@@ -106,7 +106,7 @@ segment holding an `@`, such as an e-mail address, is `:id` too).
   "token": "gc_…",           // only when the app configured a valid token (InitOptions.token); see "App tokens"
   "sid": "3f9c…",            // 24 hex chars from crypto.getRandomValues, new on every page load, never stored
   "sent": 12034,             // ms since this page's GenClass started (no wall-clock time is sent)
-  "runtime": "0.3.0-beta.4", // @genclass/runtime version
+  "runtime": "0.3.0-beta.5", // @genclass/runtime version
   "model": "2.0.0-rc4t",     // model card version, or null without a model
   "events": [ /* ≤ 100 events, ≤ 60 KB per request */ ]
 }
@@ -159,9 +159,10 @@ Numbers are rounded to 4 decimals. The source of truth is
   `effectiveType`, `saveData`)
 - `sample`
 - `situation` (whether situation text is included)
-- `visual` (`0.3.0-beta.5`: the measured visual checks `off`, `local` (development hosts, the devtools overlay,
-  `rt.checkNow()`) or `on`) and `fix` (the app turned their runtime fixes on, `visual: { on: true, fix }`; they still
-  run only in guard or heal)
+- `visual` (`0.3.0-beta.5`: the measured visual checks `off`; `local`, the default on a public host, where they load
+  only when the devtools overlay mounts or `rt.checkNow()` runs; or `on`, where they start after `load`: a development
+  host, `visual: true` or a `?genclass-visual=on` link) and `fix` (the app turned their runtime fixes on,
+  `visual: { on: true, fix }`; they still run only in guard or heal)
 
 Not the page's `decisionSample` or `maxDecisions` setting: `summary.telemetry` says how many records were sent and
 withheld ([Volume](#volume)).
