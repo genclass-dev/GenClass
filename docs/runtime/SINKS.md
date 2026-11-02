@@ -32,7 +32,7 @@ npx @genclass/runtime@beta init --sink webhook:/genclass   # or console-json; re
 
 ```html
 <meta name="genclass" content="sink=webhook:/genclass+console-json">     <!-- + joins names: commas separate the meta keys -->
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.0" data-sink="webhook:/genclass,console-json"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5" data-sink="webhook:/genclass,console-json"></script>
 <script>window.GENCLASS_CONFIG = { sinks: ["webhook:https://collector.example/genclass"] };</script>
 ```
 

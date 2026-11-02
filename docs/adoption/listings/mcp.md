@@ -371,6 +371,9 @@ Source: mxschmitt/awesome-playwright `README.md` (section "AI & Agents", alphabe
 
 ## Skill and plugin directories (2026-10-28)
 
+The skill's own listings (skills.sh, `gh skill`, cursor.directory, the curated lists, what the skill file needs where)
+are in [skills.md](skills.md) (2026-11-02); this section keeps the plugin and MCP-server directories.
+
 The skill is `skills/genclass/SKILL.md`, at the root of both repositories; the plugin is the root of genclass-plugin.
 Verified on this machine on 2026-10-28 from the pushed repository: `claude plugin marketplace add`, `codex plugin
 marketplace add` and `codex plugin add genclass@genclass`, `gemini extensions install`, `gh skill install` (gh 2.103)

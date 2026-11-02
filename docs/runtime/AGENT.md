@@ -439,7 +439,9 @@ This is one page and one bug class, a proof of the mechanism, not a recall figur
   findings each witness makes stay as they were, so on an app whose cache writes its own bookkeeping (Redux Toolkit
   Query's statuses, subscriptions) `genclass_findings` still lists those (RESULTS.md section 22 counts them).
 - WebSocket and EventSource messages are recorded, not reordered; failure responses are not held. Both are next.
-- The script-tag build has no agent entry yet (ESM only).
+- The script-tag build has no agent attribute; a page without a bundler loads the ESM entry next to it, which
+  `init --agent` writes: a module script after the tag that, on `localhost`, imports `dist/agent.js` from the script
+  URL's directory and calls `connectAgent(GenClass.runtime)` (module scripts run after deferred ones, in order).
 - Production: today the agent reads production through the dashboard (counts by diagnosis and page) and reproduces
   locally with `focus` on the flagged signature, and with `GENCLASS_REPORT` the dashboard shows what it reproduced
   and fixed (section 4.5). Sending production witnesses (the recorded order of a real user's
