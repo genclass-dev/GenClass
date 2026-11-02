@@ -13,7 +13,7 @@ import { appendEnd, bodyTagEnd, codeStyle, insertTop, planRemoval, removeMarked,
 import { integrityFor, nodeOnlyImport, scriptTag } from "../../bin/lib/plan.mjs";
 // @ts-expect-error plain ESM module without types
 import { libraryEvidence } from "../../bin/lib/detect.mjs";
-import { CMD, VERSION, channelOf, cmdFor, compareVersions, versionInSpec, versionStatus } from "../../bin/lib/version.mjs";
+import { CMD, MCP_PKG, VERSION, channelOf, cmdFor, compareVersions, versionInSpec, versionStatus } from "../../bin/lib/version.mjs";
 import { assetBase } from "../../src/cdn/global.js";
 import { GenClass } from "../../src/index.js";
 import { DEFAULT_MODEL_BASE_URL } from "../../src/model/host.js";
@@ -1242,7 +1242,7 @@ describe("init --agent: the dev-only agent link next to the overlay (the open-so
     const dir = project(VITE_TS);
     const r = cli(dir, "init", "--yes", "--no-install", "--agent");
     expect(r.code, r.out).toBe(0);
-    expect(r.out).toContain("npx -y @genclass/mcp@0.2.1 init");
+    expect(r.out).toContain(`npx -y ${MCP_PKG} init`);
     expect(r.out).toContain("127.0.0.1:47357");
     const main = readFileSync(join(dir, "src/main.tsx"), "utf8");
     const lines = main.trimEnd().split("\n");

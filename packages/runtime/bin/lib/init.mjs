@@ -1,7 +1,8 @@
 // `genclass-runtime init` and `genclass-runtime remove` (also `npx @genclass/runtime init|remove`).
 //
 // init: detects the project, installs @genclass/runtime, adds the auto import as the first statement of the entry
-// file (plus a dev-only devtools line), shows the diff and asks before writing. Every added line or created file
+// file (plus a dev-only devtools line and, with --agent, the dev-only agent line), shows the diff and asks before
+// writing. Every added line or created file
 // carries the marker `genclass:init`, so `remove` can take out exactly that and nothing else (and refuses when a
 // marked line or block was edited). Running init twice changes nothing; running it again with another --mode
 // switches the marked import (or the script tag's data-mode) to that mode in place.
