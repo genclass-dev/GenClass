@@ -1260,6 +1260,8 @@ describe("dashboard page: measured visual checks (docs/runtime/VISUAL.md section
     expect(r.text("#tiles")).toContain("Stopped by GenClass");
     expect(r.text("#tiles")).not.toContain("Fixed live");
     await r.close();
+  });
+});
 
 describe("/start/open-source: the open-source parts with no account, no token and nothing sent to genclass.dev", () => {
   /** The page in happy-dom with its own script run; `fetch` records any request (there must be none). */
