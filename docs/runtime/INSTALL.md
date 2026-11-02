@@ -2,18 +2,18 @@
 
 How to add `@genclass/runtime` to a web app and take it out again: the `init` and `remove` commands with every
 flag, the app token and dashboard that `init` creates, the zero-code options, the import, the script tag and its
-attributes, `GenClass.init()`, and the projects `init` was tested on. For `@genclass/runtime` 0.3.0 (`0.3.0-beta.0` on the npm
+attributes, `GenClass.init()`, and the projects `init` was tested on. For `@genclass/runtime` 0.3.0 (`0.3.0-beta.5` on the npm
 `beta` dist-tag). The short version is in the [package README](../../packages/runtime/README.md#install).
 
 ## Which version should I install?
 
 While `0.3.0` is in beta, every npm and npx command here names the `@beta` dist-tag. Without it you get the stable
-`0.2.x` (`0.2.2` was npm `latest` on 2026-10-22; `npm view @genclass/runtime dist-tags` shows them now), whose
+`0.2.x` (`0.2.3`, npm's `latest` since 2026-10-28; `npm view @genclass/runtime dist-tags` shows them now), whose
 runtime ignores a token and whose CLI has no `login`, `connect`, `whoami`, `logout`, `dashboard`, `--token` or `--sink`. Both
 lines load model `@genclass/runtime-model@0.2.0` by default.
 
-Pin the script tag's version (`https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.0`): the unversioned URL
-serves the `latest` dist-tag (`0.2.2` on 2026-10-22) until 0.3.0 is released.
+Pin the script tag's version (`https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5`): the unversioned URL
+serves the `latest` dist-tag (`0.2.3` on 2026-11-02) until 0.3.0 is released.
 
 **Older versions.** `0.1.0-beta.3` has these problems, fixed in `0.2.0`: app builds carried 41 MB of unused ONNX
 Runtime wasm, a CSP-blocked model failed silently, `init` could not turn telemetry off, and `status.scope.mode` read
@@ -65,6 +65,8 @@ Content-Security-Policy (`next.config` headers, a proxy or middleware, a `<meta 
 | `--from <spec>` | init | install `@genclass/runtime` from this spec (a version, tag or tarball path) |
 | `--cdn <url>` | init | plain HTML: the script URL (default: jsDelivr, this version, with an SRI hash; this version's unpkg URL gets one too; other URLs get no hash) |
 | `--no-sri` | init | plain HTML: no integrity attribute |
+| `--sync` | init | plain HTML: a blocking script tag (the default is `defer`: the page never waits for the CDN; GenClass then starts after classic scripts that have neither `defer` nor `async`) |
+| `--no-network` | init | do not ask npm for newer releases (`--dry-run`, `--no-token` and `--no-telemetry` do not ask either) |
 | `--strategy instrumentation\|layout\|pages` | init | Next.js only: where the import goes. By default `instrumentation-client` on Next.js 15.3 and later, else `layout` (App Router) or `pages` (Pages Router) |
 | `--keep-package` | remove | leave `@genclass/runtime` installed (by default `remove` uninstalls it if nothing else imports it) |
 
@@ -158,7 +160,8 @@ The second writes the server into `.mcp.json` and the `genclass` skill (the proc
 bugs) to `.claude/skills/genclass/SKILL.md`; it runs on your machine and needs no account
 ([`@genclass/mcp`](../../packages/mcp/README.md); other agents: `npx -y @genclass/mcp@0.2.1 config <client>`). Run the dev
 server: until the MCP server runs, the page logs one failed request to `127.0.0.1:47357`, the agent link finding no
-server. `npx @genclass/runtime@beta remove` takes the first command's changes out; delete `.mcp.json`'s entry and
+server: reload the page once it runs (the link tries once per page load). `npx @genclass/runtime@beta remove` takes the
+first command's changes out; delete `.mcp.json`'s entry and
 `.claude/skills/genclass/` for the second.
 
 ## How do I install it by hand?
@@ -187,7 +190,7 @@ During SSR or in Node, `/auto` installs nothing and returns an inert runtime.
 **One script tag** (no build step), first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.0" data-mode="observe" data-devtools="local"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5" data-mode="observe" data-devtools="local"></script>
 ```
 
 It exposes `window.GenClass` (since `0.3.0` also `window.GenClass.protect`), discovers the app's state like the

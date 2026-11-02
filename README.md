@@ -152,7 +152,7 @@ The full tables, with every false-intervention rate next to its recall, are unde
 
 ## New: your coding agent can see the race, replay it, and prove the fix
 
-`@genclass/mcp` (`0.2.0`, on npm since 2026-10-25) is an MCP server for Claude Code and other coding agents. Your
+`@genclass/mcp` (`0.2.1`, on npm since 2026-10-28) is an MCP server for Claude Code and other coding agents. Your
 app's development build (`@genclass/runtime` `0.3.0-beta.1` or later) connects to it with one line, and the agent
 gets every click, request, the order the responses arrived and what they wrote, uncaught errors with the click and
 request behind them, and the on-device model's detections. It can run your steps again with the network answering in
@@ -447,7 +447,7 @@ a new tag and regenerated data (`training/curriculum/rt.py` mirrors the renderer
 |---|---|
 | [`packages/runtime`](packages/runtime) | `@genclass/runtime`, the library: observers, causality, stores and adapters, learned baselines, relations and profiles, facts, triage, policy gate, actions, model host (Web Worker, ONNX Runtime Web on WebGPU or WASM), measured visual checks, devtools overlay. [README](packages/runtime/README.md) · [CHANGELOG](packages/runtime/CHANGELOG.md) |
 | [`packages/runtime-model`](packages/runtime-model) | `@genclass/runtime-model`, the default model package (data only; `files/` is gitignored and filled at release time) and its [model card](packages/runtime-model/MODEL_CARD.md) |
-| [`packages/mcp`](packages/mcp) | `@genclass/mcp` (`0.2.0` on npm), the MCP server for coding agents: pages connect through `@genclass/runtime/agent`; the agent gets findings in causal order, replays, explore verdicts, generated regression tests and, with `genclass_scan`, the page audit ([AGENT.md](docs/runtime/AGENT.md)). [README](packages/mcp/README.md) · [CHANGELOG](packages/mcp/CHANGELOG.md) |
+| [`packages/mcp`](packages/mcp) | `@genclass/mcp` (`0.2.1` on npm), the MCP server for coding agents: pages connect through `@genclass/runtime/agent`; the agent gets findings in causal order, replays, explore verdicts, generated regression tests and, with `genclass_scan`, the page audit ([AGENT.md](docs/runtime/AGENT.md)). [README](packages/mcp/README.md) · [CHANGELOG](packages/mcp/CHANGELOG.md) |
 | [`packages/playwright`](packages/playwright) | `@genclass/playwright` (unreleased), GenClass for Playwright: a fixture that puts the runtime on every page under test (observe mode, seeded network chaos with `page.route`, the model skipped by default) and writes one race file per test, and a reporter that turns those files into one markdown report for the pull request, with the evidence line and what reproduced across seeds. [README](packages/playwright/README.md) |
 | [`packages/nuxt`](packages/nuxt), [`packages/astro`](packages/astro) | `@genclass/nuxt` and `@genclass/astro` (unreleased): the runtime as a Nuxt module and as an Astro integration, one line in the framework's config, with options for the mode, the token, telemetry and the devtools overlay; browser only. [Nuxt README](packages/nuxt/README.md) · [Astro README](packages/astro/README.md) |
 | [`packages/sv`](packages/sv) | `@genclass/sv` (unreleased), a community add-on for the Svelte CLI: `npx sv add @genclass` sets up GenClass in a SvelteKit app (the dependency, its import first in `src/hooks.client`, the devtools overlay in development). [README](packages/sv/README.md) |

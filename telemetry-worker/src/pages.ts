@@ -62,7 +62,7 @@ export const LOGO =
   '<a class="logo" href="https://genclass.dev/"><img src="https://genclass.dev/brand/mark-64.png?v=2" alt="" width="24" height="24">GenClass</a>';
 
 /** The MCP server for coding agents, pinned as its own install blocks pin it (packages/mcp/src/clients.ts). */
-export const MCP_PKG = "@genclass/mcp@0.2.0";
+export const MCP_PKG = "@genclass/mcp@0.2.1";
 
 /** The package names and URLs installPrompt names; passed in, so the page script runs the same function. */
 export interface PromptNames {
@@ -501,6 +501,14 @@ export function openSourcePage(nonce: string): string {
     <li>The MCP server runs on your machine and its bridge listens on 127.0.0.1 only; with <code>GENCLASS_DASHBOARD</code> and <code>GENCLASS_REPORT</code> unset it sends nothing off the machine, and it keeps what it records in <code>.genclass/agent</code> in the project, which git ignores. <code>genclass_scan</code> and <code>scan --local</code> check pages in headless Chromium on your machine. A page URL leaves it only with <code>hosted: true</code> (or <code>scan</code> without <code>--local</code> when Playwright or its Chromium is missing): it then goes to GenClass's hosted page check (genclass-scan.mehar-144.workers.dev), which is not open source.</li>
     <li>On developer machines, npm install and npx fetch packages from the npm registry (or your mirror), and the page check's Chromium comes from Playwright's download servers; <code>fetch-model</code> (to serve the model yourself) downloads the model and onnxruntime-web from jsDelivr, or from a mirror you name with <code>--from</code> and <code>--ort-from</code>.</li>
     <li>The runtime, the MCP server, the model's training code and the collector behind genclass.dev are on <a href="${repo}">GitHub</a> under the Apache-2.0 license; the model's weights are on npm as <code>@genclass/runtime-model</code> (Apache-2.0).</li>
+  </ul>
+</section>
+<section class="stack">
+  <h2 class="h2l">What you will see</h2>
+  <ul class="facts">
+    <li>In the browser console, once the model has loaded: <code>[GenClass] Model ready (…). Mode: observe.</code>, then one <code>[GenClass] …</code> line per detection, with its evidence.</li>
+    <li>On localhost, the devtools overlay (bottom-right, Alt+Shift+G): what GenClass sees on the page, its checks and detections.</li>
+    <li>In your agent, once the MCP server runs: <code>genclass_status</code> lists the dev page (reload it after starting the server), <code>genclass_findings</code> what GenClass saw, <code>genclass_explore</code> the race, <code>genclass_replay</code> the proof.</li>
   </ul>
 </section>
 <section class="stack cmds">
