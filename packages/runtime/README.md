@@ -35,6 +35,18 @@ Once you approve the diff, `init` also creates your app's free dashboard at genc
 `package.json` `name`; `--no-token`, `--token`, `--no-telemetry` and `--dry-run` create no dashboard and never contact
 genclass.dev ([Your dashboard](#your-dashboard)).
 
+**Open source only, no account.** Two commands set up every open-source part, with nothing sent to genclass.dev:
+
+```bash
+npx @genclass/runtime@beta init --no-telemetry --agent   # the runtime (observe), the dev-only overlay and agent link; no token
+npx -y @genclass/mcp@0.2.1 init                                 # the GenClass MCP server and the `genclass` skill for Claude Code
+```
+
+The first adds one marked import (or script tag) plus an option file with `telemetry: false`; the second writes
+`.mcp.json` and `.claude/skills/genclass/SKILL.md` (other agents: `npx -y @genclass/mcp@0.2.1 config <client>`). Nothing
+else is needed; `npx @genclass/runtime@beta remove` undoes the first
+([the open-source setup](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only)).
+
 Or by hand:
 
 ```bash
@@ -468,7 +480,9 @@ npx @genclass/runtime@beta remove             # undo exactly what init added
 
 Other flags: `--yes`, `--no-telemetry` (`--telemetry` undoes it on a later run and writes no telemetry option, so
 the default applies: on, but off on local hosts), `--no-token`, `--token gc_...`, `--sink`, `--model-url`, `--no-install`,
-`--no-devtools`, and from `0.3.0-beta.2` `--no-network` and `--sync` (plain HTML).
+`--no-devtools`, `--agent` (from `0.3.0-beta.6`: the dev-only agent link too, so your coding agent sees the dev
+pages; [Your coding agent](#your-coding-agent-replay-and-explore)), and from `0.3.0-beta.2` `--no-network` and
+`--sync` (plain HTML).
 
 **Which version** (from `0.3.0-beta.2`). `init` (and `login`, `connect`) first prints its own version and the npm
 dist-tag it came from, asks npm's dist-tags once (`npm view @genclass/runtime dist-tags`, at most 3 s; never with
@@ -675,8 +689,13 @@ Claude Code and other coding agents, and lets the agent:
 - **keep the proof:** a generated Playwright test that sets the same order and fails while the bug is there.
 
 ```bash
-claude mcp add genclass -- npx -y @genclass/mcp@0.2.1
+npx @genclass/runtime@beta init --agent   # the app side: a dev-only line next to the import init writes (0.3.0-beta.6)
+npx -y @genclass/mcp@0.2.1 init                 # the server in .mcp.json and the `genclass` skill, for Claude Code
 ```
+
+Other agents: `npx -y @genclass/mcp@0.2.1 config <client>`, or `claude mcp add genclass -- npx -y @genclass/mcp@0.2.1`. By
+hand, the app side is one line in a development build (plain HTML: a module script after the tag, which `init --agent`
+writes too):
 
 ```ts
 import { GenClass } from "@genclass/runtime";

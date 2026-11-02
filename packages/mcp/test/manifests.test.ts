@@ -76,6 +76,8 @@ const PINS: Pin[] = [
   { file: "docs/runtime/AGENT.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "README.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "packages/runtime/README.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  { file: "docs/runtime/INSTALL.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  { file: "FAQ.md", text: (s) => s.replace(PINNED, pinned(V)) },
 ];
 
 function read(file: string): string {

@@ -369,10 +369,11 @@ export interface OpenSourceChoices {
 }
 
 /**
- * The prompt /start/open-source copies: installPrompt's steps without a token, a dashboard or an agent link, with
- * `telemetry: false` (the runtime sends no data anywhere; it still downloads public files from jsDelivr unless the app
- * serves them), the MCP server on the developer's machine and the page check run locally. Pure and self-contained,
- * like installPrompt: the page script runs this same function.
+ * The prompt /start/open-source copies: the two commands (`init --no-telemetry --agent` for the app, `@genclass/mcp
+ * init` for the agent), with `telemetry: false` (the runtime sends no data anywhere; it still downloads public files
+ * from jsDelivr unless the app serves them), no token, the MCP server on the developer's machine and the page check
+ * run locally; the choices are init flags. Pure and self-contained, like installPrompt: the page script runs this
+ * same function.
  */
 export function openSourcePrompt(c: OpenSourceChoices = {}, n: PromptNames = PROMPT_NAMES): string {
   const guard = !!c.guard;
@@ -380,62 +381,38 @@ export function openSourcePrompt(c: OpenSourceChoices = {}, n: PromptNames = PRO
   const logs = !!c.logs;
   const own = !!c.selfHost;
   const dir = "/genclass-model/";
-  // GenClass.init has automatic state discovery off unless asked (autoState: true, with the discover import first)
-  const init = ["telemetry: false", "autoState: true"];
-  if (guard) init.push('mode: "guard"', ...(eager ? ['aggressiveness: "eager"'] : []), "visual: { on: true, fix: true }");
-  if (own) init.push(`model: { baseUrl: "${dir}", ortWasmPaths: "${dir}ort/" }`);
-  if (logs) init.push("sinks: [consoleJson()]");
-  // the script tag carries all of it but the aggressiveness, which goes in GENCLASS_CONFIG (as in installPrompt)
-  const attrs = ['data-telemetry="off"'];
-  if (guard) attrs.push('data-mode="guard"', 'data-visual="fix"');
-  if (own) attrs.push(`data-model="${dir}"`, `data-ort="${dir}ort/"`);
-  if (logs) attrs.push('data-sink="console-json"');
-  attrs.push('data-devtools="local"');
-  const flags = ["--no-telemetry", ...(guard ? ["--mode guard"] : []), ...(logs ? ["--sink console-json"] : []), ...(own ? [`--model-url ${dir}`] : [])];
-  // init writes no visual or aggressiveness option: the prompt says where to add them
+  // every choice is an init flag, except the visual fixes and the aggressiveness, which init does not write
+  const flags = ["--no-telemetry", "--agent", ...(guard ? ["--mode guard"] : []), ...(logs ? ["--sink console-json"] : []), ...(own ? [`--model-url ${dir}`] : []), "--yes"];
   const initAdds = guard
-    ? `${eager ? 'aggressiveness: "eager" and ' : ""}visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes${eager ? ", and the GENCLASS_CONFIG line above" : ""}; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content${eager ? ', and the aggressiveness in a window.GENCLASS_CONFIG script before it' : ""})`
+    ? `add ${eager ? 'aggressiveness: "eager" and ' : ""}visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes${eager ? ', and a <script>window.GENCLASS_CONFIG = { aggressiveness: "eager" };</script> line before it' : ""}; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content${eager ? ", and the aggressiveness in a window.GENCLASS_CONFIG script before it" : ""})`
     : "";
-  const local = '["localhost", "127.0.0.1"].includes(location.hostname)';
   // A step is a one-element array, numbered at the end (choices add steps); other lines are strings. No named inner
   // function: Wrangler's bundler (keepNames) would wrap it in a __name() helper that the page script, which runs this
   // function's source, lacks.
   const out: (string | [string])[] = [
-    "Add GenClass's open-source parts to this web app (Apache-2.0, https://github.com/genclass-dev/GenClass-lib): the @genclass/runtime library in its pages, which reports the bugs that never throw (double submits, stale responses that overwrite newer data, write races, visual bugs), and the @genclass/mcp server on this machine, so you, the coding agent, can see what happens on the dev pages, replay it and prove fixes. No GenClass account and no token: nothing is sent to genclass.dev. Do every step yourself.",
+    "Add GenClass's open-source parts to this web app (Apache-2.0, https://github.com/genclass-dev/GenClass): the @genclass/runtime library in its pages, which reports the bugs that never throw (double submits, stale responses that overwrite newer data, write races, visual bugs), and the @genclass/mcp server on this machine, so you, the coding agent, can see what happens on the dev pages, replay it and prove fixes. No GenClass account and no token: nothing is sent to genclass.dev. Two commands do it; run them yourself.",
     "",
-    [`Install the runtime with the project's package manager: npm install ${n.pkg} (or pnpm add / yarn add / bun add ${n.pkg}). A site with no build step (plain HTML pages, no bundler) installs nothing: it uses the script tags below.`],
+    ...(own
+      ? [
+          [`Serve the model from the app itself, so its pages download no model from a CDN: npx ${n.pkg} fetch-model public/genclass-model (the folder the project serves as-is: public/ for Vite, Next.js and Astro, static/ for SvelteKit). It downloads the model and onnxruntime-web's files, checks the model files against the sizes and SHA-256 hashes its model card lists, and records onnxruntime-web's hashes in ort/ort.json; the next step's --model-url points at it. On a host with a 25 MiB per-file limit (Cloudflare), run fetch-model public/genclass-model --variant q8 --ort wasm instead (init --model-url adds device: "wasm" when it finds only the WASM build). With a bundler nothing else loads from a CDN. Without one, the runtime's script and what it loads on demand (its model worker, onnxruntime-web's JavaScript, sinks, visual checks, the overlay, the agent link) still come from jsDelivr unless you serve the package's dist/ folder from the app and point the script tag at it (--cdn <url>; data-base if they are in different folders).`] as [string],
+        ]
+      : []),
     [
-      "Start it as early as possible, with GenClass's anonymous diagnostics off (telemetry: false), so it sends no data anywhere" +
+      `In the project's root run: npx ${n.pkg} init ${flags.join(" ")} ` +
+        "It finds the framework and package manager, installs the runtime, adds one marked import first in the browser entry (plain HTML pages, no bundler: the script tag, pinned with an integrity hash, in every page's <head>), the dev-only devtools overlay and the dev-only agent link (which records what happens on local pages for the GenClass MCP server, talks only to 127.0.0.1 and is never part of a production build), and writes telemetry: false into a marked option file next to the entry (data-telemetry=\"off\" on the tag), so GenClass's anonymous diagnostics are off and it sends no data anywhere" +
         (own ? "" : "; the browser still downloads its model and onnxruntime-web, public files, from cdn.jsdelivr.net (about 13 MB, 18 MB on WebGPU devices, then cached) unless the app serves them") +
-        ". With a bundler, in the browser entry (main.ts, the root layout or the root component), with the discover import first, before React, Redux or Zustand load:",
+        ". It shows the diff; --yes applies it. " +
+        (guard
+          ? `Mode guard: when GenClass is sure, it acts with minimal, reversible steps (it drops a stale response or fixes a CSS bug on the page) and never changes a response${eager ? '; aggressiveness "eager" lets it act on smaller signals' : ""}. Then ${initAdds}.`
+          : "The mode stays observe: GenClass reports and never changes what the app does.") +
+        ' React state, Redux stores (configureStore, or createStore with the Redux DevTools compose) and Zustand stores made with the devtools middleware are found automatically; Pinia, Svelte stores, signals and a plain page\'s DOM are watched only for state the app registers with GenClass.runtime.atom("name", initial) or GenClass.runtime.guard("name", { get, set }), written through the handle (one atom per response, such as a search\'s query and its results): do that only if I ask.',
     ],
-    '   import "@genclass/runtime/discover"; // first: lets GenClass find React, Redux and Zustand state',
-    ...(logs ? ['   import { consoleJson } from "@genclass/runtime/sinks/console-json";'] : []),
-    '   import { GenClass } from "@genclass/runtime";',
-    `   const rt = GenClass.init({ ${init.join(", ")} });`,
-    "   Without a bundler, in the <head> of every HTML page, before the page's own scripts:",
-    ...(eager ? ['   <script>window.GENCLASS_CONFIG = { aggressiveness: "eager" };</script>'] : []),
-    `   <script src="${n.cdn}" ${attrs.join(" ")}></script>`,
-    "   and in the page's scripts the handle (rt below) is GenClass.runtime.",
-    `   (Or npx ${n.pkg} init ${flags.join(" ")} --yes does steps 1 and 2 and shows the diff, with a bundler or plain HTML pages: it starts GenClass with its zero-code entry (the /auto import with an option file, or the script tag pinned with an integrity hash), which finds React, Redux and Zustand state by itself, and adds step 3's dev-only overlay; the handle is then GenClass.runtime${guard ? `; add ${initAdds}` : ""}${own ? "; run the fetch-model command below before it" : ""}.)`,
     [
-      (guard
-        ? `Mode guard: when GenClass is sure, it acts with minimal, reversible steps (it drops a stale response or fixes a CSS bug on the page) and never changes a response${eager ? '; aggressiveness "eager" lets it act on smaller signals' : ""}.`
-        : "Keep the default mode, observe: GenClass reports and never changes what the app does.") +
-        ' In development builds also mount the devtools overlay, which shows what GenClass sees on the page: if (import.meta.env.DEV) import("@genclass/runtime/devtools").then((d) => d.mountDevtools(rt)); (Next.js: process.env.NODE_ENV === "development"; the script tag\'s data-devtools="local" does the same).',
+      `Run: npx -y ${n.mcp} init. It writes the GenClass MCP server into .mcp.json for Claude Code (npx -y ${n.mcp} config <client> prints the block for Cursor, VS Code, Codex, Gemini CLI and others) and the genclass skill, the procedure you follow for timing bugs, to .claude/skills/genclass/SKILL.md; then reload your MCP servers. It runs on this machine, its bridge listens on 127.0.0.1 only, and it needs no account: leave GENCLASS_DASHBOARD and GENCLASS_REPORT unset (either one sends to a GenClass dashboard). The app-side lines it prints are already done by the init command above. Its tools: genclass_status, genclass_findings, genclass_explain, genclass_replay, genclass_explore, genclass_scan.`,
     ],
-    ['Connect the state that responses write (search results, carts, lists, forms), so GenClass sees each write with the response or click that caused it. React state, Redux stores (configureStore, or createStore with the Redux DevTools compose) and Zustand stores made with the devtools middleware are found automatically (the discover import with autoState: true above; the script tag and init\'s /auto import do it by default); otherwise create it with rt.atom("name", initial) or wrap the store you have with rt.guard("name", { get, set }), and write through the handle. Values one response writes together (a search\'s query and its results) go in one atom, written once per response, so GenClass can drop a stale response as one write: const search = rt.atom("search", { query: "", results: [] }); then search.set((s) => ({ ...s, query: data.q, results: data.results })) and render from search.subscribe.'],
-    ['Development builds only, add the agent link: import { connectAgent } from "@genclass/runtime/agent"; if (import.meta.env.DEV) connectAgent(rt); (Next.js: process.env.NODE_ENV === "development"). It records what happens on local pages for the GenClass MCP server, talks only to 127.0.0.1 and is never part of a production build.'],
-    `   Without a bundler, after the runtime's script tag: <script type="module">if (${local}) import("${n.agent}").then((a) => { const go = () => (GenClass.runtime ? a.connectAgent(GenClass.runtime) : setTimeout(go, 50)); go(); });</script>`,
-    [`Add the GenClass MCP server to yourself: npx -y ${n.mcp} init writes .mcp.json for Claude Code (npx -y ${n.mcp} config <client> prints the block for Cursor, VS Code, Codex, Gemini CLI and others); then reload your MCP servers. It runs on this machine, its bridge listens on 127.0.0.1 only, and it needs no account: leave GENCLASS_DASHBOARD and GENCLASS_REPORT unset (either one sends to a GenClass dashboard). init also prints setup lines for the app with a bare GenClass.init(): keep the setup from steps 2 and 5 instead. Its tools: genclass_status, genclass_findings, genclass_explain, genclass_replay, genclass_explore, genclass_scan.`],
     ...(logs
       ? [
           ['Findings print as [GenClass] lines in the browser console, and the console-json sink also prints each one as one JSON line, for the log shipper the app already uses. If the team has its own endpoint for them, the webhook sink sends batched POSTs there instead: import { webhook } from "@genclass/runtime/sinks/webhook"; sinks: [webhook({ url: "<the endpoint>" })], requests: { ignore: ["<the endpoint>"] } (so GenClass does not watch its own POSTs; data-sink="webhook:<the endpoint>" on the script tag does both). Ask me for that URL rather than inventing one.'] as [string],
-        ]
-      : []),
-    ...(own
-      ? [
-          [`Serve the model from the app itself, so its pages download no model from a CDN: npx ${n.pkg} fetch-model public/genclass-model (the folder the project serves as-is: public/ for Vite, Next.js and Astro, static/ for SvelteKit), before init if you use init. It downloads the model and onnxruntime-web's files, checks the model files against the sizes and SHA-256 hashes its model card lists, and records onnxruntime-web's hashes in ort/ort.json; the model option above points at it. On a host with a 25 MiB per-file limit (Cloudflare), run fetch-model public/genclass-model --variant q8 --ort wasm instead and add device: "wasm" to the model option (data-device="wasm" on the script tag; init --model-url adds it when it finds only the WASM build). With a bundler nothing else loads from a CDN. Without one, the runtime's script and what it loads on demand (its model worker, onnxruntime-web's JavaScript, sinks, visual checks, the overlay, the agent link) still come from jsDelivr unless you serve the package's dist/ folder from the app and point the script tag and the agent link's import at it (data-base if they are in different folders).`] as [string],
         ]
       : []),
     [`Run the dev server and load a page to check that the app builds and runs without errors. Until the MCP server runs (your next conversation), the page logs a failed request to 127.0.0.1:47357: that is the agent link finding no server, and expected. In your next conversation, reload a dev page and genclass_status lists it. Then check a page for visual bugs with genclass_scan on its local URL, or from a terminal: npx ${n.pkg} scan http://localhost:5173/ --local (keep --local). It runs headless Chromium on this machine and needs Playwright: if the scan says it is missing, ask me before adding playwright as a dev dependency and downloading Chromium (about 600 MB): npm i -D playwright && npx playwright install chromium; or skip the scan and say so. Do not use hosted: true: it sends the page URL to GenClass's hosted page check, which is not open source.`],
@@ -461,11 +438,6 @@ function fnSource(fn: (...a: never[]) => unknown): string {
 function choiceOpt(k: string, label: string, note: string, sub = false): string {
   return `<label class="copt${sub ? " sub" : ""}"><input type="checkbox" data-choice="${k}"><span><b>${label}</b> ${note}</span></label>`;
 }
-
-/** The commands' agent link, before its development check (which is the bundler's: init writes the same one). */
-const AGENT_LINK_HEAD = `// in the app's entry, after the lines init added
-import { GenClass } from "@genclass/runtime";
-import { connectAgent } from "@genclass/runtime/agent";`;
 
 /** The prompt block's styles on genclass.dev's palette (the dashboard's .copts and .cprompt, DASH_CSS, re-tokened). */
 const OSS_CSS = `
@@ -517,7 +489,7 @@ export function openSourcePage(nonce: string): string {
   </fieldset>
   <div class="cprompt">
     <button class="btn green xl" type="button" id="cp" data-copy="${esc(prompt)}">Copy the prompt for your coding agent</button>
-    <p class="cp-sub">Paste it into Claude Code, Cursor or Codex: it adds GenClass to your app and the MCP server to the agent, with nothing to sign up for.</p>
+    <p class="cp-sub">Paste it into Claude Code, Cursor or Codex: two commands add GenClass to your app and the MCP server and the genclass skill to the agent, with nothing to sign up for.</p>
     <textarea class="cp-text" id="cpt" readonly hidden aria-label="The prompt, to copy by hand" rows="8">${esc(prompt)}</textarea>
   </div>
 </section>
@@ -533,12 +505,10 @@ export function openSourcePage(nonce: string): string {
 </section>
 <section class="stack cmds">
   <h2 class="h2l">Or run the commands yourself</h2>
-  ${cmd("Add the runtime to your app", `npx ${RUNTIME_PKG} init --no-telemetry`)}
-  ${cmd("Connect the dev pages to the MCP server: Vite", `${AGENT_LINK_HEAD}\nif (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime);`)}
-  ${cmd("The same for Next.js and webpack", `${AGENT_LINK_HEAD.replace("the app's entry", "the app's entry (Next.js: instrumentation-client.ts)")}\nif (process.env.NODE_ENV === "development" && GenClass.runtime) connectAgent(GenClass.runtime);`)}
-  ${cmd("Add the MCP server for Claude Code", `npx -y ${MCP_PKG} init`)}
+  ${cmd("Add the runtime to your app, with the dev-only agent link", `npx ${RUNTIME_PKG} init --no-telemetry --agent`)}
+  ${cmd("Add the MCP server and the genclass skill for Claude Code", `npx -y ${MCP_PKG} init`)}
   ${cmd("Check a page for visual bugs", `npx ${RUNTIME_PKG} scan http://localhost:5173/ --local`)}
-  <p class="muted small">init shows the diff and asks before it writes; add <code>--mode guard</code> for guard. Other agents: <code>npx -y ${MCP_PKG} config &lt;client&gt;</code> prints the block for Cursor, VS Code, Codex, Gemini CLI and others; keep <code>GENCLASS_DASHBOARD</code> and <code>GENCLASS_REPORT</code> out of it. The scan needs Playwright (<code>npm i -D playwright &amp;&amp; npx playwright install chromium</code>).</p>
+  <p class="muted small">init shows the diff and asks before it writes; add <code>--mode guard</code> for guard. Until the MCP server runs, a dev page logs one failed request to 127.0.0.1:47357 (the agent link finding no server). Other agents: <code>npx -y ${MCP_PKG} config &lt;client&gt;</code> prints the block for Cursor, VS Code, Codex, Gemini CLI and others; keep <code>GENCLASS_DASHBOARD</code> and <code>GENCLASS_REPORT</code> out of it. The scan needs Playwright (<code>npm i -D playwright &amp;&amp; npx playwright install chromium</code>).</p>
 </section>
 <footer>Want a dashboard without sending data to us? The collector is open source too:
 <a href="${repo}/blob/main/telemetry-worker/README.md#self-host-the-collector-private-mode">run it on your own Cloudflare account</a>.

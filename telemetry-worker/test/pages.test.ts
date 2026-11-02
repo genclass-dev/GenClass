@@ -1284,28 +1284,26 @@ describe("/start/open-source: the open-source parts with no account, no token an
     return { html, win, doc, urls, copied, box, copy, close: () => win.happyDOM.close() };
   }
 
-  it("the default prompt: no token, telemetry off, observe, the agent link and the MCP server without a dashboard, the local scan", () => {
+  it("the default prompt: two commands (init --no-telemetry --agent, @genclass/mcp init), no token, observe, the skill, the local scan", () => {
     const p = openSourcePrompt();
-    expect(p).toContain("No GenClass account and no token: nothing is sent to genclass.dev.");
-    expect(p).toContain(`npm install ${RUNTIME_PKG}`);
-    expect(p).toContain("const rt = GenClass.init({ telemetry: false, autoState: true });");
-    // GenClass.init finds React, Redux and Zustand state only with the discover import first and autoState: true
-    expect(p).toContain('import "@genclass/runtime/discover"; // first');
-    expect(p.indexOf('import "@genclass/runtime/discover"')).toBeLessThan(p.indexOf('import { GenClass } from "@genclass/runtime"'));
+    expect(p).toContain("No GenClass account and no token: nothing is sent to genclass.dev. Two commands do it; run them yourself.");
+    expect(p).toContain(`\n1. In the project's root run: npx ${RUNTIME_PKG} init --no-telemetry --agent --yes It finds the framework`);
+    expect(p).toContain("the dev-only devtools overlay and the dev-only agent link (which records what happens on local pages for the GenClass MCP server, talks only to 127.0.0.1 and is never part of a production build)");
+    expect(p).toContain('writes telemetry: false into a marked option file next to the entry (data-telemetry="off" on the tag)');
     // no data is sent, but the public files still come from jsDelivr unless the app serves them; the prompt says so
-    expect(p).toContain("so it sends no data anywhere; the browser still downloads its model and onnxruntime-web, public files, from cdn.jsdelivr.net");
+    expect(p).toContain("so GenClass's anonymous diagnostics are off and it sends no data anywhere; the browser still downloads its model and onnxruntime-web, public files, from cdn.jsdelivr.net");
+    expect(p).toContain("(about 13 MB, 18 MB on WebGPU devices, then cached)");
     expect(p).not.toContain("sends nothing anywhere");
-    expect(p).toContain(`<script src="${CDN_SCRIPT}" data-telemetry="off" data-devtools="local"></script>`);
-    expect(p).toContain(`npx ${RUNTIME_PKG} init --no-telemetry --yes does steps 1 and 2`);
-    expect(p).toContain("and adds step 3's dev-only overlay; the handle is then GenClass.runtime.)");
-    expect(p).toContain("Keep the default mode, observe");
-    expect(p).toContain('rt.atom("search", { query: "", results: [] })');
-    expect(p).toContain('import { connectAgent } from "@genclass/runtime/agent"; if (import.meta.env.DEV) connectAgent(rt);');
-    expect(p).toContain(`import("${CDN_SCRIPT}/dist/agent.js")`);
-    expect(p).toContain(`npx -y ${MCP_PKG} init writes .mcp.json`);
+    expect(p).toContain("The mode stays observe: GenClass reports and never changes what the app does.");
+    // discovery covers React state, Redux through its DevTools hooks and Zustand with devtools; registering is on request only
+    expect(p).toContain("Zustand stores made with the devtools middleware are found automatically");
+    expect(p).toContain('GenClass.runtime.atom("name", initial)');
+    expect(p).toContain("do that only if I ask.");
+    expect(p).toContain(`\n2. Run: npx -y ${MCP_PKG} init. It writes the GenClass MCP server into .mcp.json for Claude Code`);
+    expect(p).toContain("and the genclass skill, the procedure you follow for timing bugs, to .claude/skills/genclass/SKILL.md");
     expect(p).toContain("leave GENCLASS_DASHBOARD and GENCLASS_REPORT unset");
-    // the MCP server's init prints its own setup lines (a bare GenClass.init()): the prompt keeps its own
-    expect(p).toContain("keep the setup from steps 2 and 5 instead");
+    // the MCP server's init prints its own app-side lines: init --agent already did them
+    expect(p).toContain("The app-side lines it prints are already done by the init command above.");
     expect(p).toContain(`npx ${RUNTIME_PKG} scan http://localhost:5173/ --local`);
     expect(p).toContain("Do not use hosted: true: it sends the page URL to GenClass's hosted page check, which is not open source.");
     // the scan needs Playwright: the agent asks before adding the dev dependency and downloading Chromium
@@ -1313,44 +1311,45 @@ describe("/start/open-source: the open-source parts with no account, no token an
     // the agent link's failed request before the MCP server runs is expected
     expect(p).toContain("the page logs a failed request to 127.0.0.1:47357");
     expect(p).toContain("In your next conversation, reload a dev page and genclass_status lists it.");
-    // discovery covers React state, Redux through its DevTools hooks and Zustand with devtools; the prompt says so
-    expect(p).toContain("Zustand stores made with the devtools middleware are found automatically");
-    expect(p).toContain("(about 13 MB, 18 MB on WebGPU devices, then cached)");
+    // nothing hand-written: no import lines, no GenClass.init call, no script tag, no connectAgent
+    expect(p).not.toContain('import "');
+    expect(p).not.toContain("import {");
+    expect(p).not.toContain("GenClass.init(");
+    expect(p).not.toContain("<script src=");
+    expect(p).not.toContain("connectAgent(");
     // nothing that needs an account, a token or the hosted dashboard
     expect(p).not.toMatch(/token: "|data-token|--token|gc_[A-Za-z0-9]/);
     expect(p).not.toContain("GENCLASS_DASHBOARD=");
     expect(p).not.toContain("GENCLASS_REPORT=");
     expect(p).not.toContain("genclass.dev/dashboard");
-    expect(p).not.toContain("consoleJson");
+    expect(p).not.toContain("console-json");
     expect(p).not.toContain("fetch-model");
     expect(p).not.toContain("Deploy it");
-    // the steps are numbered 1..n with none missing
+    // the steps are numbered 1..n with none missing: init, the MCP server, the dev server and scan, the report
     const nums = [...p.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
-    expect(nums).toEqual(nums.map((_, i) => i + 1));
-    expect(p).toMatch(/\n8\. Tell me what you changed, that the app sets no GenClass token and has telemetry off, what it downloads from outside this network/);
+    expect(nums).toEqual([1, 2, 3, 4]);
+    expect(p).toMatch(/\n4\. Tell me what you changed, that the app sets no GenClass token and has telemetry off, what it downloads from outside this network/);
     // only printable text (no step marker or other control character reaches the page)
     expect(p).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/);
   });
 
-  it("the choices: guard and eager, findings in the app's own logs, the model served by the app, deploy", () => {
+  it("the choices are init flags: guard (and eager), findings in the app's own logs, the model served by the app, deploy", () => {
     const p = openSourcePrompt({ guard: true, eager: true, logs: true, selfHost: true, deploy: true });
-    expect(p).toContain('import { consoleJson } from "@genclass/runtime/sinks/console-json";');
-    expect(p).toContain('const rt = GenClass.init({ telemetry: false, autoState: true, mode: "guard", aggressiveness: "eager", visual: { on: true, fix: true }, model: { baseUrl: "/genclass-model/", ortWasmPaths: "/genclass-model/ort/" }, sinks: [consoleJson()] });');
-    expect(p).toContain('<script>window.GENCLASS_CONFIG = { aggressiveness: "eager" };</script>');
-    expect(p).toContain(`<script src="${CDN_SCRIPT}" data-telemetry="off" data-mode="guard" data-visual="fix" data-model="/genclass-model/" data-ort="/genclass-model/ort/" data-sink="console-json" data-devtools="local"></script>`);
-    expect(p).toContain(`npx ${RUNTIME_PKG} init --no-telemetry --mode guard --sink console-json --model-url /genclass-model/ --yes`);
+    expect(p).toContain(`\n1. Serve the model from the app itself, so its pages download no model from a CDN: npx ${RUNTIME_PKG} fetch-model public/genclass-model`);
+    expect(p).toContain('run fetch-model public/genclass-model --variant q8 --ort wasm instead (init --model-url adds device: "wasm" when it finds only the WASM build)');
+    expect(p).toContain(`\n2. In the project's root run: npx ${RUNTIME_PKG} init --no-telemetry --agent --mode guard --sink console-json --model-url /genclass-model/ --yes `);
     // init writes no visual or aggressiveness option: the prompt says where they go
-    expect(p).toContain('add aggressiveness: "eager" and visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes, and the GENCLASS_CONFIG line above; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content, and the aggressiveness in a window.GENCLASS_CONFIG script before it); run the fetch-model command below before it.)');
-    expect(openSourcePrompt({ guard: true })).toContain('; add visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content).)');
-    expect(p).toContain("Mode guard: when GenClass is sure");
-    expect(p).toContain("the webhook sink sends batched POSTs there instead");
-    expect(p).toContain('sinks: [webhook({ url: "<the endpoint>" })], requests: { ignore: ["<the endpoint>"] }');
-    expect(p).toContain(`npx ${RUNTIME_PKG} fetch-model public/genclass-model`);
-    expect(p).toContain('run fetch-model public/genclass-model --variant q8 --ort wasm instead and add device: "wasm" to the model option (data-device="wasm" on the script tag');
+    expect(p).toContain('Mode guard: when GenClass is sure, it acts with minimal, reversible steps (it drops a stale response or fixes a CSS bug on the page) and never changes a response; aggressiveness "eager" lets it act on smaller signals. Then add aggressiveness: "eager" and visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes, and a <script>window.GENCLASS_CONFIG = { aggressiveness: "eager" };</script> line before it; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content, and the aggressiveness in a window.GENCLASS_CONFIG script before it).');
+    expect(openSourcePrompt({ guard: true })).toContain('Then add visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content).');
+    expect(openSourcePrompt({ guard: true })).not.toContain("eager");
     // the model served by the app: no jsDelivr download for it to mention
     expect(p).not.toContain("still downloads");
+    expect(p).toContain("the webhook sink sends batched POSTs there instead");
+    expect(p).toContain('sinks: [webhook({ url: "<the endpoint>" })], requests: { ignore: ["<the endpoint>"] }');
     expect(p).toContain("Deploy it, as chosen");
-    expect(p).toMatch(/\n11\. Tell me what you changed and where it is deployed/);
+    const nums = [...p.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
+    expect(nums).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(p).toMatch(/\n7\. Tell me what you changed and where it is deployed/);
     // eager only with guard
     expect(openSourcePrompt({ eager: true })).toBe(openSourcePrompt());
   });
@@ -1377,16 +1376,10 @@ describe("/start/open-source: the open-source parts with no account, no token an
     expect(r.copied).toEqual([openSourcePrompt({ logs: true, selfHost: true, deploy: true })]);
     // the commands copy too
     const cmds = [...r.doc.querySelectorAll(".cmds [data-copy]")].map((b) => b.getAttribute("data-copy"));
-    expect(cmds).toEqual([
-      `npx ${RUNTIME_PKG} init --no-telemetry`,
-      `// in the app's entry, after the lines init added\nimport { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\nif (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime);`,
-      `// in the app's entry (Next.js: instrumentation-client.ts), after the lines init added\nimport { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\nif (process.env.NODE_ENV === "development" && GenClass.runtime) connectAgent(GenClass.runtime);`,
-      `npx -y ${MCP_PKG} init`,
-      `npx ${RUNTIME_PKG} scan http://localhost:5173/ --local`,
-    ]);
+    expect(cmds).toEqual([`npx ${RUNTIME_PKG} init --no-telemetry --agent`, `npx -y ${MCP_PKG} init`, `npx ${RUNTIME_PKG} scan http://localhost:5173/ --local`]);
     // the choices are a fieldset with a visible legend; the commands' titles are h3 under the section's h2
     expect(r.doc.querySelector("fieldset#choices > legend")!.textContent).toContain("What the prompt sets up");
-    expect(r.doc.querySelectorAll(".cmds h3").length).toBe(5);
+    expect(r.doc.querySelectorAll(".cmds h3").length).toBe(3);
     expect(r.doc.querySelectorAll(".cmds h2").length).toBe(1);
     expect(r.urls).toEqual([]);
     await r.close();

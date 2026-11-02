@@ -60,6 +60,7 @@ Content-Security-Policy (`next.config` headers, a proxy or middleware, a `<meta 
 | `--dry-run` | both | show what would change; write nothing, send nothing |
 | `--no-install` | init | do not run the package manager |
 | `--no-devtools` | init | do not add the dev-only devtools overlay |
+| `--agent` | init | from `0.3.0-beta.6`: also add the dev-only agent link (a line that loads `@genclass/runtime/agent` and calls `connectAgent`; plain HTML: a module script after the tag), so the GenClass MCP server sees the dev pages ([AGENT.md](AGENT.md)). Production builds drop it; off loopback hosts it is inert |
 | `--cwd <dir>` | both | the project directory (default: the current directory) |
 | `--from <spec>` | init | install `@genclass/runtime` from this spec (a version, tag or tarball path) |
 | `--cdn <url>` | init | plain HTML: the script URL (default: jsDelivr, this version, with an SRI hash; this version's unpkg URL gets one too; other URLs get no hash) |
@@ -135,6 +136,30 @@ npx @genclass/runtime@beta init --no-token       # no token; genclass.dev is not
 reached, `init` says so, sets GenClass up without a token, and points you to
 [genclass.dev/start](https://genclass.dev/start); run `init --token gc_...` later. `--dry-run` sends nothing and
 installs nothing.
+
+## How do I set up the open-source parts only?
+
+Two commands, no account, no token, nothing sent to genclass.dev:
+
+```bash
+npx @genclass/runtime@beta init --no-telemetry --agent   # the runtime in observe, the dev-only overlay and agent link
+npx -y @genclass/mcp@0.2.1 init                                 # the GenClass MCP server and the `genclass` skill for Claude Code
+```
+
+The first finds your framework, installs `@genclass/runtime`, adds one marked import (plain HTML: the script tag,
+pinned with an integrity hash) with the dev-only devtools and agent lines, and writes `telemetry: false` into a
+marked `genclass.config.ts` (or `.js`) next to your entry (`data-telemetry="off"` on a script tag), so GenClass's
+anonymous diagnostics are off; `--no-telemetry` implies `--no-token`. Browsers still download the model and
+onnxruntime-web, public files, from jsDelivr unless you serve them (`--model-url`,
+[Content-Security-Policy and self-hosting](../../packages/runtime/README.md#content-security-policy-and-self-hosting)).
+Add `--mode guard` to let GenClass act, `--sink console-json` for findings in your own logs.
+
+The second writes the server into `.mcp.json` and the `genclass` skill (the procedure Claude Code follows for timing
+bugs) to `.claude/skills/genclass/SKILL.md`; it runs on your machine and needs no account
+([`@genclass/mcp`](../../packages/mcp/README.md); other agents: `npx -y @genclass/mcp@0.2.1 config <client>`). Run the dev
+server: until the MCP server runs, the page logs one failed request to `127.0.0.1:47357`, the agent link finding no
+server. `npx @genclass/runtime@beta remove` takes the first command's changes out; delete `.mcp.json`'s entry and
+`.claude/skills/genclass/` for the second.
 
 ## How do I install it by hand?
 

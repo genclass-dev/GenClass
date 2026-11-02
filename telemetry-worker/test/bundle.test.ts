@@ -57,7 +57,7 @@ describe("page scripts survive Wrangler's bundling (keepNames)", () => {
     new Function("window", "document", "location", "navigator", script)(win, win.document, win.location, win.navigator);
     (win.document.querySelector('#choices [data-choice="guard"]') as unknown as HTMLInputElement).click();
     expect(win.document.getElementById("cp")!.getAttribute("data-copy")).toBe(mod.openSourcePrompt({ guard: true }));
-    expect(win.document.getElementById("cp")!.getAttribute("data-copy")).toContain('mode: "guard"');
+    expect(win.document.getElementById("cp")!.getAttribute("data-copy")).toContain("--mode guard");
     await win.happyDOM.close();
   });
 });

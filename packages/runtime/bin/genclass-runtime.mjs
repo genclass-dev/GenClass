@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // genclass-runtime CLI (Node >= 20, no dependencies). Also runs as `npx @genclass/runtime <command>`.
 //
-//   genclass-runtime init [--mode observe|guard|heal] [--token <gc_...> | --no-token] [--yes] [--dry-run] [--no-install] [--no-devtools]
+//   genclass-runtime init [--mode observe|guard|heal] [--token <gc_...> | --no-token] [--agent] [--yes] [--dry-run] [--no-install] [--no-devtools]
 //   genclass-runtime remove [--yes] [--dry-run] [--keep-package]
 //       Set GenClass up in a project (framework detection, install, one marked import in the entry file, an app token
 //       and private dashboard link from genclass.dev) and take it out again. Implemented in bin/lib/ (owner: INSTALL).
@@ -57,7 +57,7 @@ const ORT_FILES = {
 const ROLES = ["tokenizer", "calibration", "meta"];
 
 const USAGE = `Usage:
-  genclass-runtime init [--mode observe|guard|heal] [--token <gc_...> | --no-token] [--yes] [--dry-run] [--no-install] [--no-devtools]
+  genclass-runtime init [--mode observe|guard|heal] [--token <gc_...> | --no-token] [--agent] [--yes] [--dry-run] [--no-install] [--no-devtools]
   genclass-runtime remove [--yes] [--dry-run] [--keep-package]
   genclass-runtime login [--yes] [--no-browser] [--no-connect]
   genclass-runtime connect [--app <id|name>] [--name <name>] [--yes] [--dry-run] [--no-install]
