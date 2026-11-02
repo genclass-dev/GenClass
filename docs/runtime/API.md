@@ -1,9 +1,9 @@
 # GenClass Runtime API reference (@genclass/runtime)
 
 This page describes every export, option, event, action and type of `@genclass/runtime` on `main`.
-`npm i @genclass/runtime` installs 0.2.2 (`latest`); `npm i @genclass/runtime@beta` installs 0.3.0-beta.0. Items
-marked 0.3.0 are not in 0.2.x; items marked 0.3.0-beta.1 (interaction analytics, the devtools redesign) are not on
-npm yet.
+`npm i @genclass/runtime` installs 0.2.3 (`latest`); `npm i @genclass/runtime@beta` installs 0.3.0-beta.5. Items
+marked 0.3.0 are not in 0.2.x; items marked 0.3.0-beta.1 (interaction analytics, the devtools redesign) and later
+are on npm's `beta` dist-tag since 2026-10-22.
 
 GenClass Runtime (`@genclass/runtime`) is an open-source (Apache-2.0) browser library that reports race conditions in
 web apps while they happen: stale responses that land over newer data, duplicate requests such as double submits,
@@ -85,7 +85,7 @@ tag or `data-token` / `data-scope`).
 `token` (or a custom `telemetry.endpoint`) also sends `interactions` telemetry events for the app's dashboard: per
 page view the route, engaged time, scroll milestones, and clicks, rage clicks and dead clicks per element key (built
 from markup: `data-genclass-name`, `data-testid`, a stable id, a link's target, stable classes, a short structural
-path; never element text), and (Unreleased) per visit a random visit id kept 30 minutes in `localStorage`
+path; never element text), and (0.3.0-beta.2) per visit a random visit id kept 30 minutes in `localStorage`
 (`genclass.analytics.<token>`), the referring host, utm values without ids, device class, browser and OS families and
 whether the browser visited before, and how visitors move within a page load: how each view was reached (`nav`), the
 previous route and the time between (`from`, `fromMs`), the first element interacted with (`first`, `firstMs`), and at
@@ -148,7 +148,7 @@ interface InitOptions {
   token?: string;                                       // (0.3.0) app token, gc_ + 22 letters/digits: groups telemetry under your private dashboard
   analytics?: boolean;                                  // (0.3.0-beta.1) [false] interaction analytics for the app's dashboard: page views, engaged time,
                                                         // scroll depth, clicks, rage and dead clicks per element key; visits, sources, devices
-                                                        // (Unreleased); navigation within a page load (how each view was reached, the previous route,
+                                                        // (0.3.0-beta.2); navigation within a page load (how each view was reached, the previous route,
                                                         // the first interaction, the end and the path); needs telemetry and the token
   scope?: "app" | "functions";                          // (0.3.0) ["app"]; "functions": decisions and standing questions only for activity inside protect()ed functions (rt.ask() still answered)
 
