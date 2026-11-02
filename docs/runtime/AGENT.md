@@ -21,6 +21,9 @@ This feature uses that position for three things:
 
 A local MCP server (`@genclass/mcp`) gives all of it to a coding agent: findings as they happen, the evidence in
 causal order, a replay switch, an explore switch, and a Playwright regression test that fails while the bug is there.
+The server is free and runs on the developer's machine. Closed-loop development as a service, the MCP server,
+collector and dashboard run for a customer's developers and hosted by GenClass or inside their network, is an
+Enterprise offer ([genclass.dev/enterprise](https://genclass.dev/enterprise)).
 
 ```
  page (dev build)                                   this machine
@@ -32,19 +35,24 @@ causal order, a replay switch, an explore switch, and a Playwright regression te
 ```
 
 Status: new in `@genclass/runtime` 0.3.0-beta.1 (unreleased) and `@genclass/mcp` 0.1.0 (unreleased). Measured
-results are in section 7 and in [RESULTS.md](RESULTS.md) section 16.
+results are in section 7 and in [RESULTS.md](RESULTS.md) section 18.
 
 ## 1. Setup
 
 ```bash
-claude mcp add genclass -- npx -y @genclass/mcp@0.1.0   # or: npx -y @genclass/mcp@0.1.0 init  (writes .mcp.json)
+claude mcp add genclass -- npx -y @genclass/mcp@0.2.1   # or: npx -y @genclass/mcp@0.2.1 init  (writes .mcp.json and .claude/skills/genclass/SKILL.md)
 ```
 
 Or as a Claude Code plugin from this repository's marketplace (`.claude-plugin/marketplace.json`; the plugin is
-`packages/mcp/plugin`: the server, a `UserPromptSubmit` hook and a skill whose description tells Claude when to use
-it): `/plugin marketplace add genclass-dev/GenClass-lib`, then `/plugin install genclass@genclass`. Other clients
+`packages/mcp/plugin`: the server, a `UserPromptSubmit` hook and the `genclass` skill):
+`/plugin marketplace add genclass-dev/GenClass-lib`, then `/plugin install genclass@genclass`. The server's
+`instructions` carry the triggers (the symptom words, the code changes that call for an explore, the scan before a UI
+change is done) and the first call for each, so every client that passes them on gets the "when"; the skill carries
+the procedure (section 4.2) and does not need the plugin: `init` writes it into the project, and
+`npx skills add genclass-dev/GenClass-lib` installs the repository-root copy (`skills/genclass/SKILL.md`, kept
+identical to the plugin's by the version sync) through a skill directory. Other clients
 (Cursor, VS Code, Codex CLI, Gemini CLI, Windsurf, Cline, Goose, Zed, JetBrains, OpenCode): the install blocks in
-[packages/mcp/README.md](../../packages/mcp/README.md#install), or `npx -y @genclass/mcp@0.1.0 config <client>`.
+[packages/mcp/README.md](../../packages/mcp/README.md#install), or `npx -y @genclass/mcp@0.2.1 config <client>`.
 Every launcher is pinned to the release. `packages/mcp/server.json` is the entry for the official MCP Registry
 (published by the release workflow with GitHub OIDC after the npm package); the listings for other directories are
 drafted in [docs/adoption/listings/mcp.md](../adoption/listings/mcp.md).
@@ -94,7 +102,7 @@ lists. It never writes to the event log and never feeds a situation, a decision 
     a write that only reordered the field's elements or entries (the same multiset of elements, the same keys and
     values: a cache's list of keys re-sorted by arrival puts nothing older in place of anything newer), and a path the
     hub's layout re-cut in the same write (an object past 32 keys or a store past 200 fields becomes one field, or the
-    reverse: the path's "change" is GenClass's layout, not data; RESULTS.md section 20 counts the witnesses and
+    reverse: the path's "change" is GenClass's layout, not data; RESULTS.md section 22 counts the witnesses and
     stale-write findings before and after).
   - `identical-in-flight`: two identical requests (same method, URL and body) in flight together, started by two
     separate user actions. Not counted: a request the app aborted, GenClass's own retries and hedges, and keystrokes
@@ -186,11 +194,30 @@ after 30 minutes and are not restored after a restart.
 | `genclass_replay` | `arm` the next page load with a finding's order; `result`: reproduced, not reproduced, or inconclusive (and why) |
 | `genclass_analytics` | `local`: per-endpoint counts, median and p95 latency, error rates, failure streaks, per-page runs, errors and overwritten fields, learned relations and flows; `production`: the GenClass dashboard's sessions, detections by diagnosis and page, latest decisions (`GENCLASS_DASHBOARD`) |
 | `genclass_setup` | the lines to add for this project's framework (read from `package.json`); changes no file |
+| `genclass_scan` | `{url, phone?, hosted?}`: audits any page (no `connectAgent` needed) by running `@genclass/runtime`'s `scan <url> --json` (the project's own runtime when it has the command, else `npx -y @genclass/runtime@beta`) in the project's folder: headless Chromium through Playwright at desktop and phone sizes, the 23 measured visual checks in observe mode; a score and each problem with its element, selector and suggested CSS fix, plus the JSON report (`structuredContent`). `--local` unless `hosted: true` (the genclass.dev page check, public pages only), so the URL leaves the machine only when the agent asks |
 | `genclass_clear` | forget runs and/or findings (runs findings still need are kept) |
 
-The server's `instructions` (sent at initialize) tell the agent when to reach for these on its own: an intermittent bug
-report; after changing code that fetches, submits, autosaves, polls, debounces or listens to a socket; before calling a
-UI change done; and to confirm a bug before fixing it and prove the fix after.
+The server's `instructions` (sent at initialize, under 4,096 characters; the one piece of guidance every MCP client
+passes on, where tool descriptions may be deferred until a tool search) carry the "when" and the first call for each:
+the symptom words in the first 500 characters ("sometimes", "randomly", "only in production", "on slow connections", a
+value that "flips back", stale or old results, lost edits, double submits, sideways scrolling) and `genclass_findings`
+then `genclass_explain`; after changing code that fetches, submits, autosaves, polls, debounces, paginates or listens
+to a socket, `genclass_explore`; before fixing a finding, `genclass_replay`, and again after the fix; before calling a
+UI change done (also after CSS or layout changes and on sites the agent does not own), `genclass_scan`. They name the
+`genclass` skill so a client that has it loads it.
+
+The skill (`packages/mcp/plugin/skills/genclass/SKILL.md`; the plugin installs it, `genclass-mcp init` writes it to
+`.claude/skills/genclass/SKILL.md`, and `skills/genclass/SKILL.md` at the repository root is the identical copy skill
+directories read) carries the "how", which always-loaded context cannot afford: the explore arguments
+(`runs: 6, slow_ms: 600`), the Playwright pairing (`--repeat-each 8 --workers 1`), how to read a report
+("Compared: 6 of 6" against "No verdict" and "0 compared"; "Internal state only" and "Along the way only" are not
+races), what a witness, an explore race and a model detection each are, the reporting rule ("reproduced",
+"not reproduced" or "no race in N orders", never "fixed" unless a replay or explore showed it), and what to do when
+the `genclass_*` tools are missing (the one-line install, or `npx @genclass/runtime@beta scan <url> --json` for the
+visual checks alone). Its frontmatter description repeats the triggers, since that is what a client matches a skill
+on; its body does not. `packages/mcp/test/manifests.test.ts` checks the frontmatter, that every `genclass_*` name in
+the body is a registered tool, the description's length (Claude Code's 1,024), that the root copy is identical, and
+that the instructions stay under 4,096 characters, put the symptom words first and name the skill.
 
 ### 4.3 Agent API
 
@@ -200,13 +227,60 @@ start), `clear`. Local processes of the same user only (section 6).
 
 ### 4.4 Command and push
 
-- `genclass-mcp` runs the server on stdio. `genclass-mcp init [--hook]` adds it to `.mcp.json` (merging) and, with
-  `--hook`, a `UserPromptSubmit` hook to `.claude/settings.json`. `genclass-mcp status` prints the bridge's status.
+- `genclass-mcp` runs the server on stdio. `genclass-mcp init [--hook] [--no-skill]` adds it to `.mcp.json`
+  (merging), writes the `genclass` skill to `.claude/skills/genclass/SKILL.md` (the package's copy with a
+  `genclass:init` marker line after the frontmatter; a rerun replaces a file that carries the marker and leaves one
+  that does not, saying which; `--no-skill` leaves it out) and, with `--hook`, a `UserPromptSubmit` hook to
+  `.claude/settings.json`. `genclass-mcp status` prints the bridge's status.
 - **Push.** New findings are sent as Claude Code channel events (`notifications/claude/channel`, the experimental
   `claude/channel` capability; research preview, enabled with
   `claude --dangerously-load-development-channels server:genclass`), at most 3 every 3 s. Without channels, the
   prompt hook (`genclass-mcp hook`) adds findings changed since the last prompt as additional context. Both carry the
   finding id and kind first and page strings quoted; the agent calls `genclass_explain` for the rest.
+
+### 4.5 Reporting to the dashboard (opt-in): the closed loop on the dashboard
+
+Everything above stays on the developer's machine. The app's GenClass dashboard has a Closed-loop development view
+(Fig. 3 there) that draws every issue's path, found, reproduced, fix proven, closed, or round again, with the period's
+counts on each stage, lists the agent's log under it (Table 15) and, below that, the app's production problems with what
+the agent does with each (Fig. 6); by default the dashboard cannot know what the agent did, and says so. With
+`GENCLASS_REPORT` set, the MCP server mirrors its own log of the loop there.
+
+- **Off by default.** `GENCLASS_REPORT=on` reports to the dashboard named by `GENCLASS_DASHBOARD` (the private link);
+  `GENCLASS_REPORT=<link or secret>` names it directly. The sample dashboard is never a target. Unset, nothing is
+  sent, and the dashboard's view says reporting is off.
+- **What is sent** (`packages/mcp/src/report.ts`): `POST <origin>/api/projects/<secret>/agent`, JSON
+  `{ schema: "genclass-agent/1", events: [...] }`, one event per step of the loop, each `{ t, at, ... }`:
+  `found` when the bridge makes a finding (`id`, `kind`, one of the eight kinds, `route`, the page path without query
+  or fragment, capped at 200 characters); `explain` when the agent reads its evidence (`genclass_explain`); `armed`
+  when a replay of it is armed; `replay` with the last verdict `genclass_replay result` gave (`reproduced` true or
+  false; an inconclusive one is not sent); `test` when `genclass_explain` produced the regression test; `explore` when
+  an explore session is reported (`runs`, the page loads compared, `races`, the race findings it made, and the
+  session's `route` when it had one); `cleared` when the developer clears findings, runs or everything (`what`). Never
+  a title, an evidence line, a snapshot, a step, a value, an error message or any other page text. The dashboard's
+  private link is the credential (it already reads the stats); the agent's own API token never leaves the machine.
+- **How it is sent.** Batched (500 ms, at most 50 events a request), best effort: a refusal or a network error is
+  logged once to stderr and never thrown, never retried in a loop, and never changes a finding, a verdict or a tool
+  result. The session that owns the bridge reports; a session following another's bridge sends nothing (the owner
+  already does).
+- **What the dashboard keeps** (`telemetry-worker/src/dashboard.ts` `agentReport`, tables `agent_reports` and
+  `agent_log`): every accepted event as one log row (at most 500 per app, the oldest go first), and per token and
+  finding id the kind, the route (normalised like the runtime's: id-like segments become `:id`), when it was found,
+  when its evidence was first read, the last replay time and verdict, whether it ever reproduced, how many replays
+  reproduced it, when a test was written and when the fix was proven: a replay that no longer reproduces it after one
+  that did. 90 days, like the rest. Rate limited per token (`SESSION_LIMIT`), 16 KB a request. Nothing in it feeds a
+  decision: the runtime never reads the dashboard. Events the dashboard does not know are dropped, so an older
+  dashboard keeps working with a newer server and the other way round.
+- **How it is shown.** Fig. 3 counts, over the findings changed in the period: found (every finding reported),
+  reproduced (a replay reproduced it), fix proven (a replay no longer reproduces it after one that did), closed (fix
+  proven and a regression test written), open (found and not closed), and round again (replays that still reproduced a
+  finding already reproduced once: a fix was tried and the bug was still there); the two back edges, round again and
+  the loop back to production, are dashed. Table 15 lists the log newest first: the time, the step, the finding and
+  its kind, the page and the outcome ("not reproduced: the fix holds", "8 page loads compared, 1 race found"). Fig. 6
+  matches reports to its problem rows by kind (`stale-write` and `race` answer stale responses and write races,
+  `duplicate-request` double submits, `error` the failure kinds) and by page, and puts one line on the row ("Agent: f3
+  on /search reproduced, test written, fix proven 42 min ago"); Fix says how many tests the agent wrote in the period,
+  Prove names the last fix proven. Disclosed in TELEMETRY.md and the package README.
 
 ## 5. Explore and replay
 
@@ -232,7 +306,7 @@ What a seeded run ends with beyond that is sorted by where it shows, from the ev
 The internal tier exists because a data-fetching cache keeps bookkeeping whose final value depends on arrival order by
 construction, with nothing visible attached: on the Strapi admin (Redux Toolkit Query) the request ids, the fulfilled
 timestamps, the lists of cache keys a tag provides and the subscriptions differed between orders in every session
-while the page did not (RESULTS.md section 20). The rule is generic and measured on the run itself, not a list of
+while the page did not (RESULTS.md section 22). The rule is generic and measured on the run itself, not a list of
 library fields: a store value that matters to the user reaches the page, and when it does the run is in the visible
 tier, with the store fields listed beside the page lines. Its limit: a difference that shows only in a control's
 state (a button left disabled, a spinner without text) is not in the page text, so it lands in the internal tier
@@ -261,6 +335,8 @@ replays its run's seeded schedule (with its delay); anything recorded in a natur
 order as `given`. When the recorded run is gone, it refuses to arm rather than replay something else. `result` compares
 the replay run with the finding: the same witness (field by shape, signature), the same error (by name and shape), the
 failing run's page text, form values, request counts or error again = reproduced; the baseline's = not reproduced
+(page lines count: a line the page always shows once and the failing run showed twice, a product card and a stale
+result, is reproduced only when the replay shows it twice too; the finding's evidence keeps the counts, `textCounts`)
 (store values decide only for a finding recorded with nothing else, and a redaction matches any value); a replay whose
 element names changed with the order still counts as the same steps when its actions match by kind and role. It is
 inconclusive, and says why, until the run has settled and recorded user actions, when its steps differ from the
@@ -337,7 +413,7 @@ well, fixed in `src/observe/xhr.ts`.
 Tests: 36 in `packages/runtime/test/agent.test.ts`, 104 in `packages/mcp/test/`; the runtime's whole suite passes, and
 the first load stays within its limits.
 
-False reports on real apps (RESULTS.md section 20, the Strapi admin with the hunt harness and two small apps on Redux
+False reports on real apps (RESULTS.md section 22, the Strapi admin with the hunt harness and two small apps on Redux
 Toolkit Query and TanStack Query): before the rules of section 5.1, 16 of 21 interaction sessions on Strapi got a
 race-like verdict (62 reordered runs, all false by a DOM oracle) and a correct Redux Toolkit Query page got "RACE" in
 18 of 18 reordered runs; after, 0 of 21 and 0 of 18, with the real 403 race still found in 6 of 6 reordered runs at
@@ -359,15 +435,16 @@ This is one page and one bug class, a proof of the mechanism, not a recall figur
   budget (1,000 fields) are not compared; the report says when that happened.
 - An overwrite that a later response repaired (a flicker) is reported along the way, not as a race; the stale-write
   findings each witness makes stay as they were, so on an app whose cache writes its own bookkeeping (Redux Toolkit
-  Query's statuses, subscriptions) `genclass_findings` still lists those (RESULTS.md section 20 counts them).
+  Query's statuses, subscriptions) `genclass_findings` still lists those (RESULTS.md section 22 counts them).
 - WebSocket and EventSource messages are recorded, not reordered; failure responses are not held. Both are next.
 - The script-tag build has no agent entry yet (ESM only).
 - Production: today the agent reads production through the dashboard (counts by diagnosis and page) and reproduces
-  locally with `focus` on the flagged signature. Sending production witnesses (the recorded order of a real user's
+  locally with `focus` on the flagged signature, and with `GENCLASS_REPORT` the dashboard shows what it reproduced
+  and fixed (section 4.5). Sending production witnesses (the recorded order of a real user's
   failing session, without page text) is the natural next step and widens what telemetry sends, so it needs the
   owner's OK first (AGENTS.md rule 8).
 - Next measurement: explore on the six demos and the real-apps sweep, reporting races found next to false reports on
-  their correct variants (the Strapi admin and two small apps are measured, RESULTS.md section 20).
+  their correct variants (the Strapi admin and two small apps are measured, RESULTS.md section 22).
 
 ## 9. Relation to the rules
 
@@ -387,4 +464,5 @@ This is one page and one bug class, a proof of the mechanism, not a recall figur
   `performance.now` or global `setTimeout` (it wraps the page's `setTimeout` to observe pending timers, and schedules
   nothing with it).
 - **Rule 7 (dependencies).** None added: `@genclass/mcp` has no runtime dependencies.
-- **Rule 8 (telemetry).** Nothing is sent off the machine; telemetry is unchanged.
+- **Rule 8 (telemetry).** Nothing is sent off the machine; telemetry is unchanged. (`genclass_scan` sends a URL to the
+  genclass.dev page check only when the agent passes `hosted: true`.)

@@ -44,6 +44,7 @@ import {
   forgotPage,
   loginPage,
   messagePage,
+  newProjectPage,
   passkeyStepPage,
   pendingPage,
   signupPage,
@@ -54,10 +55,12 @@ import {
   createProject,
   forgetToken,
   newProjectId,
+  newSecret,
   PROJECT_COLUMNS,
   PROJECT_ID_RE,
   projectBySecret,
   projectsCreatedSince,
+  putFunnels,
   randomBase62,
   sanitizeName,
   SECRET_RE,
@@ -1539,6 +1542,22 @@ async function claimProject(c: C): Promise<Response> {
 }
 
 /**
+ * POST /api/account/projects/<id>/link: a new private dashboard link for an owned app (the dashboard's "agent link",
+ * which @genclass/mcp reads production numbers from as GENCLASS_DASHBOARD). 201 { dashboardUrl }, shown once: only
+ * the new secret's hash is stored, so it replaces the hash of any link the app had and that link stops working. Only
+ * the signed-in browser may make one (a CLI session cannot read stats, so it cannot mint a way to read them).
+ */
+async function makeLink(c: C, id: string): Promise<Response> {
+  const a = await browserWriter(c, "an agent link can be made");
+  if (a instanceof Response) return a;
+  const p = await ownedProject(c, a.account.id, id);
+  if (!p) return fail(404, "not found");
+  const secret = newSecret();
+  await c.db.prepare("UPDATE projects SET secret_hash = ?, private_link = 1 WHERE id = ? AND account_id = ?").bind(await sha256Hex(secret), id, a.account.id).run();
+  return json(201, { dashboardUrl: `${c.cfg.origin}/dashboard/${secret}` });
+}
+
+/**
  * DELETE /api/account/projects/<id>/link: turn off an owned app's private dashboard link. The stored hash is replaced
  * by the hash of a secret nobody is given, so the old link stops working (and can no longer be claimed); the app,
  * its key and its data stay in the account.
@@ -1552,6 +1571,31 @@ async function turnOffLink(c: C, id: string): Promise<Response> {
     .prepare("UPDATE projects SET secret_hash = ?, private_link = 0 WHERE id = ? AND account_id = ?")
     .bind(await sha256Hex(`off:${randomSecret(32)}`), id, a.account.id)
     .run();
+  return noContent();
+}
+
+/**
+ * DELETE /api/account/projects/<id> { confirm: "delete" }: delete an owned app with everything kept for it (its stats,
+ * visits, the agent's reports and log, its paid features, its export copies) and the app itself. Its key stops counting
+ * at once: batches the app still sends are stored as batches without a known key are (R2 only) and reach no dashboard.
+ * Its private link and agent link stop working. Only the signed-in browser may do it.
+ */
+async function deleteProject(c: C, id: string): Promise<Response> {
+  const a = await browserWriter(c, "a project can be deleted");
+  if (a instanceof Response) return a;
+  const body = await readJson(c, 1024);
+  if (body instanceof Response) return body;
+  if (body.confirm !== "delete") return fail(400, 'send { "confirm": "delete" } to delete this project');
+  const p = await ownedProject(c, a.account.id, id);
+  if (!p) return fail(404, "not found");
+  await c.db.batch([
+    c.db.prepare("DELETE FROM integrations WHERE project_id = ?").bind(id),
+    c.db.prepare("DELETE FROM forward_log WHERE project_id = ?").bind(id),
+    ...["daily", "hourly", "recent", "sessions", "visits", "agent_reports", "agent_log"].map((t) => c.db.prepare(`DELETE FROM ${t} WHERE token = ?`).bind(p.token)),
+    c.db.prepare("DELETE FROM projects WHERE id = ? AND account_id = ?").bind(id, a.account.id),
+  ]);
+  forgetToken(p.token);
+  await forgetExports(c.db, c.env.BUCKET, [p.token]).catch(() => undefined);
   return noContent();
 }
 
@@ -1637,7 +1681,7 @@ async function deleteAccount(c: C): Promise<Response> {
     c.db.prepare(`DELETE FROM forward_log WHERE project_id IN (${owned})`).bind(id),
     c.db.prepare("DELETE FROM export_keys WHERE account_id = ?").bind(id),
     c.db.prepare("DELETE FROM custom_requests WHERE account_id = ?").bind(id),
-    ...["daily", "hourly", "recent", "sessions"].map((t) => c.db.prepare(`DELETE FROM ${t} WHERE token IN (${own})`).bind(id)),
+    ...["daily", "hourly", "recent", "sessions", "visits"].map((t) => c.db.prepare(`DELETE FROM ${t} WHERE token IN (${own})`).bind(id)),
     c.db.prepare("DELETE FROM projects WHERE account_id = ? AND private_link = 0").bind(id),
     c.db.prepare("UPDATE projects SET account_id = NULL WHERE account_id = ?").bind(id),
     c.db.prepare("DELETE FROM credentials WHERE account_id = ?").bind(id),
@@ -1697,6 +1741,7 @@ async function accountView(c: C, a: Auth): Promise<AccountView> {
     providers: { google: c.cfg.google, github: c.cfg.github },
     // dashboards: open (every plan today), or locked with the plans to see
     dashboards: hasDashboard(access) ? "open" : "plans",
+    plan: access.plan.name,
     pick: { claim: c.url.searchParams.get("claim") === "1" },
     recovery: RECOVERY_CONTACT,
   };
@@ -1762,6 +1807,16 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       const view = await accountView(c, a);
       view.notice = accountNotice(url);
       return page(200, (n) => accountPage(n, view));
+    }
+    case "/account/new": {
+      // Studio's "Create a new project" (the form posts to /api/account/projects, as the CLI does)
+      if (!get) return method();
+      const a = await webSession(c);
+      // ?name= fills in the project's name (the page check's "Fix it with GenClass" names the site it checked)
+      const suggested = (url.searchParams.get("name") ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 80);
+      if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/new${suggested ? `?name=${encodeURIComponent(suggested)}` : ""}`)}`);
+      const view = await accountView(c, a);
+      return page(200, (n) => newProjectPage(n, { account: view.account, projects: view.projects.map((p) => ({ id: p.id, name: p.name })), plan: view.plan, suggested }));
     }
     case "/login/device": {
       if (!get) return method();
@@ -1865,8 +1920,20 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     const range = pickRange(url.searchParams.get("range"), viewRanges(access.plan));
     return json(200, await stats(c.db, p, range, c.now));
   }
+  const fun = /^\/api\/account\/projects\/([^/]+)\/funnels$/.exec(path);
+  if (fun) {
+    if (m !== "PUT") return method();
+    const a = await browserWriter(c, "funnels can be changed");
+    if (a instanceof Response) return a;
+    const p = await ownedProject(c, a.account.id, fun[1]!);
+    if (!p) return fail(404, "not found");
+    if (!hasDashboard(await accountAccess(c.db, a.account.id, env, c.now))) return lockedJson(c);
+    return putFunnels(c.req, c.db, p.token);
+  }
   const link = /^\/api\/account\/projects\/([^/]+)\/link$/.exec(path);
-  if (link) return m === "DELETE" ? turnOffLink(c, link[1]!) : method();
+  if (link) return m === "DELETE" ? turnOffLink(c, link[1]!) : post ? makeLink(c, link[1]!) : method();
+  const proj = /^\/api\/account\/projects\/([^/]+)$/.exec(path);
+  if (proj) return m === "DELETE" ? deleteProject(c, proj[1]!) : method();
   const ses = /^\/api\/account\/sessions\/([^/]+)$/.exec(path);
   if (ses) return m === "DELETE" ? revokeSession(c, ses[1]!) : method();
   const cred = /^\/api\/account\/credentials\/([^/]+)$/.exec(path);
@@ -1882,12 +1949,13 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     const apps = (await accountProjects(c, a.account.id)).map((x) => ({ id: x.id!, name: x.name }));
     const access = await accountAccess(c.db, a.account.id, env, c.now);
     const base = {
-      account: { apps, current: p.id!, email: a.account.email ?? a.account.github_login },
+      account: { apps, current: p.id!, email: a.account.email ?? (a.account.github_login ? `@${a.account.github_login}` : null), plan: access.plan.name },
       id: p.id!,
       firstEvent: p.first_event,
       privateLink: !!p.private_link,
       runtimeReady: runtimeHasTokens(env),
       endpoint: ownEndpoint(env),
+      origin: c.cfg.origin,
     };
     const project = { name: p.name, token: p.token, created: p.created, lastEvent: p.last_event };
     // locked (a plan file without the dashboard): the app's key and Connect panel, and the plans; no stats
@@ -1933,6 +2001,7 @@ function accountNotice(url: URL): AccountView["notice"] {
   if (q.get("linked") === "github") return { kind: "ok", text: "GitHub is linked. You can now sign in with it." };
   if (q.get("password") === "changed") return { kind: "ok", text: "Your password is changed. Every other browser and terminal is signed out." };
   if (q.get("password") === "added") return { kind: "ok", text: "Your password is set. You can now sign in with your email and password." };
+  if (q.get("deleted") === "project") return { kind: "ok", text: "The project is deleted, with its stats and its links." };
   if (q.get("error") === "google_taken") return { kind: "bad", text: "That Google account is already linked to another GenClass account, so it was not linked here." };
   if (q.get("error") === "github_taken") return { kind: "bad", text: "That GitHub account is already linked to another GenClass account, so it was not linked here." };
   return undefined;
