@@ -45,26 +45,30 @@ const DEV = {
 };
 
 /**
- * The snippets every JS entry gets: the auto import (top), the dev-only overlay (end) and, when init writes options,
- * the import of genclass.config right before the auto import (`file` is where these lines go).
+ * The snippets every JS entry gets: the auto import (top), the dev-only overlay and, with --agent, the dev-only agent
+ * link (both at the end), and, when init writes options, the import of genclass.config right before the auto import
+ * (`file` is where these lines go). `tail` is the dev-only lines in order.
  */
-function snippets(style, { mode, devtools, devCond, configFile }, file) {
+function snippets(style, { mode, devtools, agent, devCond, configFile }, file) {
   const { q, semi } = style;
   const auto = AUTO(mode);
-  return {
-    top: devtools ? `import genclass from ${q}${auto}${q}${semi}` : `import ${q}${auto}${q}${semi}`,
+  const s = {
+    top: devtools || agent ? `import genclass from ${q}${auto}${q}${semi}` : `import ${q}${auto}${q}${semi}`,
     dev: devtools ? `if (${devCond}) import(${q}@genclass/runtime/devtools${q}).then((d) => d.mountDevtools(genclass))${semi}` : null,
+    agent: agent ? `if (${devCond}) import(${q}@genclass/runtime/agent${q}).then((a) => a.connectAgent(genclass))${semi}` : null,
     cfg: configFile && file ? `import ${q}${specifier(file, configFile)}${q}${semi}` : null,
   };
+  s.tail = [s.dev, s.agent].filter(Boolean);
+  return s;
 }
 
-/** Adds the auto import as the first statement and the dev-only overlay line at the end of an existing file. */
+/** Adds the auto import as the first statement and the dev-only lines at the end of an existing file. */
 function editEntry(file, opts, extraTop = []) {
   const before = readText(file) ?? "";
   const style = codeStyle(before);
   const s = snippets(style, opts, file);
-  let after = insertTop(before, [...(s.cfg ? [s.cfg] : []), s.top, ...(s.dev ? extraTop.map((l) => l(style)) : [])].map(mark));
-  if (s.dev) after = appendEnd(after, [mark(s.dev)]);
+  let after = insertTop(before, [...(s.cfg ? [s.cfg] : []), s.top, ...(s.tail.length ? extraTop.map((l) => l(style)) : [])].map(mark));
+  if (s.tail.length) after = appendEnd(after, s.tail.map(mark));
   return { file, kind: "modify", before, after };
 }
 
@@ -75,6 +79,12 @@ function createFile(file, body, eol = "\n") {
 }
 
 const DQ = { q: '"', semi: ";" };
+
+/** The dev-only calls as the lines of one `if` block (Next.js's created files), from the snippets. */
+const devCalls = (s) => [
+  ...(s.dev ? [`  import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));`] : []),
+  ...(s.agent ? [`  import("@genclass/runtime/agent").then((a) => a.connectAgent(genclass));`] : []),
+];
 
 // -------------------------------------------------------------------------------------------- frameworks
 
@@ -120,10 +130,12 @@ function planWebpack(p, o) {
   // webpack, rspack/rsbuild and parcel replace process.env.NODE_ENV; other bundlers may not define `process`
   const knowsNodeEnv = ["webpack", "@rspack/core", "@rsbuild/core", "parcel"].includes(p.details.bundler);
   const devtools = o.devtools && knowsNodeEnv;
+  const agent = o.agent && knowsNodeEnv;
+  const skipped = [o.devtools && !knowsNodeEnv ? "devtools overlay" : null, o.agent && !knowsNodeEnv ? "agent link" : null].filter(Boolean);
   return {
     entry,
-    changes: [editEntry(entry, { ...o, devtools, devCond: DEV.node })],
-    notes: o.devtools && !knowsNodeEnv ? ["The devtools overlay was not added (unknown way to tell development builds). See the README's devtools snippet."] : [],
+    changes: [editEntry(entry, { ...o, devtools, agent, devCond: DEV.node })],
+    notes: skipped.length ? [`The ${skipped.join(" and the ")} ${skipped.length > 1 ? "were" : "was"} not added (unknown way to tell development builds). See the README's devtools snippet${o.agent ? " and docs/runtime/AGENT.md" : ""}.`] : [],
   };
 }
 
@@ -139,7 +151,7 @@ function planSvelteKit(p, o) {
   if (existing) return { entry: existing, changes: [editEntry(existing, { ...o, devCond: DEV.vite })] };
   const file = join(p.dir, "src", `hooks.client.${p.ts ? "ts" : "js"}`);
   const s = snippets(DQ, { ...o, devCond: DEV.vite }, file);
-  return { entry: file, changes: [createFile(file, [...(s.cfg ? [s.cfg] : []), s.top, ...(s.dev ? [s.dev] : [])])] };
+  return { entry: file, changes: [createFile(file, [...(s.cfg ? [s.cfg] : []), s.top, ...s.tail])] };
 }
 
 function planNuxt(p, o) {
@@ -148,8 +160,8 @@ function planNuxt(p, o) {
   if (isFile(file)) return { changes: [], manual: `${posix(relative(p.dir, file))} already exists` };
   const s = snippets(DQ, { ...o, devCond: DEV.nuxt }, file);
   const top = [...(s.cfg ? [s.cfg] : []), s.top];
-  const body = s.dev
-    ? [...top, "", "export default defineNuxtPlugin(() => {", `  ${s.dev}`, "});"]
+  const body = s.tail.length
+    ? [...top, "", "export default defineNuxtPlugin(() => {", ...s.tail.map((l) => `  ${l}`), "});"]
     : [...top, "", "export default defineNuxtPlugin(() => {});"];
   return { entry: file, changes: [createFile(file, body)] };
 }
@@ -178,7 +190,7 @@ function planNext(p, o) {
     const file = join(srcDir, `instrumentation-client.${ext}`);
     const s = snippets(DQ, { ...o, devCond: DEV.node }, file);
     const top = [...(s.cfg ? [s.cfg] : []), s.top];
-    const body = s.dev ? [...top, "", `if (process.env.NODE_ENV === "development") {`, `  import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));`, "}"] : top;
+    const body = s.tail.length ? [...top, "", `if (process.env.NODE_ENV === "development") {`, ...devCalls(s), "}"] : top;
     return { entry: file, changes: [createFile(file, body)] };
   }
 
@@ -195,7 +207,7 @@ function planNext(p, o) {
       ...(s.cfg ? [s.cfg] : []),
       s.top,
       "",
-      ...(s.dev ? [`if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {`, `  import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));`, "}", ""] : []),
+      ...(s.tail.length ? [`if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {`, ...devCalls(s), "}", ""] : []),
       "export function GenClassInit() {",
       "  return null;",
       "}",
@@ -231,7 +243,7 @@ function planNext(p, o) {
     ...(sd.cfg ? [sd.cfg] : []),
     sd.top,
     "",
-    ...(sd.dev ? [sd.dev, ""] : []),
+    ...(sd.tail.length ? [...sd.tail, ""] : []),
     `export default function App({ Component, pageProps }${p.ts ? ": AppProps" : ""}) {`,
     "  return <Component {...pageProps} />;",
     "}",
@@ -249,7 +261,7 @@ function planAstro(p, o) {
   for (const f of targets) {
     const before = readText(f) ?? "";
     const s = snippets(DQ, { ...o, devCond: DEV.vite });
-    const code = s.dev ? `${s.top} ${s.dev}` : s.top;
+    const code = [s.top, ...s.tail].join(" ");
     const lines = linesOf(before);
     const li = lines.findIndex((l) => /<\/head>/i.test(l));
     let after;
@@ -266,6 +278,17 @@ function planAstro(p, o) {
 }
 
 export const cdnUrl = (version, min = true) => `https://cdn.jsdelivr.net/npm/@genclass/runtime@${version}/dist/genclass.global${min ? ".min" : ""}.js`;
+/** The agent entry next to the script URL: the same directory's agent.js (jsDelivr, unpkg or a self-hosted dist/). */
+export const agentUrl = (scriptUrl) => scriptUrl.replace(/\/genclass\.global(?:\.min)?\.js(?:[?#].*)?$/, "/agent.js");
+/**
+ * With --agent, plain HTML gets this after the runtime's tag: a module script (which runs after the deferred tag, in
+ * order) that on a page served from this machine loads the agent entry and connects the page to the local MCP bridge.
+ * The hostname test only spares public pages the download: connectAgent itself is inert off loopback.
+ */
+export function agentTag(o, version) {
+  const url = agentUrl(o.cdn || cdnUrl(version));
+  return `<script type="module">if (["localhost", "127.0.0.1"].includes(location.hostname)) import("${url}").then((a) => a.connectAgent(GenClass.runtime));</script>`;
+}
 const unpkgUrl = (version, min) => `https://unpkg.com/@genclass/runtime@${version}/dist/genclass.global${min ? ".min" : ""}.js`;
 
 /**
@@ -305,6 +328,7 @@ function planHtml(p, o, ctx) {
   const files = htmlFiles(p.dir);
   if (!files.length) return { changes: [], manual: "no .html file with a <head> in this directory" };
   const tag = scriptTag(o, ctx.pkgDir, ctx.version);
+  const agent = o.agent ? agentTag(o, ctx.version) : null;
   const changes = [];
   for (const f of files) {
     const before = readText(f) ?? "";
@@ -313,14 +337,15 @@ function planHtml(p, o, ctx) {
     const line = lines[li];
     let after;
     if (/<\/head>/i.test(line)) {
-      // a one-line head: put the tag right after <head ...>
+      // a one-line head: put the tag (and the agent script) right after <head ...>
       const m = /<head[^>]*>/i.exec(before);
       const at = m.index + m[0].length;
-      after = before.slice(0, at) + `${tag}<!-- ${MARK_INLINE} -->` + before.slice(at);
+      after = before.slice(0, at) + `${tag}<!-- ${MARK_INLINE} -->` + (agent ? `${agent}<!-- ${MARK_INLINE} -->` : "") + before.slice(at);
     } else {
       const next = lines.slice(li + 1).find((l) => l.trim() !== "");
       const indent = next !== undefined ? indentOf(next) : indentOf(line) + indentUnit(before);
       after = insertLineAt(before, li + 1, `${indent}${tag} <!-- ${MARK} -->`);
+      if (agent) after = insertLineAt(after, li + 2, `${indent}${agent} <!-- ${MARK} -->`);
     }
     changes.push({ file: f, kind: "modify", before, after });
   }

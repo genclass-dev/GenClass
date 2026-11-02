@@ -57,7 +57,9 @@ Every launcher is pinned to the release. `packages/mcp/server.json` is the entry
 (published by the release workflow with GitHub OIDC after the npm package); the listings for other directories are
 drafted in [docs/adoption/listings/mcp.md](../adoption/listings/mcp.md).
 
-In the app's browser entry, development builds only (`@genclass/runtime` 0.3.0-beta.1 or later):
+`npx @genclass/runtime@beta init --agent` (0.3.0-beta.6) adds the line for you, next to the import it writes (plain HTML: a
+module script after the tag). By hand, in the app's browser entry, development builds only (`@genclass/runtime`
+0.3.0-beta.1 or later):
 
 ```ts
 import { GenClass } from "@genclass/runtime";

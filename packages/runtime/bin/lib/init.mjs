@@ -40,7 +40,7 @@ export const USAGE = `Usage:
   genclass-runtime init   [--mode observe|guard|heal] [--token <gc_...> | --no-token]
                           [--no-telemetry | --telemetry] [--model-url <url>]
                           [--sink console-json|webhook:<url>]
-                          [--yes] [--dry-run] [--no-install] [--no-devtools] [--no-network] [--cwd <dir>]
+                          [--agent] [--yes] [--dry-run] [--no-install] [--no-devtools] [--no-network] [--cwd <dir>]
   genclass-runtime remove [--yes] [--dry-run] [--keep-package] [--cwd <dir>]
 
 init     finds your framework, installs ${PKG} (this version, ${VERSION}; an older one already in the
@@ -79,6 +79,11 @@ remove   takes out exactly what init added (the lines and blocks marked "${MARK}
   --yes, -y        apply without asking
   --dry-run        show what would change; write nothing
   --no-install     do not run the package manager
+  --agent          also connect development builds to your coding agent: a dev-only line that loads
+                   @genclass/runtime/agent and calls connectAgent (plain HTML: a module script after the
+                   tag), so the GenClass MCP server (npx -y @genclass/mcp init) sees the page. Production
+                   builds drop it; off loopback hosts it is inert. The open-source setup, no account:
+                   init --no-telemetry --agent, then npx -y @genclass/mcp init
   --no-devtools    do not add the dev-only devtools overlay
   --no-network     do not ask npm for newer releases (--dry-run, --no-token and --no-telemetry do not
                    ask either)
@@ -99,6 +104,7 @@ const BOOL = {
   "dry-run": "dryRun",
   "no-install": "noInstall",
   "no-devtools": "noDevtools",
+  agent: "agent",
   "no-network": "noNetwork",
   "keep-package": "keepPackage",
   "no-sri": "noSri",
@@ -895,7 +901,8 @@ export async function init(o, ctx = {}) {
   }
 
   const devtools = !o.noDevtools;
-  const planFor = (config) => planInit(project, { mode: o.mode, devtools, cdn: o.cdn, sri: !o.noSri, sync: !!o.sync, strategy: o.strategy, config }, { pkgDir: PKG_DIR, version: VERSION });
+  const agent = !!o.agent;
+  const planFor = (config) => planInit(project, { mode: o.mode, devtools, agent, cdn: o.cdn, sri: !o.noSri, sync: !!o.sync, strategy: o.strategy, config }, { pkgDir: PKG_DIR, version: VERSION });
   const plan = planFor(cfg);
   if (plan.manual || !plan.changes.length) {
     out(`  ${c.yellow(sym.warn)} Could not add GenClass automatically: ${plan.manual ?? "nothing to change"}.`);
@@ -987,6 +994,8 @@ export async function init(o, ctx = {}) {
   out(`    ${sym.dot} Detections and actions appear in the browser console as ${c.cyan("[GenClass] ...")} lines.`);
   if (cfg.sinks?.length) out(`    ${sym.dot} They also reach ${c.cyan(cfg.sinks.join(", "))}: ${cfg.sinks.map((s) => SINK_WHAT[sinkBase(s)] ?? s).join("; ")}.`);
   if (devtools && changes.some((ch) => /devtools/.test(ch.after))) out(`    ${sym.dot} In development an overlay shows what GenClass sees (bottom-right, ${c.bold("Alt+Shift+G")}).`);
+  if (agent && changes.some((ch) => /runtime\/agent|\/agent\.js/.test(ch.after)))
+    out(`    ${sym.dot} In development the page connects to the GenClass MCP server: ${c.cyan("npx -y @genclass/mcp init")} adds it to Claude Code (other agents: ${c.cyan("npx -y @genclass/mcp config <client>")}); until it runs, the page logs one failed request to 127.0.0.1:47357.`);
   out(`    ${sym.dot} Rule it out while debugging: add ${c.cyan("?genclass=off")} to the URL.`);
 
   out();

@@ -1228,3 +1228,88 @@ describe("the newest line: version line, npm dist-tags, older runtimes upgraded 
     expect(r.out).toContain(`installs @genclass/runtime (this version, ${VERSION}; an older one already in the`);
   });
 });
+
+describe("init --agent: the dev-only agent link next to the overlay (the open-source setup's app side)", () => {
+  const VITE_TS = {
+    "package.json": pkg({ react: "^19.0.0", vite: "^7.0.0", "@vitejs/plugin-react": "^5" }),
+    "tsconfig.json": "{}\n",
+    "index.html": VITE_HTML,
+    "src/main.tsx": `import { createRoot } from 'react-dom/client'\nimport App from './App.tsx'\n\ncreateRoot(document.getElementById('root')!).render(<App />)\n`,
+    "src/App.tsx": `export default function App() { return <button>hi</button> }\n`,
+  };
+
+  it("Vite: the overlay line, then the agent line, both marked; the top import binds the runtime", () => {
+    const dir = project(VITE_TS);
+    const r = cli(dir, "init", "--yes", "--no-install", "--agent");
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain("npx -y @genclass/mcp init");
+    expect(r.out).toContain("127.0.0.1:47357");
+    const main = readFileSync(join(dir, "src/main.tsx"), "utf8");
+    const lines = main.trimEnd().split("\n");
+    expect(lines[0]).toBe(`import genclass from '@genclass/runtime/auto' // genclass:init`);
+    expect(lines.at(-2)).toBe(`if (import.meta.env.DEV) import('@genclass/runtime/devtools').then((d) => d.mountDevtools(genclass)) // genclass:init`);
+    expect(lines.at(-1)).toBe(`if (import.meta.env.DEV) import('@genclass/runtime/agent').then((a) => a.connectAgent(genclass)) // genclass:init`);
+    expect(cli(dir, "remove", "--yes").code).toBe(0);
+    expect(readFileSync(join(dir, "src/main.tsx"), "utf8")).toBe(VITE_TS["src/main.tsx"]);
+  });
+
+  it("--agent --no-devtools: the runtime is still bound; only the agent line follows", () => {
+    const after = roundTrip(project(VITE_TS), "--agent", "--no-devtools");
+    const lines = after["src/main.tsx"].trimEnd().split("\n");
+    expect(lines[0]).toBe(`import genclass from '@genclass/runtime/auto' // genclass:init`);
+    expect(lines.at(-1)).toBe(`if (import.meta.env.DEV) import('@genclass/runtime/agent').then((a) => a.connectAgent(genclass)) // genclass:init`);
+    expect(after["src/main.tsx"]).not.toContain("devtools");
+  });
+
+  it("Next.js 16: both calls in the one development block of instrumentation-client.ts", () => {
+    const dir = project({
+      "package.json": pkg({ next: "16.0.0", react: "^19" }),
+      "tsconfig.json": "{}\n",
+      "node_modules/next/package.json": JSON.stringify({ name: "next", version: "16.0.1" }),
+      "src/app/layout.tsx": `export default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang="en">\n      <body>{children}</body>\n    </html>\n  );\n}\n`,
+    });
+    const f = roundTrip(dir, "--agent")["src/instrumentation-client.ts"];
+    expect(f).toContain(`if (process.env.NODE_ENV === "development") {\n  import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));\n  import("@genclass/runtime/agent").then((a) => a.connectAgent(genclass));\n}`);
+  });
+
+  it("Nuxt 4 and Astro: the agent line in the plugin, and in the inline script", () => {
+    const n4 = project({ "package.json": pkg({ nuxt: "^4.0.0" }), "tsconfig.json": "{}\n", "app/app.vue": "<template><div/></template>\n" });
+    const plugin = roundTrip(n4, "--agent")["app/plugins/genclass.client.ts"];
+    expect(plugin).toContain(`  if (import.meta.dev) import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));\n  if (import.meta.dev) import("@genclass/runtime/agent").then((a) => a.connectAgent(genclass));\n});`);
+    const astro = project({ "package.json": pkg({ astro: "^5" }), "src/pages/index.astro": `<html><head><title>x</title></head><body>hi</body></html>\n` });
+    expect(roundTrip(astro, "--agent")["src/pages/index.astro"]).toContain(
+      `<script>import genclass from "@genclass/runtime/auto"; if (import.meta.env.DEV) import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass)); if (import.meta.env.DEV) import("@genclass/runtime/agent").then((a) => a.connectAgent(genclass)); // genclass:inline</script>`,
+    );
+  });
+
+  it("plain HTML: a module script after the tag, loading the agent entry next to the script URL", () => {
+    const dir = project({
+      "index.html": `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="utf-8">\n</head>\n<body></body>\n</html>\n`,
+      "about.html": `<html><head><title>About</title></head><body></body></html>`,
+    });
+    const after = roundTrip(dir, "--agent", "--cdn", "https://example.test/dist/genclass.global.min.js", "--no-sri");
+    const agent = `<script type="module">if (["localhost", "127.0.0.1"].includes(location.hostname)) import("https://example.test/dist/agent.js").then((a) => a.connectAgent(GenClass.runtime));</script>`;
+    expect(after["index.html"]).toContain(`<head>\n  <script src="https://example.test/dist/genclass.global.min.js" defer data-devtools="local"></script> <!-- genclass:init -->\n  ${agent} <!-- genclass:init -->\n  <meta charset="utf-8">`);
+    expect(after["about.html"]).toContain(`></script><!-- genclass:inline -->${agent}<!-- genclass:inline --><title>`);
+    const dflt = roundTrip(project({ "index.html": `<html><head><title>x</title></head><body></body></html>\n` }), "--agent")["index.html"];
+    expect(dflt).toContain(`import("https://cdn.jsdelivr.net/npm/@genclass/runtime@${VERSION}/dist/agent.js")`);
+  });
+
+  it("remove takes out a Prettier-wrapped agent line whole, and refuses one that was edited", () => {
+    const dir = viteVue();
+    const before = snapshot(dir);
+    expect(cli(dir, "init", "--yes", "--no-install", "--agent").code).toBe(0);
+    const f = join(dir, "src/main.js");
+    const added = readFileSync(f, "utf8");
+    const line = `if (import.meta.env.DEV) import("@genclass/runtime/agent").then((a) => a.connectAgent(genclass)); // genclass:init`;
+    expect(added).toContain(line);
+    writeFileSync(f, added.replace(line, `if (import.meta.env.DEV)\n  import("@genclass/runtime/agent").then((a) =>\n    a.connectAgent(genclass),\n  ); // genclass:init`));
+    expect(cli(dir, "remove", "--yes").code).toBe(0);
+    expect(snapshot(dir)).toEqual(before);
+    expect(cli(dir, "init", "--yes", "--no-install", "--agent").code).toBe(0);
+    writeFileSync(f, readFileSync(f, "utf8").replace("a.connectAgent(genclass)", "a.connectAgent(genclass, { anyHost: true })"));
+    const r = cli(dir, "remove", "--yes");
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("not a statement init writes");
+  });
+});
