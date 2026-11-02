@@ -30,7 +30,8 @@ Thanks for looking. Issues and pull requests are welcome.
   Worker). `billing/plans.json` is the one place the plans are defined. The website itself is built in a separate,
   private repository (see [Releasing](#releasing-maintainers)).
 - `templates/` (starter apps with the runtime installed), `research/` (earlier research; the training scripts
-  import its `jev_local` encoder), `scripts/` (Azure VM helpers for training, and the Stripe setup script).
+  import its `jev_local` encoder), `scripts/` (Azure VM helpers for training, the Stripe setup script, and the Discord server setup script:
+  [docs/community/DISCORD.md](docs/community/DISCORD.md) has the server's layout and the owner's steps).
 - `AGENTS.md` is the short guide for coding agents; it applies to people too.
 
 ## Build and test

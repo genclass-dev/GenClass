@@ -32,7 +32,7 @@ Default mode is `observe` (report only); `guard` is opt-in; `heal` is experiment
 | `research/` | earlier Jev research: extension, `jev_local` (Python encoder the training scripts import), benchmarks |
 | `docs/adoption/` | listing drafts for directories and registries (`listings/mcp.md`): steps, fields and entries, nothing submitted |
 | `docs/runtime/` | `CONTRACT.md` (binding), `API.md`, `ARCHITECTURE.md`, `OPTIONS-SPEC.md`, `THREAT-MODEL.md`, `VISUAL.md` (measured visual checks: design), `ANALYTICS.md` (interaction analytics: design), **`RESULTS.md`** (every measured number) |
-| `scripts/` | Azure VM helpers (`vm.sh`, `azvm.sh`, `launch_run.sh`); `internal/` is gitignored working notes |
+| `scripts/` | Azure VM helpers (`vm.sh`, `azvm.sh`, `launch_run.sh`); `stripe-setup.mjs` and `discord-setup.mjs` (the owner's setup scripts, tested in `telemetry-worker/test/` against fakes; the Discord server's layout is in the script and `docs/community/DISCORD.md`); `internal/` is gitignored working notes |
 
 ## Build and test
 
