@@ -1288,8 +1288,9 @@ describe("/start/open-source: the open-source parts with no account, no token an
     const p = openSourcePrompt();
     expect(p).toContain("No GenClass account and no token: nothing is sent to genclass.dev. Two commands do it; run them yourself.");
     expect(p).toContain(`\n1. In the project's root run: npx ${RUNTIME_PKG} init --no-telemetry --agent --yes It finds the framework`);
-    expect(p).toContain("the dev-only devtools overlay and the dev-only agent link (which records what happens on local pages for the GenClass MCP server, talks only to 127.0.0.1 and is never part of a production build)");
-    expect(p).toContain('writes telemetry: false into a marked option file next to the entry (data-telemetry="off" on the tag)');
+    expect(p).toContain("the dev-only devtools overlay and the dev-only agent link (which records what happens on local pages for the GenClass MCP server, talks only to 127.0.0.1 and is never part of a production build; on plain HTML pages it stays in the page and runs only on localhost)");
+    expect(p).toContain('writes telemetry: false into a marked option file next to the entry (data-telemetry="off" on the tag; Astro: a <meta name="genclass"> line)');
+    expect(p).toContain("on plain HTML pages it stays in the page and runs only on localhost");
     // no data is sent, but the public files still come from jsDelivr unless the app serves them; the prompt says so
     expect(p).toContain("so GenClass's anonymous diagnostics are off and it sends no data anywhere; the browser still downloads its model and onnxruntime-web, public files, from cdn.jsdelivr.net");
     expect(p).toContain("(about 13 MB, 18 MB on WebGPU devices, then cached)");
@@ -1344,8 +1345,9 @@ describe("/start/open-source: the open-source parts with no account, no token an
     expect(openSourcePrompt({ guard: true })).not.toContain("eager");
     // the model served by the app: no jsDelivr download for it to mention
     expect(p).not.toContain("still downloads");
-    expect(p).toContain("the webhook sink sends batched POSTs there instead");
-    expect(p).toContain('sinks: [webhook({ url: "<the endpoint>" })], requests: { ignore: ["<the endpoint>"] }');
+    // the webhook sink by name: init --sink does it, and the runtime keeps its own POSTs out of what it watches
+    expect(p).toContain("use the webhook sink instead: --sink webhook:<the endpoint> on the init command");
+    expect(p).not.toContain("import {");
     expect(p).toContain("Deploy it, as chosen");
     const nums = [...p.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
     expect(nums).toEqual([1, 2, 3, 4, 5, 6, 7]);

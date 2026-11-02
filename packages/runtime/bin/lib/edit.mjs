@@ -130,7 +130,7 @@ const META_CONFIG = String.raw`<metaname="genclass"content="[^"]*"/?>`;
 const DEV_LINE = String.raw`if\(${COND}\)${DEVTOOLS_CALL};?`;
 const AGENT_LINE = String.raw`if\(${COND}\)${AGENT_CALL};?`;
 // the same with braces (ESLint's `curly` fix), and the one block Next.js's created files hold both calls in
-const DEV_BLOCK = String.raw`if\(${COND}\)\{(?:${DEVTOOLS_CALL};?)?(?:${AGENT_CALL};?)?\}`;
+const DEV_BLOCK = String.raw`if\(${COND}\)\{(?:${DEVTOOLS_CALL};?(?:${AGENT_CALL};?)?|${AGENT_CALL};?)\}`;
 const AGENT_BLOCK = String.raw`if\(${COND}\)\{${AGENT_CALL};?\}`;
 // plain HTML with --agent: a module script after the runtime's tag (module scripts run after deferred ones, in order)
 const AGENT_SCRIPT = String.raw`<scripttype="module">if\(\["localhost","127\.0\.0\.1"\]\.includes\(location\.hostname\)\)import\("[^"]*"\)\.then\(a=>a\.connectAgent\(GenClass\.runtime\)\);?</script>`;
