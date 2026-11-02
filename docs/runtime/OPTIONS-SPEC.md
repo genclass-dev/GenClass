@@ -27,7 +27,7 @@ effectiveMode(op) = state ∈ {disabled} ? off
                        , route rule.mode ) // first matching routes[] rule
 order: off < observe < guard < heal
 ```
-   `effectiveAggressiveness` is the min of the global value (including `?genclass-aggr`, which may only demote unless `debug:true`) and the route value. Explicit `policy.thresholds` still win. The scope is **snapshotted when an op or mutation is created** (`OpRec.scope`) and is never re-classified later. `status.mode` keeps reporting the *requested* mode. `status.effectiveMode`, `Report.mode` and `SinkRecord.mode` report the effective mode.
+   `effectiveAggressiveness` is the min of the global value (including `?genclass-aggr`, which may only demote, with or without `debug:true`) and the route value. Explicit `policy.thresholds` still win. The scope is **snapshotted when an op or mutation is created** (`OpRec.scope`) and is never re-classified later. `status.mode` keeps reporting the *requested* mode. `status.effectiveMode`, `Report.mode` and `SinkRecord.mode` report the effective mode.
 4. **Gate order per decision** (`decide/policy.ts gate()`). The first step that stops the action wins, and its reason goes into `Decision.reason` and `explain()`:
    1. the subject, or the action's target op, is `protected` → passive, `protected`
    2. the subject is cross-origin → passive, `cross-origin` (not configurable)
@@ -586,7 +586,7 @@ Design, every check and threshold: [VISUAL.md](VISUAL.md). Types: `VisualOptions
 
 **Semantics.**
 - `false` (or `?genclass-visual=off`): nothing is installed, no listener, no timer, no download.
-- `"local"`: on for development hosts (`devHost` in `src/visual/start.ts`: http(s) on `localhost`, `127.0.0.1`,
+- `"local"`: on for development hosts (`devHost` in `src/devhost.ts`: http(s) on `localhost`, `127.0.0.1`,
   `[::1]` or a `*.localhost` name with an explicit port, or a `*.test` name; narrower than telemetry's `isLocalHost`,
   so Capacitor, Tauri, Electron and intranet hosts are off) and when the devtools overlay mounts or `rt.checkNow()`
   is called; off otherwise. `?genclass-visual=on` turns it on for that page load, report-only.
@@ -680,7 +680,7 @@ cross-origin            → passive always
 op scope off/observe    → never an action target (notOffered)
 effectiveMode           = min(mode|setMode|URL*, sample cap, breaker cap, route rule)  (snapshot per op)
 effectiveAggressiveness = min(global|setAggressiveness|URL*, route rule); explicit policy.thresholds win
-                          *URL overrides (mode, aggr, sample) demote only unless debug:true
+                          *URL overrides (mode, aggr, sample) demote only, on every host, debug or not
 policy.allow/deny       → unchanged, at effective mode
 policy.actionLimits     → limit:perMinute / perSubject / perSession
 onBeforeAction          → final sync veto (vetoMode "report" = record only); over hold budget → limit:hold
@@ -706,7 +706,7 @@ status.mode = requested; status.effectiveMode / Report.mode / SinkRecord.mode = 
 > - **Telemetry**: `sinks` (structured, redacted records), `session` (id and tags, never shown to the model), `report: "interventions"` (a quiet production console), `rt.summary()`, `rt.on("shadow" | "breaker" | "limit" | "modelBudget", cb)`.
 > - **Loading and cost**: `model.loadIf`, `model.threads`, `model.timeoutMs`, `model.maxDecisionsPerMinute`, `model.unloadAfterIdleMs`.
 >
-> URL overrides (`?genclass-mode`, `?genclass-aggr`, `?genclass-sample`) can only lower settings, unless `debug: true` is set.
+> URL overrides (`?genclass-mode`, `?genclass-aggr`, `?genclass-sample`) can only lower settings, with or without `debug: true`.
 >
 > ```ts
 > import { GenClass, protectPreset } from "@genclass/runtime";
@@ -763,7 +763,7 @@ status.mode = requested; status.effectiveMode / Report.mode / SinkRecord.mode = 
 > `"preset:payments"` and `"preset:auth"` in JSON configs such as `window.GENCLASS_CONFIG`); extend it with your own
 > endpoints: `[...protectPreset("payments", "auth"), "/api/cart/"]`.
 >
-> **Rollout recipe:** start with `mode: "observe", shadow: "guard"`, and compare the shadow records with your undo and complaint rates. Then switch to `mode: "guard", sample: 0.05`. Watch `rt.summary().undos` and `breaker` events, and widen `sample` as they stay quiet. For QA, `?genclass-sample=1` together with `debug: true` forces a session into the acting group.
+> **Rollout recipe:** start with `mode: "observe", shadow: "guard"`, and compare the shadow records with your undo and complaint rates. Then switch to `mode: "guard", sample: 0.05`. Watch `rt.summary().undos` and `breaker` events, and widen `sample` as they stay quiet. For QA, set `sample: 1` in the QA environment's config (no URL puts a session into the acting group).
 
 ## 8. Migration and compatibility
 

@@ -45,6 +45,8 @@ npm install @genclass/runtime@beta
 import "@genclass/runtime/auto"; // first line of your entry file (Next.js 15.3+: instrumentation-client.ts)
 ```
 
+(Next.js builds that should ship without it: [only in some builds](#only-in-some-builds-nextjs).)
+
 Or with no build step, first in `<head>`:
 
 ```html
@@ -205,6 +207,17 @@ The response to GET /api/search?q=rea (#4) arrived after 1.80s (200); the app ha
 This request comes from user typed "rea" into input "Search" (#3), started 1.80s ago.
 ```
 
+**Slow is `stall`, not `delivery`.** A delivery decision is about a response overwriting newer, pending or typed
+state, never about how long it took: a response with no such conflict is delivered without a model call however slow
+it was (unless `triage: "always"` or a standing question with `always` asks). A slow request is asked about through
+`stall`, against latency baselines learned per page load and never stored: once 5 requests with the same signature
+(method and path pattern, such as `POST /api/sessions/:id/offer`) have succeeded in this page load, each later one
+becomes a stall when it is in flight longer than the largest of 4× their median, 2× their p95 and 0.5 s, so a 6 s
+request after five 70 ms ones is asked about after 0.5 s. Slow successes stay in the window: below 20 samples the
+slowest sets the p95, so after one slow request, later ones are held to at least twice its time. Without a baseline, a
+request becomes a stall only after 10 s in flight. A 4 s call made once per page load, or a 6 s call before its
+signature's fifth success, therefore gets no stall decision.
+
 Clean in-order typeahead and autosave make no model calls and hold nothing. The model does not catch logic that is
 consistently wrong, CSS or security bugs, and it never rewrites your code; some visual and CSS bugs are covered by
 [measured checks](#visual-and-css-checks-new-in-030). Opt-in flow expectations (`learn: { expectations: true }`)
@@ -285,18 +298,48 @@ value today is observe mode: plain-English detections with the evidence.
 
 ## Costs
 
-Measured on a pilot app (2026-10-09: a Next.js 16 ordering site, production build, Playwright Chromium at 390×844,
-4× CPU throttling, medians of 5 runs, observe, `0.1.0-beta.3` with model 0.2.0) against the same build with
-`?genclass=off` ([RESULTS.md §17](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#17-browser-cost-on-a-pilot-app-2026-10-09-and-2026-10-10)):
+GenClass's own tests measure the JavaScript every page loads: about 108 KB gzip for `/auto` and 100 KB for the main
+entry ([Performance](#performance)). They measure no load times or memory in a browser (the visual bench measures
+only the visual checks' own long tasks, RESULTS.md §13 and §14). The numbers below come from one real app (a pilot
+app: a Next.js 16 ordering site, production build served by `next start`, Chromium, a phone-sized viewport, 4× CPU
+throttling, medians of 5 runs, observe mode), measured twice, with different versions, setups and controls. Compare
+each column only with its own control, and read them as one app's numbers, not a bound:
 
-| | with GenClass |
-|---|---|
-| JavaScript on every page (first load, gzip) | +97 KB with `0.1.0-beta.3` (today: [Performance](#performance)) |
-| Main thread: load event, LCP, long tasks | no measurable change; main JS heap +0.4 MB |
-| **Memory: renderer process (holds the model worker)** | **+190 to 280 MB RSS** while the model is loaded (cold and warm) |
-| **First visit download** | **about 13 MB** on WASM after the load event (12.7 MB measured: q8 model, ONNX Runtime wasm, tokenizer); WebGPU: a 5.5 MB brotli ONNX Runtime build, and with `shader-f16` the 13.6 MB fp16 model instead of the q8 |
-| Later visits | about 1 KB (`model.json` revalidated); the rest comes from Cache Storage, checked with sha256 |
-| Model load | WASM (1 thread): 0.9 to 1.3 s cold, 0.4 s warm. WebGPU (Apple M-series): 12 s cold, 2 s warm |
+- **`0.1.0-beta.3` (2026-10-09, model 0.2.0):** `GenClass.init({ mode: "observe", telemetry: false })` from the
+  main entry (no state discovery), the model from jsDelivr; Playwright Chromium, 390×844
+  ([RESULTS.md §17](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#17-browser-cost-on-a-pilot-app-2026-10-09-and-2026-10-10)).
+  JavaScript was compared with the app's build without GenClass. Everything else was compared with the same build
+  loaded with `?genclass=off`, which skips installing GenClass but still downloads and evaluates its code, so those
+  rows leave out the cost of loading it.
+- **`0.3.0-beta.0` (2026-10-17):** compared with the same commit built without GenClass
+  ([a build-time switch](#only-in-some-builds-nextjs), so the control ships none of its code), Chromium on a desktop
+  Mac. `@genclass/runtime/auto/observe` was loaded first and synchronously, before hydration, on `localhost` (so
+  development-host defaults applied) and with options that are not the defaults: visual checks and flow expectations
+  on, `debug` on, telemetry with every decision record (`decisionSample: 1`, no per-page cap), possible detections,
+  the model self-hosted (WASM q8, 1 thread). The JavaScript includes the app's own small wrapper around GenClass.
+  These are one app's numbers with these options, not GenClass's defaults
+  ([RESULTS.md §25](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#25-one-apps-browser-cost-030-beta0-measured-by-the-apps-owner-2026-10-17)).
+
+| | `0.1.0-beta.3` (2026-10-09) | `0.3.0-beta.0` (2026-10-17) |
+|---|---|---|
+| JavaScript on each page's first load | +97 KB gzip on every page (today: [Performance](#performance)) | **+111.4 KB** on the wire (`/` 346.0 → 457.4 KB, `/menu` 285.7 → 397.1 KB) |
+| Load event | no measurable change (control: `?genclass=off`) | **73 to 156 ms later** (`/` 222 → 295 ms, `/menu` 213 → 369 ms, medians) |
+| Long tasks (over 50 ms) | no measurable change (control: `?genclass=off`) | first long task **about 55 ms longer** (`/` 57-71 → 116-132 ms); warm loads went from none to 1 or 2 of 50-62 ms |
+| LCP | no measurable change (control: `?genclass=off`) | no regression above the noise |
+| Main-thread JS heap | +0.4 MB | +1.5 to 1.8 MB |
+| **Memory: renderer RSS (holds the model worker)** | **+190 to 280 MB** while the model is loaded (cold and warm) | not used (too noisy) |
+| **Memory: per process (`top`, renderer and worker, 12 s after load)** | not measured | **+117 to 175 MB** while the model is loaded |
+| **First visit download** | **about 13 MB** on WASM after the load event (12.7 MB measured: q8 model, ONNX Runtime wasm, tokenizer); WebGPU: a 5.5 MB brotli ONNX Runtime build, and with `shader-f16` the 13.6 MB fp16 model instead of the q8 | **about 14.0 MB** from the app's own origin, of which the q8 model is 10.2 MB (sent uncompressed) |
+| Later visits | about 1 KB (`model.json` revalidated); the rest comes from Cache Storage, checked with sha256 | about 1 KB |
+| Model load | WASM (1 thread): 0.9 to 1.3 s cold, 0.4 s warm. WebGPU (Apple M-series): 12 s cold, 2 s warm | WASM q8 (1 thread): 0.85 to 1.0 s cold, about 0.4 s warm (`status.loadMs`); model ready 1.25 to 1.5 s after navigation cold, 0.75 to 0.85 s warm (medians per page) |
+| Model latency per decision | not measured | 97 to 127 ms (`Decision.latencyMs`: from the call to the worker to its answer, on the main thread's clock) |
+| App build output | +41 MB of unused ONNX Runtime files (none since `0.2.0`) | no `.wasm` files |
+
+The `0.1.0-beta.3` "no measurable change" leaves out loading GenClass's code, which its control did too; the
+`0.3.0-beta.0` column includes it. What made the first long task longer (running the entry before hydration, or the
+runtime's own install work) was not measured. To ship no GenClass code in builds that do not use it, see
+[Only in some builds (Next.js)](#only-in-some-builds-nextjs): `?genclass=off`, `enabled: false` and `model: false`
+stop work, not the download.
 
 **On phones** the memory and the download are what matter. **By default the model is not loaded on devices that
 report 2 GB of memory or less, nor on Save-Data connections** (since `0.3.0`; `model.loadIf` defaults to
@@ -401,7 +444,8 @@ observing with no download and no worker.
   This is best effort; wrap important work in `rt.op(name, fn)` for exact attribution.
 - **Store state.** Discovered React and Zustand state is observed only
   ([Automatic state discovery](#automatic-state-discovery)). The first response of each kind after a page load is
-  never a delivery decision: GenClass has not yet seen what that request writes.
+  never a delivery decision, unless an explicit `learn.persist` stored what it writes on an earlier page load:
+  GenClass has not yet seen what that request writes.
 - **Install and CDN.** Read the diff `init` and `remove` show before you confirm. SRI covers only the script-tag file;
   what it loads is not integrity-checked by the browser (the runtime checks the model files' sha256), so pin a
   version, or self-host. A page that lets untrusted HTML into `<head>` should not use `<meta name="genclass">`.
@@ -422,7 +466,8 @@ npx @genclass/runtime@beta init --dry-run     # show the diff, write nothing, se
 npx @genclass/runtime@beta remove             # undo exactly what init added
 ```
 
-Other flags: `--yes`, `--no-telemetry`, `--no-token`, `--token gc_...`, `--sink`, `--model-url`, `--no-install`,
+Other flags: `--yes`, `--no-telemetry` (`--telemetry` undoes it on a later run and writes no telemetry option, so
+the default applies: on, but off on local hosts), `--no-token`, `--token gc_...`, `--sink`, `--model-url`, `--no-install`,
 `--no-devtools`, and from `0.3.0-beta.2` `--no-network` and `--sync` (plain HTML).
 
 **Which version** (from `0.3.0-beta.2`). `init` (and `login`, `connect`) first prints its own version and the npm
@@ -450,7 +495,9 @@ the tag out whatever attributes you add to it (`defer`, `async`, `nonce`). When 
 one sentence and points to the visual checks and the page scan (`npx @genclass/runtime@beta scan <url>`,
 [Audit a page](#audit-a-page)).
 
-**2. One import** (any bundler), first in your entry file, so it is installed before your framework:
+**2. One import** (any bundler; for Next.js builds that should ship without it, see
+[Only in some builds (Next.js)](#only-in-some-builds-nextjs)), first in your entry file, so it is installed before
+your framework:
 
 ```ts
 import "@genclass/runtime/auto";          // observe (the default); also /auto/guard, /auto/heal
@@ -485,7 +532,75 @@ const rt = GenClass.init(); // observe; GenClass.init({ mode: "guard" }) to let 
 or import `@genclass/runtime/discover` first and pass `autoState: true`.
 
 **ESM only.** No `require` build. Jest needs a `transformIgnorePatterns` entry such as
-`["/node_modules/(?!@genclass/runtime)"]`. The unscoped `genclass-runtime` alias is deprecated.
+`["/node_modules/(?!@genclass/runtime)"]`. The unscoped `genclass-runtime` alias is deprecated. A bundler can still
+`require` a module of your own that imports it ([Only in some builds (Next.js)](#only-in-some-builds-nextjs)).
+
+### Only in some builds (Next.js)
+
+The one import ships GenClass to every page, about 108 KB gzip on each first load, even when `?genclass=off` or
+`enabled: false` keeps it from running (`model: false` only skips the model). To leave it out of some builds
+entirely, put it behind a build-time switch the bundler can remove. In Next.js 16, a `NEXT_PUBLIC_*` variable is
+inlined only when it is set at build time: an unset one stays a lookup at run time, the branch cannot be removed, and
+the whole runtime ships unused (in one app, 15 chunks and about 275 KB gzip). So define it in `next.config.ts` as
+well, with a value even when the variable is unset:
+
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  // always defined ("" when unset), so the check in instrumentation-client.ts is a constant when Next builds
+  env: { NEXT_PUBLIC_GENCLASS: process.env.NEXT_PUBLIC_GENCLASS ?? "" },
+};
+
+export default nextConfig;
+```
+
+```ts
+// instrumentation-client.ts
+if (process.env.NEXT_PUBLIC_GENCLASS === "on") {
+  // synchronous, so GenClass is installed before React hydrates, as with the plain import
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require("./genclass");
+}
+
+export {};
+```
+
+```ts
+// genclass.ts, next to instrumentation-client.ts
+import "./genclass.config"; // optional: sets window.GENCLASS_CONFIG, so it comes before the runtime
+import genclass from "@genclass/runtime/auto";
+
+// the devtools overlay, in development only (optional)
+if (process.env.NODE_ENV === "development") {
+  import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));
+}
+```
+
+Build with `NEXT_PUBLIC_GENCLASS=on next build` (the same for `next dev`), or set it in `.env.production`; any other
+value, or none, builds without GenClass. Like every `NEXT_PUBLIC_*` value, it is fixed when you build.
+
+- **Why `require`.** It loads your own `genclass.ts`, which imports the package with `import`, and Next's bundler
+  resolves both. Do not `require("@genclass/runtime/auto")` itself: the package is ESM only and its exports have no
+  `require` condition. `require` is typed by `@types/node`, which create-next-app installs.
+- **GenClass first.** Static `import`s in `instrumentation-client.ts` run before this block (imports are hoisted),
+  so whatever they set up (an error tracker, say) would be installed before GenClass, against step 2's "first in
+  your entry file". Load other instrumentation there with `require` below the block instead.
+- **`import()` is weaker.** `import("./genclass")` in place of the `require` also ships nothing when off, but Next.js
+  does not wait for it: it can resolve after hydration has begun, so GenClass misses the requests made before it and
+  does not see React state that rendered before it ([Automatic state discovery](#automatic-state-discovery), "Not
+  covered yet").
+- **Options and `init`.** `init` treats `genclass.ts` as a setup made by hand and leaves it alone: it writes no token
+  and no `--no-telemetry`, `--model-url` or `--sink` options there, and `remove` takes nothing out. Set them in
+  `genclass.config.ts` yourself, in the form `init` writes:
+  `(globalThis as { GENCLASS_CONFIG?: object }).GENCLASS_CONFIG = { telemetry: false };` (any `GenClass.init()`
+  option, and `token: "gc_..."`).
+- **A Content-Security-Policy** built in `next.config.ts` can add GenClass's origins under the same condition
+  ([Content-Security-Policy and self-hosting](#content-security-policy-and-self-hosting)).
+- **Measured in one app** (Next.js 16.3, Turbopack): built without the variable, the app had no GenClass files and
+  was 64 B gzip larger than before GenClass was added (the empty `instrumentation-client` hook). Not checked with
+  `next build --webpack`.
 
 ## For AI coding agents installing GenClass
 
@@ -737,6 +852,13 @@ mounts; elsewhere turn them on with `visual: true`. First-load cost is about 0.5
 guard or heal mode) are re-measured and undoable. `checkPage()` from `@genclass/runtime/visual` runs one pass in a
 test; `npx @genclass/runtime@beta scan <url>` checks any URL without one ([Audit a page](#audit-a-page)).
 
+The first pass waits for web fonts (at most 3 s), then for 500 ms with nothing in flight (requests, socket connects,
+`rt.op()` and `protect()` calls) and no DOM change (at most 10 s): it runs about 2 s after `load` on a quiet page, and
+about 11.5 s after it (14.5 s when fonts take their full 3 s too) on a page that is never quiet, such as one with a
+JavaScript animation that writes inline styles on every frame. While that animation runs, re-checks of content that
+changed wait too. Marking a purely decorative animation `data-genclass-ignore` keeps it out of both waits (GenClass
+then also ignores taps and inputs inside it).
+
 On the demos, templates and compat apps: 0 false reports in 128 page views, and in the bench's run 5 recall 1.00 on
 planted faults for 19 of the 23 kinds (0.67 to 0.96 for the other four; the planted forms are the checks' author's).
 The checks were tuned on 40 public home pages, where run 5's 6 findings in 97 loads were not reviewed, so there is no
@@ -879,8 +1001,8 @@ retraining, which has not been measured
 - **Bundle:** the published `0.3.0-beta.0` measured 108.25 KB gzip for `/auto` and 100.13 KB for the main entry
   ([RESULTS.md §10](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#10-release-030-beta0-first-load-and-telemetry-volume-ci)).
   The interaction-analytics stub measured about 108.5 / 100.4 KB on its branch (§15); `0.3.0-beta.1` to `beta.4` are
-  not re-measured here (`summary().requests` added 34 B in `0.3.0-beta.2`, §21), and `test/bundle.test.ts` caps it
-  at 108.6 / 100.48 KB. The model worker, ONNX
+  not re-measured here (`summary().requests` added 34 B in `0.3.0-beta.2`, §23), and `test/bundle.test.ts` keeps them
+  under 109.0 KB and 100.7 KB (the limits follow CI's gzip on Node 22; RESULTS.md §14 lists each raise). The model worker, ONNX
   Runtime, the devtools, the sinks and the visual checks load on demand; ONNX Runtime's `.wasm` (3.1 MB brotli; 5.5 MB
   with WebGPU, per the install tests) is never part of your build. The script-tag file is about 129 KB gzip.
 - **Model:** with onnxruntime-web 1.30 on single-thread WASM, a forward pass takes an estimated 182 / 330 / 599 ms at
