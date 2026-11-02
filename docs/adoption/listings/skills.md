@@ -36,7 +36,7 @@ docs.tessl.io, claude-plugins.dev, skillsmp.com, agenticskills.io, awesomeskill.
 - **Releases and stars.** `GenClass`'s latest GitHub release is v0.2.1 (2026-10-11), before the skill existed, and
   `genclass-plugin` has no release; the tools that read the latest release before the default branch (`gh skill`,
   Gemini CLI, per `mcp.md`) therefore work from `genclass-plugin` only. Stars: `GenClass` 7, `genclass-plugin` 0. Lists
-  with a star or usage threshold (sections 7.2 and 7.3) are closed to it for now.
+  with a star or usage threshold (sections 7.1 and 7.2) are closed to it for now.
 - **Measured claims.** Only what `mcp.md` states: one page, the race found in 5 of 6 reordered runs, 0 of 6 differing
   on the fixed page. No rate beyond that in any entry.
 - **GitHub topics.** `genclass-plugin`: `agent-skills`, `claude-code-plugin`, `claude-plugin`, `codex-plugin`,
@@ -46,7 +46,7 @@ docs.tessl.io, claude-plugins.dev, skillsmp.com, agenticskills.io, awesomeskill.
 
 ### Texts to reuse
 
-- Ten words or fewer (section 7.2): `Find and prove fixes for timing bugs in web apps.`
+- Ten words or fewer (section 7.1): `Find and prove fixes for timing bugs in web apps.`
 - One sentence: `A skill for coding agents with the GenClass MCP server: record what happens inside a web app's pages in causal order, re-run a page with responses delivered in different orders to find race conditions, replay one exact order, and prove the fix with a generated Playwright test.`
 - The skill's own description (509 characters) is what the skills CLI, skills.sh and Claude Code show; reuse it where a
   form asks for the description and allows it.

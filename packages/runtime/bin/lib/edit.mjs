@@ -1,9 +1,10 @@
 // Text edits for `genclass-runtime init|remove`. Everything init adds carries a marker:
 //   - single lines:  `import genclass from "@genclass/runtime/auto"; // genclass:init`
 //   - blocks (files init creates): from a line containing `genclass:init start` to one containing `genclass:init end`
-//   - three inline forms, used only when the place to insert shares its line with other code (a one-line <head> or
-//     <body>): `<GenClassInit />{/* genclass:inline */}`, `<script>... // genclass:inline</script>` (Astro) and
-//     `<script ...></script><!-- genclass:inline -->` (HTML)
+//   - four inline forms, used only when the place to insert shares its line with other code (a one-line <head> or
+//     <body>): `<GenClassInit />{/* genclass:inline */}`, `<script>... // genclass:inline</script>` (Astro),
+//     `<script ...></script><!-- genclass:inline -->` (HTML) and `<script type="module">...</script><!-- genclass:inline -->`
+//     (HTML with --agent: the agent link's module script)
 // `planRemoval` deletes exactly those (a marked statement together with its line break), so a file init only added
 // to comes back byte for byte, and refuses (reports a problem, deletes nothing there) when a marked line or block is
 // not what init wrote. `switchMode` re-points the same marked code at another mode.
