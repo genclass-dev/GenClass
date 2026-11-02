@@ -20,7 +20,7 @@ import { createAccountProject, readCredentials } from "./account.mjs";
 import { hostConfig, hostUrl } from "./host.mjs";
 import { LOCAL_FILE, PENDING_TOKEN, START_URL, TOKEN_RE, createProject, readLocal, saveLocal, tokenInFiles } from "./token.mjs";
 import { banner, c, confirm, err, interactive, out, printChange, row, sym } from "./ui.mjs";
-import { CMD, PKG, PKG_DIR, VERSION, compareVersions, distTags, installedVersion, versionInSpec, versionStatus } from "./version.mjs";
+import { CMD, PKG, PKG_DIR, VERSION, compareVersions, distTags, installedVersion, versionInSpec, versionStatus, MCP_PKG } from "./version.mjs";
 
 const MODES = ["observe", "guard", "heal"];
 
@@ -81,9 +81,9 @@ remove   takes out exactly what init added (the lines and blocks marked "${MARK}
   --no-install     do not run the package manager
   --agent          also connect development builds to your coding agent: a dev-only line that loads
                    @genclass/runtime/agent and calls connectAgent (plain HTML: a module script after the
-                   tag), so the GenClass MCP server (npx -y @genclass/mcp init) sees the page. Production
+                   tag), so the GenClass MCP server (npx -y ${MCP_PKG} init) sees the page. Production
                    builds drop it; off loopback hosts it is inert. The open-source setup, no account:
-                   init --no-telemetry --agent, then npx -y @genclass/mcp init
+                   init --no-telemetry --agent, then npx -y ${MCP_PKG} init
   --no-devtools    do not add the dev-only devtools overlay
   --no-network     do not ask npm for newer releases (--dry-run, --no-token and --no-telemetry do not
                    ask either)
@@ -995,7 +995,7 @@ export async function init(o, ctx = {}) {
   if (cfg.sinks?.length) out(`    ${sym.dot} They also reach ${c.cyan(cfg.sinks.join(", "))}: ${cfg.sinks.map((s) => SINK_WHAT[sinkBase(s)] ?? s).join("; ")}.`);
   if (devtools && changes.some((ch) => /devtools/.test(ch.after))) out(`    ${sym.dot} In development an overlay shows what GenClass sees (bottom-right, ${c.bold("Alt+Shift+G")}).`);
   if (agent && changes.some((ch) => /runtime\/agent|\/agent\.js/.test(ch.after)))
-    out(`    ${sym.dot} In development the page connects to the GenClass MCP server: ${c.cyan("npx -y @genclass/mcp init")} adds it to Claude Code (other agents: ${c.cyan("npx -y @genclass/mcp config <client>")}); until it runs, the page logs one failed request to 127.0.0.1:47357.`);
+    out(`    ${sym.dot} In development the page connects to the GenClass MCP server: ${c.cyan(`npx -y ${MCP_PKG} init`)} adds it to Claude Code (other agents: ${c.cyan(`npx -y ${MCP_PKG} config <client>`)}); until it runs, the page logs one failed request to 127.0.0.1:47357.`);
   out(`    ${sym.dot} Rule it out while debugging: add ${c.cyan("?genclass=off")} to the URL.`);
 
   out();

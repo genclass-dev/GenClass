@@ -8,7 +8,7 @@
   in the files it creates for Next.js; plain HTML gets a module script after the tag, which loads `dist/agent.js` from
   the script URL's directory on `localhost` and connects `GenClass.runtime`; module scripts run after deferred ones,
   in order). `remove` takes it out, wrapped by a formatter or not, and refuses an edited one. So
-  `npx @genclass/runtime@beta init --no-telemetry --agent` and `npx -y @genclass/mcp init` set up every open-source
+  `npx @genclass/runtime@beta init --no-telemetry --agent` and `npx -y @genclass/mcp@0.2.1 init` set up every open-source
   part with no account and nothing sent, and the READMEs, INSTALL.md ("How do I set up the open-source parts only?"),
   FAQ, AGENT.md, the MCP server's setup text and genclass.dev/start/open-source say so with those two commands instead
   of a nine-step hand edit. No runtime code, no model-visible text, no change to what is sent. Tests:

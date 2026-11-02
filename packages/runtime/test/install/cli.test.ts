@@ -1242,7 +1242,7 @@ describe("init --agent: the dev-only agent link next to the overlay (the open-so
     const dir = project(VITE_TS);
     const r = cli(dir, "init", "--yes", "--no-install", "--agent");
     expect(r.code, r.out).toBe(0);
-    expect(r.out).toContain("npx -y @genclass/mcp init");
+    expect(r.out).toContain("npx -y @genclass/mcp@0.2.1 init");
     expect(r.out).toContain("127.0.0.1:47357");
     const main = readFileSync(join(dir, "src/main.tsx"), "utf8");
     const lines = main.trimEnd().split("\n");
@@ -1293,6 +1293,15 @@ describe("init --agent: the dev-only agent link next to the overlay (the open-so
     expect(after["about.html"]).toContain(`></script><!-- genclass:inline -->${agent}<!-- genclass:inline --><title>`);
     const dflt = roundTrip(project({ "index.html": `<html><head><title>x</title></head><body></body></html>\n` }), "--agent")["index.html"];
     expect(dflt).toContain(`import("https://cdn.jsdelivr.net/npm/@genclass/runtime@${VERSION}/dist/agent.js")`);
+    // a --cdn copy under another file name: the CLI cannot know where its agent.js is, so no module script and a note
+    const odd = project({ "index.html": `<html><head><title>x</title></head><body></body></html>\n` });
+    const r = cli(odd, "init", "--yes", "--no-install", "--agent", "--no-sri", "--cdn", "https://example.test/gc.js");
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain("The agent link was not added: --cdn https://example.test/gc.js does not end in genclass.global.js");
+    const html = readFileSync(join(odd, "index.html"), "utf8");
+    expect(html).toContain('<script src="https://example.test/gc.js" defer data-devtools="local"></script><!-- genclass:inline -->');
+    expect(html).not.toContain("connectAgent");
+    expect(cli(odd, "remove", "--yes").code).toBe(0);
   });
 
   it("remove takes out a Prettier-wrapped agent line whole, and refuses one that was edited", () => {

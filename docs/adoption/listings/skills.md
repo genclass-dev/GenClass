@@ -116,7 +116,7 @@ reachable: the command details below are from search excerpts of those pages and
   topic, an index of its own) is not verified. `gh skill publish` validates a skill against the specification and
   publishes it as a tag or release in its own repository (`--fix` for metadata); it is not a registry and is not used
   here: `genclass-plugin` is assembled by `packages/mcp/scripts/plugin-repo.mjs`, re-synced daily and never edited or
-  tagged by hand (AGENTS.md), and the skill already carries the `license` field `publish` recommends (CHANGELOG 0.2.2).
+  tagged by hand (AGENTS.md), and the skill already carries the `license` field `publish` recommends (packages/mcp/CHANGELOG.md, Unreleased).
 - **By hand.** Add the `agent-skills` topic to `genclass-dev/GenClass` (repository settings). Nothing else.
 
 ### 2.2 github/awesome-copilot (community collection)

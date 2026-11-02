@@ -278,8 +278,14 @@ function planAstro(p, o) {
 }
 
 export const cdnUrl = (version, min = true) => `https://cdn.jsdelivr.net/npm/@genclass/runtime@${version}/dist/genclass.global${min ? ".min" : ""}.js`;
-/** The agent entry next to the script URL: the same directory's agent.js (jsDelivr, unpkg or a self-hosted dist/). */
-export const agentUrl = (scriptUrl) => scriptUrl.replace(/\/genclass\.global(?:\.min)?\.js(?:[?#].*)?$/, "/agent.js");
+/**
+ * The agent entry next to the script URL: the same directory's agent.js (jsDelivr, unpkg or a self-hosted dist/), or
+ * null when the URL does not end in the runtime's file name (a renamed copy: the CLI cannot know where agent.js is).
+ */
+export function agentUrl(scriptUrl) {
+  const u = scriptUrl.replace(/\/genclass\.global(?:\.min)?\.js(?:[?#].*)?$/, "/agent.js");
+  return u === scriptUrl ? null : u;
+}
 /**
  * With --agent, plain HTML gets this after the runtime's tag: a module script (which runs after the deferred tag, in
  * order) that on a page served from this machine loads the agent entry and connects the page to the local MCP bridge.
@@ -287,7 +293,7 @@ export const agentUrl = (scriptUrl) => scriptUrl.replace(/\/genclass\.global(?:\
  */
 export function agentTag(o, version) {
   const url = agentUrl(o.cdn || cdnUrl(version));
-  return `<script type="module">if (["localhost", "127.0.0.1"].includes(location.hostname)) import("${url}").then((a) => a.connectAgent(GenClass.runtime));</script>`;
+  return url ? `<script type="module">if (["localhost", "127.0.0.1"].includes(location.hostname)) import("${url}").then((a) => a.connectAgent(GenClass.runtime));</script>` : null;
 }
 const unpkgUrl = (version, min) => `https://unpkg.com/@genclass/runtime@${version}/dist/genclass.global${min ? ".min" : ""}.js`;
 
@@ -350,6 +356,8 @@ function planHtml(p, o, ctx) {
     changes.push({ file: f, kind: "modify", before, after });
   }
   const notes = [];
+  if (o.agent && !agent)
+    notes.push(`The agent link was not added: --cdn ${o.cdn} does not end in genclass.global.js or genclass.global.min.js, so the CLI cannot know where that copy's agent.js is. Add the module script by hand (docs/runtime/AGENT.md).`);
   if (o.sri !== false && !/ integrity="/.test(tag)) {
     notes.push(
       o.cdn
