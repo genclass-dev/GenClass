@@ -2,6 +2,11 @@
 
 ## Unreleased (0.3.0-beta.5)
 
+Security fixes from the adversarial review of the mode-raise fix (`0.3.0-beta.2`); the same four fixes are in `0.2.3`
+on the stable line (tag `v0.2.3`). The measured visual checks' counts now reach the diagnostics and the dashboard
+(counts only, below; every opt-out is unchanged). No model-visible text changed (`situation-v2.3`) and the default
+model is unchanged.
+
 - **The measured visual checks' counts reach the dashboard** (owner approval 2026-10-27; VISUAL.md section 10,
   TELEMETRY.md). A site full of stuck scroll locks and frozen clicks, each measured and fixed in its visitors'
   consoles, looked clean on genclass.dev, because telemetry sent nothing about the checks. Now, counts only: the
@@ -21,6 +26,56 @@
   Healthy) and in Fix them all; a check fix still in place counts as fixed live. The sample dashboard shows simulated
   checks. The Snow Day Predictor's demo estimate (`src/demo.ts`) yields to the measured counts as soon as that project
   receives its first page load with measured checks.
+
+### Security
+
+- **A look-alike path no longer steps out of a route rule.** `routes[]` matched the raw `location.pathname`, which the
+  browser never percent-decodes, while most servers route on the decoded path: a link to `/se%61rch`, `/search/`,
+  `//search` or `/search;x=1` reached the `/search` page with the app's global mode although a rule scoped `/search`
+  to `off` or `observe` (a rule can only lower the mode, so the visitor got the global mode, never more). A rule now
+  matches the raw path or its normalised form (percent-decoded, `;` parameters dropped, dot segments and repeated
+  slashes resolved, no trailing slash; `util/match.ts normalizeRoute`); `status.scope.route` is still the raw path.
+  Matching is case-sensitive, and `/admin/*` does not cover `/admin` itself (use `/admin*` or a RegExp); both are now
+  documented. Affected: every version with `routes` (`0.1.0-beta.1` to `0.2.2`, `0.3.0-beta.0` to `0.3.0-beta.4`).
+  Tests: `test/status-scope.test.ts`; docs: OPTIONS-SPEC §4.3, API.md, THREAT-MODEL T8.
+- **An invalid `mode` ran as heal.** `mode: "HEAL"`, `"Guard"`, `"heal "`, an object or a number (a typo in an
+  env-driven config, or `window.GENCLASS_CONFIG`, which was copied unchecked) fell through the mode ranking and the
+  gate's `modeAllows` and ran guard- and heal-tier actions, which `?genclass-mode=observe` could not lower. Now any
+  value but `observe`, `guard` or `heal` runs as `observe`, with one warning (`window.GENCLASS_CONFIG.mode` is
+  validated like the meta tag and the data attributes already were), and `modeAllows` permits a non-passive tier only
+  for `guard` and `heal`, so the gate fails closed. App configuration only, never reachable from a URL. Affected: every
+  version (`0.1.0-alpha.0` to `0.2.2`, `0.3.0-beta.0` to `0.3.0-beta.4`; `window.GENCLASS_CONFIG` since `0.1.0-beta.0`).
+  Tests: `test/options.test.ts`, `test/policy.test.ts`; docs: OPTIONS-SPEC §3, API.md, THREAT-MODEL T8.
+- **A stored sample verdict overrode `sample: 0`.** The act/observe bucket is frozen in
+  `sessionStorage["genclass:bucket"]`, and a tab that drew `act` under `sample: 0.5` kept acting after a deploy set
+  `sample: 0`, until it closed (a same-origin script could write the value too). Now `sample: 0` never reads the
+  storage, and a verdict is stored with the sample it was drawn under (`act@0.5`) and reused only under that sample: a
+  change of `sample` draws again. Open tabs are re-bucketed once on upgrade. Affected: every version with `sample`
+  (`0.1.0-beta.1` to `0.2.2`, `0.3.0-beta.0` to `0.3.0-beta.4`). Tests: `test/options.test.ts`; docs: OPTIONS-SPEC
+  §4.2, INTERCEPTION.md.
+- **Hardening: `aggressiveness` level names.** The three names were looked up with `in` on a plain object, so
+  `"constructor"`, `"__proto__"`, `"valueOf"` or another `Object.prototype` member name (from the option, a route rule
+  or `?genclass-aggr=`) gave a function instead of a number, and NaN gate thresholds downstream (which clear nothing,
+  so the page acted on and reported nothing at that gate; from the URL the value was never applied). Only `cautious`,
+  `balanced` and `eager` are names now; anything else is `balanced`, as documented. Test: `test/gates.test.ts`.
+- **Docs: `devtools: "local"` is wider than the development-host test.** It mounts the overlay on every host
+  `isLocalHost` counts as local (`file:`, loopback with or without a port, `*.localhost`, `*.local`, `*.test`), so a
+  Capacitor, Tauri or Electron build that ships it gets the overlay, whose mode switch raises the mode for whoever is at
+  the device. Unchanged in code; documented in THREAT-MODEL T8 and the README. Set `devtools` per environment.
+- **Docs: OPTIONS-SPEC §3 and THREAT-MODEL T8 now describe the URL switches as `0.3.0-beta.2` left them** (lower-only
+  on every host, `debug` as console logging only, raising only on a development host); they still carried the
+  pre-fix wording.
+
+## 0.3.0-beta.4 (2026-10-27)
+
+- **The devtools pill counts measured checks** (`src/devtools/`, VISUAL.md 9.3). The collapsed pill showed only
+  interventions and model detections, so a page where GenClass had fixed invisible text, a stuck scroll lock and a
+  click block on screen still read "0 · 0". The pill now has a third counter (the scan icon) with the page's measured
+  checks, red when there are any, its title saying how many were fixed on screen, and it pulses when a new one arrives.
+  With checks and no interventions or detections yet, the panel opens on the Checks tab. Each check card leads with
+  the kind in words ("Page cannot scroll", "Page stopped taking clicks", "Invisible text", "Ads covering content"),
+  the kind itself beside it. Checks stay labelled "measured", never model findings. Tests: `devtools-checks.test.ts`.
+  No model-visible text changed (`situation-v2.3`).
 
 ## 0.3.0-beta.3 (2026-10-26)
 
@@ -108,7 +163,7 @@
   that long, EventSource and WebSocket are not checked. Same rules as the other visual checks: on by default on
   development hosts, `visual: true` elsewhere, report-only, never a situation or model input, nothing sent. It lives
   in the lazily loaded checks chunk: no first-load bytes. Demos: 0 false reports in 120 clean and chaos runs, 11 of 18
-  planted 60 s hangs found (polls on a learned schedule are skipped by design; RESULTS.md §21).
+  planted 60 s hangs found (polls on a learned schedule are skipped by design; RESULTS.md §23).
 - **`init` writes `defer` on the plain-HTML script tag**, so a slow or blocked CDN no longer holds up rendering.
   GenClass then starts after classic scripts without `defer` or `async` (their requests during page load are not
   seen), still before deferred and module scripts; model loading is unchanged (idle after `load`). `--sync` writes the
@@ -186,8 +241,8 @@ model-visible text changed (`situation-v2.3`); the default model is still `@genc
   first load stays within its limits (108.54 / 100.40 KB).
   It wraps the runtime's delivery gate and request ignore list while connected and restores both on `disconnect()`;
   nothing it records reaches a situation, a decision, the event log or the model (no model-visible text changed,
-  `situation-v2.3`), and telemetry is unchanged. INTERCEPTION.md, THREAT-MODEL.md (T10), API.md, CONTRACT.md §16,
-  RESULTS.md section 16.
+  `situation-v2.3`), and telemetry is unchanged. INTERCEPTION.md, THREAT-MODEL.md (T13), API.md, CONTRACT.md §16,
+  RESULTS.md section 18.
 - **Fix: a reused XHR object could get the next request's response early.** When the app aborted an XHR whose
   completion listeners the runtime held for a delivery decision (guard or heal) and sent a new request on the same
   object, releasing the old, held delivery ran the listeners queued for the new request before its own decision. The
@@ -202,7 +257,7 @@ model-visible text changed (`situation-v2.3`); the default model is still `@genc
   no longer names Inter or JetBrains Mono, so a page that declares either as a web font no longer downloads it for
   the overlay. The tab row scrolls sideways instead of hiding Expectations and Now past the panel's edge, and the
   header no longer clips the name. Every view, control and string is the same; no model-visible text changed.
-- **Interaction analytics, off by default (`analytics: true`; [docs/runtime/ANALYTICS.md](../../docs/runtime/ANALYTICS.md)).**
+- **Interaction analytics, off by default (`analytics: true`; [docs/runtime/ANALYTICS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/ANALYTICS.md)).**
   An app that sets `analytics: true` with its token also sends `interactions` telemetry events for its dashboard: per
   page view, the route, engaged time (the tab visible, at most 30 s after the last input), scroll depth milestones
   (25 / 50 / 75 / 100 %), and clicks, rage clicks (3 within 1 s on one element) and dead clicks (a link or button
@@ -234,14 +289,35 @@ model-visible text changed (`situation-v2.3`); the default model is still `@genc
   and heal the first duplicate submit of every page load went through on a CPU about 15% slower than the VM's. The
   warm-up now times a second pass on every device: `status.latency` comes from it, `status.warmupMs` is still the
   first, cold pass. A load on WASM takes one more warm-up pass (a ~430-token situation, warm). No model-visible text
+  changed.
 - **Release notes: the npm registry's empty `readme` field.** Since 0.3.0-beta.0 went to `beta`, the registry's
   top-level `readme` for the package (`npm view @genclass/runtime readme`) is empty: the registry empties it on every
   publish to a tag other than `latest` and fills it again on the next `latest` publish, as it does for react,
   typescript, next and vitest. The npm and jsDelivr package pages are not affected; they show each version's full
   README. `.github/workflows/release.yml` now says so. No package contents, runtime code or model-visible text
   changed.
+- **Docs and package metadata.** The npm description, keywords and author are new, and `CHANGELOG.md` now ships in
+  the package. The README is shorter: the full install guide, the dashboard and the sinks moved to
+  [INSTALL.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/INSTALL.md),
+  [DASHBOARD.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/DASHBOARD.md) and
+  [SINKS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/SINKS.md), next to a new
+  [FAQ](https://github.com/genclass-dev/GenClass-lib/blob/main/FAQ.md) and a
+  [docs index](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/README.md) with a glossary.
+  TELEMETRY.md gives the six larger events (`session`, `model`, `decision`, `detect`, `summary`, `interactions`) a
+  section each, adds `init --no-telemetry` (with its one exception: in an Astro layout where GenClass is inline in
+  `<head>`, add the `telemetry=off` meta tag yourself) and the `genclass` kill switch to its opt-out table and opens
+  with a version note. It now also lists two things that were already sent: a decision that would have acted in
+  shadow mode is always sent (never sampled), and `summary.runtime` carries the model state and the longest hold
+  (`heldMs.max`). INTERCEPTION.md also opens with a version note, lists the webhook sink's requests (and the chunks
+  the zero-code entries load for a named sink) and corrects four rows: learned state is stored only with
+  `learn.expectations` or `learn.persist`, only routine decision records are sampled and capped (0.3.0), the devtools
+  overlay listens for theme changes only with `theme: "auto"`, and a `?genclass=` value in the URL takes precedence
+  over the `genclass` kill switch in localStorage. It also marks the model's default device floor and
+  `inlineFallback: false` as 0.3.0 only. Links that leave the package point at GitHub.
+  The unscoped `genclass-runtime` alias is documented as deprecated in this repository (it is not yet marked
+  deprecated on the npm registry). Nothing that is sent changed; no runtime code and no model-visible text changed.
 
-## 0.3.0-beta.0 (unreleased)
+## 0.3.0-beta.0 (2026-10-15)
 
 The first 0.3.0 prerelease, for the `beta` dist-tag (release.yml publishes a prerelease version to the dist-tag
 named after it; `latest` stays where it is until the owner moves it). No model-visible text changed: the situation
@@ -684,7 +760,7 @@ observer does not record the runtime's own writes.
 
 ### Measured visual checks
 
-- **New: measured visual checks** ([docs/runtime/VISUAL.md](../../docs/runtime/VISUAL.md)). GenClass now finds visual
+- **New: measured visual checks** ([docs/runtime/VISUAL.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/VISUAL.md)). GenClass now finds visual
   and CSS bugs that never throw an error: text you cannot read because it is nearly the colour of its background
   (below 1.5:1, including on hover, on focus and in dark mode), images, CSS background images, stylesheets, web fonts,
   icon fonts and media that failed to load, styles and images a Content-Security-Policy blocked, `[object Object]`,
@@ -732,7 +808,7 @@ observer does not record the runtime's own writes.
     the visitor is not using, layout shifts and failed CSS images outside Chromium, low contrast that is readable but
     below WCAG AA.
   - **Measured** by a new bench (`bench/visual`, GitHub Actions only;
-    [RESULTS.md section 14](../../docs/runtime/RESULTS.md)): 0 false reports in 128 views of the demos, templates and
+    [RESULTS.md section 14](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#visual-bench)): 0 false reports in 128 views of the demos, templates and
     compat apps (desktop and phone, light and dark), and recall 1.00 on planted faults for 19 of the 23 kinds
     (`click-blocked` and `scroll-lock-stuck` 0.67, `pointer-events-leak` 0.94, `css-var-undefined` 0.96; run 5). On
     about 40 public home pages the checks
