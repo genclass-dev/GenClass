@@ -167,11 +167,12 @@ describe("no trial", () => {
     for (const [p, html] of pages) {
       expect(visible(html), p).not.toMatch(/trial/i);
       expect(html, p).not.toContain("/api/billing/trial");
-      expect(html, p).not.toMatch(/\bPro\b/);
+      // no Pro plan anywhere (the Studio pages' code font, Source Code Pro, is not one)
+      expect(html.replace(/Source(\+| )Code(\+| )Pro/g, ""), p).not.toMatch(/\bPro\b/);
     }
     expect(pages[0]![1]).toContain("The dashboard is free.");
-    expect(pages[1]![1]).toContain('<p class="opt">The runtime needs no account. The dashboard is free for every app.</p>');
-    expect(pages[2]![1]).toContain('<p class="opt">The runtime needs no account. The dashboard is free for every app.</p>');
+    expect(pages[1]![1]).toContain('<p class="opt">The runtime needs no account: <a href="/start/open-source">set it up without one</a>. The dashboard is free for every app.</p>');
+    expect(pages[2]![1]).toContain('<p class="opt">The runtime needs no account: <a href="/start/open-source">set it up without one</a>. The dashboard is free for every app.</p>');
   });
 
   it("nothing in src/ asks Stripe for a trial or writes the trial's columns", () => {

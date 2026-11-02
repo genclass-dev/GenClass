@@ -1,8 +1,19 @@
-# @genclass/runtime API reference
+# GenClass Runtime API reference (@genclass/runtime)
 
-GenClass Runtime watches a web app from the inside (user actions, async operations, network, state changes,
-errors, timing and causality) and asks a small local model, running in the browser, about situations that look
-risky. Depending on the mode it reports what it saw, or prevents the failure with a minimal, reversible action.
+This page describes every export, option, event, action and type of `@genclass/runtime` on `main`.
+`npm i @genclass/runtime` installs 0.2.2 (`latest`); `npm i @genclass/runtime@beta` installs 0.3.0-beta.0. Items
+marked 0.3.0 are not in 0.2.x; items marked 0.3.0-beta.1 (interaction analytics, the devtools redesign) are not on
+npm yet.
+
+GenClass Runtime (`@genclass/runtime`) is an open-source (Apache-2.0) browser library that reports race conditions in
+web apps while they happen: stale responses that land over newer data, duplicate requests such as double submits,
+inconsistent state and failure storms. A small model runs on the user's device, in a Web Worker on WebGPU or WASM,
+and each report comes with its evidence. By default it only reports (`observe`): it never holds, delays or changes a
+request, a response or a state write. The opt-in `guard` mode may act on a few of them: on held-out data it acted on
+7.5% of actionable real-app cases at a 0.00% false-intervention rate (7.8% of clear simulated cases at 0.13%), but in
+the six demos no mode lowered the bug rate ([RESULTS.md §1](RESULTS.md#1-model-stages-compared-held-out-simulated-apps),
+[§5](RESULTS.md#5-demos)). The `heal` mode is experimental. Terms are defined in the [glossary](README.md#glossary);
+measured numbers are in [RESULTS.md](RESULTS.md).
 
 ```ts
 import { GenClass } from "@genclass/runtime";
@@ -40,10 +51,14 @@ isValidToken(v: unknown): v is string
 Kill switch, for "is my app broken or did GenClass change something?":
 
 - `?genclass=off` in the page URL, or `localStorage.genclass = "off"`: `init` installs nothing and logs one line.
-- `?genclass=observe|guard|heal`: overrides the mode, within limits (`src/index.ts` -> `initUnsafe`; a missing
-  `mode` counts as `guard` there): `observe` always; `guard` when no mode, `guard` or `heal` is configured (the
-  default `/auto` and script tag included, not `/auto/observe`); `heal` only when `heal` is configured, or with
-  `debug: true`.
+- `?genclass=observe|guard|heal` (or the same value in `localStorage.genclass`): sets the mode for that visitor, but
+  only to demote it from the app's mode (from `observe` when the app sets none), so a crafted link cannot raise the
+  mode of a site on a public host (`src/index.ts` -> `initUnsafe`). It may raise the mode with `debug: true`, or on
+  a local or private host (`isLocalHost` in `src/telemetry/config.ts`: `localhost` and `*.localhost`, `*.local`,
+  `*.test`, `*.internal`, `*.home.arpa`, single-label intranet names, an empty host name such as a `file:` page's,
+  and loopback, private, link-local, CGNAT (100.64/10) and 0/8 addresses). That includes a production app served from such a host,
+  such as an intranet app; `routes: [{ match: "*", mode: "observe" }]` keeps it at observe whatever the URL says.
+  Before 0.2.2 it could also raise the mode to `guard` when the app set no mode.
 
 Outside a browser (no `window`/`document`, e.g. SSR), `GenClass.init()` returns an inert runtime: no observers,
 no model. Use [`createRuntime`](#headless-use-tests-ssr-simulation) for headless work.
@@ -58,9 +73,9 @@ hosts (`0.2.1` sends from them too, by mistake; fixed in `0.2.2`), outside a bro
 [packages/runtime/TELEMETRY.md](../../packages/runtime/TELEMETRY.md).
 
 **App token and dashboard** (0.3.0: `0.2.x` ignores `token`). `token: "gc_..."` (from
-`npx @genclass/runtime init` or https://genclass.dev/start) is sent with each telemetry batch so the app's diagnostics
+`npx @genclass/runtime@beta init` or https://genclass.dev/start) is sent with each telemetry batch so the app's diagnostics
 show up on its private dashboard (`https://genclass.dev/dashboard/<secret>`; free on every plan, and
-`npx @genclass/runtime dashboard` prints the link for the app in the current folder); with a token, decision events also
+`npx @genclass/runtime@beta dashboard` prints the link for the app in the current folder); with a token, decision events also
 carry `fn` (see "Protected functions"). Public; malformed values log one warning and are ignored; it does nothing
 while telemetry is off (on a local host the console says so once). `rt.telemetry.token` reports it while telemetry
 is on. `token` and `scope` are fixed when GenClass starts: on a runtime already started by `/auto` or the script tag,
@@ -71,17 +86,27 @@ tag or `data-token` / `data-scope`).
 `token` (or a custom `telemetry.endpoint`) also sends `interactions` telemetry events for the app's dashboard: per
 page view the route, engaged time, scroll milestones, and clicks, rage clicks and dead clicks per element key (built
 from markup: `data-genclass-name`, `data-testid`, a stable id, a link's target, stable classes, a short structural
-path; never element text). Every telemetry opt-out and Global Privacy Control turn them off; without a token
+path; never element text), and (Unreleased) per visit a random visit id kept 30 minutes in `localStorage`
+(`genclass.analytics.<token>`), the referring host, utm values without ids, device class, browser and OS families and
+whether the browser visited before, and how visitors move within a page load: how each view was reached (`nav`), the
+previous route and the time between (`from`, `fromMs`), the first element interacted with (`first`, `firstMs`), and at
+the end of the page load where it ended and its routes in order (`exit`, `path`, at most 10; ANALYTICS.md section 11).
+Every telemetry opt-out and Global Privacy Control turn them off; without a token
 `analytics: true` warns once and records nothing. They run in a lazy chunk (`dist/analytics/index.js`), outside the
 event log: nothing reaches a situation, a decision or the model. `rt.analytics.start()` / `stop()` turn them on and
-off later (consent; `stop()` drops the counts not sent yet). Also `data-analytics="on"`, `analytics=on` in the meta
+off later (consent; `stop()` drops the counts not sent yet and removes the visit entry). Also `data-analytics="on"`, `analytics=on` in the meta
 tag, `window.GENCLASS_CONFIG.analytics`. Schema: [TELEMETRY.md](../../packages/runtime/TELEMETRY.md#interaction-analytics).
+With the script tag, a chunk that does not load warns once per load (`[GenClass] analytics: <url> (@genclass/runtime
+<version>) did not load; nothing is recorded. ...`, `reason: "error"`), and a chunk of another release than the tag
+warns once with both versions. `0.2.x` (npm's `latest` until 0.3.0)
+and `0.3.0-beta.0` have no analytics and ignore the option silently: install `@genclass/runtime@beta`
+([ANALYTICS.md](ANALYTICS.md) section 4.1).
 
 ## Options
 
 ```ts
 interface InitOptions {
-  mode?: "observe" | "guard" | "heal";                 // default "observe"; "guard" is opt-in, "heal" experimental
+  mode?: "observe" | "guard" | "heal";                 // default "observe"; "guard" is opt-in, "heal" experimental; any other value runs as observe, with a warning
   model?: {                                             // or false: no model (observe only)
     baseUrl?: string;                                   // directory with model.json (default: jsDelivr CDN)
     device?: "auto" | "webgpu" | "wasm";                // default "auto"
@@ -123,7 +148,9 @@ interface InitOptions {
                                                         // off in GenClass.init / createRuntime (there it needs import "@genclass/runtime/discover" first)
   token?: string;                                       // (0.3.0) app token, gc_ + 22 letters/digits: groups telemetry under your private dashboard
   analytics?: boolean;                                  // (0.3.0-beta.1) [false] interaction analytics for the app's dashboard: page views, engaged time,
-                                                        // scroll depth, clicks, rage and dead clicks per element key; needs telemetry and the token
+                                                        // scroll depth, clicks, rage and dead clicks per element key; visits, sources, devices
+                                                        // (Unreleased); navigation within a page load (how each view was reached, the previous route,
+                                                        // the first interaction, the end and the path); needs telemetry and the token
   scope?: "app" | "functions";                          // (0.3.0) ["app"]; "functions": decisions and standing questions only for activity inside protect()ed functions (rt.ask() still answered)
 
   // batch 12 (docs/runtime/OPTIONS-SPEC.md); defaults in brackets
@@ -131,7 +158,10 @@ interface InitOptions {
                                                         // [true]; false: nothing installed, model never downloaded; a predicate/source forces preload "lazy"
   sample?: number;                                      // [1] fraction of sessions that act (stable per session); the rest observe
   routes?: { match: string | RegExp | ((route: string) => boolean); mode?: Mode | "off"; aggressiveness?: Aggressiveness }[];
-                                                        // first match wins; demote only
+                                                        // first match wins; demote only. Matched against the raw pathname and its normalised
+                                                        // form (percent-decoded, no ";" parameters, no trailing or repeated slashes), so
+                                                        // "/se%61rch" and "/search/" fall under "/search"; case-sensitive; "/admin/*" does
+                                                        // not cover "/admin" itself (use "/admin*" or a RegExp)
   requests?: {
     ignore?: RequestMatcher[];                          // not observed at all (native pass-through)
     protect?: (RequestMatcher | `preset:${string}`)[];  // observed, never held/retried/cached/discarded, nor what its response causes;
@@ -155,14 +185,16 @@ interface InitOptions {
   report?: "console" | "interventions" | "silent" | ((r: Report) => void);    // "interventions": console prints interventions, undos, breaker only
   learn?: { persist?: boolean | "local" | "session"; key?: string; version?: string; maxBytes?: number; // persist [unset: profiles in memory; flows in localStorage when expectations are on; true/"local"/"session": both; false: nothing]; key ["genclass:learn"]; version [session.tags.release]: mismatch discards; maxBytes [200000]
             expectations?: boolean; minSupport?: number; minShare?: number; minSessions?: number }; // [false: opt-in until its false-report rate is measured], [8 in one page load, 20 with stored counts], [0.95], [3 with localStorage, else 1] (docs/runtime/EXPECTATIONS.md)
-  // model: also loadIf [{ minDeviceMemoryGB: 4, saveData: "skip" }: no model on devices reporting ≤ 2 GB or on Save-Data; () => true forces],
-  //        inlineFallback [true; false: a failed worker means no model, never the main thread], threads ["auto"], timeoutMs [10000],
+  // model: also loadIf [0.3.0: { minDeviceMemoryGB: 4, saveData: "skip" }: no model on devices reporting ≤ 2 GB or on Save-Data; () => true forces;
+  //        0.2.x: { saveData: "lazy" }],
+  //        inlineFallback [true; false (0.3.0): a failed worker means no model, never the main thread; 0.2.x ignored false],
+  //        threads ["auto"], timeoutMs [10000],
   //        maxDecisionsPerMinute [30], unloadAfterIdleMs [false]
 }
 ```
 
 Runtime additions: `rt.audit(n?)` (the audit trail, below), `rt.disable({ undo? })` (permanent; `undo: true` rolls back the last minute's actions),
-`rt.summary(): SessionSummary` (0.3.0: `possibleDetections` per diagnosis next to `detections`, the likely ones), `rt.setSession({ id?, tags? })`, `rt.breaker.{tripped, reset()}`, `rt.learn.clear()`,
+`rt.summary(): SessionSummary` (0.3.0: `possibleDetections` per diagnosis next to `detections`, the likely ones; after 0.3.0-beta.1: `requests`, below), `rt.setSession({ id?, tags? })`, `rt.breaker.{tripped, reset()}`, `rt.learn.clear()`,
 `rt.learned()` (below), events `shadow`, `breaker`, `limit`, `modelBudget`, `expectation`. `status` adds `effectiveMode`, `sampled`, `breaker`, `scope`,
 `modelBudget`, and states `"disabled" | "skipped" | "unloaded"`. `status.scope` is what is in force on the current
 route: `mode` is the effective mode there (equal to `effectiveMode`: the requested mode demoted by sampling, the breaker
@@ -182,10 +214,11 @@ mode/allow/deny/requireDiagnosis (at the effective mode) → thresholds → `pol
 (`limit:perMinute|perSubject|perSession`; defaults 60/min global, 10/min per subject, 200 per session) → `onBeforeAction` (`vetoed`, `would-veto`, or
 `limit:hold` past the budget) → execute. effectiveMode = min(mode, sample cap, breaker cap, route rule); URL overrides
 (`?genclass`, `?genclass-mode`, `?genclass-aggr`, `?genclass-sample`, `localStorage.genclass`) only demote, from the
-app's mode or from `observe` when it sets none; they may raise only with `debug: true` or on a development host
-(`localhost`, `*.local`, `*.test`, private networks). Before 0.2.2, `?genclass=guard` opted a visitor into guard when
-the app set no mode. `policy.holdBudgetMs` is a hard ceiling that includes defers, the
-wait for a response or request body, a held write's deferred re-decisions and the veto hook.
+app's mode or from `observe` when it sets none; `?genclass=` / `localStorage.genclass` may also raise on a development
+host (http(s) on a loopback name with an explicit port, or `*.test`; `src/devhost.ts`), and since 0.2.3 and 0.3.0-beta.2
+`debug: true` raises nothing ([Init and modes](#init-and-modes)). Before 0.2.2,
+`?genclass=guard` opted a visitor into guard when the app set no mode. `policy.holdBudgetMs` is a hard ceiling that
+includes defers, the wait for a response or request body, a held write's deferred re-decisions and the veto hook.
 
 Protected requests (`requests.protect`) are never held, never wait for their body to be read, and neither they nor
 anything their response callbacks cause (writes, timers, follow-up requests: the ops inherit the protection) are
@@ -208,7 +241,7 @@ the model's recent median latency, 150 to 800 ms), then proceed unchanged; nothi
 expected to answer within that budget. Serving your page with `Cross-Origin-Opener-Policy: same-origin` and
 `Cross-Origin-Embedder-Policy: require-corp` enables WASM threads (about 3× faster without WebGPU).
 
-Self-hosting the model: `npx @genclass/runtime fetch-model public/genclass-model` then
+Self-hosting the model: `npx @genclass/runtime@beta fetch-model public/genclass-model` then
 `GenClass.init({ model: { baseUrl: "/genclass-model/" } })`.
 
 ## State
@@ -265,7 +298,9 @@ still on its way), put back the value of an unconfirmed local change (a user act
 request is still in flight), or replace text the user typed meanwhile. The model may let it through (`deliver`), let it
 through but drop the writes it makes over newer data (`discard`: each later `set()` of that response's chain applies
 its other fields and skips those), or hold it until the related requests finish and decide again (`defer`). Holding
-only adds latency; messages of one socket or stream keep their order. Before asking, it reads the response (a
+only adds latency; messages of one socket or stream keep their order. Only guard and heal hold a delivery, and only
+when an action is permitted and the model can answer within the hold budget; in observe, and whenever no hold is
+possible, the delivery is released at once, exactly as without GenClass, and decided in the background. Before asking, it reads the response (a
 clone, ≤ 256 KB of JSON) and compares it with the store: a response that equals the current values changes nothing and is let through without
 a model call. The situation then says what the response would do: put back a value a newer operation replaced (per
 field, or per item cell of a list joined by id), replace text the user typed since the request started (with a
@@ -273,9 +308,9 @@ preview centred on the difference), or reload a list without the item a recent c
 
 `set()` always applies at once (`set(x); get()` returns x) and notifies subscribers; writes to one store apply in the
 order they were made. A write that looks wrong on its own (not covered by a delivery decision) is decided in the
-background: if the model answers `discard` within 2 s after the write applied, nothing has overwritten it and the
-same operation made no other write since, GenClass reverts exactly that write (a "late revert", reported as such and
-undoable).
+background: if the model answers `discard` within 800 ms after the write applied (`LATE_REVERT_MS`), nothing has
+overwritten it and the same operation made no other write since, GenClass reverts exactly that write (a "late
+revert", reported as such and undoable). Before 0.2.0 the window was 2 s.
 
 `policy.holdWrites: true` (opt-in) holds salient writes until the model answers (at most the hold budget): a later
 write to the same store first applies the earlier held ones in order, and `get()` inside the writing operation
@@ -492,7 +527,7 @@ every observer and restores the globals it wrapped.
 
 | action | tier | effect |
 |---|---|---|
-| `discard` | guard | delivery: deliver it, but drop the state changes its operation makes over newer data (`ActionRecord.dropped` lists them; undo: apply them now). mutation: revert exactly that write if decided ≤ 2 s after it applied, nothing overwrote it and its operation wrote nothing else since (undo: re-apply); with `holdWrites`, drop the held write |
+| `discard` | guard | delivery: deliver it, but drop the state changes its operation makes over newer data (`ActionRecord.dropped` lists them; undo: apply them now). mutation: revert exactly that write if decided ≤ 800 ms after it applied, nothing overwrote it and its operation wrote nothing else since (undo: re-apply); with `holdWrites`, drop the held write |
 | `defer` | guard | hold the response/message (or held write) until related requests finish, then decide again (twice at most) |
 | `coalesce` | guard | do not send; reuse the response of the identical request in flight or just finished (`x-genclass: coalesced`) |
 | `delay` | guard | wait min(250 ms · 2^failure streak, 8 s), then send |
@@ -531,21 +566,25 @@ match anything.
 
 ```ts
 interface PolicyOptions {
-  thresholds?: { report?: number; guard?: number; heal?: number };  // overrides; else the model's own gate, else 0.6 / 0.9 / 0.8
+  thresholds?: { report?: number; guard?: number; heal?: number };  // overrides, read in the model's gate kind (mass: probabilities;
+                                    // gain: margins); else the model's own gate, else 0.6 / 0.9 / 0.8 (gain: 0.6 / 2 / 2)
   allow?: string[];                 // only these non-passive actions may run
   deny?: string[];                  // these never run
   holdBudgetMs?: number | "auto";   // default "auto": clamp(1.5 × median recent model latency, 150, 800) ms
-  holdUserWrites?: boolean;         // default false
+  holdUserWrites?: boolean;         // default false: with holdWrites on, writes made synchronously by a user handler still apply at once
   idempotencyHeaders?: string[];    // default ["Idempotency-Key", "X-Idempotency-Key"]: a POST/PATCH carrying one may be retried
   idempotencyBodyFields?: string[]; // opt-in, default []: top-level JSON body fields (e.g. "request_id") the server dedupes on
   holdWrites?: boolean;             // default false: state writes apply at once (decided at the network boundary)
-  maxActionsPerMinute?: number;     // default 60
+  actionLimits?: { perMinute?: number; perSubject?: number; perSession?: number }; // default 60 / 10 / 200
+  maxActionsPerMinute?: number;     // deprecated alias of actionLimits.perMinute (ignored when that is set)
   requireDiagnosis?: boolean;       // default true
 }
 ```
 
 Thresholds: the model's action probabilities are calibrated against the gate it ships with (`gate` in its
-meta.json, visible as `runtime.status.gate`). Two gate kinds exist:
+meta.json, visible as `runtime.status.gate`). Model 0.2.0, the default, ships a gain gate with three profiles (its
+margins and report values are in the [model card](../../packages/runtime-model/MODEL_CARD.md)). Two gate kinds
+exist:
 - `kind: "mass"` (the default, also when meta.json has no kind): the most probable permitted action runs when the
   summed probability of the permitted actions reaches its tier's threshold (`{ report?, guard: { default,
   byTrigger? }, heal: {...} }`, probabilities; defaults 0.9 / 0.8).
@@ -567,10 +606,13 @@ each comes from (`policy`, `model`, `default`); every decision records `gateKind
 and `margin` (gain), with `thresholdSource`; `explain(id).gates` has the full set.
 
 The permitted actions are the applicable non-passive actions the mode allows (observe: none; guard: guard tier;
-heal: both), minus denied ones (only allowed ones when `allow` is set). GenClass runs the most probable permitted
-action only if all of these hold, otherwise the passive action runs and the decision's `reason` says why: the
-summed probability of the permitted actions reaches that action's tier threshold; the model's top diagnosis is not
-`expected` (unless `requireDiagnosis: false`); fewer than `maxActionsPerMinute` actions ran in the last minute; the
+heal: both), minus denied ones (only allowed ones when `allow` is set); a protected or cross-origin subject, or one
+whose operation started under an `off` or `observe` route rule, has none. GenClass runs the most probable permitted
+action only if all of these hold, otherwise the passive action runs and the decision's `reason` says why: the gate
+clears (mass: the summed probability of the permitted actions reaches that action's tier threshold; gain: ĝ of that
+action is above its tier's margin); the model's top diagnosis is not
+`expected` (unless `requireDiagnosis: false`); the action limits allow it (`policy.actionLimits`: by default 60 a
+minute, 10 per subject a minute, 200 per session); the `onBeforeAction` hook, if any, does not veto it; the
 decision arrived within the hold budget (a late `discard` may still revert the write, see State). While the model is
 loading, everything proceeds unchanged: guard and heal build no situation then, as before 0.3.0; in observe (0.3.0,
 where the possible tier is in force) a salient situation is built at its trigger and decided once the model is ready,
@@ -602,8 +644,10 @@ in `rt.explain(id)`; it reaches the devtools as a dimmed card left out of the co
 is reported at the possible tier at most. `explain()`, the console, the devtools and telemetry all read the tier
 recorded with the decision. The tiers are reporting only: no action gate reads them.
 
+An intervention line in guard mode (captured with model 0.1.0):
+
 ```
-[GenClass] Prevented a stale response: search.results was written twice by other operations since its operation (#6) started (version 1 → 3), last 0.69s ago by GET /api/search?q=reac (#8), which started 0.09s after #6, from a later user action (#7). Delivered the response to GET /api/search?q=rea (#6) and dropped the state changes it makes over newer data (search.results). (stale, 0.97; discard 0.97)
+[GenClass] Prevented a stale response: search.results was written twice by other operations since its operation (#6) started (version 1 → 3), last 0.69s ago by GET /api/search?q=reac (#8), which started 0.09s after #6, from a later user action (#7). Delivered the response to GET /api/search?q=rea (#6) and dropped the state changes it makes over newer data (search.results). (stale, 0.97; discard 0.98)
 ```
 
 ```ts
@@ -627,7 +671,9 @@ overlay uses it), so debugging tools never become causes in situations.
 
 0.3.0 (CHANGELOG): the adapters, the `@genclass/runtime/sinks` exports, sinks by name and `init --sink` are not
 in `0.2.x`. The runtime has no Sentry, PostHog or Datadog adapter. On every genclass.dev plan, Free included, the GenClass
-collector forwards detections to those tools once you turn it on (https://genclass.dev/pricing).
+collector forwards likely detections to those tools once you turn it on for an app in your genclass.dev account that
+sends telemetry with its token; with telemetry off nothing is forwarded, and a forwarded record never carries page
+text (https://genclass.dev/pricing; OPTIONS-SPEC §4.11).
 
 `sinks` receive a `SinkRecord` per report (OPTIONS-SPEC §4.11): `kind`, `id`, `ts`, `sessionId`, `tags`, `mode`,
 `sampled`, `diagnosis`, `p`, `detection` (kind `detection`: `"likely"`, or `"possible"` for a sink with
@@ -667,7 +713,7 @@ never caps its `summary` record.
 Sinks by name, with no code, in the zero-code entries (`/auto`, the script tag): `window.GENCLASS_CONFIG = { sinks:
 ["webhook:/genclass"] }`, `<meta name="genclass" content="sink=webhook:/genclass+console-json">` (`+` joins names,
 since commas separate the meta keys), `data-sink="webhook:/genclass,console-json"` on the script tag, or
-`npx @genclass/runtime init --sink webhook:/genclass` (the names are `console-json` and `webhook:<url>`;
+`npx @genclass/runtime@beta init --sink webhook:/genclass` (the names are `console-json` and `webhook:<url>`;
 `console-json:noevidence` makes its adapter with `evidence: false`). The names `sentry`, `posthog` and `datadog` (any
 case, with or without an option) are left out at init with one console warning for them all, `Ignored sink <names>:
 Sentry, PostHog and Datadog forwarding is not in the free runtime: https://genclass.dev/pricing`, and nothing is loaded or sent for them; `init --sink sentry` is a usage error that says
@@ -686,7 +732,8 @@ The console default is unchanged.
 Deterministic measurements of visual and CSS bugs that never throw an error, with fixed thresholds
 ([VISUAL.md](VISUAL.md) has every check, threshold and exclusion). They are reported as kind `"check"` and never as a
 model finding: the model is not involved, the checks never feed a situation, a fact, the event log, the gate or a
-decision, and they never fire `detect`.
+decision, and they never fire `detect`. For any URL from a terminal or a coding agent, without code:
+`npx @genclass/runtime@beta scan <url> [--json]` (the package README's "Audit a page"; `@genclass/mcp`'s `genclass_scan`).
 
 ```ts
 GenClass.init({ visual: true });                                       // on everywhere, report-only
@@ -696,7 +743,7 @@ await rt.checkNow();                                                   // a pass
 
 interface VisualOptions {
   on?: boolean | "local";            // ["local" in GenClass.init in a browser; false in createRuntime] "local": development hosts and the devtools overlay only
-  checks?: Partial<Record<CheckKind, boolean>>;   // [every kind on]
+  checks?: Partial<Record<CheckKind, boolean>> & { stallMs?: number }; // [every kind on; stallMs 15000]
   fix?: boolean | ("text-invisible" | "pointer-events-leak" | "scroll-lock-stuck")[]; // [false] needs on: true and guard or heal
   ignore?: string[];                 // selectors never checked (and image hosts for text-placeholder)
   budgetMs?: number;                 // [8] per idle slice, clamped to 2..16
@@ -711,7 +758,7 @@ type CheckKind = "image-broken" | "image-css-broken" | "media-failed" | "stylesh
   | "icon-font-failed" | "csp-blocked" | "text-invisible" | "text-template-leak" | "text-placeholder" | "text-encoding"
   | "css-var-undefined" | "image-distorted" | "page-overflow-x" | "viewport-meta-missing" | "layout-shift"
   | "page-blank" | "click-blocked" | "pointer-events-leak" | "scroll-lock-stuck" | "control-unreachable"
-  | "focus-obscured" | "dialog-covered";
+  | "focus-obscured" | "dialog-covered" | "request-stalled" | "ad-heavy" | "text-warped";  // ad-heavy, text-warped: VISUAL.md 3.25, 3.26 (report only)
 
 interface CheckFinding {
   id: string;                        // "c1", "c2", ...
@@ -752,6 +799,14 @@ interface CheckFinding {
 - **Sinks** get `kind: "check"` records (`check: { kind, severity, fixed }`, `route`) only when their `kinds` list
   `"check"`; `evidence: true` adds `message`, `target` and `selector`.
 - **Audit.** Every fix applied, undone or dropped is an entry of kind `"fix"`: `fix: { what, checkId, kind, css, reason? }`.
+- **Stalled requests.** `request-stalled` (after 0.3.0-beta.1): a `fetch` or XHR request still pending after
+  `visual: { checks: { stallMs } }` (default 15,000 ms, clamped to 1 s..10 min) is reported once, with its method, host
+  and normalised path (no query), how long it has waited, and the control the page disabled (`disabled`,
+  `aria-disabled="true"`) or marked `aria-busy="true"` from 1 s before the request started, if it still is (severity
+  high then, medium otherwise; `measured.control` is `"not watched"` for a request older than the checks). Not checked:
+  EventSource and WebSocket, a request on a background schedule the runtime learned (long polling), an endpoint whose
+  learned p95 latency is at least `stallMs`. `visual.ignore` takes a host or a path prefix. Needs the runtime (not in
+  `checkPage()`); judged on the Clock at most every 2 s, from the start of the page (not after it settles).
 - **Summary.** `rt.summary().visual`, once the checks have run: `checks` (per kind), `checksByRoute` (at most 20
   routes), `fixes` (`applied`, `undone`), `passes`, `elements`, `ms`, `maxSliceMs`, `partial`, `abstained`,
   `unsupported` (kinds this browser cannot measure), `tier`, `stopped`.
@@ -768,6 +823,41 @@ interface CheckFinding {
   running runtime).
 - **Devtools.** A Checks tab lists every finding with its measured value and threshold, the suggested CSS (Copy), a
   Show button that scrolls to the element and outlines it inside the overlay, and Undo for an applied fix.
+
+### Requests in `rt.summary()`
+
+`rt.summary().requests` (after 0.3.0-beta.1, issue 94) answers "did GenClass see my requests?" without a model
+decision. Counted from the `fetch` and XHR operations the runtime records; reporting only (never a situation, a fact,
+the gate or the model), and not sent by telemetry. It is counted in the measured checks' chunk (`src/visual/requests.ts`),
+so it is present once that chunk has loaded: wherever `visual` is on (development hosts by default, `visual: true`
+elsewhere), when the devtools overlay mounts, or after `rt.checkNow()`. On load it counts the requests the runtime
+still holds (its op store keeps the last 2,000 operations of every kind), then follows its event stream.
+
+```ts
+interface RequestHealth {
+  requests: number;            // fetch and XHR requests started (GenClass's own retries and hedges excluded)
+  "2xx": number; "3xx": number; "4xx": number; "5xx": number; // answers by status class
+  network: number;             // no answer: network error, timeout (XHR timeout, AbortSignal.timeout), status 0
+  aborted: number;             // aborted by the app
+  notJson: number;             // fetch answers read with response.json() whose Content-Type is not JSON
+  byGenClass: number;          // answered by GenClass (blocked, reused response; guard and heal only)
+  pending: number;             // still in flight
+  latency?: { n: number; p50: number; p95: number }; // ms, answers that did not fail (the learned baselines, last 64 per endpoint)
+}
+interface RequestSummary extends RequestHealth {
+  hosts: Record<string, RequestHealth>; // "same-origin", "api.example.com", ...; "other" past 30 hosts
+}
+```
+
+- `requests: 0` after the app sent requests means GenClass did not see them: it was loaded after them (a deferred
+  script tag starts after classic scripts), or the app calls a `fetch` it captured before GenClass loaded. Requests
+  counted and nothing in `detections` means it saw them and none was salient: a 404 or a non-JSON answer the app's own
+  `catch` handles is counted here, not detected.
+- `notJson` reads the Content-Type header, never the body: an API that sends invalid JSON as `application/json` is not
+  counted, and neither is XHR's `responseType = "json"`. Its first-load cost is one flag on the request (34 B gzip).
+- A sink's `summary` record carries the totals with an empty `hosts` (the per-host counts stay in `rt.summary()`).
+- A request answered by GenClass from its cache before the chunk loaded counts by its status, not as `byGenClass`.
+- A request still pending past `visual.checks.stallMs` is also a `request-stalled` check (Visual checks, below).
 
 ### Audit trail
 
@@ -909,9 +999,11 @@ Subpath exports: `@genclass/runtime/react` (`useGenClassState(name, initial, opt
 `@genclass/runtime/sinks/{console-json,webhook}` (each also its default export; see "See it where you already
 look"; there is no Sentry, PostHog or Datadog adapter in the free runtime), `@genclass/runtime/visual`
 (`checkPage(options?)`, the measured visual checks without a runtime; 0.3.0). They are documented with their source.
-The devtools overlay is in genclass.dev's black design whatever the page's theme (`theme: "dark"`, the default since
-0.3.0; `"light"` is the same design on white, `"auto"` follows `prefers-color-scheme`). To integrate another state
-library use:
+From 0.3.0-beta.1 (not on npm yet) the devtools overlay is in genclass.dev's black design whatever the page's theme
+(`theme: "dark"`, the new default; `"light"` is the same design on white, `"auto"` follows `prefers-color-scheme`).
+0.3.0-beta.0 and 0.2.x use their earlier design and default to `"auto"`.
+
+To integrate another state library use:
 
 ```ts
 rt.adapter<T>(name: string, io: { get(): T; set?(v: T): void; subscribe?(fn: () => void): () => void }, opts?): {
@@ -1014,5 +1106,6 @@ credential-like strings (JWTs, API keys). Query parameters and body keys follow 
 inputs with `autocomplete` cc-* / one-time-code are never recorded. Element text such as a kanban "card" is not a
 secret. Response bodies are read only from a clone the runtime already keeps (≤ 256 KB) and only to compare them with
 the store. Decisions are made in the browser by the local model; the only data GenClass sends is its anonymous
-telemetry (on by default with `GenClass.init()` in a browser; [TELEMETRY.md](../../packages/runtime/TELEMETRY.md)),
-which includes the redacted situation text.
+telemetry (on by default with `GenClass.init()` in a browser on a public host;
+[TELEMETRY.md](../../packages/runtime/TELEMETRY.md)), which includes the redacted situation text only when the app
+sets `telemetry: { include: { situation: true } }`, and what the app's own sinks send.
