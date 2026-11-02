@@ -3,8 +3,29 @@
 ## Unreleased (0.3.0-beta.5)
 
 Security fixes from the adversarial review of the mode-raise fix (`0.3.0-beta.2`); the same four fixes are in `0.2.3`
-on the stable line (tag `v0.2.3`). Nothing else changed: no model-visible text (`situation-v2.3`), telemetry and its
-opt-outs are unchanged, and the default model is unchanged.
+on the stable line (tag `v0.2.3`). The measured visual checks' counts now reach the diagnostics and the dashboard
+(counts only, below; every opt-out is unchanged). No model-visible text changed (`situation-v2.3`) and the default
+model is unchanged.
+
+- **The measured visual checks' counts reach the dashboard** (owner approval 2026-10-27; VISUAL.md section 10,
+  TELEMETRY.md). A site full of stuck scroll locks and frozen clicks, each measured and fixed in its visitors'
+  consoles, looked clean on genclass.dev, because telemetry sent nothing about the checks. Now, counts only: the
+  `session` event says whether the checks run on the page (`visual`: `off`, `local` or `on`) and whether the app
+  turned their runtime fixes on (`fix`); once the checks have run, every `summary` event carries `counts.checks` (per
+  kind), `counts.checksByRoute` (per normalised path, at most 20), `counts.fixes` (`applied`, `undone`) and
+  `runtime.visual` (`passes`, `ms`, `partial`, `tier`). Never a selector, element text, colour, URL, size or one event
+  per finding. The summary counts are added by the checks' own file (`src/visual/bridge.ts`), so first load grows only
+  by the two session fields. With telemetry on, the console says once when the checks start what of them is sent.
+  The checks stay off on public hosts unless the app turns them on (`visual: true`, `data-visual="on"`, or
+  `data-visual="fix"` in guard mode for the fixes). Tests: `telemetry-visual.test.ts`. No model-visible text changed
+  (`situation-v2.3`).
+- **The dashboard shows them** (telemetry-worker): checks are their own kind ("Measured check", never a model
+  detection), with a card per check (what was measured, the pages, the usual fix, a Copy prompt that measures the page
+  again with `genclass_scan`), a hatched slot in the problems chart, their pages in the Pages table, their runtime
+  fixes in What GenClass did, and their coverage in Health. They count in the app's status (Critical, Needs attention,
+  Healthy) and in Fix them all; a check fix still in place counts as fixed live. The sample dashboard shows simulated
+  checks. The Snow Day Predictor's demo estimate (`src/demo.ts`) yields to the measured counts as soon as that project
+  receives its first page load with measured checks.
 
 ### Security
 
