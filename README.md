@@ -343,7 +343,7 @@ rows and 837,623 real-browser rows (§6). Recall is the open problem.
   ([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md#interaction-analytics)).
 - **The measured visual checks send counts only** (from `0.3.0-beta.5`): whether they run on the page and whether
   their runtime fixes are on, and in each summary the findings per check and per page path (at most 20 paths), the
-  fixes applied and undone, and their cost. Never a selector, element text, colour, URL or one event per finding;
+  fixes applied and undone, and their cost. Never a selector, element text, colour, URL, size or one event per finding;
   the findings themselves stay in the page. They are off on public hosts unless you turn them on.
 - **The CLI** contacts genclass.dev only for the command you run (`init` creates a dashboard only after you approve
   its diff).
