@@ -1284,15 +1284,18 @@ describe("/start/open-source: the open-source parts with no account, no token an
     return { html, win, doc, urls, copied, box, copy, close: () => win.happyDOM.close() };
   }
 
-  it("the default prompt: two commands (init --no-telemetry --agent, @genclass/mcp init), no token, observe, the skill, the local scan", () => {
+  it("the default prompt: two commands (init --agent, @genclass/mcp init), no account, diagnostics on, observe, the skill, the local scan", () => {
     const p = openSourcePrompt();
-    expect(p).toContain("No GenClass account and no token: nothing is sent to genclass.dev. Two commands do it; run them yourself.");
-    expect(p).toContain(`\n1. In the project's root run: npx ${RUNTIME_PKG} init --no-telemetry --agent --yes It finds the framework`);
+    expect(p).toContain("No GenClass account and nothing to sign in to: init creates the app's free dashboard link. Two commands do it; run them yourself.");
+    expect(p).toContain(`\n1. In the project's root run: npx ${RUNTIME_PKG} init --agent --yes It finds the framework`);
+    // diagnostics on and the free dashboard link (owner decision 2026-11-02); the opt-out is a documented flag, not the default
+    expect(p).not.toContain("--no-telemetry");
     expect(p).toContain("the dev-only devtools overlay and the dev-only agent link (which records what happens on local pages for the GenClass MCP server, talks only to 127.0.0.1 and is never part of a production build; on plain HTML pages it stays in the page and runs only on localhost)");
-    expect(p).toContain('writes telemetry: false into a marked option file next to the entry (data-telemetry="off" on the tag; Astro: a <meta name="genclass"> line)');
+    expect(p).toContain('creates the app\'s free dashboard link at genclass.dev (it sends the package name, nothing else) and writes the token into a marked option file next to the entry (data-token on the tag; Astro: a <meta name="genclass"> line)');
     expect(p).toContain("on plain HTML pages it stays in the page and runs only on localhost");
-    // no data is sent, but the public files still come from jsDelivr unless the app serves them; the prompt says so
-    expect(p).toContain("so GenClass's anonymous diagnostics are off and it sends no data anywhere; the browser still downloads its model and onnxruntime-web, public files, from cdn.jsdelivr.net");
+    // what is sent is named, and the public files still come from jsDelivr unless the app serves them; the prompt says so
+    expect(p).toContain("GenClass's anonymous diagnostics stay on: its decisions and counts, never text from the page, and never from localhost or private hosts; the browser still downloads its model and onnxruntime-web, public files, from cdn.jsdelivr.net");
+    expect(p).not.toContain("telemetry: false");
     expect(p).toContain("(about 13 MB, 18 MB on WebGPU devices, then cached)");
     expect(p).not.toContain("sends nothing anywhere");
     expect(p).toContain("The mode stays observe: GenClass reports and never changes what the app does.");
@@ -1319,7 +1322,7 @@ describe("/start/open-source: the open-source parts with no account, no token an
     expect(p).not.toContain("<script src=");
     expect(p).not.toContain("connectAgent(");
     // nothing that needs an account, a token or the hosted dashboard
-    expect(p).not.toMatch(/token: "|data-token|--token|gc_[A-Za-z0-9]/);
+    expect(p).not.toMatch(/token: "|--token|gc_[A-Za-z0-9]/);
     expect(p).not.toContain("GENCLASS_DASHBOARD=");
     expect(p).not.toContain("GENCLASS_REPORT=");
     expect(p).not.toContain("genclass.dev/dashboard");
@@ -1329,7 +1332,7 @@ describe("/start/open-source: the open-source parts with no account, no token an
     // the steps are numbered 1..n with none missing: init, the MCP server, the dev server and scan, the report
     const nums = [...p.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
     expect(nums).toEqual([1, 2, 3, 4]);
-    expect(p).toMatch(/\n4\. Tell me what you changed, that the app sets no GenClass token and has telemetry off, what it downloads from outside this network/);
+    expect(p).toMatch(/\n4\. Tell me what you changed, the dashboard link init printed if it created one \(it is saved in \.genclass\.local, which init adds to \.gitignore; keep it private\), what it downloads from outside this network/);
     // only printable text (no step marker or other control character reaches the page)
     expect(p).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/);
   });
@@ -1338,7 +1341,7 @@ describe("/start/open-source: the open-source parts with no account, no token an
     const p = openSourcePrompt({ guard: true, eager: true, logs: true, selfHost: true, deploy: true });
     expect(p).toContain(`\n1. Serve the model from the app itself, so its pages download no model from a CDN: npx ${RUNTIME_PKG} fetch-model public/genclass-model`);
     expect(p).toContain('run fetch-model public/genclass-model --variant q8 --ort wasm instead (init --model-url adds device: "wasm" when it finds only the WASM build)');
-    expect(p).toContain(`\n2. In the project's root run: npx ${RUNTIME_PKG} init --no-telemetry --agent --mode guard --sink console-json --model-url /genclass-model/ --yes `);
+    expect(p).toContain(`\n2. In the project's root run: npx ${RUNTIME_PKG} init --agent --mode guard --sink console-json --model-url /genclass-model/ --yes `);
     // init writes no visual or aggressiveness option: the prompt says where they go
     expect(p).toContain('Mode guard: when GenClass is sure, it acts with minimal, reversible steps (it drops a stale response or fixes a CSS bug on the page) and never changes a response; aggressiveness "eager" lets it act on smaller signals. Then add aggressiveness: "eager" and visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes, and a <script>window.GENCLASS_CONFIG = { aggressiveness: "eager" };</script> line before it; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content, and the aggressiveness in a window.GENCLASS_CONFIG script before it).');
     expect(openSourcePrompt({ guard: true })).toContain('Then add visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content).');
@@ -1378,7 +1381,7 @@ describe("/start/open-source: the open-source parts with no account, no token an
     expect(r.copied).toEqual([openSourcePrompt({ logs: true, selfHost: true, deploy: true })]);
     // the commands copy too
     const cmds = [...r.doc.querySelectorAll(".cmds [data-copy]")].map((b) => b.getAttribute("data-copy"));
-    expect(cmds).toEqual([`npx ${RUNTIME_PKG} init --no-telemetry --agent`, `npx -y ${MCP_PKG} init`, `npx ${RUNTIME_PKG} scan http://localhost:5173/ --local`]);
+    expect(cmds).toEqual([`npx ${RUNTIME_PKG} init --agent`, `npx -y ${MCP_PKG} init`, `npx ${RUNTIME_PKG} scan http://localhost:5173/ --local`]);
     // the choices are a fieldset with a visible legend; the commands' titles are h3 under the section's h2
     expect(r.doc.querySelector("fieldset#choices > legend")!.textContent).toContain("What the prompt sets up");
     expect(r.doc.querySelectorAll(".cmds h3").length).toBe(3);

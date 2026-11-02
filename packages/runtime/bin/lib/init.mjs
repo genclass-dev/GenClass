@@ -83,8 +83,8 @@ remove   takes out exactly what init added (the lines and blocks marked "${MARK}
   --agent          also connect development builds to your coding agent: a dev-only line that loads
                    @genclass/runtime/agent and calls connectAgent (plain HTML: a module script after the
                    tag), so the GenClass MCP server (npx -y ${MCP_PKG} init) sees the page. Production
-                   builds drop it; off loopback hosts it is inert. The open-source setup, no account:
-                   init --no-telemetry --agent, then npx -y ${MCP_PKG} init
+                   builds drop it; off loopback hosts it is inert. The two-command setup, no account:
+                   init --agent, then npx -y ${MCP_PKG} init (--no-telemetry too sends nothing)
   --no-devtools    do not add the dev-only devtools overlay
   --no-network     do not ask npm for newer releases (--dry-run, --no-token and --no-telemetry do not
                    ask either)
