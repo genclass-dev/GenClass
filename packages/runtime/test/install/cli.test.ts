@@ -1302,6 +1302,27 @@ describe("init --agent: the dev-only agent link next to the overlay (the open-so
     expect(html).toContain('<script src="https://example.test/gc.js" defer data-devtools="local"></script><!-- genclass:inline -->');
     expect(html).not.toContain("connectAgent");
     expect(cli(odd, "remove", "--yes").code).toBe(0);
+    // the READMEs' bare package URL: the agent entry is dist/agent.js next to it
+    const bare = roundTrip(project({ "index.html": `<html><head><title>x</title></head><body></body></html>\n` }), "--agent", "--no-sri", "--cdn", `https://cdn.jsdelivr.net/npm/@genclass/runtime@${VERSION}`)["index.html"];
+    expect(bare).toContain(`import("https://cdn.jsdelivr.net/npm/@genclass/runtime@${VERSION}/dist/agent.js")`);
+  });
+
+  it("remove never swallows a user's line below an edited dev-only line (a block needs one of init's calls inside)", () => {
+    const dir = viteVue();
+    const before = snapshot(dir);
+    expect(cli(dir, "init", "--yes", "--no-install", "--agent").code).toBe(0);
+    const f = join(dir, "src/main.js");
+    const added = readFileSync(f, "utf8");
+    const line = `if (import.meta.env.DEV) import("@genclass/runtime/agent").then((a) => a.connectAgent(genclass)); // genclass:init`;
+    expect(added).toContain(line);
+    // the developer passes options to the link and adds a function right after it: the marked line is no longer init's
+    const edited = added.replace(line, `const opts = { anyHost: true };\n${line.replace("a.connectAgent(genclass)", "a.connectAgent(genclass, opts)")}\nfunction reportRaces(races) {}`);
+    writeFileSync(f, edited);
+    const r = cli(dir, "remove", "--yes");
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("not a statement init writes");
+    expect(readFileSync(f, "utf8")).toBe(edited);
+    expect(snapshot(dir)).not.toEqual(before);
   });
 
   it("remove takes out a Prettier-wrapped agent line whole, and refuses one that was edited", () => {

@@ -284,7 +284,10 @@ export const cdnUrl = (version, min = true) => `https://cdn.jsdelivr.net/npm/@ge
  */
 export function agentUrl(scriptUrl) {
   const u = scriptUrl.replace(/\/genclass\.global(?:\.min)?\.js(?:[?#].*)?$/, "/agent.js");
-  return u === scriptUrl ? null : u;
+  if (u !== scriptUrl) return u;
+  // the bare package URL the READMEs' script tag uses (jsDelivr and unpkg serve the package's own file there)
+  const m = /^(https:\/\/(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/@genclass\/runtime@[^/?#]+)\/?(?:[?#].*)?$/.exec(scriptUrl);
+  return m ? `${m[1]}/dist/agent.js` : null;
 }
 /**
  * With --agent, plain HTML gets this after the runtime's tag: a module script (which runs after the deferred tag, in
