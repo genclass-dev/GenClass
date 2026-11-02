@@ -1,12 +1,21 @@
 # GenClass visual checks: design (v1, with v2 and v3 outlined)
 
-Status: design written 2026-10-13; **v1 implemented** the same day on branch `wave2/visual`
-(`packages/runtime/src/visual/`), with the differences listed in [section 19](#19-v1-implementation-notes); **measured**
-the same day by the bench of section 15 ([RESULTS.md section 14](RESULTS.md)), which tightened four checks; then a review
-of the checks (section 19, "Review of 2026-10-13") found correct pages that looked broken and costs outside the slices,
-and the code changed again (measured as run 5). The open owner decisions are in
+GenClass measured visual checks find visual and CSS bugs that throw no error, such as unreadable text, broken images,
+fonts and stylesheets, sideways scrolling on phones, and invisible layers that swallow clicks (23 kinds, section 3).
+They are deterministic measurements with documented thresholds; the model is not involved and does not look at
+pixels. In `@genclass/runtime` 0.3.0-beta.0 they are on by default on development hosts (`visual: "local"`), three
+narrow runtime fixes run only when the app opts in and the mode is guard or heal, and the measurements are in
+RESULTS.md, [section 13](RESULTS.md#visual-checks) and [section 14](RESULTS.md#visual-bench).
+
+Status: v1 shipped in 0.3.0-beta.0 (npm `beta`). Design written 2026-10-13 and implemented the same day on branch
+`wave2/visual` (`packages/runtime/src/visual/`), with the differences listed in
+[section 19](#19-v1-implementation-notes); measured the same day by the bench of section 15, which tightened four
+checks; then a review of the checks (section 19, "Review of 2026-10-13") found correct pages that looked broken and
+costs outside the slices, and the code changed again (measured as run 5). The open owner decisions are in
 [section 17](#17-owner-decisions-and-open-questions). [CONTRACT.md](CONTRACT.md) section 14,
 [API.md](API.md), [OPTIONS-SPEC.md](OPTIONS-SPEC.md) section 4.20 and the CHANGELOG have the matching entries.
+Two checks were added on 2026-10-25 at the owner's request for "strange sites": `ad-heavy` (section 3.25) and
+`text-warped` (section 3.26), with their implementation notes at the end of section 19.
 
 The owner asked on 2026-10-13 for GenClass to find visual and CSS bugs that never throw an error (white text on a
 white background, broken images, "so much more") and to fix them. Many generated ("vibecoded") sites and company
@@ -198,8 +207,12 @@ labelled "likely source rule", because rule order only approximates the cascade.
 
 ## 3. v1 checks
 
-Only checks expected to be high precision are in v1. "Expected" is the honest word: no precision figure below is
-measured yet. Each check must pass the gates in section 15 before it is on by default anywhere.
+Only checks expected to be high precision are in v1. False reports on clean local pages and recall on planted faults
+were measured after this was written (RESULTS.md sections 13 and 14). Precision on public sites was measured for runs 1
+to 4 (run 4: 8 findings in 96 loads, 5 confirmed real, 0 check errors, 3 unconfirmed) but not for the code after the
+review (run 5's 6 findings were not looked at), and the planted faults are the checks' author's own forms, so
+"expected" below still means expected. Each check must pass the gates in section 15 before it is on by default
+anywhere.
 
 Severity: **high** means content or controls the visitor needs cannot be read, seen or used; **medium** means visibly
 wrong but usable; **low** means a defect with a small visible effect.
@@ -229,10 +242,13 @@ wrong but usable; **low** means a defect with a small visible effect.
 | 21 | `control-unreachable` | a control covered by a fixed element even at max scroll | high | no | all |
 | 22 | `focus-obscured` | a focused element or anchor target hidden under a sticky header | medium | no | all |
 | 23 | `dialog-covered` | an open dialog covered by other elements, or its buttons off-screen | high | no | all |
+| 24 | `request-stalled` | a fetch or XHR request pending past 15 s, with the control the page disabled for it (section 3.24) | high or medium | no | all |
+| 25 | `ad-heavy` | ad slots cover more than 30% of the page or half the first screen, a sticky ad over 30% of the screen, or an ad interstitial (added 2026-10-25, section 3.25) | high or medium | no | all |
+| 26 | `text-warped` | text that cannot be read as text: overlapping lines, a line cut mid-way by its box, characters no font can draw, mirrored or skewed text, letter spacing that splits words, text rendered below 8 px (added 2026-10-25, section 3.26) | medium | no | all |
 
 Checks 1 to 7, 15 and 16 are mostly browser-reported and cost close to nothing (event listeners and property reads).
-Checks 8 to 14 and 17 are measured layout and text checks behind the settle and persistence gates. Checks 18 to 23
-run on interaction or on a cheap periodic read.
+Checks 8 to 14, 17, 25 and 26 are measured layout and text checks behind the settle and persistence gates. Checks 18
+to 23 run on interaction or on a cheap periodic read; check 24 runs on the runtime's in-flight requests.
 
 Each entry lists: what it measures, when it reports, what it skips, the evidence fields (local), the severity, the
 suggested developer fix, and the runtime fix if any.
@@ -708,6 +724,159 @@ The owner's first example. One check with two dimensions: the colour scheme the 
   `max-height: 90dvh; overflow-y: auto;`.
 - Runtime fix: none (moving elements or changing `z-index` is risky).
 
+### 3.24 `request-stalled` (added for issue 94, after 0.3.0-beta.1)
+
+Not a visual measurement but the same family: a deterministic measurement against a documented threshold, reported
+as kind `"check"`, never a situation, a fact, an event-log entry, a gate input or model input (rule 2 exception, as
+section 1). It exists because an app's own error handling hides the failure it measures: a handler disables its
+button, sends a request with no timeout, and re-enables the button in `finally`; when the request never answers,
+`finally` never runs, nothing throws, and no situation is salient.
+
+- Measures: the fetch and XHR requests the runtime has in flight (the bridge's `pending()`, `src/visual/bridge.ts`),
+  judged on the Clock at most every 2 s, sooner when one is due. It runs from the moment the chunk loads, not after
+  the page settles: settle waits for network quiet, which a stalled request prevents. Its own MutationObserver
+  (attributes `disabled`, `aria-busy`, `aria-disabled` only, so the passes' dirty tracking never sees them) keeps the
+  Clock time each element last became busy.
+- Reports when: a request has been pending for `visual.checks.stallMs` (default 15,000 ms, clamped to 1 s..10 min;
+  15 s is past the longest answer the demos' chaos produces, 8 s, and past the usual 10 s gateway timeouts), once per
+  request, while the tab is visible and the route's mode is not off. A request that became due while the tab was
+  hidden is reported once the tab is visible again.
+- Control: the element matching `[disabled], [aria-busy="true"], [aria-disabled="true"]` now whose last change to busy
+  happened from 1 s before the request started (a handler disables the button, then sends) up to now, earliest
+  first; `measured.control` is its state, `"none"` when there is none, `"not watched"` when the request started before
+  the checks were watching (the chunk loads 1.5 s after `load`).
+- Skips: EventSource and WebSocket (not fetch or XHR operations); GenClass's own requests; a signature the cadence
+  layer knows as a background schedule (long polling); a signature whose learned p95 latency is at least `stallMs`
+  (an endpoint that usually takes that long); a host or path prefix in `visual.ignore`; elements inside
+  `[data-genclass-ignore]` as the control. A streamed fetch is not pending once its headers arrive. The first request
+  of a long poll that has no history yet is not recognised (measured on the demos: RESULTS.md section 23).
+- Evidence: method, host, normalised path (no query), `pendingMs`, the control's state and description, when it
+  became busy relative to the request.
+- Severity: high with a control still busy, medium without.
+- Suggested fix: a timeout on the request (`AbortSignal.timeout(ms)`, `xhr.timeout`) so the app's `catch` and
+  `finally` run.
+- Runtime fix: none. A heal-mode timeout that aborts the request is proposed in OPTIONS-SPEC section 4.21 and waits
+  for the owner (rules 1 and 2).
+- Not in `checkPage()` (no runtime, no requests to watch).
+### 3.25 `ad-heavy`
+
+Added 2026-10-25 at the owner's request ("the classifier should detect strange sites, like too many ads, warped text").
+It is a measured check like the others: geometry of elements the markup names as ad slots, against fixed shares taken
+from the Coalition for Better Ads standards. It does not judge whether an ad is good, and it never feeds the model.
+
+- Measures (full passes only, in the pass's idle slices: one `querySelectorAll` for elements whose `id` or `class`
+  contains `ad` or `sponsor`, the ad attributes below and `iframe`; at most 5,000 names read, no layout read for
+  them, a step every 50; at most 50 regions measured):
+  - **ad-like regions**, each `visible` (section 2.1), at least 40 x 20 px:
+    - an element whose `id` or a class name, split into words at `-`, `_`, digits and lower-to-upper case changes,
+      contains one of the words `ad`, `ads`, `advert`, `adverts`, `advertisement`, `advertisements`, `advertising`,
+      `adslot`, `adunit`, `adbox`, `adsbygoogle`, `adsense`, `sponsored`, or that has one of the attributes
+      `data-ad-slot`, `data-ad-client`, `data-ad-unit`, `data-ad-unit-path`, `data-adunit`, `data-google-query-id`
+      (the ad tags Google AdSense, Google Ad Manager and Prebid write; `div-gpt-ad-…` and `google_ads_iframe_…` match
+      through the word `ad` and `ads`). Only names are read, never text: `header`, `shadow`, `badge`, `add-to-cart`
+      and `adaptive` contain no such word;
+    - an `iframe` from another site (a different registrable domain, as the asset checks compare hosts) whose box is
+      a fixed display ad size within 2 px: 300 x 250, 336 x 280, 728 x 90, 970 x 90, 970 x 250, 300 x 600, 160 x 600,
+      120 x 600, 300 x 1050, 320 x 50, 320 x 100, 300 x 50, 468 x 60, 250 x 250, 200 x 200 (the IAB standard units
+      and the sizes Google AdSense lists). Other cross-site iframes (video players, maps, payment fields, captchas,
+      chat widgets) are not ad-like.
+  - Only the outermost region counts when regions nest (an ad container holding an ad iframe is one region). A named
+    element larger than half the page (an in-flow wrapper such as `<main class="has-ads">`), `html` and `body` are not
+    regions; their descendants still can be.
+  - **Shares**, each the area of the union of the regions' boxes (overlaps counted once), with the viewport width `vw`
+    (`clientWidth`) and height `vh`:
+    - `firstShare`: the regions inside the first screen (document box `0..vw` x `0..vh`; a `fixed` region at its place
+      on the screen) over `vw x vh`;
+    - `fixedShare`: the largest single `fixed` region on the screen over `vw x vh` (a `sticky` region is measured at its
+      place in the page, an under-count while it is stuck);
+    - `pageShare`: the in-flow regions over the page (`vw x scrollHeight`), combined with the fixed ones, which cover
+      their share of every screen: `1 - (1 - inFlow) x (1 - fixedAll)`.
+- Reports when, at two measurements 2,000 ms apart and after network quiet (ads load late and rotate), the same
+  reason holds, in this order:
+  - `interstitial`: one `fixed` region covers at least **50%** of the screen and is on top at its centre
+    (`elementFromPoint`). Better Ads: prestitial ads and full-screen scrollovers.
+  - `sticky`: one `fixed` region covers at least **30%** of the screen. Better Ads: large sticky ads (desktop, "more
+    than 30% of the screen").
+  - `density`: `pageShare` at least **30%**. Better Ads: mobile ad density higher than 30% (the standard measures the
+    ads' height in the main content; the share of the page's area is the same on a phone, where ads are as wide as the
+    content, and lower on a desktop with side rails).
+  - `first-screen`: `firstShare` at least **50%**: more than half of what a visitor first sees is ads.
+- Skips: regions in `[data-genclass-ignore]`, `aria-hidden` or `visual.ignore` (an app can list its own house
+  promos); empty slots an ad blocker collapsed (they are not `visible`); pinch zoom (abstain list); the light tier.
+  Same-site iframes are never ad-like by size alone.
+- Evidence: `reason`, `count` (regions), `firstShare`, `pageShare`, `fixedShare` (fractions, two decimals), the
+  largest region as the finding's element with every region folded into it.
+- Severity: high for `interstitial` (the page cannot be used until it is closed), medium otherwise.
+- Suggested fix (text, not CSS): fewer or smaller ad units; keep ads under 30% of the page on phones, no sticky unit
+  over 30% of the screen, no full-screen interstitial before the content; reserve the slots' space so they do not
+  shift the page.
+- Runtime fix: none (hiding an ad changes what the site's owner sells).
+
+### 3.26 `text-warped`
+
+Added 2026-10-25 with `ad-heavy` (section 3.25). Text that is on the page and visible but that a reader cannot read as text. Every
+reason is a measurement of boxes (`Range.getClientRects()` line boxes, `getBoundingClientRect()`, computed
+`transform`, `font-size`, `letter-spacing`, `word-spacing`) or of code points; nothing reads what the text says.
+
+- Measures, on the `text-invisible` candidates (elements with a direct text node in the viewport, at most 200 per pass,
+  one element per step), after `skipText` (section 3.8: disabled controls, SVG text, single icon glyphs, emoji,
+  `[aria-busy]`) and the walk exclusions of section 3.9 (`code`, `pre`, inputs and editable regions):
+  - `overlap`: two line boxes of the element's first text node overlap vertically by at least **50%** of the smaller
+    one's height and horizontally by at least 8 px (lines on the same row never overlap horizontally; normal
+    `line-height` from 1.0 leaves at most about 25% overlap of the font's content area). Not when the element or one of
+    its 3 nearest ancestors sets `text-overflow: ellipsis` or `-webkit-line-clamp` (Chromium gives a truncated line two
+    boxes, the whole run and the part shown, one inside the other). Also between the first lines
+    of two different candidates, when at the centre of the overlap `elementsFromPoint` holds both, nothing between
+    them paints a background, an image or a replaced element (the upper text does not hide the lower one), neither is
+    `fixed` or `sticky` (a sticky header over scrolling text is normal), neither contains the other, both have opaque
+    colour and no partial opacity, both have at least 3 letters, and their font sizes are within a factor of 2
+    (decorative backdrop lettering is larger and usually translucent).
+  - `clipped`: the nearest ancestor-or-self with `overflow` `hidden` or `clip` (at most 3 levels up, at least 20 px
+    wide) cuts the first line mid-way: horizontally, the line runs at least 4 px past the box's right edge (left edge
+    in right-to-left text) while at least 4 px of it are inside; vertically, only the first line's visible part is
+    between **20% and 80%** of its height (a control whose text is cut through the middle). Not when, from the element
+    up to the box, something sets `text-overflow: ellipsis`, `-webkit-line-clamp` or a `transform` (a carousel track,
+    a marquee); when, from the element up to 3 levels above the box, something has a `mask-image` (a "read more"
+    fade); when the element is inside a container that scrolls on its own; or when the element or the box is
+    animating.
+  - `tofu`: the text node holds a lone UTF-16 surrogate (a string cut through an emoji) or a code point the browser's
+    Unicode tables call unassigned (`\p{Cn}`, which includes the noncharacters), and its line box is drawn (width
+    above 0). No font has a glyph for these, so they render as boxes. U+FFFD is `text-encoding` (section 3.11), not
+    counted twice. Whether a font has a glyph for an assigned character is not readable from the DOM and is not
+    measured (a canvas probe would compare widths, and monospace fonts make that a guess).
+  - `mirrored` and `skewed`: the product of the computed `transform`, `scale` and `rotate` of the element and its
+    ancestors (2 x 2 part; a `matrix3d` is projected) has a negative determinant (the text reads backwards; not when
+    an ancestor sets `backface-visibility: hidden`, the back face of a flip card; and only for text with at least 3
+    letters, so a flipped arrow or icon glyph is not text), or its two axes are more than
+    **20°** away from a right angle (design slants are 8 to 15°), or one axis is stretched to at least **2x** the
+    other. Pure rotation is never reported (vertical axis labels and rotated badges read fine). For a rotated or skewed
+    element the line boxes are bounding boxes, not the text's own, so `overlap`, `clipped` and `tiny` are measured
+    only when the transform product has no rotation or skew.
+  - `spacing`: computed `letter-spacing` at least **0.5 em** with at least two words of two or more letters (the gap
+    between letters is then wider than a space, about 0.25 to 0.33 em, so words no longer stand apart), or at most
+    **-0.2 em** with at least 3 letters (letters run into each other; tight display headings use -0.02 to -0.05 em),
+    or `word-spacing` at most -0.2 em with at least two words (the space between words is gone).
+  - `tiny`: `font-size` times the scale of that transform product (the square root of the determinant) is below
+    **8 px** and the drawn line box is under 10 px tall, for text still meant to be read: at least 3 letters, opaque
+    colour, no partial opacity, not `pointer-events: none` (miniature previews of a page set it), not inert or
+    `aria-hidden`.
+- Reports when: the same reason holds at two measurements 1,000 ms apart and the element is not animating. One
+  finding per element, for the first reason that holds in the order `tofu`, `mirrored`, `skewed`, `spacing`, `tiny`,
+  `overlap`, `clipped`; the overlap between two elements is tested only for elements without a finding, at most 50
+  overlapping pairs per pass.
+- Skips: translated pages (abstain list), `rt` and `rp` (ruby annotations sit over their base), elements in
+  `[data-genclass-ignore]` or `visual.ignore`, the light tier.
+- Evidence: `reason`, and per reason: the overlap fraction and the line heights, `line-height` and `font-size`; the cut
+  px and the clipping box's selector; the offending code points (`U+D83D`); the skew angle, determinant and stretch and
+  the selector of the element whose transform does it; the spacing in em; the rendered px and the scale. Text is in the
+  finding's `target` only, as for every check (local).
+- Severity: medium.
+- Suggested fix, by reason: `line-height: 1.4;`; `text-overflow: ellipsis;` on the clipping box, or `height: auto;`
+  for a control; slice strings by code point (`Array.from(s).slice(0, n)` or `Intl.Segmenter`), never by UTF-16 index;
+  `transform: none;` on the element that mirrors or skews; `letter-spacing: 0.1em;` or `word-spacing: normal;`;
+  `font-size: 12px;` or remove the scale.
+- Runtime fix: none.
+
 ## 4. Held back from v1 until measured
 
 These were researched and are useful, but their expected precision is medium, or they judge design rather than
@@ -716,7 +885,7 @@ breakage. Each needs bench numbers (section 15) before it ships, and some belong
 | candidate | why it waits |
 |---|---|
 | content stuck at `opacity: 0` (a scroll-reveal animation that never ran) | expected medium-high; cross-fade slideshows, tabs and hover reveals look the same. Report-only first |
-| clipped text in a control (`scrollWidth > clientWidth + 2`, overflow hidden, no ellipsis) | expected medium-high; icons and ripples also enlarge `scrollWidth` |
+| clipped text in a control (`scrollWidth > clientWidth + 2`, overflow hidden, no ellipsis) | expected medium-high; icons and ripples also enlarge `scrollWidth`. The line-box form (a line cut by its box, measured with `Range.getClientRects()`, which icons and ripples do not enlarge) shipped on 2026-10-25 as `text-warped` reason `clipped` (section 3.26) |
 | raw markdown in rendered text (`**bold**`, `[text](https://...)`) | chat UIs show typed markdown on purpose |
 | lazy image that never loads | needs a reliable network-quiet signal per image |
 | text over images and gradients | the runtime cannot read pixels; gradient stops are feasible, sampled images need same-origin canvas reads or a scanner |
@@ -941,6 +1110,8 @@ Budgets:
 | overflow culprit | 3,000 elements | only when the page fact holds |
 | `control-unreachable` | 50 controls | 250 hit tests at most, once per max-scroll event |
 | `css-var-undefined` | 5,000 rules | once per stylesheet set, in steps of 200 rules and one reference per step; a cross-origin sheet stops it before any walk |
+| `ad-heavy` | 5,000 names, 50 regions | full passes only; one `querySelectorAll` for names and iframes, names read in steps of 50 without layout, the union of at most 50 boxes |
+| `text-warped` | the 200 `text-invisible` candidates | one element per step (its line boxes, its transform chain up to 30 ancestors); the pairwise overlap test compares first-line boxes and hit-tests only pairs that overlap |
 | event handlers | no page reads | an event records what it needs (the target, the point); the read runs in the next idle callback |
 
 Back-off: if one step takes more than 16 ms (a forced layout on a huge DOM), the pass ends, later persistence waits
@@ -967,7 +1138,7 @@ type CheckKind =
   | "icon-font-failed" | "csp-blocked" | "text-invisible" | "text-template-leak" | "text-placeholder"
   | "text-encoding" | "css-var-undefined" | "image-distorted" | "page-overflow-x" | "viewport-meta-missing"
   | "layout-shift" | "page-blank" | "click-blocked" | "pointer-events-leak" | "scroll-lock-stuck"
-  | "control-unreachable" | "focus-obscured" | "dialog-covered";
+  | "control-unreachable" | "focus-obscured" | "dialog-covered" | "ad-heavy" | "text-warped";
 
 interface CheckFinding {
   /** "c1", "c2", ... per runtime (a counter). */
@@ -1029,6 +1200,11 @@ receives every report.
   applied. It reads `rt.checks?.()` and `on("check")` defensively for older runtimes and `MockRuntime`.
 - `@genclass/runtime/visual` also exports `checkPage(options?): Promise<CheckFinding[]>`, report-only and without a
   runtime, for the developer's own Playwright or Cypress tests and for the bench.
+- `npx @genclass/runtime@beta scan <url> [--json] [--phone] [--hosted | --local]` (alias `audit`; bin/lib/scan.mjs)
+  runs the full runtime on any URL in headless Chromium at desktop and phone sizes (observe, telemetry off, no model,
+  `visual: { on: true }`), with `rt.checkNow()`, four Tab presses and a scroll to the end, and prints `rt.checks()`
+  merged across the sizes with a score; without Playwright it uses the genclass.dev page check (never for a local
+  address). `@genclass/mcp`'s `genclass_scan` tool runs it with `--local` unless asked for `hosted`.
 
 ### 9.4 Summary, sinks, audit
 
@@ -1102,8 +1278,11 @@ clear the threshold". The 50 ms check of a colour fix also searches for a painte
 read (2 s), 300 ms after a class or style change anywhere, and when `prefers-color-scheme` changes; when the
 background differs or the colour no longer reaches its target (the item stopped being the active one, a theme
 toggle, a dark-mode switch), it is undone with the reason "the background or colour scheme changed, so the fix no
-longer fits", and a later re-check may apply it again (at most twice per finding and page). Tokens carry a prefix per
-engine (`f<prefix>-3`), so two runtimes on one page never share a rule.
+longer fits", and a later re-check may apply it again (at most twice per finding and page). An element outside the
+viewport is not re-measured (hit testing finds no points there, which would read as a changed background): its fix
+stays as it is until it is back in view; the same holds while `pointer-events: none` reaches the element (hit testing
+skips it). Tokens carry a prefix per engine (`f<prefix>-3`), so two runtimes on one page
+never share a rule.
 
 ### 11.3 Undo
 
@@ -1178,7 +1357,8 @@ packages/runtime/src/visual/
   narrow development-host rule and the hidden-tab gate account for about 100 B of it. The owner decides the ceiling.
   Merged into 0.3.0-beta.0 (`release/0.3.0-visual`, CI run 38676978903, RESULTS.md sections 10 and 13): the stub adds
   550 B to `/auto` (108.25 KB) and 524 B to the main entry (100.13 KB) against `release/0.3.0`, over its 107.74 /
-  99.71 KB limits; the owner approved 108.30 / 100.20 KB for 0.3.0-beta.0 (2026-10-15), which `bundle.test.ts` carries.
+  99.71 KB limits; the owner approved 108.30 / 100.20 KB for 0.3.0-beta.0 (2026-10-15), and `bundle.test.ts` carried
+  them until interaction analytics raised them to 108.6 / 100.48 KB on 2026-10-18 (RESULTS.md section 15).
 
 ## 14. Test plan
 
@@ -1242,9 +1422,9 @@ Browser job (new, `visual-browser` in `.github/workflows/ci.yml`, in parallel wi
 ## 15. Measurement plan in CI
 
 **Status: built** (2026-10-13): [`bench/visual/`](../../bench/visual/README.md) and
-`.github/workflows/visual-measure.yml`. The numbers are in [RESULTS.md section 14](RESULTS.md); what the bench changed
-in the checks is in section 19. Where the bench differs from the plan below: the workflow is `visual-measure.yml`,
-started by hand (and by pushes to `bench/visual/` on the visual branch), not weekly; the public sites' run logs and plain
+`.github/workflows/visual-measure.yml`. The numbers are in [RESULTS.md section 14](RESULTS.md#visual-bench); what
+the bench changed in the checks is in section 19. Where the bench differs from the plan below: the workflow is
+`visual-measure.yml`, started by hand (and by pushes to `bench/visual/` on the visual branch), not weekly; the public sites' run logs and plain
 artifacts hold counts only (no site is named next to a finding or a kind: the repository and its runs are public), and
 their per-load results and crops are uploaded only encrypted with the `VISUAL_BENCH_KEY` secret (not at all without
 it, so their findings then count as unconfirmed); the public sites run without `bypassCSP` (Playwright's
@@ -1267,7 +1447,7 @@ A workflow `visual-bench.yml` (manual dispatch and weekly, not on pull requests)
   Every finding on an unmodified page is a candidate false report. A committed `bench/visual/labels.json` (page, kind,
   selector) records a person's verdict, real or false; unlabelled findings are listed separately and never counted as
   correct. If a check finds a real issue in a demo, it is labelled and the demo is left alone.
-- **Seeded faults for recall**: `bench/visual/faults.mjs` (a seeded RNG; `Math.random` is fine in harness code)
+- **Seeded faults for recall**: `bench/visual/faults.ts` (a seeded RNG; `Math.random` is fine in harness code)
   picks visible candidates and applies each fault through a harness stylesheet plus a `data-bench-fault` marker: text
   colour equal to its resolved background, contrast 1.3:1, `pointer-events: none` left on `body`, `overflow: hidden`
   left on `body`, a transparent overlay over a button, a block with `min-width: 130vw`, an image routed to a 404, an
@@ -1296,7 +1476,7 @@ A workflow `visual-bench.yml` (manual dispatch and weekly, not on pull requests)
 
 ## 16. Product wording
 
-What to say once v1 ships (README and genclass.dev), in this voice:
+What to say about v1, which shipped in 0.3.0-beta.0 (README and genclass.dev), in this voice:
 
 > GenClass also measures visual bugs that never throw an error: text you cannot read because it is the same colour as
 > its background, images, fonts and stylesheets that failed to load, pages that scroll sideways on a phone, invisible
@@ -1335,14 +1515,15 @@ Owner decisions:
 3. **Telemetry**: the fields in section 10 (counts per kind and normalised route), under rule 8.
 4. **Sinks**: `"check"` records only for sinks that list it in `kinds`.
 5. **Gates**: the numbers in section 15. Measured on 2026-10-13 (RESULTS.md section 14): the false-report and fix gates
-   are met; the 4x-throttling gate is not reliably met (pass 1 inside 100 ms on 78.1% of clean local pages in runs 1
-   to 3 and 100% in run 4, against at least 90%, with no change to cost between runs 3 and 4); recall is below 0.7 for
+   are met in run 4; in run 5 the public-site false-report gate is not known (6 findings, none looked at); the
+   4x-throttling gate is not reliably met (pass 1 inside 100 ms on 78.1% of clean local pages in runs 1 to 3 and 100%
+   in run 4, against at least 90%, with no change to cost between runs 3 and 4); recall is below 0.7 for
    `click-blocked` and `scroll-lock-stuck` (0.67, pages whose DOM changes all the time); the cost gates were not met on
    public sites (p95 pass time 97.8 ms and p95 longest slice 57.1 ms in run 4; 95.2 ms and 18.9 ms in run 5, after the
    stylesheet walk became a sliced step; 78.1% at 4x throttling in run 5). Whether kinds that miss a gate stay on by
    default on development hosts is open.
-6. **CONTRACT.md**: the same rule 2 exception added to CONTRACT section 0 rule 1, and a new section for visual checks,
-   when implementation starts.
+6. **CONTRACT.md**: done. CONTRACT section 0 rule 1 carries the same rule 2 exception and section 14 describes the
+   visual checks; both still say the owner confirms the wording.
 7. **Public-site bench**: the list of about 40 sites and loading them weekly from GitHub runners. The list is
    `bench/visual/sites.json`; the workflow runs on manual dispatch and on pushes that change `bench/visual/` on the
    visual branch (runs 1 to 3 were push-triggered), with no schedule, until this is decided. Runs on 2026-10-13
@@ -1410,8 +1591,8 @@ What the code does where it differs from the design above (2026-10-13, branch `w
 - **Not built yet:** the explain step (likely source rule, 2.6), the "inserted content" cause tag of `layout-shift`,
   `genclass-runtime init --no-visual`, Firefox and WebKit in the browser job (it runs Chromium only), v2 and v3.
 
-What the bench (section 15, [RESULTS.md section 14](RESULTS.md)) changed, 2026-10-13. Every finding on a public site was
-looked at from its element crop; each check error led to an exclusion with a unit test in
+What the bench (section 15, [RESULTS.md section 14](RESULTS.md#visual-bench)) changed, 2026-10-13. Every finding on
+a public site was looked at from its element crop; each check error led to an exclusion with a unit test in
 `test/visual-checks.test.ts` ("bench regressions") and a fixture in `test/browser/visual/fixtures/regress-*.html` that
 reproduces the pattern, asserts that it happened, and asserts that nothing but the planted faults is reported:
 
@@ -1488,3 +1669,20 @@ finds it). Run 5 of the bench measured the result (RESULTS.md section 14).
 - **Defaults and telemetry.** The `"local"` default used telemetry's `isLocalHost`, which also covers Capacitor,
   Tauri, Electron and intranet hosts; it now uses the narrow `devHost` (7.2). The stub no longer loads the chunk in a
   hidden tab or a prerendered page. The `visual` telemetry fields were removed (section 10).
+
+### `ad-heavy` and `text-warped` (2026-10-25, branch `strange-sites`)
+
+What the build does where sections 3.25 and 3.26 were not specific, and what the first measurements changed:
+
+- **Where they run.** `ad-heavy` in full passes only (it is a page-level share; dirty-subtree passes skip it), after
+  `css-var-undefined`; `text-warped` after `text-invisible` on the same candidates (the text walk now collects them when
+  either check is on). Both are full-tier kinds (not in the light tier), `text-warped` abstains on translated pages and
+  `ad-heavy` under pinch zoom. Code: `src/visual/checks/ads.ts` and `src/visual/checks/warped.ts`, in the lazy chunk.
+- **The ellipsis case.** The first browser run reported `overlap` on two correct elements with `text-overflow:
+  ellipsis`: Chromium returns two line boxes for a truncated line (the whole run and the part shown, the second inside
+  the first), which also describes three lines at `line-height: 0`. Self-overlap is now skipped under an ellipsis
+  (section 3.26); a `line-height: 0` paragraph is still found. CI's Chromium on Linux then did the same for the last
+  line of a `-webkit-line-clamp` box (the development Mac's did not), so a line clamp is skipped the same way.
+- **Recall and false reports** are in RESULTS.md section 24 (the Chromium fixtures, and the demos and templates bench
+  run on a development machine). The compat apps and the public sites were not run for these two kinds yet: they
+  need the bench workflow (section 15), which loads public sites and is the owner's to start.

@@ -1,6 +1,18 @@
-# @genclass/runtime: configuration extensions spec (v0.3 options), final
+# GenClass Runtime options: design spec (@genclass/runtime)
 
-Status: ready for implementation. Branch `runtime`, package `packages/runtime`. I read only `types.ts`, `API.md`, README and the CONTRACT sections. Nothing was run. `aggressiveness` is already in flight, so it is not proposed here. Today's documented default is `"balanced"`, and this spec does not change it.
+This page is the design spec for the configuration options of `@genclass/runtime`: why each option exists and how
+the options combine. The reference for each option is [API.md](API.md) and the JSDoc in
+`packages/runtime/src/types.ts`; where they differ from this spec, they describe the code. `npm i @genclass/runtime@beta`
+installs 0.3.0-beta.4 (npm's `beta` dist-tag, 2026-10-27); plain `npm i @genclass/runtime` installs the stable line,
+0.2.2 (`latest`). Items marked 0.3.0 are not in 0.2.x.
+
+Status: built. Most options here shipped in 0.1.0-beta.1 (the CHANGELOG's "Batch 12, 19 options") and are in every
+later release. New in 0.3.0, not in 0.2.x: `detect` (§4.19), `visual` (§4.20), `learn.expectations` (§4.14),
+observe's deferred situations (§5.1, §5.3), the `model.loadIf` device-floor default and `inlineFallback: false`
+skipping the model (§4.15; 0.2.x defaulted to `{ saveData: "lazy" }` and ignored `inlineFallback: false`), the
+sink adapters, sinks by name and the sink `possible` flag (§4.11), and, from 0.3.0-beta.2 (2026-10-25, issue 94),
+`rt.summary().requests` (§4.11) and the `request-stalled` check with `visual.checks.stallMs` (§4.20).
+`aggressiveness` (0.1.0-beta.1, runtime batch 11) is specified in API.md, not here; its default is `"balanced"`.
 
 ## 0. Design rules
 
@@ -9,7 +21,7 @@ Status: ready for implementation. Branch `runtime`, package `packages/runtime`. 
 3. **One effective-mode function, and every term can only demote:**
 ```
 effectiveMode(op) = state ∈ {disabled} ? off
-                  : min( globalMode        // InitOptions.mode / rt.setMode / URL param (URL may only demote, debug or not)
+                  : min( globalMode        // InitOptions.mode / rt.setMode / URL param (only demotes; ?genclass= / localStorage.genclass in GenClass.init may also raise on a development host, src/devhost.ts; debug:true raises nothing)
                        , sample cap        // 'observe' if sampled out
                        , breaker cap       // breaker.downgradeTo once tripped
                        , route rule.mode ) // first matching routes[] rule
@@ -45,14 +57,15 @@ order: off < observe < guard < heal
 | 11 | `sinks` + `rt.summary()` | telemetry | `[]` | new |
 | 12 | `session` + `rt.setSession()` | telemetry | random id, `{}` | new |
 | 13 | `report` | telemetry | `"console"` | extended (`"interventions"`) |
-| 14 | `learn` (+ `rt.learn.clear()`, `rt.learned()`) | persistence | `{persist:unset, expectations:false}`: nothing stored; with `expectations: true`, flows stored, profiles in memory (EXPECTATIONS.md §4) | extended |
-| 15 | `model.loadIf`, `model.inlineFallback` | load | `{minDeviceMemoryGB:4, saveData:"skip"}`, `true` | new |
+| 14 | `learn` (+ `rt.learn.clear()`; `rt.learned()` and `expectations` 0.3.0) | persistence | `{persist:unset, expectations:false}`: nothing stored; with `expectations: true`, flows stored, profiles in memory (EXPECTATIONS.md §4) | extended |
+| 15 | `model.loadIf`, `model.inlineFallback` | load | `{minDeviceMemoryGB:4, saveData:"skip"}` (0.3.0; 0.2.x: `{saveData:"lazy"}`), `true` | new |
 | 16 | `model.threads`, `model.timeoutMs` | load | `"auto"`, `10000` | promoted from internal |
 | 17 | `model.maxDecisionsPerMinute` | load | `30` | new |
 | 18 | `model.unloadAfterIdleMs` | load | `false` | new |
-| 19 | `rt.on()` typed events: `shadow`, `breaker`, `limit`, `modelBudget` | API | — | extended |
+| 19 | `rt.on()` typed events: `shadow`, `breaker`, `limit`, `modelBudget` | API | none | extended |
 | 20 | `detect` (0.3.0) | reporting | `"possible"` where the effective mode is observe and `policy.thresholds.report` is unset, else `"likely"` | new |
-| 21 | `visual` (+ `rt.checks()`, `rt.checkNow()`, the `check` event) | measured visual checks | `"local"` in `GenClass.init()` in a browser, `false` in `createRuntime()` | new (§4.20) |
+| 21 | `visual` (0.3.0; + `rt.checks()`, `rt.checkNow()`, the `check` event) | measured visual checks | `"local"` in `GenClass.init()` in a browser, `false` in `createRuntime()` | new (§4.20); `checks.stallMs` (0.3.0-beta.2, issue 94) |
+| 22 | `requestTimeoutMs` | heal | off | **proposed only, not implemented** (§4.21) |
 
 Built in, with no option: hidden tabs (§5.1): guard and heal skip background situations; observe defers them until
 the tab is visible. Observe also defers situations raised while the model loads (§5.3).
@@ -210,6 +223,7 @@ Runtime API:
   - Results go in an LRU cache keyed by `method+" "+url`, 256 entries. Matchers are compiled once, in the `runtime.ts` constructor.
 - **`OpRec.scope`**: `{ mode, aggressiveness, protected, crossOrigin, label?, route?, correlationId? }`, set in `NetHost.startOp`.
 - **`runtime.ts computeScope()`** runs on init, on nav, on `setMode`/`setAggressiveness`, on a breaker trip or reset, and when `enabled` changes. It stores `this.scope`, which is snapshotted per op or mutation.
+- **`mode`** is validated in the `runtime.ts` constructor: any value but `observe`, `guard` or `heal` (from `createRuntime`, `GenClass.init` or `window.GENCLASS_CONFIG`, which `cdn/config.ts readWindowConfig` checks too, as `fromPairs` already did for the meta tag and the data attributes) runs as `observe`, with one warning (since 0.2.3 and 0.3.0-beta.5; before, an unknown value such as `"HEAL"` fell through `minMode` and the gate's `modeAllows` and ran as heal, and `?genclass-mode=observe` could not lower it). `modeAllows` permits a non-passive tier only for `guard` and `heal`.
 - **URL overrides** (`?genclass-mode`, `?genclass-aggr`, `?genclass-sample=0`) may only demote, on every host, with or without `debug:true` (debug is console logging only). `?genclass-sample=1` has no effect: no URL value puts a session in the act cohort. Before 0.2.3 and 0.3.0-beta.2, `debug:true` let them raise the value and `?genclass-sample=1` under debug forced the act cohort; a link could then raise any site that left debug on in production. The page's own `?genclass=` / `localStorage.genclass` (src/index.ts) may raise the mode only on a development host (src/devhost.ts: http(s) on a loopback name with an explicit port, or `*.test`). For QA on a staging or production host, set `mode` / `sample` per environment, call `rt.setMode()`, or use the devtools overlay.
 
 ## 4. Options
@@ -238,7 +252,7 @@ Runtime API:
 ### 4.2 `sample`
 **Type** `number` in [0,1], clamped with a warning. **Default** `1`.
 
-**Semantics.** Sessions outside the fraction get an `observe` cap. The model still loads, so they form the comparison group. The bucket is **decided once at init** as `hash(session.id)/2^32 < sample`, then frozen and stored in `sessionStorage["genclass:bucket"]` (wrapped in try/catch). A later `setSession({id})` does not change it. An app that passes a stable user id gets the same bucket in every tab, which is the intended behaviour. `?genclass-sample=0` always forces observe, and `=1` has no effect (since 0.2.3 and 0.3.0-beta.2; before, it forced the act cohort under debug).
+**Semantics.** Sessions outside the fraction get an `observe` cap. The model still loads, so they form the comparison group. The bucket is **decided once at init** as `hash(session.id)/2^32 < sample`, then frozen and stored in `sessionStorage["genclass:bucket"]` as `act@<sample>` or `observe@<sample>` (wrapped in try/catch). A stored verdict is reused only under the `sample` it was drawn under, so a deploy that changes `sample` draws again, and `sample: 0` (like `1`) never reads or writes it (since 0.2.3 and 0.3.0-beta.5; before, a stored `act` overrode `sample: 0` until the tab closed). A later `setSession({id})` does not change it. An app that passes a stable user id gets the same bucket in every tab, which is the intended behaviour. `?genclass-sample=0` always forces observe, and `=1` has no effect (since 0.2.3 and 0.3.0-beta.2; before, it forced the act cohort under debug).
 
 **Precedence.** It is one term of the min. `setMode` cannot lift it.
 
@@ -248,12 +262,15 @@ Runtime API:
 - Reload → same bucket.
 - Storage throws → deterministic within the page.
 - `setSession({id})` → bucket unchanged.
+- `sample:0` with a stored act verdict → observe, storage untouched.
+- A verdict stored under another `sample` (or in the bare pre-0.2.3 form) → drawn again.
 
 ### 4.3 `routes`
 **Type** `RouteRule[]`. **Default** `[]`.
 
 **Semantics.**
 - Rules are evaluated at init and on every `installNav` callback. The first match wins. A rule can only demote, and a rule that asks for a higher mode is clamped, with one warning.
+- A string rule is an exact path or a glob, matched against the raw `location.pathname` **and** against its normalised form (percent-decoded, `;` path parameters dropped, dot segments and repeated slashes resolved, no trailing slash except `/`; `util/match.ts normalizeRoute`), so `/se%61rch`, `/search/`, `//search` and `/search;x=1` fall under a `/search` rule, as they reach the same page on most servers (since 0.2.3 and 0.3.0-beta.5; before, such a link escaped the rule and got the global mode). RegExp and predicate rules see both forms. Matching is case-sensitive (`/Search` is not `/search`; use a RegExp with the `i` flag), and `/admin/*` does not cover `/admin` itself (use `/admin*` or a RegExp). `status.scope.route` stays the raw path.
 - `mode:"off"` means ops created on that route are pass-through, though they are still recorded in the timeline.
 - Ops created under `off` or `observe` scope **are never the target of an action** later, even from another route (gate step 3).
 - The scope is snapshotted per op, so a write held under heal on route A is decided under heal after navigating to route B.
@@ -267,6 +284,7 @@ Runtime API:
 - An op held on route A is decided with A's scope.
 - An op from an `off` route is not offered as a target from route B.
 - RegExp, glob and predicate rules all work, and a throwing predicate is skipped.
+- `/se%61rch`, `/search/`, `//search` and `/search;x=1` fall under a `/search` rule; `/Search` does not; `/admin/*` does not cover `/admin`.
 
 ### 4.4 `requests`
 **Type** `RequestScope`. **Default** `{ ignore:[], protect:[], crossOrigin:"observe", labels:[], labelsToModel:false }`.
@@ -428,8 +446,11 @@ Only `rt.breaker.reset()` clears a trip. `setMode` does not.
 - Dispatch is queued (a microtask batch, then `requestIdleCallback`) and never runs on the decision or hold path.
 - Errors from a sink are swallowed, with at most one status event per sink per minute.
 - On `pagehide`, or once on `visibilitychange→hidden` as a fallback, one `summary` record is emitted and each sink's `flush()` is called.
-- `rt.summary()` is always available. Two vendor-neutral adapters ship as entries of the package, outside the first-load bundle: `@genclass/runtime/sinks/{console-json,webhook}` (`src/sinks/`, each a function returning a `SinkObject` that never throws and sends only the record: one JSON line per record on the console, or batched POSTs to the URL the developer configures). The zero-code entries take them by name (`src/cdn/sinks.ts`: `window.GENCLASS_CONFIG.sinks: ["webhook:/genclass"]`, `<meta name="genclass" content="sink=console-json">`, `data-sink`, `init --sink`), as one proxy sink that queues records and loads the adapters on the first record, never before (`src/cdn/sinks-fanout.ts`, a lazy chunk of `/auto`; `dist/sinks/<name>.js` from the CDN for the script tag), so only the proxy is in the first load; a `webhook:<url>` is made absolute at init (against `document.baseURI`) and its endpoint (origin and path) joins `requests.ignore` as an exact match, and from a `<meta>` tag it must be same-origin as the browser resolves it (against the page and `document.baseURI`). Each adapter takes `evidence` (default true; false sends the structured fields only; `console-json:noevidence` in the no-code forms); the webhook caps repeats of one bug at `maxPerSignature` (10) per page load. A string in `GenClass.init({ sinks })` is ignored with one warning.
-- No Sentry, PostHog or Datadog adapter (owner decision, 2026-10-13): forwarding to those tools is not part of the free runtime. The owner intends it as a paid, server-side feature; it is not built, and no plan on https://genclass.dev/pricing offers it yet. A page config that names `sentry`, `posthog` or `datadog` (any case, with or without an option) gets one console warning for them all that says so, with https://genclass.dev/pricing, and nothing is loaded or sent for those names (`applySinks`); `init --sink sentry` is a usage error that says the same.
+- `rt.summary().requests` (0.3.0-beta.2, issue 94): request counts in total and per host (API.md), present once the
+  measured checks' chunk has loaded. In a sink's `summary` record `requests.hosts` is always empty (host names are
+  request URLs in part). Telemetry does not send `requests` (§4.21 proposes it).
+- `rt.summary()` is always available. Two vendor-neutral adapters (0.3.0, with sinks by name) ship as entries of the package, outside the first-load bundle: `@genclass/runtime/sinks/{console-json,webhook}` (`src/sinks/`, each a function returning a `SinkObject` that never throws and sends only the record: one JSON line per record on the console, or batched POSTs to the URL the developer configures). The zero-code entries take them by name (`src/cdn/sinks.ts`: `window.GENCLASS_CONFIG.sinks: ["webhook:/genclass"]`, `<meta name="genclass" content="sink=console-json">`, `data-sink`, `init --sink`), as one proxy sink that queues records and loads the adapters on the first record, never before (`src/cdn/sinks-fanout.ts`, a lazy chunk of `/auto`; `dist/sinks/<name>.js` from the CDN for the script tag), so only the proxy is in the first load; a `webhook:<url>` is made absolute at init (against `document.baseURI`) and its endpoint (origin and path) joins `requests.ignore` as an exact match, and from a `<meta>` tag it must be same-origin as the browser resolves it (against the page and `document.baseURI`). Each adapter takes `evidence` (default true; false sends the structured fields only; `console-json:noevidence` in the no-code forms); the webhook caps repeats of one bug at `maxPerSignature` (10) per page load. A string in `GenClass.init({ sinks })` is ignored with one warning.
+- No Sentry, PostHog or Datadog adapter (owner decision, 2026-10-13): forwarding to those tools is not part of the runtime. The genclass.dev collector forwards likely detections to Sentry, PostHog, Datadog, Slack or a signed webhook on every plan, Free included (https://genclass.dev/pricing, `billing/plans.json`), once the app's owner turns it on for an app in their genclass.dev account that sends telemetry with its token: nothing is forwarded for an app without an account or with telemetry off (as it is by default on local hosts), and possible detections are not forwarded (`telemetry-worker/src/forward.ts`). A forwarded record carries the diagnosis, confidence, trigger, page route, runtime and model versions, the time and a dashboard link, never page text. It is sent from the collector, so nothing changes in the app. A page config that names `sentry`, `posthog` or `datadog` (any case, with or without an option) gets one console warning for them all (`Ignored sink <names>: Sentry, PostHog and Datadog forwarding is not in the free runtime: https://genclass.dev/pricing`), and nothing is loaded or sent for those names (`applySinks`); `init --sink sentry` is a usage error that says the same.
 
 **Hooks.** `report.ts` (`toSinkRecord`, `SinkDispatcher`), the new `decide/summary.ts`, and a pagehide listener in `runtime.ts`.
 
@@ -494,7 +515,7 @@ Only `rt.breaker.reset()` clears a trip. `setMode` does not.
 - The default is a device floor: the model (10 MB on the wire, a worker of 190 to 280 MB) is not loaded on devices whose `navigator.deviceMemory` is under 4 GB, nor on Save-Data connections. `deviceMemory` is quantised to powers of two (0.25 … 8), so the floor skips exactly the devices reporting 2 GB or less; browsers that do not report it (Safari, Firefox) load. `model: { loadIf: () => true }` forces the load.
 - `false` or `"skip"` → no download, `status.state="skipped"` with a reason (`device-memory`, `save-data`, `loadIf`), the runtime behaves as if `model:false` (observes without a model) and prints one console status line saying so (`[GenClass] Model not loaded: …`; silent with `report: "silent"`).
 - `"lazy"` → `preload` is forced to `"lazy"`.
-- `inlineFallback:false` → if the worker cannot be created or fails before it is up, ORT does not run on the main thread: the state is `skipped` with reason `worker-unavailable` and one console line names the worker error. `worker:false` still runs inline (explicit).
+- `inlineFallback:false` (0.3.0; 0.2.x ignored it and ran the model inline) → if the worker cannot be created or fails before it is up, ORT does not run on the main thread: the state is `skipped` with reason `worker-unavailable` and one console line names the worker error. `worker:false` still runs inline (explicit).
 - `loadIf` never affects decisions.
 
 **Tests.**
@@ -577,11 +598,65 @@ Design, every check and threshold: [VISUAL.md](VISUAL.md). Types: `VisualOptions
 - `enabled` false or pending, a hidden tab or a prerendered page: no chunk download. A route whose mode is `"off"`:
   no checks there. `disable()`, `destroy()` and `setMode("observe")` undo every fix at once, `pause()` within 2 s.
 
+`checks.stallMs` (0.3.0-beta.2, 2026-10-25; issue 94): how long a `fetch` or XHR request may stay pending before the
+`request-stalled` check reports it; default 15,000, clamped to 1,000..600,000 (VISUAL.md 3.24).
+
 **Precedence.** `?genclass-visual=off` > an explicit `visual: false` > `?genclass-visual=on` > the `"local"` default.
 
 **Tests.** `test/visual-options.test.ts` (resolution, load timing, enabled pending), `test/visual-fix.test.ts` (the
 fix gate, undo), `test/visual-purity.test.ts` (no effect on situations, history or decisions),
 `test/browser/visual/visual.spec.ts` (Chromium, the CI `visual-browser` job).
+
+### 4.21 PROPOSED, not implemented: `requestTimeoutMs` (heal), request health in telemetry, a dashboard alert
+
+**Status: proposed in the issue 94 pull request; nothing below is in the code. Each part needs the owner's OK** (the
+timeout because of AGENTS.md rules 1 and 2, the telemetry fields and the alert because of rule 8). What shipped for
+issue 94 is local only: `rt.summary().requests` (API.md) and the `request-stalled` check (VISUAL.md 3.24), both in the
+measured checks' chunk, so a public site gets them with `visual: true`.
+
+**`requestTimeoutMs` (heal only).** `GenClass.init({ mode: "heal", requestTimeoutMs: 15000 })`, or
+`{ ms, methods?: string[] }` (default methods `GET` and `HEAD`). Default off.
+
+- *When.* Only where the request's effective mode is heal (route rules, sampling and the breaker apply as for every
+  action); never in observe or guard; never for protected requests (`requests.protect`), GenClass's own requests,
+  EventSource, WebSocket, or a signature the cadence layer knows as long-lived (the same exclusions as
+  `request-stalled`); never for a method outside `methods` (a timed-out POST may still commit on the server, and the
+  app's retry would then submit twice).
+- *How.* fetch: the observer creates an `AbortController` per request and passes the native fetch a signal that
+  aborts when either it or the app's own signal does (`AbortSignal.any([app, ours])`, or a listener on the app's
+  signal where `any` is missing); a `Request` input is rebuilt with that signal, as retries already rebuild one. At
+  `ms` on the injected Clock it calls `abort(new DOMException("GenClass requestTimeoutMs (15000 ms)", "TimeoutError"))`,
+  so the app's promise rejects with a `TimeoutError` and its own `catch` and `finally` run: the spinner stops and the
+  button is enabled again by the app's code, not by GenClass. XHR: when the app set no `xhr.timeout` (0), GenClass sets
+  it before `send()`, so the browser fires `timeout` and `loadend` to the app's handlers; an app's own timeout is
+  never changed.
+- *Logged.* As an intervention: a console line (`[GenClass] Timed out GET api.example.com/v1/forecast after 15.0 s
+  (requestTimeoutMs, heal): the app's catch and finally ran.`), a `Report` of kind `"intervention"` with action
+  `"timeout"`, a sink record, `summary().interventions.timeout`, an audit entry of kind `"action"` whose `gate` says
+  `source: "option"` (no model probability), and the op's `x-genclass`-style marker in `rt.explain()`.
+- *Undone.* An aborted request cannot be un-aborted, so this is the one heal behaviour with no per-action undo:
+  `setMode("observe" | "guard")`, the breaker, `pause()`, `disable()` and `destroy()` cancel every pending timeout at
+  once (requests already in flight then run to their natural end), and the breaker counts errors that follow a
+  timeout like errors that follow any action.
+- *Why it needs the owner.* It acts without a model decision: the policy gate never sees it (rule 1), and a fixed
+  "pending past N ms, abort" is an if/then from a measurement to an action (rule 2). The precedent is the visual
+  checks' opt-in fixes (owner, 2026-10-13: measured, opt-in, reversible, never in observe). The alternative that keeps
+  rules 1 and 2 as they are, giving the model an `abort` action on the existing `stall` trigger, changes the action
+  vocabulary, which is model-visible text: a new situation tag, regenerated data and retraining (rule 3).
+
+**Request health in telemetry.** A `runtime.requests` object on the summary event, built from `summary().requests`:
+the totals (`requests`, `2xx`..`5xx`, `network`, `aborted`, `notJson`, `byGenClass`) and `latency` (`p50`, `p95`,
+`n`), and the same per host for at most 10 hosts by request count (`"same-origin"` for the page's own origin, else
+the bare host name; the rest folded into `"other"`). Never paths, queries, headers, bodies or the `request-stalled`
+findings. Every opt-out keeps working (`telemetry: false`, `?genclass=no-telemetry`, localStorage, GPC), plus
+`telemetry.include: { requests: false }`. What widens: the host names of the APIs a page calls. When approved:
+TELEMETRY.md, both READMEs, the CHANGELOG, the console notice check and the collector's schema.
+
+**Dashboard alert.** In the collector (telemetry-worker), per app and host, over a sliding hour: alert when at least
+20 requests from at least 3 sessions show an error share (`5xx` + `network` + `notJson`, over `requests`) of 20% or
+more, or a p95 latency of at least 3 times the host's 7-day median p95. Delivered to an email address or a webhook the
+app owner sets in the dashboard, at most once per host per 6 hours, with the counts and a link to the app's page. It
+depends on the telemetry fields above.
 
 ## 5. Built-in behaviours (no option)
 
@@ -634,9 +709,9 @@ status.mode = requested; status.effectiveMode / Report.mode / SinkRecord.mode = 
 > URL overrides (`?genclass-mode`, `?genclass-aggr`, `?genclass-sample`) can only lower settings, with or without `debug: true`.
 >
 > ```ts
-> import { init } from "@genclass/runtime";
+> import { GenClass, protectPreset } from "@genclass/runtime";
 >
-> const rt = init({
+> const rt = GenClass.init({
 >   mode: "guard",
 >   aggressiveness: "cautious",
 >   enabled: {                                         // live feature flag; flipping off disables mid-session
@@ -650,7 +725,7 @@ status.mode = requested; status.effectiveMode / Report.mode / SinkRecord.mode = 
 >   ],
 >   requests: {
 >     ignore:  ["https://www.google-analytics.com/", /sentry\.io/, "*/rum/*"],
->     protect: ["/api/auth/", "/api/payments/", (r) => r.method !== "GET" && r.url.includes("/billing")],
+>     protect: [...protectPreset("payments", "auth"), (r) => r.method !== "GET" && r.url.includes("/account")],
 >     crossOrigin: "observe",
 >     labels: [{ match: "/api/orders", label: "place order" }],   // reports only by default
 >     correlate: (r) => r.headers["x-request-id"],
@@ -684,8 +759,9 @@ status.mode = requested; status.effectiveMode / Report.mode / SinkRecord.mode = 
 > onIncident(() => rt.disable({ undo: true }));
 > ```
 >
-> **Recommended `requests.protect` starter** (it is not built in; adapt it to your endpoints):
-> `[/\/(auth|login|logout|oauth|token|session)\b/, /\/(payment|checkout|billing)\b/]`
+> **Recommended `requests.protect` starter:** `protectPreset("payments", "auth")` is built in (or
+> `"preset:payments"` and `"preset:auth"` in JSON configs such as `window.GENCLASS_CONFIG`); extend it with your own
+> endpoints: `[...protectPreset("payments", "auth"), "/api/cart/"]`.
 >
 > **Rollout recipe:** start with `mode: "observe", shadow: "guard"`, and compare the shadow records with your undo and complaint rates. Then switch to `mode: "guard", sample: 0.05`. Watch `rt.summary().undos` and `breaker` events, and widen `sample` as they stay quiet. For QA, set `sample: 1` in the QA environment's config (no URL puts a session into the acting group).
 
@@ -696,10 +772,10 @@ status.mode = requested; status.effectiveMode / Report.mode / SinkRecord.mode = 
   1. `breaker` is on by default. Opt out with `breaker:false`.
   2. New `perSubject:10` (per rolling minute) and `perSession:200` limits. Opt out with `Infinity`. This may suppress frequent retries on polling endpoints.
   3. `holdBudgetMs` is now a hard ceiling that includes defers and `onBeforeAction` time.
-  4. `model.loadIf` defaults to a device floor: no model on devices reporting 2 GB or less or on Save-Data connections (`{ minDeviceMemoryGB: 4, saveData: "skip" }`; the earlier draft said `saveData:"lazy"`).
+  4. `model.loadIf` defaults to a device floor: no model on devices reporting 2 GB or less or on Save-Data connections (`{ minDeviceMemoryGB: 4, saveData: "skip" }`, from 0.3.0; 0.1.0-beta.1 to 0.2.x shipped `{ saveData: "lazy" }`).
   5. Hidden tabs skip background evaluation and release held items immediately (counted in `summary.model.hiddenSkipped`). 0.3.0: in observe they are deferred and decided when the tab is visible again (§5.1, §5.3).
   6. Query and fragment values in recorded URLs are now `…` in situation text. **Model input changes, so add this to the eval plan and re-measure accuracy before release.** Sent URLs are unchanged.
-  7. URL overrides can no longer raise mode or aggressiveness without `debug:true`. (Since 0.2.3 and 0.3.0-beta.2 not with it either: `debug` is console logging only.)
+  7. URL overrides can no longer raise mode or aggressiveness without `debug:true` (and, since 0.2.3 and 0.3.0-beta.2, not with it either: §1 URL overrides).
   8. Ops created under `off`/`observe` route scope can no longer be action targets.
 - **Renames from the earlier draft:**
 
@@ -718,11 +794,11 @@ status.mode = requested; status.effectiveMode / Report.mode / SinkRecord.mode = 
   - **Hook points:** `types.ts`, `runtime.ts`, `auto.ts`, `decide/{policy,exec,report,decider}.ts`, `observe/{fetch,xhr,websocket,eventsource,nav,errors,dom-user}.ts`, `model/{host,backend}.ts`, `learn/*`.
   - **New files:** `util/match.ts`, `decide/breaker.ts`, `decide/summary.ts`, `learn/store.ts`.
 
-Nothing was run. This spec comes from reading `packages/runtime/src/types.ts`, `docs/runtime/API.md`, the README and the CONTRACT sections. `types.ts` gives `"balanced"` as the default aggressiveness, so the README text now says "balanced". `API.md` already has `rt.on`, and the new events extend it.
+This spec was written before the options were built, from `packages/runtime/src/types.ts`, `docs/runtime/API.md`, the README and the CONTRACT sections. What was built, and how it differs, is in `packages/runtime/CHANGELOG.md` (0.1.0-beta.1 and later) and the JSDoc in `types.ts`. `types.ts` gives `"balanced"` as the default aggressiveness, so the README text says "balanced". `API.md` already had `rt.on`, and the new events extend it.
 
 ## Dropped proposals
 
-- [dx] env / preset: Auto-detecting the environment from hostname or NODE_ENV is magic that will silently go wrong (tunnels, staging), and production behaviour would change on upgrade. The defaults are already the safe production profile (guard, cautious), and dev is just mode:'observe', debug:true. A docs snippet works better than another layer of option resolution. A ?genclass-mode URL override is a production safety risk.
+- [dx] env / preset: Auto-detecting the environment from hostname or NODE_ENV is magic that will silently go wrong (tunnels, staging), and production behaviour would change on upgrade. The defaults are already the safe production profile (observe, balanced), and dev is just mode:'observe', debug:true. A docs snippet works better than another layer of option resolution. A ?genclass-mode URL override is a production safety risk.
 - [safety] policy.rules: This is a second policy language with ordering semantics, and a misordered rule can quietly widen permissions. protect already covers the main safety need, and per-scope mode/allow is rarely needed. If scoping is ever needed it should be narrow-only (deny-only), but leave it out for now to keep the library simple.
 - [safety] rollout: Developers can hand-roll this in two lines around init (mode: inCohort ? 'guard' : 'observe'), and a key() hook adds a PII risk. It is better as docs, or a plugin that tags reports with the cohort.
 - [integrations] devtools: mountDevtools already exists; an auto-mount with URL/localStorage flags exposes internals to end users in production and adds dev-build detection heuristics. A one-line conditional import is not burdensome. Better kept as the explicit opt-in subpath export (could document an `if (import.meta.env.DEV)` snippet).

@@ -1,6 +1,6 @@
 # GenClass Runtime: privacy policy
 
-_Last updated: 2026-10-22._
+_Last updated: 2026-10-27._
 
 This policy covers the diagnostics that `@genclass/runtime` (from `0.1.0-beta.3`) sends to its maintainers. It does not
 cover the website or app that uses GenClass; that site has its own privacy policy.
@@ -45,12 +45,25 @@ object; version 0.2.1 sent from those hosts by default, by mistake, fixed in 0.2
   the page the visitor scrolled (25, 50, 75 or 100 %), and how many times each element was clicked, clicked 3 or more
   times within a second, or clicked without anything changing on the page. An element is named from the page's code
   (a name the developer gave it, an id, a link's address on the same site, the other site's address only, class names
-  or its position on the page), never by its text. We do not collect what visitors type, where the mouse was, the
-  order of clicks, or anything that links one page load to another. We use this data only to show it on that
-  website's dashboard and in its export, never to train or evaluate the model.
+  or its position on the page), never by its text. With a newer runtime (after 0.3.0-beta.1), also per **visit** (page
+  views with no gap over 30 minutes): a random visit ID that the browser keeps in its local storage for those 30
+  minutes, together with a flag saying the browser visited the site before; the website the visitor came from (its
+  domain only, such as google.com); the campaign names in the link (`utm_source`, `utm_medium`, `utm_campaign`, with
+  anything that looks like an ID removed); the type of device (desktop, mobile or tablet), the browser family and the
+  operating system family (never the full user-agent string); and the pages of the visit in order. We do not collect
+  what visitors type, where the mouse was, the order of clicks, or anything that links one visit to another, and we
+  do not count unique visitors. We store only a one-way hash of the visit ID, and delete visit records 90 days after
+  the visit started. We use this data only to show it on that website's dashboard (including funnels the website's
+  owner sets up there: a few pages in order and how many visits reached each) and in its export, never to train or
+  evaluate the model. Also, within one page load: how each page view was reached (a page load, a reload, the
+  browser's back or forward button, a link inside the site), the previous page's path and the time spent before
+  moving on, the element the visitor first clicked or (with the keyboard) first moved to on each page and how long
+  that took, and, when the page load ends, its pages in order (at most 10) and that it ended there.
 
 We do **not** store IP addresses, browser user-agent strings or cookies, and the runtime sets no cookies. Each page
-load gets a random session ID that is not saved anywhere.
+load gets a random session ID that is not saved anywhere. Only when the website turned on interaction analytics does
+the runtime keep one entry in the browser's local storage (the visit ID and the visited-before flag above); the
+website's developer can remove it by turning analytics off for that visitor.
 
 ## Why we collect it
 
@@ -61,12 +74,15 @@ works on their own site. We do not sell the data, use it for advertising, or try
 
 A website owner can get a private dashboard link for their site's token. Whoever holds that link can see aggregated diagnostics for that site (counts of decisions, detections, possible detections and actions, the site's hostnames,
 routes, the names the developer gave to protected functions, model speed, versions; with interaction analytics on,
-page views, time on page, scroll depth and clicks per page and element) and a list of recent detections
+page views, the paths between pages, time on page, scroll depth and clicks per page and element, visits per day, pages per visit, where visits
+came from, devices, countries, new or returning, entry and exit pages and funnels) and a list of recent detections
 (time, route or function name, diagnosis, action). Dashboards do not show the situation text. Data from browsers that opted out or
 send Global Privacy Control never reaches a dashboard.
 
-When a developer creates a token with `npx @genclass/runtime init`, after approving its changes, the tool sends us
-the name in their project's `package.json`. We keep one record per token: the token, that name, when it was created,
+When a developer creates a token with `npx @genclass/runtime@beta init` (runtime 0.3.0-beta.0 and later;
+`npx @genclass/runtime init` once 0.3.0 is `latest`), after approving its changes, the tool sends us the name in
+their project's `package.json`. When they create one at https://genclass.dev/start, we receive the app name they
+type, if any. We keep one record per token: the token, that name, when it was created,
 when data first and last arrived, a one-way hash of the dashboard link's secret, and the account it belongs to, if
 any. These records are kept until the owner
 asks us to delete them (contact below, with the token); the dashboard data itself is deleted after 90 days.
@@ -74,8 +90,8 @@ asks us to delete them (contact below, with the token); the dashboard data itsel
 ## Accounts on genclass.dev
 
 An account is optional: GenClass, its diagnostics and the private dashboard links work without one. A developer who
-creates one (at genclass.dev/signup, or with `npx @genclass/runtime login`, runtime 0.3.0-beta.0 and later) can keep
-their apps in one place. An account stores:
+creates one (at genclass.dev/signup, or with `npx @genclass/runtime@beta login`, runtime 0.3.0-beta.0 and later;
+`npx @genclass/runtime login` once 0.3.0 is `latest`) can keep their apps in one place. An account stores:
 
 - **An email address:** as Google returned it when you sign in with Google, or as you typed it (trimmed and
   lowercased) when you sign up with an email and a password or add a password to your account, together with whether
@@ -123,11 +139,12 @@ and your plan. Never card numbers, bank details or billing addresses. For a purc
 record of the purchase (account id, email, subscription id, time) so that a person from GenClass can write to the buyer
 to start the work.
 
-**Forwarding** is off unless an account turns it on for one of its apps. Then, for each new detection
-from that app, GenClass sends a short record to the services that account chose (Sentry, PostHog, Datadog, Slack or
-its own webhook URL): the kind of problem, the model's confidence, what triggered the check, the page path, the
-runtime and model versions, the time and a link to the app's dashboard. Never text from the page. Those services
-handle the records under their own terms with the account owner. The keys and URLs for them are stored encrypted.
+**Forwarding** is off unless an account turns it on for one of its apps. Then, for each new likely detection
+from that app (never a possible one), GenClass sends a short record to the services that account chose (Sentry,
+PostHog, Datadog, Slack or its own webhook URL): the kind of problem, the model's confidence, what triggered the
+check, the page path, the runtime and model versions, the time and a link to the app's dashboard. Never text from
+the page. Those services handle the records under their own terms with the account owner. The keys and URLs for them
+are stored encrypted.
 
 **Export** lets an account download, or read with an export key, the events GenClass received for its own apps, as
 stored. Export keys are stored as one-way hashes.
@@ -141,7 +158,7 @@ own records of past payments as the law requires.
 ## Where it goes and how long we keep it
 
 Data is sent to our collector on Cloudflare and stored in Cloudflare R2. It is deleted automatically after
-**90 days**; dashboard data is deleted after 90 days too. Only GenClass maintainers can access the stored data, and
+**90 days**; dashboard data is deleted after 90 days too (visit records 90 days after the visit started). Only GenClass maintainers can access the stored data, and
 the owner of a website's dashboard link can see that website's dashboard. Cloudflare processes it on our behalf.
 
 ## How to turn it off
@@ -163,7 +180,7 @@ can also contact your local data protection authority.
 
 The data comes from your users' browsers. Depending on where you operate, you may need to mention GenClass in your
 own privacy policy, or keep `telemetry: false` until your users consent to analytics. Full technical details are in
-[TELEMETRY.md](packages/runtime/TELEMETRY.md).
+[TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md).
 
 ## Changes
 

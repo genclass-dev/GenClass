@@ -353,7 +353,9 @@ describe("the documented first-pass schedule names the delays and caps the code 
     ["VISUAL.md 2.3 Page settle", () => part(VISUAL, "- **Page settle**", "- **Persistence**"), (d) => d.all],
     ["VISUAL.md 8 Scheduling and budgets", () => part(VISUAL, "## 8. Scheduling and budgets", "\n## 9. "), (d) => ({ ...d.all, ...d.endToEnd })],
     ["API.md When they run", () => part(API, "- **When they run.**", "\n- **"), (d) => ({ ...d.all, ...d.endToEnd })],
-    ["README visual checks Cost", () => part(README, "**Cost.**", "\n\n"), (d) => ({ ...d.core, ...d.endToEnd })],
+    // the README's visual-checks section (PR 69 rewrote it without the "**Cost.**" lead): the paragraph that names the
+    // chunk delay and the one after it, on the first pass, up to the bench numbers
+    ["README visual checks", () => part(README, "These are measured checks with fixed thresholds", "\n\nOn the demos"), (d) => ({ ...d.core, ...d.endToEnd })],
   ];
 
   it.each(cases)("%s", (_name, text, want) => {
