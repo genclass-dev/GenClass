@@ -341,7 +341,10 @@ rows and 837,623 real-browser rows (§6). Recall is the open problem.
   opt-out above turns them off. Where consent is needed (the EU, EEA and UK), leave `analytics` unset and call
   `runtime.analytics.start()` once the visitor consents
   ([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md#interaction-analytics)).
-- **The visual checks send nothing.**
+- **The measured visual checks send counts only** (from `0.3.0-beta.5`): whether they run on the page and whether
+  their runtime fixes are on, and in each summary the findings per check and per page path (at most 20 paths), the
+  fixes applied and undone, and their cost. Never a selector, element text, colour, URL or one event per finding;
+  the findings themselves stay in the page. They are off on public hosts unless you turn them on.
 - **The CLI** contacts genclass.dev only for the command you run (`init` creates a dashboard only after you approve
   its diff).
 - Apps that ship GenClass may need to disclose this to their users (GDPR/CCPA). Full schema, storage and guidance:

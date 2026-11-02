@@ -75,15 +75,25 @@ segment holding an `@`, such as an e-mail address, is `:id` too).
   a random visit id kept 30 minutes, where the visit came from (the referring host, utm values), the device class,
   browser and OS families and whether the browser visited before (a flag in `localStorage`). See
   [Interaction analytics](#interaction-analytics).
-- **Measured visual checks** ([VISUAL.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/VISUAL.md); new in `0.3.0`): nothing about
-  them is sent. Their findings stay in the page (the console, `rt.checks()`, your own sinks). Counts per check kind
-  are a proposal that needs the maintainers' approval of the exact fields first; this file will list them if that
-  happens.
+- **Measured visual checks** ([VISUAL.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/VISUAL.md) section 10; counts sent from `0.3.0-beta.5`,
+  approved by the maintainers on 2026-10-27): **counts only.** The `session` event says whether the checks run on the
+  page (`visual`: `off`, `local` or `on`) and whether the app turned their runtime fixes on (`fix`). Once the checks
+  have run on the page, every `summary` event carries how many findings each check made (`counts.checks`), the same
+  per page path (`counts.checksByRoute`, the path normalised as on `session`, at most 20 paths), how many runtime
+  fixes were applied and undone (`counts.fixes`), and how many passes ran, their check time in ms, how many ran out
+  of their budget and the tier (`runtime.visual`). The findings themselves stay in the page (the console,
+  `rt.checks()`, your own sinks): never a selector, element text, colour, URL, size or one event per finding. The
+  checks are off on public hosts unless the app turns them on (`visual: true`), so most pages send `visual: "local"`
+  and no counts. When they start with telemetry on, the console says so once:
+
+  ```
+  [GenClass] The diagnostics also carry the measured visual checks' counts: findings per check and page, runtime fixes applied and undone, never selectors, page text, colours or URLs.
+  ```
 - **Never, in either setting:** typed values of password, payment (`cc-*`), one-time-code or secret-named inputs
   (the runtime never records them in the first place), cookies, request or response headers, request or response
   bodies, storage contents, the sentences GenClass prints about what it changed, the measured visual checks'
-  selectors, element text, colours, URLs and messages, IP addresses or user agents (the collector does not store
-  them).
+  selectors, element text, colours, URLs, sizes and messages (only their counts, above), IP addresses or user agents
+  (the collector does not store them).
 
 ### Batch envelope (schema `genclass-telemetry/1`)
 
@@ -148,6 +158,9 @@ Numbers are rounded to 4 decimals. The source of truth is
   `effectiveType`, `saveData`)
 - `sample`
 - `situation` (whether situation text is included)
+- `visual` (`0.3.0-beta.5`: the measured visual checks `off`, `local` (development hosts, the devtools overlay,
+  `rt.checkNow()`) or `on`) and `fix` (the app turned their runtime fixes on, `visual: { on: true, fix }`; they still
+  run only in guard or heal)
 
 Not the page's `decisionSample` or `maxDecisions` setting: `summary.telemetry` says how many records were sent and
 withheld ([Volume](#volume)).
@@ -255,6 +268,10 @@ and on destroy.
   per diagnosis, action limits hit, model errors per code, fail-opens per reason and trigger)
 - `runtime` (model state, p50/p95 latency, decisions, dropped, hidden-tab skips; held time total and max; denied and
   shadow counts; error count)
+- from `0.3.0-beta.5`, once the measured visual checks have run on the page (their own file adds them, so first load
+  carries no code for them): `counts.checks` (findings per check kind), `counts.checksByRoute`
+  (`{ [path]: { [kind]: n } }`, at most 20 paths, normalised as on `session`), `counts.fixes` (`applied`, `undone`)
+  and `runtime.visual` (`passes`, `ms` of check time, `partial` passes, `tier` `full` or `light`)
 - `telemetry` (queued, dropped, send failures, events sent; and, 0.3.0, `decisionRecords` (decisions whose records
   were sent), `decisionsSampledOut` and `decisionsCapped` (routine ones sampled out and capped))
 
@@ -457,7 +474,9 @@ or at https://genclass.dev/start.
   detections (the `detect` events with `tier: "possible"`, shown apart), actions, the app's hostnames, top routes and
   protected functions, model load, backend and latency, versions; with interaction analytics on, page views, visits,
   their sources, devices, countries, entry and exit pages and the app's funnels) and its recent detections. Dashboard
-  data is also deleted after 90 days (visits after 90 days on every plan).
+  data is also deleted after 90 days (visits after 90 days on every plan). From runtime `0.3.0-beta.5` it also shows
+  the measured visual checks' counts per check and page and their runtime fixes, as their own kind ("measured
+  check"), never as model detections.
 - A token changes nothing about when data is collected: with telemetry off (any opt-out, or Global Privacy
   Control, or a local host) nothing is sent and the dashboard gets nothing from that page. On a local host the
   console says so once when a token is set; otherwise only with `debug: true`.

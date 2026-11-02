@@ -97,7 +97,9 @@ describe.skipIf(!built)("dist as an app bundles it", () => {
   // CI (Node 22) gzips /auto to 108.83 KB where this Mac (Node 25) gets 108.63 KB, a zlib difference; the limit
   // follows CI's number (owner OK on 2026-10-28, with the 0.1 KB raise first; the growth itself is 0.28 KB).
   // The main entry likewise: CI measures 100.55 KB (Node 25: 100.46 KB); its growth from the same fixes is 0.15 KB.
-  const LIMIT_KB: Record<string, number> = { "auto.js": 108.9, "index.js": 100.6 };
+  // 0.3.0-beta.5 (owner OK 2026-11-02): the session event's two visual-checks fields (`visual`, `fix`; VISUAL.md
+  // section 10) grow both by 0.06 KB (Node 22: /auto 108.89 KB, the main entry 100.61 KB); the limits follow.
+  const LIMIT_KB: Record<string, number> = { "auto.js": 109.0, "index.js": 100.7 };
   it("first-load cost of /auto and the main entry, minified + gzip: under the limits", async () => {
     const { build } = await import("esbuild");
     const uses: Record<string, string> = { "auto.js": "", "index.js": "GenClass.init({});" };
