@@ -34,7 +34,7 @@ Enterprise offer ([genclass.dev/enterprise](https://genclass.dev/enterprise)).
  └──────────────────────────────┘   the schedule    └──────────────────────────┘
 ```
 
-Status: new in `@genclass/runtime` 0.3.0-beta.1 (unreleased) and `@genclass/mcp` 0.1.0 (unreleased). Measured
+Status: new in `@genclass/runtime` 0.3.0-beta.1 (on npm's `beta` dist-tag since 2026-10-22) and `@genclass/mcp` 0.1.0 (0.2.1 is on npm). Measured
 results are in section 7 and in [RESULTS.md](RESULTS.md) section 18.
 
 ## 1. Setup
