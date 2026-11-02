@@ -141,7 +141,7 @@ installs nothing.
 
 ## How do I set up the open-source parts only?
 
-Two commands, no account, no token, nothing sent to genclass.dev:
+Two commands, no account, no token, nothing sent to genclass.dev (`--agent` is new in `0.3.0-beta.6`):
 
 ```bash
 npx @genclass/runtime@beta init --no-telemetry --agent   # the runtime in observe, the dev-only overlay and agent link

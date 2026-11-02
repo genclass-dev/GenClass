@@ -35,7 +35,8 @@ Once you approve the diff, `init` also creates your app's free dashboard at genc
 `package.json` `name`; `--no-token`, `--token`, `--no-telemetry` and `--dry-run` create no dashboard and never contact
 genclass.dev ([Your dashboard](#your-dashboard)).
 
-**Open source only, no account.** Two commands set up every open-source part, with nothing sent to genclass.dev:
+**Open source only, no account.** Two commands set up every open-source part, with nothing sent to genclass.dev
+(`--agent` is new in `0.3.0-beta.6`):
 
 ```bash
 npx @genclass/runtime@beta init --no-telemetry --agent   # the runtime (observe), the dev-only overlay and agent link; no token

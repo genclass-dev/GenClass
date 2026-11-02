@@ -37,7 +37,8 @@ Once you approve, `init` installs the package, adds one import first in your ent
 devtools overlay in development only) and creates your app's dashboard token (`--no-token` skips it; every flag:
 [INSTALL.md](docs/runtime/INSTALL.md)).
 
-**Open source only, no account.** Two commands set up every open-source part, with nothing sent to genclass.dev:
+**Open source only, no account.** Two commands set up every open-source part, with nothing sent to genclass.dev
+(`--agent` is new in `0.3.0-beta.6`):
 
 ```bash
 npx @genclass/runtime@beta init --no-telemetry --agent   # the runtime (observe), the dev-only overlay and agent link; no token

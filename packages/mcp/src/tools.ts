@@ -559,7 +559,7 @@ export function setupText(cwd: string, client?: string | null): string {
   const guard = next ? `process.env.NODE_ENV === "development"` : vite ? "import.meta.env.DEV" : `process.env.NODE_ENV !== "production"`;
   const where = next ? "a client component loaded once from the root layout (\"use client\")" : vite ? "the app's entry (src/main.tsx or src/main.ts), before the app renders" : "the app's browser entry, before the app starts";
   const lines = [
-    "One command does the app side: npx @genclass/runtime@beta init --agent (it installs the runtime if needed and adds a dev-only agent line next to the import it writes; --no-telemetry too for no diagnostics). By hand:",
+    "One command does the app side: npx @genclass/runtime@beta init --agent (@genclass/runtime 0.3.0-beta.6 or later; it installs the runtime if needed and adds a dev-only agent line next to the import it writes; --no-telemetry too for no diagnostics). By hand:",
     installed
       ? "@genclass/runtime is installed."
       : `1. Install the newest runtime, 0.3.0-beta.1 or later (the agent entry and analytics; 0.2.x has neither${has("@genclass/runtime") ? `; this project has ${JSON.stringify(range)}${have !== range ? `, installed ${have}` : ""}` : ""}): npm install @genclass/runtime@beta`,

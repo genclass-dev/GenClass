@@ -175,7 +175,7 @@ Details: [genclass.dev/pricing](https://genclass.dev/pricing),
 
 Yes. Two commands set up every open-source part with nothing sent to genclass.dev:
 `npx @genclass/runtime@beta init --no-telemetry --agent` (the runtime in observe mode, the dev-only overlay and agent
-link, no token) and `npx -y @genclass/mcp@0.2.1 init` (the MCP server and the `genclass` skill for Claude Code). Details:
+link, no token; `--agent` is new in `0.3.0-beta.6`) and `npx -y @genclass/mcp@0.2.1 init` (the MCP server and the `genclass` skill for Claude Code). Details:
 [INSTALL.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only).
 
 ## How is it different from Sentry, Datadog or my tests?
