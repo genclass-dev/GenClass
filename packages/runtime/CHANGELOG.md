@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.3.0-beta.5)
+## 0.3.0-beta.5 (2026-11-02)
 
 Security fixes from the adversarial review of the mode-raise fix (`0.3.0-beta.2`); the same four fixes are in `0.2.3`
 on the stable line (tag `v0.2.3`). The measured visual checks' counts now reach the diagnostics and the dashboard
