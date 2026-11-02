@@ -141,17 +141,20 @@ installs nothing.
 
 ## How do I set up the open-source parts only?
 
-Two commands, no account, no token, nothing sent to genclass.dev (`--agent` is new in `0.3.0-beta.6`):
+Two commands, no account, nothing to sign in to (`--agent` is new in `0.3.0-beta.6`):
 
 ```bash
-npx @genclass/runtime@beta init --no-telemetry --agent   # the runtime in observe, the dev-only overlay and agent link
-npx -y @genclass/mcp@0.2.1 init                                 # the GenClass MCP server and the `genclass` skill for Claude Code
+npx @genclass/runtime@beta init --agent   # the runtime in observe, the dev-only overlay and agent link, your free dashboard link
+npx -y @genclass/mcp@0.2.1 init           # the GenClass MCP server and the `genclass` skill for Claude Code
 ```
 
 The first finds your framework, installs `@genclass/runtime`, adds one marked import (plain HTML: the script tag,
-pinned with an integrity hash) with the dev-only devtools and agent lines, and writes `telemetry: false` into a
-marked `genclass.config.ts` (or `.js`) next to your entry (`data-telemetry="off"` on a script tag), so GenClass's
-anonymous diagnostics are off; `--no-telemetry` implies `--no-token`. Browsers still download the model and
+pinned with an integrity hash) with the dev-only devtools and agent lines, and, once you approve the diff, creates the
+app's free dashboard link at genclass.dev (it sends the package name, nothing else) and writes the token into a marked
+`genclass.config.ts` (or `.js`) next to your entry (`data-token` on a script tag). GenClass's anonymous diagnostics
+stay on, as with every `init` (never page text, never from local hosts;
+[TELEMETRY.md](../../packages/runtime/TELEMETRY.md)): `init --no-telemetry --agent` turns them off and implies
+`--no-token`; `--no-token` alone skips the link. Browsers still download the model and
 onnxruntime-web, public files, from jsDelivr unless you serve them (`--model-url`,
 [Content-Security-Policy and self-hosting](../../packages/runtime/README.md#content-security-policy-and-self-hosting)).
 Add `--mode guard` to let GenClass act, `--sink console-json` for findings in your own logs.

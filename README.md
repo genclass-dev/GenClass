@@ -37,16 +37,18 @@ Once you approve, `init` installs the package, adds one import first in your ent
 devtools overlay in development only) and creates your app's dashboard token (`--no-token` skips it; every flag:
 [INSTALL.md](docs/runtime/INSTALL.md)).
 
-**Open source only, no account.** Two commands set up every open-source part, with nothing sent to genclass.dev
-(`--agent` is new in `0.3.0-beta.6`):
+**Two commands, no account.** They set up every open-source part, and nothing asks you to sign in (`--agent` is new
+in `0.3.0-beta.6`):
 
 ```bash
-npx @genclass/runtime@beta init --no-telemetry --agent   # the runtime (observe), the dev-only overlay and agent link; no token
-npx -y @genclass/mcp@0.2.1 init                                 # the GenClass MCP server and the `genclass` skill for Claude Code
+npx @genclass/runtime@beta init --agent   # the runtime (observe), the dev-only overlay and agent link, your free dashboard link
+npx -y @genclass/mcp@0.2.1 init           # the GenClass MCP server and the `genclass` skill for Claude Code
 ```
 
-The first adds one marked import plus an option file with `telemetry: false` (plain HTML: the script tag with
-`data-telemetry="off"`; Astro: a `<meta name="genclass">` line); the second writes
+The first adds one marked import plus an option file with the app's token (plain HTML: the script tag with
+`data-token`; Astro: a `<meta name="genclass">` line), creates the app's free dashboard link at genclass.dev (it sends
+the package name, nothing else) and keeps anonymous diagnostics on, as every `init` does (never page text, never from
+local hosts; `init --no-telemetry --agent` turns them off and creates no link); the second writes
 `.mcp.json` and `.claude/skills/genclass/SKILL.md` (other agents: `npx -y @genclass/mcp@0.2.1 config <client>`). Nothing
 else is needed; `npx @genclass/runtime@beta remove` undoes the first
 ([the open-source setup](docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only)).

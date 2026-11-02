@@ -350,9 +350,9 @@ See <a href="https://github.com/genclass-dev/GenClass-lib/blob/main/PRIVACY.md">
 
 // ------------------------------------------------------------------------------------- /start/open-source
 // GenClass's open-source parts with no account: the runtime in the app's pages, the agent link, the MCP server and the
-// page check, all Apache-2.0, with no token and the runtime's anonymous diagnostics off, so nothing reaches
-// genclass.dev. For teams that cannot sign up for or send data to a hosted dashboard (enterprises). The page sends
-// nothing either: its choices rewrite the prompt in the browser, with the server's own openSourcePrompt.
+// page check, all Apache-2.0, with no account: init creates the app's free dashboard link and keeps the runtime's
+// anonymous diagnostics on, as every init does (`--no-telemetry` for neither; owner decision 2026-11-02). For teams
+// that cannot sign up for a hosted dashboard. The page sends nothing either: its choices rewrite the prompt in the browser, with the server's own openSourcePrompt.
 
 /** What /start/open-source's choices add to openSourcePrompt; all off is observe, the overlay in development only. */
 export interface OpenSourceChoices {
@@ -369,10 +369,10 @@ export interface OpenSourceChoices {
 }
 
 /**
- * The prompt /start/open-source copies: the two commands (`init --no-telemetry --agent` for the app, `@genclass/mcp
- * init` for the agent), with `telemetry: false` (the runtime sends no data anywhere; it still downloads public files
- * from jsDelivr unless the app serves them), no token, the MCP server on the developer's machine and the page check
- * run locally; the choices are init flags. Pure and self-contained, like installPrompt: the page script runs this
+ * The prompt /start/open-source copies: the two commands (`init --agent` for the app, `@genclass/mcp init` for the
+ * agent), with the app's free dashboard link and anonymous diagnostics on (never page text, never from local hosts;
+ * the browser downloads public files from jsDelivr unless the app serves them), no account, the MCP server on the
+ * developer's machine and the page check run locally; the choices are init flags. Pure and self-contained, like installPrompt: the page script runs this
  * same function.
  */
 export function openSourcePrompt(c: OpenSourceChoices = {}, n: PromptNames = PROMPT_NAMES): string {
@@ -382,7 +382,7 @@ export function openSourcePrompt(c: OpenSourceChoices = {}, n: PromptNames = PRO
   const own = !!c.selfHost;
   const dir = "/genclass-model/";
   // every choice is an init flag, except the visual fixes and the aggressiveness, which init does not write
-  const flags = ["--no-telemetry", "--agent", ...(guard ? ["--mode guard"] : []), ...(logs ? ["--sink console-json"] : []), ...(own ? [`--model-url ${dir}`] : []), "--yes"];
+  const flags = ["--agent", ...(guard ? ["--mode guard"] : []), ...(logs ? ["--sink console-json"] : []), ...(own ? [`--model-url ${dir}`] : []), "--yes"];
   const initAdds = guard
     ? `add ${eager ? 'aggressiveness: "eager" and ' : ""}visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes${eager ? ', and a <script>window.GENCLASS_CONFIG = { aggressiveness: "eager" };</script> line before it' : ""}; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content${eager ? ", and the aggressiveness in a window.GENCLASS_CONFIG script before it" : ""})`
     : "";
@@ -390,7 +390,7 @@ export function openSourcePrompt(c: OpenSourceChoices = {}, n: PromptNames = PRO
   // function: Wrangler's bundler (keepNames) would wrap it in a __name() helper that the page script, which runs this
   // function's source, lacks.
   const out: (string | [string])[] = [
-    "Add GenClass's open-source parts to this web app (Apache-2.0, https://github.com/genclass-dev/GenClass): the @genclass/runtime library in its pages, which reports the bugs that never throw (double submits, stale responses that overwrite newer data, write races, visual bugs), and the @genclass/mcp server on this machine, so you, the coding agent, can see what happens on the dev pages, replay it and prove fixes. No GenClass account and no token: nothing is sent to genclass.dev. Two commands do it; run them yourself.",
+    "Add GenClass's open-source parts to this web app (Apache-2.0, https://github.com/genclass-dev/GenClass): the @genclass/runtime library in its pages, which reports the bugs that never throw (double submits, stale responses that overwrite newer data, write races, visual bugs), and the @genclass/mcp server on this machine, so you, the coding agent, can see what happens on the dev pages, replay it and prove fixes. No GenClass account and nothing to sign in to: init creates the app's free dashboard link. Two commands do it; run them yourself.",
     "",
     ...(own
       ? [
@@ -399,7 +399,7 @@ export function openSourcePrompt(c: OpenSourceChoices = {}, n: PromptNames = PRO
       : []),
     [
       `In the project's root run: npx ${n.pkg} init ${flags.join(" ")} ` +
-        "It finds the framework and package manager, installs the runtime, adds one marked import first in the browser entry (plain HTML pages, no bundler: the script tag, pinned with an integrity hash, in every page's <head>), the dev-only devtools overlay and the dev-only agent link (which records what happens on local pages for the GenClass MCP server, talks only to 127.0.0.1 and is never part of a production build; on plain HTML pages it stays in the page and runs only on localhost), and writes telemetry: false into a marked option file next to the entry (data-telemetry=\"off\" on the tag; Astro: a <meta name=\"genclass\"> line), so GenClass's anonymous diagnostics are off and it sends no data anywhere" +
+        "It finds the framework and package manager, installs the runtime, adds one marked import first in the browser entry (plain HTML pages, no bundler: the script tag, pinned with an integrity hash, in every page's <head>), the dev-only devtools overlay and the dev-only agent link (which records what happens on local pages for the GenClass MCP server, talks only to 127.0.0.1 and is never part of a production build; on plain HTML pages it stays in the page and runs only on localhost), and, once applied, creates the app's free dashboard link at genclass.dev (it sends the package name, nothing else) and writes the token into a marked option file next to the entry (data-token on the tag; Astro: a <meta name=\"genclass\"> line). GenClass's anonymous diagnostics stay on: its decisions and counts, never text from the page, and never from localhost or private hosts" +
         (own ? "" : "; the browser still downloads its model and onnxruntime-web, public files, from cdn.jsdelivr.net (about 13 MB, 18 MB on WebGPU devices, then cached) unless the app serves them") +
         ". It shows the diff; --yes applies it. " +
         (guard
@@ -419,7 +419,7 @@ export function openSourcePrompt(c: OpenSourceChoices = {}, n: PromptNames = PRO
     ...(c.deploy
       ? [["Deploy it, as chosen, with the command this project already uses (a deploy script in package.json, wrangler deploy for a Cloudflare Worker, vercel deploy --prod, and so on), then check that the deployed site serves the change."] as [string]]
       : []),
-    [`Tell me what you changed${c.deploy ? " and where it is deployed" : ""}, that the app sets no GenClass token and has telemetry off, what it downloads from outside this network, and that a new conversation with you has the GenClass tools.`],
+    [`Tell me what you changed${c.deploy ? " and where it is deployed" : ""}, the dashboard link init printed if it created one (it is saved in .genclass.local, which init adds to .gitignore; keep it private), what it downloads from outside this network, and that a new conversation with you has the GenClass tools.`],
   ];
   let k = 0;
   return out.map((l) => (typeof l === "string" ? l : `${++k}. ${l[0]}`)).join("\n");
@@ -476,7 +476,8 @@ export function openSourcePage(nonce: string): string {
 <section class="stack mt-xl">
   <h1>GenClass without an account</h1>
   <p class="lead">The open-source parts only, Apache-2.0: the runtime in your app's pages, and the MCP server and the
-  page check on your machine. No sign-in, no token, and nothing is sent to genclass.dev.</p>
+  page check on your machine. No sign-in: init creates the app's free dashboard link, and anonymous diagnostics stay on
+  unless you turn them off.</p>
 </section>
 <section class="card stack">
   <fieldset class="copts" id="choices">
@@ -496,7 +497,7 @@ export function openSourcePage(nonce: string): string {
 <section class="stack">
   <h2 class="h2l">What leaves your network</h2>
   <ul class="facts">
-    <li>Nothing goes to genclass.dev: there is no token, and the runtime's anonymous diagnostics are off (<code>telemetry: false</code>).</li>
+    <li>To genclass.dev: the app's package name, once, when <code>init</code> creates its free dashboard link (<code>--no-token</code> skips it); then, from public hosts only, the runtime's anonymous diagnostics: its decisions and counts, never text from the page (<a href="${repo}/blob/main/packages/runtime/TELEMETRY.md">every field</a>). <code>init --no-telemetry --agent</code> turns them off and creates no link, so nothing goes to genclass.dev at all.</li>
     <li>Browsers download public files from jsDelivr (cdn.jsdelivr.net), once, then cached: the model and onnxruntime-web (about 13 MB on WASM, 18 MB on WebGPU) unless you serve them yourself, and on sites without a bundler the runtime's own files unless you serve its <code>dist/</code> folder. No app data goes with those requests.</li>
     <li>The MCP server runs on your machine and its bridge listens on 127.0.0.1 only; with <code>GENCLASS_DASHBOARD</code> and <code>GENCLASS_REPORT</code> unset it sends nothing off the machine, and it keeps what it records in <code>.genclass/agent</code> in the project, which git ignores. <code>genclass_scan</code> and <code>scan --local</code> check pages in headless Chromium on your machine. A page URL leaves it only with <code>hosted: true</code> (or <code>scan</code> without <code>--local</code> when Playwright or its Chromium is missing): it then goes to GenClass's hosted page check (genclass-scan.mehar-144.workers.dev), which is not open source.</li>
     <li>On developer machines, npm install and npx fetch packages from the npm registry (or your mirror), and the page check's Chromium comes from Playwright's download servers; <code>fetch-model</code> (to serve the model yourself) downloads the model and onnxruntime-web from jsDelivr, or from a mirror you name with <code>--from</code> and <code>--ort-from</code>.</li>
@@ -513,10 +514,10 @@ export function openSourcePage(nonce: string): string {
 </section>
 <section class="stack cmds">
   <h2 class="h2l">Or run the commands yourself</h2>
-  ${cmd("Add the runtime to your app, with the dev-only agent link", `npx ${RUNTIME_PKG} init --no-telemetry --agent`)}
+  ${cmd("Add the runtime to your app, with the dev-only agent link", `npx ${RUNTIME_PKG} init --agent`)}
   ${cmd("Add the MCP server and the genclass skill for Claude Code", `npx -y ${MCP_PKG} init`)}
   ${cmd("Check a page for visual bugs", `npx ${RUNTIME_PKG} scan http://localhost:5173/ --local`)}
-  <p class="muted small">init shows the diff and asks before it writes; add <code>--mode guard</code> for guard. Until the MCP server runs, a dev page logs one failed request to 127.0.0.1:47357 (the agent link finding no server). Other agents: <code>npx -y ${MCP_PKG} config &lt;client&gt;</code> prints the block for Cursor, VS Code, Codex, Gemini CLI and others; keep <code>GENCLASS_DASHBOARD</code> and <code>GENCLASS_REPORT</code> out of it. The scan needs Playwright (<code>npm i -D playwright &amp;&amp; npx playwright install chromium</code>).</p>
+  <p class="muted small">init shows the diff and asks before it writes; add <code>--mode guard</code> for guard, <code>--no-telemetry</code> to send nothing to genclass.dev. Until the MCP server runs, a dev page logs one failed request to 127.0.0.1:47357 (the agent link finding no server). Other agents: <code>npx -y ${MCP_PKG} config &lt;client&gt;</code> prints the block for Cursor, VS Code, Codex, Gemini CLI and others; keep <code>GENCLASS_DASHBOARD</code> and <code>GENCLASS_REPORT</code> out of it. The scan needs Playwright (<code>npm i -D playwright &amp;&amp; npx playwright install chromium</code>).</p>
 </section>
 <footer>Want a dashboard without sending data to us? The collector is open source too:
 <a href="${repo}/blob/main/telemetry-worker/README.md#self-host-the-collector-private-mode">run it on your own Cloudflare account</a>.
