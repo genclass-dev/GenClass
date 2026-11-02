@@ -12,6 +12,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const PKG = "@genclass/runtime";
+/** The MCP server's launcher, pinned to its release (packages/mcp/test/manifests.test.ts keeps it current; `npm run sync -w @genclass/mcp`). */
+export const MCP_PKG = "@genclass/mcp@0.2.1";
 export const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /** This package's version ("latest" if package.json cannot be read). */

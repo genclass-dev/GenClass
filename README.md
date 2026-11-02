@@ -44,7 +44,8 @@ npx @genclass/runtime@beta init --no-telemetry --agent   # the runtime (observe)
 npx -y @genclass/mcp@0.2.1 init                                 # the GenClass MCP server and the `genclass` skill for Claude Code
 ```
 
-The first adds one marked import (or script tag) plus an option file with `telemetry: false`; the second writes
+The first adds one marked import plus an option file with `telemetry: false` (plain HTML: the script tag with
+`data-telemetry="off"`; Astro: a `<meta name="genclass">` line); the second writes
 `.mcp.json` and `.claude/skills/genclass/SKILL.md` (other agents: `npx -y @genclass/mcp@0.2.1 config <client>`). Nothing
 else is needed; `npx @genclass/runtime@beta remove` undoes the first
 ([the open-source setup](docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only)).
