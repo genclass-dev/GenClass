@@ -344,7 +344,11 @@ observing with no download and no worker.
   model. Every opt-out above turns them off. Where consent is needed (the EU, EEA and UK), leave `analytics` unset and
   call `runtime.analytics.start()` once the visitor consents. Details:
   [TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md#interaction-analytics).
-- **The measured visual checks send nothing**, and sinks send only where you point them.
+- **The measured visual checks send counts only** (from `0.3.0-beta.5`): whether they run on the page and whether
+  their runtime fixes are on, and in each summary the findings per check and per page path (at most 20 paths), the
+  fixes applied and undone, and their cost. Never a selector, element text, colour, URL or one event per finding; the
+  findings themselves stay in the page (the console, `rt.checks()`, your own sinks, which send only where you point
+  them). They are off on public hosts unless you turn them on.
 - **The CLI** contacts genclass.dev only for the command you run: `init` creates a dashboard only after you approve
   its diff (it sends `package.json`'s `name`); `login`, `connect`, `whoami`, `logout` and, signed in without a private
   link in the folder, `dashboard` talk to your account
@@ -728,7 +732,8 @@ These are measured checks with fixed thresholds, reported as kind `"check"`; the
 feed a decision. They skip what they cannot know (text over photos, video, canvases, gradients). They run by default
 on development hosts (a dev server's port on `localhost` and similar, `*.test` names) and when the devtools overlay
 mounts; elsewhere turn them on with `visual: true`. First-load cost is about 0.5 KB gzip; the checks load 1.5 s after
-`load`, read the page in idle slices of 8 ms and send nothing. Opt-in fixes (`visual: { on: true, fix: true }` in
+`load`, read the page in idle slices of 8 ms and send only their counts (from `0.3.0-beta.5`, see
+[Privacy and telemetry](#privacy-and-telemetry)). Opt-in fixes (`visual: { on: true, fix: true }` in
 guard or heal mode) are re-measured and undoable. `checkPage()` from `@genclass/runtime/visual` runs one pass in a
 test; `npx @genclass/runtime@beta scan <url>` checks any URL without one ([Audit a page](#audit-a-page)).
 
