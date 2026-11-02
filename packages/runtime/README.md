@@ -50,7 +50,7 @@ import "@genclass/runtime/auto"; // first line of your entry file (Next.js 15.3+
 Or with no build step, first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.4"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5"></script>
 ```
 
 That is the whole setup. Network traffic, user actions, errors and timing are observed, and so is your app's state:
@@ -59,8 +59,8 @@ React component state, Redux and Redux Toolkit stores, and Zustand stores with `
 are not: there, stale responses are reported only for stores you register (double submits need no state).
 
 **Versions:** this README describes `0.3.0` with model `@genclass/runtime-model@0.2.0`. The newest line is
-`0.3.0-beta.4`, npm's `beta` dist-tag (`0.3.0-beta.1` to `beta.4` were released between 2026-10-22 and 2026-10-27);
-npm's `latest` is still the older `0.2.2` (`npm view @genclass/runtime dist-tags` shows them now). Every npm and npx
+`0.3.0-beta.5`, npm's `beta` dist-tag (`0.3.0-beta.1` to `beta.5` were released between 2026-10-22 and 2026-11-02);
+npm's `latest` is still the older `0.2.3` (`npm view @genclass/runtime dist-tags` shows them now). Every npm and npx
 command here names `@beta`: without it npm installs `0.2.x`, which has no token, dashboard, interaction analytics,
 visual checks or agent link and ignores those options without a word (a TypeScript app gets a type error for
 `analytics` and `token`), and whose CLI has no `login`, `dashboard`, `scan` or `--sink`. `0.2.x` is the exception,
@@ -389,8 +389,8 @@ observing with no download and no worker.
   [TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md#interaction-analytics).
 - **The measured visual checks send counts only** (from `0.3.0-beta.5`): whether they run on the page and whether
   their runtime fixes are on, and in each summary the findings per check and per page path (at most 20 paths), the
-  fixes applied and undone, and their cost. Never a selector, element text, colour, URL or one event per finding; the
-  findings themselves stay in the page (the console, `rt.checks()`, your own sinks, which send only where you point
+  fixes applied and undone, and their cost. Never a selector, element text, colour, URL, size or one event per finding;
+  the findings themselves stay in the page (the console, `rt.checks()`, your own sinks, which send only where you point
   them). They are off on public hosts unless you turn them on.
 - **The CLI** contacts genclass.dev only for the command you run: `init` creates a dashboard only after you approve
   its diff (it sends `package.json`'s `name`); `login`, `connect`, `whoami`, `logout` and, signed in without a private
@@ -476,11 +476,11 @@ dist-tag it came from, asks npm's dist-tags once (`npm view @genclass/runtime di
 on npm, with the command that runs it:
 
 ```
-  ✔ Version    @genclass/runtime 0.3.0-beta.3 (npm dist-tag beta)
-  ▲ Newer      @genclass/runtime 0.3.0-beta.4 is on npm (dist-tag beta): run npx @genclass/runtime@beta init instead
+  ✔ Version    @genclass/runtime 0.3.0-beta.4 (npm dist-tag beta)
+  ▲ Newer      @genclass/runtime 0.3.0-beta.5 is on npm (dist-tag beta): run npx @genclass/runtime@beta init instead
 ```
 
-It installs its own version (`@genclass/runtime@^0.3.0-beta.4` today), and a project that already has an older one
+It installs its own version (`@genclass/runtime@^0.3.0-beta.5` today), and a project that already has an older one
 (a `0.2.x` from `npx @genclass/runtime init` without `@beta`) is upgraded, after the same diff and question. Every
 command it prints names `@beta` while it is a prerelease.
 
@@ -509,7 +509,7 @@ Options go in `window.GENCLASS_CONFIG = { ... }` (any `InitOptions`, set before 
 **3. One script tag** (no build step), first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.4" data-mode="observe" data-devtools="local"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5" data-mode="observe" data-devtools="local"></script>
 ```
 
 It exposes `window.GenClass` and loads the model worker and the overlay on demand from the same version; `data-mode`,
