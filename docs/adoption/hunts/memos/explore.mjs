@@ -231,7 +231,8 @@ const surfaces = {
   reaction: {
     memo: () => seeds.target,
     async steps(page) {
-      await page.getByRole("button", { name: "Add reaction" }).first().click({ force: true });
+      await page.locator("main article, main .group\\/memo").first().hover(); // the reaction button shows on hover
+      await page.getByRole("button", { name: "Add reaction" }).first().click();
       await page.getByRole("button", { name: "👍", exact: true }).click();
       await nap(page);
       await page.getByRole("button", { name: "❤️", exact: true }).click();
