@@ -1,0 +1,229 @@
+From a440178655a8c77f0e9f0cec3a8d2d1d238fc8b2 Mon Sep 17 00:00:00 2001
+From: GenClass hunt <hunt@localhost>
+Date: Tue, 3 Nov 2026 16:49:23 +0000
+Subject: [PATCH 1/2] fix(web): keep the newer memo update when two updates of
+ a memo overlap
+
+Pinning a memo and unpinning it before the first reply sent both updates at
+once. The server saved them in order and ended unpinned, but when the pin
+reply arrived last, useUpdateMemo's onSuccess wrote it over the newer state:
+the detail page showed the memo pinned until the detail was fetched again.
+The same holds for archive then restore and for the task check-all actions,
+which go through the same hook.
+
+Memo updates now share one mutation scope, so they are sent one at a time in
+the order they were made, and an update whose memo has a newer update queued
+behind it leaves the cache to that update's own onSuccess instead of writing
+its older reply over the newer optimistic patch.
+---
+ web/src/hooks/useMemoQueries.ts | 10 ++++++
+ web/tests/memo-record.test.tsx  | 55 +++++++++++++++++++++++++++++++++
+ 2 files changed, 65 insertions(+)
+
+diff --git a/web/src/hooks/useMemoQueries.ts b/web/src/hooks/useMemoQueries.ts
+index 1a1be2606..3729b468c 100644
+--- a/web/src/hooks/useMemoQueries.ts
++++ b/web/src/hooks/useMemoQueries.ts
+@@ -327,6 +327,9 @@ export function useUpdateMemo() {
+   const queryClient = useQueryClient();
+ 
+   return useMutation({
++    // Memo updates run one at a time, in the order they were made. Sent together, two quick updates of one memo
++    // (pin then unpin) can finish in either order, and the older reply would overwrite the newer change in the cache.
++    scope: { id: "memo-update" },
+     mutationFn: async ({ update, updateMask }: { update: Partial<Memo>; updateMask: string[] }) => {
+       const memo = await memoServiceClient.updateMemo({
+         memo: create(MemoSchema, update as Record<string, unknown>),
+@@ -369,6 +372,13 @@ export function useUpdateMemo() {
+       if (updateMask.includes("space")) {
+         queryClient.invalidateQueries({ queryKey: memoKeys.all });
+       }
++      // A newer update of this memo is queued behind this one: keep its optimistic patch, and leave the cache
++      // writes and refetches to its own onSuccess. This reply, or a refetch sent before it is saved, is older.
++      const newerUpdateQueued =
++        queryClient.isMutating({
++          predicate: (mutation) => (mutation.state.variables as { update?: Partial<Memo> } | undefined)?.update?.name === updatedMemo.name,
++        }) > 1;
++      if (newerUpdateQueued) return;
+       // Update cache with server response
+       queryClient.setQueryData(memoKeys.detail(updatedMemo.name), updatedMemo);
+       patchMemoInCollectionQueries(queryClient, updatedMemo);
+diff --git a/web/tests/memo-record.test.tsx b/web/tests/memo-record.test.tsx
+index 82b71b2bc..788774586 100644
+--- a/web/tests/memo-record.test.tsx
++++ b/web/tests/memo-record.test.tsx
+@@ -188,3 +188,58 @@ describe("useCreateMemo", () => {
+     expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey?.[1])).not.toContain("comments");
+   });
+ });
++
++describe("useUpdateMemo", () => {
++  beforeEach(() => vi.resetAllMocks());
++
++  // Pin, then unpin before the first reply: two updates of one memo in flight, as a quick second click makes them.
++  const pinThenUnpin = () => {
++    const { client, wrapper } = setup();
++    const target = memo("memos/x");
++    client.setQueryData(memoKeys.detail(target.name), target);
++    const replies: Array<() => void> = [];
++    api.updateMemo.mockImplementation(
++      ({ memo: update }: { memo: Memo }) =>
++        new Promise<Memo>((done) => replies.push(() => done(create(MemoSchema, { ...target, pinned: update.pinned })))),
++    );
++    const { result } = renderHook(() => ({ record: useMemoRecord(target.name), update: useUpdateMemo() }), { wrapper });
++    act(() => {
++      result.current.update.mutate({ update: { name: target.name, pinned: true }, updateMask: ["pinned"] });
++      result.current.update.mutate({ update: { name: target.name, pinned: false }, updateMask: ["pinned"] });
++    });
++    // Answers one waiting request: the newest (pop) or the oldest (shift), once every request that can be sent is.
++    const answer = async (pick: "newest" | "oldest") => {
++      await act(async () => {
++        await new Promise((done) => setTimeout(done, 0));
++      });
++      await waitFor(() => expect(replies.length).toBeGreaterThan(0));
++      await act(async () => (pick === "newest" ? replies.pop() : replies.shift())?.());
++    };
++    return { client, target, result, answer };
++  };
++
++  it("keeps the newer change when the older reply arrives last", async () => {
++    const { client, target, result, answer } = pinThenUnpin();
++    await waitFor(() => expect(result.current.record?.pinned).toBe(false));
++
++    await answer("newest");
++    await answer("newest");
++    await waitFor(() => expect(client.isMutating()).toBe(0));
++
++    expect(api.updateMemo.mock.calls.map(([request]) => request.memo.pinned)).toEqual([true, false]);
++    expect(client.getQueryData<Memo>(memoKeys.detail(target.name))?.pinned).toBe(false);
++    expect(result.current.record?.pinned).toBe(false);
++  });
++
++  it("does not show the older reply while the newer update is still saving", async () => {
++    const { client, result, answer } = pinThenUnpin();
++    await waitFor(() => expect(result.current.record?.pinned).toBe(false));
++
++    await answer("oldest");
++    expect(result.current.record?.pinned).toBe(false);
++
++    await answer("oldest");
++    await waitFor(() => expect(client.isMutating()).toBe(0));
++    expect(result.current.record?.pinned).toBe(false);
++  });
++});
+-- 
+2.43.0
+
+
+From e2547a94367e7686097d8efcbc081a59b64f8d29 Mon Sep 17 00:00:00 2001
+From: GenClass hunt <hunt@localhost>
+Date: Tue, 3 Nov 2026 17:08:37 +0000
+Subject: [PATCH 2/2] fix(web): refetch a memo's reactions through its query
+
+A reaction click fetched the memo with a raw getMemo call and wrote the reply
+into the detail cache whenever it arrived. Adding two reactions quickly sent
+two such fetches, and when the first one (asked before the second reaction
+was saved) answered last, it wrote the older reactions over the newer ones:
+the second reaction disappeared from the page although the server kept it,
+until the next refetch.
+
+The click now invalidates the memo's detail query instead. React Query
+cancels an in-flight refetch of that query when it starts a newer one, so an
+older copy of the reactions can no longer land after a newer one.
+---
+ .../components/MemoReactionListView/hooks.ts  |  6 +-
+ web/tests/reaction-actions.test.tsx           | 65 +++++++++++++++++++
+ 2 files changed, 68 insertions(+), 3 deletions(-)
+ create mode 100644 web/tests/reaction-actions.test.tsx
+
+diff --git a/web/src/components/MemoReactionListView/hooks.ts b/web/src/components/MemoReactionListView/hooks.ts
+index f544632f8..9404aca21 100644
+--- a/web/src/components/MemoReactionListView/hooks.ts
++++ b/web/src/components/MemoReactionListView/hooks.ts
+@@ -55,9 +55,9 @@ export const useReactionActions = ({ memo, onComplete }: UseReactionActionsOptio
+           reaction: { reactionType },
+         });
+       }
+-      // Refetch the memo to get updated reactions and invalidate cache
+-      const updatedMemo = await memoServiceClient.getMemo({ name: memo.name });
+-      queryClient.setQueryData(memoKeys.detail(memo.name), updatedMemo);
++      // Refetch the memo through its query: a newer refetch (another reaction, a live update) cancels this one, so an
++      // older copy of the reactions cannot land after a newer one.
++      await queryClient.invalidateQueries({ queryKey: memoKeys.detail(memo.name) });
+       queryClient.invalidateQueries({ queryKey: memoKeys.lists() });
+       // If this memo is a comment, refresh the parent's comments list so the comment's reactions update in the UI
+       if (memo.parent) {
+diff --git a/web/tests/reaction-actions.test.tsx b/web/tests/reaction-actions.test.tsx
+new file mode 100644
+index 000000000..c895cbf7a
+--- /dev/null
++++ b/web/tests/reaction-actions.test.tsx
+@@ -0,0 +1,65 @@
++import { create } from "@bufbuild/protobuf";
++import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
++import { act, renderHook, waitFor } from "@testing-library/react";
++import type { ReactNode } from "react";
++import { beforeEach, describe, expect, it, vi } from "vitest";
++import { useReactionActions } from "@/components/MemoReactionListView/hooks";
++import { memoDetailQueryOptions, memoKeys } from "@/hooks/useMemoQueries";
++import { type Memo, MemoSchema, ReactionSchema } from "@/types/proto/api/memo_service_pb";
++
++const api = vi.hoisted(() => ({ getMemo: vi.fn(), upsertMemoReaction: vi.fn(), deleteMemoReaction: vi.fn() }));
++vi.mock("@/connect", () => ({ memoServiceClient: api }));
++vi.mock("@/hooks/useCurrentUser", () => ({ default: () => ({ name: "users/me" }) }));
++vi.mock("@/contexts/MentionResolutionContext", () => ({ useResolvedUsersByNames: () => new Map() }));
++
++const setup = () => {
++  const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } } });
++  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
++  return { client, wrapper };
++};
++
++describe("useReactionActions", () => {
++  beforeEach(() => vi.resetAllMocks());
++
++  it("keeps the newer reactions when the first reaction's refetch answers last", async () => {
++    const { client, wrapper } = setup();
++    const name = "memos/x";
++    client.setQueryData(memoKeys.detail(name), create(MemoSchema, { name, reactions: [] }));
++    // The server's reactions, and the replies to getMemo, each holding the reactions saved when it was asked.
++    const saved: string[] = [];
++    const replies: Array<() => void> = [];
++    api.upsertMemoReaction.mockImplementation(async ({ reaction }: { reaction: { reactionType: string } }) => {
++      saved.push(reaction.reactionType);
++      return create(ReactionSchema, { reactionType: reaction.reactionType });
++    });
++    api.getMemo.mockImplementation(() => {
++      const reactions = saved.map((reactionType) => create(ReactionSchema, { reactionType, creator: "users/me" }));
++      return new Promise<Memo>((done) => replies.push(() => done(create(MemoSchema, { name, reactions }))));
++    });
++
++    // The detail page: the memo's query is observed, and the reaction picker acts on the memo it shows.
++    const { result } = renderHook(
++      () => {
++        const memo = useQuery(memoDetailQueryOptions(name)).data as Memo;
++        return { memo, actions: useReactionActions({ memo }) };
++      },
++      { wrapper },
++    );
++    act(() => {
++      void result.current.actions.handleReactionClick("👍");
++    });
++    await waitFor(() => expect(api.getMemo).toHaveBeenCalledTimes(1));
++    act(() => {
++      void result.current.actions.handleReactionClick("❤️");
++    });
++    await waitFor(() => expect(api.getMemo).toHaveBeenCalledTimes(2));
++
++    // The second refetch answers first, then the first one, which only knows about 👍.
++    await act(async () => replies[1]());
++    await act(async () => replies[0]());
++
++    await waitFor(() => expect(client.isFetching()).toBe(0));
++    expect(saved).toEqual(["👍", "❤️"]);
++    expect(result.current.memo.reactions.map((reaction) => reaction.reactionType)).toEqual(["👍", "❤️"]);
++  });
++});
+-- 
+2.43.0
+

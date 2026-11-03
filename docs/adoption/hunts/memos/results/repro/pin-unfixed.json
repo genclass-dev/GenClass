@@ -1,0 +1,102 @@
+{
+  "surface": "pin",
+  "memos": "http://localhost:3001",
+  "held": "UpdateMemo",
+  "delay_ms": 1500,
+  "later_ms": 30000,
+  "trials": 10,
+  "stale_after_3s": 10,
+  "stale_after_later": 10,
+  "results": [
+    {
+      "trial": 1,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    },
+    {
+      "trial": 2,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    },
+    {
+      "trial": 3,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    },
+    {
+      "trial": 4,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    },
+    {
+      "trial": 5,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    },
+    {
+      "trial": 6,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    },
+    {
+      "trial": 7,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    },
+    {
+      "trial": 8,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    },
+    {
+      "trial": 9,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    },
+    {
+      "trial": 10,
+      "shownSoon": "pinned=true",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=true",
+      "serverLater": "pinned=false",
+      "stale": true,
+      "staleLater": true
+    }
+  ]
+}

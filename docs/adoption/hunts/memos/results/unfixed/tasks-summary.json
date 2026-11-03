@@ -1,0 +1,58 @@
+{
+  "surface": "tasks",
+  "memos": "http://localhost:3001",
+  "genclass": true,
+  "runs": 6,
+  "pause": 0,
+  "tail": 2500,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "no race",
+      "differ": 0,
+      "finding": null,
+      "shown": [
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then ListMemoComments#3 then GetMemo#3 then UpdateMemo#2]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#3 then ListMemoComments#3 then UpdateMemo#2 then GetMemo#2]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then GetMemo#3 then ListMemoComments#3 then UpdateMemo#2]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#2 then ListMemoComments#3 then GetMemo#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#2 then UpdateMemo#2 then GetMemo#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#2 then ListMemoComments#3 then UpdateMemo#2 then GetMemo#3]"
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "no race",
+      "differ": 0,
+      "finding": null,
+      "shown": [
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then ListMemoComments#3 then GetMemo#3 then UpdateMemo#2]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#3 then ListMemoComments#3 then UpdateMemo#2 then GetMemo#2]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#3 then ListMemoComments#3 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#2]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#2 then ListMemoComments#3 then GetMemo#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#3 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#2 then GetMemo#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#2 then ListMemoComments#3 then UpdateMemo#2 then GetMemo#3]"
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 1 of 6",
+      "differ": 1,
+      "finding": "f19",
+      "shown": [
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#2 then GetMemo#2 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#3 then GetMemo#3 then UpdateMemo#2]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then UpdateMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then GetMemo#3 then ListMemoComments#3 then UpdateMemo#2]",
+        "DIFFER shown tasks=xxx | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then GetMemo#3 then ListMemoComments#3 then UpdateMemo#2 then UpdateMemo#1]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#2 then ListMemoComments#1 then UpdateMemo#2 then ListMemoComments#3 then GetMemo#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#2 then UpdateMemo#2 then GetMemo#3]",
+        "same   shown tasks=___ | server tasks=___ [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#3 then UpdateMemo#2 then ListMemoComments#2 then GetMemo#3 then GetMemo#2]"
+      ]
+    }
+  ]
+}

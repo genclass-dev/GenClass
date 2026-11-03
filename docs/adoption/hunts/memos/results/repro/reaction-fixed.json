@@ -1,0 +1,102 @@
+{
+  "surface": "reaction",
+  "memos": "http://localhost:3002",
+  "held": "GetMemo sent between the first upsert's reply and the second upsert",
+  "delay_ms": 1500,
+  "later_ms": 30000,
+  "trials": 10,
+  "stale_after_3s": 0,
+  "stale_after_later": 0,
+  "results": [
+    {
+      "trial": 1,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 2,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 3,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 4,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 5,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 6,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 7,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 8,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 9,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 10,
+      "shownSoon": "reactions=👍1 ❤️1",
+      "serverSoon": "reactions=👍1 ❤️1",
+      "shownLater": "reactions=👍1 ❤️1",
+      "serverLater": "reactions=👍1 ❤️1",
+      "stale": false,
+      "staleLater": false
+    }
+  ]
+}

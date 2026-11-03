@@ -1,0 +1,58 @@
+{
+  "surface": "comment",
+  "memos": "http://localhost:3001",
+  "genclass": true,
+  "runs": 6,
+  "pause": 0,
+  "tail": 2500,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "race in 4 of 6",
+      "differ": 0,
+      "finding": "f1",
+      "shown": [
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#2 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then GetMemo#4 then ListMemoComments#4 then ListMemoComments#5 then GetMemo#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#2 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then GetMemo#4 then ListMemoComments#4 then ListMemoComments#5 then GetMemo#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#1 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then GetMemo#4 then ListMemoComments#5 then GetMemo#5 then ListMemoComments#4]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#3 then ListMemoComments#3 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#2 then GetMemo#5 then ListMemoComments#5 then ListMemoComments#4 then GetMemo#4]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#3 then ListMemoComments#3 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#2 then ListMemoComments#5 then ListMemoComments#4 then GetMemo#4 then GetMemo#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#1 then ListMemoComments#3 then GetMemo#3 then GetMemo#4 then ListMemoComments#4 then CreateMemoComment#2 then GetMemo#5 then ListMemoComments#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#1 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then ListMemoComments#4 then GetMemo#4 then GetMemo#5 then ListMemoComments#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then ListMemoComments#3 then ListMemoComments#2 then GetMemo#3 then GetMemo#2 then ListMemoComments#4 then CreateMemoComment#2 then ListMemoComments#5 then GetMemo#5 then GetMemo#4]"
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "race in 5 of 6",
+      "differ": 0,
+      "finding": "f2",
+      "shown": [
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#2 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then GetMemo#4 then ListMemoComments#4 then ListMemoComments#5 then GetMemo#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#2 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then GetMemo#4 then ListMemoComments#4 then ListMemoComments#5 then GetMemo#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#1 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then GetMemo#4 then ListMemoComments#5 then GetMemo#5 then ListMemoComments#4]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#3 then ListMemoComments#3 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#2 then GetMemo#5 then ListMemoComments#5 then ListMemoComments#4 then GetMemo#4]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then ListMemoComments#2 then GetMemo#2 then GetMemo#3 then ListMemoComments#3 then CreateMemoComment#2 then ListMemoComments#5 then ListMemoComments#4 then GetMemo#4 then GetMemo#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#1 then ListMemoComments#3 then GetMemo#3 then GetMemo#4 then ListMemoComments#4 then CreateMemoComment#2 then GetMemo#5 then ListMemoComments#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#1 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then ListMemoComments#4 then GetMemo#4 then GetMemo#5 then ListMemoComments#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then ListMemoComments#3 then ListMemoComments#2 then GetMemo#3 then GetMemo#2 then ListMemoComments#4 then CreateMemoComment#2 then ListMemoComments#5 then GetMemo#5 then GetMemo#4]"
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 6 of 6",
+      "differ": 0,
+      "finding": "f6",
+      "shown": [
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#2 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then GetMemo#4 then ListMemoComments#4 then ListMemoComments#5 then GetMemo#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#2 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then GetMemo#4 then ListMemoComments#4 then ListMemoComments#5 then GetMemo#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#1 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then GetMemo#4 then ListMemoComments#5 then GetMemo#5 then ListMemoComments#4]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#3 then ListMemoComments#3 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#2 then GetMemo#5 then ListMemoComments#5 then ListMemoComments#4 then GetMemo#4]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#3 then ListMemoComments#3 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#2 then ListMemoComments#5 then ListMemoComments#4 then GetMemo#4 then GetMemo#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then GetMemo#2 then ListMemoComments#1 then CreateMemoComment#1 then GetMemo#3 then ListMemoComments#2 then GetMemo#4 then ListMemoComments#3 then CreateMemoComment#2 then GetMemo#5 then ListMemoComments#4]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then CreateMemoComment#1 then ListMemoComments#3 then GetMemo#3 then CreateMemoComment#2 then ListMemoComments#4 then GetMemo#4 then GetMemo#5 then ListMemoComments#5]",
+        "same   shown comments=comment first+comment second | server comments=comment first+comment second [delivered GetMemo#1 then ListMemoComments#1 then CreateMemoComment#1 then ListMemoComments#3 then ListMemoComments#2 then GetMemo#3 then GetMemo#2 then ListMemoComments#4 then CreateMemoComment#2 then ListMemoComments#5 then GetMemo#5 then GetMemo#4]"
+      ]
+    }
+  ]
+}

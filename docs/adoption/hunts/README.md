@@ -7,6 +7,7 @@ the project's maintainers to take or leave. One report per target; nothing here 
 | target | report | patch and draft text | harness |
 |---|---|---|---|
 | Strapi admin panel (5.59.0) | [strapi.md](strapi.md) | [strapi.patch](strapi.patch), [strapi-issue.md](strapi-issue.md) | [strapi/](strapi/) |
+| Memos (main@b40d8a7, 26.11.1-dev): stale pin, tasks and reactions after two quick changes | [memos.md](memos.md) | [memos.patch](memos.patch), [memos-issue.md](memos-issue.md) | [memos/](memos/) |
 
 Every report gives the versions and commits, the exact commands, every scenario with its verdict including the
 negatives, the finding with its evidence in causal order, the root cause, the fix, the test result, the check on the

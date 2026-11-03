@@ -1,0 +1,278 @@
+Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x1"}.
+
+load 1: same   shown reactions=👍1 ❤️1 | server reactions=👍1 ❤️1 [delivered GetMemo#1 then ListMemoComments#1 then UpsertMemoReaction#1 then GetMemo#2 then ListMemoComments#2 then UpsertMemoReaction#2 then GetMemo#3 then ListMemoComments#3 then GetMemo#4 then GetMemo#5]
+load 2: same   shown reactions=👍1 ❤️1 | server reactions=👍1 ❤️1 [delivered GetMemo#1 then ListMemoComments#1 then UpsertMemoReaction#1 then GetMemo#2 then ListMemoComments#2 then UpsertMemoReaction#2 then GetMemo#3 then ListMemoComments#3 then GetMemo#4 then GetMemo#5]
+load 3: DIFFER shown reactions=👍1 | server reactions=👍1 ❤️1 [delivered GetMemo#1 then UpsertMemoReaction#1 then GetMemo#4 then UpsertMemoReaction#2 then GetMemo#5 then GetMemo#3 then GetMemo#2 then ListMemoComments#1]
+load 4: same   shown reactions=👍1 ❤️1 | server reactions=👍1 ❤️1 [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then UpsertMemoReaction#1 then GetMemo#3 then ListMemoComments#3 then UpsertMemoReaction#2 then GetMemo#5 then GetMemo#2 then GetMemo#4]
+load 5: same   shown reactions=👍1 ❤️1 | server reactions=👍1 ❤️1 [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#3 then ListMemoComments#3 then UpsertMemoReaction#2 then GetMemo#4 then UpsertMemoReaction#1 then GetMemo#5 then GetMemo#2]
+load 6: same   shown reactions=👍1 ❤️1 | server reactions=👍1 ❤️1 [delivered GetMemo#1 then ListMemoComments#1 then UpsertMemoReaction#2 then GetMemo#4 then ListMemoComments#3 then GetMemo#3 then ListMemoComments#2 then GetMemo#2 then UpsertMemoReaction#1 then GetMemo#5]
+load 7: same   shown reactions=👍1 ❤️1 | server reactions=👍1 ❤️1 [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then ListMemoComments#3 then UpsertMemoReaction#2 then GetMemo#4 then GetMemo#2 then UpsertMemoReaction#1 then GetMemo#5 then GetMemo#3]
+load 8: same   shown reactions=👍1 ❤️1 | server reactions=👍1 ❤️1 [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#3 then ListMemoComments#2 then UpsertMemoReaction#1 then UpsertMemoReaction#2 then GetMemo#5 then GetMemo#4 then GetMemo#3 then GetMemo#2]
+
+Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /memos/Qc6UsEqSDZKLxmKCaAvDQh · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add reaction"
+  click button "👍"
+  key button "👍"
+  click button "Add reaction"
+  click button "❤"
+Ignored as noise (differs between the two baselines): state CreateSpaceDialog.state5, state CreateSpaceDialog_2.state5
+RACE: 1 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r3 (seed 1):
+    page text only in the baseline: "1", "❤"
+    requests sent to "POST /memos.api.MemoService/ListMemoComments": baseline "3", this run "1"
+    state "MemoEditorView.external0.reactions": baseline "2 items [{name: \"memos/Qc6UsEqSDZKLxmKCa…\", +4}, …]", this run "1 item [{name: \"memos/Qc6UsEqSDZKLxmKCa…\", +4}]"
+    state "AppSidebarProvider.state2.memo.reactions": baseline "2 items [{name: \"memos/Qc6UsEqSDZKLxmKCa…\", +4}, …]", this run "1 item [{name: \"memos/Qc6UsEqSDZKLxmKCa…\", +4}]"
+    witness only here: overwrote-newer MemoEditorView.external0.reactions by POST /memos.api.MemoService/GetMemo
+    witness only here: overwrote-newer AppSidebarProvider.state2.memo.reactions by POST /memos.api.MemoService/GetMemo
+Internal state only (not a race by this check): 4 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.
+- run r4 (seed 2):
+    state "PopoverPopup.external12": baseline "\"_r_1c_\"", this run "\"_r_22_\""
+    state "PopoverPositioner.external15": baseline "\"_r_1c_\"", this run "\"_r_22_\""
+    witness only here: overwrote-newer ReactionSelector.state1 by POST /memos.api.MemoService/GetMemo
+    witness only here: overwrote-newer PopoverRootComponent.state0 by POST /memos.api.MemoService/GetMemo
+    witness only here: overwrote-newer PopoverRootComponent.external0 by POST /memos.api.MemoService/GetMemo
+- run r6 (seed 4):
+    state "PopoverPopup.external12": baseline "\"_r_1c_\"", this run "\"_r_2o_\""
+    state "PopoverPositioner.external15": baseline "\"_r_1c_\"", this run "\"_r_2o_\""
+- run r7 (seed 5):
+    state "PopoverPopup.external12": baseline "\"_r_1c_\"", this run "\"_r_1t_\""
+    state "PopoverPositioner.external15": baseline "\"_r_1c_\"", this run "\"_r_1t_\""
+    state "ReactionSelector.external0.revision": baseline "0", this run "1"
+    state "ClampedSection.state0": baseline "(absent)", this run "0"
+    state "ClampedSection.state1": baseline "(absent)", this run "false"
+    state "ClampedSection.state2": baseline "(absent)", this run "false"
+
+Race finding(s): f19. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+19 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f19 [race] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 0 s ago
+  The final state depends on response order: requests to "POST /memos.api.MemoService/ListMemoComments" ("3" in request order, "1" under "seed 1")
+- f9 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverPopup.external0" after the user's "click button \"Add reaction\"" had already written it
+- f10 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverTrigger.external3" after the user's "click button \"Add reaction\"" had already written it
+- f11 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverTrigger.external4" after the user's "click button \"Add reaction\"" had already written it
+- f12 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverRootComponent.external7" after the user's "click button \"Add reaction\"" had already written it
+- f13 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverPositioner.external14" after the user's "click button \"Add reaction\"" had already written it
+- f14 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverPositioner.external6" after the user's "click button \"Add reaction\"" had already written it
+- f15 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverPositioner.external9" after the user's "click button \"Add reaction\"" had already written it
+- f16 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverPopup.external1" after the user's "click button \"Add reaction\"" had already written it
+- f17 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverPopup.external3" after the user's "click button \"Add reaction\"" had already written it
+- f18 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverInteractions.external1" after the user's "click button \"Add reaction\"" had already written it
+- f3 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "ReactionSelector.state1" after the user's "click button \"Add reaction\"" had already written it
+- f4 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverRootComponent.state0" after the user's "click button \"Add reaction\"" had already written it
+- f5 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverRootComponent.external0" after the user's "click button \"Add reaction\"" had already written it
+- f6 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverRootComponent.external3" after the user's "click button \"Add reaction\"" had already written it
+- f7 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverRootComponent.external6" after the user's "click button \"Add reaction\"" had already written it
+- f8 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 31 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "PopoverPositioner.external2" after the user's "click button \"Add reaction\"" had already written it
+- f1 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 37 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "MemoEditorView.external0.reactions" after a newer "POST /memos.api.MemoService/GetMemo" had already written it
+- f2 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 37 s ago
+  The response to "POST /memos.api.MemoService/GetMemo" "30 bytes" overwrote "AppSidebarProvider.state2.memo.reactions" after a newer "POST /memos.api.MemoService/GetMemo" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f19 · race · "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The final state depends on response order: requests to "POST /memos.api.MemoService/ListMemoComments" ("3" in request order, "1" under "seed 1") (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x1: 1 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- requests sent to "POST /memos.api.MemoService/ListMemoComments": baseline "3", failing run "1"
+- state "MemoEditorView.external0.reactions": baseline "2 items [{name: \"memos/Qc6UsEqSDZKLxmKCa…\", +4}, …]", failing run "1 item [{name: \"memos/Qc6UsEqSDZKLxmKCa…\", +4}]"
+- state "AppSidebarProvider.state2.memo.reactions": baseline "2 items [{name: \"memos/Qc6UsEqSDZKLxmKCa…\", +4}, …]", failing run "1 item [{name: \"memos/Qc6UsEqSDZKLxmKCa…\", +4}]"
+- page text in the baseline only: "1"
+- page text in the baseline only: "❤"
+- witness in the failing run only: overwrote-newer MemoEditorView.external0.reactions by POST /memos.api.MemoService/GetMemo
+- witness in the failing run only: overwrote-newer AppSidebarProvider.state2.memo.reactions by POST /memos.api.MemoService/GetMemo
+
+## Steps of run r3 ("http://localhost:3001/memos/Qc6UsEqSDZKLxmKCaAvDQh", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++1.541s write CreateSpaceDialog.state5: "CreateSpaceDialog.state5: \"8cf4ed42-9f0c-429b-98ed-6b6f6d…\" → \"ccfe98a4-9466-4362-a58a-f1d65f…\" (re…"
++1.541s write TooltipTrigger.external1: "TooltipTrigger.external1: 1 → 2"
++1.541s write CreateSpaceDialog_2.state5: "CreateSpaceDialog_2.state5: \"4fb2230a-cd9a-4f8d-a61f-0256d5…\" → \"926c4ced-59e5-46ed-a308-d04b1a…\" (…"
++1.542s send POST /memos.api.MemoService/GetMemo#1 "30 bytes"
++1.543s send POST /memos.api.UserService/ListMemoViews#1 "14 bytes"
++1.544s send POST /memos.api.SpaceService/ListSpaces#1 "3 bytes"
++1.545s send GET /api/sse#1 via timer 1ms
++1.593s delivered POST /memos.api.UserService/ListMemoViews#1 (held 38 ms)
++1.623s delivered POST /memos.api.UserService/ListUserSettings#1 (held 278 ms)
++1.632s write AuthProvider.state0.isInitialized, AuthProvider.state0.isLoading, AuthProvider.state0.isUserSettingsInitialized, AuthProvider.state0.userGeneralSetting, AuthProvider.state0.userGeneralSetting.$typeName, AuthProvider.state0.userGeneralSetting.locale, AuthProvider.state0.userGeneralSetting.memoVisibility, AuthProvider.state0.userGeneralSetting.saveMediaMetadata, AuthProvider.state0.userGeneralSetting.theme by POST /memos.api.UserService/ListUserSettings#1: "AuthProvider.state0.userGeneralSetting.$typeName: undefined → \"memos.api.UserSetting.GeneralSetti…"; "AuthProvider.state0.userGeneralSetting.locale: undefined → \"en\""; "AuthProvider.state0.userGeneralSetting.memoVisibility: undefined → \"PRIVATE\""
++1.643s write GlobalMemoEditorProvider.external0.revision: "GlobalMemoEditorProvider.external0.revision: 0 → 1"
++1.643s write QuickFindDialog.external0.revision: "QuickFindDialog.external0.revision: 0 → 1"
++1.643s write MemoDetail.external0.revision: "MemoDetail.external0.revision: 0 → 1"
++1.643s write SpaceSwitcher.external0.revision: "SpaceSwitcher.external0.revision: 0 → 1"
++1.643s write CreateSpaceDialog.external0.revision: "CreateSpaceDialog.external0.revision: 0 → 1"
++1.644s write SidebarResizeHandle.external0.revision: "SidebarResizeHandle.external0.revision: 0 → 1"
++1.644s write AppSidebar.external0.revision: "AppSidebar.external0.revision: 0 → 1"
++1.644s write GlobalNavigation.external0.revision: "GlobalNavigation.external0.revision: 0 → 1"
++1.644s write NewMemoAction.external0.revision: "NewMemoAction.external0.revision: 0 → 1"
++1.644s write SpaceSwitcher_2.external0.revision: "SpaceSwitcher_2.external0.revision: 0 → 1"
++1.644s write CreateSpaceDialog_2.external0.revision: "CreateSpaceDialog_2.external0.revision: 0 → 1"
++1.653s delivered GET /api/sse#1 (held 98 ms)
++1.684s delivered POST /memos.api.MemoService/GetMemo#1 (held 127 ms)
++1.734s write AppSidebarProvider.state2, AppSidebarProvider.state2.commentCount, AppSidebarProvider.state2.contentHidden, AppSidebarProvider.state2.from, AppSidebarProvider.state2.memo.$typeName, AppSidebarProvider.state2.memo.attachments, AppSidebarProvider.state2.memo.content, AppSidebarProvider.state2.memo.createTime.$typeName, AppSidebarProvider.state2.memo.createTime.nanos, AppSidebarProvider.state2.memo.createTime.seconds, AppSidebarProvider.state2.memo.creator, AppSidebarProvider.state2.memo.name by POST /memos.api.MemoService/GetMemo#1: "AppSidebarProvider.state2.memo.$typeName: undefined → \"memos.api.Memo\""; "AppSidebarProvider.state2.memo.name: undefined → \"memos/Qc6UsEqSDZKLxmKCaAvDQh\""; "AppSidebarProvider.state2.memo.creator: undefined → \"users/hunter\""
++1.735s write MenuTrigger.external1 by POST /memos.api.MemoService/GetMemo#1: "MenuTrigger.external1: 1 → 2"
++1.736s write MenuTrigger_2.external1 by POST /memos.api.MemoService/GetMemo#1: "MenuTrigger_2.external1: 1 → 2"
++1.737s send POST /memos.api.MemoService/ListMemoComments#1 "32 bytes" via timer 0ms
++1.831s delivered POST /memos.api.SpaceService/ListSpaces#1 (held 273 ms)
++1.845s write PopoverTrigger.external8: "PopoverTrigger.external8: null → \"mouse\""
++1.847s action 0: click button "Add reaction"
++1.848s write ReactionSelector.state1 by action 0: "ReactionSelector.state1: false → true"
++1.849s write PopoverRootComponent.external8 by action 0: "PopoverRootComponent.external8: null → \"base-ui-_r_1d_\""
++1.849s write PopoverTrigger.external1, PopoverTrigger.external6 by action 0: "PopoverTrigger.external1: false → true"; "PopoverTrigger.external6: null → \"trigger-press\""
++1.851s write PopoverRootComponent.state1 by action 0: "PopoverRootComponent.state1: false → true"
++1.851s write PopoverRootComponent.state0 by action 0: "PopoverRootComponent.state0: undefined → \"starting\""
++1.851s write PopoverRootComponent.external0, PopoverRootComponent.external3, PopoverRootComponent.external6 by action 0: "PopoverRootComponent.external0: false → true"; "PopoverRootComponent.external3: false → true"; "PopoverRootComponent.external6: false → true"
++1.851s write PopoverTrigger.external3, PopoverTrigger.external4 by action 0: "PopoverTrigger.external3: false → true"; "PopoverTrigger.external4: undefined → \"_r_1c_\""
++1.854s write PopoverRootComponent.external4, PopoverRootComponent.external7 by action 0: "PopoverRootComponent.external4: false → true"; "PopoverRootComponent.external7: 0 → 1"
++1.854s write PopoverPortal.external0 by action 0: "PopoverPortal.external0: false → true"
++1.854s write PopoverTrigger.external10, PopoverTrigger.external10.onClick, PopoverTrigger.external10.onKeyDown, PopoverTrigger.external10.onPointerDown, PopoverTrigger.external5 by action 0: "PopoverTrigger.external5: false → true"; "PopoverTrigger.external10.onKeyDown: undefined → function"; "PopoverTrigger.external10.onPointerDown: undefined → function"
++1.854s write PopoverInteractions.external1 by action 0: "PopoverInteractions.external1: false → true"
++1.886s write PopoverPositioner.state4.isPositioned, PopoverPositioner.state4.middlewareData, PopoverPositioner.state4.middlewareData.arrow.centerOffset, PopoverPositioner.state4.middlewareData.arrow.x, PopoverPositioner.state4.middlewareData.flip, PopoverPositioner.state4.middlewareData.hide.referenceHidden, PopoverPositioner.state4.middlewareData.offset.placement, PopoverPositioner.state4.middlewareData.offset.x, PopoverPositioner.state4.middlewareData.offset.y, PopoverPositioner.state4.middlewareData.shift.enabled, PopoverPositioner.state4.middlewareData.shift.x, PopoverPositioner.state4.middlewareData.shift.y by action 0: "PopoverPositioner.state4.x: 0 → 850"; "PopoverPositioner.state4.y: 0 → 67"; "PopoverPositioner.state4.middlewareData.offset.x: undefined → 0"
++1.893s write PopoverRootComponent.state0 by action 0: "PopoverRootComponent.state0: \"starting\" → undefined"
++1.895s write PopoverPositioner.external9 by action 0: "PopoverPositioner.external9: \"starting\" → undefined"
++1.895s write PopoverPopup.external3 by action 0: "PopoverPopup.external3: \"starting\" → undefined"
++1.945s action 1: click button "👍"
++1.946s send POST /memos.api.MemoService/UpsertMemoReaction#1 "38 bytes" (action 1)
++1.952s action 2: key button "👍"
++1.956s write ReactionSelector.state1 by action 2: "ReactionSelector.state1: true → false"
++1.956s write PopoverPositioner.external3, PopoverPositioner.external8 by action 2: "PopoverPositioner.external3: \"trigger-press\" → \"escape-key\""; "PopoverPositioner.external8: undefined → \"dismiss\""
++1.956s write PopoverPopup.external2, PopoverPopup.external9 by action 2: "PopoverPopup.external2: undefined → \"dismiss\""; "PopoverPopup.external9: \"trigger-press\" → \"escape-key\""
++1.956s write PopoverTrigger.external6 by action 2: "PopoverTrigger.external6: \"trigger-press\" → \"escape-key\""
++1.959s write PopoverRootComponent.state0 by action 2: "PopoverRootComponent.state0: undefined → \"ending\""
++1.959s write PopoverRootComponent.external0, PopoverRootComponent.external3, PopoverRootComponent.external6 by action 2: "PopoverRootComponent.external0: true → false"; "PopoverRootComponent.external3: true → false"; "PopoverRootComponent.external6: true → false"
++1.959s write PopoverPositioner.external2 by action 2: "PopoverPositioner.external2: true → false"
++1.959s write PopoverPopup.external0 by action 2: "PopoverPopup.external0: true → false"
++1.959s write PopoverTrigger.external3, PopoverTrigger.external4 by action 2: "PopoverTrigger.external3: true → false"; "PopoverTrigger.external4: \"_r_1c_\" → undefined"
++1.963s write PopoverRootComponent.external7 by action 2: "PopoverRootComponent.external7: 1 → 0"
++1.963s write PopoverPositioner.external14, PopoverPositioner.external6, PopoverPositioner.external9 by action 2: "PopoverPositioner.external6: \"mouse\" → null"; "PopoverPositioner.external9: undefined → \"ending\""; "PopoverPositioner.external14: true → false"
++1.963s write PopoverPopup.external1, PopoverPopup.external3 by action 2: "PopoverPopup.external1: \"mouse\" → null"; "PopoverPopup.external3: undefined → \"ending\""
++1.963s write FloatingFocusManager.external0 by action 2: "FloatingFocusManager.external0: true → false"
++1.963s write PopoverTrigger.external8 by action 2: "PopoverTrigger.external8: \"mouse\" → null"
++1.963s write PopoverInteractions.external1 by action 2: "PopoverInteractions.external1: true → false"
++1.971s write PopoverRootComponent.state1 by action 2: "PopoverRootComponent.state1: true → false"
++1.971s write PopoverRootComponent.state0 by action 2: "PopoverRootComponent.state0: \"ending\" → undefined"
++1.971s write PopoverRootComponent.external4, PopoverRootComponent.external8 by action 2: "PopoverRootComponent.external4: true → false"; "PopoverRootComponent.external8: \"base-ui-_r_1d_\" → null"
++1.971s write PopoverPortal.external0 by action 2: "PopoverPortal.external0: true → false"
++1.971s write PopoverTrigger.external1, PopoverTrigger.external5, PopoverTrigger.external6 by action 2: "PopoverTrigger.external1: true → false"; "PopoverTrigger.external5: true → false"; "PopoverTrigger.external6: \"escape-key\" → null"
++1.973s write PopoverTrigger.external10, PopoverTrigger.external10.onClick, PopoverTrigger.external10.onKeyDown, PopoverTrigger.external10.onPointerDown by action 2: "PopoverTrigger.external10: undefined → {}"; "PopoverTrigger.external10.onKeyDown: function → undefined"; "PopoverTrigger.external10.onPointerDown: function → undefined"
++1.979s send POST /memos.api.MemoService/GetMemo#2 "30 bytes"
++2.011s delivered POST /memos.api.MemoService/UpsertMemoReaction#1 (held 31 ms)
++2.012s send POST /memos.api.MemoService/GetMemo#3 "30 bytes" (action 1) via POST /memos.api.MemoService/UpsertMemoReaction
++2.061s write PopoverTrigger.external8: "PopoverTrigger.external8: null → \"mouse\""
++2.061s action 3: click button "Add reaction"
++2.063s write ReactionSelector.state1 by action 3: "ReactionSelector.state1: false → true"
++2.063s write PopoverRootComponent.external8 by action 3: "PopoverRootComponent.external8: null → \"base-ui-_r_1d_\""
++2.063s write PopoverTrigger.external1, PopoverTrigger.external6 by action 3: "PopoverTrigger.external1: false → true"; "PopoverTrigger.external6: null → \"trigger-press\""
++2.064s write PopoverRootComponent.state1 by action 3: "PopoverRootComponent.state1: false → true"
++2.064s write PopoverRootComponent.state0 by action 3: "PopoverRootComponent.state0: undefined → \"starting\""
++2.065s write PopoverRootComponent.external0, PopoverRootComponent.external3, PopoverRootComponent.external6 by action 3: "PopoverRootComponent.external0: false → true"; "PopoverRootComponent.external3: false → true"; "PopoverRootComponent.external6: false → true"
++2.065s write PopoverTrigger.external3, PopoverTrigger.external4 by action 3: "PopoverTrigger.external3: false → true"; "PopoverTrigger.external4: undefined → \"_r_1c_\""
++2.067s write PopoverRootComponent.external4, PopoverRootComponent.external7 by action 3: "PopoverRootComponent.external4: false → true"; "PopoverRootComponent.external7: 0 → 1"
++2.067s write PopoverPortal.external0 by action 3: "PopoverPortal.external0: false → true"
++2.067s write PopoverTrigger.external10, PopoverTrigger.external10.onClick, PopoverTrigger.external10.onKeyDown, PopoverTrigger.external10.onPointerDown, PopoverTrigger.external5 by action 3: "PopoverTrigger.external5: false → true"; "PopoverTrigger.external10.onKeyDown: undefined → function"; "PopoverTrigger.external10.onPointerDown: undefined → function"
++2.067s write PopoverInteractions.external1 by action 3: "PopoverInteractions.external1: false → true"
++2.081s write PopoverPositioner.external14, PopoverPositioner.external2, PopoverPositioner.external3, PopoverPositioner.external6, PopoverPositioner.external8, PopoverPositioner.external9 by action 3: "PopoverPositioner.external2: false → true"; "PopoverPositioner.external3: \"escape-key\" → \"trigger-press\""; "PopoverPositioner.external6: null → \"mouse\""
++2.088s write PopoverRootComponent.state0 by action 3: "PopoverRootComponent.state0: \"starting\" → undefined"
++2.090s write PopoverPositioner.external9 by action 3: "PopoverPositioner.external9: \"starting\" → undefined"
++2.091s write PopoverPopup.external0, PopoverPopup.external1, PopoverPopup.external2, PopoverPopup.external3, PopoverPopup.external9 by action 3: "PopoverPopup.external0: false → true"; "PopoverPopup.external1: null → \"mouse\""; "PopoverPopup.external2: \"dismiss\" → undefined"
++2.146s action 4: click button "❤"
++2.147s send POST /memos.api.MemoService/UpsertMemoReaction#2 "40 bytes" (action 4)
++2.157s send POST /memos.api.MemoService/GetMemo#4 "30 bytes"
++2.273s delivered POST /memos.api.MemoService/GetMemo#4 (held 109 ms)
++2.276s write MemoEditorView.external0.reactions by POST /memos.api.MemoService/GetMemo#4: "MemoEditorView.external0.reactions: 0 items → 2 items [{name: \"memos/Qc6UsEqSDZKLxmKCa…\",…"
++2.288s write AppSidebarProvider.state2.memo.reactions by POST /memos.api.MemoService/GetMemo#4: "AppSidebarProvider.state2.memo.reactions: 0 items → 2 items [{name: \"memos/Qc6UsEqSDZKLxmKCa…\",…"
++2.304s delivered POST /memos.api.MemoService/UpsertMemoReaction#2 (held 145 ms)
++2.304s send POST /memos.api.MemoService/GetMemo#5 "30 bytes" (action 4) via POST /memos.api.MemoService/UpsertMemoReaction
++2.359s delivered POST /memos.api.MemoService/GetMemo#5 (held 44 ms)
++2.363s write ReactionSelector.state1 by POST /memos.api.MemoService/GetMemo#5: "ReactionSelector.state1: true → false"
++2.366s write PopoverRootComponent.state0 by POST /memos.api.MemoService/GetMemo#5: "PopoverRootComponent.state0: undefined → \"ending\""
++2.366s write PopoverRootComponent.external0, PopoverRootComponent.external3, PopoverRootComponent.external6 by POST /memos.api.MemoService/GetMemo#5: "PopoverRootComponent.external0: true → false"; "PopoverRootComponent.external3: true → false"; "PopoverRootComponent.external6: true → false"
++2.366s write PopoverPositioner.external2 by POST /memos.api.MemoService/GetMemo#5: "PopoverPositioner.external2: true → false"
++2.367s write PopoverPopup.external0 by POST /memos.api.MemoService/GetMemo#5: "PopoverPopup.external0: true → false"
++2.367s write PopoverTrigger.external3, PopoverTrigger.external4 by POST /memos.api.MemoService/GetMemo#5: "PopoverTrigger.external3: true → false"; "PopoverTrigger.external4: \"_r_1c_\" → undefined"
++2.369s write PopoverRootComponent.external7 by POST /memos.api.MemoService/GetMemo#5: "PopoverRootComponent.external7: 1 → 0"
++2.370s write PopoverPositioner.external14, PopoverPositioner.external6, PopoverPositioner.external9 by POST /memos.api.MemoService/GetMemo#5: "PopoverPositioner.external6: \"mouse\" → null"; "PopoverPositioner.external9: undefined → \"ending\""; "PopoverPositioner.external14: true → false"
++2.370s write PopoverPopup.external1, PopoverPopup.external3 by POST /memos.api.MemoService/GetMemo#5: "PopoverPopup.external1: \"mouse\" → null"; "PopoverPopup.external3: undefined → \"ending\""
++2.370s write PopoverTrigger.external8 by POST /memos.api.MemoService/GetMemo#5: "PopoverTrigger.external8: \"mouse\" → null"
++2.370s write PopoverInteractions.external1 by POST /memos.api.MemoService/GetMemo#5: "PopoverInteractions.external1: true → false"
++2.375s write PopoverRootComponent.state1: "PopoverRootComponent.state1: true → false"
++2.375s write PopoverRootComponent.state0: "PopoverRootComponent.state0: \"ending\" → undefined"
++2.375s write PopoverRootComponent.external4, PopoverRootComponent.external8: "PopoverRootComponent.external4: true → false"; "PopoverRootComponent.external8: \"base-ui-_r_1d_\" → null"
++2.375s write PopoverPortal.external0: "PopoverPortal.external0: true → false"
++2.375s write PopoverTrigger.external1, PopoverTrigger.external5, PopoverTrigger.external6: "PopoverTrigger.external1: true → false"; "PopoverTrigger.external5: true → false"; "PopoverTrigger.external6: \"trigger-press\" → null"
++2.377s write PopoverTrigger.external10, PopoverTrigger.external10.onClick, PopoverTrigger.external10.onKeyDown, PopoverTrigger.external10.onPointerDown: "PopoverTrigger.external10: undefined → {}"; "PopoverTrigger.external10.onKeyDown: function → undefined"; "PopoverTrigger.external10.onPointerDown: function → undefined"
++2.389s delivered POST /memos.api.MemoService/GetMemo#3 (held 368 ms)
++2.390s write MemoEditorView.external0.reactions by POST /memos.api.MemoService/GetMemo#3: "MemoEditorView.external0.reactions: 2 → 1 items: removed 1 item"
++2.396s write AppSidebarProvider.state2.memo.reactions by POST /memos.api.MemoService/GetMemo#3: "AppSidebarProvider.state2.memo.reactions: 2 → 1 items: removed 1 item"
++2.420s delivered POST /memos.api.MemoService/GetMemo#2 (held 432 ms)
++2.450s delivered POST /memos.api.MemoService/ListMemoComments#1 (held 696 ms)
+
+Delivery order: POST /memos.api.InstanceService/BatchGetInstanceSettings#1 → POST /memos.api.InstanceService/GetInstanceSetting#1 → POST /memos.api.InstanceService/GetInstanceProfile#1 → POST /memos.api.AuthService/RefreshToken#1 → POST /memos.api.AuthService/GetCurrentUser#1 → POST /memos.api.UserService/ListMemoViews#1 → POST /memos.api.UserService/ListUserSettings#1 → GET /api/sse#1 → POST /memos.api.MemoService/GetMemo#1 → POST /memos.api.SpaceService/ListSpaces#1 → POST /memos.api.MemoService/UpsertMemoReaction#1 → POST /memos.api.MemoService/GetMemo#4 → POST /memos.api.MemoService/UpsertMemoReaction#2 → POST /memos.api.MemoService/GetMemo#5 → POST /memos.api.MemoService/GetMemo#3 → POST /memos.api.MemoService/GetMemo#2 → POST /memos.api.MemoService/ListMemoComments#1
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f19"} (schedule: seeded 1, +0-300 ms)
+2. Open "http://localhost:3001/memos/Qc6UsEqSDZKLxmKCaAvDQh" and do the same 5 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f19"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f19 (race), generated from run r3.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:3001";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":300},"maxHoldMs":1800};
+
+test("/memos/Qc6UsEqSDZKLxmKCaAvDQh: the final state does not depend on response order (GenClass f19)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/memos/Qc6UsEqSDZKLxmKCaAvDQh");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "Add reaction", exact: true }).or(page.locator("[name=\"Add reaction\"], [id=\"Add reaction\"]")).first().click();
+  await page.getByRole("button", { name: "👍", exact: true }).or(page.locator("[name=\"👍\"], [id=\"👍\"]")).first().click();
+  await page.getByRole("button", { name: "👍", exact: true }).or(page.locator("[name=\"👍\"], [id=\"👍\"]")).first().press("Escape");
+  await page.getByRole("button", { name: "Add reaction", exact: true }).or(page.locator("[name=\"Add reaction\"], [id=\"Add reaction\"]")).first().click();
+  await page.getByRole("button", { name: "❤", exact: true }).or(page.locator("[name=\"❤\"], [id=\"❤\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.requests["POST /memos.api.MemoService/ListMemoComments"] ?? 0, "requests sent, as with responses in request order").toBe(3);
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("1");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("❤");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

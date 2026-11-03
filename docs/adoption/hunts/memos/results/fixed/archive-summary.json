@@ -1,0 +1,58 @@
+{
+  "surface": "archive",
+  "memos": "http://localhost:3002",
+  "genclass": true,
+  "runs": 6,
+  "pause": 0,
+  "tail": 2500,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "no race",
+      "differ": 4,
+      "finding": null,
+      "shown": [
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then ListMemos#1 then UpdateMemo#2 then ListMemos#2 then ListMemos#3]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then ListMemos#1 then UpdateMemo#2 then ListMemos#2 then ListMemos#3]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then ListMemos#1]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#2 then ListMemos#1]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then ListMemos#1]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemos#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#2 then ListMemos#3 then ListMemos#2]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then ListMemos#1 then GetMemo#2 then UpdateMemo#2 then ListMemos#3 then ListMemos#2]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemos#1 then ListMemoComments#2 then GetMemo#2]"
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "race in 4 of 5",
+      "differ": 0,
+      "finding": "f10",
+      "shown": [
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#1~hedge then GetMemo#3 then ListMemoComments#3 then ListMemos#1 then ListMemos#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#1~hedge then GetMemo#3 then ListMemoComments#3 then ListMemos#1 then ListMemos#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then ListMemoComments#3 then GetMemo#3 then ListMemos#1 then UpdateMemo#1~hedge then ListMemos#3 then ListMemos#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#3 then ListMemos#1 then ListMemoComments#3 then ListMemoComments#2 then UpdateMemo#1~hedge then ListMemos#3 then ListMemos#2 then GetMemo#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then GetMemo#3 then ListMemos#1 then ListMemoComments#3 then UpdateMemo#1~hedge then ListMemos#2 then ListMemos#3]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then UpdateMemo#1~hedge then ListMemoComments#3 then ListMemos#1 then GetMemo#3 then ListMemoComments#2 then GetMemo#2 then ListMemos#2]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemos#1 then ListMemoComments#2 then GetMemo#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#3 then ListMemos#1 then ListMemoComments#2 then UpdateMemo#1~hedge then ListMemos#3 then GetMemo#3 then ListMemos#2 then GetMemo#2]"
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 5 of 6",
+      "differ": 1,
+      "finding": "f17",
+      "shown": [
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#1~hedge then GetMemo#3 then ListMemoComments#3 then ListMemos#1 then ListMemos#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#1~hedge then GetMemo#3 then ListMemoComments#3 then ListMemos#1 then ListMemos#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then ListMemoComments#3 then GetMemo#3 then ListMemos#1 then UpdateMemo#1~hedge then ListMemos#3 then ListMemos#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#3 then ListMemos#1 then ListMemoComments#3 then ListMemoComments#2 then UpdateMemo#1~hedge then GetMemo#2 then ListMemos#3 then ListMemos#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then GetMemo#3 then ListMemos#1 then ListMemoComments#3 then UpdateMemo#1~hedge then ListMemos#2 then ListMemos#3]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then UpdateMemo#1 then UpdateMemo#1~hedge then ListMemoComments#3 then ListMemos#1 then GetMemo#3 then ListMemoComments#2 then GetMemo#2 then ListMemoComments#1 then ListMemos#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#3 then ListMemos#1 then ListMemoComments#2 then GetMemo#2 then GetMemo#3 then UpdateMemo#1~hedge then ListMemos#3 then ListMemos#2]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemos#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#2 then ListMemos#3 then ListMemos#2]"
+      ]
+    }
+  ]
+}
