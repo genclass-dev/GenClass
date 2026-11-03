@@ -1,0 +1,287 @@
+Explore x6 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x6"}.
+
+load 1: {"shown":"SELECT\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+load 2: {"shown":"SELECT\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+load 3: {"shown":"SELECT 'alpha' AS v -- bravo","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+load 4: {"shown":"SELECT\n  'alpha' AS v -- bravo","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+load 5: {"shown":"SELECT\n  'alpha' AS v -- bravo","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+load 6: {"shown":"SELECT\n  'alpha' AS v -- bravo","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+load 7: {"shown":"SELECT\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+load 8: {"shown":"SELECTravo\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+
+Explore x6: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines (grouped by action kinds and element roles: the recorded element names differed between loads).
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click div "SELECT 'alpha' AS v -- bravo"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v -- bravo
+  
+  
+  key textbox "Cursor at row 1"
+RACE: 5 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r48 (seed 1):
+    page text only in the baseline: "2", "SELECT", "'alpha' AS v"
+    page text only in this run: "SELECT 'alpha' AS v -- bravo"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 11]"
+    state "cX.state1": baseline "23", this run "22"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT 'alpha' AS v -- bravo\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT 'alpha' AS v -- bravo\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "53"
+    state "y.state1": baseline "65", this run "62"
+- run r49 (seed 2):
+    page text only in the baseline: "'alpha' AS v"
+    page text only in this run: "'alpha' AS v -- bravo"
+    field "Cursor at row 2": baseline "(absent)", this run "'alpha' AS v -- bravo"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "58"
+    state "y.state1": baseline "65", this run "66"
+- run r50 (seed 3):
+    page text only in the baseline: "'alpha' AS v"
+    page text only in this run: "'alpha' AS v -- bravo"
+    field "Cursor at row 2": baseline "(absent)", this run "'alpha' AS v -- bravo"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "58"
+    state "y.state1": baseline "65", this run "66"
+- run r51 (seed 4):
+    page text only in the baseline: "'alpha' AS v"
+    page text only in this run: "'alpha' AS v -- bravo"
+    field "Cursor at row 2": baseline "(absent)", this run "'alpha' AS v -- bravo"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "58"
+    state "y.state1": baseline "65", this run "66"
+- run r53 (seed 6):
+    page text only in the baseline: "SELECT"
+    page text only in this run: "SELECTravo"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 9]"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    witness only here: overwrote-newer cX.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer save.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer runQueryAction.state1 by POST /api/v1/sqllab/format_sql/
+
+Race finding(s): f26. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+# f26 · race · "/sqllab/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "SELECT 'alpha' AS v -- bravo" under "seed 1", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x6: 5 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", failing run "2 items [{error: undefined}, 11]"
+- state "cX.state1": baseline "23", failing run "22"
+- state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", failing run "\"SELECT 'alpha' AS v -- bravo\""
+- state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", failing run "\"SELECT 'alpha' AS v -- bravo\""
+- state "sqlEditorTabHeader.state0": baseline "57", failing run "53"
+- state "y.state1": baseline "65", failing run "62"
+- page text in the baseline only: "2"
+- page text in the baseline only: "SELECT"
+- page text in the baseline only: "'alpha' AS v"
+- page text in the failing run only: "SELECT 'alpha' AS v -- bravo"
+
+## Steps of run r48 ("http://localhost:8088/sqllab/", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++3.151s write save.state1 by action 1: "save.state1: 11 → 12"
++3.151s write runQueryAction.state1 by action 1: "runQueryAction.state1: 11 → 12"
++3.151s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 19 → 21"
++3.179s write y.state1 by action 1: "y.state1: 26 → 28"
++3.179s write cX.state3 by action 1: "cX.state3: \"SELECT 'al'\" → \"SELECT 'alp'\""
++3.179s write cX.state1 by action 1: "cX.state1: 8 → 9"
++3.179s write save.state1 by action 1: "save.state1: 12 → 13"
++3.179s write runQueryAction.state1 by action 1: "runQueryAction.state1: 12 → 13"
++3.179s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 21 → 23"
++3.206s write y.state1 by action 1: "y.state1: 28 → 30"
++3.206s write cX.state3 by action 1: "cX.state3: \"SELECT 'alp'\" → \"SELECT 'alph'\""
++3.206s write cX.state1 by action 1: "cX.state1: 9 → 10"
++3.206s write save.state1 by action 1: "save.state1: 13 → 14"
++3.206s write runQueryAction.state1 by action 1: "runQueryAction.state1: 13 → 14"
++3.206s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 23 → 25"
++3.234s write y.state1 by action 1: "y.state1: 30 → 32"
++3.234s write cX.state3 by action 1: "cX.state3: \"SELECT 'alph'\" → \"SELECT 'alpha'\""
++3.234s write cX.state1 by action 1: "cX.state1: 10 → 11"
++3.234s write save.state1 by action 1: "save.state1: 14 → 15"
++3.234s write runQueryAction.state1 by action 1: "runQueryAction.state1: 14 → 15"
++3.234s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 25 → 27"
++3.258s write y.state1 by action 1: "y.state1: 32 → 33"
++3.258s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 27 → 28"
++3.289s write y.state1 by action 1: "y.state1: 33 → 35"
++3.289s write Connect_Component.state0 by action 1: "Connect_Component.state0: 2 items, 1 changed: 5 → 6"
++3.289s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha'\" → \"SELECT 'alpha' \""
++3.294s write save.state1 by action 1: "save.state1: 15 → 16"
++3.294s write runQueryAction.state1 by action 1: "runQueryAction.state1: 15 → 16"
++3.294s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 28 → 29"
++3.326s write y.state1 by action 1: "y.state1: 35 → 37"
++3.326s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha' \" → \"SELECT 'alpha' A\""
++3.326s write cX.state1 by action 1: "cX.state1: 11 → 12"
++3.326s write save.state1 by action 1: "save.state1: 16 → 17"
++3.326s write runQueryAction.state1 by action 1: "runQueryAction.state1: 16 → 17"
++3.326s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 29 → 31"
++3.355s write y.state1 by action 1: "y.state1: 37 → 39"
++3.356s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha' A\" → \"SELECT 'alpha' AS\""
++3.356s write cX.state1 by action 1: "cX.state1: 12 → 13"
++3.356s write save.state1 by action 1: "save.state1: 17 → 18"
++3.356s write runQueryAction.state1 by action 1: "runQueryAction.state1: 17 → 18"
++3.356s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 31 → 33"
++3.384s write y.state1 by action 1: "y.state1: 39 → 41"
++3.384s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha' AS\" → \"SELECT 'alpha' AS \""
++3.384s write cX.state1 by action 1: "cX.state1: 13 → 14"
++3.384s write save.state1 by action 1: "save.state1: 18 → 19"
++3.384s write runQueryAction.state1 by action 1: "runQueryAction.state1: 18 → 19"
++3.384s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 33 → 35"
++3.413s write y.state1 by action 1: "y.state1: 41 → 43"
++3.413s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha' AS \" → \"SELECT 'alpha' AS v\""
++3.413s write cX.state1 by action 1: "cX.state1: 14 → 15"
++3.413s write save.state1 by action 1: "save.state1: 19 → 20"
++3.413s write runQueryAction.state1 by action 1: "runQueryAction.state1: 19 → 20"
++3.413s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 35 → 37"
++3.437s action 2: key textbox "Cursor at row 1"
++3.671s write Connect_Component.state0: "Connect_Component.state0: 2 items, 1 changed: 6 → 7"
++3.673s write Connect_Component_2.state0: "Connect_Component_2.state0: 2 items [null, 0] → 2 items [{error: undefined}, 1]"
++3.742s send POST /api/v1/sqllab/format_sql/#1 "{sql: \"SELECT 'alpha' AS v\", database_id: 1}"
++3.900s action 3: type textbox "Cursor at row 1" = "SELECT 'alpha' AS v -- bravo" (9 keystrokes over 231 ms)
++3.906s write y.state1 by action 3: "y.state1: 43 → 45"
++3.906s write Connect_Component.state0 by action 3: "Connect_Component.state0: 2 items, 1 changed: 7 → 8"
++3.906s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v\" → \"SELECT 'alpha' AS v \""
++3.910s write save.state1 by action 3: "save.state1: 20 → 21"
++3.910s write runQueryAction.state1 by action 3: "runQueryAction.state1: 20 → 21"
++3.910s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 37 → 38"
++3.937s write y.state1 by action 3: "y.state1: 45 → 47"
++3.938s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v \" → \"SELECT 'alpha' AS v -\""
++3.938s write cX.state1 by action 3: "cX.state1: 15 → 16"
++3.938s write save.state1 by action 3: "save.state1: 21 → 22"
++3.938s write runQueryAction.state1 by action 3: "runQueryAction.state1: 21 → 22"
++3.938s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 38 → 40"
++3.964s write y.state1 by action 3: "y.state1: 47 → 49"
++3.964s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -\" → \"SELECT 'alpha' AS v --\""
++3.964s write cX.state1 by action 3: "cX.state1: 16 → 17"
++3.965s write save.state1 by action 3: "save.state1: 22 → 23"
++3.965s write runQueryAction.state1 by action 3: "runQueryAction.state1: 22 → 23"
++3.965s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 40 → 42"
++3.991s write y.state1 by action 3: "y.state1: 49 → 51"
++3.991s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v --\" → \"SELECT 'alpha' AS v -- \""
++3.991s write cX.state1 by action 3: "cX.state1: 17 → 18"
++3.991s write save.state1 by action 3: "save.state1: 23 → 24"
++3.991s write runQueryAction.state1 by action 3: "runQueryAction.state1: 23 → 24"
++3.991s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 42 → 44"
++4.019s write y.state1 by action 3: "y.state1: 51 → 53"
++4.019s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- \" → \"SELECT 'alpha' AS v -- b\""
++4.019s write cX.state1 by action 3: "cX.state1: 18 → 19"
++4.019s write save.state1 by action 3: "save.state1: 24 → 25"
++4.019s write runQueryAction.state1 by action 3: "runQueryAction.state1: 24 → 25"
++4.019s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 44 → 46"
++4.048s write y.state1 by action 3: "y.state1: 53 → 55"
++4.048s write Connect_Component.state0 by action 3: "Connect_Component.state0: 2 items, 1 changed: 8 → 9"
++4.048s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- b\" → \"SELECT 'alpha' AS v -- br\""
++4.051s write save.state1 by action 3: "save.state1: 25 → 26"
++4.051s write runQueryAction.state1 by action 3: "runQueryAction.state1: 25 → 26"
++4.051s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 46 → 47"
++4.078s write y.state1 by action 3: "y.state1: 55 → 57"
++4.078s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- br\" → \"SELECT 'alpha' AS v -- bra\""
++4.078s write cX.state1 by action 3: "cX.state1: 19 → 20"
++4.078s write save.state1 by action 3: "save.state1: 26 → 27"
++4.078s write runQueryAction.state1 by action 3: "runQueryAction.state1: 26 → 27"
++4.078s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 47 → 49"
++4.105s write y.state1 by action 3: "y.state1: 57 → 59"
++4.105s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- bra\" → \"SELECT 'alpha' AS v -- brav\""
++4.106s write cX.state1 by action 3: "cX.state1: 20 → 21"
++4.106s write save.state1 by action 3: "save.state1: 27 → 28"
++4.106s write runQueryAction.state1 by action 3: "runQueryAction.state1: 27 → 28"
++4.106s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 49 → 51"
++4.121s delivered POST /api/v1/sqllab/format_sql/#1 (held 361 ms)
++4.126s write y.state1 by POST /api/v1/sqllab/format_sql/#1: "y.state1: 59 → 60"
++4.126s write Connect_Component.state0 by POST /api/v1/sqllab/format_sql/#1: "Connect_Component.state0: 2 items, 1 changed: 9 → 10"
++4.129s write cX.state1: "cX.state1: 21 → 22"
++4.130s write save.state1: "save.state1: 28 → 29"
++4.130s write runQueryAction.state1: "runQueryAction.state1: 28 → 29"
++4.130s write sqlEditorTabHeader.state0: "sqlEditorTabHeader.state0: 51 → 52"
++4.136s write y.state1 by action 3: "y.state1: 60 → 62"
++4.136s write Connect_Component.state0 by action 3: "Connect_Component.state0: 2 items, 1 changed: 10 → 11"
++4.136s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- brav\" → \"SELECT 'alpha' AS v -- bravo\""
++4.139s write save.state1 by action 3: "save.state1: 29 → 30"
++4.139s write runQueryAction.state1 by action 3: "runQueryAction.state1: 29 → 30"
++4.139s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 52 → 53"
++4.161s action 4: key textbox "Cursor at row 1"
+
+Delivery order: GET /api/v1/database/#1 → GET /api/v1/database/#2 → GET /api/v1/sqllab/#1 → GET /api/v1/database/:id/schemas/#1 → GET /api/v1/database/:id/function_names/#1 → POST /api/v1/sqllab/format_sql/#1
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f26"} (schedule: seeded 1, +0-900 ms)
+2. Open "http://localhost:8088/sqllab/" and do the same 5 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f26"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f26 (race), generated from run r48.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:8088";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":900},"maxHoldMs":2400};
+
+test("/sqllab/: the final state does not depend on response order (GenClass f26)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/sqllab/");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByText("SELECT 'alpha' AS v -- bravo", { exact: true }).first().click();
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().fill("");
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().pressSequentially("SELECT 'alpha' AS v", { delay: 30 });
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().press("Escape");
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().fill("");
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().pressSequentially("SELECT 'alpha' AS v -- bravo", { delay: 29 });
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().press("Escape");
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("2");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("SELECT");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("'alpha' AS v");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("SELECT 'alpha' AS v -- bravo");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```
+
+replay load: {"shown":"SELECTo\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+Replays of f26:
+- r54: inconclusive · the page shows neither the failing run's text nor all of the baseline's (missing "SELECT")
+
+Inconclusive: see the note.
+
+7 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f26 [race] "/sqllab/" · 1× in 1 run(s) · 7 s ago · last replay: inconclusive
+  The page depends on response order: it shows "SELECT 'alpha' AS v -- bravo" under "seed 1", not in request order
+- f20 [stale-write] "/sqllab/" · 6× in 6 run(s) · 3 s ago
+  The response to "POST /api/v1/sqllab/format_sql/" "{sql: \"SELECT 'alpha' AS v\", database_id: 1}" overwrote "y.state1" after the user's "type textbox \"Cursor at row 1\"" had already written it
+- f21 [stale-write] "/sqllab/" · 5× in 5 run(s) · 3 s ago
+  The response to "POST /api/v1/sqllab/format_sql/" "{sql: \"SELECT 'alpha' AS v\", database_id: 1}" overwrote "Connect_Component.state0" after the user's "type textbox \"Cursor at row 1\"" had already written it
+- f22 [stale-write] "/sqllab/" · 1× in 1 run(s) · 10 s ago
+  The response to "POST /api/v1/sqllab/format_sql/" "{sql: \"SELECT 'alpha' AS v\", database_id: 1}" overwrote "cX.state1" after the user's "type textbox \"Cursor at row 1\"" had already written it
+- f23 [stale-write] "/sqllab/" · 1× in 1 run(s) · 10 s ago
+  The response to "POST /api/v1/sqllab/format_sql/" "{sql: \"SELECT 'alpha' AS v\", database_id: 1}" overwrote "save.state1" after the user's "type textbox \"Cursor at row 1\"" had already written it
+- f24 [stale-write] "/sqllab/" · 1× in 1 run(s) · 10 s ago
+  The response to "POST /api/v1/sqllab/format_sql/" "{sql: \"SELECT 'alpha' AS v\", database_id: 1}" overwrote "runQueryAction.state1" after the user's "type textbox \"Cursor at row 1\"" had already written it
+- f25 [stale-write] "/sqllab/" · 1× in 1 run(s) · 10 s ago
+  The response to "POST /api/v1/sqllab/format_sql/" "{sql: \"SELECT 'alpha' AS v\", database_id: 1}" overwrote "sqlEditorTabHeader.state0" after the user's "type textbox \"Cursor at row 1\"" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.

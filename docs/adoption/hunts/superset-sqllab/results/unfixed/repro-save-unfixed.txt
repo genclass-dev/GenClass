@@ -1,0 +1,10 @@
+save, delay 0 ms, trial 1: POSTs 1, saved queries with the label 1 -> one
+save, delay 0 ms, trial 2: POSTs 1, saved queries with the label 1 -> one
+save, delay 0 ms, trial 3: POSTs 1, saved queries with the label 1 -> one
+save, delay 300 ms, trial 1: POSTs 2, saved queries with the label 2 -> DUPLICATED
+save, delay 300 ms, trial 2: POSTs 2, saved queries with the label 2 -> DUPLICATED
+save, delay 300 ms, trial 3: POSTs 2, saved queries with the label 2 -> DUPLICATED
+save, delay 900 ms, trial 1: POSTs 2, saved queries with the label 2 -> DUPLICATED
+save, delay 900 ms, trial 2: POSTs 2, saved queries with the label 2 -> DUPLICATED
+save, delay 900 ms, trial 3: POSTs 2, saved queries with the label 2 -> DUPLICATED
+[{"delay":0,"posts":1,"saved":1,"duplicated":false},{"delay":0,"posts":1,"saved":1,"duplicated":false},{"delay":0,"posts":1,"saved":1,"duplicated":false},{"delay":300,"posts":2,"saved":2,"duplicated":true},{"delay":300,"posts":2,"saved":2,"duplicated":true},{"delay":300,"posts":2,"saved":2,"duplicated":true},{"delay":900,"posts":2,"saved":2,"duplicated":true},{"delay":900,"posts":2,"saved":2,"duplicated":true},{"delay":900,"posts":2,"saved":2,"duplicated":true}]

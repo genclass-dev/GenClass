@@ -1,0 +1,13 @@
+format, delay 0 ms, trial 1: POSTs 1, editor "SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t -- bravo" -> kept
+format, delay 0 ms, trial 2: POSTs 1, editor "SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t -- bravo" -> kept
+format, delay 0 ms, trial 3: POSTs 1, editor "SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t -- bravo" -> kept
+format, delay 300 ms, trial 1: POSTs 1, editor "select 'alpha' as v from (select 1) t -- bravo" -> kept
+format, delay 300 ms, trial 2: POSTs 1, editor "select 'alpha' as v from (select 1) t -- bravo" -> kept
+format, delay 300 ms, trial 3: POSTs 1, editor "select 'alpha' as v from (select 1) t -- bravo" -> kept
+format, delay 900 ms, trial 1: POSTs 1, editor "SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t" -> TYPED TEXT LOST
+format, delay 900 ms, trial 2: POSTs 1, editor "SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t" -> TYPED TEXT LOST
+format, delay 900 ms, trial 3: POSTs 1, editor "SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t" -> TYPED TEXT LOST
+format, delay 1500 ms, trial 1: POSTs 1, editor "SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t" -> TYPED TEXT LOST
+format, delay 1500 ms, trial 2: POSTs 1, editor "SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t" -> TYPED TEXT LOST
+format, delay 1500 ms, trial 3: POSTs 1, editor "SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t" -> TYPED TEXT LOST
+[{"delay":0,"posts":1,"shown":"SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t -- bravo","lost":false},{"delay":0,"posts":1,"shown":"SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t -- bravo","lost":false},{"delay":0,"posts":1,"shown":"SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t -- bravo","lost":false},{"delay":300,"posts":1,"shown":"select 'alpha' as v from (select 1) t -- bravo","lost":false},{"delay":300,"posts":1,"shown":"select 'alpha' as v from (select 1) t -- bravo","lost":false},{"delay":300,"posts":1,"shown":"select 'alpha' as v from (select 1) t -- bravo","lost":false},{"delay":900,"posts":1,"shown":"SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t","lost":true},{"delay":900,"posts":1,"shown":"SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t","lost":true},{"delay":900,"posts":1,"shown":"SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t","lost":true},{"delay":1500,"posts":1,"shown":"SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t","lost":true},{"delay":1500,"posts":1,"shown":"SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t","lost":true},{"delay":1500,"posts":1,"shown":"SELECT\n  'alpha' AS v\nFROM (\n  SELECT\n    1\n) AS t","lost":true}]

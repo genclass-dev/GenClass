@@ -1,0 +1,335 @@
+{
+  "surface": "savequery",
+  "app": "http://localhost:8088",
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "race in 2 of 2",
+      "finding": "f30",
+      "oracleDiffering": "4 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        1,
+        1
+      ],
+      "loads": [
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/QIhe-lCCyHw#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/QIhe-lCCyHw#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/PWLpY_RpdRd#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/PWLpY_RpdRd#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/DMLCgxxbcfm#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /tabstateview/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        }
+      ],
+      "replay": "- r83: inconclusive · ended with other values: PUT /tabstateview/:id = \"(absent)\", PUT /tabstateview/DMLCgxxbcfm = \"(absent)\"  Inconclusive: see the note."
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "no verdict",
+      "finding": null,
+      "oracleDiffering": "6 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "loads": [
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /tabstateview/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /tabstateview/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#2",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#2"
+          ]
+        }
+      ],
+      "replay": ""
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "no verdict",
+      "finding": null,
+      "oracleDiffering": "6 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "loads": [
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/xiPXvCKz-Sh#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/xiPXvCKz-Sh#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/:id#2",
+            "PUT /tabstateview/:id#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 2,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/NftVnmJLEko#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#2",
+            "PUT /tabstateview/NftVnmJLEko#2"
+          ]
+        }
+      ],
+      "replay": ""
+    }
+  ]
+}

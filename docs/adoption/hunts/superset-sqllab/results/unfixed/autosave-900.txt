@@ -1,0 +1,244 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+load 1: {"puts":["SELECT 'alpha' AS v"],"server":"SELECT 'alpha' AS v","shown":"SELECT 'alpha' AS v -- bravo","lost":true,"order":["PUT /tabstateview/:id#1"]}
+load 2: {"puts":["SELECT 'alpha' AS v"],"server":"SELECT 'alpha' AS v","shown":"SELECT 'alpha' AS v -- bravo","lost":true,"order":["PUT /tabstateview/:id#1"]}
+load 3: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+load 4: {"puts":["SELECT 'alpha' AS v"],"server":"SELECT 'alpha' AS v","shown":"SELECT 'alpha' AS v -- bravo","lost":true,"order":["PUT /tabstateview/:id#1"]}
+load 5: {"puts":["SELECT 'alpha' AS v"],"server":"SELECT 'alpha' AS v","shown":"SELECT 'alpha' AS v -- bravo","lost":true,"order":["PUT /tabstateview/:id#1"]}
+load 6: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+load 7: {"puts":["SELECT 'alpha' AS v"],"server":"SELECT 'alpha' AS v","shown":"SELECT 'alpha' AS v -- bravo","lost":true,"order":["PUT /tabstateview/:id#1"]}
+load 8: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines (grouped by action kinds and element roles: the recorded element names differed between loads).
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click div "SELECT 'alpha' AS v"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v -- bravo
+  
+  
+  key textbox "Cursor at row 1"
+Ignored as noise (differs between the two baselines): state y.state12.updatedAt
+RACE: 3 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r21 (seed 1):
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "2"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 12]"
+    state "cX.state1": baseline "22", this run "21"
+    state "sqlEditorTabHeader.state0": baseline "53", this run "52"
+    state "y.state7": baseline "1", this run "2"
+- run r24 (seed 4):
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "2"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 11]"
+    state "y.state7": baseline "1", this run "2"
+- run r26 (seed 6):
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "2"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 12]"
+    state "cX.state1": baseline "22", this run "21"
+    state "sqlEditorTabHeader.state0": baseline "53", this run "52"
+    state "y.state7": baseline "1", this run "2"
+
+Race finding(s): f5. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+# f5 · race · "/sqllab/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The final state depends on response order: requests to "PUT /tabstateview/:id" ("1" in request order, "2" under "seed 1") (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x3: 3 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- requests sent to "PUT /tabstateview/:id": baseline "1", failing run "2"
+- state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", failing run "2 items [{error: undefined}, 12]"
+- state "cX.state1": baseline "22", failing run "21"
+- state "sqlEditorTabHeader.state0": baseline "53", failing run "52"
+- state "y.state7": baseline "1", failing run "2"
+
+## Steps of run r21 ("http://localhost:8088/sqllab/", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++3.204s write cX.state1 by action 1: "cX.state1: 8 → 9"
++3.204s write save.state1 by action 1: "save.state1: 12 → 13"
++3.204s write runQueryAction.state1 by action 1: "runQueryAction.state1: 12 → 13"
++3.204s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 21 → 23"
++3.232s write y.state1 by action 1: "y.state1: 28 → 30"
++3.232s write cX.state3 by action 1: "cX.state3: \"SELECT 'alp'\" → \"SELECT 'alph'\""
++3.232s write cX.state1 by action 1: "cX.state1: 9 → 10"
++3.232s write save.state1 by action 1: "save.state1: 13 → 14"
++3.232s write runQueryAction.state1 by action 1: "runQueryAction.state1: 13 → 14"
++3.232s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 23 → 25"
++3.259s write y.state1 by action 1: "y.state1: 30 → 32"
++3.259s write cX.state3 by action 1: "cX.state3: \"SELECT 'alph'\" → \"SELECT 'alpha'\""
++3.259s write cX.state1 by action 1: "cX.state1: 10 → 11"
++3.259s write save.state1 by action 1: "save.state1: 14 → 15"
++3.259s write runQueryAction.state1 by action 1: "runQueryAction.state1: 14 → 15"
++3.259s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 25 → 27"
++3.283s write y.state1 by action 1: "y.state1: 32 → 33"
++3.283s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 27 → 28"
++3.312s write y.state1 by action 1: "y.state1: 33 → 35"
++3.313s write Connect_Component.state0 by action 1: "Connect_Component.state0: 2 items, 1 changed: 5 → 6"
++3.313s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha'\" → \"SELECT 'alpha' \""
++3.316s write save.state1 by action 1: "save.state1: 15 → 16"
++3.316s write runQueryAction.state1 by action 1: "runQueryAction.state1: 15 → 16"
++3.316s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 28 → 29"
++3.346s write y.state1 by action 1: "y.state1: 35 → 37"
++3.346s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha' \" → \"SELECT 'alpha' A\""
++3.346s write cX.state1 by action 1: "cX.state1: 11 → 12"
++3.346s write save.state1 by action 1: "save.state1: 16 → 17"
++3.346s write runQueryAction.state1 by action 1: "runQueryAction.state1: 16 → 17"
++3.346s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 29 → 31"
++3.373s write y.state1 by action 1: "y.state1: 37 → 39"
++3.373s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha' A\" → \"SELECT 'alpha' AS\""
++3.373s write cX.state1 by action 1: "cX.state1: 12 → 13"
++3.373s write save.state1 by action 1: "save.state1: 17 → 18"
++3.373s write runQueryAction.state1 by action 1: "runQueryAction.state1: 17 → 18"
++3.373s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 31 → 33"
++3.403s write y.state1 by action 1: "y.state1: 39 → 41"
++3.403s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha' AS\" → \"SELECT 'alpha' AS \""
++3.403s write cX.state1 by action 1: "cX.state1: 13 → 14"
++3.403s write save.state1 by action 1: "save.state1: 18 → 19"
++3.403s write runQueryAction.state1 by action 1: "runQueryAction.state1: 18 → 19"
++3.403s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 33 → 35"
++3.432s write y.state1 by action 1: "y.state1: 41 → 43"
++3.432s write cX.state3 by action 1: "cX.state3: \"SELECT 'alpha' AS \" → \"SELECT 'alpha' AS v\""
++3.433s write cX.state1 by action 1: "cX.state1: 14 → 15"
++3.433s write save.state1 by action 1: "save.state1: 19 → 20"
++3.433s write runQueryAction.state1 by action 1: "runQueryAction.state1: 19 → 20"
++3.433s write sqlEditorTabHeader.state0 by action 1: "sqlEditorTabHeader.state0: 35 → 37"
++3.456s action 2: key textbox "Cursor at row 1"
++3.698s write Connect_Component.state0: "Connect_Component.state0: 2 items, 1 changed: 6 → 7"
++3.701s write Connect_Component_2.state0: "Connect_Component_2.state0: 2 items [null, 0] → 2 items [{error: undefined}, 1]"
++8.434s write y.state12, y.state12.cursorPosition.column, y.state12.cursorPosition.row, y.state12.id, y.state12.selectedText, y.state12.sql, y.state12.updatedAt by action 1: "y.state12.id: undefined → \"7\""; "y.state12.selectedText: undefined → undefined"; "y.state12.sql: undefined → \"SELECT 'alpha' AS v\""
++8.436s send PUT /tabstateview/:id#1 "form 10 fields"
++8.606s action 3: type textbox "Cursor at row 1" = "SELECT 'alpha' AS v -- bravo" (9 keystrokes over 246 ms)
++8.614s write y.state1 by action 3: "y.state1: 43 → 45"
++8.614s write Connect_Component.state0 by action 3: "Connect_Component.state0: 2 items, 1 changed: 7 → 8"
++8.614s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v\" → \"SELECT 'alpha' AS v \""
++8.618s write save.state1 by action 3: "save.state1: 20 → 21"
++8.618s write runQueryAction.state1 by action 3: "runQueryAction.state1: 20 → 21"
++8.618s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 37 → 38"
++8.651s write y.state1 by action 3: "y.state1: 45 → 47"
++8.652s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v \" → \"SELECT 'alpha' AS v -\""
++8.652s write cX.state1 by action 3: "cX.state1: 15 → 16"
++8.652s write save.state1 by action 3: "save.state1: 21 → 22"
++8.652s write runQueryAction.state1 by action 3: "runQueryAction.state1: 21 → 22"
++8.652s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 38 → 40"
++8.681s write y.state1 by action 3: "y.state1: 47 → 49"
++8.681s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -\" → \"SELECT 'alpha' AS v --\""
++8.681s write cX.state1 by action 3: "cX.state1: 16 → 17"
++8.681s write save.state1 by action 3: "save.state1: 22 → 23"
++8.681s write runQueryAction.state1 by action 3: "runQueryAction.state1: 22 → 23"
++8.681s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 40 → 42"
++8.707s write y.state1 by action 3: "y.state1: 49 → 51"
++8.707s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v --\" → \"SELECT 'alpha' AS v -- \""
++8.707s write cX.state1 by action 3: "cX.state1: 17 → 18"
++8.707s write save.state1 by action 3: "save.state1: 23 → 24"
++8.707s write runQueryAction.state1 by action 3: "runQueryAction.state1: 23 → 24"
++8.708s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 42 → 44"
++8.735s write y.state1 by action 3: "y.state1: 51 → 53"
++8.735s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- \" → \"SELECT 'alpha' AS v -- b\""
++8.735s write cX.state1 by action 3: "cX.state1: 18 → 19"
++8.735s write save.state1 by action 3: "save.state1: 24 → 25"
++8.735s write runQueryAction.state1 by action 3: "runQueryAction.state1: 24 → 25"
++8.735s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 44 → 46"
++8.765s write y.state1 by action 3: "y.state1: 53 → 55"
++8.765s write Connect_Component.state0 by action 3: "Connect_Component.state0: 2 items, 1 changed: 8 → 9"
++8.765s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- b\" → \"SELECT 'alpha' AS v -- br\""
++8.768s write save.state1 by action 3: "save.state1: 25 → 26"
++8.768s write runQueryAction.state1 by action 3: "runQueryAction.state1: 25 → 26"
++8.768s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 46 → 47"
++8.795s write y.state1 by action 3: "y.state1: 55 → 57"
++8.795s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- br\" → \"SELECT 'alpha' AS v -- bra\""
++8.795s write cX.state1 by action 3: "cX.state1: 19 → 20"
++8.795s write save.state1 by action 3: "save.state1: 26 → 27"
++8.795s write runQueryAction.state1 by action 3: "runQueryAction.state1: 26 → 27"
++8.795s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 47 → 49"
++8.814s delivered PUT /tabstateview/:id#1 (held 361 ms)
++8.820s write y.state7 by PUT /tabstateview/:id#1: "y.state7: 0 → 1"
++8.820s write y.state2 by PUT /tabstateview/:id#1: "y.state2: 1 → 2"
++8.820s write Connect_Component.state0 by PUT /tabstateview/:id#1: "Connect_Component.state0: 2 items, 1 changed: 9 → 10"
++8.827s write y.state1 by action 3: "y.state1: 57 → 59"
++8.827s write Connect_Component.state0 by action 3: "Connect_Component.state0: 2 items, 1 changed: 10 → 11"
++8.827s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- bra\" → \"SELECT 'alpha' AS v -- brav\""
++8.830s write save.state1 by action 3: "save.state1: 27 → 28"
++8.830s write runQueryAction.state1 by action 3: "runQueryAction.state1: 27 → 28"
++8.830s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 49 → 50"
++8.857s write y.state1 by action 3: "y.state1: 59 → 61"
++8.857s write cX.state3 by action 3: "cX.state3: \"SELECT 'alpha' AS v -- brav\" → \"SELECT 'alpha' AS v -- bravo\""
++8.857s write cX.state1 by action 3: "cX.state1: 20 → 21"
++8.857s write save.state1 by action 3: "save.state1: 28 → 29"
++8.857s write runQueryAction.state1 by action 3: "runQueryAction.state1: 28 → 29"
++8.857s write sqlEditorTabHeader.state0 by action 3: "sqlEditorTabHeader.state0: 50 → 52"
++8.879s action 4: key textbox "Cursor at row 1"
++9.458s write cX.state4 by action 3: "cX.state4: \"SELECT 'alpha' AS v\" → \"SELECT 'alpha' AS v -- bravo\""
++13.858s write y.state12.cursorPosition.column, y.state12.sql, y.state12.updatedAt by action 3: "y.state12.sql: \"SELECT 'alpha' AS v\" → \"SELECT 'alpha' AS v -- bravo\""; "y.state12.updatedAt: 1793725858832 → 1793725864258"; "y.state12.cursorPosition.column: 19 → 28"
++13.860s send PUT /tabstateview/:id#2 "form 10 fields"
++14.266s delivered PUT /tabstateview/:id#2 (held 387 ms)
++14.274s write y.state7 by PUT /tabstateview/:id#2: "y.state7: 1 → 2"
++14.274s write y.state2 by PUT /tabstateview/:id#2: "y.state2: 2 → 3"
++14.274s write Connect_Component.state0 by PUT /tabstateview/:id#2: "Connect_Component.state0: 2 items, 1 changed: 11 → 12"
+
+Delivery order: GET /api/v1/database/#1 → GET /api/v1/database/#2 → GET /api/v1/sqllab/#1 → GET /api/v1/database/:id/schemas/#1 → GET /api/v1/database/:id/function_names/#1 → PUT /tabstateview/:id#1 → PUT /tabstateview/:id#2
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f5"} (schedule: seeded 1, +0-900 ms)
+2. Open "http://localhost:8088/sqllab/" and do the same 5 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f5"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f5 (race), generated from run r21.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:8088";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":900},"maxHoldMs":2400};
+
+test("/sqllab/: the final state does not depend on response order (GenClass f5)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/sqllab/");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByText("SELECT 'alpha' AS v", { exact: true }).first().click();
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().fill("");
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().pressSequentially("SELECT 'alpha' AS v", { delay: 30 });
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().press("Escape");
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().fill("");
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().pressSequentially("SELECT 'alpha' AS v -- bravo", { delay: 31 });
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().press("Escape");
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.requests["PUT /tabstateview/:id"] ?? 0, "requests sent, as with responses in request order").toBe(1);
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```
+
+replay load: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+Replays of f5:
+- r27: REPRODUCED · ended with the same wrong values as the failing run
+
+The bug is still there under the recorded order.
+
+2 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f5 [race] "/sqllab/" · 1× in 1 run(s) · 22 s ago · last replay: reproduced
+  The final state depends on response order: requests to "PUT /tabstateview/:id" ("1" in request order, "2" under "seed 1")
+- f4 [stale-write] "/sqllab/" · 8× in 8 run(s) · 13 s ago
+  The response to "PUT /tabstateview/:id" "form 10 fields" overwrote "Connect_Component.state0" after the user's "type textbox \"Cursor at row 1\"" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.

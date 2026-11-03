@@ -1,0 +1,117 @@
+From 70e216faa6dc9c9728b6c052992479d254bec7bc Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 17:13:27 +0000
+Subject: [PATCH] fix(sqllab): save a query once when Save is clicked again
+ while saving
+
+The Save query modal's Save, Save as new and Update buttons were only
+disabled for an empty name. The modal stays open until the request
+resolves, so a second click on a slow save (a double click is enough)
+posted /api/v1/saved_query/ again and created a duplicate saved query.
+Disable the buttons while a save or update is in progress.
+
+Generated-by: Claude Code
+---
+ .../components/SaveQuery/SaveQuery.test.tsx   | 27 +++++++++++++++++++
+ .../src/SqlLab/components/SaveQuery/index.tsx | 23 +++++++++++-----
+ 2 files changed, 44 insertions(+), 6 deletions(-)
+
+diff --git a/superset-frontend/src/SqlLab/components/SaveQuery/SaveQuery.test.tsx b/superset-frontend/src/SqlLab/components/SaveQuery/SaveQuery.test.tsx
+index d31449222b..bc8500e8ac 100644
+--- a/superset-frontend/src/SqlLab/components/SaveQuery/SaveQuery.test.tsx
++++ b/superset-frontend/src/SqlLab/components/SaveQuery/SaveQuery.test.tsx
+@@ -421,6 +421,33 @@ describe('SavedQuery', () => {
+     expect(mockOnSave).toHaveBeenCalledTimes(1);
+   });
+ 
++  test('saves once when save is clicked again while the save is in progress', async () => {
++    let resolveSave: () => void;
++    const savePromise = new Promise<void>(resolve => {
++      resolveSave = resolve;
++    });
++    const mockOnSave = jest.fn().mockImplementation(() => savePromise);
++
++    render(<SaveQuery {...mockedProps} onSave={mockOnSave} />, {
++      useRedux: true,
++      store: mockStore(mockState),
++    });
++
++    await userEvent.click(screen.getByRole('button', { name: /save/i }));
++    const modalSaveBtn = screen.getAllByRole('button', { name: /save/i })[1];
++    await userEvent.click(modalSaveBtn);
++    await userEvent.click(modalSaveBtn);
++
++    expect(mockOnSave).toHaveBeenCalledTimes(1);
++    expect(modalSaveBtn).toBeDisabled();
++    resolveSave!();
++    await waitFor(() => {
++      expect(
++        screen.queryByRole('heading', { name: /save query/i }),
++      ).not.toBeInTheDocument();
++    });
++  });
++
+   test('handles save with a new tab that has no changes', async () => {
+     const mockOnSave = jest.fn().mockResolvedValue(undefined);
+ 
+diff --git a/superset-frontend/src/SqlLab/components/SaveQuery/index.tsx b/superset-frontend/src/SqlLab/components/SaveQuery/index.tsx
+index dccdb3b497..9fc4b7e849 100644
+--- a/superset-frontend/src/SqlLab/components/SaveQuery/index.tsx
++++ b/superset-frontend/src/SqlLab/components/SaveQuery/index.tsx
+@@ -112,6 +112,7 @@ const SaveQuery = ({
+   );
+   const [label, setLabel] = useState<string>(defaultLabel);
+   const [showSave, setShowSave] = useState<boolean>(false);
++  const [isSaving, setIsSaving] = useState<boolean>(false);
+   const [showSaveDatasetModal, setShowSaveDatasetModal] = useState(false);
+   // Saving a dataset runs the SQL to introspect columns, so it needs a
+   // successful run of the SQL being saved that produced at least one column
+@@ -154,13 +155,23 @@ const SaveQuery = ({
+ 
+   const onSaveWrapper = async () => {
+     logAction(LOG_ACTIONS_SQLLAB_SAVE_QUERY, {});
+-    await onSave(queryPayload(), query.id);
+-    close();
++    setIsSaving(true);
++    try {
++      await onSave(queryPayload(), query.id);
++      close();
++    } finally {
++      setIsSaving(false);
++    }
+   };
+ 
+   const onUpdateWrapper = async () => {
+-    await onUpdate(queryPayload(), query.id);
+-    close();
++    setIsSaving(true);
++    try {
++      await onUpdate(queryPayload(), query.id);
++      close();
++    } finally {
++      setIsSaving(false);
++    }
+   };
+ 
+   const onLabelChange = (e: ChangeEvent<HTMLInputElement>) => {
+@@ -256,7 +267,7 @@ const SaveQuery = ({
+             <Button
+               buttonStyle={isSaved ? 'secondary' : 'primary'}
+               onClick={onSaveWrapper}
+-              disabled={isLabelEmpty}
++              disabled={isLabelEmpty || isSaving}
+               cta
+             >
+               {isSaved ? t('Save as new') : t('Save')}
+@@ -265,7 +276,7 @@ const SaveQuery = ({
+               <Button
+                 buttonStyle="primary"
+                 onClick={onUpdateWrapper}
+-                disabled={isLabelEmpty}
++                disabled={isLabelEmpty || isSaving}
+                 cta
+               >
+                 {t('Update')}
+-- 
+2.43.0
+

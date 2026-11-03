@@ -1,0 +1,225 @@
+[genclass-mcp] bridge listening on http://127.0.0.1:43601
+savequery slow 300 load 1: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 300 load 2: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 300 load 3: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+savequery slow 300 load 4: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/HJcspTVomTy#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 300 load 5: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+savequery slow 300 load 6: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+savequery slow 300 load 7: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 300 load 8: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /api/v1/saved_query/#1","PUT /tabstateview/exEVdAMHG-d#1","POST /tabstateview/:id/migrate_query#1"]}
+--- savequery slow_ms=300
+Explore x7: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+Ignored as noise (differs between the two baselines): state autoSizer_2.state1, state autoSizer_2.state2, state autoSizer_3.state1, state autoSizer_3.state2, state clockCircle.state0, state sqlEditorLeftBar_3.state1, text "hunt double save"
+RACE: 5 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r53 (seed 2):
+    page text only in this run: "Untitled Query 31"
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "(absent)"
+    requests sent to "PUT /tabstateview/HJcspTVomTy": baseline "(absent)", this run "1"
+    state "cX.state1": baseline "14", this run "15"
+    state "sqlEditorTabHeader_2.state0": baseline "37", this run "38"
+- run r54 (seed 3):
+    page text only in this run: "Untitled Query 31", "Untitled Query 32"
+    state "cX.state1": baseline "14", this run "15"
+    state "sqlEditorTabHeader_2.state0": baseline "37", this run "38"
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r55 (seed 4):
+    page text only in this run: "Untitled Query 31", "Untitled Query 32", "Untitled Query 33"
+    state "cX.state1": baseline "14", this run "15"
+    state "sqlEditorTabHeader_2.state0": baseline "37", this run "38"
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r56 (seed 5):
+    page text only in this run: "Untitled Query 31", "Untitled Query 32", "Untitled Query 33", "Untitled Query 34"
+    state "cX.state1": baseline "14", this run "15"
+    state "sqlEditorTabHeader_2.state0": baseline "37", this run "38"
+- run r57 (seed 6):
+    page text only in this run: "Untitled Query 31", "Untitled Query 32", "Untitled Query 33", "Untitled Query 34"
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "(absent)"
+    requests sent to "PUT /tabstateview/exEVdAMHG-d": baseline "(absent)", this run "1"
+    state "cX.state1": baseline "14", this run "15"
+    state "sqlEditorTabHeader_2.state0": baseline "37", this run "38"
+    witness only here: overwrote-newer autoSizer.state2 by GET /api/v1/database/
+    witness only here: overwrote-newer autoSizer_2.state2 by GET /api/v1/database/
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+Along the way only (not a race by this check): 1 of 6 ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).
+- run r52 (seed 1):
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+
+Race finding(s): f6. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+savequery slow 600 load 1: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 600 load 2: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 600 load 3: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/VKcLDMiyMiM#1"]}
+savequery slow 600 load 4: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/AOUyFCAcssW#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 600 load 5: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+savequery slow 600 load 6: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+savequery slow 600 load 7: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 600 load 8: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+--- savequery slow_ms=600
+Explore x8: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+Ignored as noise (differs between the two baselines): state autoSizer_2.state1, state autoSizer_2.state2, state autoSizer_3.state1, state autoSizer_3.state2, state clockCircle.state0, state sqlEditorLeftBar_3.state1, text "Untitled Query N"
+RACE: 2 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r61 (seed 1):
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "(absent)"
+    requests sent to "PUT /tabstateview/VKcLDMiyMiM": baseline "(absent)", this run "1"
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r62 (seed 2):
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "(absent)"
+    requests sent to "PUT /tabstateview/AOUyFCAcssW": baseline "(absent)", this run "1"
+Along the way only (not a race by this check): 3 of 6 ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).
+- run r63 (seed 3):
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r64 (seed 4):
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r66 (seed 6):
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+
+Race finding(s): f9. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+savequery slow 900 load 1: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 900 load 2: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/tuKaXWTnzyD#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 900 load 3: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+savequery slow 900 load 4: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 900 load 5: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+savequery slow 900 load 6: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/AnpvltHtSkw#1"]}
+savequery slow 900 load 7: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/activate#1"]}
+savequery slow 900 load 8: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+--- savequery slow_ms=900
+Explore x9: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+Ignored as noise (differs between the two baselines): state clockCircle.state0, state sqlEditorLeftBar_3.state1, requests PUT /tabstateview/:id, requests PUT /tabstateview/tuKaXWTnzyD, text "Untitled Query N"
+RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r70 (seed 1):
+    page text only in this run: "hunt double save"
+    state "cX.state1": baseline "15", this run "14"
+    state "oJ.state0": baseline "\"rgb(217, 217, 217)\"", this run "\"rgba(217, 217, 217, 0.01)\""
+    state "oJ.state4": baseline "0", this run "144"
+    state "oJ.state5": baseline "0", this run "32"
+    state "sqlEditorTabHeader_2.state0": baseline "38", this run "37"
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r71 (seed 2):
+    page text only in this run: "hunt double save"
+- run r72 (seed 3):
+    page text only in this run: "hunt double save"
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r73 (seed 4):
+    page text only in this run: "hunt double save"
+    requests sent to "PUT /tabstateview/AnpvltHtSkw": baseline "(absent)", this run "1"
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r74 (seed 5):
+    page text only in this run: "hunt double save"
+    requests sent to "POST /tabstateview/:id/activate": baseline "(absent)", this run "1"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 16]", this run "2 items [{error: undefined}, 18]"
+    state "Connect_Component_2.state0": baseline "2 items [{error: undefined}, 7]", this run "2 items [{error: undefined}, 8]"
+    state "Connect_Component_3.state0": baseline "2 items [{error: undefined}, 2]", this run "2 items [{error: undefined}, 1]"
+    state "empty_2.state1": baseline "3", this run "4"
+    state "jsSqlToolbar.state0": baseline "4", this run "5"
+    announcements (status, alert regions) only in one of them: "Your query was not properly saved"
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/sqllab/execute/
+- run r75 (seed 6):
+    page text only in this run: "hunt double save"
+    state "cX.state1": baseline "15", this run "14"
+    state "sqlEditorTabHeader_2.state0": baseline "38", this run "37"
+
+Race finding(s): f13. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+[
+  {
+    "slow_ms": 300,
+    "verdict": "race in 5 of 6",
+    "finding": "f6",
+    "oracleDiffering": "0 of 6",
+    "lostOrDuplicated": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "replay": "- r58: not reproduced · ended with the values of the request-order baseline  The recorded order no longer produces it: the fix holds for this schedule. Run genclass_explore once more to check other orders."
+  },
+  {
+    "slow_ms": 600,
+    "verdict": "race in 2 of 6",
+    "finding": "f9",
+    "oracleDiffering": "0 of 6",
+    "lostOrDuplicated": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "replay": "- r67: not reproduced · ended with the values of the request-order baseline  The recorded order no longer produces it: the fix holds for this schedule. Run genclass_explore once more to check other orders."
+  },
+  {
+    "slow_ms": 900,
+    "verdict": "race in 6 of 6",
+    "finding": "f13",
+    "oracleDiffering": "0 of 6",
+    "lostOrDuplicated": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "replay": "- r76: REPRODUCED · the page shows the failing run's text again  The bug is still there under the recorded order."
+  }
+]

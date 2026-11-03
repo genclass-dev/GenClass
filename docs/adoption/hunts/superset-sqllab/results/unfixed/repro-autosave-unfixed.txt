@@ -1,0 +1,282 @@
+delay 0 ms, trial 1: PUTs 2 ["SELECT 'alpha' AS v", "SELECT 'alpha' AS v -- bravo"], server "SELECT 'alpha' AS v -- bravo", after reload "SELECT 'alpha' AS v -- bravo" -> kept
+delay 0 ms, trial 2: PUTs 2 ["SELECT 'alpha' AS v", "SELECT 'alpha' AS v -- bravo"], server "SELECT 'alpha' AS v -- bravo", after reload "SELECT 'alpha' AS v -- bravo" -> kept
+delay 0 ms, trial 3: PUTs 2 ["SELECT 'alpha' AS v", "SELECT 'alpha' AS v -- bravo"], server "SELECT 'alpha' AS v -- bravo", after reload "SELECT 'alpha' AS v -- bravo" -> kept
+delay 300 ms, trial 1: PUTs 2 ["SELECT 'alpha' AS v", "SELECT 'alpha' AS v -- bravo"], server "SELECT 'alpha' AS v -- bravo", after reload "SELECT 'alpha' AS v -- bravo" -> kept
+delay 300 ms, trial 2: PUTs 2 ["SELECT 'alpha' AS v", "SELECT 'alpha' AS v -- bravo"], server "SELECT 'alpha' AS v -- bravo", after reload "SELECT 'alpha' AS v -- bravo" -> kept
+delay 300 ms, trial 3: PUTs 2 ["SELECT 'alpha' AS v", "SELECT 'alpha' AS v -- bravo"], server "SELECT 'alpha' AS v -- bravo", after reload "SELECT 'alpha' AS v -- bravo" -> kept
+delay 600 ms, trial 1: PUTs 1 ["SELECT 'alpha' AS v"], server "SELECT 'alpha' AS v", after reload "SELECT 'alpha' AS v" -> EDIT LOST
+delay 600 ms, trial 2: PUTs 2 ["SELECT 'alpha' AS v", "SELECT ..."], server "SELECT 'alpha' AS v", after reload "SELECT ..." -> EDIT LOST
+delay 600 ms, trial 3: PUTs 1 ["SELECT 'alpha' AS v"], server "SELECT 'alpha' AS v", after reload "SELECT 'alpha' AS v" -> EDIT LOST
+delay 900 ms, trial 1: PUTs 1 ["SELECT 'alpha' AS v"], server "SELECT 'alpha' AS v", after reload "SELECT 'alpha' AS v" -> EDIT LOST
+delay 900 ms, trial 2: PUTs 1 ["SELECT 'alpha' AS v"], server "SELECT 'alpha' AS v", after reload "SELECT 'alpha' AS v" -> EDIT LOST
+delay 900 ms, trial 3: PUTs 2 ["SELECT 'alpha' AS v", "SELECT ..."], server "SELECT 'alpha' AS v", after reload "SELECT ..." -> EDIT LOST
+delay 1500 ms, trial 1: PUTs 1 ["SELECT 'alpha' AS v"], server "SELECT 'alpha' AS v", after reload "SELECT 'alpha' AS v" -> EDIT LOST
+delay 1500 ms, trial 2: PUTs 1 ["SELECT 'alpha' AS v"], server "SELECT 'alpha' AS v", after reload "SELECT 'alpha' AS v" -> EDIT LOST
+delay 1500 ms, trial 3: PUTs 1 ["SELECT 'alpha' AS v"], server "SELECT 'alpha' AS v", after reload "SELECT 'alpha' AS v" -> EDIT LOST
+[
+  {
+    "delay": 0,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 13
+      },
+      {
+        "sql": "SELECT 'alpha' AS v -- bravo",
+        "sentMs": 5423,
+        "deliveredMs": 5435
+      }
+    ],
+    "typedBMs": 442,
+    "serverSql": "SELECT 'alpha' AS v -- bravo",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v -- bravo",
+    "lost": false
+  },
+  {
+    "delay": 0,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 12
+      },
+      {
+        "sql": "SELECT 'alpha' AS v -- bravo",
+        "sentMs": 5428,
+        "deliveredMs": 5441
+      }
+    ],
+    "typedBMs": 447,
+    "serverSql": "SELECT 'alpha' AS v -- bravo",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v -- bravo",
+    "lost": false
+  },
+  {
+    "delay": 0,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 15
+      },
+      {
+        "sql": "SELECT 'alpha' AS v -- bravo",
+        "sentMs": 5423,
+        "deliveredMs": 5439
+      }
+    ],
+    "typedBMs": 441,
+    "serverSql": "SELECT 'alpha' AS v -- bravo",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v -- bravo",
+    "lost": false
+  },
+  {
+    "delay": 300,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 319
+      },
+      {
+        "sql": "SELECT 'alpha' AS v -- bravo",
+        "sentMs": 5422,
+        "deliveredMs": 5737
+      }
+    ],
+    "typedBMs": 444,
+    "serverSql": "SELECT 'alpha' AS v -- bravo",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v -- bravo",
+    "lost": false
+  },
+  {
+    "delay": 300,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 312
+      },
+      {
+        "sql": "SELECT 'alpha' AS v -- bravo",
+        "sentMs": 5415,
+        "deliveredMs": 5740
+      }
+    ],
+    "typedBMs": 435,
+    "serverSql": "SELECT 'alpha' AS v -- bravo",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v -- bravo",
+    "lost": false
+  },
+  {
+    "delay": 300,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 312
+      },
+      {
+        "sql": "SELECT 'alpha' AS v -- bravo",
+        "sentMs": 5406,
+        "deliveredMs": 5720
+      }
+    ],
+    "typedBMs": 424,
+    "serverSql": "SELECT 'alpha' AS v -- bravo",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v -- bravo",
+    "lost": false
+  },
+  {
+    "delay": 600,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 617
+      }
+    ],
+    "typedBMs": 457,
+    "serverSql": "SELECT 'alpha' AS v",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v",
+    "lost": true
+  },
+  {
+    "delay": 600,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 612
+      },
+      {
+        "sql": "SELECT ...",
+        "sentMs": 20362,
+        "deliveredMs": 20973
+      }
+    ],
+    "typedBMs": 451,
+    "serverSql": "SELECT 'alpha' AS v",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT ...",
+    "lost": true
+  },
+  {
+    "delay": 600,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 614
+      }
+    ],
+    "typedBMs": 431,
+    "serverSql": "SELECT 'alpha' AS v",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v",
+    "lost": true
+  },
+  {
+    "delay": 900,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 913
+      }
+    ],
+    "typedBMs": 424,
+    "serverSql": "SELECT 'alpha' AS v",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v",
+    "lost": true
+  },
+  {
+    "delay": 900,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 924
+      }
+    ],
+    "typedBMs": 447,
+    "serverSql": "SELECT 'alpha' AS v",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v",
+    "lost": true
+  },
+  {
+    "delay": 900,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 922
+      },
+      {
+        "sql": "SELECT ...",
+        "sentMs": 21620,
+        "deliveredMs": 22532
+      }
+    ],
+    "typedBMs": 433,
+    "serverSql": "SELECT 'alpha' AS v",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT ...",
+    "lost": true
+  },
+  {
+    "delay": 1500,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 1523
+      }
+    ],
+    "typedBMs": 449,
+    "serverSql": "SELECT 'alpha' AS v",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v",
+    "lost": true
+  },
+  {
+    "delay": 1500,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 1515
+      }
+    ],
+    "typedBMs": 426,
+    "serverSql": "SELECT 'alpha' AS v",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v",
+    "lost": true
+  },
+  {
+    "delay": 1500,
+    "puts": [
+      {
+        "sql": "SELECT 'alpha' AS v",
+        "sentMs": 0,
+        "deliveredMs": 1514
+      }
+    ],
+    "typedBMs": 417,
+    "serverSql": "SELECT 'alpha' AS v",
+    "shownBeforeReload": "SELECT 'alpha' AS v -- bravo",
+    "shownAfterReload": "SELECT 'alpha' AS v",
+    "lost": true
+  }
+]
