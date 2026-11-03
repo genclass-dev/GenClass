@@ -1,0 +1,450 @@
+{
+  "scenario": "list-pages",
+  "slow_ms": 600,
+  "runs": 6,
+  "seed": 1,
+  "inject": false,
+  "started": "2026-11-03T16:59:28.981Z",
+  "loads": [
+    {
+      "n": 1,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 2,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 3,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 4,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 5,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 6,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 7,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 8,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+[
+  {
+    "file": "create-enter-slow300-seed1.json",
+    "scenario": "create-enter",
+    "slow_ms": 300,
+    "inject": true,
+    "verdict": "no race, 0 of 6",
+    "what": "nothing",
+    "oracle": "8/8",
+    "failed": 0,
+    "forced": 0,
+    "witnesses": 0,
+    "wire": "query KsFetchAdminMeta 3, query RelationshipSelect 2, mutation {createTag} 1, query KsFetchItem 2"
+  },
+  {
+    "file": "create-enter-slow600-seed1-nogenclass.json",
+    "scenario": "create-enter",
+    "slow_ms": 600,
+    "inject": false,
+    "verdict": "n/a (natural loads)",
+    "what": "nothing",
+    "oracle": "8/8",
+    "failed": 0,
+    "forced": 0,
+    "witnesses": 0,
+    "wire": "query KsFetchAdminMeta 3, query RelationshipSelect 2, mutation {createTag} 1, query KsFetchItem 2/3, mutation {updateTag} 1"
+  },
+  {
+    "file": "create-enter-slow600-seed1.json",
+    "scenario": "create-enter",
+    "slow_ms": 600,
+    "inject": true,
+    "verdict": "no race, 0 of 6",
+    "what": "nothing",
+    "oracle": "8/8",
+    "failed": 0,
+    "forced": 0,
+    "witnesses": 0,
+    "wire": "query KsFetchAdminMeta 3, query RelationshipSelect 2, mutation {createTag} 1, query KsFetchItem 2"
+  },
+  {
+    "file": "create-enter-slow900-seed1.json",
+    "scenario": "create-enter",
+    "slow_ms": 900,
+    "inject": true,
+    "verdict": "no race, 0 of 6",
+    "what": "nothing",
+    "oracle": "8/8",
+    "failed": 0,
+    "forced": 0,
+    "witnesses": 0,
+    "wire": "query KsFetchAdminMeta 3, query RelationshipSelect 2, mutation {createTag} 1, query KsFetchItem 2"
+  }
+]

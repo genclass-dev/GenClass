@@ -1,0 +1,22 @@
+{
+  "what": "throttle.mjs runs (no GenClass, Chromium network throttling via CDP, Enter twice 60 ms apart or a double click on Create), 10 trials each; twoCreates = trials with two create mutations on the wire, duplicateRows = trials with two rows of that name, failToasts = trials showing 'Unable to create'",
+  "unfixed (main at 88da2cc)": [
+    {"list":"tags","mode":"enter","latency":400,"twoCreates":10,"duplicateRows":10,"failToasts":0},
+    {"list":"tags","mode":"enter","latency":150,"twoCreates":10,"duplicateRows":10,"failToasts":0},
+    {"list":"tags","mode":"enter","latency":0,"twoCreates":9,"duplicateRows":9,"failToasts":0},
+    {"list":"tags","mode":"click","latency":400,"twoCreates":0,"duplicateRows":0,"failToasts":0},
+    {"list":"authors","mode":"enter","latency":400,"twoCreates":10,"duplicateRows":0,"failToasts":10}
+  ],
+  "fixed, first version (guard reset in finally; superseded)": [
+    {"list":"tags","mode":"enter","latency":400,"twoCreates":0,"duplicateRows":0,"failToasts":0},
+    {"list":"tags","mode":"enter","latency":0,"twoCreates":9,"duplicateRows":9,"failToasts":0},
+    {"list":"authors","mode":"enter","latency":400,"twoCreates":0,"duplicateRows":0,"failToasts":0}
+  ],
+  "fixed (the patch)": [
+    {"list":"tags","mode":"enter","latency":400,"twoCreates":0,"duplicateRows":0,"failToasts":0},
+    {"list":"tags","mode":"enter","latency":150,"twoCreates":0,"duplicateRows":0,"failToasts":0},
+    {"list":"tags","mode":"enter","latency":0,"twoCreates":0,"duplicateRows":0,"failToasts":0},
+    {"list":"authors","mode":"enter","latency":400,"twoCreates":0,"duplicateRows":0,"failToasts":0},
+    {"list":"tags","mode":"click","latency":400,"twoCreates":0,"duplicateRows":0,"failToasts":0}
+  ]
+}

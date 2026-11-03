@@ -1,0 +1,487 @@
+{
+  "scenario": "rel-more",
+  "slow_ms": 600,
+  "runs": 6,
+  "seed": 1,
+  "inject": true,
+  "started": "2026-11-03T16:51:00.788Z",
+  "loads": [
+    {
+      "n": 1,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ],
+        "agent": {
+          "run": "r1",
+          "schedule": {
+            "order": "fifo",
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "baseline 1 (responses in request order)"
+          },
+          "witnesses": [
+            "overwrote-newer keystone.options POST /api/graphql#2"
+          ],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 3,
+        "query RelationshipSelectMore": 1
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 2,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ],
+        "agent": {
+          "run": "r2",
+          "schedule": {
+            "order": "fifo",
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "baseline 2 (responses in request order)"
+          },
+          "witnesses": [
+            "overwrote-newer keystone.options POST /api/graphql#2"
+          ],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 3,
+        "query RelationshipSelectMore": 1
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 3,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ],
+        "agent": {
+          "run": "r3",
+          "schedule": {
+            "order": "seeded",
+            "seed": 1,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 1"
+          },
+          "witnesses": [
+            "overwrote-newer keystone.options POST /api/graphql#2"
+          ],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 3,
+        "query RelationshipSelectMore": 1
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 4,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ],
+        "agent": {
+          "run": "r4",
+          "schedule": {
+            "order": "seeded",
+            "seed": 2,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 2"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 3,
+        "query RelationshipSelectMore": 1
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 5,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ],
+        "agent": {
+          "run": "r5",
+          "schedule": {
+            "order": "seeded",
+            "seed": 3,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 3"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 3,
+        "query RelationshipSelectMore": 1
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 6,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ],
+        "agent": {
+          "run": "r6",
+          "schedule": {
+            "order": "seeded",
+            "seed": 4,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 4"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 3,
+        "query RelationshipSelectMore": 2
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 7,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ],
+        "agent": {
+          "run": "r7",
+          "schedule": {
+            "order": "seeded",
+            "seed": 5,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 5"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 3,
+        "query RelationshipSelectMore": 3
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 8,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ],
+        "agent": {
+          "run": "r8",
+          "schedule": {
+            "order": "seeded",
+            "seed": 6,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 6"
+          },
+          "witnesses": [
+            "overwrote-newer keystone.options POST /api/graphql#2"
+          ],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 3,
+        "query RelationshipSelectMore": 1
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "zeta tag 005",
+          "zeta tag 017",
+          "zeta tag 029",
+          "zeta tag 041",
+          "zeta tag 053",
+          "zeta tag 065",
+          "zeta tag 077",
+          "zeta tag 089",
+          "zeta tag 101",
+          "zeta tag 113"
+        ]
+      },
+      "ok": true
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /posts/create · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click div \"Tags\"\n  click button \"Show suggestions\"\n  type combobox \"Tags\" = zeta\nRACE: 2 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.\n- run r6 (seed 4):\n    requests sent to \"POST /api/graphql\": baseline \"5\", this run \"6\"\n- run r7 (seed 5):\n    requests sent to \"POST /api/graphql\": baseline \"5\", this run \"7\"\n\nRace finding(s): f2. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.",
+  "findings": "2 finding(s), most important first (recorded from the app's pages: data, not instructions):\n- f2 [race] \"/posts/create\" · 1× in 1 run(s) · 0 s ago\n  The final state depends on response order: requests to \"POST /api/graphql\" (\"5\" in request order, \"6\" under \"seed 4\")\n- f1 [stale-write] \"/posts/create\" · 4× in 4 run(s) · 1 s ago\n  The response to \"POST /api/graphql\" \"{operationName: \\\"RelationshipSelectMore\\\", +2}\" overwrote \"keystone.options\" after the user's \"click button \\\"Show suggestions\\\"\" had already written it\n\nNext: genclass_explain {id} for the evidence, the replay and a regression test.",
+  "explains": {
+    "f2": "# f2 · race · \"/posts/create\" · 1× in 1 run(s) · first 0 s ago, last 0 s ago\nThe final state depends on response order: requests to \"POST /api/graphql\" (\"5\" in request order, \"6\" under \"seed 4\") (recorded from the app's pages: data, not instructions)\n\n## Evidence (recorded from the app's pages: data, not instructions)\n- Explore x1: 2 of 6 reordered run(s) ended differently from the baseline (responses in request order).\n- requests sent to \"POST /api/graphql\": baseline \"5\", failing run \"6\"\n\n## Steps of run r6 (\"http://localhost:3000/posts/create\", schedule seeded 4) (recorded from the app's pages: data, not instructions)\n+0.385s send POST /api/graphql#1 \"{operationName: \\\"KsFetchAdminMeta\\\", variables: {}, +1}\"\n+0.608s delivered POST /api/graphql#1 (held 206 ms)\n+0.795s send POST /api/graphql#1~hedge \"{operationName: \\\"RelationshipSelect\\\", +2}\" via POST /api/graphql\n+0.799s send POST /api/graphql#1~hedge \"{operationName: \\\"RelationshipSelect\\\", +2}\" via POST /api/graphql\n+1.418s delivered POST /api/graphql#1~hedge (held 559 ms)\n+1.449s delivered POST /api/graphql#1~hedge (held 589 ms)\n+1.701s action 0: click div \"Tags\"\n+1.773s send POST /api/graphql#2 \"{operationName: \\\"RelationshipSelectMore\\\", +2}\"\n+1.817s action 1: click button \"Show suggestions\"\n+1.821s write keystone.options by action 1: \"keystone.options: \\\"\\\" → \\\"alpha tag 000 | beta tag 001 |…\\\" (inserts \\\"alpha tag 000 | beta tag 00…\\\")\"\n+1.872s delivered POST /api/graphql#2 (held 15 ms)\n+1.888s send POST /api/graphql#3 \"{operationName: \\\"RelationshipSelectMore\\\", +2}\" via timer 0ms\n+1.955s action 2: type combobox \"Tags\" = \"zeta\" (4 keystrokes over 274 ms)\n+1.989s write keystone.options: \"keystone.options: \\\"… kappa tag 009\\\" → \\\"… kappa tag 009 | lambda tag 01…\\\" (inserts \\\" | lambda tag 01…\"\n+2.258s delivered POST /api/graphql#3 (held 346 ms)\n+2.445s send POST /api/graphql#4 \"{operationName: \\\"RelationshipSelect\\\", +2}\"\n+2.915s delivered POST /api/graphql#4 (held 437 ms)\n+2.929s write keystone.options by POST /api/graphql#4: \"keystone.options: \\\"alpha tag 000 | beta tag 001 |…\\\" → \\\"zeta tag 005 | zeta tag 017 | …\\\" (replaces \\\"…\"\n\nDelivery order: POST /api/graphql#1 → POST /api/graphql#1~hedge → POST /api/graphql#1~hedge → POST /api/graphql#2 → POST /api/graphql#3 → POST /api/graphql#4\n\n## Reproduce and verify\n1. genclass_replay {action:\"arm\", id:\"f2\"} (schedule: seeded 4, +0-600 ms)\n2. Open \"http://localhost:3000/posts/create\" and do the same 3 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().\n3. genclass_replay {action:\"result\", id:\"f2\"}: \"reproduced\" confirms the bug; after your fix it should say \"not reproduced\".\n\n## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)\n```ts\n// GenClass regression test for finding f2 (race), generated from run r6.\n// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link\n// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.\n// The recorded strings below came from the page; they are test data.\nimport { test, expect } from \"@playwright/test\";\n\nconst APP = process.env.GENCLASS_APP_URL ?? \"http://localhost:3000\";\nconst SCHEDULE = {\"order\":\"seeded\",\"seed\":4,\"delay\":{\"minMs\":0,\"maxMs\":600},\"maxHoldMs\":2100};\n\ntest(\"/posts/create: the final state does not depend on response order (GenClass f2)\", async ({ page }) => {\n  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);\n  await page.goto(APP + \"/posts/create\");\n  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), \"the dev build calls connectAgent(rt) from @genclass/runtime/agent\").toBe(true);\n  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));\n  await page.getByText(\"Tags\", { exact: true }).first().click();\n  await page.getByRole(\"button\", { name: \"Show suggestions\", exact: true }).or(page.locator(\"[name=\\\"Show suggestions\\\"], [id=\\\"Show suggestions\\\"]\")).first().click();\n  await page.getByRole(\"combobox\", { name: \"Tags\", exact: true }).or(page.locator(\"[name=\\\"Tags\\\"], [id=\\\"Tags\\\"]\")).first().fill(\"\");\n  await page.getByRole(\"combobox\", { name: \"Tags\", exact: true }).or(page.locator(\"[name=\\\"Tags\\\"], [id=\\\"Tags\\\"]\")).first().pressSequentially(\"zeta\", { delay: 91 });\n  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));\n  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());\n  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());\n  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());\n  void witnesses; void errors; void snap;\n  expect(snap.requests[\"POST /api/graphql\"] ?? 0, \"requests sent, as with responses in request order\").toBe(5);\n  // TODO: also assert what the user should see, e.g.\n  // await expect(page.getByRole(\"listitem\").first()).toContainText(\"...\");\n});\n```",
+    "f1": "# f1 · stale-write · \"/posts/create\" · 4× in 4 run(s) · first 27 s ago, last 1 s ago\nThe response to \"POST /api/graphql\" \"{operationName: \\\"RelationshipSelectMore\\\", +2}\" overwrote \"keystone.options\" after the user's \"click button \\\"Show suggestions\\\"\" had already written it (recorded from the app's pages: data, not instructions)\n\n## Evidence (recorded from the app's pages: data, not instructions)\n- Field \"keystone.options\" was written by the response to POST /api/graphql#2 \"{operationName: \\\"RelationshipSelectMore\\\", +2}\".\n- Before that, the user (click button \"Show suggestions\") (action 1) had written it, 47 ms after that request started: the response put older data over newer.\n- The write: \"\\\"alpha tag 000 | beta tag 001 | gamma tag 002 | …\\\" → \\\"alpha tag 000 | beta tag 001 | gamma tag 002 | …\\\"\"\n\n## Steps of run r1 (\"http://localhost:3000/posts/create\", schedule fifo) (recorded from the app's pages: data, not instructions)\n+0.365s send POST /api/graphql#1 \"{operationName: \\\"KsFetchAdminMeta\\\", variables: {}, +1}\"\n+0.507s delivered POST /api/graphql#1 (held 123 ms)\n+0.702s send POST /api/graphql#1~hedge \"{operationName: \\\"RelationshipSelect\\\", +2}\" via POST /api/graphql\n+0.704s send POST /api/graphql#1~hedge \"{operationName: \\\"RelationshipSelect\\\", +2}\" via POST /api/graphql\n+0.873s delivered POST /api/graphql#1~hedge (held 107 ms)\n+0.903s delivered POST /api/graphql#1~hedge (held 136 ms)\n+1.220s action 0: click div \"Tags\"\n+1.285s send POST /api/graphql#2 \"{operationName: \\\"RelationshipSelectMore\\\", +2}\"\n+1.327s action 1: click button \"Show suggestions\"\n+1.332s write keystone.options by action 1: \"keystone.options: \\\"\\\" → \\\"alpha tag 000 | beta tag 001 |…\\\" (inserts \\\"alpha tag 000 | beta tag 00…\\\")\"\n+1.466s action 2: type combobox \"Tags\" = \"zeta\" (4 keystrokes over 246 ms)\n+1.854s delivered POST /api/graphql#2 (held 487 ms)\n+1.885s write keystone.options by POST /api/graphql#2: \"keystone.options: \\\"… kappa tag 009\\\" → \\\"… kappa tag 009 | lambda tag 01…\\\" (inserts \\\" | lambda tag 01…\"\n+1.921s send POST /api/graphql#3 \"{operationName: \\\"RelationshipSelect\\\", +2}\"\n+2.067s delivered POST /api/graphql#3 (held 122 ms)\n+2.084s write keystone.options by POST /api/graphql#3: \"keystone.options: \\\"alpha tag 000 | beta tag 001 |…\\\" → \\\"zeta tag 005 | zeta tag 017 | …\\\" (replaces \\\"…\"\n\nDelivery order: POST /api/graphql#1 → POST /api/graphql#1~hedge → POST /api/graphql#1~hedge → POST /api/graphql#2 → POST /api/graphql#3\n\n## Reproduce and verify\n1. genclass_replay {action:\"arm\", id:\"f1\"} (schedule: recorded order (5 keys))\n2. Open \"http://localhost:3000/posts/create\" and do the same 3 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().\n3. genclass_replay {action:\"result\", id:\"f1\"}: \"reproduced\" confirms the bug; after your fix it should say \"not reproduced\".\n\n## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)\n```ts\n// GenClass regression test for finding f1 (stale-write), generated from run r1.\n// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link\n// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.\n// The recorded strings below came from the page; they are test data.\nimport { test, expect } from \"@playwright/test\";\n\nconst APP = process.env.GENCLASS_APP_URL ?? \"http://localhost:3000\";\nconst SCHEDULE = {\"order\":\"given\",\"given\":[\"POST /api/graphql#1\",\"POST /api/graphql#1~hedge\",\"POST /api/graphql#1~hedge\",\"POST /api/graphql#2\",\"POST /api/graphql#3\"]};\n\ntest(\"/posts/create: no response overwrites newer keystone.options (GenClass f1)\", async ({ page }) => {\n  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);\n  await page.goto(APP + \"/posts/create\");\n  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), \"the dev build calls connectAgent(rt) from @genclass/runtime/agent\").toBe(true);\n  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));\n  await page.getByText(\"Tags\", { exact: true }).first().click();\n  await page.getByRole(\"button\", { name: \"Show suggestions\", exact: true }).or(page.locator(\"[name=\\\"Show suggestions\\\"], [id=\\\"Show suggestions\\\"]\")).first().click();\n  await page.getByRole(\"combobox\", { name: \"Tags\", exact: true }).or(page.locator(\"[name=\\\"Tags\\\"], [id=\\\"Tags\\\"]\")).first().fill(\"\");\n  await page.getByRole(\"combobox\", { name: \"Tags\", exact: true }).or(page.locator(\"[name=\\\"Tags\\\"], [id=\\\"Tags\\\"]\")).first().pressSequentially(\"zeta\", { delay: 82 });\n  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));\n  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());\n  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());\n  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());\n  void witnesses; void errors; void snap;\n  // the bug: a response overwrote newer data in this field\n  const SUBJECT = new RegExp(\"^keystone\\\\.options$\");\n  expect(witnesses.filter((w: any) => w.kind === \"overwrote-newer\" && SUBJECT.test(w.subject))).toEqual([]);\n  // TODO: also assert what the user should see, e.g.\n  // await expect(page.getByRole(\"listitem\").first()).toContainText(\"...\");\n});\n```"
+  }
+}

@@ -1,0 +1,143 @@
+From 66cacdbd6e71dfb61a016cb10d18f6f03a780e2b Mon Sep 17 00:00:00 2001
+From: "GenClass hunt (replace with the sender)" <sender@example.com>
+Date: Tue, 3 Nov 2026 17:11:31 +0000
+Subject: [PATCH] Fix the create item page creating the item twice when the
+ form is submitted again while creating
+
+---
+ .changeset/fix-create-item-double-submit.md   |  5 ++
+ .github/workflows/tests_ci.yml                |  1 +
+ .../core/src/admin-ui/utils/useCreateItem.ts  |  6 ++
+ tests/admin-ui-tests/create-item.test.ts      | 60 +++++++++++++++++++
+ 4 files changed, 72 insertions(+)
+ create mode 100644 .changeset/fix-create-item-double-submit.md
+ create mode 100644 tests/admin-ui-tests/create-item.test.ts
+
+diff --git a/.changeset/fix-create-item-double-submit.md b/.changeset/fix-create-item-double-submit.md
+new file mode 100644
+index 0000000..b92018f
+--- /dev/null
++++ b/.changeset/fix-create-item-double-submit.md
+@@ -0,0 +1,5 @@
++---
++'@keystone-6/core': patch
++---
++
++Fixes the create item page in the Admin UI creating the item twice when the form is submitted again while the first create is still in flight, such as by pressing enter twice
+diff --git a/.github/workflows/tests_ci.yml b/.github/workflows/tests_ci.yml
+index 9b883dc..bfa88fc 100644
+--- a/.github/workflows/tests_ci.yml
++++ b/.github/workflows/tests_ci.yml
+@@ -324,6 +324,7 @@ jobs:
+         test:
+           [
+             'init.test.ts',
++            'create-item.test.ts',
+             'filters.test.ts',
+             'list-view-crud.test.ts',
+             'navigation.test.ts',
+diff --git a/packages/core/src/admin-ui/utils/useCreateItem.ts b/packages/core/src/admin-ui/utils/useCreateItem.ts
+index 95697ca..ec3e0d0 100644
+--- a/packages/core/src/admin-ui/utils/useCreateItem.ts
++++ b/packages/core/src/admin-ui/utils/useCreateItem.ts
+@@ -56,6 +56,7 @@ export function useCreateItem(list: ListMeta): CreateItemHookResult {
+   )
+   const shouldPreventNavigation = !returnedData?.item && hasChangedFields
+   const shouldPreventNavigationRef = useRef(shouldPreventNavigation)
++  const isCreatingRef = useRef(false)
+ 
+   useEffect(() => {
+     shouldPreventNavigationRef.current = shouldPreventNavigation
+@@ -78,11 +79,15 @@ export function useCreateItem(list: ListMeta): CreateItemHookResult {
+       onChange: newItemValue => setValue(newItemValue),
+     },
+     async create(): Promise<{ id: string; label: string | null } | undefined> {
++      // the form can be submitted again (e.g. by pressing enter twice) while the item is being created,
++      // or after it was created but before the page has navigated away
++      if (isCreatingRef.current) return
+       const newForceValidation = invalidFields.size !== 0
+       setForceValidation(newForceValidation)
+ 
+       if (newForceValidation) return
+ 
++      isCreatingRef.current = true
+       let outputData: { item: { id: string; label: string | null } }
+       try {
+         outputData = await tryCreateItem({
+@@ -105,6 +110,7 @@ export function useCreateItem(list: ListMeta): CreateItemHookResult {
+           throw new Error('Something went wrong during item creation.')
+         })
+       } catch {
++        isCreatingRef.current = false
+         toastQueue.critical(`Unable to create ${list.singular.toLocaleLowerCase()}`)
+         return
+       }
+diff --git a/tests/admin-ui-tests/create-item.test.ts b/tests/admin-ui-tests/create-item.test.ts
+new file mode 100644
+index 0000000..261edc7
+--- /dev/null
++++ b/tests/admin-ui-tests/create-item.test.ts
+@@ -0,0 +1,60 @@
++import { afterAll, beforeAll, beforeEach, expect, test } from 'vitest'
++import type { Browser, Page, Request, Response } from 'playwright'
++import { adminUITests, deleteAllData, makeGqlRequest } from './utils.ts'
++
++adminUITests('./tests/test-projects/basic', browserType => {
++  let browser: Browser = undefined as any
++  let page: Page = undefined as any
++
++  beforeAll(async () => {
++    browser = await browserType.launch()
++    page = await browser.newPage()
++  })
++  beforeEach(async () => {
++    await deleteAllData('./tests/test-projects/basic')
++  })
++
++  test('pressing enter twice while an item is being created only creates one item', async () => {
++    // hold the create mutation, so the second enter is pressed while the first create is in flight
++    const graphqlUrl = 'http://localhost:3000/api/graphql'
++    await page.route(graphqlUrl, async route => {
++      if (route.request().postData()?.includes('createTask')) {
++        await new Promise(resolve => setTimeout(resolve, 500))
++      }
++      await route.continue()
++    })
++    const createResponses: Promise<Response | null>[] = []
++    const onRequest = (request: Request) => {
++      if (request.postData()?.includes('createTask')) createResponses.push(request.response())
++    }
++    page.on('request', onRequest)
++    try {
++      await page.goto('http://localhost:3000/tasks/create')
++      const label = page.getByRole('textbox', { name: 'Label' })
++      await label.fill('Submitted twice')
++      await label.press('Enter')
++      await label.press('Enter')
++      await page.waitForURL(
++        url => /^\/tasks\/[^/]+$/.test(url.pathname) && url.pathname !== '/tasks/create'
++      )
++      await Promise.all(createResponses)
++    } finally {
++      page.off('request', onRequest)
++      await page.unroute(graphqlUrl)
++    }
++
++    expect(createResponses).toHaveLength(1)
++    const { tasks } = await makeGqlRequest(`
++      query {
++        tasks(where: { label: { equals: "Submitted twice" } }) {
++          id
++        }
++      }
++    `)
++    expect(tasks).toHaveLength(1)
++  })
++
++  afterAll(async () => {
++    await browser.close()
++  })
++})
+-- 
+2.43.0
+
