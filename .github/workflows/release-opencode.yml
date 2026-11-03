@@ -1,0 +1,123 @@
+name: Release OpenCode plugin
+
+# Publishes opencode-genclass (packages/opencode-plugin) to npm from a tag `opencode-v<version>` whose version equals
+# packages/opencode-plugin/package.json (e.g. opencode-v0.1.0), with npm provenance, the way release-mcp.yml publishes
+# @genclass/mcp. Authentication: npm trusted publishing (OIDC, `id-token: write`); no npm token is stored.
+#
+# Owner setup:
+# - First version only: npm configures trusted publishing from a package's own settings page, so the package must exist
+#   before this workflow can publish it. Push the tag once: the workflow builds, tests and uploads the tarball as the
+#   `opencode-tarball` artifact, and its publish step fails without a trusted publisher. Publish that exact tarball once
+#   from your own npm login (`npm publish opencode-genclass-<version>.tgz --access public`), then on npmjs.com:
+#   opencode-genclass → Settings → Trusted publishing → GitHub Actions: organization genclass-dev, this repository,
+#   workflow filename release-opencode.yml, environment npm-publish. Later versions publish from here.
+# - The npm-publish GitHub environment (shared with release.yml and release-mcp.yml) asks its reviewers to approve.
+# - The plugin starts `npx -y @genclass/mcp@<version>` (src/index.ts, kept in step by packages/mcp/test/manifests.test.ts):
+#   release that version of @genclass/mcp first (release-mcp.yml).
+
+on:
+  push:
+    tags: ["opencode-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-opencode-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: "opencode-genclass: verify, build, test, publish with provenance"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing and the provenance attestation
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # trusted publishing needs npm >= 11.5.1 (Node 22 ships npm 10)
+      - name: npm 11
+        run: npm install -g npm@11 && npm --version
+
+      - name: The tag names the package version, and the server it starts is on npm
+        run: |
+          TAG="${GITHUB_REF_NAME#opencode-v}"
+          PKG=$(node -p "require('./packages/opencode-plugin/package.json').version")
+          echo "tag $TAG, package.json $PKG"
+          test "$TAG" = "$PKG"
+          MCP=$(node -p "require('./packages/mcp/package.json').version")
+          grep -q "\"@genclass/mcp@$MCP\"" packages/opencode-plugin/src/index.ts
+          npm view "@genclass/mcp@$MCP" version
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck -w opencode-genclass
+
+      - name: Build
+        run: npm run build -w opencode-genclass
+
+      - name: Unit tests
+        working-directory: packages/opencode-plugin
+        run: npx vitest run
+
+      - name: The plugin in the real OpenCode binaries
+        run: node packages/opencode-plugin/test/smoke/run.mjs
+
+      - name: Pack
+        id: pack
+        working-directory: packages/opencode-plugin
+        run: |
+          FILE=$(npm pack --silent | tail -1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          sha512sum "$FILE"
+          tar -tzf "$FILE" | sort > "$FILE.files.txt"
+          cat "$FILE.files.txt"
+          # the built plugin, its README, changelog and licence; no tests or sources
+          grep -q "package/dist/index.js" "$FILE.files.txt"
+          grep -q "package/LICENSE" "$FILE.files.txt"
+          ! grep -q "package/test/" "$FILE.files.txt"
+          ! grep -q "package/src/" "$FILE.files.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-tarball
+          path: |
+            packages/opencode-plugin/${{ steps.pack.outputs.file }}
+            packages/opencode-plugin/${{ steps.pack.outputs.file }}.files.txt
+          if-no-files-found: error
+
+      - name: Publish with provenance
+        working-directory: packages/opencode-plugin
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          case "$VERSION" in
+            *-*) DIST_TAG=$(echo "${VERSION#*-}" | cut -d. -f1) ;;
+            *) DIST_TAG=latest ;;
+          esac
+          npm publish "${{ steps.pack.outputs.file }}" --provenance --access public --tag "$DIST_TAG"
+
+      - name: Verify the registry signature and provenance
+        run: |
+          VERSION=$(node -p "require('./packages/opencode-plugin/package.json').version")
+          mkdir -p "$RUNNER_TEMP/verify" && cd "$RUNNER_TEMP/verify"
+          npm init -y > /dev/null
+          for i in $(seq 1 40); do npm view "opencode-genclass@$VERSION" version --prefer-online && break; sleep 20; done
+          for i in $(seq 1 10); do npm install --no-audit --no-fund --ignore-scripts "opencode-genclass@$VERSION" && break; sleep 30; done
+          for i in $(seq 1 20); do npm audit signatures && break; echo "attestations not served yet, retry $i"; sleep 30; done
+          # the published module has one default export with id, setup and server
+          node --input-type=module -e "import('opencode-genclass').then((m) => { const d = m.default; if (Object.keys(m).join() !== 'default' || d.id !== 'genclass' || typeof d.setup !== 'function' || typeof d.server !== 'function') process.exit(1); })"

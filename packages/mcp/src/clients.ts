@@ -203,8 +203,11 @@ export const CLIENTS: ClientInstall[] = [
     match: /^opencode/i,
     block: (v) =>
       [
-        "`opencode.json` in the project (`~/.config/opencode/opencode.json` for all projects), or `opencode mcp add`:",
+        "`opencode.json` in the project (`~/.config/opencode/opencode.json` for all projects):",
         fence("json", json({ $schema: "https://opencode.ai/config.json", mcp: { [NAME]: { type: "local", command: ["npx", "-y", pinned(v)], enabled: true } } })),
+        "Or from the command line. OpenCode 1.x writes it to the global configuration (`~/.config/opencode/opencode.jsonc` when there is none yet), so use the JSON above for one project; OpenCode 2.x writes the project's `opencode.json` (as `mcp.servers.genclass`; `--global` for the global one):",
+        fence("bash", `opencode mcp add ${NAME} -- npx -y ${pinned(v)}`),
+        `OpenCode also loads the \`genclass\` skill from \`.claude/skills/\`, where \`npx -y ${pinned(v)} init\` writes it, and from \`.agents/skills/\`, where \`npx skills add genclass-dev/genclass-plugin -a opencode\` installs it.`,
       ].join("\n\n"),
   },
 ];

@@ -5,13 +5,15 @@
 //                                add the server to this project's .mcp.json and the genclass skill (the package's
 //                                plugin/skills/genclass/SKILL.md, with a `genclass:init` marker line) to
 //                                .claude/skills/genclass/SKILL.md (and, with --hook, the prompt hook to
-//                                .claude/settings.json), then print the lines for the app's dev build
+//                                .claude/settings.json; when the project has an .opencode/ directory, the OpenCode
+//                                command .opencode/commands/genclass-explore.md), then print the lines for the app's
+//                                dev build
 //   genclass-mcp hook            UserPromptSubmit hook: new findings since the last prompt, as additional context
 //   genclass-mcp status          the bridge's status, for people
 //   genclass-mcp config [client] how to add the server to an MCP client (all of them without an argument)
 //
-// init writes only those three files, merging with what is there (the skill: a rerun replaces a file that carries the
-// marker and leaves one without it), and says what it changed.
+// init writes only those files, merging with what is there (the skill and the OpenCode command: a rerun replaces a file
+// that carries the marker and leaves one without it), and says what it changed.
 
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -37,7 +39,8 @@ const HELP = `genclass-mcp ${VERSION}: GenClass for coding agents
   genclass-mcp init [--hook] [--no-skill]
                                add it to this project's .mcp.json and write the genclass skill (the procedure Claude Code
                                loads for timing bugs) to .claude/skills/genclass/SKILL.md; --hook: also a prompt hook in
-                               .claude/settings.json; --no-skill: leave the skill out
+                               .claude/settings.json; --no-skill: leave the skill out. With an .opencode/ directory, it
+                               also writes the OpenCode command .opencode/commands/genclass-explore.md
   genclass-mcp hook            print new findings for a UserPromptSubmit hook
   genclass-mcp status          show connected pages and findings
   genclass-mcp config [client] how to add it to an MCP client (${CLIENTS.map((c) => c.id).join(", ")})
@@ -99,6 +102,44 @@ function writeSkill(io: CliIo): void {
   io.out(cur === null ? `Wrote the genclass skill (the procedure Claude Code loads for timing bugs) to ${file}; --no-skill leaves it out.\n` : `Replaced the genclass skill at ${file} (it carried the ${SKILL_MARK} marker).\n`);
 }
 
+/** Where init writes the OpenCode command, when the project has an `.opencode/` directory (opencode.ai/docs/commands). */
+export const OPENCODE_COMMAND_PATH = join(".opencode", "commands", "genclass-explore.md");
+
+/** The OpenCode command `/genclass-explore <url> [steps]`: the explore procedure of the skill's section 2, with the marker in its frontmatter. */
+export function opencodeCommandText(version: string): string {
+  return [
+    "---",
+    "description: Explore response orders on a page with GenClass",
+    `# ${SKILL_MARK}: written by \`npx -y ${pinned(version)} init\`; a rerun replaces this file while this line is here, so remove the line to keep your edits`,
+    "---",
+    "Find race conditions on $1 with the genclass MCP server. The steps to run on each load are described after the URL: $ARGUMENTS",
+    "",
+    '1. Call `genclass_explore` with `{"action":"start","runs":6,"slow_ms":600}` (add `"route"` with the page\'s path when the steps load several pages).',
+    "2. Load $1 fresh 8 times (2 baselines, then 6 loads with the responses in other orders) and do the same steps on every load, with the project's Playwright tests (`--repeat-each 8 --workers 1`) or a browser tool. After the steps, wait for `window.__GENCLASS_AGENT__.whenSettled()`.",
+    '3. Call `genclass_explore` with `{"action":"report"}` and give the verdict per scenario. "No race found" with 6 of 6 compared is a result; "No verdict" or "0 compared" is not (run it again with `route` set). For a RACE, call `genclass_explain` on the finding and replay it with `genclass_replay` before changing code.',
+    "",
+  ].join("\n");
+}
+
+/** Writes the OpenCode command when `.opencode/` exists: new, replaced (it had the marker) or left alone (it did not). */
+function writeOpencodeCommand(io: CliIo): void {
+  if (!existsSync(join(io.cwd, ".opencode"))) return;
+  const file = join(io.cwd, OPENCODE_COMMAND_PATH);
+  const cur = existsSync(file) ? readFileSync(file, "utf8") : null;
+  if (cur !== null && !cur.includes(SKILL_MARK)) {
+    io.out(`${OPENCODE_COMMAND_PATH} exists without the ${SKILL_MARK} marker (yours, or edited); leaving it.\n`);
+    return;
+  }
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, opencodeCommandText(VERSION));
+  } catch (e) {
+    io.err(`Could not write ${file}: ${e instanceof Error ? e.message : String(e)}\n`);
+    return;
+  }
+  io.out(cur === null ? `Wrote the OpenCode command /genclass-explore to ${file} (this project has .opencode/).\n` : `Replaced the OpenCode command at ${file} (it carried the ${SKILL_MARK} marker).\n`);
+}
+
 export function init(io: CliIo, hook: boolean, skill = true): number {
   const mcpFile = join(io.cwd, ".mcp.json");
   const existing = existsSync(mcpFile) ? readJson(mcpFile) : {};
@@ -114,6 +155,7 @@ export function init(io: CliIo, hook: boolean, skill = true): number {
     io.out(`Added the genclass server to ${mcpFile}.\n`);
   }
   if (skill) writeSkill(io);
+  writeOpencodeCommand(io);
   if (hook) {
     const sFile = join(io.cwd, ".claude", "settings.json");
     const s = existsSync(sFile) ? readJson(sFile) : {};

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **OpenCode: the command-line install and the skill paths, and an `/genclass-explore` command from `init`.** The
+  OpenCode block (README, `config opencode`, `genclass_setup`) adds `opencode mcp add genclass -- npx -y
+  @genclass/mcp@<version>` and where each line writes it: OpenCode 1.19.5 to the global configuration
+  (`~/.config/opencode/opencode.jsonc` when there is none yet, at `mcp.genclass`), OpenCode 2.2.5 to the project's
+  `opencode.json` at `mcp.servers.genclass` (`--global` for the global one); both checked with the binaries. The
+  JSON block stays the flat `mcp.genclass` map, which 1.19.5 documents and 2.2.5 still loads (checked: listed and
+  connected). It also says that OpenCode loads the `genclass` skill from `.claude/skills/` (what `init` writes) and
+  `.agents/skills/` (`npx skills add genclass-dev/genclass-plugin -a opencode`), both listed by `opencode debug skill`
+  on 1.19.5. `init` writes `.opencode/commands/genclass-explore.md` when the project has an `.opencode/` directory:
+  the explore procedure of the skill's section 2 as an OpenCode command (`/genclass-explore <url> <steps>`), with the
+  `genclass:init` marker in its frontmatter, so a rerun replaces its own file and leaves one without the marker
+  (1.19.5 lists it in `opencode debug config`). The OpenCode plugin, `opencode-genclass` (packages/opencode-plugin),
+  pins this package's version and joins `test/manifests.test.ts`.
+
 - **The plugin's repository vendors the server, and the lockfile is gone.** In
   [genclass-dev/genclass-plugin](https://github.com/genclass-dev/genclass-plugin), `.mcp.json` and the hook run
   `node ${CLAUDE_PLUGIN_ROOT}/server/genclass-mcp.mjs` instead of `npx -y @genclass/mcp@<version>`: `server/cli.mjs`

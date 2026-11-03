@@ -1,0 +1,86 @@
+name: OpenCode plugin
+
+# opencode-genclass (packages/opencode-plugin): typecheck, build and the unit tests (the V1 hooks, the V2 setup on a
+# fake context, the digest against a stub bridge, parity with `genclass-mcp hook`), then in a second job the plugin
+# in the real OpenCode binaries (test/smoke/run.mjs): opencode-ai@1.19.5 and @opencode/cli@2.2.5 from npm, the
+# genclass server listed and connected through the plugin, a project's own genclass entry winning, and on 1.x the
+# findings digest reaching a stub model's request. Every check talks to 127.0.0.1 only, besides npm (the binaries
+# and @genclass/mcp). A separate workflow from ci.yml so it never blocks the main CI job; it publishes nothing.
+
+on:
+  push:
+    paths:
+      - "packages/opencode-plugin/**"
+      - "packages/mcp/src/cli.ts"
+      - "packages/mcp/src/text.ts"
+      - "packages/mcp/package.json"
+      - "package-lock.json"
+      - ".github/workflows/opencode-plugin.yml"
+  pull_request:
+    paths:
+      - "packages/opencode-plugin/**"
+      - "packages/mcp/src/cli.ts"
+      - "packages/mcp/src/text.ts"
+      - "packages/mcp/package.json"
+      - "package-lock.json"
+      - ".github/workflows/opencode-plugin.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opencode-plugin-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: "opencode-genclass: typecheck, build, unit tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck -w opencode-genclass
+
+      - name: Build
+        run: npm run build -w opencode-genclass
+
+      - name: Unit tests
+        working-directory: packages/opencode-plugin
+        run: npx vitest run
+
+  opencode:
+    name: "opencode-genclass in OpenCode 1.19.5 and 2.2.5"
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build -w opencode-genclass
+
+      - name: The plugin in the real binaries
+        run: node packages/opencode-plugin/test/smoke/run.mjs
