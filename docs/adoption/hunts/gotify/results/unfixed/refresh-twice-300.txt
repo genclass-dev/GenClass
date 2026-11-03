@@ -1,0 +1,141 @@
+Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x1"}.
+
+load 1: spinner=1 rows=0 [delivered GET /current/user#1 then GET /application#1 then GET /message#1 then GET /message#2]
+load 2: spinner=1 rows=0 [delivered GET /current/user#1 then GET /application#1 then GET /message#1 then GET /message#2]
+load 3: spinner=1 rows=0 [delivered GET /current/user#1 then GET /application#1 then GET /message#1 then GET /message#2]
+load 4: spinner=1 rows=0 [delivered GET /current/user#1 then GET /message#1 then GET /application#1 then GET /message#2]
+load 5: spinner=1 rows=0 [delivered GET /current/user#1 then GET /application#1 then GET /message#1 then GET /message#2]
+load 6: spinner=1 rows=0 [delivered GET /current/user#1 then GET /application#1 then GET /message#1 then GET /message#2]
+load 7: spinner=1 rows=0 [delivered GET /current/user#1 then GET /message#1 then GET /message#2 then GET /application#1]
+load 8: spinner=0 rows=6 [delivered GET /current/user#1 then GET /application#1 then GET /message#1 then GET /message#2 then GET /message#3]
+
+Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## / · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "REFRESH"
+  click button "REFRESH"
+Ignored as noise (differs between the two baselines): state iL.state0, state iL_2.state0, state iL_3.state0
+RACE: 1 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r8 (seed 6):
+    page text only in this run: "Backup", "Hunt", "Hunt", "Hunt"
+    state "heading.text": baseline "\"All Messages | \"", this run "\"All Messages\""
+    state "messages.spinner": baseline "true", this run "false"
+    state "messages.titles": baseline "\"\"", this run "\"pushed push-during-load-4832-4 | pushed push-du…\""
+    requests sent to "GET /message": baseline "2", this run "3"
+
+Race finding(s): f1. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+1 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f1 [race] "/" · 1× in 1 run(s) · 0 s ago
+  The page depends on response order: it shows "Backup" under "seed 6", not in request order
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f1 · race · "/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "Backup" under "seed 6", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x1: 1 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- state "heading.text": baseline "\"All Messages | \"", failing run "\"All Messages\""
+- state "messages.spinner": baseline "true", failing run "false"
+- state "messages.titles": baseline "\"\"", failing run "\"pushed push-during-load-4832-4 | pushed push-du…\""
+- requests sent to "GET /message": baseline "2", failing run "3"
+- page text in the failing run only: "Backup"
+- page text in the failing run only: "Hunt"
+- page text in the failing run only: "Hunt"
+- page text in the failing run only: "Hunt"
+
+## Steps of run r8 ("http://localhost:8080/#/", schedule seeded 6) (recorded from the app's pages: data, not instructions)
++0.077s send GET /current/user#1
++0.109s write messages.spinner: "messages.spinner: false → true"
++0.321s delivered GET /current/user#1 (held 209 ms)
++0.322s send GET /application#1 via GET /current/user
++0.337s send GET /message#1 "?since=0" via GET /current/user
++0.339s write heading.text by GET /current/user#1: "heading.text: \"\" → \"All Messages | \""
++0.454s delivered GET /application#1 (held 110 ms)
++0.463s write navigation.apps by GET /application#1: "navigation.apps: \"\" → \"Backup | Hunt | app create-app…\" (inserts \"Backup | Hunt | app create-…\")"
++0.519s delivered GET /message#1 (held 174 ms)
++0.527s write heading.text by GET /message#1: "heading.text: \"All Messages | \" → \"All Messages\""
++0.527s write messages.spinner by GET /message#1: "messages.spinner: true → false"
++0.554s write messages.titles: "messages.titles: \"\" → \"pushed push-during-load-4832-4\""
++0.561s write iL.state0: "iL.state0: 1793724423122 → 1793724423135"
++0.562s write messages.titles: "messages.titles: \"…ng-load-4832-4\" → \"…ng-load-4832-4 | pushed push-d…\" (inserts \" | pushed push-du…"
++0.563s write iL_2.state0: "iL_2.state0: 1793724423140 → 1793724423143"
++0.563s write iL_3.state0: "iL_3.state0: 1793724423139 → 1793724423143"
++0.948s write qf.state0: "qf.state0: false → true"
++0.949s action 0: click button "REFRESH"
++0.951s send GET /message#2 "?since=0" (action 0)
++0.954s write heading.text by action 0: "heading.text: \"All Messages\" → \"All Messages | \""
++0.954s write messages.spinner, messages.titles by action 0: "messages.spinner: false → true"; "messages.titles: \"pushed push-during-load-4832-4…\" → \"\" (removes \"pushed push-during-load-483…\")"
++0.967s delivered GET /message#2 (held 6 ms)
++0.970s write heading.text by GET /message#2: "heading.text: \"All Messages | \" → \"All Messages\""
++0.970s write messages.spinner by GET /message#2: "messages.spinner: true → false"
++0.990s write messages.titles: "messages.titles: \"\" → \"pushed push-during-load-4832-4\""
++0.996s write iL.state0: "iL.state0: 1793724423135 → 1793724423571"
++0.996s write messages.titles: "messages.titles: \"…ng-load-4832-4\" → \"…ng-load-4832-4 | pushed push-d…\" (inserts \" | pushed push-du…"
++0.997s write iL_2.state0: "iL_2.state0: 1793724423143 → 1793724423577"
++0.997s write iL_3.state0: "iL_3.state0: 1793724423143 → 1793724423577"
++1.002s write qf_2.state0: "qf_2.state0: false → true"
++1.003s action 1: click button "REFRESH"
++1.004s send GET /message#3 "?since=0" (action 1)
++1.006s write heading.text by action 1: "heading.text: \"All Messages\" → \"All Messages | \""
++1.006s write messages.spinner, messages.titles by action 1: "messages.spinner: false → true"; "messages.titles: \"pushed push-during-load-4832-4…\" → \"\" (removes \"pushed push-during-load-483…\")"
++1.294s delivered GET /message#3 (held 282 ms)
++1.297s write heading.text by GET /message#3: "heading.text: \"All Messages | \" → \"All Messages\""
++1.297s write messages.spinner by GET /message#3: "messages.spinner: true → false"
++1.324s write messages.titles: "messages.titles: \"\" → \"pushed push-during-load-4832-4\""
++1.329s write iL.state0: "iL.state0: 1793724423571 → 1793724423904"
++1.329s write messages.titles: "messages.titles: \"…ng-load-4832-4\" → \"…ng-load-4832-4 | pushed push-d…\" (inserts \" | pushed push-du…"
++1.329s write iL_2.state0: "iL_2.state0: 1793724423577 → 1793724423910"
++1.330s write iL_3.state0: "iL_3.state0: 1793724423577 → 1793724423910"
+
+Delivery order: GET /current/user#1 → GET /application#1 → GET /message#1 → GET /message#2 → GET /message#3
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f1"} (schedule: seeded 6, +0-300 ms)
+2. Open "http://localhost:8080/#/" and do the same 2 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f1"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f1 (race), generated from run r8.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:8080";
+const SCHEDULE = {"order":"seeded","seed":6,"delay":{"minMs":0,"maxMs":300},"maxHoldMs":1800};
+
+test("/: the final state does not depend on response order (GenClass f1)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/#/");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "REFRESH", exact: true }).or(page.locator("[name=\"REFRESH\"], [id=\"REFRESH\"]")).first().click();
+  await page.getByRole("button", { name: "REFRESH", exact: true }).or(page.locator("[name=\"REFRESH\"], [id=\"REFRESH\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Backup");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Hunt");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Hunt");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```
