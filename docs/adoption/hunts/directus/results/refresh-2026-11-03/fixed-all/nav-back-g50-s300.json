@@ -1,0 +1,101 @@
+{
+  "scenario": "nav-back",
+  "gapMs": 50,
+  "slowMs": 300,
+  "runs": 6,
+  "started": "2026-11-03T17:19:20.666Z",
+  "start": "Explore x1 armed: the next 8 page loads of \"/admin/content/articles\" get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "results": [
+    {
+      "url": "/admin/content/articles/1",
+      "title": "Alpha: launch checklist",
+      "summary": "Alpha body: the steps before a launch.",
+      "topic": "rest",
+      "related": "Bravo: incident review",
+      "header": "Articles: Alpha: launch checklist",
+      "menu": [],
+      "ms": 2428,
+      "errors": []
+    },
+    {
+      "url": "/admin/content/articles/1",
+      "title": "Alpha: launch checklist",
+      "summary": "Alpha body: the steps before a launch.",
+      "topic": "rest",
+      "related": "Bravo: incident review",
+      "header": "Articles: Alpha: launch checklist",
+      "menu": [],
+      "ms": 2410,
+      "errors": []
+    },
+    {
+      "url": "/admin/content/articles/1",
+      "title": "Alpha: launch checklist",
+      "summary": "Alpha body: the steps before a launch.",
+      "topic": "rest",
+      "related": "Bravo: incident review",
+      "header": "Articles: Alpha: launch checklist",
+      "menu": [],
+      "ms": 2872,
+      "errors": []
+    },
+    {
+      "url": "/admin/content/articles/1",
+      "title": "Alpha: launch checklist",
+      "summary": "Alpha body: the steps before a launch.",
+      "topic": "rest",
+      "related": "Bravo: incident review",
+      "header": "Articles: Alpha: launch checklist",
+      "menu": [],
+      "ms": 3534,
+      "errors": []
+    },
+    {
+      "url": "/admin/content/articles/1",
+      "title": "Alpha: launch checklist",
+      "summary": "Alpha body: the steps before a launch.",
+      "topic": "rest",
+      "related": "Bravo: incident review",
+      "header": "Articles: Alpha: launch checklist",
+      "menu": [],
+      "ms": 3938,
+      "errors": []
+    },
+    {
+      "url": "/admin/content/articles/1",
+      "title": "Alpha: launch checklist",
+      "summary": "Alpha body: the steps before a launch.",
+      "topic": "rest",
+      "related": "Bravo: incident review",
+      "header": "Articles: Alpha: launch checklist",
+      "menu": [],
+      "ms": 4112,
+      "errors": []
+    },
+    {
+      "url": "/admin/content/articles/1",
+      "title": "Alpha: launch checklist",
+      "summary": "Alpha body: the steps before a launch.",
+      "topic": "rest",
+      "related": "Bravo: incident review",
+      "header": "Articles: Alpha: launch checklist",
+      "menu": [],
+      "ms": 3414,
+      "errors": []
+    },
+    {
+      "url": "/admin/content/articles/1",
+      "title": "Alpha: launch checklist",
+      "summary": "Alpha body: the steps before a launch.",
+      "topic": "rest",
+      "related": "Bravo: incident review",
+      "header": "Articles: Alpha: launch checklist",
+      "menu": [],
+      "ms": 3179,
+      "errors": []
+    }
+  ],
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /admin/content/articles · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click span \"Alpha: launch checklist\"\n  click link\n  click button\nNo race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.\nInternal state only (not a race by this check): 6 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.\n- run r4 (seed 1):\n    requests sent to \"GET /items/articles\": baseline \"8\", this run \"6\"\n    requests sent to \"GET /items/articles/:id\": baseline \"12\", this run \"10\"\n    requests sent to \"GET /revisions\": baseline \"7\", this run \"6\"\n    requests sent to \"GET /items/authors/:id\": baseline \"6\", this run \"4\"\n    requests sent to \"GET /items/authors\": baseline \"6\", this run \"4\"\n- run r5 (seed 2) (2 hold(s) ran out):\n    requests sent to \"GET /items/articles\": baseline \"8\", this run \"6\"\n    requests sent to \"GET /items/articles/:id\": baseline \"12\", this run \"10\"\n    requests sent to \"GET /revisions\": baseline \"7\", this run \"6\"\n    requests sent to \"GET /items/authors/:id\": baseline \"6\", this run \"4\"\n    requests sent to \"GET /items/authors\": baseline \"6\", this run \"4\"\n- run r6 (seed 3) (7 hold(s) ran out):\n    requests sent to \"GET /items/articles\": baseline \"8\", this run \"6\"\n    requests sent to \"GET /items/articles/:id\": baseline \"12\", this run \"10\"\n    requests sent to \"GET /revisions\": baseline \"7\", this run \"6\"\n    requests sent to \"GET /items/authors/:id\": baseline \"6\", this run \"4\"\n    requests sent to \"GET /items/authors\": baseline \"6\", this run \"4\"\n    witness only here: identical-in-flight GET /revisions by GET /revisions",
+  "verdict": "no race",
+  "findings": "2 finding(s), most important first (recorded from the app's pages: data, not instructions):\n- f2 [duplicate-request] \"/admin/content/articles\" · 1× in 1 run(s) · 16 s ago\n  \"GET /shares\" was sent twice, 95 ms apart, by two separate user actions while the first was in flight\n- f1 [duplicate-request] \"/admin/content/articles\" · 1× in 1 run(s) · 1 min ago\n  \"GET /revisions\" was sent twice, 209 ms apart, by two separate user actions while the first was in flight\n\nNext: genclass_explain {id} for the evidence, the replay and a regression test."
+}

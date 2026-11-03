@@ -7,6 +7,7 @@ the project's maintainers to take or leave. One report per target; nothing here 
 | target | report | patch and draft text | harness |
 |---|---|---|---|
 | Strapi admin panel (5.59.0) | [strapi.md](strapi.md) | [strapi.patch](strapi.patch), [strapi-issue.md](strapi-issue.md) | [strapi/](strapi/) |
+| Directus Studio (12.5.1; refreshed on `main` after 12.6.0, 2026-11-03; source-available) | [directus.md](directus.md) | [directus.patch](directus.patch), [directus-facts.md](directus-facts.md) (a fact sheet: Directus's AI policy wants the issue in the sender's own words) | [directus/](directus/) |
 
 Every report gives the versions and commits, the exact commands, every scenario with its verdict including the
 negatives, the finding with its evidence in causal order, the root cause, the fix, the test result, the check on the

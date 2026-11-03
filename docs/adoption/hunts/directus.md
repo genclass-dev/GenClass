@@ -2,7 +2,9 @@
 
 Evidence for the owner to write an issue from, in the owner's own words (facts in
 [directus-facts.md](directus-facts.md)). Nothing was sent to directus/directus: no fork, push, issue, PR or comment.
-Everything here was run locally in a cloud container on 2026-10-24 and 2026-10-25.
+Everything here was run locally in a cloud container on 2026-10-24 and 2026-10-25, and re-run on today's `main` on
+2026-11-03 (section 14, "Refresh (2026-11-03)": status there). Directus is source-available (MSCL 1.0), not OSI open
+source.
 
 ## Headline
 
@@ -42,7 +44,7 @@ that other item's text into the current one for every field you edit.**
 | what | version |
 |---|---|
 | Directus | 12.5.1, tag `v12.5.1`, commit `2cd112f1a1afe42829d2e4de899d07ce4394649c` (2026-10-23); `@directus/app` 18.1.1, `@directus/api` 40.0.1 |
-| License | MSCL-1.0-GPL (Directus's own) |
+| License | MSCL-1.0-GPL, Directus's own Monospace Sustainable Core License: source-available, not OSI open source |
 | App stack | Vue 3.5.43, vue-router 4.6.3, Vite 8.1.2 dev server (`cd app && pnpm dev`, :8080, `/admin`), SDK on `ofetch` 1.5.1, `axios` 1.20.0, `p-queue` 8.1.x |
 | API | `pnpm --filter api dev` on 127.0.0.1:8055, SQLite (`sqlite3` 6.0.1), `RATE_LIMITER_ENABLED=false`, `CACHE_ENABLED=false`, websockets off (the defaults) |
 | Runtime | Node 22.22.0, pnpm 10.27.0 (from `packageManager`), Ubuntu 24.04.5, Linux 6.18 |
@@ -486,8 +488,7 @@ Both are GenClass follow-ups, not Directus findings.
   The race is in app code that both builds share, but that was not measured.
 - The GenClass harness needs two test-side workarounds (section 5). The plain confirmation needs neither.
 - Seeds 1 to 6 in every session (section 6.1).
-- Not done: a search of directus/directus issues for duplicates (outside this session's repository scope; terms are
-  in the fact sheet); the picker and autocomplete races were not confirmed without GenClass; Save was tested on two
+- Not done on 2026-10-25: a search of directus/directus issues for duplicates (done on 2026-11-03, section 14); the picker and autocomplete races were not confirmed without GenClass; Save was tested on two
   field types only.
 - Not run: Directus's API tests, e2e tests and the blackbox suite; only the app test files named above and the whole
   app suite (section 10).
@@ -504,3 +505,171 @@ Both are GenClass follow-ups, not Directus findings.
 | [directus/schema-snapshot.yaml](directus/schema-snapshot.yaml) | Directus schema snapshot (12.5.1, sqlite) |
 | [directus/classify.py](directus/classify.py), [directus/make-tables.py](directus/make-tables.py) | the run classification and the tables in this file |
 | [directus/results/](directus/results/) | per session `<scenario>-g<gap>-s<slow_ms>.json` (report and final states) in `buggy/`, `fixed/` (use-item guard), `fixed-all/` (all guards), `fixed-ac2/` (final autocomplete guard); plain runs `plain.jsonl`; Save runs `save-*.jsonl`; `evidence-first-race.json` (the 6.4 timeline with GenClass's full explain) |
+
+## 14. Refresh (2026-11-03)
+
+A cloud session of the adoption swarm (slug `directus-refresh`) re-ran the hunt on today's Directus `main` and brought
+the drafts up to date. This branch carries PR #90's commit rebased onto today's GenClass-lib `main` and supersedes
+that pull request. Nothing was sent to directus/directus: no fork, push, issue, PR, comment or reaction.
+
+### 14.1 What was run
+
+| what | version |
+|---|---|
+| Directus | `main` at `88c5c470b14bdf3501a2a31e429273087f22e937` (2026-11-02, "Nested list nn table search ignores displayed related fields (#28422)"), four commits after `v12.6.0` (`60133482`, 2026-10-27); `directus` 12.6.0, `@directus/app` 19.0.0, `@directus/api` 41.0.0 |
+| Code involved | `use-item/index.ts`, `use-template-data.ts`, `use-relation-single.ts`, `input-autocomplete-api.vue` and their tests, `item.vue`, `modules/content/index.ts`, `app.vue`, `select-dropdown-m2o.vue`, `private-view-header-bar-icon.vue` and `packages/composables/src/use-items.ts`: identical to `v12.5.1` (`git diff --stat v12.5.1 HEAD -- <files>` is empty), so every line number in sections 4 to 10 still holds. `use-relation-multiple.ts` changed one line (L535, a filter comparison), not the guard cited at L510-517 |
+| Runtime | Node 26.13.0 and pnpm 12.4.1: since 12.6.0 the repository requires them (`package.json` `engines` `"node": "26"`, `"pnpm": ">=12 <13"`, `packageManager` `pnpm@12.4.1`, `pnpm-workspace.yaml` `engineStrict: true`; at `v12.5.1` it was Node 22 and pnpm 10). Node 26 from the nodejs.org tarball, `npm i -g pnpm@12.4.1` |
+| Stack | Vue 3.5.43, vue-router 4.6.3, Vite 8.1.6, vitest 4.1.12, happy-dom 21.0.4, `sqlite3` 6.0.1 |
+| Browser | Chromium headless shell 153.0.8010.12 through Playwright 1.63.0, Ubuntu 24.04.5 |
+| GenClass | GenClass-lib `main` at `c1c9e14` built here: `@genclass/runtime` 0.3.0-beta.5 (script-tag build and `dist/agent.js`), `@genclass/mcp` 0.2.1 |
+
+Commands (the 2026-10-25 ones in section 2, with these differences):
+
+```bash
+git clone --depth 50 https://github.com/directus/directus.git ~/targets/directus && cd ~/targets/directus
+export PATH=~/opt/node-v26.13.0-linux-x64/bin:$PATH        # Node 26.13.0; then: npm i -g pnpm@12.4.1
+CI=true pnpm install --frozen-lockfile                       # 12 s
+NODE_OPTIONS=--max_old_space_size=6144 pnpm build            # CI's setting; a few minutes here
+# api/.env as in section 2
+(cd api && pnpm cli bootstrap) && (cd api && pnpm dev) & (cd app && pnpm dev) &
+node docs/adoption/hunts/directus/setup-schema.mjs && node docs/adoption/hunts/directus/setup-related.mjs
+# plain matrix (no GenClass): 4 delays x 4 gaps x 3 runs, then the two Save checks, into results/refresh-2026-11-03/<build>/
+for d in 0 300 600 900; do for g in 50 100 200 300; do
+  node confirm-plain.mjs --delay $d --gap $g --repeat 3 --out <dir>/plain.jsonl; done; done
+node confirm-plain.mjs --delay 600 --gap 100 --repeat 3 --save summary --out <dir>/save-summary.jsonl
+node confirm-plain.mjs --delay 600 --gap 100 --repeat 3 --save title --out <dir>/save-title.jsonl
+# explore: the four settings of section 11, on the unfixed and on the fixed build
+node gc-harness.mjs --scenario nav-back --gap <50|300|100|200> --slow <300|300|600|900> --runs 6 --out <dir>/nav-back-g<gap>-s<slow>.json
+python3 -I make-tables.py results/refresh-2026-11-03     # the tables below
+```
+
+The fixed build is the patch applied to the served tree (`git apply directus.patch`; Vite serves the changed modules).
+
+### 14.2 The patch on today's `main`
+
+[directus.patch](directus.patch) is now a `git diff` against `88c5c47`. The code and test hunks are unchanged (the four
+files are identical at `v12.5.1`, `v12.6.0` and `88c5c47`; `git apply --check` passes on all three). New in it:
+`.changeset/stale-item-navigation.md` (`'@directus/app': patch`, one past-tense sentence, the format of the four
+changesets already in `.changeset/`), which Directus asks for in every app change. Not in it: the sender's
+`contributors.yml` line (CLA).
+
+Tests, in a worktree of `88c5c47` (`cd app && npx vitest run` on the four test files), three runs each way:
+
+| | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| new tests added, source unfixed | 6 failed, 34 passed | 6 failed, 34 passed | 6 failed, 34 passed |
+| patch applied | 40 passed | 40 passed | 40 passed |
+
+The six failures are the six new tests, with the same messages as in section 10 (`expected { id: 1, title: 'First' }
+to deeply equal { id: 2, title: 'Second' }`, `... to be null` twice, `Tenant A` for `Tenant B`, `{ title: 'First' }`
+for `{ title: 'Second' }`, `[ 'react', 'redis' ]` for `[ 'react' ]`). Checks Directus asks for before a pull request,
+on the patched tree: `pnpm lint` 0 errors (78 warnings, none in a changed file), `pnpm lint:style` clean, `pnpm format`
+("All matched files use Prettier code style!"). The whole app suite and `vue-tsc` were not re-run (section 10 has
+them on 12.5.1).
+
+### 14.3 Reproduction without GenClass, unfixed and fixed
+
+`confirm-plain.mjs` unchanged (plain Playwright, no injected script, no browser flag; only article 2's GET held).
+
+| article 2 response delayed by | unfixed `main`: stale form under `/articles/1` | fixed: stale form |
+|---|---:|---:|
+| 0 ms | 0 of 12 | 0 of 12 |
+| 300 ms | **9 of 12** (gap 50, 100, 200 ms: 3 of 3 each; 300 ms: 0 of 3) | 0 of 12 |
+| 600 ms | **12 of 12** | 0 of 12 |
+| 900 ms | **12 of 12** | 0 of 12 |
+| Save after appending " Reviewed." to the Summary | `PATCH /items/articles/1` `{"summary": "Bravo body: what failed on Tuesday. Reviewed."}`; article 1's summary became that in the database, **3 of 3**; article 2 unchanged | `{"summary": "Alpha body: the steps before a launch. Reviewed."}`, 3 of 3 |
+| Save after replacing the Title | `{"title": "Alpha: launch checklist v2"}`, only the title written, 3 of 3 | the same, 3 of 3 |
+
+Every stale run showed the header "Articles: Bravo: incident review" and the Title "Bravo: incident review" under
+`/admin/content/articles/1`. On 12.5.1 the 300 ms delay gave 7 of 14 (section 7); the rule is the same: stale whenever
+article 2's response lands after article 1's. Per-run times: `make-tables.py` output, files in
+`directus/results/refresh-2026-11-03/{buggy,fixed-all}/`.
+
+### 14.4 GenClass explore, unfixed and fixed
+
+Four sessions per build at the settings of section 11 (2 fifo baselines + seeds 1 to 6 each), classified by
+`make-tables.py` as in section 6.
+
+Unfixed `main`:
+
+| slow_ms | gap ms | GenClass verdict | stale form | stale header only | stale M2O display only | request counts only | witness only | not compared | baselines right |
+|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| 300 | 50 | 4 of 5 | 2 | 1 | 1 | 1 | 0 | 1 (seed 2: harness timeout) | 2 of 2 |
+| 300 | 300 | 6 of 6 | 3 | 2 | 1 | 0 | 0 | 0 | 2 of 2 |
+| 600 | 100 | 6 of 6 | 3 | 2 | 1 | 0 | 0 | 0 | 2 of 2 |
+| 900 | 200 | 5 of 6 | 3 | 1 | 1 | 1 | 0 | 0 | 2 of 2 |
+| **all** | | **21 of 23** | **11** of 23 | 6 | 4 | 2 | 0 | 1 | 8 of 8 |
+
+The same four settings on 12.5.1 with GenClass 0.3.0-beta.1 (section 6.1): 24 of 24 flagged, 9 stale form, 5 header,
+4 display, 6 request counts only. Today the two count-only runs are listed under "Internal state only (not a race by
+this check)" and not counted in the verdict: since PR #90, explore treats GET request counts as internal (GenClass-lib
+`99fe8d0`, `e603695`; RESULTS.md section 22). So the verdict now flags exactly the 21 runs whose page differs.
+Seed 2 of the first session timed out in the harness waiting for the Related field's link on article 1 (60 s) and was
+not compared; not investigated.
+
+Fixed (the patch, all four guards):
+
+| slow_ms | gap ms | GenClass verdict | stale form, header or display | request counts only (GenClass: "internal state only") | same as baseline | baselines right |
+|---:|---:|---|---:|---:|---:|---:|
+| 300 | 50 | No race found (0 of 6) | 0 | 3 | 3 | 2 of 2 |
+| 300 | 300 | **RACE 1 of 6** (false: seed 4, see below) | 0 | 4 (seed 4 among them) | 2 | 2 of 2 |
+| 600 | 100 | No race found (0 of 6) | 0 | 3 | 3 | 2 of 2 |
+| 900 | 200 | No race found (0 of 6) | 0 | 3 | 3 | 2 of 2 |
+| **all** | | **1 of 24 flagged, false** | **0** of 24 | 13 | 11 | 8 of 8 |
+
+All 32 loads (baselines included) ended on `/admin/content/articles/1` with the Title "Alpha: launch checklist" and
+the header "Articles: Alpha: launch checklist". On 12.5.1 with GenClass 0.3.0-beta.1 the same four sessions flagged
+**23 of 24** runs on the fixed build, "RACE" in 4 of 4 sessions (section 11.4); today **1 of 24**, in 1 of 4 sessions.
+The one: run r7 (seed 4) of the 300/300 session differs from the baselines only in request counts, and one of them is a
+write, `PATCH /users/me/track/page` (the Studio's last-page tracking, sent on navigation): 3 in the baselines, 4 in
+this run. GenClass counts writes per signature as part of the final state ("the writes it sent"), so a timing-dependent
+count of a fire-and-forget tracking write still makes a RACE. Not a Directus finding.
+
+Recall on the unfixed build stays: 11 of 23 compared runs show a stale form (9 of 24 at the same settings on 12.5.1).
+False-report rate on the fixed build: 1 of 24 reordered runs (0 of 24 by the DOM oracle).
+
+### 14.5 Upstream since the hunt
+
+- Duplicate search (`gh api -X GET search/issues`, `repo:directus/directus is:issue|is:pull-request <terms>`, 3 s
+  apart): 8 term queries for issues and pull requests each, plus every issue (16) and pull request (38) opened since
+  2026-10-24. Nothing on this bug; nearest is issue #28430 (Insights panels, multi-query results out of order, PR
+  #28442 open), a different component. Details and the terms are in the fact sheet.
+- Open pull requests that might collide (#28449 shadow versioning, #28439 form re-rendering, #28437, #28443, #28412,
+  #28423, #28442, #28446, #28398, fetched read-only with `git fetch origin pull/<n>/head`): none touches a patched file
+  or `item.vue`.
+- Rules re-read at `88c5c47`: `ai_policy.md`, `contributing.md` (a link to
+  https://directus.com/docs/community/contribution/pull-requests), `cla.md`, `contributors.yml`, `AGENTS.md`,
+  `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/`. Since `v12.5.1` only `AGENTS.md` (Node 26, pnpm 12),
+  `.github/copilot-instructions.md` and `contributors.yml` changed. `AGENTS.md` invites automated agents to add
+  🤖🤖🤖 to a title to be "fast-tracked"; the sender files by hand under `ai_policy.md` (human in the loop, own words,
+  AI-generated content disclosed in quote blocks) and must not add it. The fact sheet now has the rules, the form and
+  template fields and a "Before filing" checklist.
+
+### 14.6 Problems with GenClass itself (2026-11-03)
+
+- Fixed since PR #90: request-count-only differences are no longer a RACE (section 14.4).
+- Still open: a write's request count is part of explore's final state, so a fire-and-forget write whose count depends
+  on timing (Directus's `PATCH /users/me/track/page`, 3 in the baselines and 4 in one reordered run) makes a false
+  RACE: 1 of 24 runs on the fixed build (section 14.4). A per-signature allowlist, or comparing writes by body and
+  target rather than by count, would remove it.
+- Still open (section 11.4): the summary line for runs that "ended right" with a witness says "an older response
+  overwrote newer data" also for `identical-in-flight` witnesses. Not seen in today's verdict lines (no run ended
+  right with only a witness), so not re-measured.
+- The harness kept its two workarounds (section 5: the Local Network Access flag, the dropped Vue DevTools tags; the
+  Studio's `vite.config.js` still loads the overlay); not re-tested without them.
+- `make-tables.py` counts a seeded load that failed in the harness as "same as baseline"; the table above corrects
+  it by hand. Harness-only, not GenClass.
+
+### 14.7 Status
+
+**Ready to send** (as evidence and a fix for a person to file by hand). The bug reproduces on today's `main` without
+GenClass (33 of 36 runs with article 2's response 300 to 900 ms late; 0 of 12 without a delay) and Save still writes
+the other item's text into the current one (3 of 3); the patch applies unchanged, its tests fail before and pass after
+(3 runs each way), lint, style and format pass, and nothing upstream duplicates or collides with it. What is left is
+the sender's by-hand list in [directus-facts.md](directus-facts.md), "Before filing": reproduce by hand, run the tests,
+read the diff until every line can be explained, write the issue and the PR in their own words (Directus's
+`ai_policy.md`; AI-generated material only in marked quote blocks), search again on the day, add the CLA line to
+`contributors.yml`, never add 🤖🤖🤖. File the issue first, then the PR with `Fixes #<issue>`.
+
+Time: 1 hour 20 minutes of wall clock (setup to a running Studio about 15 minutes: Node 26 tarball, install 12 s, build,
+bootstrap; the plain matrix about 9 minutes per build; each explore session 4 to 5 minutes).

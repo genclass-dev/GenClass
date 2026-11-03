@@ -1,12 +1,26 @@
 Directus Studio: discard stale responses in the item view and its siblings (prepared, not submitted).
-Base: directus/directus tag v12.5.1 (2cd112f1a1afe42829d2e4de899d07ce4394649c). Apply with: git apply directus.patch
-Evidence and test results: docs/adoption/hunts/directus.md in genclass-dev/GenClass-lib.
+Base: directus/directus main at 88c5c470b14bdf3501a2a31e429273087f22e937 (2026-11-02, after v12.6.0). Apply with:
+git apply directus.patch. The code part also applies unchanged to v12.5.1 and v12.6.0 (the four files are identical).
+Evidence and test results: docs/adoption/hunts/directus.md in genclass-dev/GenClass-lib (section 14 for this base).
 
 - app/src/composables/use-item/index.ts: the fix for the reported bug (generation counter in getItem()).
 - use-template-data.ts, use-relation-single.ts, input-autocomplete-api.vue: the same class, separable.
 - Tests: 3 in use-item/index.test.ts, 1 each in use-template-data.test.ts, use-relation-single.test.ts and the new
-  input-autocomplete-api.test.ts. Each fails on v12.5.1 and passes with the patch.
+  input-autocomplete-api.test.ts. Each fails on the base and passes with the patch.
+- .changeset/stale-item-navigation.md: '@directus/app': patch; reword it before sending.
+- Not included: contributors.yml (the CLA line is the sender's own GitHub username).
 
+diff --git a/.changeset/stale-item-navigation.md b/.changeset/stale-item-navigation.md
+new file mode 100644
+index 0000000..d6ec11c
+--- /dev/null
++++ b/.changeset/stale-item-navigation.md
+@@ -0,0 +1,5 @@
++---
++'@directus/app': patch
++---
++
++Fixed the item page showing the previous item's values after navigating between items while a request was still loading
 diff --git a/app/src/composables/use-item/index.test.ts b/app/src/composables/use-item/index.test.ts
 index 2da53dc..9c6d173 100644
 --- a/app/src/composables/use-item/index.test.ts

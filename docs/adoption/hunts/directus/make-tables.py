@@ -45,7 +45,7 @@ def verdict(s):
     m = re.search(r"RACE: no reordered run ended differently, but (\d+) of (\d+)", s["report"])
     if m:
         return f"0 of {m.group(2)} (+{m.group(1)} with a witness)"
-    m = re.search(r"all (\d+) reordered run", s["report"])
+    m = re.search(r"all (\d+) reordered run", s["report"]) or re.search(r"No race found: none of the (\d+) compared", s["report"])
     return f"no race (0 of {m.group(1)})" if m else "?"
 
 
@@ -60,10 +60,11 @@ def nav_table(tag):
         for _, _, b in bl:
             c[cls(b)] += 1
         seeded = s["runs"]
-        same = seeded - len(bl)
+        failed = sum(1 for r in s["results"][2:] if "failed" in r)  # a load the harness could not drive: not compared
+        same = seeded - len(bl) - failed
         base = s["results"][:2]
         base_ok = sum(1 for r in base if r.get("title") == "Alpha: launch checklist" and r.get("url", "").endswith("/articles/1"))
-        print(f"| {s['slowMs']} | {s['gapMs']} | {verdict(s)} | {c['form']} | {c['header']} | {c['display']} | {c['counts']} | {c['witness']} | {same} | {base_ok} of 2 |")
+        print(f"| {s['slowMs']} | {s['gapMs']} | {verdict(s)} | {c['form']} | {c['header']} | {c['display']} | {c['counts']} | {c['witness']} | {same}" + (f" ({failed} not compared)" if failed else "") + f" | {base_ok} of 2 |")
         tot["seeded"] += seeded
         for k in c:
             tot[k] += c[k]
