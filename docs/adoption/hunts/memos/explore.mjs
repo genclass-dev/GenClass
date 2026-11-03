@@ -214,7 +214,12 @@ const surfaces = {
       await nap(page);
       await menu(page, "Restore");
     },
-    oracle: (shown, server) => ({ shown: `path=${shown.path}`, server: `state=${server.state}` }),
+    // The page a person ends on, against the page that lists the memo in its saved state (home or its own page for
+    // NORMAL, /archived for ARCHIVED).
+    oracle: (shown, server) => ({
+      shown: `page=${shown.path === "/archived" ? "archived" : "home-or-detail"}`,
+      server: `page=${server.state === "ARCHIVED" ? "archived" : "home-or-detail"}`,
+    }),
   },
   tasks: {
     memo: () => seeds.tasks,
