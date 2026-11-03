@@ -90,10 +90,17 @@ cd ~/targets/linkcheck/after && node ~/targets/tools/404-links/404-links.js
 
 **The whole list, before and after the change** (exit code 1 both times):
 
-<!-- linkcheck:full -->
+| Run | Links checked | Passed (200) | Failed | Errors by kind |
+|---|---|---|---|---|
+| Recorded commit (before) | 243 | 118 | 125 | 124 `ENOTFOUND`, 1 `403` (`https://www.npmjs.com/package/s3-test-server`) |
+| With the patch (after) | 244 | 119 | 125 | the same 125 URLs |
 
-In this container, only github.com and raw.githubusercontent.com hosts resolve. Every other host failed with
-`ENOTFOUND`, plus one 403. So the full-list error count measures this sandbox, not the list. The useful comparison
+`diff` of the sorted URL lists: the only added URL is `https://github.com/genclass-dev/GenClass`, which passed with
+`[200]`. The failing set is identical before and after.
+
+In this container, only github.com and raw.githubusercontent.com resolve (the passing set is 117 github.com links
+and 1 raw.githubusercontent.com link before the change). Every other host failed with `ENOTFOUND`, and npmjs.com
+answered 403. So the full-list error count measures this sandbox, not the list. The useful comparison
 is that the change adds one link, and that link passes. The brief's verifier found the action already failing on
 `master` on GitHub. A red check is expected and is not caused by this entry.
 
@@ -173,5 +180,6 @@ No GenClass code was run for a listing. Documentation found along the way:
 
 ## 8. Time
 
-About 45 minutes: reading the brief and rules, locating and checking the entry, the link checker runs (the full-list
-run takes about 15 minutes because of the 500 ms GitHub delay), and these files.
+About 75 minutes, of which about 35 were waiting for the two full-list link checker runs (243 links each, with
+500 ms between GitHub requests). The rest went to reading the brief and the rules, locating and checking the entry,
+and writing these files.
