@@ -2,7 +2,8 @@
 
 Status: evidence and a prepared fix, nothing sent to Gitea. The issue draft ([gitea-issue.md](gitea-issue.md)) and the
 patch ([gitea.patch](gitea.patch)) are for the owner to reproduce by hand, rewrite and send. Gitea asks for an issue
-before a PR, and its AI policy needs the contributor to answer maintainer questions personally.
+before a PR, and its AI policy needs the contributor to answer maintainer questions personally. Refreshed on
+2026-11-03 against Gitea `main` at `78eb95a`: **ready to send** (see "Refresh (2026-11-03)" at the end).
 
 ## Headline
 
@@ -342,3 +343,165 @@ clone and both builds 11 min (GenClass 2 min, Gitea 3 min 37 s); the harness, th
 first race found 9 min; the other surfaces and the negatives 5 min; the e2e test and the fix 10 min; the before and
 after runs and both explore datasets 15 min (one 3-latency session set for one surface takes about 1 min); the patch,
 the person-paced check and the writing about 25 min.
+
+## Refresh (2026-11-03)
+
+Status: **ready to send**. The bug is still on Gitea's `main` and in the latest release, nothing has been filed on it,
+the patch applies unchanged, and every number below was re-measured today. What the sender has left is by hand:
+reproduce it in their own browser, run the test, read the diff, rewrite where they want, file the issue, and open the
+PR only after a maintainer responds (checklist at the top of [gitea-issue.md](gitea-issue.md)). Forgejo could not be
+checked from this container (below).
+
+### What was re-run, and how
+
+- Gitea `main` at [`78eb95a`](https://github.com/go-gitea/gitea/commit/78eb95ab19c64210c00b15eaf85551d188613173)
+  (2026-11-03 15:30 UTC, 78 commits after the hunt's `ff68b39`), cloned to `~/targets/gitea`; latest release
+  [v28.3.0](https://github.com/go-gitea/gitea/releases/tag/v28.3.0) (tag commit `4f5a3e1`, 2026-11-01). Both
+  handler files are byte-identical to the hunt's commit and to v28.3.0 (`git diff v28.3.0 HEAD` on them is empty; blobs
+  `2e03422` and `a17e985`, the ones the patch names), so the line links in the drafts now point at v28.3.0 with the same
+  line numbers. No commit since `ff68b39` touched them.
+- Toolchain: `go.mod` now `go 1.27` / `toolchain go1.27.3` (fetched by `GOTOOLCHAIN=auto` from the container's Go
+  1.24.7), Node 22.23.4, pnpm 12.16.1 (Gitea's `packageManager`; preinstalled here, so the hunt's corepack workaround
+  was not needed), Gitea's Playwright 1.64.1 driving the container's Chromium (revision 1243, Chrome for Testing
+  153.0.8010.12). `make build`: 4 min 43 s. GenClass at this repository's `c1c9e14` (`@genclass/runtime`
+  0.3.0-beta.5, `@genclass/mcp` 0.2.1), built from the checkout.
+- `make test-e2e` still starts with `playwright install --with-deps`, which this container does not allow (and
+  Gitea's config now has a `webkit` project too), so `tools/test-e2e.sh` ran directly on the built binary with an
+  uncommitted `playwright.local.config.ts` that keeps Gitea's config and only keeps the `chromium` project, pointed at
+  `/opt/pw-browsers/chromium`:
+
+  ```bash
+  GITEA_I_AM_BEING_UNSAFE_RUNNING_AS_ROOT=true EXECUTABLE=gitea \
+    ./tools/test-e2e.sh -c playwright.local.config.ts tests/e2e/markdown-preview.test.ts
+  ```
+
+  three separate runs on the unfixed tree (with only the test file added) and three on the fixed tree (`git am
+  docs/adoption/hunts/gitea.patch`, then `make build` again).
+- The person-paced reproduction ([gitea-throttle.mjs](gitea-throttle.mjs), unchanged) and the explore sessions
+  ([gitea-explore.mjs](gitea-explore.mjs), unchanged) ran against one local instance on port 3000 configured as in
+  "Setup and commands" (user `gitea`, SQLite, `e2e-admin`, repository `hunt` with auto-init, issue 1), restarted on each
+  build. Fixed build first, then unfixed. The dispatch surface (the secondary lead) was not re-run.
+
+### Numbers
+
+| | unfixed (`78eb95a`) | fixed (`78eb95a` + patch) |
+|---|---|---|
+| e2e test, 3 runs x 2 tests | **6 of 6 fail**, at lines 44 and 68 (the assertion after the release), each receiving "outdated text" | **6 of 6 pass**, 1.5 to 2.4 s per test |
+| neighbouring `codeeditor.test.ts`, `issue-comment.test.ts` with the new test | not run | 7 of 7 pass |
+| without GenClass: Chromium throttled to 400 ms and 50 KB/s, 62 KB first text, about 1 s between actions, 5 runs | **5 of 5** end with the long text (first line "item 0 with bold and code text") while the editor holds "short text"; "short text" first appeared 3.06 to 3.20 s after the first click | **0 of 5**: 5 of 5 end with "short text" |
+| explore, comment box, 3 x (2 baselines + 6 seeded), 300 / 600 / 900 ms | **5 of 18** seeded loads end with the old text (2, 1, 2) | **0 of 18** |
+| explore, file editor Preview, same | **6 of 18** (2, 2, 2) | **0 of 18** |
+| explore, file editor Preview Changes, 3 x (2 baselines + 12 seeded) | **12 of 36** (4, 4, 4) | **0 of 36** |
+| seeded loads where the newer response was delivered first | 23, all 23 showed the old text | 23, none showed the old text |
+| baselines (responses in request order) ending right | 18 of 18 | 18 of 18 |
+| explore's RACE verdicts | 9 of 9 sessions, each count equal to the loads with old text; `overwrote-newer` witness and `stale-write` finding in all 9 | 1 of 9 sessions, a false report (below); no `overwrote-newer` witness in any |
+
+The per-latency splits differ slightly from 2026-10-24 (comment 6 then 5, file Preview 5 then 6): which seeds put the
+newer response first depends on the request keys and the page's other requests, and the oracle (the preview's text)
+agrees with the delivery order in every load on both days. Per-session numbers: [gitea-refresh/summary.json](gitea-refresh/summary.json).
+
+Lint on the fixed tree: `pnpm exec eslint --max-warnings=0` on the three changed files and `pnpm exec vue-tsc` (what
+`make lint-js` runs, scoped) are clean. Not run: Gitea's vitest suite (browser mode on Playwright 1.64.1's own browsers,
+not installed here; the changed handlers have no unit tests), Firefox and WebKit e2e.
+
+Timeline from the unfixed comment session at 600 ms (run r11, seed 1, as `genclass_explain` printed it; the page's own
+`content-history` request left out):
+
+```
++0.482s send POST /:id/hunt/markup#1 "form 3 fields" (action 1)
++0.593s send POST /:id/hunt/markup#2 "form 3 fields" (action 4)
++0.931s delivered POST /:id/hunt/markup#2 (held 320 ms)
++0.932s write commentPreview.text by POST /:id/hunt/markup#2: "Loading…" → "bravo final wording"
++0.962s delivered POST /:id/hunt/markup#1 (held 458 ms)
++0.963s write commentPreview.text by POST /:id/hunt/markup#1: "bravo final wording" → "alpha draft of the comment"
+```
+
+### The tracker since the hunt
+
+`gh api -X GET search/issues`, 3 s apart, each query with `is:issue` and again with `is:pr`, all with
+`repo:go-gitea/gitea`: `preview markdown outdated`, `preview stale`, `preview race`, `preview "out of order"`,
+`preview created:>=2026-10-24`, `ComboMarkdownEditor`, `repo-editor preview`, `markup preview old text` (16 queries).
+Nothing on this bug. The issues and PRs created since 2026-10-24 that matched are about mail templates, cleanup rules,
+pasting code, review attachments and pages support. The closest older items stay as the draft names them:
+[#19784](https://github.com/go-gitea/gitea/issues/19784) (uncommitted IME input on Android) and the merged
+[#36625](https://github.com/go-gitea/gitea/pull/36625) ("Fix state desync in ComboMarkdownEditor", a different
+desync). The one open PR that touches `repo-editor.ts`,
+[#37167](https://github.com/go-gitea/gitea/pull/37167) (rich markdown diffs), leaves both preview handlers as they are
+on `main` (read from its head ref with `git fetch origin pull/37167/head`), so the patch does not conflict with it today.
+
+### The project's rules, read today
+
+[CONTRIBUTING.md](https://github.com/go-gitea/gitea/blob/main/CONTRIBUTING.md#ai-contribution-policy) at `78eb95a`,
+"AI Contribution Policy", in full:
+
+> Contributions made with the assistance of AI tools are welcome, but contributors must use them responsibly and
+> disclose that use clearly.
+>
+> 1. Review AI-generated code closely before marking a pull request ready for review.
+> 2. Manually test the changes and add appropriate automated tests where feasible.
+> 3. Only use AI to assist in contributions that you understand well enough to explain, defend, and revise yourself
+>    during review.
+> 4. Disclose AI-assisted content clearly.
+> 5. Do not rely solely on AI to generate replies or engage in discussions.
+>    Ensure your responses are concise, accurate, and thoughtful, avoiding generic or low-quality AI-generated content.
+> 6. AI may be used to help draft issues and pull requests, but contributors remain responsible for the accuracy,
+>    completeness, and intent of what they submit.
+>
+> Maintainers reserve the right to close pull requests and issues that do not disclose AI assistance, that appear to
+> be low-quality AI-generated content, or where the contributor cannot explain or defend the proposed changes
+> themselves.
+>
+> We welcome new contributors, but cannot sustain the effort of supporting contributors who primarily defer to AI
+> rather than engaging substantively with the review process.
+
+Also from CONTRIBUTING: "file an issue or comment on an existing one before starting your work" and "Pull requests
+should not be the place for architecture discussions" (hence issue first); "describe the problem you are fixing, not
+how you are fixing it" in the PR title, Conventional Commits, squash merge; the DCO is agreed by opening the PR, with
+`Signed-off-by` optional. Gitea's [AGENTS.md](https://github.com/go-gitea/gitea/blob/main/AGENTS.md) (for coding
+agents) adds: `Assisted-by: AGENT_NAME:MODEL_VERSION` trailer, "never `Co-Authored-By` or `Signed-off-by`"; PR
+descriptions "minimal, only what and why", under 1000 characters; issues and PRs by full URL; "Attribute agent
+authorship on one trailing line in issue and PR comments, never as a PR description section"; comments "almost none,
+short and preferably same-line"; e2e tests under 4 s and waiting "on a deterministic condition rather than `sleep`".
+The patch already followed these; the fixed tests take 1.5 to 2.4 s.
+
+### What changed in the drafts
+
+- [gitea-issue.md](gitea-issue.md): version line (`main` at `78eb95a`, v28.3.0), code links moved to v28.3.0 (same
+  lines), the duplicate search dated and listed, the disclosure as one trailing line in the swarm's wording (Gitea's
+  AGENTS.md wants a single trailing line), a "before filing" and a "before opening the PR" checklist split into what the
+  session did and what is by hand, and the **pull request description**, which the hunt had not drafted (Gitea's
+  template, 965 characters, with answers to the three questions a reviewer is likely to ask).
+- [gitea.patch](gitea.patch): unchanged. It applies with `git am` on `78eb95a` and `git format-patch` from there
+  differs only in the commit hash and the abbreviated blob lengths. The sender still sets their identity and the
+  trailer's `MODEL_VERSION`.
+
+### Forgejo
+
+Not checked. `codeberg.org` (and `code.forgejo.org`) are denied by this container's network policy (the proxy answers
+403 to CONNECT), there is no Forgejo mirror on GitHub, and the Go module proxy does not serve the current module. So
+whether Forgejo still carries the same handlers is unknown today; a session with codeberg.org allowed can check
+`web_src/js/features/comp/ComboMarkdownEditor.*` and `web_src/js/features/repo-editor.*` on Forgejo's default branch.
+Nothing was prepared for Forgejo.
+
+### Problems with GenClass itself (new today)
+
+- **A false RACE from server timing text.** On the fixed build, the Preview Changes session at 600 ms reported "RACE:
+  12 of 12" and filed finding f1 ("it shows "Page: 16ms Template: 4ms" under "seed 1""): Gitea's footer prints the
+  server's render time. Explore treats text as noise only when it "differs between the two baselines"; in that session
+  both baselines happened to render "Page: 18ms Template: 4ms", so every seeded load differed from them. The other 8
+  sessions on the fixed build listed `text "Page: N Template: N"` as ignored noise. The fixed build's preview was right
+  in all 12 loads. A cheap improvement: treat text that differs from the baselines only in numbers (the "N" pattern
+  explore already builds) as noise when the numbers look like durations, or when that pattern varied in any earlier
+  session on the same page; until then, two baselines are too few for pages that print timings.
+- **The generated regression test's locator for an unlabeled editor.** In that same finding, the recorded step names
+  CodeMirror's unlabeled textbox by its content ("type textbox "alpha draft of the comment""), so the generated test
+  fills `getByRole("textbox", { name: "alpha draft of the comment" })`, which will not match an empty editor on a fresh
+  load. Not hit on the comment box, whose textarea has a placeholder.
+- Still true from the hunt: no automatic state discovery on this stack (one injected `rt.atom` per pane), and the
+  Local Network Access permission each route-fulfilled context needs.
+
+### Time spent
+
+About 30 minutes of wall-clock time (16:34 to about 17:05 UTC): clone and both builds 7 min, the e2e runs 4 min, the
+tracker search 2 min, the instance, the throttled runs and the explore sessions 10 min, the Forgejo attempts 3 min,
+the drafts and this section the rest.
