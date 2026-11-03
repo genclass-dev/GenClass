@@ -1,0 +1,25 @@
+{
+  "scenario": "admin-search",
+  "delay_ms": 1500,
+  "delayed": "0 of 5 wrong",
+  "control": "0 of 5 wrong",
+  "delayedLines": [
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")",
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")",
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")",
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")",
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")"
+  ],
+  "controlLines": [
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")",
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")",
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")",
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")",
+    "OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\")"
+  ],
+  "requests": [
+    "?perpage=50&page=0&query=&activeLast30Days=false",
+    "?perpage=50&page=0&query=lunar&activeLast30Days=false",
+    "?perpage=50&page=0&query=lunar-o&activeLast30Days=false"
+  ]
+}

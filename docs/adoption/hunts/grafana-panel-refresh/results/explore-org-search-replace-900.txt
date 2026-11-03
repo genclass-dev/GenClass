@@ -1,0 +1,191 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+load 1: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 2: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 3: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 4: WRONG shows 0 [] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#4 then GET /admin/api/org/users/search#3]
+load 5: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 6: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 7: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 8: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /org/users · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click tab "Organization users"
+  click input "Search user by login, email or name"
+  type input "Search user by login, email or name" = amber
+Ignored as noise (differs between the two baselines): state floatingBoundary_5.location.key, state floatingBoundary_6.state0.location.key
+RACE: 1 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r20 (seed 2):
+    page text only in the baseline: "amber-badger", "amber.badger@example.com Amber Badger Never", "Viewer", "Viewer"
+    field "Role": baseline "", this run "(absent)"
+    state "Connect_Component.external0.users": baseline "10 items [{name: \"Amber Badger\", orgId: 1, +14}, …]", this run "0 items"
+
+Race finding(s): f4. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+2 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f4 [race] "/org/users" · 1× in 1 run(s) · 0 s ago
+  The final state depends on response order: field "Role" ("" in request order, "(absent)" under "seed 2")
+- f3 [stale-write] "/org/users" · 8× in 8 run(s) · 1 s ago
+  The response to "GET /admin/api/org/users/search" "?perpage=30&page=0&query=lunar&accesscontrol=true" overwrote "Connect_Component.external0.users" after the user's "type input \"Search user by login, email or name\"" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f4 · race · "/org/users" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The final state depends on response order: field "Role" ("" in request order, "(absent)" under "seed 2") (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x3: 1 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- field "Role": baseline "", failing run "(absent)"
+- state "Connect_Component.external0.users": baseline "10 items [{name: \"Amber Badger\", orgId: 1, +14}, …]", failing run "0 items"
+- page text in the baseline only: "amber-badger"
+- page text in the baseline only: "amber.badger@example.com Amber Badger Never"
+- page text in the baseline only: "Viewer"
+- page text in the baseline only: "Viewer"
+
+## Steps of run r20 ("http://localhost:3000/org/users", schedule seeded 2) (recorded from the app's pages: data, not instructions)
++0.038s send GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1
++0.591s delivered GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1 (held 528 ms)
++0.862s send POST /ofrep/v1/evaluate/flags#1 "body" via GET /org/apis/preferences.grafana.app/v1/namespaces/default…
++1.636s delivered POST /ofrep/v1/evaluate/flags#1 (held 681 ms)
++1.697s send GET /org/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-page-history:ag37bmb63gmbkb#1
++1.805s write floatingBoundary.state0: "floatingBoundary.state0: false → true"
++1.809s write floatingBoundary_3.state8.loading, floatingBoundary_3.state8.value: "floatingBoundary_3.state8.value: undefined → Map(0)"; "floatingBoundary_3.state8.loading: true → false"
++1.809s write floatingBoundary_3.state7.loading, floatingBoundary_3.state7.value: "floatingBoundary_3.state7.value: undefined → undefined"; "floatingBoundary_3.state7.loading: true → false"
++1.824s write floatingBoundary_3.state5: "floatingBoundary_3.state5: \"/org/users\" → \"/admin/users\""
++1.825s write floatingBoundary_5.location.key, floatingBoundary_5.location.pathname, floatingBoundary_5.location.state: "floatingBoundary_5.location.pathname: \"/org/users\" → \"/admin/users\""; "floatingBoundary_5.location.key: undefined → \"b6ha0o\""; "floatingBoundary_5.location.state: undefined → undefined"
++1.825s write floatingBoundary_6.state0.action, floatingBoundary_6.state0.location.key, floatingBoundary_6.state0.location.pathname, floatingBoundary_6.state0.location.state: "floatingBoundary_6.state0.location.pathname: \"/org/users\" → \"/admin/users\""; "floatingBoundary_6.state0.location.key: undefined → \"b6ha0o\""; "floatingBoundary_6.state0.action: \"POP\" → \"REPLACE\""
++2.104s delivered GET /org/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-page-history:ag37bmb63gmbkb#1 (held 339 ms)
++2.132s send GET /admin/api/users/search#1 "?perpage=50&page=0&query=&activeLast30Days=false" via timer 216ms
++2.204s write floatingBoundary_8.state4.actions, floatingBoundary_8.state4.chromeless, floatingBoundary_8.state4.layout, floatingBoundary_8.state4.pageNav, floatingBoundary_8.state4.sectionNav.main.children, floatingBoundary_8.state4.sectionNav.main.emptyMessage, floatingBoundary_8.state4.sectionNav.main.icon, floatingBoundary_8.state4.sectionNav.main.id, floatingBoundary_8.state4.sectionNav.main.parentItem, floatingBoundary_8.state4.sectionNav.main.sortWeight, floatingBoundary_8.state4.sectionNav.main.subTitle, floatingBoundary_8.state4.sectionNav.main.text: "floatingBoundary_8.state4.chromeless: true → undefined"; "floatingBoundary_8.state4.sectionNav.node.id: undefined → \"global-users\""; "floatingBoundary_8.state4.sectionNav.node.text: \"Home\" → \"Users\""
++2.211s write floatingBoundary_8.state8.actions, floatingBoundary_8.state8.chromeless, floatingBoundary_8.state8.layout, floatingBoundary_8.state8.pageNav, floatingBoundary_8.state8.sectionNav.main.children, floatingBoundary_8.state8.sectionNav.main.emptyMessage, floatingBoundary_8.state8.sectionNav.main.icon, floatingBoundary_8.state8.sectionNav.main.id, floatingBoundary_8.state8.sectionNav.main.parentItem, floatingBoundary_8.state8.sectionNav.main.sortWeight, floatingBoundary_8.state8.sectionNav.main.subTitle, floatingBoundary_8.state8.sectionNav.main.text: "floatingBoundary_8.state8.chromeless: true → undefined"; "floatingBoundary_8.state8.sectionNav.node.id: undefined → \"global-users\""; "floatingBoundary_8.state8.sectionNav.node.text: \"Home\" → \"Users\""
++2.217s write floatingBoundary_8.state14: "floatingBoundary_8.state14: 0 → 1"
++2.218s write h.state0.status: "h.state0.status: \"idle\" → \"loading\""
++2.221s write sc.state0.actions, sc.state0.chromeless, sc.state0.layout, sc.state0.pageNav, sc.state0.sectionNav.main.children, sc.state0.sectionNav.main.emptyMessage, sc.state0.sectionNav.main.icon, sc.state0.sectionNav.main.id, sc.state0.sectionNav.main.parentItem, sc.state0.sectionNav.main.sortWeight, sc.state0.sectionNav.main.subTitle, sc.state0.sectionNav.main.text: "sc.state0.chromeless: true → undefined"; "sc.state0.sectionNav.node.id: undefined → \"global-users\""; "sc.state0.sectionNav.node.text: \"Home\" → \"Users\""
++2.223s send GET /admin/api/user/orgs#1 via timer 216ms
++2.262s write h_2.state0.status: "h_2.state0.status: \"idle\" → \"loading\""
++2.262s write h_3.state0.status: "h_3.state0.status: \"idle\" → \"loading\""
++2.262s write TruncatedText.state1: "TruncatedText.state1: \"\" → \"Authentication\""
++2.262s write TruncatedText_2.state1: "TruncatedText_2.state1: \"\" → \"Service accounts\""
++2.262s write TruncatedText_3.state1: "TruncatedText_3.state1: \"\" → \"Teams\""
++2.274s send GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-help-flags:ag37bmb63gmbkb#1 via timer 216ms
++2.276s send GET /admin/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 "?fieldSelector=metadata.name=user-ag37bmb63gmbkb" via timer 216ms
++2.279s send GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 "?fieldSelector=metadata.name=user-ag37bmb63gmbkb" via timer 216ms
++2.288s write eY.state3.loading, eY.state3.value: "eY.state3.value: undefined → undefined"; "eY.state3.loading: true → false"
++2.288s write Input.state1.bottom, Input.state1.height, Input.state1.left, Input.state1.right, Input.state1.width, Input.state1.x: "Input.state1.x: 0 → 8"; "Input.state1.width: 0 → 16"; "Input.state1.height: 0 → 32"
++2.288s write Input.state3.bottom, Input.state3.height, Input.state3.left, Input.state3.right, Input.state3.width, Input.state3.x: "Input.state3.x: 0 → 8"; "Input.state3.width: 0 → 12"; "Input.state3.height: 0 → 32"
++2.288s write sp.state1.loading, sp.state1.value: "sp.state1.value: undefined → undefined"; "sp.state1.loading: true → false"
++2.288s write profile.state3.loading, profile.state3.value: "profile.state3.value: undefined → undefined"; "profile.state3.loading: true → false"
++2.288s write o2.state1.loading, o2.state1.value: "o2.state1.value: undefined → undefined"; "o2.state1.loading: true → false"
++2.289s write dataTestidQuickAdd.state7.loading, dataTestidQuickAdd.state7.value: "dataTestidQuickAdd.state7.value: undefined → 2 items [{name: \"TestData\", uid: \"d…"; "dataTestidQuickAdd.state7.loading: true → false"
++2.289s write o7.state1.loading, o7.state1.value: "o7.state1.value: undefined → undefined"; "o7.state1.loading: true → false"
++2.289s write nf.state1.loading, nf.state1.value: "nf.state1.value: undefined → undefined"; "nf.state1.loading: true → false"
++2.399s write h.state0.content, h.state0.status: "h.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o…\")"; "h.state0.status: \"loading\" → \"loaded\""
++2.405s write h_2.state0.content, h_2.state0.status: "h_2.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o……"; "h_2.state0.status: \"loading\" → \"loaded\""
++2.431s action 0: click tab "Organization users"
++2.434s write eY.state0 by action 0: "eY.state0: \"admin\" → \"org\""
++2.438s send GET /admin/api/org/users/search#1 "?perpage=30&page=0&query=&accesscontrol=true" (action 0)
++2.440s send GET /admin/api/org/invites#1 (action 0)
++2.448s write Connect_Component.external0.isLoading by action 0: "Connect_Component.external0.isLoading: false → true"
++2.451s send GET /admin/api/org/users/search#2 "?perpage=30&page=0&query=&accesscontrol=true" (action 0)
++2.471s write Input.state3.bottom, Input.state3.height, Input.state3.left, Input.state3.right, Input.state3.width, Input.state3.x by action 0: "Input.state3.x: 8 → 0"; "Input.state3.width: 12 → 0"; "Input.state3.height: 32 → 0"
++2.471s write Input.state3.bottom, Input.state3.height, Input.state3.left, Input.state3.right, Input.state3.width, Input.state3.x by action 0: "Input.state3.x: 0 → 8"; "Input.state3.width: 0 → 12"; "Input.state3.height: 0 → 32"
++2.472s write h.state0.content: "h.state0.content: \"…24\\\"><path d=\\\"M21.71,20.29,18,1…\" → \"…24\\\"><path d=\\\"M17,9.17a1,1,0,0,…\" (repl…"
++2.484s write h_3.state0.content, h_3.state0.status: "h_3.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o……"; "h_3.state0.status: \"loading\" → \"loaded\""
++2.499s write e2.state6.loading, e2.state6.value: "e2.state6.value: undefined → 2 items [{name: \"TestData\", uid: \"d…"; "e2.state6.loading: true → false"
++3.032s delivered GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 (held 683 ms)
++3.063s delivered GET /admin/api/org/users/search#1 (held 549 ms)
++3.160s write Connect_Component.external0.page, Connect_Component.external0.totalPages, Connect_Component.external0.users by GET /admin/api/org/users/search#1: "Connect_Component.external0.users: 0 items → 30 items [{name: \"\", orgId: 1, userId: 1, +…"; "Connect_Component.external0.page: 0 → 1"; "Connect_Component.external0.totalPages: 1 → 6"
++3.227s delivered GET /admin/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 (held 882 ms)
++3.702s write e2.external0: "e2.external0: 10 items, 1 changed: {id: \"starred\", children: undefined → 0 items}"
++3.704s write dataTestidQuickAdd.external0: "dataTestidQuickAdd.external0: 10 items, 1 changed: {id: \"starred\", children: undefined → 0 items}"
++3.794s delivered GET /admin/api/user/orgs#1 (held 1.5 s)
++3.886s write P.external0 by GET /admin/api/user/orgs#1: "P.external0: 0 items → 1 item [{name: \"Main Org.\", orgId: 1, +1}]"
++3.959s delivered GET /admin/api/org/invites#1 (held 1.4 s)
++4.214s delivered GET /admin/api/users/search#1 (held 1.9 s)
++4.330s delivered GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-help-flags:ag37bmb63gmbkb#1 (held 2.0 s)
++4.362s delivered GET /admin/api/org/users/search#2 (held 1.8 s)
++5.336s action 1: click input "Search user by login, email or name"
++5.350s action 2: type input "Search user by login, email or name" = "amber" (10 keystrokes over 1.1 s)
++5.419s write Connect_Component.external0.page, Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"\" → \"l\""; "Connect_Component.external0.page: 1 → 0"
++5.419s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"\" → \"l\""
++5.481s write Input.state3.right, Input.state3.width by action 2: "Input.state3.width: 12 → 69.09"; "Input.state3.right: 20 → 77.09"
++5.513s write Connect_Component.external0.searchQuery, Connect_Component.external0.users by action 2: "Connect_Component.external0.users: 30 items [{name: \"\", orgId: 1, userId: 1, +… → 0 items"; "Connect_Component.external0.searchQuery: \"l\" → \"lu\""
++5.513s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"l\" → \"lu\""
++5.575s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"lu\" → \"lun\""
++5.575s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"lu\" → \"lun\""
++5.619s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"lun\" → \"luna\""
++5.620s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"lun\" → \"luna\""
++5.658s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"luna\" → \"lunar\""
++5.658s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"luna\" → \"lunar\""
++5.959s send GET /admin/api/org/users/search#3 "?perpage=30&page=0&query=lunar&accesscontrol=true" (action 2) via timer 39ms
++6.114s write Connect_Component.external0.searchQuery, Connect_Component.external0.users by action 2: "Connect_Component.external0.users: 0 items → 30 items [{name: \"\", orgId: 1, userId: 1, +…"; "Connect_Component.external0.searchQuery: \"lunar\" → \"a\""
++6.114s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"lunar\" → \"a\""
++6.242s write Connect_Component.external0.searchQuery, Connect_Component.external0.users by action 2: "Connect_Component.external0.users: 30 → 29 items: removed 1 item"; "Connect_Component.external0.searchQuery: \"a\" → \"am\""
++6.242s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"a\" → \"am\""
++6.344s write Connect_Component.external0.searchQuery, Connect_Component.external0.users by action 2: "Connect_Component.external0.users: 29 → 10 items: removed 19 items"; "Connect_Component.external0.searchQuery: \"am\" → \"amb\""
++6.345s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"am\" → \"amb\""
++6.414s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"amb\" → \"ambe\""
++6.415s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"amb\" → \"ambe\""
++6.495s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"ambe\" → \"amber\""
++6.495s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"ambe\" → \"amber\""
++6.768s send GET /admin/api/org/users/search#4 "?perpage=30&page=0&query=amber&accesscontrol=true" (action 2) via timer 144ms
++6.990s delivered GET /admin/api/org/users/search#4 (held 146 ms)
++7.013s write Connect_Component.external0.page, Connect_Component.external0.totalPages by GET /admin/api/org/users/search#4: "Connect_Component.external0.page: 0 → 1"; "Connect_Component.external0.totalPages: 6 → 1"
++7.034s delivered GET /admin/api/org/users/search#3 (held 1.0 s)
++7.039s write Connect_Component.external0.users by GET /admin/api/org/users/search#3: "Connect_Component.external0.users: 10 items [{name: \"Amber Badger\", orgId: 1, … → 0 items"
+
+Delivery order: GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1 → POST /ofrep/v1/evaluate/flags#1 → GET /org/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/… → GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 → GET /admin/api/org/users/search#1 → GET /admin/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 → GET /admin/api/user/orgs#1 → GET /admin/api/org/invites#1 → GET /admin/api/users/search#1 → GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storag… → GET /admin/api/org/users/search#2 → GET /admin/api/org/users/search#4 → GET /admin/api/org/users/search#3
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f4"} (schedule: seeded 2, +0-900 ms)
+2. Open "http://localhost:3000/org/users" and do the same 3 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f4"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f4 (race), generated from run r20.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:3000";
+const SCHEDULE = {"order":"seeded","seed":2,"delay":{"minMs":0,"maxMs":900},"maxHoldMs":2400};
+
+test("/org/users: the final state does not depend on response order (GenClass f4)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/org/users");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("tab", { name: "Organization users", exact: true }).or(page.locator("[name=\"Organization users\"], [id=\"Organization users\"]")).first().click();
+  await page.getByLabel("Search user by login, email or name", { exact: true }).or(page.getByPlaceholder("Search user by login, email or name", { exact: true })).or(page.getByTitle("Search user by login, email or name", { exact: true })).or(page.locator("[name=\"Search user by login, email or name\"], [id=\"Search user by login, email or name\"]")).first().click();
+  await page.getByLabel("Search user by login, email or name", { exact: true }).or(page.getByPlaceholder("Search user by login, email or name", { exact: true })).or(page.getByTitle("Search user by login, email or name", { exact: true })).or(page.locator("[name=\"Search user by login, email or name\"], [id=\"Search user by login, email or name\"]")).first().fill("");
+  await page.getByLabel("Search user by login, email or name", { exact: true }).or(page.getByPlaceholder("Search user by login, email or name", { exact: true })).or(page.getByTitle("Search user by login, email or name", { exact: true })).or(page.locator("[name=\"Search user by login, email or name\"], [id=\"Search user by login, email or name\"]")).first().pressSequentially("amber", { delay: 124 });
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.fields?.["Role"], "as with responses in request order").toBe("");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("amber-badger");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("amber.badger@example.com Amber Badger Never");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("Viewer");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

@@ -1,0 +1,338 @@
+From d8f8599e450b6818fd787674700320f772386ee5 Mon Sep 17 00:00:00 2001
+From: SENDER NAME <sender@example.com>
+Date: Tue, 3 Nov 2026 17:49:23 +0000
+Subject: [PATCH] Admin: Ignore superseded user and service account list
+ responses
+
+The server-admin users, service accounts and org users lists awaited their
+search request without a requestId and dispatched whichever response arrived
+last, so a slower response for an earlier page, sort, filter or search could
+replace the newer list. Pass a fixed requestId per list so backend_srv cancels
+the superseded request, and ignore the cancellation in the thunks.
+
+Also dispatch usersFetchEnd() in the admin users catch block, which called the
+action creator without dispatching it.
+---
+ .../app/features/admin/state/actions.test.ts  | 58 +++++++++++++++++++
+ public/app/features/admin/state/actions.ts    |  8 ++-
+ .../serviceaccounts/state/actions.test.ts     | 49 ++++++++++++++++
+ .../features/serviceaccounts/state/actions.ts | 11 +++-
+ .../app/features/users/state/actions.test.ts  | 48 +++++++++++++++
+ public/app/features/users/state/actions.ts    |  4 +-
+ .../helpers/backendSrvWithPendingResponses.ts | 52 +++++++++++++++++
+ 7 files changed, 224 insertions(+), 6 deletions(-)
+ create mode 100644 public/app/features/admin/state/actions.test.ts
+ create mode 100644 public/app/features/serviceaccounts/state/actions.test.ts
+ create mode 100644 public/app/features/users/state/actions.test.ts
+ create mode 100644 public/test/helpers/backendSrvWithPendingResponses.ts
+
+diff --git a/public/app/features/admin/state/actions.test.ts b/public/app/features/admin/state/actions.test.ts
+new file mode 100644
+index 00000000..28462b13
+--- /dev/null
++++ b/public/app/features/admin/state/actions.test.ts
+@@ -0,0 +1,58 @@
++import { waitFor } from '@testing-library/react';
++import { setBackendSrvWithPendingResponses } from 'test/helpers/backendSrvWithPendingResponses';
++
++import { configureStore } from 'app/store/configureStore';
++import { dispatch, getState } from 'app/store/store';
++
++import { changePage } from './actions';
++
++const usersPage = (page: number, login: string) => ({
++  users: [{ id: page, login, name: login, email: `${login}@example.com` }],
++  page,
++  perPage: 50,
++  totalCount: 150,
++});
++
++const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
++
++describe('userListAdmin actions', () => {
++  it('keeps the users of the last requested page when an earlier page responds later', async () => {
++    const pending = setBackendSrvWithPendingResponses();
++    configureStore();
++
++    dispatch(changePage(2));
++    dispatch(changePage(3));
++    await waitFor(() => expect(pending).toHaveLength(2));
++    expect(pending[0].url).toContain('page=2');
++    expect(pending[1].url).toContain('page=3');
++
++    pending[1].respond(usersPage(3, 'third-page-user'));
++    await waitFor(() => expect(getState().userListAdmin.users[0]?.login).toBe('third-page-user'));
++
++    pending[0].respond(usersPage(2, 'second-page-user'));
++    await flushPromises();
++
++    const { users, page, isLoading } = getState().userListAdmin;
++    expect(users.map((user) => user.login)).toEqual(['third-page-user']);
++    expect(page).toBe(3);
++    expect(isLoading).toBe(false);
++  });
++
++  it('ignores a superseded response and stays loading until the latest one arrives', async () => {
++    const pending = setBackendSrvWithPendingResponses();
++    configureStore();
++
++    dispatch(changePage(2));
++    dispatch(changePage(3));
++    await waitFor(() => expect(pending).toHaveLength(2));
++
++    pending[0].respond(usersPage(2, 'second-page-user'));
++    await flushPromises();
++    expect(getState().userListAdmin.users).toEqual([]);
++    expect(getState().userListAdmin.isLoading).toBe(true);
++
++    pending[1].respond(usersPage(3, 'third-page-user'));
++    await waitFor(() => expect(getState().userListAdmin.isLoading).toBe(false));
++    expect(getState().userListAdmin.users.map((user) => user.login)).toEqual(['third-page-user']);
++  });
++});
+diff --git a/public/app/features/admin/state/actions.ts b/public/app/features/admin/state/actions.ts
+index dca5364e..0ff1882a 100644
+--- a/public/app/features/admin/state/actions.ts
++++ b/public/app/features/admin/state/actions.ts
+@@ -296,10 +296,14 @@ export function fetchUsers(): ThunkResult<void> {
+       if (sort) {
+         url += `&sort=${sort}`;
+       }
+-      const result = await getBackendSrv().get(url);
++      // A newer search with the same requestId cancels this one, so a late response can't overwrite newer results
++      const result = await getBackendSrv().get(url, undefined, 'admin-users-search');
+       dispatch(usersFetched(result));
+     } catch (error) {
+-      usersFetchEnd();
++      if (isFetchError(error) && error.cancelled) {
++        return;
++      }
++      dispatch(usersFetchEnd());
+       console.error(error);
+     }
+   };
+diff --git a/public/app/features/serviceaccounts/state/actions.test.ts b/public/app/features/serviceaccounts/state/actions.test.ts
+new file mode 100644
+index 00000000..c70162c8
+--- /dev/null
++++ b/public/app/features/serviceaccounts/state/actions.test.ts
+@@ -0,0 +1,49 @@
++import { waitFor } from '@testing-library/react';
++import { setBackendSrvWithPendingResponses } from 'test/helpers/backendSrvWithPendingResponses';
++
++import { contextSrv } from 'app/core/services/context_srv';
++import { configureStore } from 'app/store/configureStore';
++import { dispatch, getState } from 'app/store/store';
++
++import { changePage } from './actions';
++
++const serviceAccountsPage = (page: number, name: string) => ({
++  serviceAccounts: [{ id: page, uid: name, name, login: `sa-1-${name}` }],
++  page,
++  perPage: 50,
++  totalCount: 150,
++});
++
++const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
++
++describe('service accounts list actions', () => {
++  beforeEach(() => {
++    jest.spyOn(contextSrv, 'hasPermission').mockReturnValue(true);
++    jest.spyOn(contextSrv, 'licensedAccessControlEnabled').mockReturnValue(false);
++  });
++
++  afterEach(() => {
++    jest.restoreAllMocks();
++  });
++
++  it('keeps the service accounts of the last requested page when an earlier page responds later', async () => {
++    const pending = setBackendSrvWithPendingResponses();
++    configureStore();
++
++    dispatch(changePage(2));
++    dispatch(changePage(3));
++    await waitFor(() => expect(pending).toHaveLength(2));
++    expect(pending[0].url).toContain('page=2');
++    expect(pending[1].url).toContain('page=3');
++
++    pending[1].respond(serviceAccountsPage(3, 'third-page-sa'));
++    await waitFor(() => expect(getState().serviceAccounts.serviceAccounts[0]?.name).toBe('third-page-sa'));
++
++    pending[0].respond(serviceAccountsPage(2, 'second-page-sa'));
++    await flushPromises();
++
++    const { serviceAccounts, page } = getState().serviceAccounts;
++    expect(serviceAccounts.map((serviceAccount) => serviceAccount.name)).toEqual(['third-page-sa']);
++    expect(page).toBe(3);
++  });
++});
+diff --git a/public/app/features/serviceaccounts/state/actions.ts b/public/app/features/serviceaccounts/state/actions.ts
+index 78080003..9b2d2a34 100644
+--- a/public/app/features/serviceaccounts/state/actions.ts
++++ b/public/app/features/serviceaccounts/state/actions.ts
+@@ -1,6 +1,6 @@
+ import { debounce } from 'lodash';
+ 
+-import { getBackendSrv } from '@grafana/runtime';
++import { getBackendSrv, isFetchError } from '@grafana/runtime';
+ import { fetchRoleOptions } from 'app/core/components/RolePicker/api';
+ import { contextSrv } from 'app/core/services/context_srv';
+ import { AccessControlAction } from 'app/types/accessControl';
+@@ -50,10 +50,13 @@ export function fetchServiceAccounts(
+           dispatch(serviceAccountsFetchBegin());
+         }
+         const { perPage, page, query, serviceAccountStateFilter } = getState().serviceAccounts;
++        // A newer search with the same requestId cancels this one, so a late response can't overwrite newer results
+         const result = await getBackendSrv().get(
+           `/api/serviceaccounts/search?perpage=${perPage}&page=${page}&query=${query}${getStateFilter(
+             serviceAccountStateFilter
+-          )}&accesscontrol=true`
++          )}&accesscontrol=true`,
++          undefined,
++          'service-accounts-search'
+         );
+ 
+         if (
+@@ -76,7 +79,9 @@ export function fetchServiceAccounts(
+         dispatch(serviceAccountsFetched(result));
+       }
+     } catch (error) {
+-      console.error(error);
++      if (!(isFetchError(error) && error.cancelled)) {
++        console.error(error);
++      }
+     } finally {
+       dispatch(serviceAccountsFetchEnd());
+     }
+diff --git a/public/app/features/users/state/actions.test.ts b/public/app/features/users/state/actions.test.ts
+new file mode 100644
+index 00000000..e3c457ef
+--- /dev/null
++++ b/public/app/features/users/state/actions.test.ts
+@@ -0,0 +1,48 @@
++import { waitFor } from '@testing-library/react';
++import { setBackendSrvWithPendingResponses } from 'test/helpers/backendSrvWithPendingResponses';
++
++import { contextSrv } from 'app/core/services/context_srv';
++import { configureStore } from 'app/store/configureStore';
++import { dispatch, getState } from 'app/store/store';
++
++import { changePage } from './actions';
++
++const orgUsersPage = (page: number, login: string) => ({
++  orgUsers: [{ userId: page, login, name: login, email: `${login}@example.com`, role: 'Viewer' }],
++  page,
++  perPage: 30,
++  totalCount: 90,
++});
++
++const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
++
++describe('org users actions', () => {
++  beforeEach(() => {
++    jest.spyOn(contextSrv, 'licensedAccessControlEnabled').mockReturnValue(false);
++  });
++
++  afterEach(() => {
++    jest.restoreAllMocks();
++  });
++
++  it('keeps the users of the last requested page when an earlier page responds later', async () => {
++    const pending = setBackendSrvWithPendingResponses();
++    configureStore();
++
++    dispatch(changePage(2));
++    dispatch(changePage(3));
++    await waitFor(() => expect(pending).toHaveLength(2));
++    expect(pending[0].url).toContain('page=2');
++    expect(pending[1].url).toContain('page=3');
++
++    pending[1].respond(orgUsersPage(3, 'third-page-user'));
++    await waitFor(() => expect(getState().users.users[0]?.login).toBe('third-page-user'));
++
++    pending[0].respond(orgUsersPage(2, 'second-page-user'));
++    await flushPromises();
++
++    const { users, page } = getState().users;
++    expect(users.map((user) => user.login)).toEqual(['third-page-user']);
++    expect(page).toBe(3);
++  });
++});
+diff --git a/public/app/features/users/state/actions.ts b/public/app/features/users/state/actions.ts
+index be0fd63d..864f12f2 100644
+--- a/public/app/features/users/state/actions.ts
++++ b/public/app/features/users/state/actions.ts
+@@ -24,9 +24,11 @@ export function loadUsers(): ThunkResult<void> {
+     try {
+       dispatch(usersFetchBegin());
+       const { perPage, page, searchQuery, sort } = getState().users;
++      // A newer search with the same requestId cancels this one, so a late response can't overwrite newer results
+       const users = await getBackendSrv().get(
+         `/api/org/users/search`,
+-        accessControlQueryParam({ perpage: perPage, page, query: searchQuery, sort })
++        accessControlQueryParam({ perpage: perPage, page, query: searchQuery, sort }),
++        'org-users-search'
+       );
+ 
+       if (
+diff --git a/public/test/helpers/backendSrvWithPendingResponses.ts b/public/test/helpers/backendSrvWithPendingResponses.ts
+new file mode 100644
+index 00000000..377bc9dd
+--- /dev/null
++++ b/public/test/helpers/backendSrvWithPendingResponses.ts
+@@ -0,0 +1,52 @@
++import { Subject } from 'rxjs';
++
++import { type EventBusExtended } from '@grafana/data';
++import { setBackendSrv } from '@grafana/runtime';
++import { BackendSrv } from 'app/core/services/backend_srv';
++import { type ContextSrv } from 'app/core/services/context_srv';
++
++export interface PendingResponse {
++  url: string;
++  respond: (body: unknown) => void;
++}
++
++/**
++ * Installs a real BackendSrv whose network calls stay pending until the test responds to them,
++ * so a test controls the order in which responses arrive (including requestId cancellation).
++ * Returns the list of pending calls, in the order they were sent.
++ */
++export function setBackendSrvWithPendingResponses(): PendingResponse[] {
++  const pending: PendingResponse[] = [];
++  const fromFetch = jest.fn((input: string | Request) => {
++    const url = typeof input === 'string' ? input : input.url;
++    const response = new Subject<Response>();
++    pending.push({
++      url,
++      respond: (body: unknown) => {
++        response.next({
++          ok: true,
++          status: 200,
++          statusText: 'Ok',
++          headers: new Headers(),
++          redirected: false,
++          type: 'basic',
++          url,
++          text: () => Promise.resolve(JSON.stringify(body)),
++        } as unknown as Response);
++        response.complete();
++      },
++    });
++    return response.asObservable();
++  });
++
++  setBackendSrv(
++    new BackendSrv({
++      fromFetch,
++      appEvents: { emit: jest.fn(), publish: jest.fn() } as unknown as EventBusExtended,
++      contextSrv: { user: { orgId: 1, isSignedIn: true } } as unknown as ContextSrv,
++      logout: jest.fn(),
++    })
++  );
++
++  return pending;
++}
+-- 
+2.43.0
+

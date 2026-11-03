@@ -1,0 +1,51 @@
+{
+  "scenario": "sa-page",
+  "runs": 6,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "No race found",
+      "oracleWrong": "0 of 8",
+      "loads": [
+        "load 1: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 2: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 3: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 4: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 5: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 6: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 7: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 8: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]"
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "No race found",
+      "oracleWrong": "0 of 8",
+      "loads": [
+        "load 1: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 2: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 3: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 4: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 5: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 6: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 7: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 8: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]"
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "No race found",
+      "oracleWrong": "0 of 8",
+      "loads": [
+        "load 1: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 2: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 3: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 4: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 5: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 6: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 7: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]",
+        "load 8: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3]"
+      ]
+    }
+  ]
+}

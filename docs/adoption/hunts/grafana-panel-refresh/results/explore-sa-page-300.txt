@@ -1,0 +1,158 @@
+Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x1"}.
+
+load 1: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#2 then GET /org/api/serviceaccounts/search#3]
+load 2: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#2 then GET /org/api/serviceaccounts/search#3]
+load 3: WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3 then GET /org/api/serviceaccounts/search#2]
+load 4: WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3 then GET /org/api/serviceaccounts/search#2]
+load 5: WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3 then GET /org/api/serviceaccounts/search#2]
+load 6: WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3 then GET /org/api/serviceaccounts/search#2]
+load 7: WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#3 then GET /org/api/serviceaccounts/search#2]
+load 8: OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3) [delivered GET /org/api/serviceaccounts/search#1 then GET /org/api/serviceaccounts/search#2 then GET /org/api/serviceaccounts/search#3]
+
+Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /org/serviceaccounts · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "2"
+  click button "3"
+RACE: 5 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r3 (seed 1):
+    page text only in the baseline: "svc keen badger sa-1-svc-keen-badger", "svc keen falcon sa-1-svc-keen-falcon", "svc keen heron sa-1-svc-keen-heron", "svc keen lynx sa-1-svc-keen-lynx"
+    page text only in this run: "svc fancy badger sa-1-svc-fancy-badger", "Viewer", "Viewer", "Viewer"
+- run r4 (seed 2):
+    page text only in the baseline: "svc keen badger sa-1-svc-keen-badger", "svc keen falcon sa-1-svc-keen-falcon", "svc keen heron sa-1-svc-keen-heron", "svc keen lynx sa-1-svc-keen-lynx"
+    page text only in this run: "svc fancy badger sa-1-svc-fancy-badger", "Viewer", "Viewer", "Viewer"
+- run r5 (seed 3):
+    page text only in the baseline: "svc keen badger sa-1-svc-keen-badger", "svc keen falcon sa-1-svc-keen-falcon", "svc keen heron sa-1-svc-keen-heron", "svc keen lynx sa-1-svc-keen-lynx"
+    page text only in this run: "svc fancy badger sa-1-svc-fancy-badger", "Viewer", "Viewer", "Viewer"
+- run r6 (seed 4):
+    page text only in the baseline: "svc keen badger sa-1-svc-keen-badger", "svc keen falcon sa-1-svc-keen-falcon", "svc keen heron sa-1-svc-keen-heron", "svc keen lynx sa-1-svc-keen-lynx"
+    page text only in this run: "svc fancy badger sa-1-svc-fancy-badger", "Viewer", "Viewer", "Viewer"
+- run r7 (seed 5):
+    page text only in the baseline: "svc keen badger sa-1-svc-keen-badger", "svc keen falcon sa-1-svc-keen-falcon", "svc keen heron sa-1-svc-keen-heron", "svc keen lynx sa-1-svc-keen-lynx"
+    page text only in this run: "svc fancy badger sa-1-svc-fancy-badger", "Viewer", "Viewer", "Viewer"
+
+Race finding(s): f1. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+1 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f1 [race] "/org/serviceaccounts" · 1× in 1 run(s) · 0 s ago
+  The page depends on response order: it shows "svc fancy badger sa-1-svc-fancy-badger" under "seed 1", not in request order
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f1 · race · "/org/serviceaccounts" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "svc fancy badger sa-1-svc-fancy-badger" under "seed 1", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x1: 5 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- page text in the baseline only: "svc keen badger sa-1-svc-keen-badger"
+- page text in the baseline only: "svc keen falcon sa-1-svc-keen-falcon"
+- page text in the baseline only: "svc keen heron sa-1-svc-keen-heron"
+- page text in the baseline only: "svc keen lynx sa-1-svc-keen-lynx"
+- page text in the failing run only: "svc fancy badger sa-1-svc-fancy-badger"
+- page text in the failing run only: "Viewer"
+- page text in the failing run only: "Viewer"
+- page text in the failing run only: "Viewer"
+
+## Steps of run r3 ("http://localhost:3000/org/serviceaccounts", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++0.093s send GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1
++0.149s delivered GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1 (held 26 ms)
++0.486s send POST /ofrep/v1/evaluate/flags#1 "body" via GET /org/apis/preferences.grafana.app/v1/namespaces/default…
++0.829s delivered POST /ofrep/v1/evaluate/flags#1 (held 242 ms)
++0.888s send GET /org/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-page-history:ag37bmb63gmbkb#1
++0.989s write floatingBoundary.state0: "floatingBoundary.state0: false → true"
++0.993s write floatingBoundary_3.state8.loading, floatingBoundary_3.state8.value: "floatingBoundary_3.state8.value: undefined → Map(0)"; "floatingBoundary_3.state8.loading: true → false"
++0.993s write floatingBoundary_3.state7.loading, floatingBoundary_3.state7.value: "floatingBoundary_3.state7.value: undefined → undefined"; "floatingBoundary_3.state7.loading: true → false"
++1.088s delivered GET /org/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-page-history:ag37bmb63gmbkb#1 (held 132 ms)
++1.291s send GET /org/api/serviceaccounts/search#1 "?perpage=50&page=0&query=&accesscontrol=true" via timer 210ms
++1.379s write floatingBoundary_5.state4.actions, floatingBoundary_5.state4.chromeless, floatingBoundary_5.state4.layout, floatingBoundary_5.state4.pageNav, floatingBoundary_5.state4.sectionNav.main.children, floatingBoundary_5.state4.sectionNav.main.emptyMessage, floatingBoundary_5.state4.sectionNav.main.icon, floatingBoundary_5.state4.sectionNav.main.id, floatingBoundary_5.state4.sectionNav.main.parentItem, floatingBoundary_5.state4.sectionNav.main.sortWeight, floatingBoundary_5.state4.sectionNav.main.subTitle, floatingBoundary_5.state4.sectionNav.main.text: "floatingBoundary_5.state4.chromeless: true → undefined"; "floatingBoundary_5.state4.sectionNav.node.id: undefined → \"serviceaccounts\""; "floatingBoundary_5.state4.sectionNav.node.text: \"Home\" → \"Service accounts\""
++1.386s write floatingBoundary_5.state8.actions, floatingBoundary_5.state8.chromeless, floatingBoundary_5.state8.layout, floatingBoundary_5.state8.pageNav, floatingBoundary_5.state8.sectionNav.main.children, floatingBoundary_5.state8.sectionNav.main.emptyMessage, floatingBoundary_5.state8.sectionNav.main.icon, floatingBoundary_5.state8.sectionNav.main.id, floatingBoundary_5.state8.sectionNav.main.parentItem, floatingBoundary_5.state8.sectionNav.main.sortWeight, floatingBoundary_5.state8.sectionNav.main.subTitle, floatingBoundary_5.state8.sectionNav.main.text: "floatingBoundary_5.state8.chromeless: true → undefined"; "floatingBoundary_5.state8.sectionNav.node.id: undefined → \"serviceaccounts\""; "floatingBoundary_5.state8.sectionNav.node.text: \"Home\" → \"Service accounts\""
++1.393s write floatingBoundary_5.state14: "floatingBoundary_5.state14: 0 → 1"
++1.394s write h.state0.status: "h.state0.status: \"idle\" → \"loading\""
++1.394s write h_2.state0.status: "h_2.state0.status: \"idle\" → \"loading\""
++1.397s write sc.state0.actions, sc.state0.chromeless, sc.state0.layout, sc.state0.pageNav, sc.state0.sectionNav.main.children, sc.state0.sectionNav.main.emptyMessage, sc.state0.sectionNav.main.icon, sc.state0.sectionNav.main.id, sc.state0.sectionNav.main.parentItem, sc.state0.sectionNav.main.sortWeight, sc.state0.sectionNav.main.subTitle, sc.state0.sectionNav.main.text: "sc.state0.chromeless: true → undefined"; "sc.state0.sectionNav.node.id: undefined → \"serviceaccounts\""; "sc.state0.sectionNav.node.text: \"Home\" → \"Service accounts\""
++1.399s send GET /org/api/user/orgs#1 via timer 210ms
++1.442s write h_3.state0.status: "h_3.state0.status: \"idle\" → \"loading\""
++1.443s write TruncatedText.state1: "TruncatedText.state1: \"\" → \"Authentication\""
++1.443s write TruncatedText_2.state1: "TruncatedText_2.state1: \"\" → \"Service accounts\""
++1.443s write TruncatedText_3.state1: "TruncatedText_3.state1: \"\" → \"Teams\""
++1.462s send GET /org/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 "?fieldSelector=metadata.name=user-ag37bmb63gmbkb" via timer 210ms
++1.464s send GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 "?fieldSelector=metadata.name=user-ag37bmb63gmbkb" via timer 210ms
++1.475s write Input.state1.bottom, Input.state1.height, Input.state1.left, Input.state1.right, Input.state1.width, Input.state1.x: "Input.state1.x: 0 → 8"; "Input.state1.width: 0 → 16"; "Input.state1.height: 0 → 32"
++1.475s write Input.state3.bottom, Input.state3.height, Input.state3.left, Input.state3.right, Input.state3.width, Input.state3.x: "Input.state3.x: 0 → 8"; "Input.state3.width: 0 → 12"; "Input.state3.height: 0 → 32"
++1.476s write sp.state1.loading, sp.state1.value: "sp.state1.value: undefined → undefined"; "sp.state1.loading: true → false"
++1.476s write profile.state3.loading, profile.state3.value: "profile.state3.value: undefined → undefined"; "profile.state3.loading: true → false"
++1.476s write o2.state1.loading, o2.state1.value: "o2.state1.value: undefined → undefined"; "o2.state1.loading: true → false"
++1.477s write dataTestidQuickAdd.state7.loading, dataTestidQuickAdd.state7.value: "dataTestidQuickAdd.state7.value: undefined → 2 items [{name: \"TestData\", uid: \"d…"; "dataTestidQuickAdd.state7.loading: true → false"
++1.478s write o7.state1.loading, o7.state1.value: "o7.state1.value: undefined → undefined"; "o7.state1.loading: true → false"
++1.478s write nf.state1.loading, nf.state1.value: "nf.state1.value: undefined → undefined"; "nf.state1.loading: true → false"
++1.519s write h.state0.content, h.state0.status: "h.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o…\")"; "h.state0.status: \"loading\" → \"loaded\""
++1.543s write h_2.state0.content, h_2.state0.status: "h_2.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o……"; "h_2.state0.status: \"loading\" → \"loaded\""
++1.577s write h_3.state0.content, h_3.state0.status: "h_3.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o……"; "h_3.state0.status: \"loading\" → \"loaded\""
++1.663s write e2.state6.loading, e2.state6.value: "e2.state6.value: undefined → 2 items [{name: \"TestData\", uid: \"d…"; "e2.state6.loading: true → false"
++1.797s delivered GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 (held 251 ms)
++1.831s delivered GET /org/api/serviceaccounts/search#1 (held 332 ms)
++2.167s delivered GET /org/api/user/orgs#1 (held 645 ms)
++2.172s write P.external0 by GET /org/api/user/orgs#1: "P.external0: 0 items → 1 item [{name: \"Main Org.\", orgId: 1, +1}]"
++2.197s delivered GET /org/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 (held 667 ms)
++2.273s write e2.external0 by GET /org/api/serviceaccounts/search#1: "e2.external0: 10 items, 1 changed: {id: \"starred\", children: undefined → 0 items}"
++2.273s write dataTestidQuickAdd.external0 by GET /org/api/serviceaccounts/search#1: "dataTestidQuickAdd.external0: 10 items, 1 changed: {id: \"starred\", children: undefined → 0 items}"
++3.174s action 0: click button "2"
++3.176s send GET /org/api/serviceaccounts/search#2 "?perpage=50&page=2&query=&accesscontrol=true" (action 0)
++3.583s action 1: click button "3"
++3.586s send GET /org/api/serviceaccounts/search#3 "?perpage=50&page=3&query=&accesscontrol=true" (action 1)
++4.137s delivered GET /org/api/serviceaccounts/search#3 (held 234 ms)
++4.323s delivered GET /org/api/serviceaccounts/search#2 (held 427 ms)
+
+Delivery order: GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1 → POST /ofrep/v1/evaluate/flags#1 → GET /org/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/… → GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 → GET /org/api/serviceaccounts/search#1 → GET /org/api/user/orgs#1 → GET /org/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 → GET /org/api/serviceaccounts/search#3 → GET /org/api/serviceaccounts/search#2
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f1"} (schedule: seeded 1, +0-300 ms)
+2. Open "http://localhost:3000/org/serviceaccounts" and do the same 2 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f1"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f1 (race), generated from run r3.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:3000";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":300},"maxHoldMs":1800};
+
+test("/org/serviceaccounts: the final state does not depend on response order (GenClass f1)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/org/serviceaccounts");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "2", exact: true }).or(page.locator("[name=\"2\"], [id=\"2\"]")).first().click();
+  await page.getByRole("button", { name: "3", exact: true }).or(page.locator("[name=\"3\"], [id=\"3\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("svc keen badger sa-1-svc-keen-badger");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("svc keen falcon sa-1-svc-keen-falcon");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("svc keen heron sa-1-svc-keen-heron");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("svc fancy badger sa-1-svc-fancy-badger");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Viewer");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Viewer");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

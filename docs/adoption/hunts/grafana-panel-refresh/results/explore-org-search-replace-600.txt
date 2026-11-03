@@ -1,0 +1,54 @@
+Explore x2 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x2"}.
+
+load 1: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 2: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 3: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 4: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 5: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 6: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 7: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 8: OK    shows 10 [amber-badger, amber-falcon, amber-heron, ...] expected 10 [amber-badger, amber-falcon, amber-heron, ...] (query "amber") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+
+Explore x2: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /org/users · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click tab "Organization users"
+  click input "Search user by login, email or name"
+  type input "Search user by login, email or name" = amber
+Ignored as noise (differs between the two baselines): state TruncatedText_2.state0, state TruncatedText_2.state1, state TruncatedText_3.state0, state TruncatedText_3.state1, state floatingBoundary_5.location.key, state floatingBoundary_6.state0.location.key
+No race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.
+Internal state only (not a race by this check): 1 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.
+- run r15 (seed 5):
+    state "Connect_Component.external0.fetchInvitees": baseline "function", this run "(absent)"
+    state "Connect_Component.external0.invitees": baseline "0 items", this run "(absent)"
+    state "Connect_Component.external0.isLoading": baseline "true", this run "false"
+    state "Connect_Component.external0.loadUsers": baseline "function", this run "(absent)"
+    state "Connect_Component.external0.perPage": baseline "30", this run "(absent)"
+    state "Connect_Component.external0.removeUser": baseline "function", this run "(absent)"
+Along the way only (not a race by this check): 3 of 6 ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).
+- run r12 (seed 2):
+    witness only here: overwrote-newer Connect_Component.external0.users by GET /admin/api/org/users/search
+- run r14 (seed 4):
+    witness only here: overwrote-newer Connect_Component.external0.users by GET /admin/api/org/users/search
+- run r16 (seed 6):
+    witness only here: overwrote-newer Connect_Component.external0.users by GET /admin/api/org/users/search
+
+1 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f2 [stale-write] "/org/users" · 3× in 3 run(s) · 2 s ago
+  The response to "GET /admin/api/org/users/search" "?perpage=30&page=0&query=lunar&accesscontrol=true" overwrote "Connect_Component.external0.users" after the user's "type input \"Search user by login, email or name\"" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+

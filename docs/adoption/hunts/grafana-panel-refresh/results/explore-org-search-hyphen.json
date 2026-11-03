@@ -1,0 +1,52 @@
+{
+  "scenario": "org-search-hyphen",
+  "runs": 6,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "No race found",
+      "oracleWrong": "8 of 8",
+      "loads": [
+        "load 1: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 2: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 3: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 4: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 5: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 6: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 7: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 8: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]"
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "No race found",
+      "oracleWrong": "8 of 8",
+      "loads": [
+        "load 1: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 2: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 3: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 4: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 5: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 6: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 7: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 8: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]"
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "RACE in 3 of 6",
+      "oracleWrong": "5 of 8",
+      "loads": [
+        "load 1: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 2: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 3: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 4: OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#4 then GET /admin/api/org/users/search#3]",
+        "load 5: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]",
+        "load 6: OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#4 then GET /admin/api/org/users/search#3]",
+        "load 7: OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#4 then GET /admin/api/org/users/search#3]",
+        "load 8: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query \"lunar-o\") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]"
+      ]
+    }
+  ],
+  "note": "typed \"lunar\", then \"-o\": the org list sends lunar\\-o (FilterInput regex-escapes), which matches nobody, so this harness oracle (built on the unescaped query) is wrong on every baseline; explore compares with the baselines and is not affected"
+}
