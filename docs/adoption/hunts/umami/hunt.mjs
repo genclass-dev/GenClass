@@ -12,7 +12,7 @@
 // Each run also keeps a timeline (page clock, ms): keystrokes, history pushes (the URL commit), RSC responses and every
 // change of the input's value, so a revert can be read in causal order.
 //
-// Usage (from the GenClass-lib repo root, both packages built, Umami on 3000 seeded with seed.mjs):
+// Usage (from the GenClass repo root, both packages built, Umami on 3000 seeded with seed.mjs):
 //   node docs/adoption/hunts/umami/hunt.mjs <page> <pattern> [--slow 600] [--runs 6] [--seed 1] [--once] [--replay]
 //     [--label x] [--out dir]
 // Pages: websites (/websites), users (/admin/users). Patterns: pause (word, 700 ms, rest), split (650 ms mid-word).

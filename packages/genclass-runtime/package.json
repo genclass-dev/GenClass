@@ -6,12 +6,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/genclass-dev/GenClass-lib.git",
+    "url": "git+https://github.com/genclass-dev/GenClass.git",
     "directory": "packages/genclass-runtime"
   },
   "homepage": "https://genclass.dev",
   "bugs": {
-    "url": "https://github.com/genclass-dev/GenClass-lib/issues"
+    "url": "https://github.com/genclass-dev/GenClass/issues"
   },
   "keywords": [
     "genclass",

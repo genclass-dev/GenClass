@@ -549,7 +549,7 @@ function header(o: StudioOptions): string {
   const help = `<div class="dd"><button class="sb-ib" type="button" data-dd aria-haspopup="menu" aria-expanded="false" aria-label="Help">${icon("help", 15)}</button><div class="dd-m end" role="menu" hidden><span class="dd-l">Help</span><a href="https://genclass.dev/docs/dashboard">${icon(
     "book",
     14,
-  )}Dashboard guide</a><a href="https://genclass.dev/docs">${icon("book", 14)}Docs</a><a href="https://genclass.dev/docs/mcp">${icon("bot", 14)}MCP server</a><a href="https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md">${icon(
+  )}Dashboard guide</a><a href="https://genclass.dev/docs">${icon("book", 14)}Docs</a><a href="https://genclass.dev/docs/mcp">${icon("bot", 14)}MCP server</a><a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">${icon(
     "file",
     14,
   )}What is collected</a><a href="https://discord.gg/kN9kRnFtZm">${icon("message", 14)}Discord</a></div></div>`;
@@ -567,7 +567,7 @@ function header(o: StudioOptions): string {
 <nav class="sb-crumbs" aria-label="Breadcrumb">${DIVIDER}${orgMenu}${projectMenu}</nav>
 ${acts}
 <div class="sb-right">
-<a class="btn sm ghost sb-fb" href="https://github.com/genclass-dev/GenClass-lib/issues/new">Feedback</a>
+<a class="btn sm ghost sb-fb" href="https://github.com/genclass-dev/GenClass/issues/new">Feedback</a>
 <button class="sb-search" type="button" data-open="m-cmd" aria-label="Search">${icon("search", 13)}<span>Search...</span><kbd>⌘K</kbd></button>
 ${help}
 ${me}
