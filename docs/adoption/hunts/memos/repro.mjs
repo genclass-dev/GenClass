@@ -8,8 +8,9 @@
 //
 //   pin       More > Pin, then More > Unpin. Held: the reply to the first UpdateMemo (pinned: true). The server saves
 //             pin, then unpin, and ends unpinned. Read: the pinned corner mark (the icon with aria-label "Pinned").
-//   reaction  Add reaction > 👍, then Add reaction > ❤️ (the picker opened again). Held: the reply to the GetMemo that
-//             the 👍 click sends after its upsert (it was answered with 👍 only). The server ends with both. Read: the
+//   reaction  Add reaction > 👍, then Add reaction > ❤️ (the picker opened again). Held: the replies to the GetMemo
+//             requests sent after the 👍 upsert was answered and before the ❤️ upsert (the 👍 click's own getMemo,
+//             answered with 👍 only, and any live-update refetch in that window). The server ends with both. Read: the
 //             reaction pills.
 //
 // Each trial starts from a fresh sign-in and the memo reset (unpinned, no reactions). The page is read 3 s after the
@@ -55,12 +56,15 @@ const surfaces = {
     server: (memo) => `pinned=${memo.pinned === true}`,
   },
   reaction: {
-    held: "GetMemo after the first upsert",
-    // hold the first GetMemo sent after the first reaction's upsert was answered
+    held: "GetMemo sent between the first upsert's reply and the second upsert",
+    // Hold every GetMemo sent after the 👍 upsert was answered and before the ❤️ upsert: the click's own getMemo, and
+    // any live-update refetch of the detail query in that window (React Query cancels those when a newer one starts).
     hold: (method, state) => {
       if (method === "UpsertMemoReaction") state.upserts++;
-      if (method === "GetMemo" && state.upserts === 1 && !state.taken) return (state.taken = true);
-      return false;
+      return method === "GetMemo" && state.firstUpsertAnswered && state.upserts === 1;
+    },
+    answered: (method, state) => {
+      if (method === "UpsertMemoReaction" && state.upserts === 1) state.firstUpsertAnswered = true;
     },
     async steps(page) {
       const card = page.locator("main article, main .group\\/memo").first();
@@ -106,15 +110,21 @@ for (let i = 0; i < Number(arg.trials); i++) {
   for (const r of before.reactions ?? []) await call("DeleteMemoReaction", { name: r.name });
 
   const page = await ctx.newPage();
-  const state = { updates: 0, upserts: 0, taken: false, armed: false };
+  const state = { updates: 0, upserts: 0, firstUpsertAnswered: false, armed: false };
   let heldDelivered = null;
   await page.route("**/memos.api.MemoService/*", async (route) => {
     const method = route.request().url().split("/").pop();
     const held = state.armed && s.hold(method, state);
-    const reply = await route.fetch(); // the request reaches the server now; only the reply waits
-    if (held && delay > 0) await sleep(delay);
-    await route.fulfill({ response: reply });
-    if (held) heldDelivered = Date.now();
+    try {
+      const reply = await route.fetch(); // the request reaches the server now; only the reply waits
+      if (held && delay > 0) await sleep(delay);
+      await route.fulfill({ response: reply });
+      if (state.armed) s.answered?.(method, state);
+      if (held) heldDelivered = Date.now();
+    } catch {
+      // the page aborted the request (React Query cancels a superseded refetch)
+      if (held) heldDelivered = Date.now();
+    }
   });
   await page.goto(`${M}/${target}`);
   await page.getByRole("button", { name: "More" }).first().waitFor();
