@@ -14,7 +14,7 @@
 // Surfaces (--surface), each the same steps every load:
 //   search  library home page; type "Har" in the global search, wait 800 ms (the search box's debounce is 750 ms), type
 //           "Harmony"; oracle: every book in the menu has "Harmony" in its title
-//   sort    bookshelf page; open the sort menu and pick "Title", then at once open it again and pick "Author (Last, First)"
+//   sort    bookshelf page (sorted by title by default); open the sort menu and pick "Publish Year", then at once open it again and pick "Author (Last, First)"
 //           (each pick re-fetches the bookshelf: GET /api/libraries/:id/items?sort=...); oracle: the shown cards are
 //           in the order the API gives for the final sort
 //   edit    an item page; Edit, Details tab, type a title, click Save (PATCH), type a subtitle at once, read both fields
@@ -162,7 +162,7 @@ const surfaces = {
     await page.locator("#book-card-0").waitFor();
     const toggle = page.locator("div:has(> ul.librarySortMenu) > button");
     await toggle.click();
-    await page.locator("ul.librarySortMenu li[role=menuitem]", { hasText: /^\s*Title\s*$/ }).click();
+    await page.locator("ul.librarySortMenu li[role=menuitem]", { hasText: "Publish Year" }).click();
     await toggle.click();
     await page.locator("ul.librarySortMenu li[role=menuitem]", { hasText: "Author (Last, First)" }).click();
     await page.waitForTimeout(300);
@@ -233,7 +233,7 @@ async function scenario(fn) {
   }
   const order = withGenClass
     ? await page
-        .evaluate(() => window.__GENCLASS_AGENT__.recorded().order.filter((k) => /search|items\?|\/media/.test(k)).map((k) => k.replace(/^.*\/api\//, "").slice(0, 60)))
+        .evaluate(() => window.__GENCLASS_AGENT__.recorded().order.filter((k) => /search|\/items#|\/media#/.test(k)).map((k) => k.replace(/^.*\/api\//, "").slice(0, 60)))
         .catch(() => [])
     : [];
   await page.waitForTimeout(500);
