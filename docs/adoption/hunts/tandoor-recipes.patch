@@ -1,0 +1,236 @@
+From e0cf2842184448d62b36e6e58f9a87511c866282 Mon Sep 17 00:00:00 2001
+From: GenClass hunt <hunt@localhost>
+Date: Tue, 3 Nov 2026 16:53:39 +0000
+Subject: [PATCH 1/2] fix(shopping): keep changes made while the sync queue is
+ running
+
+_replaySyncQueue removed each finished entry by the index it had when the
+run started. Once an earlier entry was removed the indexes shifted, so a
+later entry (for example unchecking an item right after checking it) was
+removed without ever being sent, and the finished one stayed in the queue
+and was sent again. A second run started while the first was in flight
+also re-sent the entries still in flight.
+
+Remove the finished entry itself, and let a run that starts while the
+previous one is in flight wait for it (the previous run schedules the
+queue again when its requests are done).
+---
+ vue3/src/stores/ShoppingStore.ts | 23 ++++++++++++++++++++---
+ 1 file changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/vue3/src/stores/ShoppingStore.ts b/vue3/src/stores/ShoppingStore.ts
+index e1535879a..f214fe44a 100644
+--- a/vue3/src/stores/ShoppingStore.ts
++++ b/vue3/src/stores/ShoppingStore.ts
+@@ -478,12 +478,17 @@ export const useShoppingStore = defineStore(_STORE_ID, () => {
+      * @private
+      */
+     function _replaySyncQueue() {
++        if (syncQueueRunning.value) {
++            // requests of the previous run are still in flight, it runs the queue again once they are done
++            // so changes made in the meantime are sent after them, in the order they were made
++            return
++        }
+         if (navigator.onLine || document.location.href.includes('localhost')) {
+             let api = new ApiApi()
+             let promises: Promise<void>[] = []
+ 
+             let updatedEntries = new Map<number, ShoppingListEntry>()
+-            itemCheckSyncQueue.value.forEach((entry, index) => {
++            itemCheckSyncQueue.value.forEach((entry) => {
+                 entry['status'] = ((entry['status'] === 'waiting_failed_before') ? 'syncing_failed_before' : 'syncing')
+                 syncQueueRunning.value = true
+                 let p = api.apiShoppingListEntryBulkCreate({shoppingListEntryBulk: entry}, {}).then((r) => {
+@@ -494,12 +499,12 @@ export const useShoppingStore = defineStore(_STORE_ID, () => {
+                             updatedEntries.set(id, e)
+                         }
+                     })
+-                    itemCheckSyncQueue.value.splice(index, 1)
++                    removeFromSyncQueue(entry)
+                 }).catch((err) => {
+                     if (err.name === "FetchError") {
+                         entry['status'] = 'waiting_failed_before'
+                     } else {
+-                        itemCheckSyncQueue.value.splice(index, 1)
++                        removeFromSyncQueue(entry)
+                         useMessageStore().addError(ErrorMessageType.UPDATE_ERROR, err)
+                     }
+                 })
+@@ -521,6 +526,18 @@ export const useShoppingStore = defineStore(_STORE_ID, () => {
+         }
+     }
+ 
++    /**
++     * remove a finished entry from the sync queue
++     * the entry's position may have changed since the request was sent (entries before it finished first), so it is looked up again
++     * @param entry entry to remove
++     */
++    function removeFromSyncQueue(entry: IShoppingSyncQueueEntry) {
++        let index = itemCheckSyncQueue.value.indexOf(entry)
++        if (index >= 0) {
++            itemCheckSyncQueue.value.splice(index, 1)
++        }
++    }
++
+     /**
+      * manages running the replaySyncQueue function after the given timeout
+      * calling this function might cancel a previously created timeout
+-- 
+2.43.0
+
+
+From eb8a2f4438c2d9aff92aa2ade47318edace9bb22 Mon Sep 17 00:00:00 2001
+From: GenClass hunt <hunt@localhost>
+Date: Tue, 3 Nov 2026 16:53:49 +0000
+Subject: [PATCH 2/2] fix(search): ignore responses of superseded list requests
+
+The recipe search, the model lists and the model select showed the
+response that arrived last, not the one for the latest request: switching
+pages twice quickly could show page 2's recipes under page 1, and typing
+in a select after a short pause could list the results of the first
+letters. The search signal of useDebouncedSearch only changes when the
+search text changes, so page and filter changes shared it.
+
+Abort the previous request before a new search or page load, and keep the
+loading state until the latest request is done. In the model select a
+counter ignores the responses of earlier searches.
+---
+ vue3/src/components/inputs/VModelSelect.vue | 16 ++++++++++++++--
+ vue3/src/pages/ModelListPage.vue            | 13 +++++++++----
+ vue3/src/pages/SearchPage.vue               | 13 +++++++++----
+ 3 files changed, 32 insertions(+), 10 deletions(-)
+
+diff --git a/vue3/src/components/inputs/VModelSelect.vue b/vue3/src/components/inputs/VModelSelect.vue
+index 127e69868..94b95749e 100644
+--- a/vue3/src/components/inputs/VModelSelect.vue
++++ b/vue3/src/components/inputs/VModelSelect.vue
+@@ -273,6 +273,11 @@ const debouncedSearchItems = useDebounceFn(() => {
+     searchItems()
+ }, 300)
+ 
++/**
++ * number of the latest search, responses of earlier searches are ignored
++ */
++let searchRequestCount = 0
++
+ /**
+  * performs the API request to search for the selected input
+  */
+@@ -285,7 +290,12 @@ function searchItems() {
+     }
+     console.log('search query is', query)
+     loading.value = true
++    const searchRequest = ++searchRequestCount
+     return modelClass.value.list({query: query, page: 1, pageSize: props.limit}).then((r: any) => {
++        if (searchRequest != searchRequestCount) {
++            // a newer search was started while this one was running (e.g. the user kept typing), its results are shown instead
++            return
++        }
+         if (modelClass.value.model.isPaginated) {
+             hasMoreItems.value = !!r.next
+             items.value = r.results
+@@ -311,8 +321,10 @@ function searchItems() {
+         useMessageStore().addError(ErrorMessageType.FETCH_ERROR, err)
+     }).finally(() => {
+         console.log('search items finished')
+-        loading.value = false
+-        hasLoadedOnce.value = true
++        if (searchRequest == searchRequestCount) {
++            loading.value = false
++            hasLoadedOnce.value = true
++        }
+     })
+ }
+ 
+diff --git a/vue3/src/pages/ModelListPage.vue b/vue3/src/pages/ModelListPage.vue
+index 411e4084d..968f94645 100644
+--- a/vue3/src/pages/ModelListPage.vue
++++ b/vue3/src/pages/ModelListPage.vue
+@@ -199,7 +199,7 @@ const itemsPerPageOptions = [
+     {value: 50, title: '50'},
+ ]
+ 
+-const {inputValue: query, debouncedValue: debouncedQuery, signal} = useDebouncedSearch({routeQueryKey: 'query'})
++const {inputValue: query, debouncedValue: debouncedQuery, signal, abort: abortLoad} = useDebouncedSearch({routeQueryKey: 'query'})
+ const page = useRouteQuery('page', 1, {transform: Number})
+ const pageSize = useRouteQuery('pageSize', useUserPreferenceStore().deviceSettings.general_tableItemsPerPage, {transform: Number})
+ 
+@@ -244,6 +244,9 @@ onBeforeMount(() => {
+  * @param options
+  */
+ function loadItems(options: VDataTableUpdateOptions) {
++    // abort a request still in flight (e.g. for the previous page) so its response cannot replace the items of this one
++    abortLoad()
++    const requestSignal = signal.value
+     loading.value = true
+     selectedItems.value = []
+     window.scrollTo({top: 0, behavior: 'smooth'})
+@@ -253,15 +256,17 @@ function loadItems(options: VDataTableUpdateOptions) {
+ 
+     let request = {query: debouncedQuery.value, page: options.page, pageSize: pageSize.value}
+ 
+-    genericModel.value.list(request, {signal: signal.value}).then((r: any) => {
++    genericModel.value.list(request, {signal: requestSignal}).then((r: any) => {
+         items.value = r.results
+         itemCount.value = r.count
+     }).catch((err: any) => {
+-        if (err.name !== 'AbortError') {
++        if (err.name !== 'AbortError' && err.cause?.name !== 'AbortError') {
+             useMessageStore().addError(ErrorMessageType.FETCH_ERROR, err)
+         }
+     }).finally(() => {
+-        loading.value = false
++        if (!requestSignal.aborted) {
++            loading.value = false
++        }
+     })
+ }
+ 
+diff --git a/vue3/src/pages/SearchPage.vue b/vue3/src/pages/SearchPage.vue
+index a39f350bf..e4e9987ac 100644
+--- a/vue3/src/pages/SearchPage.vue
++++ b/vue3/src/pages/SearchPage.vue
+@@ -198,7 +198,7 @@ const {t} = useI18n()
+ const router = useRouter()
+ const {mdAndUp} = useDisplay()
+ 
+-const {inputValue: query, debouncedValue: debouncedQuery, signal, flush: flushQuery, reset: resetQuery} = useDebouncedSearch({routeQueryKey: 'query'})
++const {inputValue: query, debouncedValue: debouncedQuery, signal, abort: abortSearch, flush: flushQuery, reset: resetQuery} = useDebouncedSearch({routeQueryKey: 'query'})
+ const page = useRouteQuery('page', 1, {transform: Number})
+ const pageSize = useRouteQuery('pageSize', useUserPreferenceStore().deviceSettings.search_itemsPerPage, {transform: Number})
+ 
+@@ -277,6 +277,9 @@ onMounted(() => {
+  * @param options
+  */
+ function searchRecipes(options: VDataTableUpdateOptions) {
++    // abort a search still in flight (e.g. for the previous page or filter) so its response cannot replace the results of this one
++    abortSearch()
++    const requestSignal = signal.value
+     let api = new ApiApi()
+     loading.value = true
+     hasFiltersApplied.value = false
+@@ -298,7 +301,7 @@ function searchRecipes(options: VDataTableUpdateOptions) {
+         }
+     })
+ 
+-    api.apiRecipeList(searchParameters, {signal: signal.value}).then((r) => {
++    api.apiRecipeList(searchParameters, {signal: requestSignal}).then((r) => {
+         recipes.value = r.results
+         tableItemCount.value = r.count
+     }).catch(err => {
+@@ -306,8 +309,10 @@ function searchRecipes(options: VDataTableUpdateOptions) {
+             useMessageStore().addError(ErrorMessageType.FETCH_ERROR, err)
+         }
+     }).finally(() => {
+-        loading.value = false
+-        window.scrollTo({top: 0, behavior: 'smooth'})
++        if (!requestSignal.aborted) {
++            loading.value = false
++            window.scrollTo({top: 0, behavior: 'smooth'})
++        }
+     })
+ }
+ 
+-- 
+2.43.0
+
