@@ -1,0 +1,94 @@
+From 3796336bb205598bfee755a8a9ddcd0f1e409a15 Mon Sep 17 00:00:00 2001
+From: GenClass <noreply@genclass.dev>
+Date: Tue, 3 Nov 2026 16:37:34 +0000
+Subject: [PATCH] Add GenClass to Code Analysis & Quality
+
+---
+ ...github-genclass-dev-genclass-cafd8990.json | 62 +++++++++++++++++++
+ docs/code-analysis--quality.md                |  1 +
+ 2 files changed, 63 insertions(+)
+ create mode 100644 data/server-metadata/github-genclass-dev-genclass-cafd8990.json
+
+diff --git a/data/server-metadata/github-genclass-dev-genclass-cafd8990.json b/data/server-metadata/github-genclass-dev-genclass-cafd8990.json
+new file mode 100644
+index 00000000..6b5b4d09
+--- /dev/null
++++ b/data/server-metadata/github-genclass-dev-genclass-cafd8990.json
+@@ -0,0 +1,62 @@
++{
++  "$schema": "../../schemas/server-metadata.schema.json",
++  "id": "github-genclass-dev-genclass-cafd8990",
++  "source": {
++    "projectUrl": "https://github.com/genclass-dev/GenClass"
++  },
++  "links": {
++    "docs": "https://github.com/genclass-dev/GenClass/blob/main/packages/mcp/README.md",
++    "homepage": "https://genclass.dev"
++  },
++  "install": {
++    "commands": [
++      "npx -y @genclass/mcp@0.2.1"
++    ],
++    "env": [],
++    "confidence": "high"
++  },
++  "transport": [
++    "stdio"
++  ],
++  "auth": {
++    "type": "none",
++    "notes": [
++      "No API key and no account. The server's bridge listens on 127.0.0.1 only.",
++      "Opt-in network reads only: genclass_analytics with source \"production\" reads the developer's own GenClass dashboard when GENCLASS_DASHBOARD is set; genclass_scan with hosted: true sends the page URL to the genclass.dev page check."
++    ]
++  },
++  "clients": [
++    "Claude Code",
++    "Claude Desktop",
++    "Cursor",
++    "VS Code",
++    "Codex",
++    "Gemini CLI",
++    "Windsurf",
++    "Cline",
++    "Goose",
++    "other MCP-compatible clients"
++  ],
++  "tools": {
++    "count": 9,
++    "names": [
++      "genclass_status",
++      "genclass_findings",
++      "genclass_explain",
++      "genclass_explore",
++      "genclass_replay",
++      "genclass_analytics",
++      "genclass_setup",
++      "genclass_scan",
++      "genclass_clear"
++    ],
++    "source": "self_reported"
++  },
++  "license": "Apache-2.0",
++  "verification": {
++    "status": "self_reported",
++    "notes": [
++      "Submitted by the GenClass maintainers. The tool list is the tools/list answer of npx -y @genclass/mcp@0.2.1 over stdio (serverInfo genclass 0.2.1, 9 tools)."
++    ]
++  }
++}
+diff --git a/docs/code-analysis--quality.md b/docs/code-analysis--quality.md
+index 439feaed..7f0d6de0 100644
+--- a/docs/code-analysis--quality.md
++++ b/docs/code-analysis--quality.md
+@@ -125,6 +125,7 @@ Servers focused on static analysis, linting, code metrics, security scanning, vu
+ - [vostride/agent-qa](https://github.com/vostride/agent-qa): Self-improving agentic QA harness with a local MCP server for authoring, running, validating, and triaging natural-language web and mobile tests. Install: `npm install -D agent-qa`.
+ - [autonomous-testing/wopee-mcp](https://github.com/autonomous-testing/wopee-mcp): AI testing agents for web apps — dispatch test runs, analysis crawls, and AI agent tests, fetch artifacts and project status.
+ - [Aboudjem/sniff](https://github.com/Aboudjem/sniff): Autonomous QA and accessibility scanner that walks real user flows in a headless browser, reporting broken pages, dead links, console errors, and WCAG issues. Install with `npx -y sniff-qa --mcp`.
++- [GenClass](https://github.com/genclass-dev/GenClass): Helps a coding agent find race conditions in a web app: reads what happened in the app's development pages in causal order (clicks, requests, the order responses arrived, state writes, errors), re-runs a page with network responses delivered in different orders, replays one exact order to prove a fix and writes a Playwright regression test. The page side is two dev-only lines (`connectAgent` from `@genclass/runtime/agent`). Install: `npx -y @genclass/mcp@0.2.1`. Transport: stdio. Local by default: no auth, no account; the bridge listens on 127.0.0.1. 9 tools. Clients: Claude Code, Cursor, VS Code, Codex. License: Apache-2.0. [Docs](https://github.com/genclass-dev/GenClass/blob/main/packages/mcp/README.md).
+ - [Aboudjem/ui-ux-suite](https://github.com/Aboudjem/ui-ux-suite): UI/UX design-audit server that scores a project across 12 dimensions including color contrast, typography, accessibility, layout, and spacing against WCAG 2.2 and APCA. Install with `npx -y ui-ux-suite`.
+ - [snayyar00/webability-mcp](https://github.com/snayyar00/webability-mcp): Find and fix web accessibility (WCAG 2.2 AA, ADA, Section 508, EAA, AODA) issues from your coding agent — scan any URL/HTML with 3 engines (axe-core, HTML_CodeSniffer, and custom detectors), get framework-aware fixes, verify, run a vision audit, and generate auditor-ready reports. Install: `npx -y -p @webability/mcp webability-mcp`. Hosted HTTP also available at `https://mcp.webability.io/mcp`.
+ - [Cranot/roam-code](https://github.com/Cranot/roam-code): Local-first MCP server with 116 tools for codebase intelligence — graph-aware retrieval (FTS5 + personalized PageRank + clones), patch verifier (clones-not-edited check), in-toto v1 Code Graph Attestation with cosign signing, OpenVEX-correct taint reachability, AIBOM extension (CycloneDX 1.7) for EU AI Act compliance. 27 languages, 33-tool core preset + dedicated 14-tool compliance preset. Zero API keys, 100% local SQLite.
+-- 
+2.43.0
+
