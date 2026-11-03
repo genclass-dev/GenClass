@@ -1,0 +1,125 @@
+# Navidrome: apply the last star rating when two ratings overlap (fix plus regression test).
+# Against navidrome/navidrome master at 7c1e68a1e4e68e7257affba4f25cd9cb545c7016 (2026-11-03). Apply with: git apply navidrome.patch
+
+diff --git a/ui/src/common/useRating.jsx b/ui/src/common/useRating.jsx
+index 82e9bfc..3bbceca 100644
+--- a/ui/src/common/useRating.jsx
++++ b/ui/src/common/useRating.jsx
+@@ -8,6 +8,9 @@ export const useRating = (resource, record) => {
+   const dataProvider = useDataProvider()
+   const refresh = useRefresh()
+   const mountedRef = useRef(false)
++  // Ratings are applied one at a time: a second rating is sent only after the first one's
++  // refresh has landed, so an older refresh cannot arrive last and bring back the old rating.
++  const pendingRef = useRef(Promise.resolve())
+   const rating = record.rating
+ 
+   useEffect(() => {
+@@ -22,7 +25,7 @@ export const useRating = (resource, record) => {
+       // A playlistTrack id is a position, not a stable key: rating a song can drop it out
+       // of a smart playlist, and that position then holds a different track. Refetching
+       // the row by id would write the neighbour's data under this row, so reload the list.
+-      dataProvider
++      return dataProvider
+         .getOne('song', { id: record.mediaFileId })
+         .catch((e) => {
+           // eslint-disable-next-line no-console
+@@ -36,7 +39,7 @@ export const useRating = (resource, record) => {
+         })
+     } else {
+       // Regular song or other resource
+-      dataProvider
++      return dataProvider
+         .getOne(resource, { id: record.id })
+         .catch((e) => {
+           // eslint-disable-next-line no-console
+@@ -52,17 +55,20 @@ export const useRating = (resource, record) => {
+ 
+   const rate = (val, id) => {
+     setLoading(true)
+-    subsonic
+-      .setRating(id, val)
+-      .then(refreshRating)
+-      .catch((e) => {
+-        // eslint-disable-next-line no-console
+-        console.log('Error setting star rating: ', e)
+-        notify('ra.page.error', 'warning')
+-        if (mountedRef.current) {
+-          setLoading(false)
+-        }
+-      })
++    pendingRef.current = pendingRef.current.then(() =>
++      subsonic
++        .setRating(id, val)
++        .then(refreshRating)
++        .catch((e) => {
++          // eslint-disable-next-line no-console
++          console.log('Error setting star rating: ', e)
++          notify('ra.page.error', 'warning')
++          if (mountedRef.current) {
++            setLoading(false)
++          }
++        }),
++    )
++    return pendingRef.current
+   }
+ 
+   return [rate, rating, loading]
+diff --git a/ui/src/common/useRating.test.js b/ui/src/common/useRating.test.js
+index ffe9abf..cb66e01 100644
+--- a/ui/src/common/useRating.test.js
++++ b/ui/src/common/useRating.test.js
+@@ -60,6 +60,53 @@ describe('useRating', () => {
+     expect(subsonic.setRating).toHaveBeenCalledWith('sg-1', 0)
+   })
+ 
++  it('keeps the last rating when a quick second rating overtakes the first refresh', async () => {
++    // The server stores each rating and answers each refresh with what it has when the
++    // refresh arrives; the test delivers those answers newest first, as a slow network may
++    let stored = 1
++    subsonic.setRating.mockImplementation((id, rating) => {
++      stored = rating
++      return Promise.resolve()
++    })
++    const answers = []
++    const landed = [] // ratings in the order the refreshes reach the store
++    getOne.mockImplementation((resource, params) => {
++      const rating = stored
++      return new Promise((resolve) =>
++        answers.push(() => {
++          landed.push(rating)
++          resolve({ data: { id: params.id, rating } })
++        }),
++      )
++    })
++    const flush = () => new Promise((r) => setTimeout(r, 0))
++
++    const record = { id: 'sg-1', rating: 1 }
++    const { result } = renderHook(() => useRating('song', record))
++    await act(async () => {
++      result.current[0](3, 'sg-1')
++      await flush()
++    })
++    await act(async () => {
++      result.current[0](5, 'sg-1')
++      await flush()
++    })
++    for (let i = 0; i < 4 && answers.length > 0; i++) {
++      await act(async () => {
++        while (answers.length > 0) answers.pop()()
++        await flush()
++      })
++    }
++
++    expect(subsonic.setRating.mock.calls).toEqual([
++      ['sg-1', 3],
++      ['sg-1', 5],
++    ])
++    expect(stored).toBe(5)
++    expect(landed[landed.length - 1]).toBe(5)
++    subsonic.setRating.mockImplementation(() => Promise.resolve())
++  })
++
+   describe('playlist track scenarios', () => {
+     it('refreshes the song and reloads the list for playlist tracks', async () => {
+       const record = {
