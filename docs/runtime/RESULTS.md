@@ -1053,6 +1053,19 @@ The item-navigation false reports come from the explore verdict comparing per-si
 state, and from counting `identical-in-flight` witnesses under the "older response overwrote newer data" summary line
 (`packages/mcp/src/compare.ts`, `src/tools.ts`); both are open follow-ups.
 
+Refresh on Directus `main` `88c5c47` (after 12.6.0; Node 26.13.0), 2026-11-03, with `@genclass/runtime` 0.3.0-beta.5
+and `@genclass/mcp` 0.2.1 built from GenClass-lib `c1c9e14`, item navigation at four settings (`slow_ms`/gap 300/50,
+300/300, 600/100, 900/200), the same harness (hunt report section 14):
+
+| measurement | unfixed `main` | fixed (the same patch) |
+|---|---|---|
+| fifo baselines | 8 of 8 right | 8 of 8 right |
+| `genclass_explore`, item navigation | **21 of 23** compared runs flagged (1 load not compared: harness timeout); 11 stale form, 6 stale header, 4 stale M2O display; the 2 request-count-only runs reported as internal, not as races | **1 of 24 flagged, a false report** (one more `PATCH /users/me/track/page`, a tracking write, than the baselines); 0 stale views; 13 request-count-only runs reported as internal |
+| plain Playwright, no GenClass, article 2's response delayed 300 to 900 ms | 33 of 36 stale (0 of 12 with no delay) | 0 of 36 stale (0 of 12 with no delay) |
+
+At the same four settings on 12.5.1 (GenClass 0.3.0-beta.1) the fixed build was flagged in 23 of 24 runs (17 by
+request counts, 6 by an `identical-in-flight` witness only); today 1 of 24, and that one is a write's count.
+
 ## 19. Coding agents on a real library issue: redux-toolkit#5139 (local, 2026-10-25, Chromium through Playwright 1.63.0)
 
 [(internal notes)/rtk-5139.md](../(internal notes)/rtk-5139.md). The agent link and `@genclass/mcp` (both built from
