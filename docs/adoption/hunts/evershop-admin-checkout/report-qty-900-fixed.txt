@@ -1,0 +1,45 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /cart · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button
+  click button
+Ignored as noise (differs between the two baselines): state evershopGlobal.state0.data
+No race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.
+Along the way only (not a race by this check): 5 of 6 ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).
+- run r19 (seed 1):
+    witness only here: overwrote-newer evershopGlobal.state0.loadingStates.updatingItem by POST /api/graphql
+- run r20 (seed 2):
+    witness only here: overwrote-newer evershopGlobal.state0.syncStatus.synced by PATCH /api/cart/:id/items/:id
+    witness only here: overwrote-newer evershopGlobal.state0.syncStatus.syncing by PATCH /api/cart/:id/items/:id
+- run r21 (seed 3):
+    witness only here: overwrote-newer evershopGlobal.state0.syncStatus.synced by PATCH /api/cart/:id/items/:id
+    witness only here: overwrote-newer evershopGlobal.state0.syncStatus.syncing by PATCH /api/cart/:id/items/:id
+
+3 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f6 [stale-write] "/cart" · 3× in 3 run(s) · 2 s ago
+  The response to "POST /api/graphql" "{query: \"query Query {\\n myCart …\", +2}" overwrote "evershopGlobal.state0.loadingStates.updatingItem" after a newer "timer 500ms" had already written it
+- f7 [stale-write] "/cart" · 2× in 2 run(s) · 13 s ago
+  The response to "PATCH /api/cart/:id/items/:id" "{qty: 1, action: \"increase\"}" overwrote "evershopGlobal.state0.syncStatus.synced" after a newer "POST /api/graphql" had already written it
+- f8 [stale-write] "/cart" · 2× in 2 run(s) · 13 s ago
+  The response to "PATCH /api/cart/:id/items/:id" "{qty: 1, action: \"increase\"}" overwrote "evershopGlobal.state0.syncStatus.syncing" after a newer "POST /api/graphql" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+
+

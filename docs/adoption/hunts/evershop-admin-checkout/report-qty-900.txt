@@ -1,0 +1,44 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /cart · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button
+  click button
+Ignored as noise (differs between the two baselines): state evershopGlobal.state0.data
+RACE: 4 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r21 (seed 1):
+    page text only in the baseline: "4", "$30.00", "$54.00", "$54.00"
+    page text only in this run: "3", "$15.00", "$39.00", "$39.00"
+    witness only here: overwrote-newer evershopGlobal.state0.loadingStates.updatingItem by POST /api/graphql
+- run r22 (seed 2):
+    requests sent to "POST /api/graphql": baseline "1", this run "2"
+    witness only here: overwrote-newer evershopGlobal.state0.syncStatus.synced by PATCH /api/cart/:id/items/:id
+    witness only here: overwrote-newer evershopGlobal.state0.syncStatus.syncing by PATCH /api/cart/:id/items/:id
+- run r23 (seed 3):
+    requests sent to "POST /api/graphql": baseline "1", this run "2"
+    state "eD.state0": baseline "false", this run "(absent)"
+    state "eD.state1": baseline "true", this run "(absent)"
+    state "eD.state2": baseline "\"/images?src=%2Fassets%2Fcatalog%2F5908%2F7443%2…\"", this run "(absent)"
+    state "eD_2.state0": baseline "false", this run "(absent)"
+    state "eD_2.state1": baseline "true", this run "(absent)"
+    witness only here: overwrote-newer evershopGlobal.state0.syncStatus.synced by PATCH /api/cart/:id/items/:id
+    witness only here: overwrote-newer evershopGlobal.state0.syncStatus.syncing by PATCH /api/cart/:id/items/:id
+- run r26 (seed 6):
+    requests sent to "POST /api/graphql": baseline "1", this run "2"
+    witness only here: overwrote-newer evershopGlobal.state0.loadingStates.updatingItem by POST /api/graphql
+

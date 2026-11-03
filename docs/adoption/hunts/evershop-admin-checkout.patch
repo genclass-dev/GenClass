@@ -1,0 +1,437 @@
+From 4618b1f1d07b740d93814f309fb23b5f6ba3215b Mon Sep 17 00:00:00 2001
+From: <sender> <sender@example.invalid>
+Date: Tue, 3 Nov 2026 17:02:38 +0000
+Subject: [PATCH 1/2] fix(cart): fetch the cart after each change, not with an
+ earlier change's request
+
+Two cart changes close together (the quantities of two lines, or a
+quantity and a remove) each fetch the cart again when their request is
+done. urql gives a query the result of an identical one already in flight,
+so the second change could get the first change's fetch, answered before
+the second change reached the server: the page kept that line's old price
+and the old totals. syncCartWithServer now starts each fetch once the one
+before it has finished.
+---
+ .../frontStore/cart/CartContext.tsx           |  18 ++-
+ .../cart/tests/unit/cartSyncOverlap.test.tsx  | 153 ++++++++++++++++++
+ 2 files changed, 170 insertions(+), 1 deletion(-)
+ create mode 100644 packages/evershop/src/components/frontStore/cart/tests/unit/cartSyncOverlap.test.tsx
+
+diff --git a/packages/evershop/src/components/frontStore/cart/CartContext.tsx b/packages/evershop/src/components/frontStore/cart/CartContext.tsx
+index 6a6ef0b8..aef7e8b3 100644
+--- a/packages/evershop/src/components/frontStore/cart/CartContext.tsx
++++ b/packages/evershop/src/components/frontStore/cart/CartContext.tsx
+@@ -553,7 +553,7 @@ export const CartProvider = ({
+   // `synced` after ADD_ITEM, so it showed the old contents, and a failed
+   // fetch never reached the catch. The new cart and `synced` now land
+   // together.
+-  const syncCartWithServer = useCallback(
++  const fetchCart = useCallback(
+     async (trigger?: string): Promise<CartData | undefined> => {
+       try {
+         // Set syncing to true and synced to false when starting sync
+@@ -599,6 +599,22 @@ export const CartProvider = ({
+     [client, query, addMineCartItemApi]
+   );
+ 
++  // One fetch at a time: urql gives a query the result of an identical one
++  // already in flight (dedupExchange). Two changes close together (the
++  // quantities of two lines) made the second sync share the first one's
++  // fetch, sent before the second change reached the server, so the page
++  // kept that older cart (a line's old price, the old totals). Each sync now
++  // starts its fetch once the one before it has finished.
++  const syncQueue = React.useRef<Promise<unknown>>(Promise.resolve());
++  const syncCartWithServer = useCallback(
++    (trigger?: string): Promise<CartData | undefined> => {
++      const sync = syncQueue.current.then(() => fetchCart(trigger));
++      syncQueue.current = sync;
++      return sync;
++    },
++    [fetchCart]
++  );
++
+   React.useEffect(() => {
+     if (cart && JSON.stringify(cart) !== JSON.stringify(state.data)) {
+       dispatch({ type: 'SET_CART', payload: cart });
+diff --git a/packages/evershop/src/components/frontStore/cart/tests/unit/cartSyncOverlap.test.tsx b/packages/evershop/src/components/frontStore/cart/tests/unit/cartSyncOverlap.test.tsx
+new file mode 100644
+index 00000000..638b356c
+--- /dev/null
++++ b/packages/evershop/src/components/frontStore/cart/tests/unit/cartSyncOverlap.test.tsx
+@@ -0,0 +1,153 @@
++import '../../../customer/address/tests/unit/domSetup.js';
++import { jest, describe, it, expect, afterEach, beforeEach } from '@jest/globals';
++
++/**
++ * Two cart changes close together, such as the quantities of two lines
++ * (each line waits 500 ms after the last click, then sends its update): each
++ * change fetches the cart again once its request is done. urql gives a query
++ * the result of an identical one already in flight (dedupExchange), so when
++ * the second update finished while the first one's fetch was still on the
++ * wire, the second sync got that fetch's result: the cart as the server had
++ * it before the second update. The page then showed the second line's old
++ * price and the old totals until the next change or a reload. Each sync now
++ * fetches after the one before it has finished.
++ *
++ * The real CartProvider with a real urql client (its default exchanges);
++ * fetch is faked: an update answers at once, and the test holds each cart
++ * query open and answers it with the cart the server had at that moment.
++ */
++const { createClient } = await import('urql');
++const client = createClient({ url: '/api/graphql' });
++jest.unstable_mockModule('urql', () => ({ useClient: () => client }));
++
++const React = (await import('react')).default;
++const { act } = await import('react');
++const { createRoot } = await import('react-dom/client');
++const { CartProvider, useCartState, useCartDispatch } = await import(
++  '../../CartContext.js'
++);
++
++const line = (id: string, sku: string, qty: number, price: number) => ({
++  cartItemId: id,
++  uuid: `uuid-${id}`,
++  productSku: sku,
++  qty,
++  lineTotal: { value: qty * price, text: `$${qty * price}.00` },
++  removeApi: `/api/carts/cart-1/items/${id}`,
++  updateQtyApi: `/api/carts/cart-1/items/${id}`
++});
++const cart = (cupQty: number, penQty: number) => ({
++  uuid: 'cart-1',
++  totalQty: cupQty + penQty,
++  items: [line('i1', 'CUP', cupQty, 15), line('i2', 'PEN', penQty, 12)],
++  addItemApi: '/api/carts/cart-1/items',
++  error: null,
++  errors: []
++});
++
++// Cart queries the page sent, each held open until the test answers it
++const cartQueries: Array<(myCart: unknown) => void> = [];
++const updates: string[] = [];
++
++let state: ReturnType<typeof useCartState>;
++let actions: ReturnType<typeof useCartDispatch>;
++function Probe() {
++  state = useCartState();
++  actions = useCartDispatch();
++  return null;
++}
++
++const tick = () => new Promise((r) => setTimeout(r, 0));
++
++describe('cart sync after two changes close together', () => {
++  let container: HTMLElement;
++  let root: ReturnType<typeof createRoot>;
++  const realFetch = globalThis.fetch;
++
++  beforeEach(async () => {
++    cartQueries.length = 0;
++    updates.length = 0;
++    globalThis.fetch = (async (url: string, init?: RequestInit) => {
++      if (String(url).endsWith('/api/graphql')) {
++        return new Promise((resolve) => {
++          cartQueries.push((myCart) =>
++            resolve(
++              new Response(JSON.stringify({ data: { myCart } }), {
++                status: 200,
++                headers: { 'Content-Type': 'application/json' }
++              })
++            )
++          );
++        });
++      }
++      updates.push(`${init?.method} ${url}`);
++      return { ok: true, json: async () => ({ data: {} }) };
++    }) as unknown as typeof fetch;
++    container = document.createElement('div');
++    document.body.appendChild(container);
++    root = createRoot(container);
++    await act(async () => {
++      root.render(
++        <CartProvider
++          cart={cart(1, 1) as never}
++          query="query { myCart { uuid } }"
++          addMineCartItemApi="/api/cart/mine/items"
++        >
++          <Probe />
++        </CartProvider>
++      );
++    });
++  });
++
++  afterEach(() => {
++    act(() => root.unmount());
++    container.remove();
++    globalThis.fetch = realFetch;
++  });
++
++  it("the second change's cart is fetched after it, not taken from the first change's fetch", async () => {
++    let first!: Promise<void>;
++    let second!: Promise<void>;
++
++    // Line 1: its update is done, its cart query is on the wire
++    await act(async () => {
++      first = actions.updateItem('i1', { qty: 1, action: 'increase' });
++      await tick();
++    });
++    expect(updates).toEqual(['PATCH /api/carts/cart-1/items/i1']);
++    expect(cartQueries).toHaveLength(1);
++
++    // Line 2: its update is done too, while that query is still open
++    await act(async () => {
++      second = actions.updateItem('i2', { qty: 1, action: 'increase' });
++      await tick();
++    });
++    expect(updates).toHaveLength(2);
++
++    // The server answers the first query with the cart it had then: line 1
++    // changed, line 2 not yet
++    await act(async () => {
++      cartQueries[0](cart(2, 1));
++      await tick();
++      await tick();
++    });
++
++    // The second change gets a fetch of its own, answered with both changes
++    expect(cartQueries).toHaveLength(2);
++    await act(async () => {
++      cartQueries[1](cart(2, 2));
++      await Promise.all([first, second]);
++    });
++
++    expect(state.data.items.map((item) => [item.productSku, item.qty])).toEqual([
++      ['CUP', 2],
++      ['PEN', 2]
++    ]);
++    expect(state.data.totalQty).toBe(4);
++    expect(state.syncStatus).toEqual({
++      syncing: false,
++      synced: true,
++      trigger: 'updateItem'
++    });
++  });
++});
+-- 
+2.43.0
+
+
+From 711cd9e4ca5594606250ece5dd81ec88d5f38616 Mon Sep 17 00:00:00 2001
+From: <sender> <sender@example.invalid>
+Date: Tue, 3 Nov 2026 17:02:39 +0000
+Subject: [PATCH 2/2] fix(checkout): keep the shipping methods of the latest
+ quote
+
+Checkout re-quotes the shipping methods 800 ms after each change of the
+address. When the address changed again while a quote was on the way and
+the older quote answered last, its methods replaced the newer ones (a
+Canadian address listed the United States methods). Only the latest
+quote's answer is kept now.
+---
+ .../frontStore/cart/CartContext.tsx           |  21 ++-
+ .../tests/unit/shippingQuoteOrder.test.tsx    | 141 ++++++++++++++++++
+ 2 files changed, 158 insertions(+), 4 deletions(-)
+ create mode 100644 packages/evershop/src/components/frontStore/cart/tests/unit/shippingQuoteOrder.test.tsx
+
+diff --git a/packages/evershop/src/components/frontStore/cart/CartContext.tsx b/packages/evershop/src/components/frontStore/cart/CartContext.tsx
+index aef7e8b3..7f20030b 100644
+--- a/packages/evershop/src/components/frontStore/cart/CartContext.tsx
++++ b/packages/evershop/src/components/frontStore/cart/CartContext.tsx
+@@ -1227,12 +1227,18 @@ export const CartProvider = ({
+     return state.data?.uuid ?? null;
+   }, [state.data?.uuid]);
+ 
++  // The latest shipping quote: an address edited again while its quote was
++  // on the way (a country, then another) must not get the older address's
++  // methods when that answer lands last
++  const shippingQuote = React.useRef(0);
++
+   // Fetch available shipping methods based on address parameters and update cart state
+   const fetchAvailableShippingMethods = useCallback(
+     async (params: ShippingAddressParams) => {
+       if (!state.data?.uuid) {
+         throw new Error('Cannot fetch shipping methods: cart not initialized');
+       }
++      const quote = ++shippingQuote.current;
+ 
+       try {
+         dispatch({
+@@ -1249,6 +1255,10 @@ export const CartProvider = ({
+             postalCode: params.postalCode || null
+           })
+           .toPromise();
++        if (quote !== shippingQuote.current) {
++          // A newer address was quoted since: its answer decides
++          return;
++        }
+ 
+         if (result.error) {
+           throw new Error(
+@@ -1279,10 +1289,13 @@ export const CartProvider = ({
+ 
+         throw new Error(errorMessage);
+       } finally {
+-        dispatch({
+-          type: 'SET_SPECIFIC_LOADING',
+-          payload: { operation: 'fetchingShippingMethods', loading: false }
+-        });
++        // The newer quote, still on the way, keeps the loading state
++        if (quote === shippingQuote.current) {
++          dispatch({
++            type: 'SET_SPECIFIC_LOADING',
++            payload: { operation: 'fetchingShippingMethods', loading: false }
++          });
++        }
+       }
+     },
+     [state.data?.uuid, client]
+diff --git a/packages/evershop/src/components/frontStore/cart/tests/unit/shippingQuoteOrder.test.tsx b/packages/evershop/src/components/frontStore/cart/tests/unit/shippingQuoteOrder.test.tsx
+new file mode 100644
+index 00000000..6c85a109
+--- /dev/null
++++ b/packages/evershop/src/components/frontStore/cart/tests/unit/shippingQuoteOrder.test.tsx
+@@ -0,0 +1,141 @@
++import '../../../customer/address/tests/unit/domSetup.js';
++import { jest, describe, it, expect, afterEach, beforeEach } from '@jest/globals';
++
++/**
++ * Checkout re-quotes the shipping methods 800 ms after each change of the
++ * address's geographic fields (Shipment.tsx). When the address changes again
++ * while a quote is on the way (United States, then Canada) and the older
++ * quote answers last, its methods replaced the newer ones: a Canadian
++ * address listed the United States methods. Only the latest quote's answer
++ * is kept now.
++ *
++ * The real CartProvider, with a fake urql client whose queries the test
++ * holds open and answers in the order it chooses.
++ */
++type Deferred = {
++  promise: Promise<unknown>;
++  resolve: (value: unknown) => void;
++};
++const deferred = (): Deferred => {
++  let resolve!: (value: unknown) => void;
++  const promise = new Promise((r) => {
++    resolve = r;
++  });
++  return { promise, resolve };
++};
++
++const queries: Array<{ variables: Record<string, unknown>; result: Deferred }> = [];
++const fakeClient = {
++  query: (_query: string, variables: Record<string, unknown>) => {
++    const result = deferred();
++    queries.push({ variables, result });
++    return { toPromise: () => result.promise };
++  }
++};
++jest.unstable_mockModule('urql', () => ({
++  useClient: () => fakeClient
++}));
++
++const React = (await import('react')).default;
++const { act } = await import('react');
++const { createRoot } = await import('react-dom/client');
++const { CartProvider, useCartState, useCartDispatch } = await import(
++  '../../CartContext.js'
++);
++
++const cart = {
++  uuid: 'cart-1',
++  items: [{ cartItemId: 'i1', productSku: 'TEE', qty: 1 }],
++  totalQty: 1,
++  addItemApi: '/api/carts/cart-1/items',
++  availableShippingMethods: [],
++  error: null,
++  errors: []
++};
++const methods = (name: string) => ({
++  data: {
++    myCart: {
++      availableShippingMethods: [
++        { code: name.toLowerCase(), name, providerCode: 'core' }
++      ]
++    }
++  }
++});
++
++let state: ReturnType<typeof useCartState>;
++let actions: ReturnType<typeof useCartDispatch>;
++function Probe() {
++  state = useCartState();
++  actions = useCartDispatch();
++  return null;
++}
++
++describe('shipping quotes for an address changed twice', () => {
++  let container: HTMLElement;
++  let root: ReturnType<typeof createRoot>;
++
++  beforeEach(async () => {
++    queries.length = 0;
++    container = document.createElement('div');
++    document.body.appendChild(container);
++    root = createRoot(container);
++    await act(async () => {
++      root.render(
++        <CartProvider
++          cart={cart as never}
++          query="query { myCart { uuid } }"
++          addMineCartItemApi="/api/cart/mine/items"
++        >
++          <Probe />
++        </CartProvider>
++      );
++    });
++  });
++
++  afterEach(() => {
++    act(() => root.unmount());
++    container.remove();
++  });
++
++  it("the older address's quote, answered last, does not replace the newer one", async () => {
++    let us!: Promise<void>;
++    let ca!: Promise<void>;
++    await act(async () => {
++      us = actions.fetchAvailableShippingMethods({ country: 'US' });
++      ca = actions.fetchAvailableShippingMethods({ country: 'CA' });
++    });
++    expect(queries.map((q) => q.variables.country)).toEqual(['US', 'CA']);
++
++    // Canada answers first, the United States last
++    await act(async () => {
++      queries[1].result.resolve(methods('Canada Post'));
++      await ca;
++    });
++    // The newer quote has landed; nothing is loading any more
++    expect(state.loadingStates.fetchingShippingMethods).toBe(false);
++    await act(async () => {
++      queries[0].result.resolve(methods('US Ground'));
++      await us;
++    });
++
++    expect(state.data.availableShippingMethods.map((m) => m.name)).toEqual([
++      'Canada Post'
++    ]);
++    expect(state.loadingStates.fetchingShippingMethods).toBe(false);
++  });
++
++  it('while the newer quote is on the way, the older answer leaves it loading', async () => {
++    let us!: Promise<void>;
++    await act(async () => {
++      us = actions.fetchAvailableShippingMethods({ country: 'US' });
++      actions.fetchAvailableShippingMethods({ country: 'CA' });
++    });
++    await act(async () => {
++      queries[0].result.resolve(methods('US Ground'));
++      await us;
++    });
++
++    expect(state.data.availableShippingMethods).toEqual([]);
++    expect(state.loadingStates.fetchingShippingMethods).toBe(true);
++  });
++});
+-- 
+2.43.0
+
