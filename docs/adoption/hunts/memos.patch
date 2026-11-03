@@ -1,0 +1,116 @@
+From a440178655a8c77f0e9f0cec3a8d2d1d238fc8b2 Mon Sep 17 00:00:00 2001
+From: GenClass hunt <hunt@localhost>
+Date: Tue, 3 Nov 2026 16:49:23 +0000
+Subject: [PATCH] fix(web): keep the newer memo update when two updates of a
+ memo overlap
+
+Pinning a memo and unpinning it before the first reply sent both updates at
+once. The server saved them in order and ended unpinned, but when the pin
+reply arrived last, useUpdateMemo's onSuccess wrote it over the newer state:
+the detail page showed the memo pinned until the detail was fetched again.
+The same holds for archive then restore and for the task check-all actions,
+which go through the same hook.
+
+Memo updates now share one mutation scope, so they are sent one at a time in
+the order they were made, and an update whose memo has a newer update queued
+behind it leaves the cache to that update's own onSuccess instead of writing
+its older reply over the newer optimistic patch.
+---
+ web/src/hooks/useMemoQueries.ts | 10 ++++++
+ web/tests/memo-record.test.tsx  | 55 +++++++++++++++++++++++++++++++++
+ 2 files changed, 65 insertions(+)
+
+diff --git a/web/src/hooks/useMemoQueries.ts b/web/src/hooks/useMemoQueries.ts
+index 1a1be2606..3729b468c 100644
+--- a/web/src/hooks/useMemoQueries.ts
++++ b/web/src/hooks/useMemoQueries.ts
+@@ -327,6 +327,9 @@ export function useUpdateMemo() {
+   const queryClient = useQueryClient();
+ 
+   return useMutation({
++    // Memo updates run one at a time, in the order they were made. Sent together, two quick updates of one memo
++    // (pin then unpin) can finish in either order, and the older reply would overwrite the newer change in the cache.
++    scope: { id: "memo-update" },
+     mutationFn: async ({ update, updateMask }: { update: Partial<Memo>; updateMask: string[] }) => {
+       const memo = await memoServiceClient.updateMemo({
+         memo: create(MemoSchema, update as Record<string, unknown>),
+@@ -369,6 +372,13 @@ export function useUpdateMemo() {
+       if (updateMask.includes("space")) {
+         queryClient.invalidateQueries({ queryKey: memoKeys.all });
+       }
++      // A newer update of this memo is queued behind this one: keep its optimistic patch, and leave the cache
++      // writes and refetches to its own onSuccess. This reply, or a refetch sent before it is saved, is older.
++      const newerUpdateQueued =
++        queryClient.isMutating({
++          predicate: (mutation) => (mutation.state.variables as { update?: Partial<Memo> } | undefined)?.update?.name === updatedMemo.name,
++        }) > 1;
++      if (newerUpdateQueued) return;
+       // Update cache with server response
+       queryClient.setQueryData(memoKeys.detail(updatedMemo.name), updatedMemo);
+       patchMemoInCollectionQueries(queryClient, updatedMemo);
+diff --git a/web/tests/memo-record.test.tsx b/web/tests/memo-record.test.tsx
+index 82b71b2bc..788774586 100644
+--- a/web/tests/memo-record.test.tsx
++++ b/web/tests/memo-record.test.tsx
+@@ -188,3 +188,58 @@ describe("useCreateMemo", () => {
+     expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey?.[1])).not.toContain("comments");
+   });
+ });
++
++describe("useUpdateMemo", () => {
++  beforeEach(() => vi.resetAllMocks());
++
++  // Pin, then unpin before the first reply: two updates of one memo in flight, as a quick second click makes them.
++  const pinThenUnpin = () => {
++    const { client, wrapper } = setup();
++    const target = memo("memos/x");
++    client.setQueryData(memoKeys.detail(target.name), target);
++    const replies: Array<() => void> = [];
++    api.updateMemo.mockImplementation(
++      ({ memo: update }: { memo: Memo }) =>
++        new Promise<Memo>((done) => replies.push(() => done(create(MemoSchema, { ...target, pinned: update.pinned })))),
++    );
++    const { result } = renderHook(() => ({ record: useMemoRecord(target.name), update: useUpdateMemo() }), { wrapper });
++    act(() => {
++      result.current.update.mutate({ update: { name: target.name, pinned: true }, updateMask: ["pinned"] });
++      result.current.update.mutate({ update: { name: target.name, pinned: false }, updateMask: ["pinned"] });
++    });
++    // Answers one waiting request: the newest (pop) or the oldest (shift), once every request that can be sent is.
++    const answer = async (pick: "newest" | "oldest") => {
++      await act(async () => {
++        await new Promise((done) => setTimeout(done, 0));
++      });
++      await waitFor(() => expect(replies.length).toBeGreaterThan(0));
++      await act(async () => (pick === "newest" ? replies.pop() : replies.shift())?.());
++    };
++    return { client, target, result, answer };
++  };
++
++  it("keeps the newer change when the older reply arrives last", async () => {
++    const { client, target, result, answer } = pinThenUnpin();
++    await waitFor(() => expect(result.current.record?.pinned).toBe(false));
++
++    await answer("newest");
++    await answer("newest");
++    await waitFor(() => expect(client.isMutating()).toBe(0));
++
++    expect(api.updateMemo.mock.calls.map(([request]) => request.memo.pinned)).toEqual([true, false]);
++    expect(client.getQueryData<Memo>(memoKeys.detail(target.name))?.pinned).toBe(false);
++    expect(result.current.record?.pinned).toBe(false);
++  });
++
++  it("does not show the older reply while the newer update is still saving", async () => {
++    const { client, result, answer } = pinThenUnpin();
++    await waitFor(() => expect(result.current.record?.pinned).toBe(false));
++
++    await answer("oldest");
++    expect(result.current.record?.pinned).toBe(false);
++
++    await answer("oldest");
++    await waitFor(() => expect(client.isMutating()).toBe(0));
++    expect(result.current.record?.pinned).toBe(false);
++  });
++});
+-- 
+2.43.0
+
