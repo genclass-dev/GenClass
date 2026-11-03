@@ -1,0 +1,21 @@
+search #1: ok input "document 12", dropdown [document 12]
+search #2: ok input "document 12", dropdown [document 12]
+search #3: ok input "document 12", dropdown [document 12]
+search #4: ok input "document 12", dropdown [document 12]
+search #5: ok input "document 12", dropdown [document 12]
+escape #1: ok after Escape input ""; then input "", dropdown closed []
+escape #2: ok after Escape input "doc"; then input "", dropdown closed []
+escape #3: ok after Escape input "doc"; then input "", dropdown closed []
+escape #4: ok after Escape input "doc"; then input "", dropdown closed []
+escape #5: ok after Escape input ""; then input "", dropdown closed []
+notes-double #1: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-double #2: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-double #3: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-double #4: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-double #5: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-single #1: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-single #2: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-single #3: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-single #4: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-single #5: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+{"search":"0 of 5 wrong","escape":"0 of 5 wrong","notes-double":"0 of 5 wrong","notes-single":"0 of 5 wrong"}

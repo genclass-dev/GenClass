@@ -1,0 +1,182 @@
+{
+  "surface": "search",
+  "ui": "http://localhost:4200",
+  "runs": 6,
+  "seed": 1,
+  "sessions": [
+    {
+      "slow_ms": 600,
+      "explore": "no race, 0 of 6",
+      "oracleWrong": 0,
+      "loads": [
+        {
+          "load": 1,
+          "fifo": true,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 2,
+          "fifo": true,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 3,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #2",
+            "GET #1"
+          ]
+        },
+        {
+          "load": 4,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 5,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 6,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 7,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 8,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        }
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "explore": "no race, 0 of 6",
+      "oracleWrong": 0,
+      "loads": [
+        {
+          "load": 1,
+          "fifo": true,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 2,
+          "fifo": true,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 3,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #2",
+            "GET #1"
+          ]
+        },
+        {
+          "load": 4,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 5,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 6,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 7,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 8,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        }
+      ]
+    }
+  ]
+}

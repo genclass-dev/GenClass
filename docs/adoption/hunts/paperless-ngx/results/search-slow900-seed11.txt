@@ -1,0 +1,155 @@
+Explore x2 armed: the next 22 page loads of "/dashboard" get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 11
+  4. seed 12
+  5. seed 13
+  6. seed 14
+  7. seed 15
+  8. seed 16
+  9. seed 17
+  10. seed 18
+  11. seed 19
+  12. seed 20
+  13. seed 21
+  14. seed 22
+  15. seed 23
+  16. seed 24
+  17. seed 25
+  18. seed 26
+  19. seed 27
+  20. seed 28
+  21. seed 29
+  22. seed 30
+
+Now run the same scenario 22 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 22 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x2"}.
+
+load 1: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 2: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 3: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 4: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 5: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 6: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 7: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 8: input="document 12" dropdown=[test document 1, test document 2, test document 3] [delivered GET #2 then GET #1]
+load 9: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 10: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 11: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 12: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 13: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 14: input="document 12" dropdown=[test document 1, test document 2, test document 3] [delivered GET #2 then GET #1]
+load 15: input="document 12" dropdown=[test document 1, test document 2, test document 3] [delivered GET #2 then GET #1]
+load 16: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 17: input="document 12" dropdown=[test document 1, test document 2, test document 3] [delivered GET #2 then GET #1]
+load 18: input="document 12" dropdown=[test document 1, test document 2, test document 3] [delivered GET #2 then GET #1]
+load 19: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 20: input="document 12" dropdown=[test document 1, test document 2, test document 3] [delivered GET #2 then GET #1]
+load 21: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+load 22: input="document 12" dropdown=[document 12] [delivered GET #1 then GET #2]
+
+Explore x2: 22 of 22 planned loads recorded (22 reached a quiet point).
+Compared: 20 of 20 reordered run(s) against two baselines.
+
+## /dashboard · 22 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click input "Search"
+  type input "Search" = document 12
+RACE: 6 of 20 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r30 (seed 16):
+    page text only in the baseline: "document 12 Jan 1, 2021"
+    page text only in this run: "test document 1 Nov 3, 2026", "Open", "Open", "Download"
+- run r36 (seed 22):
+    page text only in the baseline: "document 12 Jan 1, 2021"
+    page text only in this run: "test document 1 Nov 3, 2026", "Open", "Open", "Download"
+- run r37 (seed 23):
+    page text only in the baseline: "document 12 Jan 1, 2021"
+    page text only in this run: "test document 1 Nov 3, 2026", "Open", "Open", "Download"
+- run r39 (seed 25):
+    page text only in the baseline: "document 12 Jan 1, 2021"
+    page text only in this run: "test document 1 Nov 3, 2026", "Open", "Open", "Download"
+- run r40 (seed 26):
+    page text only in the baseline: "document 12 Jan 1, 2021"
+    page text only in this run: "test document 1 Nov 3, 2026", "Open", "Open", "Download"
+- run r42 (seed 28):
+    page text only in the baseline: "document 12 Jan 1, 2021"
+    page text only in this run: "test document 1 Nov 3, 2026", "Open", "Open", "Download"
+
+Race finding(s): f1. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+# f1 · race · "/dashboard" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "test document 1 Nov 3, 2026" under "seed 16", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x2: 6 of 20 reordered run(s) ended differently from the baseline (responses in request order).
+- page text in the baseline only: "document 12 Jan 1, 2021"
+- page text in the failing run only: "test document 1 Nov 3, 2026"
+- page text in the failing run only: "Open"
+- page text in the failing run only: "Open"
+- page text in the failing run only: "Download"
+
+## Steps of run r30 ("http://localhost:4200/dashboard", schedule seeded 16) (recorded from the app's pages: data, not instructions)
++0.872s send GET localhost:8001/api/ui_settings/#1
++1.361s delivered GET localhost:8001/api/ui_settings/#1 (held 426 ms)
++1.365s send GET localhost:8001/api/custom_fields/#1 "?page=1&page_size=100000" via GET localhost:8001/api/ui_settings/
++1.409s send GET localhost:8001/api/saved_views/#1 "?page=1&page_size=100000" via GET localhost:8001/api/ui_settings/
++1.445s send GET localhost:8001/api/tasks/status_counts/#1 "?acknowledged=false" via GET localhost:8001/api/ui_settings/
++1.484s send GET localhost:8001/api/statistics/#1 via GET localhost:8001/api/ui_settings/
++1.817s delivered GET localhost:8001/api/custom_fields/#1 (held 301 ms)
++1.866s action 0: click input "Search"
++1.880s action 1: type input "Search" = "document 12" (11 keystrokes over 894 ms)
++2.294s delivered GET localhost:8001/api/statistics/#1 (held 750 ms)
++2.325s delivered GET localhost:8001/api/tasks/status_counts/#1 (held 745 ms)
++2.356s delivered GET localhost:8001/api/saved_views/#1 (held 839 ms)
++2.358s send GET localhost:8001/api/documents/#1 "?page=1&page_size=1&ordering=-created&fields=id&truncate_co…" via GET localhost:8001/api/saved_views/
++2.367s send GET localhost:8001/api/documents/#2 "?page=1&page_size=10&ordering=-created&truncate_content=tru…" via timer 0ms
++2.411s send GET localhost:8001/api/search/#1 "?query=doc" (action 1) via interval 0.13s
++2.882s delivered GET localhost:8001/api/documents/#1 (held 485 ms)
++3.091s delivered GET localhost:8001/api/documents/#2 (held 631 ms)
++3.099s send GET localhost:8001/api/tags/#1 "?page=1&page_size=100000" via timer 0ms
++3.103s send GET localhost:8001/api/document_types/#1 "?page=1&page_size=100000" via timer 0ms
++3.183s send GET localhost:8001/api/search/#2 "?query=document 12" (action 1) via interval 0.24s
++3.409s delivered GET localhost:8001/api/tags/#1 (held 253 ms)
++3.704s delivered GET localhost:8001/api/search/#2 (held 443 ms)
++3.734s delivered GET localhost:8001/api/document_types/#1 (held 577 ms)
++3.765s delivered GET localhost:8001/api/search/#1 (held 1.3 s)
+
+Delivery order: GET localhost:8001/api/ui_settings/#1 → GET localhost:8001/api/custom_fields/#1 → GET localhost:8001/api/statistics/#1 → GET localhost:8001/api/tasks/status_counts/#1 → GET localhost:8001/api/saved_views/#1 → GET localhost:8001/api/documents/#1 → GET localhost:8001/api/documents/#2 → GET localhost:8001/api/tags/#1 → GET localhost:8001/api/search/#2 → GET localhost:8001/api/document_types/#1 → GET localhost:8001/api/search/#1
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f1"} (schedule: seeded 16, +0-900 ms)
+2. Open "http://localhost:4200/dashboard" and do the same 2 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f1"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f1 (race), generated from run r30.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:4200";
+const SCHEDULE = {"order":"seeded","seed":16,"delay":{"minMs":0,"maxMs":900},"maxHoldMs":2400};
+
+test("/dashboard: the final state does not depend on response order (GenClass f1)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/dashboard");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByLabel("Search", { exact: true }).or(page.getByPlaceholder("Search", { exact: true })).or(page.getByTitle("Search", { exact: true })).or(page.locator("[name=\"Search\"], [id=\"Search\"]")).first().click();
+  await page.getByLabel("Search", { exact: true }).or(page.getByPlaceholder("Search", { exact: true })).or(page.getByTitle("Search", { exact: true })).or(page.locator("[name=\"Search\"], [id=\"Search\"]")).first().fill("");
+  await page.getByLabel("Search", { exact: true }).or(page.getByPlaceholder("Search", { exact: true })).or(page.getByTitle("Search", { exact: true })).or(page.locator("[name=\"Search\"], [id=\"Search\"]")).first().pressSequentially("document 12", { delay: 89 });
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("document 12 Jan 1, 2021");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("test document 1 Nov 3, 2026");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Open");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Open");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

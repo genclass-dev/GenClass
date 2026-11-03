@@ -1,0 +1,269 @@
+{
+  "surface": "notes",
+  "ui": "http://localhost:4200",
+  "runs": 6,
+  "seed": 1,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "explore": "RACE in 1 of 6",
+      "oracleWrong": 8,
+      "loads": [
+        {
+          "load": 1,
+          "fifo": true,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 2,
+          "fifo": true,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 3,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 4,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #2",
+            "POST #1"
+          ]
+        },
+        {
+          "load": 5,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 6,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #2",
+            "POST #1"
+          ]
+        },
+        {
+          "load": 7,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #2",
+            "POST #1"
+          ]
+        },
+        {
+          "load": 8,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        }
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "explore": "RACE in 2 of 6",
+      "oracleWrong": 8,
+      "loads": [
+        {
+          "load": 1,
+          "fifo": true,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 2,
+          "fifo": true,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 3,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 4,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #2",
+            "POST #1"
+          ]
+        },
+        {
+          "load": 5,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 6,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #2",
+            "POST #1"
+          ]
+        },
+        {
+          "load": 7,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 1",
+          "delivered": [
+            "POST #2",
+            "POST #1"
+          ]
+        },
+        {
+          "load": 8,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        }
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "explore": "RACE in 2 of 6",
+      "oracleWrong": 8,
+      "loads": [
+        {
+          "load": 1,
+          "fifo": true,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 2,
+          "fifo": true,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 3,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 4,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #2",
+            "POST #1"
+          ]
+        },
+        {
+          "load": 5,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        },
+        {
+          "load": 6,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 1",
+          "delivered": [
+            "POST #2",
+            "POST #1"
+          ]
+        },
+        {
+          "load": 7,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #2",
+            "POST #1"
+          ]
+        },
+        {
+          "load": 8,
+          "fifo": false,
+          "ok": false,
+          "shown": "api holds 2 copy(ies), page lists 2",
+          "delivered": [
+            "POST #1",
+            "POST #2"
+          ]
+        }
+      ]
+    }
+  ]
+}

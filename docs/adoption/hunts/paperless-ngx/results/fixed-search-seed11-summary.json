@@ -1,0 +1,235 @@
+{
+  "surface": "search",
+  "ui": "http://localhost:4200",
+  "runs": 20,
+  "seed": 11,
+  "sessions": [
+    {
+      "slow_ms": 900,
+      "explore": "no race, 0 of 20",
+      "oracleWrong": 0,
+      "loads": [
+        {
+          "load": 1,
+          "fifo": true,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 2,
+          "fifo": true,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 3,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 4,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 5,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #2",
+            "GET #1"
+          ]
+        },
+        {
+          "load": 6,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 7,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 8,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #2",
+            "GET #1"
+          ]
+        },
+        {
+          "load": 9,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 10,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 11,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 12,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 13,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 14,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #2",
+            "GET #1"
+          ]
+        },
+        {
+          "load": 15,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #2",
+            "GET #1"
+          ]
+        },
+        {
+          "load": 16,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 17,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #2",
+            "GET #1"
+          ]
+        },
+        {
+          "load": 18,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #2",
+            "GET #1"
+          ]
+        },
+        {
+          "load": 19,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 20,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #2",
+            "GET #1"
+          ]
+        },
+        {
+          "load": 21,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        },
+        {
+          "load": 22,
+          "fifo": false,
+          "ok": true,
+          "shown": "input=\"document 12\" dropdown=[document 12]",
+          "delivered": [
+            "GET #1",
+            "GET #2"
+          ]
+        }
+      ]
+    }
+  ]
+}
