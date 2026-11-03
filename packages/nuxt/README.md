@@ -11,8 +11,8 @@ storm. In the default `observe` mode it reports (one console line per finding, t
 nothing; `guard` mode, opt-in, lets it drop a stale response or reuse a duplicate's result when the model is confident.
 It is Apache-2.0, runs on-device, and never sends page content unless you opt in. What it finds and how often, with
 the false-intervention rate next to every recall number, is in the runtime's
-[README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md) and
-[RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md).
+[README](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md) and
+[RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md).
 
 ## Install
 
@@ -54,7 +54,7 @@ export default defineNuxtConfig({
 |---|---|---|---|
 | `mode` | `"observe"`, `"guard"` | `"observe"` | `observe` reports what GenClass finds and never holds, delays or changes anything. `guard` also prevents failures with small, reversible actions (drop a stale response, reuse a duplicate's result) when the model is confident. The plugin imports `@genclass/runtime/auto` or `@genclass/runtime/auto/guard` accordingly. |
 | `token` | `"gc_..."` | none | Your app's token from [genclass.dev](https://genclass.dev) or `npx @genclass/runtime@beta login`; with telemetry on, findings also reach your dashboard. Needs `@genclass/runtime` 0.3.0 or later (0.2.x ignores it). |
-| `telemetry` | `true`, `false` | the runtime's default | Anonymous, redacted diagnostics to the GenClass maintainers ([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md)). Unset: on from public hosts, off on localhost and private networks. `false`: off. `true`: an explicit opt-in that also sends from local hosts. |
+| `telemetry` | `true`, `false` | the runtime's default | Anonymous, redacted diagnostics to the GenClass maintainers ([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md)). Unset: on from public hosts, off on localhost and private networks. `false`: off. `true`: an explicit opt-in that also sends from local hosts. |
 | `devtools` | `"dev"`, `"always"`, `"never"` | `"dev"` | The devtools overlay (detections, actions, the evidence behind each decision, a mode switch). `"dev"` loads it in `nuxt dev` only; a production build carries no reference to it. `"always"` loads it in production too. The overlay is a lazy chunk, never part of the first load. |
 
 `token` and `telemetry` are passed to the runtime as `window.GENCLASS_CONFIG`, the page configuration it documents, by
@@ -68,7 +68,7 @@ Automatic state discovery covers React, Redux and Zustand, not Vue refs or Pinia
 from the network and user input: stale typeahead responses, duplicate submits, failure storms, retries and stalls.
 Decisions that compare a late response with newer data already in your state need that state registered
 (`genclass.atom(...)` / `genclass.guard(...)`, see
-[State it can protect](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#state-it-can-protect)).
+[State it can protect](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#state-it-can-protect)).
 The runtime the plugin started is `GenClass.runtime` from `@genclass/runtime`.
 
 ## Turning it off
@@ -81,7 +81,7 @@ The runtime the plugin started is `GenClass.runtime` from `@genclass/runtime`.
 
 In a browser on a public host, GenClass sends anonymous, redacted diagnostics by default: session info, decisions and
 their outcomes, detections, model errors and periodic counts; never raw input values, cookies, headers, storage or page
-text unless you opt in ([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md)).
+text unless you opt in ([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md)).
 It is off on localhost and private networks, and for visitors whose browser sends Global Privacy Control. To turn it
 off for everyone:
 
@@ -101,7 +101,7 @@ npm test             # the generated code, and one production build of test/fixt
 
 Built with `@nuxt/kit` 4 and tested with Nuxt 4.6. The module declares `nuxt: ">=3.17.0"`; Nuxt 3 is not tested.
 A starter app with the module installed is in
-[templates/nuxt](https://github.com/genclass-dev/GenClass-lib/tree/main/templates/nuxt).
+[templates/nuxt](https://github.com/genclass-dev/GenClass/tree/main/templates/nuxt).
 
 ## License
 

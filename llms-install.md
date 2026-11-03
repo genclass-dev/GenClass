@@ -75,6 +75,6 @@ visual bugs before calling a UI change done (it needs Playwright's Chromium: `np
 same audit from a terminal is `npx @genclass/runtime@beta scan <url>`). The server's instructions and each tool's
 description say when to use what; the procedure (explore arguments, how to read a report, what to say when done) is
 the `genclass` skill: `npx -y @genclass/mcp@0.2.1 init` writes it to `.claude/skills/genclass/SKILL.md` for Claude
-Code (`--no-skill` leaves it out), and `npx skills add genclass-dev/GenClass-lib` installs the repository-root copy
+Code (`--no-skill` leaves it out), and `npx skills add genclass-dev/GenClass` installs the repository-root copy
 (`skills/genclass/SKILL.md`) through a skill directory, with no server. More:
-https://github.com/genclass-dev/GenClass-lib/tree/main/packages/mcp
+https://github.com/genclass-dev/GenClass/tree/main/packages/mcp

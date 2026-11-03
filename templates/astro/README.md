@@ -35,7 +35,7 @@ in your layout's head); `npx astro add @genclass/astro` adds the integration.
 from the network and user input: stale typeahead responses, duplicate submits, failure storms, retries and stalls.
 Decisions that compare a late response with newer data already in your state need that state registered
 (`genclass.atom(...)` / `genclass.guard(...)`, see
-[State it can protect](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#state-it-can-protect)),
+[State it can protect](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#state-it-can-protect)),
 or a React island, whose state is discovered.
 
 ## Observe, then guard
@@ -62,7 +62,7 @@ no reference to it. `genclass({ devtools: "always" })` loads it in production to
 ## Privacy
 
 In a browser, GenClass sends anonymous, redacted diagnostics by default
-([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md)).
+([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md)).
 To turn that off, pass the option in `astro.config.mjs`:
 
 ```js
@@ -72,4 +72,4 @@ integrations: [genclass({ telemetry: false })],
 ## Compatibility
 
 Astro 7 with the Node adapter (standalone). The integration needs Astro 4 or later; the frameworks behind the other
-templates are covered by the [compatibility matrix](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md).
+templates are covered by the [compatibility matrix](https://github.com/genclass-dev/GenClass/blob/main/compat/RESULTS.md).

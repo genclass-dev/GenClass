@@ -14,8 +14,8 @@ import { color } from "@sveltejs/sv-utils";
 import { defineAddon, defineAddonOptions } from "sv";
 import { RUNTIME, RUNTIME_RANGE, editAppHtml, editHooks, hasHeadSlot, newHooksFile } from "./edit.js";
 
-const TELEMETRY_DOC = "https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md";
-const SELF_HOST_DOC = "https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting";
+const TELEMETRY_DOC = "https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md";
+const SELF_HOST_DOC = "https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting";
 
 const options = defineAddonOptions()
   .add("mode", {
@@ -46,7 +46,7 @@ function read(cwd: string, rel: string): string {
 export default defineAddon({
   id: "@genclass/sv",
   shortDescription: "race-condition reports",
-  homepage: "https://github.com/genclass-dev/GenClass-lib/tree/main/packages/sv#readme",
+  homepage: "https://github.com/genclass-dev/GenClass/tree/main/packages/sv#readme",
   options,
 
   setup: ({ isKit, unsupported }) => {

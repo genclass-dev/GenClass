@@ -9,7 +9,7 @@ diagnostics are separate (see [Privacy](#privacy)).
 This page covers `@genclass/runtime-model@0.2.0` (model `genclass-runtime-r17` 2.0.0-rc4t, training run
 `r17-v2dT`), the default model of `@genclass/runtime` 0.1.0-beta.1 and later, including `0.2.3` (npm `latest`) and
 `0.3.0-beta.5` (`beta`, 2026-11-03). Training data, held-out results, thresholds and limits are in the
-[model card](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime-model/MODEL_CARD.md).
+[model card](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime-model/MODEL_CARD.md).
 
 ## At a glance
 
@@ -26,8 +26,8 @@ This page covers `@genclass/runtime-model@0.2.0` (model `genclass-runtime-r17` 2
 | observe detections at `balanced`, held-out real apps, right diagnosis | duplicate submits 75%, stale overwrites 30% (`situation-v2.3` slice; 21% on `situation-v2`), genuine breaks 6%. False detections were held to at most 2% (real) and 3% (simulated) of clean decisions, met on held-out test; the exact rates are not published. Runtime `0.3.0`'s observe default also records *possible* detections, down to the `eager` report gate (0.70): likely and possible together are expected at the `eager` profile's 77% / 45% / 13%, with false detections held to at most 5% (real) and 6% (simulated); the share of possible detections that are false is not measured |
 | licence | Apache-2.0 (initialised from `jhu-clsp/ettin-encoder-17m`, MIT) |
 
-Numbers: [model card](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime-model/MODEL_CARD.md)
-and [RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md) §1, §2, §11 and
+Numbers: [model card](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime-model/MODEL_CARD.md)
+and [RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md) §1, §2, §11 and
 §17. The false-intervention rate (FIR) is the share of cases where doing nothing was best but the gate fired anyway.
 
 ## Do I need to install it?
@@ -60,12 +60,12 @@ plus onnxruntime-web's wasm from jsDelivr's `onnxruntime-web` package. On WASM a
 A pilot app with `@genclass/runtime` 0.1.0-beta.3 and this model recorded 12.7 MB after the load event: the q8 model
 at 9.45 MB as recorded, ONNX Runtime's wasm at 3.07 MB brotli and the tokenizer at 207 KB; with the q8 file at its
 full 10.2 MB the same sum is about 13.4 MB
-([RESULTS.md §17](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#17-browser-cost-on-a-pilot-app-2026-10-09-and-2026-10-10)).
+([RESULTS.md §17](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#17-browser-cost-on-a-pilot-app-2026-10-09-and-2026-10-10)).
 On WebGPU the ONNX Runtime build is larger (5.5 MB brotli), and with `shader-f16` the 13.6 MB fp16 file replaces the
 q8. Later visits revalidate `model.json` (about 1 KB) and read the rest from Cache Storage. A forward pass on one WASM
 thread is estimated at about 182 / 330 / 599 ms at 500 / 780 / 1,170 tokens (a least-squares fit over runs of
 onnxruntime-web 1.30 in Node on the training VM, not in a browser;
-[RESULTS.md §2](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#2-r17-vs-r32-choosing-the-shipping-model)).
+[RESULTS.md §2](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#2-r17-vs-r32-choosing-the-shipping-model)).
 
 Model: `genclass-runtime-r17` 2.0.0-rc4t (training run `r17-v2dT`). `model.json` sha256
 `3f79289280dc11e4284b04d63a505e3cac9e77b3dc06a981cd4686c880169daf`. Its `meta.json` gate is a gain gate with three
@@ -106,12 +106,12 @@ above and `ortWasmPaths`.
 
 With the script tag, use `data-model="/genclass-model/"` (and `data-ort` for a self-hosted ONNX Runtime). The full
 Content-Security-Policy guidance is in the
-[`@genclass/runtime` README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting).
+[`@genclass/runtime` README](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting).
 
 ## What it can and can't do
 
 In short (details in the
-[model card](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime-model/MODEL_CARD.md)):
+[model card](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime-model/MODEL_CARD.md)):
 
 - **It rarely acts, and misses most problems.** In `guard` or `heal` mode it acts only when its expected gain over
   doing nothing clears the profile's margin and the top diagnosis is not `expected`. At the default `balanced`
@@ -126,7 +126,7 @@ In short (details in the
   in the devtools and in telemetry (on the app's own listeners only with `detect: "possible"`). Likely and possible
   together are expected to match the `eager` profile: 77% / 45% / 13% detected, false detections held to at most 5%
   (real) and 6% (simulated); the share of possible detections that are false is not measured, and neither tier has
-  been measured end to end on 0.3.0 ([RESULTS.md §11](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#11-observe-mode-detection-in-030-the-possible-tier-and-deferred-situations)).
+  been measured end to end on 0.3.0 ([RESULTS.md §11](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#11-observe-mode-detection-in-030-the-possible-tier-and-deferred-situations)).
   The previous model (0.1.0, report threshold 0.85) had 0.36% on clean or benign real-app traffic and
   3.8% of held-out real-app decisions whose correct diagnosis was `expected` (most of them from one app).
 - **Calibration** (ECE) has not been measured for 0.2.0 (0.1.0: 0.021 to 0.023).
@@ -142,12 +142,12 @@ versions differ: `0.1.0-beta.1` and `0.1.0-beta.2` have no diagnostics, `0.1.0-b
 hosts too, and `0.1.0-beta.3` to `0.2.0` include the redacted situation text the model read by default. Opt out with
 `GenClass.init({ telemetry: false })`, `?genclass=no-telemetry`, `localStorage.setItem("genclass.telemetry", "off")`
 or `init --no-telemetry`; browsers sending Global Privacy Control are never collected.
-Details: [TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md).
+Details: [TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md).
 
 ## License
 
 Apache-2.0. Initialised from `jhu-clsp/ettin-encoder-17m` (MIT); trained only on data generated for this project
-(see the [model card](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime-model/MODEL_CARD.md)).
+(see the [model card](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime-model/MODEL_CARD.md)).
 
 <!-- Maintainers: npmjs.com shows the README and package.json fields (description, keywords, homepage) of the
 published version, MODEL_CARD.md ships in the same tarball, and a published version cannot be republished. On

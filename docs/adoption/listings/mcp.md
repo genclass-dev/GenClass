@@ -23,12 +23,13 @@ submitted.
 - **What it sends.** Nothing leaves the machine: the bridge listens on 127.0.0.1 only. The one exception is opt-in:
   `genclass_analytics {source: "production"}` reads the developer's own GenClass dashboard when they set
   `GENCLASS_DASHBOARD`.
-- **Repository.** Public URL: https://github.com/genclass-dev/GenClass-lib (`daybot-solutions-inc/GenClass-lib` is a
-  mirror; submit the `genclass-dev` one everywhere). Server: `packages/mcp`. Claude Code plugin: `packages/mcp/plugin`.
+- **Repository.** Public URL: https://github.com/genclass-dev/GenClass (`daybot-solutions-inc/GenClass-lib` and
+  `genclass-dev/GenClass-lib` are old names that GitHub redirects; submit the `genclass-dev/GenClass` one everywhere).
+  Server: `packages/mcp`. Claude Code plugin: `packages/mcp/plugin`.
   Registry name: `io.github.genclass-dev/genclass`. The plugin at a repository root, with its marketplace files:
   https://github.com/genclass-dev/genclass-plugin (assembled from `packages/mcp/plugin` by
   `packages/mcp/scripts/plugin-repo.mjs`, re-synced daily by its own workflow, never edited by hand). Submit that
-  one to plugin and skill directories, and GenClass-lib to MCP server directories.
+  one to plugin and skill directories, and GenClass to MCP server directories.
 
 ### Texts to reuse
 
@@ -49,9 +50,9 @@ submitted.
   wants a 400x400 PNG; Cursor a logo committed to the repository.
 - **Contact email** for the forms that ask (Anthropic, mcpservers.org). PRIVACY.md names mehar@daybot.ca.
 - **GitHub topics.** `gemini-cli-extension` (Gemini gallery), `agent-skills` (`gh skill`), `claude-code-plugin`,
-  `claude-plugin` and `codex-plugin` are set on genclass-plugin; GenClass-lib carries `gemini-cli-extension`,
+  `claude-plugin` and `codex-plugin` are set on genclass-plugin; GenClass carries `gemini-cli-extension`,
   `claude-code-plugin` and `mcp-server`. Gemini CLI and `gh skill` read the latest GitHub release before the default
-  branch, and GenClass-lib's latest release (v0.2.1, 2026-10-11) predates the plugin, so only genclass-plugin installs
+  branch, and GenClass's latest release (v0.2.1, 2026-10-11) predates the plugin, so only genclass-plugin installs
   through them.
 
 ## Order
@@ -79,7 +80,7 @@ issue modelcontextprotocol/registry#1468.
   checks it against the 2025-12-11 schema, and `mcp-publisher validate` against the live registry accepted this file
   on 2026-10-24 and refused the old 210-character one with 422).
 - **Organization namespace.** OIDC grants `io.github.<repository owner>/*`, so the tag must be pushed to
-  `genclass-dev/GenClass-lib` (the job checks this first). `mcp-publisher login github` (device flow) cannot publish
+  `genclass-dev/GenClass` (the job checks this first). `mcp-publisher login github` (device flow) cannot publish
   to an organization namespace (#1468, open); the fallback is `mcp-publisher login github --token <PAT>` with a
   classic PAT with `read:org` or a fine-grained one with Organization Members read-only, by an organization Owner.
 - **Draft.** `packages/mcp/server.json` as committed.
@@ -96,7 +97,7 @@ official registry); docs.github.com "Extend Copilot Chat with MCP" (VS Code adds
   > Subject: MCP server for the GitHub MCP Registry: io.github.genclass-dev/genclass
   >
   > Hello, we publish io.github.genclass-dev/genclass to the official MCP Registry (npm `@genclass/mcp`, stdio,
-  > Apache-2.0, source https://github.com/genclass-dev/GenClass-lib/tree/main/packages/mcp) and would like it included
+  > Apache-2.0, source https://github.com/genclass-dev/GenClass/tree/main/packages/mcp) and would like it included
   > in the GitHub MCP Registry. It is a local server for coding agents: it shows the agent what happened inside a web
   > app's pages on the developer's machine in causal order, re-runs a page with network responses delivered in
   > different orders to find race conditions, replays one exact order to prove a fix, and writes a Playwright
@@ -117,8 +118,8 @@ support.claude.com "Anthropic Software Directory Policy".
   submit a repository folder holds that listing.
 - **Steps.** claude.ai/directory/manage, Submit new, Plugin bundle. Source: repository
   `genclass-dev/genclass-plugin`, no plugin path (the plugin is the repository root), branch `main`; Validate.
-  GenClass-lib itself cannot be submitted: the portal stops validating a repository whose GitHub archive is over
-  50 MiB (pre-submission checklist), and GenClass-lib's is 51 MiB. Listing details are read from
+  GenClass itself cannot be submitted: the portal stops validating a repository whose GitHub archive is over
+  50 MiB (pre-submission checklist), and GenClass's is 51 MiB. Listing details are read from
   `.claude-plugin/plugin.json` and `README.md` at that root (the same files as `packages/mcp/plugin/`). Data handling: the plugin
   collects and sends nothing; it reads and writes `.genclass/agent/` in the project and `~/.genclass/` (the bridge
   token); the optional dashboard read is the only network request off the machine. Compliance: contact email and
@@ -136,7 +137,7 @@ support.claude.com "Anthropic Software Directory Policy".
   now is: `scripts/plugin-repo.mjs` fetches the released `@genclass/mcp` at the plugin's version from npm and vendors
   its `dist/cli.js` (about 150 KB, no dependencies) as `server/cli.mjs` with the package's command next to it, and
   `.mcp.json` and the hook run `node ${CLAUDE_PLUGIN_ROOT}/server/genclass-mcp.mjs`; the lockfile is gone. The copy
-  of the plugin inside GenClass-lib keeps `npx` (nothing built is committed there), and the Agent Plugins `mcp.json`
+  of the plugin inside GenClass keeps `npx` (nothing built is committed there), and the Agent Plugins `mcp.json`
   keeps `npx` everywhere, since that format has no plugin-root variable. An unpinned launcher would block; the
   manifests test keeps the `npx` pins equal to `package.json`'s version and checks the assembled tree. Between a
   version bump and its release the sync script exits 3 (npm does not serve the new version yet) and the plugin
@@ -208,7 +209,7 @@ Source: punkpeye/awesome-mcp-servers `CONTRIBUTING.md`, `README.md` (legend, Dev
 - **Draft** (heading `### 💻 <a name="developer-tools"></a>Developer Tools`; confirm the Glama path once listed):
 
 ```
-- [genclass-dev/GenClass-lib](https://github.com/genclass-dev/GenClass-lib) [![genclass-dev/GenClass-lib MCP server](https://glama.ai/mcp/servers/genclass-dev/GenClass-lib/badges/score.svg)](https://glama.ai/mcp/servers/genclass-dev/GenClass-lib) 📇 🏠 🍎 🪟 🐧 - Race conditions in web apps for coding agents: records clicks, requests, response order and state writes in the app's pages on your machine, re-runs a page with responses delivered in different orders, replays one exact order to prove a fix and writes a Playwright regression test.
+- [genclass-dev/GenClass](https://github.com/genclass-dev/GenClass) [![genclass-dev/GenClass MCP server](https://glama.ai/mcp/servers/genclass-dev/GenClass/badges/score.svg)](https://glama.ai/mcp/servers/genclass-dev/GenClass) 📇 🏠 🍎 🪟 🐧 - Race conditions in web apps for coding agents: records clicks, requests, response order and state writes in the app's pages on your machine, re-runs a page with responses delivered in different orders, replays one exact order to prove a fix and writes a Playwright regression test.
 ```
 
 ## 5. Glama (glama.ai/mcp/servers)
@@ -244,7 +245,7 @@ Source: cline/mcp-marketplace `README.md` and `.github/ISSUE_TEMPLATE/mcp-server
   Addition" goes here). `llms-install.md` is at the repository root.
 - **Draft.**
 
-  > GitHub Repository URL: https://github.com/genclass-dev/GenClass-lib
+  > GitHub Repository URL: https://github.com/genclass-dev/GenClass
   >
   > Additional Information: The server is in `packages/mcp` (npm `@genclass/mcp`); install steps for agents are in
   > `llms-install.md` at the repository root. Reason for addition: it gives Cline a way to find and prove timing bugs
@@ -259,7 +260,7 @@ Source: cline/mcp-marketplace `README.md` and `.github/ISSUE_TEMPLATE/mcp-server
 Source: the form at https://mcpservers.org/submit.
 
 - **Fields.** Server Name `GenClass`; Category `Development`; Short Description: the one-sentence text above;
-  Repository, Website or Documentation: `https://github.com/genclass-dev/GenClass-lib/tree/main/packages/mcp`;
+  Repository, Website or Documentation: `https://github.com/genclass-dev/GenClass/tree/main/packages/mcp`;
   Official MCP Registry Name: `io.github.genclass-dev/genclass`; "supports remote connections": leave unchecked
   (stdio only); Contact Email; plan Free (review within two weeks) unless the owner prefers the paid one.
 
@@ -267,12 +268,12 @@ Source: the form at https://mcpservers.org/submit.
 
 Source: https://mcp.so/submit; chatmcp/mcpso issue 1 "Submit Your MCP Servers here".
 
-- **How.** The form, type MCP Server: Repository URL `https://github.com/genclass-dev/GenClass-lib`, Name `GenClass`.
+- **How.** The form, type MCP Server: Repository URL `https://github.com/genclass-dev/GenClass`, Name `GenClass`.
   The form shows a paid option ($39, published without review); the free review option was not visible without
   signing in. Or a comment on issue chatmcp/mcpso#1.
 - **Draft comment.**
 
-  > GenClass: https://github.com/genclass-dev/GenClass-lib (server in `packages/mcp`). A local MCP server that shows a
+  > GenClass: https://github.com/genclass-dev/GenClass (server in `packages/mcp`). A local MCP server that shows a
   > coding agent what happened inside a web app's pages in causal order, finds race conditions by re-running a page
   > with responses delivered in different orders, replays one exact order to prove a fix, and writes a Playwright
   > regression test. Install: `npx -y @genclass/mcp@0.2.1`. Category: developer tools.
@@ -286,7 +287,7 @@ form was not read.
   components in the Open Plugins (Agent Plugins) layout: `packages/mcp/plugin/plugin.json` and `mcp.json` (Agent
   Plugins 1.0.0, valid against its schemas in `schemas.test.ts`), `skills/genclass/SKILL.md`, and the Claude Code
   `.mcp.json` and `hooks/hooks.json`. If it does not find a plugin in a subfolder from the repository URL, paste
-  `https://github.com/genclass-dev/GenClass-lib/tree/main/packages/mcp/plugin`. Each submission gets an automated
+  `https://github.com/genclass-dev/GenClass/tree/main/packages/mcp/plugin`. Each submission gets an automated
   security scan.
 
 ## 10. Cursor Marketplace (cursor.com/marketplace/publish)
@@ -304,10 +305,10 @@ Source: cursor.com/docs/reference/plugins ("Submitting a plugin").
 Source: google-gemini/gemini-cli `docs/extensions/releasing.md` and `docs/extensions/reference.md`.
 
 - **How.** No submission: a daily crawler lists public repositories with the GitHub topic `gemini-cli-extension`
-  whose root holds `gemini-extension.json`. Add the topic to `genclass-dev/GenClass-lib` once 0.1.0 is on npm. The
+  whose root holds `gemini-extension.json`. Add the topic to `genclass-dev/GenClass` once 0.1.0 is on npm. The
   committed `gemini-extension.json` starts `npx -y @genclass/mcp@0.2.1` (kept equal to the package version by
   `manifests.test.ts`).
-- **Install line for the entry.** `gemini extensions install https://github.com/genclass-dev/GenClass-lib`. This
+- **Install line for the entry.** `gemini extensions install https://github.com/genclass-dev/GenClass`. This
   clones the whole repository, which is large; `gemini mcp add genclass npx -- -y @genclass/mcp@0.2.1` adds the server
   alone.
 
@@ -333,7 +334,7 @@ Source: hesreallyhim/awesome-claude-code `CONTRIBUTING.md` and `.github/ISSUE_TE
 - **Draft.**
   - Display Name: `GenClass`
   - Category: `Testing`
-  - Link: `https://github.com/genclass-dev/GenClass-lib/tree/main/packages/mcp`
+  - Link: `https://github.com/genclass-dev/GenClass/tree/main/packages/mcp`
   - Author Name: `GenClass`; Author Link: `https://github.com/genclass-dev`
   - Description: `A plugin with an MCP server, a prompt hook and a skill that show Claude Code what happened inside a web app's pages in causal order, re-run a page with network responses delivered in different orders to find race conditions, and replay one exact order to confirm a fix. It also writes a Playwright regression test from a finding; so far measured on one page, where the race showed in 5 of 6 reordered runs and the fixed page showed none.`
   - Checklist: the five required boxes are for the person who submits to check after doing what they say; leave the
@@ -345,11 +346,11 @@ Source: ccplugins/awesome-claude-code-plugins `README.md` (no CONTRIBUTING file)
 
 - **How.** A pull request adding one line under `### MCP Servers` in `README.md` (roughly alphabetical). Optionally
   an entry in its `.claude-plugin/marketplace.json`; for a plugin in a subfolder Claude Code's marketplace format
-  takes `{"source": "git-subdir", "url": "genclass-dev/GenClass-lib", "path": "packages/mcp/plugin"}`.
+  takes `{"source": "git-subdir", "url": "genclass-dev/GenClass", "path": "packages/mcp/plugin"}`.
 - **Draft.**
 
 ```
-- [GenClass](https://github.com/genclass-dev/GenClass-lib/tree/main/packages/mcp/plugin) - See the race, replay it, prove the fix: an MCP server, a prompt hook and a skill that show Claude what happened inside a web app's pages in causal order, re-run a page with responses in different orders to find races, and write a Playwright regression test. Install: `/plugin marketplace add genclass-dev/GenClass-lib` then `/plugin install genclass@genclass`
+- [GenClass](https://github.com/genclass-dev/GenClass/tree/main/packages/mcp/plugin) - See the race, replay it, prove the fix: an MCP server, a prompt hook and a skill that show Claude what happened inside a web app's pages in causal order, re-run a page with responses in different orders to find races, and write a Playwright regression test. Install: `/plugin marketplace add genclass-dev/GenClass` then `/plugin install genclass@genclass`
 ```
 
   (The list's own entries separate name and text with a long dash; this draft uses a hyphen, per this repository's
@@ -363,7 +364,7 @@ Source: mxschmitt/awesome-playwright `README.md` (section "AI & Agents", alphabe
 - **Draft.**
 
 ```
-- [GenClass MCP](https://github.com/genclass-dev/GenClass-lib/tree/main/packages/mcp) - MCP server that lets coding agents find race conditions in a web app by re-running a page with responses delivered in different orders, replay one exact order, and generate a Playwright test that fails while the bug is there.
+- [GenClass MCP](https://github.com/genclass-dev/GenClass/tree/main/packages/mcp) - MCP server that lets coding agents find race conditions in a web app by re-running a page with responses delivered in different orders, replay one exact order, and generate a Playwright test that fails while the bug is there.
 ```
 
   `@genclass/playwright` (the race-file reporter) would go under `## Reporters` in the same format once it is
