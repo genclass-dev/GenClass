@@ -18,10 +18,10 @@ Angular, Solid and plain-HTML apps (measured in Chromium with an unpublished 0.1
 2026-10-10, not re-run on 0.2.2 or 0.3.0:
 [compatibility matrix](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md)).
 
-**Status: `@genclass/runtime@0.3.0-beta.5`, the newest line (npm `beta` dist-tag: `npm install @genclass/runtime@beta`;
-the stable line is `0.2.x`), with model `@genclass/runtime-model@0.2.0`.** npm dist-tags on 2026-11-02: `latest` is
-`0.2.3` and `beta` is `0.3.0-beta.5` (`0.3.0-beta.1` to `0.3.0-beta.5` were released between 2026-10-22 and
-2026-11-02). This README describes the `0.3.0` line; `0.2.x`, npm's `latest`, is the exception for an app that cannot
+**Status: `@genclass/runtime@0.3.0-beta.6`, the newest line (npm `beta` dist-tag: `npm install @genclass/runtime@beta`;
+the stable line is `0.2.x`), with model `@genclass/runtime-model@0.2.0`.** npm dist-tags on 2026-11-03: `latest` is
+`0.2.3` and `beta` is `0.3.0-beta.6` (`0.3.0-beta.1` to `0.3.0-beta.6` were released between 2026-10-22 and
+2026-11-03). This README describes the `0.3.0` line; `0.2.x`, npm's `latest`, is the exception for an app that cannot
 take a prerelease. Both lines load the same model. AI coding agents working on this repository: start at
 [AGENTS.md](AGENTS.md).
 
@@ -63,7 +63,7 @@ import "@genclass/runtime/auto";
 Or with no build step, first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.6"></script>
 ```
 
 - **That covers network, user actions, errors and timing in the whole app, and its state where it can be found.**
@@ -288,7 +288,7 @@ but the gate fired anyway. Source and history:
 10.2 MB q8, about 180 to 600 ms per model pass at 500 to 1,170 tokens on one WASM thread (estimated from runs in Node,
 not in a browser), loaded from jsDelivr at idle and cached. The model and the
 situation text it reads (`situation-v2.3`) are the same in `0.2.2` and in every `0.3.0` release so far
-(`0.3.0-beta.0` to `0.3.0-beta.5`; each CHANGELOG entry says no model-visible text changed). On held-out data (§1):
+(`0.3.0-beta.0` to `0.3.0-beta.6`; each CHANGELOG entry says no model-visible text changed). On held-out data (§1):
 
 | profile | guard FIR | guard recall (clear / real) | heal FIR | heal recall (clear / real) | report threshold |
 |---|---|---|---|---|---|
