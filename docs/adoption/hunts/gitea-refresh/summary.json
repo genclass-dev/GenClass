@@ -1,0 +1,246 @@
+{
+ "date": "2026-11-03",
+ "gitea": "main 78eb95ab19c64210c00b15eaf85551d188613173",
+ "genclass": "c1c9e14 (@genclass/runtime 0.3.0-beta.5, @genclass/mcp 0.2.1)",
+ "explore": {
+  "unfixed": {
+   "comment": [
+    {
+     "slow_ms": 300,
+     "verdict": "race in 2 of 6",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 2,
+     "seededNewerFirst": 2
+    },
+    {
+     "slow_ms": 600,
+     "verdict": "race in 1 of 6",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 1,
+     "seededNewerFirst": 1
+    },
+    {
+     "slow_ms": 900,
+     "verdict": "race in 2 of 6",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 2,
+     "seededNewerFirst": 2
+    }
+   ],
+   "file": [
+    {
+     "slow_ms": 300,
+     "verdict": "race in 2 of 6",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 2,
+     "seededNewerFirst": 2
+    },
+    {
+     "slow_ms": 600,
+     "verdict": "race in 2 of 6",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 2,
+     "seededNewerFirst": 2
+    },
+    {
+     "slow_ms": 900,
+     "verdict": "race in 2 of 6",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 2,
+     "seededNewerFirst": 2
+    }
+   ],
+   "diff": [
+    {
+     "slow_ms": 300,
+     "verdict": "race in 4 of 12",
+     "seeded": 12,
+     "baselinesRight": 2,
+     "seededShowingOldText": 4,
+     "seededNewerFirst": 4
+    },
+    {
+     "slow_ms": 600,
+     "verdict": "race in 4 of 12",
+     "seeded": 12,
+     "baselinesRight": 2,
+     "seededShowingOldText": 4,
+     "seededNewerFirst": 4
+    },
+    {
+     "slow_ms": 900,
+     "verdict": "race in 4 of 12",
+     "seeded": 12,
+     "baselinesRight": 2,
+     "seededShowingOldText": 4,
+     "seededNewerFirst": 4
+    }
+   ]
+  },
+  "fixed": {
+   "comment": [
+    {
+     "slow_ms": 300,
+     "verdict": "no race",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 0,
+     "seededNewerFirst": 2
+    },
+    {
+     "slow_ms": 600,
+     "verdict": "no race",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 0,
+     "seededNewerFirst": 1
+    },
+    {
+     "slow_ms": 900,
+     "verdict": "no race",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 0,
+     "seededNewerFirst": 2
+    }
+   ],
+   "file": [
+    {
+     "slow_ms": 300,
+     "verdict": "no race",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 0,
+     "seededNewerFirst": 2
+    },
+    {
+     "slow_ms": 600,
+     "verdict": "no race",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 0,
+     "seededNewerFirst": 2
+    },
+    {
+     "slow_ms": 900,
+     "verdict": "no race",
+     "seeded": 6,
+     "baselinesRight": 2,
+     "seededShowingOldText": 0,
+     "seededNewerFirst": 2
+    }
+   ],
+   "diff": [
+    {
+     "slow_ms": 300,
+     "verdict": "no race",
+     "seeded": 12,
+     "baselinesRight": 2,
+     "seededShowingOldText": 0,
+     "seededNewerFirst": 4
+    },
+    {
+     "slow_ms": 600,
+     "verdict": "race in 12 of 12",
+     "seeded": 12,
+     "baselinesRight": 2,
+     "seededShowingOldText": 0,
+     "seededNewerFirst": 4
+    },
+    {
+     "slow_ms": 900,
+     "verdict": "no race",
+     "seeded": 12,
+     "baselinesRight": 2,
+     "seededShowingOldText": 0,
+     "seededNewerFirst": 4
+    }
+   ]
+  }
+ },
+ "throttle": {
+  "unfixed": [
+   {
+    "run": 0,
+    "secondShownAtMs": 3170,
+    "previewFirstLine": "item 0 with bold and code text",
+    "editor": "short text"
+   },
+   {
+    "run": 1,
+    "secondShownAtMs": 3055,
+    "previewFirstLine": "item 0 with bold and code text",
+    "editor": "short text"
+   },
+   {
+    "run": 2,
+    "secondShownAtMs": 3140,
+    "previewFirstLine": "item 0 with bold and code text",
+    "editor": "short text"
+   },
+   {
+    "run": 3,
+    "secondShownAtMs": 3197,
+    "previewFirstLine": "item 0 with bold and code text",
+    "editor": "short text"
+   },
+   {
+    "run": 4,
+    "secondShownAtMs": 3092,
+    "previewFirstLine": "item 0 with bold and code text",
+    "editor": "short text"
+   }
+  ],
+  "fixed": [
+   {
+    "run": 0,
+    "secondShownAtMs": 3088,
+    "previewFirstLine": "short text",
+    "editor": "short text"
+   },
+   {
+    "run": 1,
+    "secondShownAtMs": 3126,
+    "previewFirstLine": "short text",
+    "editor": "short text"
+   },
+   {
+    "run": 2,
+    "secondShownAtMs": 3091,
+    "previewFirstLine": "short text",
+    "editor": "short text"
+   },
+   {
+    "run": 3,
+    "secondShownAtMs": 3103,
+    "previewFirstLine": "short text",
+    "editor": "short text"
+   },
+   {
+    "run": 4,
+    "secondShownAtMs": 3085,
+    "previewFirstLine": "short text",
+    "editor": "short text"
+   }
+  ]
+ },
+ "e2e": {
+  "unfixed": "3 runs x 2 tests: 6 of 6 failed (lines 44 and 68, received \"outdated text\")",
+  "fixed": "3 runs x 2 tests: 6 of 6 passed (1.5-2.4 s per test); with codeeditor.test.ts and issue-comment.test.ts 7 of 7 passed"
+ },
+ "falseReports": [
+  {
+   "build": "fixed",
+   "surface": "diff",
+   "slow_ms": 600,
+   "verdict": "race in 12 of 12",
+   "cause": "footer server timing \"Page: N Template: N\" identical in both baselines, so not filtered as noise; no load showed old text"
+  }
+ ]
+}
