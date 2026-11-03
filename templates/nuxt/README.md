@@ -32,7 +32,7 @@ project without the module (a `plugins/genclass.client.ts` with the same line).
 yet, so in a Nuxt app GenClass works from the network and user input: duplicate submits, failure storms, retries and
 stalls. Decisions that compare a late response with newer data already in your state need that state registered
 (`genclass.atom(...)` / `genclass.guard(...)`, see
-[State it can protect](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#state-it-can-protect)).
+[State it can protect](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#state-it-can-protect)).
 
 ## Observe, then guard
 
@@ -60,7 +60,7 @@ like.
 ## Privacy
 
 In a browser, GenClass sends anonymous, redacted diagnostics by default
-([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md)).
+([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md)).
 To turn that off, pass the option in `nuxt.config.ts`:
 
 ```ts
@@ -70,4 +70,4 @@ genclass: { telemetry: false },
 ## Compatibility
 
 Nuxt 4.6 with the module. The module declares `nuxt: ">=3.17.0"`; Nuxt 3 is not tested. Vue 3 + Vite with Pinia is
-part of the public [compatibility matrix](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md).
+part of the public [compatibility matrix](https://github.com/genclass-dev/GenClass/blob/main/compat/RESULTS.md).

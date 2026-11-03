@@ -13,8 +13,8 @@
   `plugin/package-lock.json`) earned the note "Launcher locked" but a second hold, "Dependencies install from a
   lockfile" (2026-10-28). The directory's own text names the way out: the package's built files inside the plugin,
   each under 256 KiB, run from `${CLAUDE_PLUGIN_ROOT}`, with no `package.json` or lockfile; so both files are removed
-  again. The plugin folder in GenClass-lib keeps the `npx` launchers (nothing built is committed here, and the
-  marketplace in GenClass-lib still lists it), and the Agent Plugins `mcp.json` keeps `npx` everywhere, because that
+  again. The plugin folder in GenClass keeps the `npx` launchers (nothing built is committed here, and the
+  marketplace in GenClass still lists it), and the Agent Plugins `mcp.json` keeps `npx` everywhere, because that
   format has no plugin-root variable (Codex and Cursor read it). The daily sync vendors the release of `package.json`'s
   version; between a bump and its release the script exits 3 and the repository stays as it is (its workflow treats
   that as nothing to do), so a release is: bump, `npm run sync -w @genclass/mcp`, tag, publish; the next sync vendors
@@ -27,12 +27,12 @@
   (`.agents/plugins/marketplace.json`) and Cursor, the Gemini CLI manifest and the licence, assembled by
   `node packages/mcp/scripts/plugin-repo.mjs` (`npm run plugin-repo -w @genclass/mcp`) and re-synced there daily by
   its own workflow. Anthropic's directory stops validating a repository whose GitHub archive is over 50 MiB
-  (GenClass-lib's is 51), and Codex, Gemini CLI, `gh skill` and the skills CLI clone or read a whole repository for
-  one plugin (Gemini CLI and `gh skill` read the latest GitHub release first, which in GenClass-lib predates the
+  (GenClass's is 51), and Codex, Gemini CLI, `gh skill` and the skills CLI clone or read a whole repository for
+  one plugin (Gemini CLI and `gh skill` read the latest GitHub release first, which in GenClass predates the
   plugin), so the small repository is what the install lines name: `/plugin marketplace add genclass-dev/genclass-plugin`,
   `codex plugin marketplace add genclass-dev/genclass-plugin` then `codex plugin add genclass@genclass`,
   `gemini extensions install https://github.com/genclass-dev/genclass-plugin`, `npx skills add genclass-dev/genclass-plugin`,
-  `gh skill install genclass-dev/genclass-plugin genclass`. The marketplace in GenClass-lib still lists the plugin.
+  `gh skill install genclass-dev/genclass-plugin genclass`. The marketplace in GenClass still lists the plugin.
 - **A Codex marketplace file at the repository root**, `.agents/plugins/marketplace.json` (Codex's own format; Codex
   already read `.claude-plugin/marketplace.json`).
 - **The skill's frontmatter names its licence** (`license: Apache-2.0`, the Agent Skills field `gh skill publish`
@@ -59,7 +59,7 @@
   rerun replaces a file that carries the marker and leaves one that does not (yours, or edited), and says which;
   `--no-skill` leaves the skill out; a `CLAUDE.md` without a `.claude/` folder still gets it under `.claude/skills/`.
 - **A repository-root copy for skill directories.** `skills/genclass/SKILL.md` is a byte-identical copy of the
-  plugin's skill, so `npx skills add genclass-dev/GenClass-lib` (skills.sh and directories that read a repository's
+  plugin's skill, so `npx skills add genclass-dev/GenClass` (skills.sh and directories that read a repository's
   root `skills/` folder) finds it; `npm run sync -w @genclass/mcp` refreshes the copy and pins the install line in
   both.
 - Tests: `test/manifests.test.ts` checks the skill's frontmatter (name, a one-line description of at most 1,024

@@ -1393,7 +1393,7 @@ packages/runtime/src/visual/
 ## 14. Test plan
 
 No vitest, build or Playwright runs on the Mac (8 GB). Every step is verified in CI on the branch:
-`gh workflow run ci.yml --repo genclass-dev/GenClass-lib --ref <branch>`, then `gh run watch <id> --exit-status`.
+`gh workflow run ci.yml --repo genclass-dev/GenClass --ref <branch>`, then `gh run watch <id> --exit-status`.
 
 Unit tests (existing vitest step, no new dependency):
 

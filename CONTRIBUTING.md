@@ -1,6 +1,6 @@
 # Contributing to GenClass
 
-How to change GenClass-lib, the repository of `@genclass/runtime` (GenClass Runtime, an open-source browser library
+How to change GenClass, the repository of `@genclass/runtime` (GenClass Runtime, an open-source browser library
 that reports race conditions in web apps), its model package, and everything used to train and evaluate the model:
 where things are, what CI runs, the rules that keep the measurements honest, and how a release is made. To use
 GenClass in an app, read the [package README](packages/runtime/README.md) instead.

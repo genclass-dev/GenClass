@@ -59,7 +59,7 @@ not returned, the wrong ids are marked `false` (read from the code, not reproduc
 
 **How it was found**
 
-Found while running the admin panel under [GenClass](https://github.com/genclass-dev/GenClass-lib), which re-runs the
+Found while running the admin panel under [GenClass](https://github.com/genclass-dev/GenClass), which re-runs the
 same user steps with responses delivered in different orders and compares the final state: the page ended identical
 every time, but the number of relationship batch requests depended on the delivery order: between 2 and 5 per
 collection for the same steps, different from the request-order runs in 33 of 36 reordered runs of the search and sort
