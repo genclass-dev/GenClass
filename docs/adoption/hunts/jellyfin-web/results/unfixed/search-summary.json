@@ -1,0 +1,52 @@
+{
+  "surface": "search",
+  "jellyfin": "http://127.0.0.1:8096",
+  "runs": 6,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "no race",
+      "finding": null,
+      "shown": [
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4 then /Items#5 then /Items#6 then /Items#7]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4 then /Items#5 then /Items#6 then /Items#7]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4]"
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "no race",
+      "finding": null,
+      "shown": [
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4~hedge then /Items#4~hedge then /Items#5]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4 then /Items#5 then /Items#6 then /Items#7]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4 then /Items#5 then /Items#6]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#6 then /Items#5 then /Items#7]"
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "no race",
+      "finding": null,
+      "shown": [
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#3 then /Items#2 then /Items#4]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#4 then /Items#5 then /Items#6]",
+        "query=Bramble results=Bramble (1972) | Bramble (1972) [delivered /Items#1 then /Items#2 then /Items#3 then /Items#4]"
+      ]
+    }
+  ]
+}

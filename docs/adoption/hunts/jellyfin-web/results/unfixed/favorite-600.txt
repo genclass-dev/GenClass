@@ -1,0 +1,211 @@
+Explore x2 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x2"}.
+
+load 1: shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2]
+load 2: shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2]
+load 3: shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#2]
+load 4: shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /Items/:id/Similar#1 then /FavoriteItems/:id#1]
+load 5: shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /Items/:id/Similar#1]
+load 6: shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#2 then /FavoriteItems/:id#1 then /Items/:id/Collections#1 then /Items/:id/Similar#1]
+load 7: shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /FavoriteItems/:id#1]
+load 8: shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#2]
+
+Explore x2: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /web/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add to favorites"
+  click button "Add to favorites" ×2
+Ignored as noise (differs between the two baselines): state CustomCss.external0.dataUpdatedAt
+RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r11 (seed 1):
+    page text only in the baseline: "Ends at 4:51 PM"
+    page text only in this run: "Ends at 4:52 PM"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_2.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_3.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    requests sent to "GET /web/config.json": baseline "8", this run "9"
+- run r12 (seed 2) (1 hold(s) ran out):
+    page text only in the baseline: "Ends at 4:51 PM"
+    page text only in this run: "Ends at 4:52 PM"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_2.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_3.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+- run r13 (seed 3) (1 hold(s) ran out):
+    page text only in the baseline: "Ends at 4:51 PM"
+    page text only in this run: "Ends at 4:52 PM"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_2.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_3.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    requests sent to "GET /web/config.json": baseline "8", this run "9"
+- run r14 (seed 4):
+    page text only in the baseline: "Ends at 4:51 PM"
+    page text only in this run: "Ends at 4:52 PM"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_2.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_3.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    requests sent to "GET /web/config.json": baseline "8", this run "9"
+- run r15 (seed 5):
+    page text only in the baseline: "Ends at 4:51 PM"
+    page text only in this run: "Ends at 4:52 PM"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_2.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_3.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+- run r16 (seed 6):
+    page text only in the baseline: "Ends at 4:51 PM"
+    page text only in this run: "Ends at 4:52 PM"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_2.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    state "ApiProvider_3.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", this run "\"2026-11-03T16:51:51.3405078Z\""
+    requests sent to "GET /web/config.json": baseline "8", this run "9"
+
+Race finding(s): f3. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+2 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f3 [race] "/web/" · 1× in 1 run(s) · 0 s ago
+  The page depends on response order: it shows "Ends at 4:52 PM" under "seed 1", not in request order
+- f2 [duplicate-request] "/web/" · 8× in 8 run(s) · 1 s ago
+  "POST /Users/:id/FavoriteItems/:id" was sent twice, 4 ms apart, by two separate user actions while the first was in flight
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f3 · race · "/web/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "Ends at 4:52 PM" under "seed 1", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x2: 6 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", failing run "\"2026-11-03T16:51:51.3405078Z\""
+- state "ApiProvider_2.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", failing run "\"2026-11-03T16:51:51.3405078Z\""
+- state "ApiProvider_3.state2.LastActivityDate": baseline "\"2026-11-03T16:50:50.0945774Z\"", failing run "\"2026-11-03T16:51:51.3405078Z\""
+- requests sent to "GET /web/config.json": baseline "8", failing run "9"
+- page text in the baseline only: "Ends at 4:51 PM"
+- page text in the failing run only: "Ends at 4:52 PM"
+
+## Steps of run r11 ("http://127.0.0.1:8096/web/#/details?id=cf31f12ab7261eda0a152751791cb935", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++1.096s send GET /web/config.json#1
++1.637s send GET /web/config.json#2
++1.823s delivered GET /web/config.json#2 (held 154 ms)
++1.867s delivered GET /web/config.json#1 (held 507 ms)
++2.488s send GET /web/config.json#3
++2.711s write UserSettingsProvider.state0: "UserSettingsProvider.state0: undefined → null"
++2.712s write UserSettingsProvider.state2: "UserSettingsProvider.state2: undefined → null"
++2.712s write UserSettingsProvider.state3: "UserSettingsProvider.state3: undefined → null"
++2.713s write UserSettingsProvider.state4: "UserSettingsProvider.state4: undefined → null"
++2.713s write UserSettingsProvider.state5: "UserSettingsProvider.state5: \"en-us\" → null"
++2.713s write CssVarsProvider.state1: "CssVarsProvider.state1: false → true"
++2.713s write CssVarsProvider.state0.lightColorScheme: "CssVarsProvider.state0.lightColorScheme: \"light\" → \"dark\""
++2.715s send GET /System/Info/Public#1 via timer 100ms
++2.736s send GET /System/Info/Public#2 via timer 100ms
++2.780s write PersistQueryClientProvider.state0: "PersistQueryClientProvider.state0: true → false"
++3.085s delivered GET /web/config.json#3 (held 385 ms)
++3.338s delivered GET /System/Info/Public#2 (held 563 ms)
++3.369s delivered GET /System/Info/Public#1 (held 612 ms)
++3.371s send GET /System/Info#1 via GET /System/Info/Public
++3.558s delivered GET /System/Info#1 (held 164 ms)
++3.567s send POST /Sessions/Capabilities/Full#1 "{PlayableMediaTypes: [2], SupportedCommands: [33], +2}" via GET /System/Info
++3.568s send GET /Users/:id#1 via GET /System/Info
++3.933s delivered POST /Sessions/Capabilities/Full#1 (held 292 ms)
++3.963s delivered GET /Users/:id#1 (held 322 ms)
++3.982s send GET /DisplayPreferences/usersettings#1 "?userId=62c3d87eb3a0462cac334ed79f9c10d0&client=emby" via GET /Users/:id
++4.181s delivered GET /DisplayPreferences/usersettings#1 (held 150 ms)
++4.191s write ApiProvider.state2, ApiProvider.state2.Configuration.CastReceiverId, ApiProvider.state2.Configuration.DisplayCollectionsView, ApiProvider.state2.Configuration.DisplayMissingEpisodes, ApiProvider.state2.Configuration.EnableLocalPassword, ApiProvider.state2.Configuration.EnableNextEpisodeAutoPlay, ApiProvider.state2.Configuration.GroupedFolders, ApiProvider.state2.Configuration.HidePlayedInLatest, ApiProvider.state2.Configuration.LatestItemsExcludes, ApiProvider.state2.Configuration.MyMediaExcludes, ApiProvider.state2.Configuration.OrderedViews, ApiProvider.state2.Configuration.PlayDefaultAudioTrack by GET /DisplayPreferences/usersettings#1: "ApiProvider.state2.Name: undefined → \"hunt\""; "ApiProvider.state2.ServerId: undefined → \"f932b90fb12841d59a819f111442b256\""; "ApiProvider.state2.Id: undefined → \"62c3d87eb3a0462cac334ed79f9c10d0\""
++4.192s write ApiProvider.state1 by GET /DisplayPreferences/usersettings#1: "ApiProvider.state1: undefined → \"f932b90fb12841d59a819f111442b256\""
++4.193s write ConnectionRequired.state1 by GET /DisplayPreferences/usersettings#1: "ConnectionRequired.state1: true → false"
++4.237s write CustomCss.external0.fetchStatus, CustomCss.external0.isEnabled, CustomCss.external0.isFetching, CustomCss.external0.isInitialLoading, CustomCss.external0.isLoading, CustomCss.external0.isStale: "CustomCss.external0.fetchStatus: \"idle\" → \"fetching\""; "CustomCss.external0.isInitialLoading: false → true"; "CustomCss.external0.isLoading: false → true"
++4.241s send GET /Branding/Configuration#1
++4.389s write details.favorite: "details.favorite: \"\" → \"no\""
++4.404s send GET /Users/:id/Items/:id#1 via timer 0ms
++4.415s send GET /UserViews#1 "?userId=62c3d87eb3a0462cac334ed79f9c10d0" via timer 0ms
++4.418s delivered GET /Branding/Configuration#1 (held 124 ms)
++4.422s write CustomCss.external0.data, CustomCss.external0.data.SplashscreenEnabled, CustomCss.external0.dataUpdatedAt, CustomCss.external0.fetchStatus, CustomCss.external0.isFetched, CustomCss.external0.isFetchedAfterMount, CustomCss.external0.isFetching, CustomCss.external0.isInitialLoading, CustomCss.external0.isLoading, CustomCss.external0.isPending, CustomCss.external0.isStale, CustomCss.external0.isSuccess by GET /Branding/Configuration#1: "CustomCss.external0.status: \"pending\" → \"success\""; "CustomCss.external0.fetchStatus: \"fetching\" → \"idle\""; "CustomCss.external0.isPending: true → false"
++4.546s delivered GET /UserViews#1 (held 51 ms)
++4.934s delivered GET /Users/:id/Items/:id#1 (held 441 ms)
++4.941s send GET /web/config.json#4 via GET /Users/:id/Items/:id
++4.945s send GET /web/config.json#5 via GET /Users/:id/Items/:id
++4.947s send GET /web/config.json#6 via GET /Users/:id/Items/:id
++4.949s send GET /web/config.json#7 via GET /Users/:id/Items/:id
++4.952s send GET /web/config.json#8 via GET /Users/:id/Items/:id
++4.954s send GET /web/config.json#9 via GET /Users/:id/Items/:id
++4.957s send GET /Items/:id/Similar#1 "?userId=62c3d87eb3a0462cac334ed79f9c10d0&limit=12&fields=Pr…" via GET /Users/:id/Items/:id
++5.223s write details.title by GET /Users/:id/Items/:id#1: "details.title: \"\" → \"Bramble (1972)\""
++5.226s send GET /Items/:id/Collections#1 "?userId=62c3d87eb3a0462cac334ed79f9c10d0&fields=PrimaryImag…" via GET /Users/:id/Items/:id
++5.231s write ApiProvider_2.state2, ApiProvider_2.state2.Configuration.CastReceiverId, ApiProvider_2.state2.Configuration.DisplayCollectionsView, ApiProvider_2.state2.Configuration.DisplayMissingEpisodes, ApiProvider_2.state2.Configuration.EnableLocalPassword, ApiProvider_2.state2.Configuration.EnableNextEpisodeAutoPlay, ApiProvider_2.state2.Configuration.GroupedFolders, ApiProvider_2.state2.Configuration.HidePlayedInLatest, ApiProvider_2.state2.Configuration.LatestItemsExcludes, ApiProvider_2.state2.Configuration.MyMediaExcludes, ApiProvider_2.state2.Configuration.OrderedViews, ApiProvider_2.state2.Configuration.PlayDefaultAudioTrack by GET /Users/:id/Items/:id#1: "ApiProvider_2.state2.Name: undefined → \"hunt\""; "ApiProvider_2.state2.ServerId: undefined → \"f932b90fb12841d59a819f111442b256\""; "ApiProvider_2.state2.Id: undefined → \"62c3d87eb3a0462cac334ed79f9c10d0\""
++5.232s write ApiProvider_2.state1 by GET /Users/:id/Items/:id#1: "ApiProvider_2.state1: undefined → \"f932b90fb12841d59a819f111442b256\""
++5.232s write UserSettingsProvider_2.state0 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_2.state0: undefined → null"
++5.232s write UserSettingsProvider_2.state2 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_2.state2: undefined → null"
++5.232s write UserSettingsProvider_2.state3 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_2.state3: undefined → null"
++5.232s write UserSettingsProvider_2.state4 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_2.state4: undefined → null"
++5.232s write UserSettingsProvider_2.state5 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_2.state5: \"en-us\" → null"
++5.232s write CssVarsProvider_2.state1 by GET /Users/:id/Items/:id#1: "CssVarsProvider_2.state1: false → true"
++5.232s write CssVarsProvider_2.state0.lightColorScheme by GET /Users/:id/Items/:id#1: "CssVarsProvider_2.state0.lightColorScheme: \"light\" → \"dark\""
++5.234s write ApiProvider_3.state2, ApiProvider_3.state2.Configuration.CastReceiverId, ApiProvider_3.state2.Configuration.DisplayCollectionsView, ApiProvider_3.state2.Configuration.DisplayMissingEpisodes, ApiProvider_3.state2.Configuration.EnableLocalPassword, ApiProvider_3.state2.Configuration.EnableNextEpisodeAutoPlay, ApiProvider_3.state2.Configuration.GroupedFolders, ApiProvider_3.state2.Configuration.HidePlayedInLatest, ApiProvider_3.state2.Configuration.LatestItemsExcludes, ApiProvider_3.state2.Configuration.MyMediaExcludes, ApiProvider_3.state2.Configuration.OrderedViews, ApiProvider_3.state2.Configuration.PlayDefaultAudioTrack by GET /Users/:id/Items/:id#1: "ApiProvider_3.state2.Name: undefined → \"hunt\""; "ApiProvider_3.state2.ServerId: undefined → \"f932b90fb12841d59a819f111442b256\""; "ApiProvider_3.state2.Id: undefined → \"62c3d87eb3a0462cac334ed79f9c10d0\""
++5.234s write ApiProvider_3.state1 by GET /Users/:id/Items/:id#1: "ApiProvider_3.state1: undefined → \"f932b90fb12841d59a819f111442b256\""
++5.234s write UserSettingsProvider_3.state0 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_3.state0: undefined → null"
++5.234s write UserSettingsProvider_3.state2 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_3.state2: undefined → null"
++5.234s write UserSettingsProvider_3.state3 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_3.state3: undefined → null"
++5.234s write UserSettingsProvider_3.state4 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_3.state4: undefined → null"
++5.235s write UserSettingsProvider_3.state5 by GET /Users/:id/Items/:id#1: "UserSettingsProvider_3.state5: \"en-us\" → null"
++5.235s write CssVarsProvider_3.state1 by GET /Users/:id/Items/:id#1: "CssVarsProvider_3.state1: false → true"
++5.235s write CssVarsProvider_3.state0.lightColorScheme by GET /Users/:id/Items/:id#1: "CssVarsProvider_3.state0.lightColorScheme: \"light\" → \"dark\""
++5.334s action 0: click button "Add to favorites"
++5.335s send POST /Users/:id/FavoriteItems/:id#1 (action 0)
++5.337s action 1: click button "Add to favorites" (click 2)
++5.338s send POST /Users/:id/FavoriteItems/:id#2 (action 1)
++5.712s delivered GET /web/config.json#6 (held 459 ms)
++5.839s delivered POST /Users/:id/FavoriteItems/:id#1 (held 467 ms)
++5.841s write details.favorite by POST /Users/:id/FavoriteItems/:id#1: "details.favorite: \"no\" → \"yes\""
++5.870s delivered GET /web/config.json#5 (held 630 ms)
++5.900s delivered GET /web/config.json#4 (held 657 ms)
++5.931s delivered GET /web/config.json#8 (held 683 ms)
++5.961s delivered GET /Items/:id/Similar#1 (held 695 ms)
++5.992s delivered GET /web/config.json#9 (held 741 ms)
++6.023s delivered GET /Items/:id/Collections#1 (held 749 ms)
++6.054s delivered GET /web/config.json#7 (held 800 ms)
++6.084s delivered POST /Users/:id/FavoriteItems/:id#2 (held 709 ms)
+
+Delivery order: GET /web/config.json#2 → GET /web/config.json#1 → GET /web/config.json#3 → GET /System/Info/Public#2 → GET /System/Info/Public#1 → GET /System/Info#1 → POST /Sessions/Capabilities/Full#1 → GET /Users/:id#1 → GET /DisplayPreferences/usersettings#1 → GET /Branding/Configuration#1 → GET /UserViews#1 → GET /Users/:id/Items/:id#1 → GET /web/config.json#6 → POST /Users/:id/FavoriteItems/:id#1 → GET /web/config.json#5 → GET /web/config.json#4 → GET /web/config.json#8 → GET /Items/:id/Similar#1 → GET /web/config.json#9 → GET /Items/:id/Collections#1 → GET /web/config.json#7 → POST /Users/:id/FavoriteItems/:id#2
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f3"} (schedule: seeded 1, +0-600 ms)
+2. Open "http://127.0.0.1:8096/web/#/details?id=cf31f12ab7261eda0a152751791cb935" and do the same 2 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f3"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f3 (race), generated from run r11.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://127.0.0.1:8096";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":600},"maxHoldMs":2100};
+
+test("/web/: the final state does not depend on response order (GenClass f3)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/web/#/details?id=cf31f12ab7261eda0a152751791cb935");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "Add to favorites", exact: true }).or(page.locator("[name=\"Add to favorites\"], [id=\"Add to favorites\"]")).first().dblclick();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("Ends at 4:51 PM");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Ends at 4:52 PM");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

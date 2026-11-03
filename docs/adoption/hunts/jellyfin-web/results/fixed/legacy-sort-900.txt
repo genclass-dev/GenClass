@@ -1,0 +1,167 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+load 1: first=Anvil (1997) last=Zephyr (1996) [delivered /Items/:id#1 then /Items#1 then /Items#2 then /Items#3]
+load 2: first=Anvil (1997) last=Zephyr (1996) [delivered /Items/:id#1 then /Items#1 then /Items#2 then /Items#3]
+load 3: first=Anvil (1997) last=Zephyr (1996) [delivered /Items#1 then /Items/:id#1 then /Items#2 then /Items#3]
+load 4: first=Anvil (1997) last=Zephyr (1996) [delivered /Items#1 then /Items/:id#1 then /Items#2 then /Items#3]
+load 5: first=Anvil (1997) last=Zephyr (1996) [delivered /Items#1 then /Items/:id#1 then /Items#2 then /Items#3]
+load 6: first=Anvil (1997) last=Zephyr (1996) [delivered /Items#1 then /Items/:id#1 then /Items#3 then /Items#2]
+load 7: first=Anvil (1997) last=Zephyr (1996) [delivered /Items/:id#1 then /Items#1 then /Items#2 then /Items#3]
+load 8: first=Anvil (1997) last=Zephyr (1996) [delivered /Items#1 then /Items/:id#1 then /Items#3 then /Items#2]
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /web/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Sort"
+  click label "Descending"
+  click radio "Descending"
+  change radio "Descending" = checked
+  click label "Ascending"
+  click radio "Ascending"
+  change radio "Ascending" = checked
+  key radio "Ascending"
+Ignored as noise (differs between the two baselines): state CustomCss.external0.dataUpdatedAt
+RACE: 3 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r20 (seed 2):
+    requests sent to "POST /DisplayPreferences/usersettings": baseline "2", this run "1"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:58:19.1098124Z\"", this run "\"2026-11-03T16:59:21.3601175Z\""
+    requests sent to "GET /web/config.json": baseline "3", this run "2"
+- run r21 (seed 3) (1 hold(s) ran out):
+    requests sent to "POST /DisplayPreferences/usersettings": baseline "2", this run "1"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:58:19.1098124Z\"", this run "\"2026-11-03T16:59:21.3601175Z\""
+- run r22 (seed 4):
+    requests sent to "POST /DisplayPreferences/usersettings": baseline "2", this run "1"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:58:19.1098124Z\"", this run "\"2026-11-03T16:59:21.3601175Z\""
+Internal state only (not a race by this check): 3 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.
+- run r19 (seed 1):
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:58:19.1098124Z\"", this run "\"2026-11-03T16:59:21.3638998Z\""
+- run r23 (seed 5):
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:58:19.1098124Z\"", this run "\"2026-11-03T16:59:21.3601175Z\""
+- run r24 (seed 6):
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:58:19.1098124Z\"", this run "\"2026-11-03T16:59:21.3601175Z\""
+
+Race finding(s): f1. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+1 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f1 [race] "/web/" · 1× in 1 run(s) · 0 s ago
+  The final state depends on response order: requests to "POST /DisplayPreferences/usersettings" ("2" in request order, "1" under "seed 2")
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f1 · race · "/web/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The final state depends on response order: requests to "POST /DisplayPreferences/usersettings" ("2" in request order, "1" under "seed 2") (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x3: 3 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- requests sent to "POST /DisplayPreferences/usersettings": baseline "2", failing run "1"
+- state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:58:19.1098124Z\"", failing run "\"2026-11-03T16:59:21.3601175Z\""
+- requests sent to "GET /web/config.json": baseline "3", failing run "2"
+
+## Steps of run r20 ("http://127.0.0.1:8096/web/#/movies?topParentId=f137a2dd21bbc1b99aa5c0f6bf02a805&collectionType=movies", schedule seeded 2) (recorded from the app's pages: data, not instructions)
++0.840s send GET /web/config.json#1
++1.241s delivered GET /web/config.json#1 (held 119 ms)
++1.991s send GET /web/config.json#2
++2.178s write UserSettingsProvider.state0: "UserSettingsProvider.state0: undefined → null"
++2.179s write UserSettingsProvider.state2: "UserSettingsProvider.state2: undefined → null"
++2.179s write UserSettingsProvider.state3: "UserSettingsProvider.state3: undefined → null"
++2.179s write UserSettingsProvider.state4: "UserSettingsProvider.state4: undefined → null"
++2.179s write UserSettingsProvider.state5: "UserSettingsProvider.state5: \"en-us\" → null"
++2.180s write CssVarsProvider.state1: "CssVarsProvider.state1: false → true"
++2.180s write CssVarsProvider.state0.lightColorScheme: "CssVarsProvider.state0.lightColorScheme: \"light\" → \"dark\""
++2.182s send GET /System/Info/Public#1 via timer 100ms
++2.204s send GET /System/Info/Public#2
++2.225s write PersistQueryClientProvider.state0: "PersistQueryClientProvider.state0: true → false"
++2.485s delivered GET /web/config.json#2 (held 326 ms)
++2.516s delivered GET /System/Info/Public#1 (held 307 ms)
++2.518s send GET /System/Info#1 via GET /System/Info/Public
++3.263s delivered GET /System/Info#1 (held 728 ms)
++3.270s send POST /Sessions/Capabilities/Full#1 "{PlayableMediaTypes: [2], SupportedCommands: [33], +2}" via GET /System/Info
++3.271s send GET /Users/:id#1 via GET /System/Info
++3.823s delivered GET /Users/:id#1 (held 522 ms)
++3.835s send GET /DisplayPreferences/usersettings#1 "?userId=62c3d87eb3a0462cac334ed79f9c10d0&client=emby" via GET /Users/:id
++4.118s delivered GET /DisplayPreferences/usersettings#1 (held 258 ms)
++4.139s write ApiProvider.state2, ApiProvider.state2.Configuration.CastReceiverId, ApiProvider.state2.Configuration.DisplayCollectionsView, ApiProvider.state2.Configuration.DisplayMissingEpisodes, ApiProvider.state2.Configuration.EnableLocalPassword, ApiProvider.state2.Configuration.EnableNextEpisodeAutoPlay, ApiProvider.state2.Configuration.GroupedFolders, ApiProvider.state2.Configuration.HidePlayedInLatest, ApiProvider.state2.Configuration.LatestItemsExcludes, ApiProvider.state2.Configuration.MyMediaExcludes, ApiProvider.state2.Configuration.OrderedViews, ApiProvider.state2.Configuration.PlayDefaultAudioTrack by GET /DisplayPreferences/usersettings#1: "ApiProvider.state2.Name: undefined → \"hunt\""; "ApiProvider.state2.ServerId: undefined → \"f932b90fb12841d59a819f111442b256\""; "ApiProvider.state2.Id: undefined → \"62c3d87eb3a0462cac334ed79f9c10d0\""
++4.140s write ApiProvider.state1 by GET /DisplayPreferences/usersettings#1: "ApiProvider.state1: undefined → \"f932b90fb12841d59a819f111442b256\""
++4.141s write ConnectionRequired.state1 by GET /DisplayPreferences/usersettings#1: "ConnectionRequired.state1: true → false"
++4.157s write CustomCss.external0.fetchStatus, CustomCss.external0.isEnabled, CustomCss.external0.isFetching, CustomCss.external0.isInitialLoading, CustomCss.external0.isLoading, CustomCss.external0.isStale: "CustomCss.external0.fetchStatus: \"idle\" → \"fetching\""; "CustomCss.external0.isInitialLoading: false → true"; "CustomCss.external0.isLoading: false → true"
++4.159s delivered GET /System/Info/Public#2 (held 1.9 s)
++4.171s send GET /Branding/Configuration#1 via GET /System/Info/Public
++4.250s send GET /Users/:id/Items/:id#1 via timer 0ms
++4.568s send GET /UserViews#1 "?userId=62c3d87eb3a0462cac334ed79f9c10d0" via timer 0ms
++4.646s send GET /Users/:id/Items#1 "?SortBy=SortName,ProductionYear&SortOrder=Ascending&Include…"
++4.953s delivered GET /UserViews#1 (held 299 ms)
++4.984s delivered GET /Users/:id/Items#1 (held 304 ms)
++5.004s write grid.titles by GET /Users/:id/Items#1: "grid.titles: \"\" → \"Anvil (1997),Aurora (1971),Bea…\" (inserts \"Anvil (1997),Aurora (1971),…\")"
++5.029s delivered GET /Branding/Configuration#1 (held 829 ms)
++5.040s write CustomCss.external0.data, CustomCss.external0.data.SplashscreenEnabled, CustomCss.external0.dataUpdatedAt, CustomCss.external0.fetchStatus, CustomCss.external0.isFetched, CustomCss.external0.isFetchedAfterMount, CustomCss.external0.isFetching, CustomCss.external0.isInitialLoading, CustomCss.external0.isLoading, CustomCss.external0.isPending, CustomCss.external0.isStale, CustomCss.external0.isSuccess by GET /Branding/Configuration#1: "CustomCss.external0.status: \"pending\" → \"success\""; "CustomCss.external0.fetchStatus: \"fetching\" → \"idle\""; "CustomCss.external0.isPending: true → false"
++5.066s delivered GET /Users/:id/Items/:id#1 (held 410 ms)
++5.096s delivered POST /Sessions/Capabilities/Full#1 (held 1.8 s)
++5.260s action 0: click button "Sort"
++5.566s action 1: click label "Descending"
++5.567s action 2: click radio "Descending"
++5.568s action 3: change radio "Descending" = "checked"
++5.569s send GET /Users/:id/Items#2 "?SortBy=SortName,ProductionYear&SortOrder=Descending&Includ…" (action 3)
++5.617s action 4: click label "Ascending"
++5.620s action 5: click radio "Ascending"
++5.621s action 6: change radio "Ascending" = "checked"
++5.622s send GET /Users/:id/Items#3 "?SortBy=SortName,ProductionYear&SortOrder=Ascending&Include…" (action 6)
++5.631s action 7: key radio "Ascending"
++5.672s send POST /DisplayPreferences/usersettings#1 "?userId=62c3d87eb3a0462cac334ed79f9c10d0&client=emby {Id: \"3ce5b65d-e116-d731-6…" (action 6) via timer 50ms
++6.041s delivered GET /Users/:id/Items#2 (held 434 ms)
++6.072s delivered GET /Users/:id/Items#3 (held 421 ms)
++6.102s delivered POST /DisplayPreferences/usersettings#1 (held 410 ms)
+
+Delivery order: GET /web/config.json#1 → GET /web/config.json#2 → GET /System/Info/Public#1 → GET /System/Info#1 → GET /Users/:id#1 → GET /DisplayPreferences/usersettings#1 → GET /System/Info/Public#2 → GET /UserViews#1 → GET /Users/:id/Items#1 → GET /Branding/Configuration#1 → GET /Users/:id/Items/:id#1 → POST /Sessions/Capabilities/Full#1 → GET /Users/:id/Items#2 → GET /Users/:id/Items#3 → POST /DisplayPreferences/usersettings#1
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f1"} (schedule: seeded 2, +0-900 ms)
+2. Open "http://127.0.0.1:8096/web/#/movies?topParentId=f137a2dd21bbc1b99aa5c0f6bf02a805&collectionType=movies" and do the same 8 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f1"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f1 (race), generated from run r20.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://127.0.0.1:8096";
+const SCHEDULE = {"order":"seeded","seed":2,"delay":{"minMs":0,"maxMs":900},"maxHoldMs":2400};
+
+test("/web/: the final state does not depend on response order (GenClass f1)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/web/#/movies?topParentId=f137a2dd21bbc1b99aa5c0f6bf02a805&collectionType=movies");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "Sort", exact: true }).or(page.locator("[name=\"Sort\"], [id=\"Sort\"]")).first().click();
+  await page.getByText("Descending", { exact: true }).first().click();
+  await page.getByRole("radio", { name: "Descending", exact: true }).or(page.locator("[name=\"Descending\"], [id=\"Descending\"]")).first().click();
+  await page.getByRole("radio", { name: "Descending", exact: true }).or(page.locator("[name=\"Descending\"], [id=\"Descending\"]")).first().check();
+  await page.getByText("Ascending", { exact: true }).first().click();
+  await page.getByRole("radio", { name: "Ascending", exact: true }).or(page.locator("[name=\"Ascending\"], [id=\"Ascending\"]")).first().click();
+  await page.getByRole("radio", { name: "Ascending", exact: true }).or(page.locator("[name=\"Ascending\"], [id=\"Ascending\"]")).first().check();
+  await page.getByRole("radio", { name: "Ascending", exact: true }).or(page.locator("[name=\"Ascending\"], [id=\"Ascending\"]")).first().press("Escape");
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.requests["POST /DisplayPreferences/usersettings"] ?? 0, "requests sent, as with responses in request order").toBe(2);
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```
