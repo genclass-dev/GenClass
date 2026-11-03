@@ -1,0 +1,25 @@
+# Local hunt config (docs/adoption/hunts/prometheus-mantine-ui.md): several scrape pools so the Targets and
+# Service discovery pool select has something to switch between, and a rules file so the Alerts page is not empty.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+rule_files:
+  - rules.yml
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+  - job_name: self-a
+    static_configs:
+      - targets: ["localhost:9090", "127.0.0.1:9090"]
+        labels: { pool: a }
+  - job_name: self-b
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels: { pool: b }
+      - targets: ["localhost:9999", "localhost:9998", "localhost:9997"]
+        labels: { pool: b-down }
+  - job_name: down-only
+    static_configs:
+      - targets: ["localhost:9996", "localhost:9995"]

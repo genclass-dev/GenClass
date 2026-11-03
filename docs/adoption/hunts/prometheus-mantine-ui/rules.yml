@@ -1,0 +1,15 @@
+groups:
+  - name: hunt-alerts
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        labels: { severity: page }
+        annotations: { summary: "{{ $labels.instance }} is down" }
+      - alert: AlwaysFiring
+        expr: vector(1)
+      - alert: NeverFiring
+        expr: vector(1) == 0
+  - name: hunt-records
+    rules:
+      - record: job:up:sum
+        expr: sum by (job) (up)

@@ -1,0 +1,154 @@
+{
+  "app": "http://localhost:4173",
+  "expr": "sum by (job) (up) + count by (job) (go_goroutines)",
+  "runs": 8,
+  "nodes": 5,
+  "sentTotal": 56,
+  "abortedTotal": 16,
+  "perRun": [
+    {
+      "nodes": 5,
+      "sent": 7,
+      "aborted": 2,
+      "sentQueries": [
+        "up",
+        "go_goroutines",
+        "up",
+        "go_goroutines",
+        "sum by(job) (up)",
+        "count by(job) (go_goroutines)",
+        "sum by(job) (up)   count by(job) (go_goroutines)"
+      ],
+      "abortedQueries": [
+        "up",
+        "go_goroutines"
+      ]
+    },
+    {
+      "nodes": 5,
+      "sent": 7,
+      "aborted": 2,
+      "sentQueries": [
+        "up",
+        "go_goroutines",
+        "up",
+        "go_goroutines",
+        "sum by(job) (up)",
+        "count by(job) (go_goroutines)",
+        "sum by(job) (up)   count by(job) (go_goroutines)"
+      ],
+      "abortedQueries": [
+        "up",
+        "go_goroutines"
+      ]
+    },
+    {
+      "nodes": 5,
+      "sent": 7,
+      "aborted": 2,
+      "sentQueries": [
+        "up",
+        "go_goroutines",
+        "up",
+        "go_goroutines",
+        "sum by(job) (up)",
+        "count by(job) (go_goroutines)",
+        "sum by(job) (up)   count by(job) (go_goroutines)"
+      ],
+      "abortedQueries": [
+        "up",
+        "go_goroutines"
+      ]
+    },
+    {
+      "nodes": 5,
+      "sent": 7,
+      "aborted": 2,
+      "sentQueries": [
+        "up",
+        "go_goroutines",
+        "up",
+        "go_goroutines",
+        "sum by(job) (up)",
+        "count by(job) (go_goroutines)",
+        "sum by(job) (up)   count by(job) (go_goroutines)"
+      ],
+      "abortedQueries": [
+        "up",
+        "go_goroutines"
+      ]
+    },
+    {
+      "nodes": 5,
+      "sent": 7,
+      "aborted": 2,
+      "sentQueries": [
+        "up",
+        "go_goroutines",
+        "up",
+        "go_goroutines",
+        "sum by(job) (up)",
+        "count by(job) (go_goroutines)",
+        "sum by(job) (up)   count by(job) (go_goroutines)"
+      ],
+      "abortedQueries": [
+        "up",
+        "go_goroutines"
+      ]
+    },
+    {
+      "nodes": 5,
+      "sent": 7,
+      "aborted": 2,
+      "sentQueries": [
+        "up",
+        "go_goroutines",
+        "up",
+        "go_goroutines",
+        "sum by(job) (up)",
+        "count by(job) (go_goroutines)",
+        "sum by(job) (up)   count by(job) (go_goroutines)"
+      ],
+      "abortedQueries": [
+        "up",
+        "go_goroutines"
+      ]
+    },
+    {
+      "nodes": 5,
+      "sent": 7,
+      "aborted": 2,
+      "sentQueries": [
+        "up",
+        "go_goroutines",
+        "up",
+        "go_goroutines",
+        "sum by(job) (up)",
+        "count by(job) (go_goroutines)",
+        "sum by(job) (up)   count by(job) (go_goroutines)"
+      ],
+      "abortedQueries": [
+        "up",
+        "go_goroutines"
+      ]
+    },
+    {
+      "nodes": 5,
+      "sent": 7,
+      "aborted": 2,
+      "sentQueries": [
+        "up",
+        "go_goroutines",
+        "up",
+        "go_goroutines",
+        "sum by(job) (up)",
+        "count by(job) (go_goroutines)",
+        "sum by(job) (up)   count by(job) (go_goroutines)"
+      ],
+      "abortedQueries": [
+        "up",
+        "go_goroutines"
+      ]
+    }
+  ]
+}

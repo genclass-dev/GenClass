@@ -1,0 +1,83 @@
+diff --git a/web/ui/mantine-ui/src/pages/query/TreeNode.test.tsx b/web/ui/mantine-ui/src/pages/query/TreeNode.test.tsx
+new file mode 100644
+index 0000000..8f003aa
+--- /dev/null
++++ b/web/ui/mantine-ui/src/pages/query/TreeNode.test.tsx
+@@ -0,0 +1,57 @@
++// Copyright The Prometheus Authors
++
++import { MantineProvider } from "@mantine/core";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { cleanup, render } from "@testing-library/react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import TreeNode from "./TreeNode";
++import { nodeType } from "../../promql/ast";
++
++vi.mock("../../state/settingsSlice", () => ({
++  useSettings: () => ({ pathPrefix: "/prometheus" }),
++}));
++
++afterEach(() => {
++  cleanup();
++  vi.unstubAllGlobals();
++});
++
++describe("tree node queries", () => {
++  it("sends a leaf node's query once", () => {
++    const signals: AbortSignal[] = [];
++    vi.stubGlobal("matchMedia", () => ({
++      matches: false,
++      addEventListener: vi.fn(),
++      removeEventListener: vi.fn(),
++    }));
++    vi.stubGlobal("fetch", (_: string, { signal }: RequestInit) => {
++      signals.push(signal!);
++      return new Promise(() => {});
++    });
++    render(
++      <MantineProvider>
++        <QueryClientProvider client={new QueryClient()}>
++          <TreeNode
++            node={{
++              type: nodeType.vectorSelector,
++              name: "up",
++              matchers: [],
++              offset: 0,
++              offsetExpr: null,
++              timestamp: null,
++              startOrEnd: null,
++              anchored: false,
++              smoothed: false,
++            }}
++            selectedNode={null}
++            setSelectedNode={vi.fn()}
++            reverse={false}
++            childIdx={0}
++          />
++        </QueryClientProvider>
++      </MantineProvider>,
++    );
++    expect(signals).toHaveLength(1);
++    expect(signals[0].aborted).toBe(false);
++  });
++});
+diff --git a/web/ui/mantine-ui/src/pages/query/TreeNode.tsx b/web/ui/mantine-ui/src/pages/query/TreeNode.tsx
+index 0487d68..b60c763 100644
+--- a/web/ui/mantine-ui/src/pages/query/TreeNode.tsx
++++ b/web/ui/mantine-ui/src/pages/query/TreeNode.tsx
+@@ -2,6 +2,7 @@ import {
+   FC,
+   useCallback,
+   useEffect,
++  useId,
+   useLayoutEffect,
+   useMemo,
+   useRef,
+@@ -30,7 +31,6 @@ import serializeNode from "../../promql/serialize";
+ import { IconPointFilled } from "@tabler/icons-react";
+ import classes from "./TreeNode.module.css";
+ import clsx from "clsx";
+-import { useId } from "@mantine/hooks";
+ import { functionSignatures } from "../../promql/functionSignatures";
+ 
+ const nodeIndent = 20;

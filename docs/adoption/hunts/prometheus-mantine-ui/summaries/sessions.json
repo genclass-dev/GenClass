@@ -1,0 +1,44 @@
+[
+  {
+    "file": "tree-slow300-seed1.json",
+    "scenario": "tree",
+    "plain": false,
+    "slow_ms": 300,
+    "delay_ms": null,
+    "loads": 8,
+    "oracleSame": 8,
+    "verdict": "no race, 0 of 6",
+    "other": "internal only in 5 of 6: requests sent to \"GET /-/ready\": count differs; requests sent to \"GET /api/v1/status/walreplay\": count differs; requests sent to \"GET /api/v1/query\": count differs; noise ignored: text \"N results – N –\", text \"Load time: N Result series: N\"",
+    "forced": 45,
+    "held": 0,
+    "errors": 0
+  },
+  {
+    "file": "tree-slow600-seed1.json",
+    "scenario": "tree",
+    "plain": false,
+    "slow_ms": 600,
+    "delay_ms": null,
+    "loads": 8,
+    "oracleSame": 8,
+    "verdict": "no race, 0 of 6",
+    "other": "internal only in 6 of 6: requests sent to \"GET /api/v1/status/walreplay\": count differs; requests sent to \"GET /api/v1/query\": count differs; requests sent to \"GET /-/ready\": count differs; noise ignored: text \"N results – N –\", text \"Load time: N Result series: N\"",
+    "forced": 40,
+    "held": 0,
+    "errors": 0
+  },
+  {
+    "file": "tree-slow900-seed1.json",
+    "scenario": "tree",
+    "plain": false,
+    "slow_ms": 900,
+    "delay_ms": null,
+    "loads": 8,
+    "oracleSame": 8,
+    "verdict": "no race, 0 of 6",
+    "other": "internal only in 6 of 6: requests sent to \"GET /api/v1/query\": count differs; requests sent to \"GET /-/ready\": count differs; requests sent to \"GET /api/v1/status/walreplay\": count differs; noise ignored: text \"N results – N –\", text \"Load time: N Result series: N\"",
+    "forced": 33,
+    "held": 0,
+    "errors": 0
+  }
+]

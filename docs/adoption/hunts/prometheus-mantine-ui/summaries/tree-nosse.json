@@ -1,0 +1,33 @@
+{
+  "what": "tree scenario, explore 300 ms, runs 2 (4 loads), with /api/v1/notifications/live aborted by a Playwright route (hunt.mjs --block-sse)",
+  "command": "node docs/adoption/hunts/prometheus-mantine-ui/hunt.mjs tree --slow 300 --runs 2 --block-sse",
+  "loads": [
+    {
+      "n": 1,
+      "schedule": "baseline 1 (responses in request order)",
+      "forced": 0,
+      "same": true
+    },
+    {
+      "n": 2,
+      "schedule": "baseline 2 (responses in request order)",
+      "forced": 0,
+      "same": true
+    },
+    {
+      "n": 3,
+      "schedule": "seed 1",
+      "forced": 0,
+      "same": true
+    },
+    {
+      "n": 4,
+      "schedule": "seed 2",
+      "forced": 0,
+      "same": true
+    }
+  ],
+  "verdict": [
+    "No race found: none of the 2 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline."
+  ]
+}

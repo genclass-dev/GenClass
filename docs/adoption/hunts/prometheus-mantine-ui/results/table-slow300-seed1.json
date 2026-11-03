@@ -1,0 +1,351 @@
+{
+  "scenario": "table",
+  "app": "http://localhost:4173",
+  "plain": false,
+  "slow_ms": 300,
+  "delay_ms": null,
+  "runs": 6,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r1",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "baseline 1 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 5
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725053.226&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725054.072&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725054.185&stats=true"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r2",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "baseline 2 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 5
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725069.76&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725070.123&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725070.242&stats=true"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r3",
+        "schedule": {
+          "order": "seeded",
+          "seed": 1,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 1"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 5
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725087.383&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725088.21&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725088.342&stats=true"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r4",
+        "schedule": {
+          "order": "seeded",
+          "seed": 2,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 2"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 5
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725094.088&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725096.272&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725096.386&stats=true"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r5",
+        "schedule": {
+          "order": "seeded",
+          "seed": 3,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 3"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725116.186&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725116.737&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725116.853&stats=true"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r6",
+        "schedule": {
+          "order": "seeded",
+          "seed": 4,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 4"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 1
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725123.805&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725124.486&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725124.6&stats=true"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r7",
+        "schedule": {
+          "order": "seeded",
+          "seed": 5,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 5"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 6
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725144.278&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725146.736&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725146.868&stats=true"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r8",
+        "schedule": {
+          "order": "seeded",
+          "seed": 6,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 6"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725159.683&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725160.5&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725160.616&stats=true"
+      ]
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of \"/query\" get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /query · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click textbox \"up\"\n  type textbox \"count by (job) (up)\" = count by (job) (up)\n  key textbox \"count by (job) (up)\"\n  click button \"Execute\"\n  click textbox \"count by (job) (up)\"\n  type textbox \"sum by (job) (up == 0)\" = sum by (job) (up == 0)\n  key textbox \"sum by (job) (up == 0)\"\n  click button \"Execute\"\nIgnored as noise (differs between the two baselines): text \"Load time: N Result series: N\"\nNo race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.\nInternal state only (not a race by this check): 5 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.\n- run r4 (seed 2) (5 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"4\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"1\"\n- run r5 (seed 3) (4 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"4\", this run \"3\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"2\"\n- run r6 (seed 4) (1 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"4\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"1\"",
+  "findings": "No findings match. Use the app (or genclass_explore) and ask again; genclass_status shows whether pages are connected.",
+  "explains": {},
+  "oracle": "8 of 8 loads showed the reference state"
+}
