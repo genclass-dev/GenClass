@@ -1,0 +1,22 @@
+From 640fb55ab2459fc7f5407a2900aad0f0d96951db Mon Sep 17 00:00:00 2001
+From: Sender Name <sender@example.invalid>
+Date: Tue, 3 Nov 2026 12:00:00 +0000
+Subject: [PATCH] Add GenClass
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ README.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/README.md b/README.md
+index 995d450..e84fa62 100644
+--- a/README.md
++++ b/README.md
+@@ -380,6 +380,7 @@ _For Single Page Applications (SPAs) and more._
+ ## Dev Tools
+ 
+ - [Frontman](https://github.com/frontman-ai/frontman) - Open-source AI coding agent that lives in your browser with click-to-edit and hot reload for Svelte apps.
++- [GenClass](https://github.com/genclass-dev/GenClass) - Reports race conditions in a SvelteKit app while they happen (stale responses, duplicate submits) from one import in hooks.client, with a small on-device model.
+ 
+ ### Adapters
+ 

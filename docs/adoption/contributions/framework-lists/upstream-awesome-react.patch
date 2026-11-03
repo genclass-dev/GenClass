@@ -1,0 +1,24 @@
+From 7811d7bcf58982c9a2d371f54639f3ae2a645114 Mon Sep 17 00:00:00 2001
+From: Sender Name <sender@example.invalid>
+Date: Tue, 3 Nov 2026 12:00:00 +0000
+Subject: [PATCH] Add genclass to React Development Tools
+
+https://github.com/genclass-dev/GenClass
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ README.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/README.md b/README.md
+index 82e74fc..b83c9e3 100644
+--- a/README.md
++++ b/README.md
+@@ -122,6 +122,7 @@ A collection of awesome things regarding the React ecosystem.
+ - [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) - React specific linting rules for ESLint
+ - [react-scan](https://github.com/aidenybai/react-scan) - Scan for React performance issues and eliminate slow renders in your app
+ - [why-did-you-render](https://github.com/welldone-software/why-did-you-render) - Monkey patches React to notify you about avoidable re-renders
++- [genclass](https://github.com/genclass-dev/GenClass) - Reports race conditions in a React app while they happen with a small on-device model; its default observe mode changes no request or state write
+ 
+ #### React Libraries
+ 
