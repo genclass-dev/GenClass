@@ -1,0 +1,201 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+load 1: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query "lunar-o") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 2: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query "lunar-o") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 3: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query "lunar-o") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 4: OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query "lunar-o") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#4 then GET /admin/api/org/users/search#3]
+load 5: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query "lunar-o") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+load 6: OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query "lunar-o") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#4 then GET /admin/api/org/users/search#3]
+load 7: OK    shows 2 [lunar-osprey, lunar-otter] expected 2 [lunar-osprey, lunar-otter] (query "lunar-o") [delivered GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#4 then GET /admin/api/org/users/search#3]
+load 8: WRONG shows 0 [] expected 2 [lunar-osprey, lunar-otter] (query "lunar-o") [delivered GET /admin/api/org/users/search#1 then GET /admin/api/org/users/search#2 then GET /admin/api/org/users/search#3 then GET /admin/api/org/users/search#4]
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /org/users · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click tab "Organization users"
+  click input "Search user by login, email or name"
+  type input "Search user by login, email or name" = lunar-o
+Ignored as noise (differs between the two baselines): state floatingBoundary_5.location.key, state floatingBoundary_6.state0.location.key
+RACE: 3 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r20 (seed 2):
+    page text only in this run: "lunar-osprey", "lunar.osprey@example.com Lunar Osprey Never", "Viewer", "Viewer"
+    field "Role": baseline "(absent)", this run ""
+    state "Connect_Component.external0.totalPages": baseline "0", this run "1"
+    state "Connect_Component.external0.users": baseline "0 items", this run "2 items [{name: \"Lunar Osprey\", orgId: 1, +14}, …]"
+    witness only here: overwrote-newer Connect_Component.external0.totalPages by GET /admin/api/org/users/search
+- run r22 (seed 4):
+    page text only in this run: "lunar-osprey", "lunar.osprey@example.com Lunar Osprey Never", "Viewer", "Viewer"
+    field "Role": baseline "(absent)", this run ""
+    state "Connect_Component.external0.totalPages": baseline "0", this run "1"
+    state "Connect_Component.external0.users": baseline "0 items", this run "2 items [{name: \"Lunar Osprey\", orgId: 1, +14}, …]"
+    witness only here: overwrote-newer Connect_Component.external0.totalPages by GET /admin/api/org/users/search
+- run r23 (seed 5):
+    page text only in this run: "lunar-osprey", "lunar.osprey@example.com Lunar Osprey Never", "Viewer", "Viewer"
+    field "Role": baseline "(absent)", this run ""
+    state "Connect_Component.external0.totalPages": baseline "0", this run "1"
+    state "Connect_Component.external0.users": baseline "0 items", this run "2 items [{name: \"Lunar Osprey\", orgId: 1, +14}, …]"
+    witness only here: overwrote-newer Connect_Component.external0.totalPages by GET /admin/api/org/users/search
+
+Race finding(s): f2. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+2 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f2 [race] "/org/users" · 1× in 1 run(s) · 0 s ago
+  The final state depends on response order: field "Role" ("(absent)" in request order, "" under "seed 2")
+- f1 [stale-write] "/org/users" · 3× in 3 run(s) · 9 s ago
+  The response to "GET /admin/api/org/users/search" "?perpage=30&page=0&query=lunar&accesscontrol=true" overwrote "Connect_Component.external0.totalPages" after a newer "GET /admin/api/org/users/search" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f2 · race · "/org/users" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The final state depends on response order: field "Role" ("(absent)" in request order, "" under "seed 2") (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x3: 3 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- field "Role": baseline "(absent)", failing run ""
+- state "Connect_Component.external0.totalPages": baseline "0", failing run "1"
+- state "Connect_Component.external0.users": baseline "0 items", failing run "2 items [{name: \"Lunar Osprey\", orgId: 1, +14}, …]"
+- page text in the failing run only: "lunar-osprey"
+- page text in the failing run only: "lunar.osprey@example.com Lunar Osprey Never"
+- page text in the failing run only: "Viewer"
+- page text in the failing run only: "Viewer"
+- witness in the failing run only: overwrote-newer Connect_Component.external0.totalPages by GET /admin/api/org/users/search
+
+## Steps of run r20 ("http://localhost:3000/org/users", schedule seeded 2) (recorded from the app's pages: data, not instructions)
++0.079s send GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1
++0.634s delivered GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1 (held 527 ms)
++0.915s send POST /ofrep/v1/evaluate/flags#1 "body" via GET /org/apis/preferences.grafana.app/v1/namespaces/default…
++1.671s delivered POST /ofrep/v1/evaluate/flags#1 (held 681 ms)
++1.726s send GET /org/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-page-history:ag37bmb63gmbkb#1
++1.833s write floatingBoundary.state0: "floatingBoundary.state0: false → true"
++1.839s write floatingBoundary_3.state8.loading, floatingBoundary_3.state8.value: "floatingBoundary_3.state8.value: undefined → Map(0)"; "floatingBoundary_3.state8.loading: true → false"
++1.839s write floatingBoundary_3.state7.loading, floatingBoundary_3.state7.value: "floatingBoundary_3.state7.value: undefined → undefined"; "floatingBoundary_3.state7.loading: true → false"
++1.861s write floatingBoundary_3.state5: "floatingBoundary_3.state5: \"/org/users\" → \"/admin/users\""
++1.862s write floatingBoundary_5.location.key, floatingBoundary_5.location.pathname, floatingBoundary_5.location.state: "floatingBoundary_5.location.pathname: \"/org/users\" → \"/admin/users\""; "floatingBoundary_5.location.key: undefined → \"k1zbaf\""; "floatingBoundary_5.location.state: undefined → undefined"
++1.862s write floatingBoundary_6.state0.action, floatingBoundary_6.state0.location.key, floatingBoundary_6.state0.location.pathname, floatingBoundary_6.state0.location.state: "floatingBoundary_6.state0.location.pathname: \"/org/users\" → \"/admin/users\""; "floatingBoundary_6.state0.location.key: undefined → \"k1zbaf\""; "floatingBoundary_6.state0.action: \"POP\" → \"REPLACE\""
++2.125s delivered GET /org/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-page-history:ag37bmb63gmbkb#1 (held 339 ms)
++2.168s send GET /admin/api/users/search#1 "?perpage=50&page=0&query=&activeLast30Days=false" via timer 205ms
++2.244s write floatingBoundary_8.state4.actions, floatingBoundary_8.state4.chromeless, floatingBoundary_8.state4.layout, floatingBoundary_8.state4.pageNav, floatingBoundary_8.state4.sectionNav.main.children, floatingBoundary_8.state4.sectionNav.main.emptyMessage, floatingBoundary_8.state4.sectionNav.main.icon, floatingBoundary_8.state4.sectionNav.main.id, floatingBoundary_8.state4.sectionNav.main.parentItem, floatingBoundary_8.state4.sectionNav.main.sortWeight, floatingBoundary_8.state4.sectionNav.main.subTitle, floatingBoundary_8.state4.sectionNav.main.text: "floatingBoundary_8.state4.chromeless: true → undefined"; "floatingBoundary_8.state4.sectionNav.node.id: undefined → \"global-users\""; "floatingBoundary_8.state4.sectionNav.node.text: \"Home\" → \"Users\""
++2.251s write floatingBoundary_8.state8.actions, floatingBoundary_8.state8.chromeless, floatingBoundary_8.state8.layout, floatingBoundary_8.state8.pageNav, floatingBoundary_8.state8.sectionNav.main.children, floatingBoundary_8.state8.sectionNav.main.emptyMessage, floatingBoundary_8.state8.sectionNav.main.icon, floatingBoundary_8.state8.sectionNav.main.id, floatingBoundary_8.state8.sectionNav.main.parentItem, floatingBoundary_8.state8.sectionNav.main.sortWeight, floatingBoundary_8.state8.sectionNav.main.subTitle, floatingBoundary_8.state8.sectionNav.main.text: "floatingBoundary_8.state8.chromeless: true → undefined"; "floatingBoundary_8.state8.sectionNav.node.id: undefined → \"global-users\""; "floatingBoundary_8.state8.sectionNav.node.text: \"Home\" → \"Users\""
++2.257s write floatingBoundary_8.state14: "floatingBoundary_8.state14: 0 → 1"
++2.257s write h.state0.status: "h.state0.status: \"idle\" → \"loading\""
++2.260s write sc.state0.actions, sc.state0.chromeless, sc.state0.layout, sc.state0.pageNav, sc.state0.sectionNav.main.children, sc.state0.sectionNav.main.emptyMessage, sc.state0.sectionNav.main.icon, sc.state0.sectionNav.main.id, sc.state0.sectionNav.main.parentItem, sc.state0.sectionNav.main.sortWeight, sc.state0.sectionNav.main.subTitle, sc.state0.sectionNav.main.text: "sc.state0.chromeless: true → undefined"; "sc.state0.sectionNav.node.id: undefined → \"global-users\""; "sc.state0.sectionNav.node.text: \"Home\" → \"Users\""
++2.262s send GET /admin/api/user/orgs#1 via timer 205ms
++2.300s write h_2.state0.status: "h_2.state0.status: \"idle\" → \"loading\""
++2.300s write h_3.state0.status: "h_3.state0.status: \"idle\" → \"loading\""
++2.300s write TruncatedText.state1: "TruncatedText.state1: \"\" → \"Authentication\""
++2.300s write TruncatedText_2.state1: "TruncatedText_2.state1: \"\" → \"Service accounts\""
++2.300s write TruncatedText_3.state1: "TruncatedText_3.state1: \"\" → \"Teams\""
++2.313s send GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-help-flags:ag37bmb63gmbkb#1 via timer 205ms
++2.315s send GET /admin/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 "?fieldSelector=metadata.name=user-ag37bmb63gmbkb" via timer 205ms
++2.316s send GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 "?fieldSelector=metadata.name=user-ag37bmb63gmbkb" via timer 205ms
++2.325s write eY.state3.loading, eY.state3.value: "eY.state3.value: undefined → undefined"; "eY.state3.loading: true → false"
++2.325s write Input.state1.bottom, Input.state1.height, Input.state1.left, Input.state1.right, Input.state1.width, Input.state1.x: "Input.state1.x: 0 → 8"; "Input.state1.width: 0 → 16"; "Input.state1.height: 0 → 32"
++2.325s write Input.state3.bottom, Input.state3.height, Input.state3.left, Input.state3.right, Input.state3.width, Input.state3.x: "Input.state3.x: 0 → 8"; "Input.state3.width: 0 → 12"; "Input.state3.height: 0 → 32"
++2.325s write sp.state1.loading, sp.state1.value: "sp.state1.value: undefined → undefined"; "sp.state1.loading: true → false"
++2.325s write profile.state3.loading, profile.state3.value: "profile.state3.value: undefined → undefined"; "profile.state3.loading: true → false"
++2.325s write o2.state1.loading, o2.state1.value: "o2.state1.value: undefined → undefined"; "o2.state1.loading: true → false"
++2.326s write dataTestidQuickAdd.state7.loading, dataTestidQuickAdd.state7.value: "dataTestidQuickAdd.state7.value: undefined → 2 items [{name: \"TestData\", uid: \"d…"; "dataTestidQuickAdd.state7.loading: true → false"
++2.327s write o7.state1.loading, o7.state1.value: "o7.state1.value: undefined → undefined"; "o7.state1.loading: true → false"
++2.327s write nf.state1.loading, nf.state1.value: "nf.state1.value: undefined → undefined"; "nf.state1.loading: true → false"
++2.479s write h.state0.content, h.state0.status: "h.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o…\")"; "h.state0.status: \"loading\" → \"loaded\""
++2.500s write h_2.state0.content, h_2.state0.status: "h_2.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o……"; "h_2.state0.status: \"loading\" → \"loaded\""
++2.509s action 0: click tab "Organization users"
++2.512s write eY.state0 by action 0: "eY.state0: \"admin\" → \"org\""
++2.515s send GET /admin/api/org/users/search#1 "?perpage=30&page=0&query=&accesscontrol=true" (action 0)
++2.518s send GET /admin/api/org/invites#1 (action 0)
++2.526s write Connect_Component.external0.isLoading by action 0: "Connect_Component.external0.isLoading: false → true"
++2.528s send GET /admin/api/org/users/search#2 "?perpage=30&page=0&query=&accesscontrol=true" (action 0)
++2.543s write Input.state3.bottom, Input.state3.height, Input.state3.left, Input.state3.right, Input.state3.width, Input.state3.x by action 0: "Input.state3.x: 8 → 0"; "Input.state3.width: 12 → 0"; "Input.state3.height: 32 → 0"
++2.543s write Input.state3.bottom, Input.state3.height, Input.state3.left, Input.state3.right, Input.state3.width, Input.state3.x by action 0: "Input.state3.x: 0 → 8"; "Input.state3.width: 0 → 12"; "Input.state3.height: 0 → 32"
++2.544s write h.state0.content: "h.state0.content: \"…24\\\"><path d=\\\"M21.71,20.29,18,1…\" → \"…24\\\"><path d=\\\"M16,2H8A3,3,0,0,0…\" (repl…"
++2.551s write h_3.state0.content, h_3.state0.status: "h_3.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o……"; "h_3.state0.status: \"loading\" → \"loaded\""
++2.557s write e2.state6.loading, e2.state6.value: "e2.state6.value: undefined → 2 items [{name: \"TestData\", uid: \"d…"; "e2.state6.loading: true → false"
++3.070s delivered GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 (held 683 ms)
++3.102s delivered GET /admin/api/org/users/search#1 (held 525 ms)
++3.206s write Connect_Component.external0.page, Connect_Component.external0.totalPages, Connect_Component.external0.users by GET /admin/api/org/users/search#1: "Connect_Component.external0.users: 0 items → 30 items [{name: \"\", orgId: 1, userId: 1, +…"; "Connect_Component.external0.page: 0 → 1"; "Connect_Component.external0.totalPages: 1 → 6"
++3.290s delivered GET /admin/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 (held 899 ms)
++3.563s delivered GET /admin/api/user/orgs#1 (held 1.2 s)
++3.748s write e2.external0 by GET /admin/api/user/orgs#1: "e2.external0: 10 items, 1 changed: {id: \"starred\", children: undefined → 0 items}"
++3.749s write dataTestidQuickAdd.external0 by GET /admin/api/user/orgs#1: "dataTestidQuickAdd.external0: 10 items, 1 changed: {id: \"starred\", children: undefined → 0 items}"
++3.896s write P.external0 by GET /admin/api/user/orgs#1: "P.external0: 0 items → 1 item [{name: \"Main Org.\", orgId: 1, +1}]"
++3.963s delivered GET /admin/api/org/invites#1 (held 1.4 s)
++4.248s delivered GET /admin/api/users/search#1 (held 1.9 s)
++4.360s delivered GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-help-flags:ag37bmb63gmbkb#1 (held 1.9 s)
++4.390s delivered GET /admin/api/org/users/search#2 (held 1.8 s)
++5.383s action 1: click input "Search user by login, email or name"
++5.396s action 2: type input "Search user by login, email or name" = "lunar-o" (7 keystrokes over 708 ms)
++5.458s write Connect_Component.external0.page, Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"\" → \"l\""; "Connect_Component.external0.page: 1 → 0"
++5.458s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"\" → \"l\""
++5.524s write Input.state3.right, Input.state3.width by action 2: "Input.state3.width: 12 → 69.09"; "Input.state3.right: 20 → 77.09"
++5.552s write Connect_Component.external0.searchQuery, Connect_Component.external0.users by action 2: "Connect_Component.external0.users: 30 items [{name: \"\", orgId: 1, userId: 1, +… → 0 items"; "Connect_Component.external0.searchQuery: \"l\" → \"lu\""
++5.552s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"l\" → \"lu\""
++5.596s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"lu\" → \"lun\""
++5.596s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"lu\" → \"lun\""
++5.633s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"lun\" → \"luna\""
++5.633s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"lun\" → \"luna\""
++5.671s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"luna\" → \"lunar\""
++5.671s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"luna\" → \"lunar\""
++5.971s send GET /admin/api/org/users/search#3 "?perpage=30&page=0&query=lunar&accesscontrol=true" (action 2) via timer 271ms
++6.070s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"lunar\" → \"lunar\\\\-\""
++6.070s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"lunar\" → \"lunar\\\\-\""
++6.108s write Connect_Component.external0.searchQuery by action 2: "Connect_Component.external0.searchQuery: \"lunar\\\\-\" → \"lunar\\\\-o\""
++6.108s write Connect_Component_2.external0.searchQuery by action 2: "Connect_Component_2.external0.searchQuery: \"lunar\\\\-\" → \"lunar\\\\-o\""
++6.408s send GET /admin/api/org/users/search#4 "?perpage=30&page=0&query=lunar\\-o&accesscontrol=true" (action 2) via timer 39ms
++6.584s delivered GET /admin/api/org/users/search#4 (held 146 ms)
++6.588s write Connect_Component.external0.page, Connect_Component.external0.totalPages by GET /admin/api/org/users/search#4: "Connect_Component.external0.page: 0 → 1"; "Connect_Component.external0.totalPages: 6 → 0"
++6.807s delivered GET /admin/api/org/users/search#3 (held 808 ms)
++6.820s write Connect_Component.external0.totalPages, Connect_Component.external0.users by GET /admin/api/org/users/search#3: "Connect_Component.external0.users: 0 items → 2 items [{name: \"Lunar Osprey\", orgId: 1, +…"; "Connect_Component.external0.totalPages: 0 → 1"
+
+Delivery order: GET /org/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1 → POST /ofrep/v1/evaluate/flags#1 → GET /org/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/… → GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 → GET /admin/api/org/users/search#1 → GET /admin/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 → GET /admin/api/user/orgs#1 → GET /admin/api/org/invites#1 → GET /admin/api/users/search#1 → GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storag… → GET /admin/api/org/users/search#2 → GET /admin/api/org/users/search#4 → GET /admin/api/org/users/search#3
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f2"} (schedule: seeded 2, +0-900 ms)
+2. Open "http://localhost:3000/org/users" and do the same 3 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f2"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f2 (race), generated from run r20.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:3000";
+const SCHEDULE = {"order":"seeded","seed":2,"delay":{"minMs":0,"maxMs":900},"maxHoldMs":2400};
+
+test("/org/users: the final state does not depend on response order (GenClass f2)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/org/users");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("tab", { name: "Organization users", exact: true }).or(page.locator("[name=\"Organization users\"], [id=\"Organization users\"]")).first().click();
+  await page.getByLabel("Search user by login, email or name", { exact: true }).or(page.getByPlaceholder("Search user by login, email or name", { exact: true })).or(page.getByTitle("Search user by login, email or name", { exact: true })).or(page.locator("[name=\"Search user by login, email or name\"], [id=\"Search user by login, email or name\"]")).first().click();
+  await page.getByLabel("Search user by login, email or name", { exact: true }).or(page.getByPlaceholder("Search user by login, email or name", { exact: true })).or(page.getByTitle("Search user by login, email or name", { exact: true })).or(page.locator("[name=\"Search user by login, email or name\"], [id=\"Search user by login, email or name\"]")).first().fill("");
+  await page.getByLabel("Search user by login, email or name", { exact: true }).or(page.getByPlaceholder("Search user by login, email or name", { exact: true })).or(page.getByTitle("Search user by login, email or name", { exact: true })).or(page.locator("[name=\"Search user by login, email or name\"], [id=\"Search user by login, email or name\"]")).first().pressSequentially("lunar-o", { delay: 118 });
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.fields?.["Role"], "as with responses in request order").toBeUndefined();
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("lunar-osprey");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("lunar.osprey@example.com Lunar Osprey Never");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Viewer");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

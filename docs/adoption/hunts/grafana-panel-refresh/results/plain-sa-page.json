@@ -1,0 +1,25 @@
+{
+  "scenario": "sa-page",
+  "delay_ms": 1500,
+  "delayed": "5 of 5 wrong",
+  "control": "0 of 5 wrong",
+  "delayedLines": [
+    "WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2)",
+    "WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2)",
+    "WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2)",
+    "WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2)",
+    "WRONG shows 50 [svc fancy badger, svc fancy falcon, svc fancy heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 2)"
+  ],
+  "controlLines": [
+    "OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3)",
+    "OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3)",
+    "OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3)",
+    "OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3)",
+    "OK    shows 20 [svc keen badger, svc keen falcon, svc keen heron, ...] expected 20 [svc keen badger, svc keen falcon, svc keen heron, ...] (page button 3)"
+  ],
+  "requests": [
+    "?perpage=50&page=0&query=&accesscontrol=true",
+    "?perpage=50&page=2&query=&accesscontrol=true",
+    "?perpage=50&page=3&query=&accesscontrol=true"
+  ]
+}

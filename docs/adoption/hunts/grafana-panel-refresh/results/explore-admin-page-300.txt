@@ -1,0 +1,183 @@
+Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x1"}.
+
+load 1: OK    shows 50 [jolly-stoat, keen-badger, keen-falcon, ...] expected 50 [jolly-stoat, keen-badger, keen-falcon, ...] (page button 3) [delivered GET /admin/api/users/search#1 then GET /admin/api/users/search#2 then GET /admin/api/users/search#3]
+load 2: OK    shows 50 [jolly-stoat, keen-badger, keen-falcon, ...] expected 50 [jolly-stoat, keen-badger, keen-falcon, ...] (page button 3) [delivered GET /admin/api/users/search#1 then GET /admin/api/users/search#2 then GET /admin/api/users/search#3]
+load 3: WRONG shows 50 [eager-stoat, fancy-badger, fancy-falcon, ...] expected 50 [jolly-stoat, keen-badger, keen-falcon, ...] (page button 2) [delivered GET /admin/api/users/search#1 then GET /admin/api/users/search#3 then GET /admin/api/users/search#2]
+load 4: OK    shows 50 [jolly-stoat, keen-badger, keen-falcon, ...] expected 50 [jolly-stoat, keen-badger, keen-falcon, ...] (page button 3) [delivered GET /admin/api/users/search#1 then GET /admin/api/users/search#2 then GET /admin/api/users/search#3]
+load 5: WRONG shows 50 [eager-stoat, fancy-badger, fancy-falcon, ...] expected 50 [jolly-stoat, keen-badger, keen-falcon, ...] (page button 2) [delivered GET /admin/api/users/search#1 then GET /admin/api/users/search#3 then GET /admin/api/users/search#2]
+load 6: WRONG shows 50 [eager-stoat, fancy-badger, fancy-falcon, ...] expected 50 [jolly-stoat, keen-badger, keen-falcon, ...] (page button 2) [delivered GET /admin/api/users/search#1 then GET /admin/api/users/search#3 then GET /admin/api/users/search#2]
+load 7: WRONG shows 50 [eager-stoat, fancy-badger, fancy-falcon, ...] expected 50 [jolly-stoat, keen-badger, keen-falcon, ...] (page button 2) [delivered GET /admin/api/users/search#1 then GET /admin/api/users/search#3 then GET /admin/api/users/search#2]
+load 8: OK    shows 50 [jolly-stoat, keen-badger, keen-falcon, ...] expected 50 [jolly-stoat, keen-badger, keen-falcon, ...] (page button 3) [delivered GET /admin/api/users/search#1 then GET /admin/api/users/search#2 then GET /admin/api/users/search#3]
+
+Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /admin/users · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "2"
+  click button "3"
+RACE: 4 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r3 (seed 1):
+    page text only in the baseline: "jolly-stoat jolly.stoat@example.com Jolly Stoat Never", "keen-badger keen.badger@example.com Keen Badger Never", "keen-falcon keen.falcon@example.com Keen Falcon Never", "keen-heron keen.heron@example.com Keen Heron Never"
+    page text only in this run: "eager-stoat eager.stoat@example.com Eager Stoat Never", "fancy-badger fancy.badger@example.com Fancy Badger Never", "fancy-falcon fancy.falcon@example.com Fancy Falcon Never", "fancy-heron fancy.heron@example.com Fancy Heron Never"
+    state "Connect_Component.external0.page": baseline "3", this run "2"
+    state "Connect_Component.external0.users": baseline "50 items [{id: 101, name: \"Jolly Stoat\", +12}, …]", this run "50 items [{id: 51, name: \"Eager Stoat\", +12}, …]"
+    witness only here: overwrote-newer Connect_Component.external0.users by GET /admin/api/users/search
+- run r5 (seed 3):
+    page text only in the baseline: "jolly-stoat jolly.stoat@example.com Jolly Stoat Never", "keen-badger keen.badger@example.com Keen Badger Never", "keen-falcon keen.falcon@example.com Keen Falcon Never", "keen-heron keen.heron@example.com Keen Heron Never"
+    page text only in this run: "eager-stoat eager.stoat@example.com Eager Stoat Never", "fancy-badger fancy.badger@example.com Fancy Badger Never", "fancy-falcon fancy.falcon@example.com Fancy Falcon Never", "fancy-heron fancy.heron@example.com Fancy Heron Never"
+    state "Connect_Component.external0.page": baseline "3", this run "2"
+    state "Connect_Component.external0.users": baseline "50 items [{id: 101, name: \"Jolly Stoat\", +12}, …]", this run "50 items [{id: 51, name: \"Eager Stoat\", +12}, …]"
+    witness only here: overwrote-newer Connect_Component.external0.users by GET /admin/api/users/search
+- run r6 (seed 4):
+    page text only in the baseline: "jolly-stoat jolly.stoat@example.com Jolly Stoat Never", "keen-badger keen.badger@example.com Keen Badger Never", "keen-falcon keen.falcon@example.com Keen Falcon Never", "keen-heron keen.heron@example.com Keen Heron Never"
+    page text only in this run: "eager-stoat eager.stoat@example.com Eager Stoat Never", "fancy-badger fancy.badger@example.com Fancy Badger Never", "fancy-falcon fancy.falcon@example.com Fancy Falcon Never", "fancy-heron fancy.heron@example.com Fancy Heron Never"
+    state "Connect_Component.external0.page": baseline "3", this run "2"
+    state "Connect_Component.external0.users": baseline "50 items [{id: 101, name: \"Jolly Stoat\", +12}, …]", this run "50 items [{id: 51, name: \"Eager Stoat\", +12}, …]"
+    witness only here: overwrote-newer Connect_Component.external0.users by GET /admin/api/users/search
+- run r7 (seed 5):
+    page text only in the baseline: "jolly-stoat jolly.stoat@example.com Jolly Stoat Never", "keen-badger keen.badger@example.com Keen Badger Never", "keen-falcon keen.falcon@example.com Keen Falcon Never", "keen-heron keen.heron@example.com Keen Heron Never"
+    page text only in this run: "eager-stoat eager.stoat@example.com Eager Stoat Never", "fancy-badger fancy.badger@example.com Fancy Badger Never", "fancy-falcon fancy.falcon@example.com Fancy Falcon Never", "fancy-heron fancy.heron@example.com Fancy Heron Never"
+    state "Connect_Component.external0.page": baseline "3", this run "2"
+    state "Connect_Component.external0.users": baseline "50 items [{id: 101, name: \"Jolly Stoat\", +12}, …]", this run "50 items [{id: 51, name: \"Eager Stoat\", +12}, …]"
+    witness only here: overwrote-newer Connect_Component.external0.users by GET /admin/api/users/search
+
+Race finding(s): f3. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+3 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f3 [race] "/admin/users" · 1× in 1 run(s) · 0 s ago
+  The page depends on response order: it shows "eager-stoat eager.stoat@example.com Eager Stoat Never" under "seed 1", not in request order
+- f1 [stale-write] "/admin/users" · 8× in 8 run(s) · 1 s ago
+  The response to "GET /admin/api/users/search" "?perpage=50&page=2&query=&activeLast30Days=false" overwrote "Connect_Component.external0.page" after the user's "click button \"3\"" had already written it
+- f2 [stale-write] "/admin/users" · 4× in 4 run(s) · 5 s ago
+  The response to "GET /admin/api/users/search" "?perpage=50&page=2&query=&activeLast30Days=false" overwrote "Connect_Component.external0.users" after a newer "GET /admin/api/users/search" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f3 · race · "/admin/users" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "eager-stoat eager.stoat@example.com Eager Stoat Never" under "seed 1", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x1: 4 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- state "Connect_Component.external0.page": baseline "3", failing run "2"
+- state "Connect_Component.external0.users": baseline "50 items [{id: 101, name: \"Jolly Stoat\", +12}, …]", failing run "50 items [{id: 51, name: \"Eager Stoat\", +12}, …]"
+- page text in the baseline only: "jolly-stoat jolly.stoat@example.com Jolly Stoat Never"
+- page text in the baseline only: "keen-badger keen.badger@example.com Keen Badger Never"
+- page text in the baseline only: "keen-falcon keen.falcon@example.com Keen Falcon Never"
+- page text in the baseline only: "keen-heron keen.heron@example.com Keen Heron Never"
+- page text in the failing run only: "eager-stoat eager.stoat@example.com Eager Stoat Never"
+- page text in the failing run only: "fancy-badger fancy.badger@example.com Fancy Badger Never"
+- page text in the failing run only: "fancy-falcon fancy.falcon@example.com Fancy Falcon Never"
+- page text in the failing run only: "fancy-heron fancy.heron@example.com Fancy Heron Never"
+- witness in the failing run only: overwrote-newer Connect_Component.external0.users by GET /admin/api/users/search
+
+## Steps of run r3 ("http://localhost:3000/admin/users", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++0.021s send GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1
++0.223s delivered GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences/merged#1 (held 165 ms)
++0.573s send POST /ofrep/v1/evaluate/flags#1 "body" via GET /admin/apis/preferences.grafana.app/v1/namespaces/defau…
++0.915s delivered POST /ofrep/v1/evaluate/flags#1 (held 242 ms)
++0.979s send GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-page-history:ag37bmb63gmbkb#1
++1.093s write floatingBoundary.state0: "floatingBoundary.state0: false → true"
++1.097s write floatingBoundary_3.state8.loading, floatingBoundary_3.state8.value: "floatingBoundary_3.state8.value: undefined → Map(0)"; "floatingBoundary_3.state8.loading: true → false"
++1.097s write floatingBoundary_3.state7.loading, floatingBoundary_3.state7.value: "floatingBoundary_3.state7.value: undefined → undefined"; "floatingBoundary_3.state7.loading: true → false"
++1.146s delivered GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-page-history:ag37bmb63gmbkb#1 (held 87 ms)
++1.402s send GET /admin/api/users/search#1 "?perpage=50&page=0&query=&activeLast30Days=false" via timer 198ms
++1.487s write floatingBoundary_5.state4.actions, floatingBoundary_5.state4.chromeless, floatingBoundary_5.state4.layout, floatingBoundary_5.state4.pageNav, floatingBoundary_5.state4.sectionNav.main.children, floatingBoundary_5.state4.sectionNav.main.emptyMessage, floatingBoundary_5.state4.sectionNav.main.icon, floatingBoundary_5.state4.sectionNav.main.id, floatingBoundary_5.state4.sectionNav.main.parentItem, floatingBoundary_5.state4.sectionNav.main.sortWeight, floatingBoundary_5.state4.sectionNav.main.subTitle, floatingBoundary_5.state4.sectionNav.main.text: "floatingBoundary_5.state4.chromeless: true → undefined"; "floatingBoundary_5.state4.sectionNav.node.id: undefined → \"global-users\""; "floatingBoundary_5.state4.sectionNav.node.text: \"Home\" → \"Users\""
++1.496s write floatingBoundary_5.state8.actions, floatingBoundary_5.state8.chromeless, floatingBoundary_5.state8.layout, floatingBoundary_5.state8.pageNav, floatingBoundary_5.state8.sectionNav.main.children, floatingBoundary_5.state8.sectionNav.main.emptyMessage, floatingBoundary_5.state8.sectionNav.main.icon, floatingBoundary_5.state8.sectionNav.main.id, floatingBoundary_5.state8.sectionNav.main.parentItem, floatingBoundary_5.state8.sectionNav.main.sortWeight, floatingBoundary_5.state8.sectionNav.main.subTitle, floatingBoundary_5.state8.sectionNav.main.text: "floatingBoundary_5.state8.chromeless: true → undefined"; "floatingBoundary_5.state8.sectionNav.node.id: undefined → \"global-users\""; "floatingBoundary_5.state8.sectionNav.node.text: \"Home\" → \"Users\""
++1.502s write floatingBoundary_5.state14: "floatingBoundary_5.state14: 0 → 1"
++1.503s write h.state0.status: "h.state0.status: \"idle\" → \"loading\""
++1.506s write sc.state0.actions, sc.state0.chromeless, sc.state0.layout, sc.state0.pageNav, sc.state0.sectionNav.main.children, sc.state0.sectionNav.main.emptyMessage, sc.state0.sectionNav.main.icon, sc.state0.sectionNav.main.id, sc.state0.sectionNav.main.parentItem, sc.state0.sectionNav.main.sortWeight, sc.state0.sectionNav.main.subTitle, sc.state0.sectionNav.main.text: "sc.state0.chromeless: true → undefined"; "sc.state0.sectionNav.node.id: undefined → \"global-users\""; "sc.state0.sectionNav.node.text: \"Home\" → \"Users\""
++1.508s send GET /admin/api/user/orgs#1 via timer 198ms
++1.555s write h_2.state0.status: "h_2.state0.status: \"idle\" → \"loading\""
++1.555s write h_3.state0.status: "h_3.state0.status: \"idle\" → \"loading\""
++1.555s write TruncatedText.state1: "TruncatedText.state1: \"\" → \"Authentication\""
++1.555s write TruncatedText_2.state1: "TruncatedText_2.state1: \"\" → \"Service accounts\""
++1.555s write TruncatedText_3.state1: "TruncatedText_3.state1: \"\" → \"Teams\""
++1.571s send GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-help-flags:ag37bmb63gmbkb#1 via timer 198ms
++1.573s send GET /admin/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 "?fieldSelector=metadata.name=user-ag37bmb63gmbkb" via timer 198ms
++1.575s send GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 "?fieldSelector=metadata.name=user-ag37bmb63gmbkb" via timer 198ms
++1.587s write eY.state3.loading, eY.state3.value: "eY.state3.value: undefined → undefined"; "eY.state3.loading: true → false"
++1.587s write Input.state1.bottom, Input.state1.height, Input.state1.left, Input.state1.right, Input.state1.width, Input.state1.x: "Input.state1.x: 0 → 8"; "Input.state1.width: 0 → 16"; "Input.state1.height: 0 → 32"
++1.587s write Input.state3.bottom, Input.state3.height, Input.state3.left, Input.state3.right, Input.state3.width, Input.state3.x: "Input.state3.x: 0 → 8"; "Input.state3.width: 0 → 12"; "Input.state3.height: 0 → 32"
++1.587s write sp.state1.loading, sp.state1.value: "sp.state1.value: undefined → undefined"; "sp.state1.loading: true → false"
++1.587s write profile.state3.loading, profile.state3.value: "profile.state3.value: undefined → undefined"; "profile.state3.loading: true → false"
++1.587s write o2.state1.loading, o2.state1.value: "o2.state1.value: undefined → undefined"; "o2.state1.loading: true → false"
++1.589s write dataTestidQuickAdd.state7.loading, dataTestidQuickAdd.state7.value: "dataTestidQuickAdd.state7.value: undefined → 2 items [{name: \"TestData\", uid: \"d…"; "dataTestidQuickAdd.state7.loading: true → false"
++1.589s write o7.state1.loading, o7.state1.value: "o7.state1.value: undefined → undefined"; "o7.state1.loading: true → false"
++1.589s write nf.state1.loading, nf.state1.value: "nf.state1.value: undefined → undefined"; "nf.state1.loading: true → false"
++1.693s write h.state0.content, h.state0.status: "h.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o…\")"; "h.state0.status: \"loading\" → \"loaded\""
++1.805s write e2.state6.loading, e2.state6.value: "e2.state6.value: undefined → 2 items [{name: \"TestData\", uid: \"d…"; "e2.state6.loading: true → false"
++1.819s write h_2.state0.content, h_2.state0.status: "h_2.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o……"; "h_2.state0.status: \"loading\" → \"loaded\""
++1.897s write h_3.state0.content, h_3.state0.status: "h_3.state0.content: \"\" → \"<svg xmlns=\\\"http://www.w3.org/…\" (inserts \"<svg xmlns=\\\"http://www.w3.o……"; "h_3.state0.status: \"loading\" → \"loaded\""
++1.902s delivered GET /admin/api/user/orgs#1 (held 113 ms)
++1.904s write P.external0 by GET /admin/api/user/orgs#1: "P.external0: 0 items → 1 item [{name: \"Main Org.\", orgId: 1, +1}]"
++1.932s delivered GET /admin/api/users/search#1 (held 284 ms)
++1.993s write Connect_Component.external0.isLoading, Connect_Component.external0.page, Connect_Component.external0.showPaging, Connect_Component.external0.totalPages, Connect_Component.external0.users by GET /admin/api/users/search#1: "Connect_Component.external0.users: 0 items → 50 items [{id: 1, name: \"\", uid: \"ag37bmb63…"; "Connect_Component.external0.showPaging: false → true"; "Connect_Component.external0.totalPages: 1 → 4"
++2.021s delivered GET /admin/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 (held 232 ms)
++2.102s delivered GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 (held 476 ms)
++2.150s write e2.external0: "e2.external0: 10 items, 1 changed: {id: \"starred\", children: undefined → 0 items}"
++2.151s write dataTestidQuickAdd.external0: "dataTestidQuickAdd.external0: 10 items, 1 changed: {id: \"starred\", children: undefined → 0 items}"
++2.188s delivered GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-help-flags:ag37bmb63gmbkb#1 (held 496 ms)
++2.193s write dismiss.state0 by GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storage/grafana-help-flags…: "dismiss.state0: true → false"
++2.676s action 0: click button "2"
++2.679s send GET /admin/api/users/search#2 "?perpage=50&page=2&query=&activeLast30Days=false" (action 0)
++2.731s write Connect_Component.external0.isLoading, Connect_Component.external0.page by action 0: "Connect_Component.external0.page: 1 → 2"; "Connect_Component.external0.isLoading: false → true"
++2.742s action 1: click button "3"
++2.745s send GET /admin/api/users/search#3 "?perpage=50&page=3&query=&activeLast30Days=false" (action 1)
++2.789s write Connect_Component.external0.page by action 1: "Connect_Component.external0.page: 2 → 3"
++2.900s delivered GET /admin/api/users/search#3 (held 72 ms)
++3.005s write Connect_Component.external0.isLoading, Connect_Component.external0.users by GET /admin/api/users/search#3: "Connect_Component.external0.users: 50 items, 50 changed"; "Connect_Component.external0.isLoading: true → false"
++3.080s delivered GET /admin/api/users/search#2 (held 283 ms)
++3.157s write Connect_Component.external0.page, Connect_Component.external0.users by GET /admin/api/users/search#2: "Connect_Component.external0.users: 50 items, 50 changed"; "Connect_Component.external0.page: 3 → 2"
+
+Delivery order: GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences/merge… → POST /ofrep/v1/evaluate/flags#1 → GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storag… → GET /admin/api/user/orgs#1 → GET /admin/api/users/search#1 → GET /admin/apis/collections.grafana.app/v1alpha1/namespaces/default/stars#1 → GET /admin/apis/preferences.grafana.app/v1/namespaces/default/preferences#1 → GET /admin/apis/userstorage.grafana.app/v0alpha1/namespaces/default/user-storag… → GET /admin/api/users/search#3 → GET /admin/api/users/search#2
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f3"} (schedule: seeded 1, +0-300 ms)
+2. Open "http://localhost:3000/admin/users" and do the same 2 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f3"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f3 (race), generated from run r3.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:3000";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":300},"maxHoldMs":1800};
+
+test("/admin/users: the final state does not depend on response order (GenClass f3)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/admin/users");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "2", exact: true }).or(page.locator("[name=\"2\"], [id=\"2\"]")).first().click();
+  await page.getByRole("button", { name: "3", exact: true }).or(page.locator("[name=\"3\"], [id=\"3\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("jolly-stoat jolly.stoat@example.com Jolly Stoat Never");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("keen-badger keen.badger@example.com Keen Badger Never");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("keen-falcon keen.falcon@example.com Keen Falcon Never");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("eager-stoat eager.stoat@example.com Eager Stoat Never");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("fancy-badger fancy.badger@example.com Fancy Badger Never");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("fancy-falcon fancy.falcon@example.com Fancy Falcon Never");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

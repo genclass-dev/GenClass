@@ -1,0 +1,27 @@
+{
+  "scenario": "sa-search",
+  "delay_ms": 3000,
+  "delayed": "5 of 5 wrong",
+  "control": "0 of 5 wrong",
+  "delayedLines": [
+    "WRONG shows 50 [svc amber falcon, svc amber lynx, svc amber plover, ...] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")",
+    "WRONG shows 50 [svc amber falcon, svc amber lynx, svc amber plover, ...] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")",
+    "WRONG shows 50 [svc amber falcon, svc amber lynx, svc amber plover, ...] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")",
+    "WRONG shows 50 [svc amber falcon, svc amber lynx, svc amber plover, ...] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")",
+    "WRONG shows 50 [svc amber falcon, svc amber lynx, svc amber plover, ...] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")"
+  ],
+  "controlLines": [
+    "OK    shows 2 [svc lunar osprey, svc lunar otter] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")",
+    "OK    shows 2 [svc lunar osprey, svc lunar otter] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")",
+    "OK    shows 2 [svc lunar osprey, svc lunar otter] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")",
+    "OK    shows 2 [svc lunar osprey, svc lunar otter] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")",
+    "OK    shows 2 [svc lunar osprey, svc lunar otter] expected 2 [svc lunar osprey, svc lunar otter] (query \"lunar o\")"
+  ],
+  "requests": [
+    "?perpage=50&page=0&query=&accesscontrol=true",
+    "?perpage=50&page=0&query=l&accesscontrol=true",
+    "?perpage=50&page=0&query=lunar&accesscontrol=true",
+    "?perpage=50&page=0&query=lunar%20&accesscontrol=true",
+    "?perpage=50&page=0&query=lunar%20o&accesscontrol=true"
+  ]
+}
