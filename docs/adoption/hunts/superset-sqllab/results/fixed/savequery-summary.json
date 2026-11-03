@@ -1,0 +1,304 @@
+{
+  "surface": "savequery",
+  "app": "http://localhost:8088",
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "race in 5 of 6",
+      "finding": "f6",
+      "oracleDiffering": "0 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "loads": [
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/HJcspTVomTy#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/exEVdAMHG-d#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        }
+      ],
+      "replay": "- r58: not reproduced · ended with the values of the request-order baseline  The recorded order no longer produces it: the fix holds for this schedule. Run genclass_explore once more to check other orders."
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "race in 2 of 6",
+      "finding": "f9",
+      "oracleDiffering": "0 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "loads": [
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /tabstateview/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /tabstateview/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/VKcLDMiyMiM#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/AOUyFCAcssW#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        }
+      ],
+      "replay": "- r67: not reproduced · ended with the values of the request-order baseline  The recorded order no longer produces it: the fix holds for this schedule. Run genclass_explore once more to check other orders."
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 6 of 6",
+      "finding": "f13",
+      "oracleDiffering": "0 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "loads": [
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "POST /tabstateview/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/tuKaXWTnzyD#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/AnpvltHtSkw#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /tabstateview/:id/migrate_query#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/activate#1"
+          ]
+        },
+        {
+          "savedQueryPosts": 1,
+          "modalOpen": false,
+          "order": [
+            "POST /tabstateview/#1",
+            "POST /api/v1/saved_query/#1",
+            "PUT /tabstateview/:id#1",
+            "POST /tabstateview/:id/migrate_query#1"
+          ]
+        }
+      ],
+      "replay": "- r76: REPRODUCED · the page shows the failing run's text again  The bug is still there under the recorded order."
+    }
+  ]
+}

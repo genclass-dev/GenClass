@@ -1,0 +1,375 @@
+{
+  "surface": "autosave",
+  "app": "http://localhost:8088",
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "no race",
+      "finding": null,
+      "oracleDiffering": "0 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "loads": [
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        }
+      ],
+      "replay": ""
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "no race",
+      "finding": null,
+      "oracleDiffering": "0 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "loads": [
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        }
+      ],
+      "replay": ""
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "no race",
+      "finding": null,
+      "oracleDiffering": "0 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "loads": [
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        },
+        {
+          "puts": [
+            "SELECT 'alpha' AS v",
+            "SELECT 'alpha' AS v -- bravo"
+          ],
+          "server": "SELECT 'alpha' AS v -- bravo",
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "lost": false,
+          "order": [
+            "PUT /tabstateview/:id#1",
+            "PUT /tabstateview/:id#2"
+          ]
+        }
+      ],
+      "replay": ""
+    }
+  ]
+}

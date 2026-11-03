@@ -1,0 +1,255 @@
+{
+  "surface": "format",
+  "app": "http://localhost:8088",
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "race in 6 of 6",
+      "finding": "f12",
+      "oracleDiffering": "6 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "loads": [
+        {
+          "shown": "SELECTavo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECTavo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT-- bravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT- bravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECTravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECTravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT-- bravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT bravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        }
+      ],
+      "replay": "- r36: inconclusive · the page shows neither the failing run's text nor all of the baseline's (missing \"SELECTavo\")  Inconclusive: see the note."
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "race in 5 of 6",
+      "finding": "f19",
+      "oracleDiffering": "5 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "loads": [
+        {
+          "shown": "SELECTbravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECTbravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECTbravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT- bravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECTravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECTvo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        }
+      ],
+      "replay": "- r45: REPRODUCED · the page shows the failing run's text again  The bug is still there under the recorded order."
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 5 of 6",
+      "finding": "f26",
+      "oracleDiffering": "5 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ],
+      "loads": [
+        {
+          "shown": "SELECT\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECTravo\n  'alpha' AS v",
+          "formats": 1,
+          "lost": true,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        }
+      ],
+      "replay": "- r54: inconclusive · the page shows neither the failing run's text nor all of the baseline's (missing \"SELECT\")  Inconclusive: see the note."
+    }
+  ]
+}

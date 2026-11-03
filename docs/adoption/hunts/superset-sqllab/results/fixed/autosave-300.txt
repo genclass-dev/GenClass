@@ -1,0 +1,60 @@
+Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x1"}.
+
+load 1: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+load 2: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+load 3: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+load 4: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+load 5: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+load 6: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+load 7: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+load 8: {"puts":["SELECT 'alpha' AS v","SELECT 'alpha' AS v -- bravo"],"server":"SELECT 'alpha' AS v -- bravo","shown":"SELECT 'alpha' AS v -- bravo","lost":false,"order":["PUT /tabstateview/:id#1","PUT /tabstateview/:id#2"]}
+
+Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click div "SELECT 'alpha' AS v -- bravo"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v -- bravo
+  
+  
+  key textbox "Cursor at row 1"
+Ignored as noise (differs between the two baselines): state y.state12.updatedAt
+No race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.
+Internal state only (not a race by this check): 4 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.
+- run r5 (seed 3):
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 13]", this run "2 items [{error: undefined}, 11]"
+    state "cX.state1": baseline "20", this run "21"
+    state "sqlEditorTabHeader.state0": baseline "50", this run "51"
+- run r6 (seed 4):
+    state "sqlEditorLeftBar_2.state0": baseline "0", this run "(absent)"
+    state "sqlEditorLeftBar_2.state1": baseline "0", this run "(absent)"
+    state "sqlEditorLeftBar_2.state2": baseline "0", this run "(absent)"
+    state "sqlEditorLeftBar_2.state4": baseline "false", this run "(absent)"
+    state "sqlEditorLeftBar_2.state5": baseline "undefined", this run "(absent)"
+    state "sqlEditorLeftBar_2.state6": baseline "undefined", this run "(absent)"
+- run r7 (seed 5):
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 13]", this run "2 items [{error: undefined}, 11]"
+    state "cX.state1": baseline "20", this run "21"
+    state "sqlEditorTabHeader.state0": baseline "50", this run "51"
+
+
+
+
+
+No findings match. Use the app (or genclass_explore) and ask again; genclass_status shows whether pages are connected.

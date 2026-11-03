@@ -1,0 +1,419 @@
+{
+  "autosave": [
+    {
+      "slow_ms": 300,
+      "verdict": "no race",
+      "finding": null,
+      "oracleDiffering": "0 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "replay": "",
+      "oracle": [
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        }
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "race in 2 of 6",
+      "finding": "f3",
+      "oracleDiffering": "2 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "replay": "- r18: REPRODUCED · ended with the same wrong values as the failing run  The bug is still there under the recorded order.",
+      "oracle": [
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 1,
+          "server": "SELECT 'alpha' AS v"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 1,
+          "server": "SELECT 'alpha' AS v"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        }
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 3 of 6",
+      "finding": "f5",
+      "oracleDiffering": "3 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0
+      ],
+      "replay": "- r27: REPRODUCED · ended with the same wrong values as the failing run  The bug is still there under the recorded order.",
+      "oracle": [
+        {
+          "puts": 1,
+          "server": "SELECT 'alpha' AS v"
+        },
+        {
+          "puts": 1,
+          "server": "SELECT 'alpha' AS v"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 1,
+          "server": "SELECT 'alpha' AS v"
+        },
+        {
+          "puts": 1,
+          "server": "SELECT 'alpha' AS v"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "puts": 1,
+          "server": "SELECT 'alpha' AS v"
+        },
+        {
+          "puts": 2,
+          "server": "SELECT 'alpha' AS v -- bravo"
+        }
+      ]
+    }
+  ],
+  "format": [
+    {
+      "slow_ms": 300,
+      "verdict": "race in 6 of 6",
+      "finding": "f12",
+      "oracleDiffering": "6 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "replay": "- r36: inconclusive · the page shows neither the failing run's text nor all of the baseline's (missing \"SELECTavo\")  Inconclusive: see the note.",
+      "oracle": [
+        {
+          "shown": "SELECTavo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECTavo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECT-- bravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECT- bravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECTravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECTravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECT-- bravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECT bravo\n  'alpha' AS v"
+        }
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "race in 5 of 6",
+      "finding": "f19",
+      "oracleDiffering": "5 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "replay": "- r45: REPRODUCED · the page shows the failing run's text again  The bug is still there under the recorded order.",
+      "oracle": [
+        {
+          "shown": "SELECTbravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECTbravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECTbravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECT- bravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECTravo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECTvo\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v"
+        }
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 5 of 6",
+      "finding": "f26",
+      "oracleDiffering": "5 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ],
+      "replay": "- r54: inconclusive · the page shows neither the failing run's text nor all of the baseline's (missing \"SELECT\")  Inconclusive: see the note.",
+      "oracle": [
+        {
+          "shown": "SELECT\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo"
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v -- bravo"
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v -- bravo"
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v -- bravo"
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v"
+        },
+        {
+          "shown": "SELECTravo\n  'alpha' AS v"
+        }
+      ]
+    }
+  ],
+  "savequery": [
+    {
+      "slow_ms": 300,
+      "verdict": "race in 2 of 2",
+      "finding": "f30",
+      "oracleDiffering": "4 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        1,
+        1
+      ],
+      "replay": "- r83: inconclusive · ended with other values: PUT /tabstateview/:id = \"(absent)\", PUT /tabstateview/DMLCgxxbcfm = \"(absent)\"  Inconclusive: see the note.",
+      "oracle": [
+        {
+          "posts": 1
+        },
+        {
+          "posts": 1
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 1
+        },
+        {
+          "posts": 1
+        }
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "no verdict",
+      "finding": null,
+      "oracleDiffering": "6 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "replay": "",
+      "oracle": [
+        {
+          "posts": 1
+        },
+        {
+          "posts": 1
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        }
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "no verdict",
+      "finding": null,
+      "oracleDiffering": "6 of 6",
+      "lostOrDuplicated": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "replay": "",
+      "oracle": [
+        {
+          "posts": 1
+        },
+        {
+          "posts": 1
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        },
+        {
+          "posts": 2
+        }
+      ]
+    }
+  ]
+}

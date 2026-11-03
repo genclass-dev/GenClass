@@ -1,0 +1,255 @@
+{
+  "surface": "format",
+  "app": "http://localhost:8088",
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "no race",
+      "finding": null,
+      "oracleDiffering": "0 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "loads": [
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        }
+      ],
+      "replay": ""
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "no race",
+      "finding": null,
+      "oracleDiffering": "0 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "loads": [
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        }
+      ],
+      "replay": ""
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 3 of 6",
+      "finding": "f1",
+      "oracleDiffering": "3 of 6",
+      "lostOrDuplicated": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "loads": [
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT\n  'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        },
+        {
+          "shown": "SELECT 'alpha' AS v -- bravo",
+          "formats": 1,
+          "lost": false,
+          "order": [
+            "POST /api/v1/sqllab/format_sql/#1"
+          ]
+        }
+      ],
+      "replay": "- r49: REPRODUCED · ended with the same wrong values as the failing run  The bug is still there under the recorded order."
+    }
+  ]
+}

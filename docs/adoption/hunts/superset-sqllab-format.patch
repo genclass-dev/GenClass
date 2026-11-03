@@ -1,0 +1,79 @@
+From e5a49a463807335e57c3c5e98242184ad46a0eec Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 17:06:50 +0000
+Subject: [PATCH] fix(sqllab): keep edits typed while the query is being
+ formatted
+
+formatQuery replaced the editor's SQL with the formatted text whenever
+the /api/v1/sqllab/format_sql/ response arrived. Anything typed after
+pressing Format SQL (or Ctrl+Shift+F) and before a slow response landed
+was overwritten. Apply the formatted text only when the query is still
+the one that was sent.
+
+Generated-by: Claude Code
+---
+ .../src/SqlLab/actions/sqlLab.test.ts         | 31 +++++++++++++++++++
+ .../src/SqlLab/actions/sqlLab.ts              |  5 ++-
+ 2 files changed, 35 insertions(+), 1 deletion(-)
+
+diff --git a/superset-frontend/src/SqlLab/actions/sqlLab.test.ts b/superset-frontend/src/SqlLab/actions/sqlLab.test.ts
+index 43687f67b0..fe4f62a7a7 100644
+--- a/superset-frontend/src/SqlLab/actions/sqlLab.test.ts
++++ b/superset-frontend/src/SqlLab/actions/sqlLab.test.ts
+@@ -223,6 +223,37 @@ describe('async actions', () => {
+       expect(store.getActions()[0].sql).toBe(expectedSql);
+     });
+ 
++    test('keeps the edits made while the query was being formatted', async () => {
++      const queryEditorToFormat = {
++        ...defaultQueryEditor,
++        sql: 'select 1',
++      };
++      let state = {
++        sqlLab: {
++          queryEditors: [queryEditorToFormat],
++          unsavedQueryEditor: {},
++        },
++      };
++      const store = mockStore(() => state);
++      const request = store.dispatch(
++        actions.formatQuery(queryEditorToFormat as unknown as QueryEditor),
++      );
++      // the user keeps typing before the formatted query comes back
++      state = {
++        sqlLab: {
++          ...state.sqlLab,
++          unsavedQueryEditor: {
++            id: queryEditorToFormat.id,
++            sql: 'select 1 -- edited',
++          },
++        },
++      };
++      await request;
++
++      expect(fetchMock.callHistory.calls(formatQueryEndpoint)).toHaveLength(1);
++      expect(store.getActions()).toHaveLength(0);
++    });
++
+     test('sends only sql in request body when no dbId or templateParams', async () => {
+       const queryEditorWithoutExtras = {
+         ...defaultQueryEditor,
+diff --git a/superset-frontend/src/SqlLab/actions/sqlLab.ts b/superset-frontend/src/SqlLab/actions/sqlLab.ts
+index 632fafb1ef..ccb4acb827 100644
+--- a/superset-frontend/src/SqlLab/actions/sqlLab.ts
++++ b/superset-frontend/src/SqlLab/actions/sqlLab.ts
+@@ -1302,7 +1302,10 @@ export function formatQuery(
+       body: JSON.stringify(body),
+       headers: { 'Content-Type': 'application/json' },
+     }).then(({ json }) => {
+-      dispatch(queryEditorSetSql(queryEditor, json.result));
++      // a query edited while it was being formatted keeps the newer edits
++      if (getUpToDateQuery(getState(), queryEditor).sql === sql) {
++        dispatch(queryEditorSetSql(queryEditor, json.result));
++      }
+     });
+   };
+ }
+-- 
+2.43.0
+

@@ -1,0 +1,265 @@
+[genclass-mcp] bridge listening on http://127.0.0.1:37249
+format slow 300 load 1: {"shown":"SELECTavo\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 300 load 2: {"shown":"SELECTavo\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 300 load 3: {"shown":"SELECT-- bravo\n  'alpha' AS v","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 300 load 4: {"shown":"SELECT- bravo\n  'alpha' AS v","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 300 load 5: {"shown":"SELECTravo\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 300 load 6: {"shown":"SELECTravo\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 300 load 7: {"shown":"SELECT-- bravo\n  'alpha' AS v","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 300 load 8: {"shown":"SELECT bravo\n  'alpha' AS v","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+--- format slow_ms=300
+Explore x4: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines (grouped by action kinds and element roles: the recorded element names differed between loads).
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click div "SELECT 'alpha' AS v -- bravo"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v -- bravo
+  
+  
+  key textbox "Cursor at row 1"
+RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r30 (seed 1):
+    page text only in the baseline: "SELECTavo"
+    page text only in this run: "SELECT-- bravo"
+    state "cX.state1": baseline "23", this run "22"
+    state "cX.state3": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECT-- bravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECT-- bravo\\n 'alpha' AS v\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "56"
+    witness only here: overwrote-newer save.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer runQueryAction.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer sqlEditorTabHeader.state0 by POST /api/v1/sqllab/format_sql/
+- run r31 (seed 2):
+    page text only in the baseline: "SELECTavo"
+    page text only in this run: "SELECT- bravo"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 9]"
+    state "cX.state3": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECT- bravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECT- bravo\\n 'alpha' AS v\""
+    witness only here: overwrote-newer cX.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer save.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer runQueryAction.state1 by POST /api/v1/sqllab/format_sql/
+- run r32 (seed 3):
+    page text only in the baseline: "SELECTavo"
+    page text only in this run: "SELECTravo"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 9]"
+    state "cX.state3": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    witness only here: overwrote-newer cX.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer save.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer runQueryAction.state1 by POST /api/v1/sqllab/format_sql/
+- run r33 (seed 4):
+    page text only in the baseline: "SELECTavo"
+    page text only in this run: "SELECTravo"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 9]"
+    state "cX.state3": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    witness only here: overwrote-newer cX.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer save.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer runQueryAction.state1 by POST /api/v1/sqllab/format_sql/
+- run r34 (seed 5):
+    page text only in the baseline: "SELECTavo"
+    page text only in this run: "SELECT-- bravo"
+    state "cX.state1": baseline "23", this run "22"
+    state "cX.state3": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECT-- bravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECT-- bravo\\n 'alpha' AS v\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "56"
+    witness only here: overwrote-newer save.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer runQueryAction.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer sqlEditorTabHeader.state0 by POST /api/v1/sqllab/format_sql/
+- run r35 (seed 6):
+    page text only in the baseline: "SELECTavo"
+    page text only in this run: "SELECT bravo"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 9]"
+    state "cX.state3": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECT bravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTavo\\n 'alpha' AS v\"", this run "\"SELECT bravo\\n 'alpha' AS v\""
+    witness only here: overwrote-newer cX.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer save.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer runQueryAction.state1 by POST /api/v1/sqllab/format_sql/
+
+Race finding(s): f12. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+format slow 600 load 1: {"shown":"SELECTbravo\n  'alpha' AS v","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 600 load 2: {"shown":"SELECTbravo\n  'alpha' AS v","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 600 load 3: {"shown":"SELECTbravo\n  'alpha' AS v","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 600 load 4: {"shown":"SELECT- bravo\n  'alpha' AS v","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 600 load 5: {"shown":"SELECTravo\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 600 load 6: {"shown":"SELECT\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 600 load 7: {"shown":"SELECTvo\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 600 load 8: {"shown":"SELECT\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+--- format slow_ms=600
+Explore x5: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines (grouped by action kinds and element roles: the recorded element names differed between loads).
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click div "SELECT 'alpha' AS v -- bravo"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  type textbox "Cursor at row 1" = SELECTbravo
+  
+  
+  key textbox "Cursor at row 1"
+RACE: 5 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r40 (seed 2):
+    page text only in the baseline: "SELECTbravo"
+    page text only in this run: "SELECT- bravo"
+    state "cX.state3": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECT- bravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECT- bravo\\n 'alpha' AS v\""
+- run r41 (seed 3):
+    page text only in the baseline: "SELECTbravo"
+    page text only in this run: "SELECTravo"
+    state "cX.state3": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    state "sqlEditorLeftBar_2.state0": baseline "0", this run "(absent)"
+    state "sqlEditorLeftBar_2.state1": baseline "0", this run "(absent)"
+    state "sqlEditorLeftBar_2.state2": baseline "0", this run "(absent)"
+    state "sqlEditorLeftBar_2.state4": baseline "false", this run "(absent)"
+- run r42 (seed 4):
+    page text only in the baseline: "SELECTbravo"
+    page text only in this run: "SELECT"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 9]", this run "2 items [{error: undefined}, 10]"
+    state "cX.state3": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v\""
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/sqllab/format_sql/
+- run r43 (seed 5):
+    page text only in the baseline: "SELECTbravo"
+    page text only in this run: "SELECTvo"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 9]", this run "2 items [{error: undefined}, 10]"
+    state "cX.state3": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECTvo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECTvo\\n 'alpha' AS v\""
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/sqllab/format_sql/
+- run r44 (seed 6):
+    page text only in the baseline: "SELECTbravo"
+    page text only in this run: "SELECT"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 9]", this run "2 items [{error: undefined}, 10]"
+    state "cX.state3": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECTbravo\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v\""
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/sqllab/format_sql/
+
+Race finding(s): f19. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+format slow 900 load 1: {"shown":"SELECT\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 900 load 2: {"shown":"SELECT\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 900 load 3: {"shown":"SELECT 'alpha' AS v -- bravo","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 900 load 4: {"shown":"SELECT\n  'alpha' AS v -- bravo","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 900 load 5: {"shown":"SELECT\n  'alpha' AS v -- bravo","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 900 load 6: {"shown":"SELECT\n  'alpha' AS v -- bravo","formats":1,"lost":false,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 900 load 7: {"shown":"SELECT\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+format slow 900 load 8: {"shown":"SELECTravo\n  'alpha' AS v","formats":1,"lost":true,"order":["POST /api/v1/sqllab/format_sql/#1"]}
+--- format slow_ms=900
+Explore x6: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines (grouped by action kinds and element roles: the recorded element names differed between loads).
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click div "SELECT 'alpha' AS v -- bravo"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v -- bravo
+  
+  
+  key textbox "Cursor at row 1"
+RACE: 5 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r48 (seed 1):
+    page text only in the baseline: "2", "SELECT", "'alpha' AS v"
+    page text only in this run: "SELECT 'alpha' AS v -- bravo"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 11]"
+    state "cX.state1": baseline "23", this run "22"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT 'alpha' AS v -- bravo\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT 'alpha' AS v -- bravo\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "53"
+    state "y.state1": baseline "65", this run "62"
+- run r49 (seed 2):
+    page text only in the baseline: "'alpha' AS v"
+    page text only in this run: "'alpha' AS v -- bravo"
+    field "Cursor at row 2": baseline "(absent)", this run "'alpha' AS v -- bravo"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "58"
+    state "y.state1": baseline "65", this run "66"
+- run r50 (seed 3):
+    page text only in the baseline: "'alpha' AS v"
+    page text only in this run: "'alpha' AS v -- bravo"
+    field "Cursor at row 2": baseline "(absent)", this run "'alpha' AS v -- bravo"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "58"
+    state "y.state1": baseline "65", this run "66"
+- run r51 (seed 4):
+    page text only in the baseline: "'alpha' AS v"
+    page text only in this run: "'alpha' AS v -- bravo"
+    field "Cursor at row 2": baseline "(absent)", this run "'alpha' AS v -- bravo"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECT\\n 'alpha' AS v -- bravo\""
+    state "sqlEditorTabHeader.state0": baseline "57", this run "58"
+    state "y.state1": baseline "65", this run "66"
+- run r53 (seed 6):
+    page text only in the baseline: "SELECT"
+    page text only in this run: "SELECTravo"
+    state "Connect_Component.state0": baseline "2 items [{error: undefined}, 10]", this run "2 items [{error: undefined}, 9]"
+    state "cX.state3": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    state "cX.state4": baseline "\"SELECT\\n 'alpha' AS v\"", this run "\"SELECTravo\\n 'alpha' AS v\""
+    witness only here: overwrote-newer cX.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer save.state1 by POST /api/v1/sqllab/format_sql/
+    witness only here: overwrote-newer runQueryAction.state1 by POST /api/v1/sqllab/format_sql/
+
+Race finding(s): f26. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+[
+  {
+    "slow_ms": 300,
+    "verdict": "race in 6 of 6",
+    "finding": "f12",
+    "oracleDiffering": "6 of 6",
+    "lostOrDuplicated": [
+      1,
+      1,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0
+    ],
+    "replay": "- r36: inconclusive · the page shows neither the failing run's text nor all of the baseline's (missing \"SELECTavo\")  Inconclusive: see the note."
+  },
+  {
+    "slow_ms": 600,
+    "verdict": "race in 5 of 6",
+    "finding": "f19",
+    "oracleDiffering": "5 of 6",
+    "lostOrDuplicated": [
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1
+    ],
+    "replay": "- r45: REPRODUCED · the page shows the failing run's text again  The bug is still there under the recorded order."
+  },
+  {
+    "slow_ms": 900,
+    "verdict": "race in 5 of 6",
+    "finding": "f26",
+    "oracleDiffering": "5 of 6",
+    "lostOrDuplicated": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1
+    ],
+    "replay": "- r54: inconclusive · the page shows neither the failing run's text nor all of the baseline's (missing \"SELECT\")  Inconclusive: see the note."
+  }
+]

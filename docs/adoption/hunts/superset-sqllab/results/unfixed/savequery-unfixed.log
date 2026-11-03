@@ -1,0 +1,189 @@
+[genclass-mcp] bridge listening on http://127.0.0.1:41341
+savequery slow 300 load 1: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 300 load 2: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 300 load 3: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#2","PUT /tabstateview/QIhe-lCCyHw#1","POST /api/v1/saved_query/#1","PUT /tabstateview/QIhe-lCCyHw#2"]}
+savequery slow 300 load 4: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","PUT /tabstateview/:id#2"]}
+savequery slow 300 load 5: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/PWLpY_RpdRd#1","POST /api/v1/saved_query/#2","PUT /tabstateview/PWLpY_RpdRd#2"]}
+savequery slow 300 load 6: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#2"]}
+savequery slow 300 load 7: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/DMLCgxxbcfm#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 300 load 8: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+--- savequery slow_ms=300
+Explore x10: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 2 of 6 reordered run(s) against two baselines.
+
+## /sqllab/ · 4 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+Ignored as noise (differs between the two baselines): state Connect_Component.state0, state empty.state0, state empty.state1, state jsSqlToolbar_2.state0, state jsSqlToolbar_2.state1, state jsSqlToolbar_2.state2, state jsSqlToolbar_2.state3, state jsSqlToolbar_2.state4
+RACE: 2 of 2 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r81 (seed 5):
+    page text only in this run: "Untitled Query 8", "Untitled Query 9", "Untitled Query 10", "Untitled Query 11"
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "(absent)"
+    requests sent to "PUT /tabstateview/DMLCgxxbcfm": baseline "(absent)", this run "1"
+    state "clockCircle.state0": baseline "\"00:00:00.239\"", this run "\"00:00:00.329\""
+- run r82 (seed 6):
+    page text only in this run: "Untitled Query 8", "Untitled Query 9", "Untitled Query 10", "Untitled Query 11"
+    state "clockCircle.state0": baseline "\"00:00:00.239\"", this run "\"00:00:00.266\""
+    state "sqlEditorLeftBar_2.state0": baseline "0", this run "false"
+    state "sqlEditorLeftBar_2.state1": baseline "0", this run "\"Sa20SBJtF4p\""
+    state "sqlEditorLeftBar_2.state4": baseline "false", this run "(absent)"
+    state "sqlEditorLeftBar_2.state5": baseline "undefined", this run "(absent)"
+    state "sqlEditorLeftBar_2.state6": baseline "undefined", this run "(absent)"
+
+## /sqllab/ · 4 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+  click button "Save"
+No baseline run in this group (the first two armed loads are the baselines): nothing to compare with.
+
+Race finding(s): f30. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+savequery slow 600 load 1: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 600 load 2: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 600 load 3: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#2"]}
+savequery slow 600 load 4: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","PUT /tabstateview/:id#2"]}
+savequery slow 600 load 5: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#2"]}
+savequery slow 600 load 6: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#2"]}
+savequery slow 600 load 7: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 600 load 8: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#2"]}
+--- savequery slow_ms=600
+Explore x11: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 0 of 6 reordered run(s) against two baselines.
+
+## /sqllab/ · 2 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+Ignored as noise (differs between the two baselines): state clockCircle.state0, state sqlEditorLeftBar_3.state1, text "Untitled Query N"
+No verdict: 0 reordered runs were compared in this group (the reordered loads recorded other user actions: see the other groups).
+
+## /sqllab/ · 6 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+  click button "Save"
+No baseline run in this group (the first two armed loads are the baselines): nothing to compare with.
+
+savequery slow 900 load 1: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 900 load 2: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+savequery slow 900 load 3: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#2"]}
+savequery slow 900 load 4: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","PUT /tabstateview/:id#2"]}
+savequery slow 900 load 5: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/xiPXvCKz-Sh#1","POST /api/v1/saved_query/#2","PUT /tabstateview/xiPXvCKz-Sh#2"]}
+savequery slow 900 load 6: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#2"]}
+savequery slow 900 load 7: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#2","PUT /tabstateview/:id#1"]}
+savequery slow 900 load 8: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /api/v1/saved_query/#1","PUT /tabstateview/NftVnmJLEko#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#2","PUT /tabstateview/NftVnmJLEko#2"]}
+--- savequery slow_ms=900
+Explore x12: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 0 of 6 reordered run(s) against two baselines.
+
+## /sqllab/ · 2 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+Ignored as noise (differs between the two baselines): state cX.state1, state clockCircle.state0, state sqlEditorLeftBar_3.state1, state sqlEditorTabHeader_2.state0, text "hunt double save"
+No verdict: 0 reordered runs were compared in this group (the reordered loads recorded other user actions: see the other groups).
+
+## /sqllab/ · 6 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+  click button "Save"
+No baseline run in this group (the first two armed loads are the baselines): nothing to compare with.
+
+[
+  {
+    "slow_ms": 300,
+    "verdict": "race in 2 of 2",
+    "finding": "f30",
+    "oracleDiffering": "4 of 6",
+    "lostOrDuplicated": [
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1
+    ],
+    "replay": "- r83: inconclusive · ended with other values: PUT /tabstateview/:id = \"(absent)\", PUT /tabstateview/DMLCgxxbcfm = \"(absent)\"  Inconclusive: see the note."
+  },
+  {
+    "slow_ms": 600,
+    "verdict": "no verdict",
+    "finding": null,
+    "oracleDiffering": "6 of 6",
+    "lostOrDuplicated": [
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "replay": ""
+  },
+  {
+    "slow_ms": 900,
+    "verdict": "no verdict",
+    "finding": null,
+    "oracleDiffering": "6 of 6",
+    "lostOrDuplicated": [
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "replay": ""
+  }
+]

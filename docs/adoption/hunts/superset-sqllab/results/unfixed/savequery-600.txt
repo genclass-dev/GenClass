@@ -1,0 +1,69 @@
+Explore x11 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x11"}.
+
+load 1: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+load 2: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+load 3: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#2"]}
+load 4: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","PUT /tabstateview/:id#2"]}
+load 5: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#2"]}
+load 6: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#2"]}
+load 7: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#2","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+load 8: {"savedQueryPosts":2,"modalOpen":false,"order":["POST /tabstateview/#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#2","PUT /tabstateview/:id#2"]}
+
+Explore x11: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 0 of 6 reordered run(s) against two baselines.
+
+## /sqllab/ · 2 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+Ignored as noise (differs between the two baselines): state clockCircle.state0, state sqlEditorLeftBar_3.state1, text "Untitled Query N"
+No verdict: 0 reordered runs were compared in this group (the reordered loads recorded other user actions: see the other groups).
+
+## /sqllab/ · 6 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+  click button "Save"
+No baseline run in this group (the first two armed loads are the baselines): nothing to compare with.
+
+
+
+
+
+4 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f31 [stale-write] "/sqllab/" · 7× in 4 run(s) · 1 s ago
+  The response to "POST /api/v1/saved_query/" "{label: \"hunt double save\", description: \"\", +4}" overwrote "y.state0" after a newer "POST /tabstateview/" had already written it
+- f32 [stale-write] "/sqllab/" · 3× in 3 run(s) · 2 s ago
+  The response to "POST /api/v1/saved_query/" "{label: \"hunt double save\", description: \"\", +4}" overwrote "Connect_Component.state0" after a newer "POST /tabstateview/:id/migrate_query" had already written it
+- f33 [stale-write] "/sqllab/" · 2× in 2 run(s) · 21 s ago
+  The response to "POST /api/v1/saved_query/" "{label: \"hunt double save\", description: \"\", +4}" overwrote "y.state1" after a newer "POST /api/v1/saved_query/" had already written it
+- f34 [stale-write] "/sqllab/" · 1× in 1 run(s) · 11 s ago
+  The response to "PUT /tabstateview/:id" "form 1 fields" overwrote "Connect_Component_3.state0" after a newer "PUT /tabstateview/:id" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.

@@ -1,0 +1,252 @@
+Explore x8 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x8"}.
+
+load 1: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+load 2: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","POST /tabstateview/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+load 3: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/VKcLDMiyMiM#1"]}
+load 4: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/AOUyFCAcssW#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+load 5: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+load 6: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+load 7: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1"]}
+load 8: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1","POST /tabstateview/:id/migrate_query#1"]}
+
+Explore x8: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /sqllab/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Add tab"
+  click div "SELECT ..."
+  type textbox "Cursor at row 1" = SELECT 'alpha' AS v
+  
+  
+  key textbox "Cursor at row 1"
+  key textbox "Cursor at row 1"
+  click button "Save"
+  type input "Name" = hunt double save
+  click button "Save"
+Ignored as noise (differs between the two baselines): state autoSizer_2.state1, state autoSizer_2.state2, state autoSizer_3.state1, state autoSizer_3.state2, state clockCircle.state0, state sqlEditorLeftBar_3.state1, text "Untitled Query N"
+RACE: 2 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r61 (seed 1):
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "(absent)"
+    requests sent to "PUT /tabstateview/VKcLDMiyMiM": baseline "(absent)", this run "1"
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r62 (seed 2):
+    requests sent to "PUT /tabstateview/:id": baseline "1", this run "(absent)"
+    requests sent to "PUT /tabstateview/AOUyFCAcssW": baseline "(absent)", this run "1"
+Along the way only (not a race by this check): 3 of 6 ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).
+- run r63 (seed 3):
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r64 (seed 4):
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+- run r66 (seed 6):
+    witness only here: overwrote-newer y.state0 by POST /api/v1/saved_query/
+    witness only here: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+
+Race finding(s): f9. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+# f9 · race · "/sqllab/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The final state depends on response order: requests to "PUT /tabstateview/:id" ("1" in request order, "(absent)" under "seed 1"); requests to "PUT /tabstateview/VKcLDMiyMiM" ("(absent)" in request order, "1" under "seed 1") (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x8: 2 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- requests sent to "PUT /tabstateview/:id": baseline "1", failing run "(absent)"
+- requests sent to "PUT /tabstateview/VKcLDMiyMiM": baseline "(absent)", failing run "1"
+- witness in the failing run only: overwrote-newer y.state0 by POST /api/v1/saved_query/
+- witness in the failing run only: overwrote-newer Connect_Component.state0 by POST /api/v1/saved_query/
+
+## Steps of run r61 ("http://localhost:8088/sqllab/", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++4.185s write cX.state1 by action 2: "cX.state1: 9 → 10"
++4.185s write save.state1 by action 2: "save.state1: 14 → 15"
++4.185s write runQueryAction.state1 by action 2: "runQueryAction.state1: 14 → 15"
++4.185s write sqlEditorTabHeader_2.state0 by action 2: "sqlEditorTabHeader_2.state0: 23 → 25"
++4.212s write y.state1 by action 2: "y.state1: 32 → 34"
++4.212s write cX.state3 by action 2: "cX.state3: \"SELECT 'alph'\" → \"SELECT 'alpha'\""
++4.212s write cX.state1 by action 2: "cX.state1: 10 → 11"
++4.212s write save.state1 by action 2: "save.state1: 15 → 16"
++4.212s write runQueryAction.state1 by action 2: "runQueryAction.state1: 15 → 16"
++4.212s write sqlEditorTabHeader_2.state0 by action 2: "sqlEditorTabHeader_2.state0: 25 → 27"
++4.236s write y.state1 by action 2: "y.state1: 34 → 35"
++4.236s write sqlEditorTabHeader_2.state0 by action 2: "sqlEditorTabHeader_2.state0: 27 → 28"
++4.264s write y.state1 by action 2: "y.state1: 35 → 37"
++4.264s write cX.state3 by action 2: "cX.state3: \"SELECT 'alpha'\" → \"SELECT 'alpha' \""
++4.264s write cX.state1 by action 2: "cX.state1: 11 → 12"
++4.264s write save.state1 by action 2: "save.state1: 16 → 17"
++4.264s write runQueryAction.state1 by action 2: "runQueryAction.state1: 16 → 17"
++4.264s write sqlEditorTabHeader_2.state0 by action 2: "sqlEditorTabHeader_2.state0: 28 → 30"
++4.294s write y.state1 by action 2: "y.state1: 37 → 39"
++4.294s write Connect_Component.state0 by action 2: "Connect_Component.state0: 2 items, 1 changed: 10 → 11"
++4.294s write cX.state3 by action 2: "cX.state3: \"SELECT 'alpha' \" → \"SELECT 'alpha' A\""
++4.297s write save.state1 by action 2: "save.state1: 17 → 18"
++4.297s write runQueryAction.state1 by action 2: "runQueryAction.state1: 17 → 18"
++4.297s write sqlEditorTabHeader_2.state0 by action 2: "sqlEditorTabHeader_2.state0: 30 → 31"
++4.324s write y.state1 by action 2: "y.state1: 39 → 41"
++4.325s write cX.state3 by action 2: "cX.state3: \"SELECT 'alpha' A\" → \"SELECT 'alpha' AS\""
++4.325s write cX.state1 by action 2: "cX.state1: 12 → 13"
++4.325s write save.state1 by action 2: "save.state1: 18 → 19"
++4.325s write runQueryAction.state1 by action 2: "runQueryAction.state1: 18 → 19"
++4.325s write sqlEditorTabHeader_2.state0 by action 2: "sqlEditorTabHeader_2.state0: 31 → 33"
++4.352s write y.state1 by action 2: "y.state1: 41 → 43"
++4.352s write cX.state3 by action 2: "cX.state3: \"SELECT 'alpha' AS\" → \"SELECT 'alpha' AS \""
++4.352s write cX.state1 by action 2: "cX.state1: 13 → 14"
++4.352s write save.state1 by action 2: "save.state1: 19 → 20"
++4.352s write runQueryAction.state1 by action 2: "runQueryAction.state1: 19 → 20"
++4.353s write sqlEditorTabHeader_2.state0 by action 2: "sqlEditorTabHeader_2.state0: 33 → 35"
++4.382s write y.state1 by action 2: "y.state1: 43 → 45"
++4.382s write cX.state3 by action 2: "cX.state3: \"SELECT 'alpha' AS \" → \"SELECT 'alpha' AS v\""
++4.382s write cX.state1 by action 2: "cX.state1: 14 → 15"
++4.382s write save.state1 by action 2: "save.state1: 20 → 21"
++4.382s write runQueryAction.state1 by action 2: "runQueryAction.state1: 20 → 21"
++4.382s write sqlEditorTabHeader_2.state0 by action 2: "sqlEditorTabHeader_2.state0: 35 → 37"
++4.405s action 3: key textbox "Cursor at row 1"
++4.407s action 4: key textbox "Cursor at row 1"
++4.413s write y.state1 by action 4: "y.state1: 45 → 46"
++4.413s write Connect_Component.state0 by action 4: "Connect_Component.state0: 2 items, 1 changed: 11 → 12"
++4.417s write Connect_Component_2.state0 by action 4: "Connect_Component_2.state0: 2 items, 1 changed: 2 → 3"
++4.437s write jsSqlToolbar.state0 by action 4: "jsSqlToolbar.state0: 1 → 2"
++4.438s write tq.state1 by action 4: "tq.state1: 0 → 1"
++4.438s write save.state1 by action 4: "save.state1: 21 → 22"
++4.438s write empty_2.state1 by action 4: "empty_2.state1: 0 → 1"
++4.438s write sqlEditorTabHeader_2.state0 by action 4: "sqlEditorTabHeader_2.state0: 37 → 38"
++4.440s write va.state0 by action 4: "va.state0: 0 → 1"
++4.440s send POST /api/v1/sqllab/execute/#1 "{client_id: \"5pPUSvK0RYG\", database_id: 1, +11}" (action 4)
++4.469s write clockCircle.state0 by action 4: "clockCircle.state0: \"00:00:00.00\" → \"00:00:00.061\""
++4.499s write clockCircle.state0 by action 4: "clockCircle.state0: \"00:00:00.061\" → \"00:00:00.090\""
++4.529s write clockCircle.state0 by action 4: "clockCircle.state0: \"00:00:00.090\" → \"00:00:00.120\""
++4.559s write clockCircle.state0 by action 4: "clockCircle.state0: \"00:00:00.120\" → \"00:00:00.150\""
++4.589s write clockCircle.state0 by action 4: "clockCircle.state0: \"00:00:00.150\" → \"00:00:00.180\""
++4.619s write clockCircle.state0 by action 4: "clockCircle.state0: \"00:00:00.180\" → \"00:00:00.210\""
++4.649s write clockCircle.state0 by action 4: "clockCircle.state0: \"00:00:00.210\" → \"00:00:00.240\""
++4.679s delivered POST /api/v1/sqllab/execute/#1 (held 173 ms)
++4.679s write clockCircle.state0 by action 4: "clockCircle.state0: \"00:00:00.240\" → \"00:00:00.270\""
++4.687s write Connect_Component.state0 by POST /api/v1/sqllab/execute/#1: "Connect_Component.state0: 2 items, 1 changed: 12 → 13"
++4.692s write Connect_Component_2.state0: "Connect_Component_2.state0: 2 items, 1 changed: 3 → 4"
++4.735s write jsSqlToolbar.state0: "jsSqlToolbar.state0: 2 → 3"
++4.735s write tq.state1: "tq.state1: 1 → 2"
++4.735s write save.state7: "save.state7: 0 → 1"
++4.735s write empty_2.state1: "empty_2.state1: 1 → 2"
++4.735s write sqlEditorTabHeader_2.state1: "sqlEditorTabHeader_2.state1: 0 → 1"
++4.791s write agColumnHeader.state2: "agColumnHeader.state2: undefined → null"
++4.983s write cX.state4 by action 2: "cX.state4: \"SELECT ...\" → \"SELECT 'alpha' AS v\""
++5.833s action 5: click button "Save"
++5.839s write save.state4 by action 5: "save.state4: false → true"
++5.870s write saveQueryModal.state0 by action 5: "saveQueryModal.state0: false → true"
++5.870s write saveQueryModal_2.state1 by action 5: "saveQueryModal_2.state1: false → true"
++5.891s action 6: type input "Name" = "hunt double save"
++5.896s write save.state3 by action 6: "save.state3: \"Untitled Query 40\" → \"hunt double save\""
++6.197s send GET /api/v1/database/:id#1 via timer 5.00s
++6.281s action 7: click button "Save"
++6.287s write save.state5 by action 7: "save.state5: false → true"
++6.288s send POST /api/v1/saved_query/#1 "{label: \"hunt double save\", description: \"\", +4}" (action 7)
++6.309s write oJ.state6: "oJ.state6: false → true"
++6.309s write oJ.state0: "oJ.state0: null → \"rgba(217, 217, 217, 0.01)\""
++6.309s write oJ.state2: "oJ.state2: 0 → -1"
++6.309s write oJ.state3: "oJ.state3: 0 → -1"
++6.309s write oJ.state4: "oJ.state4: 0 → 144"
++6.309s write oJ.state5: "oJ.state5: 0 → 32"
++6.309s write oJ.state1: "oJ.state1: 0 items → 4 items [6, 6, 6, …]"
++6.813s delivered GET /api/v1/database/:id#1 (held 594 ms)
++6.814s send POST /tabstateview/#1 "form 1 fields" via GET /api/v1/database/:id
++6.928s delivered POST /tabstateview/#1 (held 98 ms)
++6.929s send POST /tabstateview/:id/migrate_query#1 "form 1 fields" via POST /tabstateview/
++6.937s write y.state0 by POST /tabstateview/#1: "y.state0: 1 → 2"
++6.937s write Connect_Component.state0 by POST /tabstateview/#1: "Connect_Component.state0: 2 items, 1 changed: 13 → 14"
++6.980s write Connect_Component_2.state0: "Connect_Component_2.state0: 2 items, 1 changed: 4 → 5"
++7.061s delivered POST /tabstateview/:id/migrate_query#1 (held 76 ms)
++7.067s write Connect_Component.state0 by POST /tabstateview/:id/migrate_query#1: "Connect_Component.state0: 2 items, 1 changed: 14 → 15"
++7.070s write Connect_Component_2.state0: "Connect_Component_2.state0: 2 items, 1 changed: 5 → 6"
++7.082s write jsSqlToolbar.state0: "jsSqlToolbar.state0: 3 → 4"
++7.082s write tq.state1: "tq.state1: 2 → 3"
++7.083s write save.state7: "save.state7: 1 → 2"
++7.083s write empty_2.state1: "empty_2.state1: 2 → 3"
++7.093s delivered POST /api/v1/saved_query/#1 (held 787 ms)
++7.094s send PUT /tabstateview/VKcLDMiyMiM#1 "form 1 fields" (action 7) via POST /api/v1/saved_query/
++7.103s write y.state0 by POST /api/v1/saved_query/#1: "y.state0: 2 → 3"
++7.103s write y.state1 by POST /api/v1/saved_query/#1: "y.state1: 46 → 47"
++7.103s write Connect_Component.state0 by POST /api/v1/saved_query/#1: "Connect_Component.state0: 2 items, 1 changed: 15 → 16"
++7.103s write save.state4 by POST /api/v1/saved_query/#1: "save.state4: true → false"
++7.104s write save.state5 by POST /api/v1/saved_query/#1: "save.state5: true → false"
++7.138s write Connect_Component_2.state0: "Connect_Component_2.state0: 2 items, 1 changed: 6 → 7"
++7.377s write saveQueryModal.state0: "saveQueryModal.state0: true → false"
++7.377s write saveQueryModal_2.state0: "saveQueryModal_2.state0: true → false"
++7.388s delivered PUT /tabstateview/VKcLDMiyMiM#1 (held 247 ms)
++7.393s write Connect_Component_3.state0 by PUT /tabstateview/VKcLDMiyMiM#1: "Connect_Component_3.state0: 2 items [null, 0] → 2 items [{error: undefined}, 2]"
++7.399s write oJ.state0: "oJ.state0: \"rgba(217, 217, 217, 0.01)\" → \"rgb(217, 217, 217)\""
++7.400s write oJ.state4: "oJ.state4: 144 → 0"
++7.400s write oJ.state5: "oJ.state5: 32 → 0"
++7.400s write toastContainer.state0: "toastContainer.state0: false → true"
++7.400s write toastContainer_2.state0: "toastContainer_2.state0: false → true"
+
+Delivery order: GET /api/v1/database/#1 → GET /api/v1/database/#2 → GET /api/v1/sqllab/#1 → GET /api/v1/database/:id/schemas/#1 → GET /api/v1/database/:id/function_names/#1 → POST /api/v1/sqllab/execute/#1 → GET /api/v1/database/:id#1 → POST /tabstateview/#1 → POST /tabstateview/:id/migrate_query#1 → POST /api/v1/saved_query/#1 → PUT /tabstateview/VKcLDMiyMiM#1
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f9"} (schedule: seeded 1, +0-600 ms)
+2. Open "http://localhost:8088/sqllab/" and do the same 8 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f9"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f9 (race), generated from run r61.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:8088";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":600},"maxHoldMs":2100};
+
+test("/sqllab/: the final state does not depend on response order (GenClass f9)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/sqllab/");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "Add tab", exact: true }).or(page.locator("[name=\"Add tab\"], [id=\"Add tab\"]")).first().click();
+  await page.getByText("SELECT ...", { exact: true }).first().click();
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().fill("");
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().pressSequentially("SELECT 'alpha' AS v", { delay: 30 });
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().press("Escape");
+  await page.getByRole("textbox", { name: "Cursor at row 1", exact: true }).or(page.locator("[name=\"Cursor at row 1\"], [id=\"Cursor at row 1\"]")).first().press("Enter");
+  await page.getByRole("button", { name: "Save", exact: true }).or(page.locator("[name=\"Save\"], [id=\"Save\"]")).first().click();
+  await page.getByLabel("Name", { exact: true }).or(page.getByPlaceholder("Name", { exact: true })).or(page.getByTitle("Name", { exact: true })).or(page.locator("[name=\"Name\"], [id=\"Name\"]")).first().fill("");
+  await page.getByLabel("Name", { exact: true }).or(page.getByPlaceholder("Name", { exact: true })).or(page.getByTitle("Name", { exact: true })).or(page.locator("[name=\"Name\"], [id=\"Name\"]")).first().pressSequentially("hunt double save", { delay: 60 });
+  await page.getByRole("button", { name: "Save", exact: true }).or(page.locator("[name=\"Save\"], [id=\"Save\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.requests["PUT /tabstateview/:id"] ?? 0, "requests sent, as with responses in request order").toBe(1);
+  expect(snap.requests["PUT /tabstateview/VKcLDMiyMiM"] ?? 0, "requests sent, as with responses in request order").toBe(0);
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```
+
+replay load: {"savedQueryPosts":1,"modalOpen":false,"order":["POST /tabstateview/#1","POST /tabstateview/:id/migrate_query#1","POST /api/v1/saved_query/#1","PUT /tabstateview/:id#1"]}
+Replays of f9:
+- r67: not reproduced · ended with the values of the request-order baseline
+
+The recorded order no longer produces it: the fix holds for this schedule. Run genclass_explore once more to check other orders.
+
+3 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f9 [race] "/sqllab/" · 1× in 1 run(s) · 12 s ago · last replay: not reproduced
+  The final state depends on response order: requests to "PUT /tabstateview/:id" ("1" in request order, "(absent)" under "seed 1"); requests to "PUT /tabstateview/VKcLDMiyMiM" ("(absent)" in request order, "1" under "seed 1")
+- f7 [stale-write] "/sqllab/" · 5× in 5 run(s) · 4 s ago
+  The response to "POST /api/v1/saved_query/" "{label: \"hunt double save\", description: \"\", +4}" overwrote "y.state0" after a newer "POST /tabstateview/" had already written it
+- f8 [stale-write] "/sqllab/" · 5× in 5 run(s) · 4 s ago
+  The response to "POST /api/v1/saved_query/" "{label: \"hunt double save\", description: \"\", +4}" overwrote "Connect_Component.state0" after a newer "POST /tabstateview/:id/migrate_query" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.

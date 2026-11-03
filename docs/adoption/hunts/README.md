@@ -7,6 +7,7 @@ the project's maintainers to take or leave. One report per target; nothing here 
 | target | report | patch and draft text | harness |
 |---|---|---|---|
 | Strapi admin panel (5.59.0) | [strapi.md](strapi.md) | [strapi.patch](strapi.patch), [strapi-issue.md](strapi-issue.md) | [strapi/](strapi/) |
+| Apache Superset SQL Lab (master `730016b8`) | [superset-sqllab.md](superset-sqllab.md) | [superset-sqllab.patch](superset-sqllab.patch) (autosave), [superset-sqllab-format.patch](superset-sqllab-format.patch), [superset-sqllab-savequery.patch](superset-sqllab-savequery.patch), [superset-sqllab-issue.md](superset-sqllab-issue.md) | [superset-sqllab/](superset-sqllab/) |
 
 Every report gives the versions and commits, the exact commands, every scenario with its verdict including the
 negatives, the finding with its evidence in causal order, the root cause, the fix, the test result, the check on the
