@@ -1,0 +1,161 @@
+Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x1"}.
+
+load 1: clients named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /client#1 then POST /client#1 then POST /client#2 then GET /client#2 then GET /client#3]
+load 2: clients named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /client#1 then POST /client#1 then POST /client#2 then GET /client#2 then GET /client#3]
+load 3: clients named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /client#1 then POST /client#2 then GET /client#2 then POST /client#1 then GET /client#3]
+load 4: clients named like the form: 2 [delivered GET /current/user#1 then POST /client#1 then POST /client#2 then GET /client#3 then GET /application#1 then GET /client#2 then GET /client#1]
+load 5: clients named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /client#1 then POST /client#2 then POST /client#1 then GET /client#3 then GET /client#2]
+load 6: clients named like the form: 2 [delivered GET /current/user#1 then POST /client#2 then GET /application#1 then POST /client#1 then GET /client#3 then GET /client#2 then GET /client#1]
+load 7: clients named like the form: 2 [delivered GET /current/user#1 then GET /client#1 then POST /client#1 then POST /client#2 then GET /client#3 then GET /client#2 then GET /application#1]
+load 8: clients named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /client#1 then POST /client#2 then POST /client#1 then GET /client#3 then GET /client#2]
+
+Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## / · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "CREATE CLIENT"
+  type input "Name *" = client create-client-double-15290-1
+  click button "CREATE"
+  click button "CREATE"
+Ignored as noise (differs between the two baselines): state clientDialog.state0, state iL.state0, state iL_2.state0, state iL_3.state0, text "gotify-hunt N N N N", text "N", text "Never", text "client N - -"
+RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r3 (seed 1):
+    page text only in the baseline: "gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 10 minutes ago 2026-11-03"
+    page text only in this run: "gotify-hunt 43m 6d 23h 44m 16 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 11 minutes ago 2026-11-03"
+- run r4 (seed 2):
+    page text only in the baseline: "gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03", "gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 10 minutes ago 2026-11-03", "gotify-hunt 51m 6d 23h 51m 8 minutes ago 2026-11-03"
+    page text only in this run: "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 11 minutes ago 2026-11-03", "gotify-hunt 51m 6d 23h 51m 9 minutes ago 2026-11-03"
+    witness only here: overwrote-newer clientTable.names by GET /client
+- run r5 (seed 3):
+    page text only in the baseline: "gotify-hunt 43m 6d 23h 43m 17 minutes ago 2026-11-03", "gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03", "gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 10 minutes ago 2026-11-03"
+    page text only in this run: "gotify-hunt 42m 6d 23h 42m 17 minutes ago 2026-11-03", "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 11 minutes ago 2026-11-03"
+- run r6 (seed 4):
+    page text only in the baseline: "gotify-hunt 43m 6d 23h 43m 17 minutes ago 2026-11-03", "gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03", "gotify-hunt 44m 6d 23h 44m 15 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 10 minutes ago 2026-11-03"
+    page text only in this run: "gotify-hunt 42m 6d 23h 42m 17 minutes ago 2026-11-03", "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 11 minutes ago 2026-11-03"
+    witness only here: overwrote-newer clientTable.names by GET /client
+- run r7 (seed 5):
+    page text only in the baseline: "gotify-hunt 43m 6d 23h 43m 17 minutes ago 2026-11-03", "gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03", "gotify-hunt 44m 6d 23h 44m 15 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 10 minutes ago 2026-11-03"
+    page text only in this run: "gotify-hunt 42m 6d 23h 42m 17 minutes ago 2026-11-03", "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 11 minutes ago 2026-11-03"
+    witness only here: overwrote-newer clientTable.names by GET /client
+- run r8 (seed 6):
+    page text only in the baseline: "gotify-hunt 43m 6d 23h 43m 17 minutes ago 2026-11-03", "gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03", "gotify-hunt 44m 6d 23h 44m 15 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 10 minutes ago 2026-11-03"
+    page text only in this run: "gotify-hunt 42m 6d 23h 42m 17 minutes ago 2026-11-03", "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03", "gotify-hunt 49m 6d 23h 49m 11 minutes ago 2026-11-03"
+
+Race finding(s): f2. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+2 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f2 [race] "/" · 1× in 1 run(s) · 0 s ago
+  The page depends on response order: it shows "gotify-hunt 43m 6d 23h 44m 16 minutes ago 2026-11-03" under "seed 1", not in request order
+- f1 [stale-write] "/" · 3× in 3 run(s) · 4 s ago
+  The response to "GET /client" overwrote "clientTable.names" after a newer "GET /client" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f2 · race · "/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "gotify-hunt 43m 6d 23h 44m 16 minutes ago 2026-11-03" under "seed 1", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x1: 6 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- page text in the baseline only: "gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03"
+- page text in the baseline only: "gotify-hunt 49m 6d 23h 49m 10 minutes ago 2026-11-03"
+- page text in the failing run only: "gotify-hunt 43m 6d 23h 44m 16 minutes ago 2026-11-03"
+- page text in the failing run only: "gotify-hunt 49m 6d 23h 49m 11 minutes ago 2026-11-03"
+
+## Steps of run r3 ("http://localhost:8080/#/clients", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++0.081s send GET /current/user#1
++0.113s write messages.spinner: "messages.spinner: false → true"
++0.239s delivered GET /current/user#1 (held 123 ms)
++0.241s send GET /application#1 via GET /current/user
++0.257s send GET /client#1 via GET /current/user
++0.257s write heading.text by GET /current/user#1: "heading.text: \"\" → \"Clients\""
++0.258s write messages.spinner by GET /current/user#1: "messages.spinner: true → false"
++0.305s delivered GET /application#1 (held 41 ms)
++0.328s write navigation.apps by GET /application#1: "navigation.apps: \"\" → \"Backup | Hunt | app create-app…\" (inserts \"Backup | Hunt | app create-…\")"
++0.338s delivered GET /client#1 (held 74 ms)
++0.380s write iL.state0 by GET /client#1: "iL.state0: 1793724910384 → 1793724910390"
++0.381s write iL_2.state0 by GET /client#1: "iL_2.state0: 1793724910384 → 1793724910390"
++0.381s write iL_3.state0 by GET /client#1: "iL_3.state0: 1793724910384 → 1793724910390"
++0.381s write clientTable.names by GET /client#1: "clientTable.names: \"\" → \"gotify-hunt | gotify-hunt | go…\" (inserts \"gotify-hunt | gotify-hunt |…\")"
++0.414s write qf.state0: "qf.state0: false → true"
++0.415s action 0: click button "CREATE CLIENT"
++0.458s write muiFocusable.state0 by action 0: "muiFocusable.state0: \"exited\" → \"entering\""
++0.458s write df_2.state0 by action 0: "df_2.state0: \"exited\" → \"entering\""
++0.478s action 1: type input "Name *" = "client create-client-double-15290-3"
++0.480s write clientDialog.state0 by action 1: "clientDialog.state0: \"\" → \"client create-client-double-15…\" (inserts \"client create-client-double…\")"
++0.527s write qf_2.state0: "qf_2.state0: false → true"
++0.527s action 2: click button "CREATE"
++0.529s send POST /client#1 "{name: \"client create-client-do…\", +1}" (action 2)
++0.579s write qf_3.state0: "qf_3.state0: false → true"
++0.579s action 3: click button "CREATE"
++0.580s send POST /client#2 "{name: \"client create-client-do…\", +1}" (action 3)
++0.683s write muiFocusable.state0 by action 0: "muiFocusable.state0: \"entering\" → \"entered\""
++0.683s write df_2.state0 by action 0: "df_2.state0: \"entering\" → \"entered\""
++0.784s delivered POST /client#2 (held 195 ms)
++0.784s send GET /client#2 (action 3) via POST /client
++0.924s delivered GET /client#2 (held 135 ms)
++0.942s write clientTable.names by GET /client#2: "clientTable.names: \"…double-15290-2\" → \"…double-15290-2 | client create…\" (inserts \" | client creat…"
++0.979s write notistackSnackbar_2.status: "notistackSnackbar_2.status: \"exited\" → \"entering\""
++0.980s write muiFocusable.state0: "muiFocusable.state0: \"entered\" → \"entering\""
++0.980s write df_2.state0: "df_2.state0: \"entered\" → \"entering\""
++0.982s delivered POST /client#1 (held 443 ms)
++0.983s send GET /client#3 (action 2) via POST /client
++1.072s delivered GET /client#3 (held 82 ms)
++1.100s write notistackSnackbar_2_2.status: "notistackSnackbar_2_2.status: \"exited\" → \"entering\""
++1.203s write notistackSnackbar_2.status: "notistackSnackbar_2.status: \"entering\" → \"entered\""
++1.205s write muiFocusable.state0: "muiFocusable.state0: \"entering\" → \"entered\""
++1.205s write df_2.state0: "df_2.state0: \"entering\" → \"entered\""
++1.326s write notistackSnackbar_2_2.status: "notistackSnackbar_2_2.status: \"entering\" → \"entered\""
+
+Delivery order: GET /current/user#1 → GET /application#1 → GET /client#1 → POST /client#2 → GET /client#2 → POST /client#1 → GET /client#3
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f2"} (schedule: seeded 1, +0-300 ms)
+2. Open "http://localhost:8080/#/clients" and do the same 4 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f2"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f2 (race), generated from run r3.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:8080";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":300},"maxHoldMs":1800};
+
+test("/: the final state does not depend on response order (GenClass f2)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/#/clients");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "CREATE CLIENT", exact: true }).or(page.locator("[name=\"CREATE CLIENT\"], [id=\"CREATE CLIENT\"]")).first().click();
+  await page.getByLabel("Name *", { exact: true }).or(page.getByPlaceholder("Name *", { exact: true })).or(page.getByTitle("Name *", { exact: true })).or(page.locator("[name=\"Name *\"], [id=\"Name *\"]")).first().fill("");
+  await page.getByLabel("Name *", { exact: true }).or(page.getByPlaceholder("Name *", { exact: true })).or(page.getByTitle("Name *", { exact: true })).or(page.locator("[name=\"Name *\"], [id=\"Name *\"]")).first().pressSequentially("client create-client-double-15290-3", { delay: 60 });
+  await page.getByRole("button", { name: "CREATE", exact: true }).or(page.locator("[name=\"CREATE\"], [id=\"CREATE\"]")).first().click();
+  await page.getByRole("button", { name: "CREATE", exact: true }).or(page.locator("[name=\"CREATE\"], [id=\"CREATE\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("gotify-hunt 49m 6d 23h 49m 10 minutes ago 2026-11-03");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("gotify-hunt 43m 6d 23h 44m 16 minutes ago 2026-11-03");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("gotify-hunt 49m 6d 23h 49m 11 minutes ago 2026-11-03");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

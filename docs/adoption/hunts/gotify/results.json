@@ -1,0 +1,353 @@
+{
+  "unfixed": [
+    {
+      "surface": "create-app-double",
+      "slow_ms": 300,
+      "explore": "no race",
+      "along_the_way": "3 of 6",
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "create-app-double",
+      "slow_ms": 600,
+      "explore": "RACE 1 of 6",
+      "along_the_way": "1 of 6",
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"Backup 0 16 minutes ago 2026-11-03\", \"Hunt 0 16 minutes ago 2026-11-03\"",
+        "page text only in this run: \"Backup 0 17 minutes ago 2026-11-03\", \"Hunt 0 17 minutes ago 2026-11-03\"",
+        "state \"iL.state0\": baseline \"(absent)\", this run \"1793724868894\"",
+        "state \"iL_2.state0\": baseline \"(absent)\", this run \"1793724868894\"",
+        "state \"iL.state0\": baseline \"(absent)\", this run \"1793724852995\"",
+        "state \"iL_2.state0\": baseline \"(absent)\", this run \"1793724852995\"",
+        "state \"iL.state0\": baseline \"(absent)\", this run \"1793724866313\"",
+        "state \"iL_2.state0\": baseline \"(absent)\", this run \"1793724866312\""
+      ]
+    },
+    {
+      "surface": "create-app-double",
+      "slow_ms": 900,
+      "explore": "no race",
+      "along_the_way": "3 of 6",
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": [
+        "state \"iL.state0\": baseline \"(absent)\", this run \"1793724895293\""
+      ]
+    },
+    {
+      "surface": "create-client-double",
+      "slow_ms": 300,
+      "explore": "RACE 6 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03\", \"gotify-hunt 49m 6d 23h 49m 10 minutes ago 2026-11-03\"",
+        "page text only in this run: \"gotify-hunt 43m 6d 23h 44m 16 minutes ago 2026-11-03\", \"gotify-hunt 49m 6d 23h 49m 11 minutes ago 2026-11-03\"",
+        "page text only in the baseline: \"gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03\", \"gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03\", \"gotify-hunt 49m",
+        "page text only in this run: \"gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03\", \"gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03\", \"gotify-hunt 49m 6d ",
+        "page text only in the baseline: \"gotify-hunt 43m 6d 23h 43m 17 minutes ago 2026-11-03\", \"gotify-hunt 44m 6d 23h 44m 16 minutes ago 2026-11-03\", \"gotify-hunt 44m",
+        "page text only in this run: \"gotify-hunt 42m 6d 23h 42m 17 minutes ago 2026-11-03\", \"gotify-hunt 43m 6d 23h 43m 16 minutes ago 2026-11-03\", \"gotify-hunt 43m 6d "
+      ]
+    },
+    {
+      "surface": "create-client-double",
+      "slow_ms": 600,
+      "explore": "RACE 2 of 6",
+      "along_the_way": "2 of 6",
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"gotify-hunt 58m 6d 23h 58m\"",
+        "page text only in this run: \"gotify-hunt 57m 6d 23h 57m\""
+      ]
+    },
+    {
+      "surface": "create-client-double",
+      "slow_ms": 900,
+      "explore": "RACE 5 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"gotify-hunt 53m 6d 23h 55m\", \"gotify-hunt (current) 59m 6d 23h 59m\"",
+        "page text only in this run: \"gotify-hunt 52m 6d 23h 55m\", \"gotify-hunt (current) 58m 6d 23h 58m\""
+      ]
+    },
+    {
+      "surface": "delete-then-leave",
+      "slow_ms": 300,
+      "explore": "RACE 6 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"3m ago\"",
+        "page text only in this run: \"4m ago\"",
+        "page text only in the baseline: \"3m ago\", \"3m ago\"",
+        "page text only in this run: \"4m ago\", \"4m ago\"",
+        "page text only in the baseline: \"3m ago\", \"3m ago\", \"3m ago\"",
+        "page text only in this run: \"4m ago\", \"4m ago\", \"5m ago\"",
+        "page text only in this run: \"4m ago\", \"5m ago\", \"5m ago\""
+      ]
+    },
+    {
+      "surface": "delete-then-leave",
+      "slow_ms": 600,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "delete-then-leave",
+      "slow_ms": 900,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "nav-during-load",
+      "slow_ms": 300,
+      "explore": "RACE 2 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "2 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"Backup\", \"Backup\", \"Backup\", \"Backup\"",
+        "state \"heading.text\": baseline \"\\\"Backup\\\"\", this run \"\\\"Backup | \\\"\"",
+        "state \"messages.spinner\": baseline \"false\", this run \"true\"",
+        "state \"messages.titles\": baseline \"\\\"seed 19 | seed 17 | seed 15 | seed 13 | seed 11…\\\"\", this run \"\\\"\\\"\"",
+        "requests sent to \"GET /application/:id/message\": baseline \"1\", this run \"(absent)\""
+      ]
+    },
+    {
+      "surface": "nav-during-load",
+      "slow_ms": 600,
+      "explore": "RACE 6 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in this run: \"Backup\", \"Backup\", \"Backup\", \"Backup\"",
+        "state \"heading.text\": baseline \"\\\"Backup | \\\"\", this run \"\\\"Backup\\\"\"",
+        "state \"messages.spinner\": baseline \"true\", this run \"false\"",
+        "state \"messages.titles\": baseline \"\\\"\\\"\", this run \"\\\"seed 19 | seed 17 | seed 15 | seed 13 | seed 11…\\\"\"",
+        "state \"iL.state0\": baseline \"(absent)\", this run \"1793724363424\"",
+        "state \"iL_2.state0\": baseline \"(absent)\", this run \"1793724363431\"",
+        "state \"iL_3.state0\": baseline \"(absent)\", this run \"1793724363431\"",
+        "state \"iL.state0\": baseline \"(absent)\", this run \"1793724366307\""
+      ]
+    },
+    {
+      "surface": "nav-during-load",
+      "slow_ms": 900,
+      "explore": "RACE 4 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "2 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in this run: \"Backup\", \"Backup\", \"Backup\", \"Backup\"",
+        "state \"heading.text\": baseline \"\\\"Backup | \\\"\", this run \"\\\"Backup\\\"\"",
+        "state \"messages.spinner\": baseline \"true\", this run \"false\"",
+        "state \"messages.titles\": baseline \"\\\"\\\"\", this run \"\\\"seed 19 | seed 17 | seed 15 | seed 13 | seed 11…\\\"\"",
+        "state \"iL.state0\": baseline \"(absent)\", this run \"1793724388439\"",
+        "state \"iL_2.state0\": baseline \"(absent)\", this run \"1793724388445\"",
+        "state \"iL_3.state0\": baseline \"(absent)\", this run \"1793724388445\"",
+        "state \"iL.state0\": baseline \"(absent)\", this run \"1793724392339\""
+      ]
+    },
+    {
+      "surface": "push-during-load",
+      "slow_ms": 300,
+      "explore": "RACE 6 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"Backup\"",
+        "page text only in this run: \"Hunt\""
+      ]
+    },
+    {
+      "surface": "push-during-load",
+      "slow_ms": 600,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "push-during-load",
+      "slow_ms": 900,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "refresh-once",
+      "slow_ms": 300,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "refresh-once",
+      "slow_ms": 600,
+      "explore": "RACE 4 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"8m ago\", \"8m ago\", \"10m ago\", \"10m ago\"",
+        "page text only in this run: \"9m ago\", \"9m ago\", \"11m ago\", \"11m ago\""
+      ]
+    },
+    {
+      "surface": "refresh-once",
+      "slow_ms": 900,
+      "explore": "RACE 4 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"8m ago\"",
+        "page text only in this run: \"9m ago\""
+      ]
+    },
+    {
+      "surface": "refresh-twice",
+      "slow_ms": 300,
+      "explore": "RACE 1 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "5 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in this run: \"Backup\", \"Hunt\", \"Hunt\", \"Hunt\"",
+        "state \"heading.text\": baseline \"\\\"All Messages | \\\"\", this run \"\\\"All Messages\\\"\"",
+        "state \"messages.spinner\": baseline \"true\", this run \"false\"",
+        "state \"messages.titles\": baseline \"\\\"\\\"\", this run \"\\\"pushed push-during-load-4832-4 | pushed push-du…\\\"\"",
+        "requests sent to \"GET /message\": baseline \"2\", this run \"3\""
+      ]
+    },
+    {
+      "surface": "refresh-twice",
+      "slow_ms": 600,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "refresh-twice",
+      "slow_ms": 900,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "2 of 2",
+      "oracle_bug_seeded": "6 of 6",
+      "forced": 0,
+      "race_lines": []
+    }
+  ],
+  "fixed": [
+    {
+      "surface": "nav-during-load",
+      "slow_ms": 300,
+      "explore": "RACE 4 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"9m ago\", \"9m ago\", \"9m ago\", \"9m ago\"",
+        "page text only in this run: \"10m ago\", \"10m ago\", \"10m ago\", \"10m ago\""
+      ]
+    },
+    {
+      "surface": "nav-during-load",
+      "slow_ms": 600,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "nav-during-load",
+      "slow_ms": 900,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "refresh-twice",
+      "slow_ms": 300,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "refresh-twice",
+      "slow_ms": 600,
+      "explore": "no race",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": []
+    },
+    {
+      "surface": "refresh-twice",
+      "slow_ms": 900,
+      "explore": "RACE 3 of 6",
+      "along_the_way": null,
+      "oracle_bug_baselines": "0 of 2",
+      "oracle_bug_seeded": "0 of 6",
+      "forced": 0,
+      "race_lines": [
+        "page text only in the baseline: \"11m ago\", \"11m ago\", \"11m ago\", \"11m ago\"",
+        "page text only in this run: \"12m ago\", \"12m ago\", \"12m ago\", \"12m ago\""
+      ]
+    }
+  ]
+}

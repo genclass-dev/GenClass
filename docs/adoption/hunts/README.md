@@ -7,6 +7,7 @@ the project's maintainers to take or leave. One report per target; nothing here 
 | target | report | patch and draft text | harness |
 |---|---|---|---|
 | Strapi admin panel (5.59.0) | [strapi.md](strapi.md) | [strapi.patch](strapi.patch), [strapi-issue.md](strapi-issue.md) | [strapi/](strapi/) |
+| Gotify server WebUI (master `dd06dc7`, v3.1.1) | [gotify.md](gotify.md) | [gotify.patch](gotify.patch), [gotify-issue.md](gotify-issue.md) | [gotify/](gotify/) |
 
 Every report gives the versions and commits, the exact commands, every scenario with its verdict including the
 negatives, the finding with its evidence in causal order, the root cause, the fix, the test result, the check on the

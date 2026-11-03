@@ -1,0 +1,52 @@
+Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x1"}.
+
+load 1: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /application#2 then POST /application#1 then POST /application#2 then GET /application#3 then GET /application#4]
+load 2: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /application#2 then POST /application#1 then POST /application#2 then GET /application#3 then GET /application#4]
+load 3: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /application#2 then POST /application#1 then POST /application#2 then GET /application#4 then GET /application#3]
+load 4: applications named like the form: 2 [delivered GET /current/user#1 then POST /application#2 then POST /application#1 then GET /application#3 then GET /application#1 then GET /application#2 then GET /application#4]
+load 5: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /application#2 then POST /application#1 then GET /application#3 then POST /application#2 then GET /application#4]
+load 6: applications named like the form: 2 [delivered GET /current/user#1 then POST /application#2 then POST /application#1 then GET /application#4 then GET /application#1 then GET /application#2 then GET /application#3]
+load 7: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#2 then POST /application#2 then POST /application#1 then GET /application#3 then GET /application#1 then GET /application#4]
+load 8: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#2 then GET /application#1 then POST /application#1 then GET /application#3 then POST /application#2 then GET /application#4]
+
+Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## / · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "CREATE APPLICATION"
+  type input "Name *" = app create-app-double-14296-1
+  click button "CREATE"
+  click button "CREATE"
+Ignored as noise (differs between the two baselines): state appTable.names, state appDialog.state0, state iL.state0, state iL_2.state0, text "N", text "app N", text "Never", text "app N N"
+No race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.
+Along the way only (not a race by this check): 3 of 6 ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).
+- run r4 (seed 2):
+    witness only here: overwrote-newer navigation.apps by GET /application
+    witness only here: overwrote-newer appTable.names by GET /application
+- run r6 (seed 4):
+    witness only here: overwrote-newer navigation.apps by GET /application
+    witness only here: overwrote-newer appTable.names by GET /application
+- run r7 (seed 5):
+    witness only here: overwrote-newer navigation.apps by GET /application
+    witness only here: overwrote-newer appTable.names by GET /application
+
+2 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f1 [stale-write] "/" · 4× in 3 run(s) · 5 s ago
+  The response to "GET /application" overwrote "navigation.apps" after a newer "GET /application" had already written it
+- f2 [stale-write] "/" · 4× in 3 run(s) · 5 s ago
+  The response to "GET /application" overwrote "appTable.names" after a newer "GET /application" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+

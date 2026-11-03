@@ -1,0 +1,75 @@
+diff --git a/ui/src/message/MessagesStore.ts b/ui/src/message/MessagesStore.ts
+index e72ac55..02028ab 100644
+--- a/ui/src/message/MessagesStore.ts
++++ b/ui/src/message/MessagesStore.ts
+@@ -25,7 +25,7 @@ export class MessagesStore {
+     @observable private accessor state: Record<string, MessagesState> = {};
+     @observable private accessor pendingDeletes: Map<number, PendingDelete> = observable.map();
+ 
+-    private loading = false;
++    private loading = new Set<MessagesState>();
+ 
+     public constructor(
+         private readonly appStore: BaseStore<IApplication>,
+@@ -48,10 +48,10 @@ export class MessagesStore {
+     @action
+     public loadMore = async (appId: number) => {
+         const state = this.stateOf(appId);
+-        if (!state.hasMore || this.loading) {
++        if (!state.hasMore || this.loading.has(state)) {
+             return Promise.resolve();
+         }
+-        this.loading = true;
++        this.loading.add(state);
+ 
+         try {
+             const pagedResult = await this.fetchMessages(appId, state.nextSince).then(
+@@ -64,7 +64,7 @@ export class MessagesStore {
+                 state.loaded = true;
+             });
+         } finally {
+-            this.loading = false;
++            this.loading.delete(state);
+         }
+ 
+         return Promise.resolve();
+diff --git a/ui/src/tests/message.test.ts b/ui/src/tests/message.test.ts
+index d9b4172..b69f7e0 100644
+--- a/ui/src/tests/message.test.ts
++++ b/ui/src/tests/message.test.ts
+@@ -1,5 +1,5 @@
+ // todo before all tests jest start puppeteer
+-import {Page} from 'puppeteer';
++import {HTTPRequest, Page} from 'puppeteer';
+ import {newTest, GotifyTest} from './setup';
+ import {
+     clearField,
+@@ -309,5 +309,28 @@ describe('Messages', () => {
+         await waitForExists(page, '.message .title', backup3.title);
+         expect(await extractMessages(1)).toEqual([backup3]);
+     });
++    it('loads an app opened while all messages are still loading', async () => {
++        let release = () => {};
++        const held = new Promise<void>((resolve) => (release = resolve));
++        const holdAllMessages = (request: HTTPRequest) => {
++            if (request.url().endsWith('/message?since=0')) {
++                held.then(() => request.continue());
++            } else {
++                request.continue();
++            }
++        };
++        await page.setRequestInterception(true);
++        page.on('request', holdAllMessages);
++        try {
++            await page.reload();
++            await navigate('Backup');
++            release();
++            expect(await extractMessages(1)).toEqual([backup3]);
++        } finally {
++            page.off('request', holdAllMessages);
++            await page.setRequestInterception(false);
++        }
++        await navigate('All Messages');
++    });
+     it('does logout', async () => await auth.logout(page));
+ });

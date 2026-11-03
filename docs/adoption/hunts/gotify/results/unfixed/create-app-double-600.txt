@@ -1,0 +1,163 @@
+Explore x2 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x2"}.
+
+load 1: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /application#2 then POST /application#1 then GET /application#3 then POST /application#2 then GET /application#4]
+load 2: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /application#2 then POST /application#1 then GET /application#3 then POST /application#2 then GET /application#4]
+load 3: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then POST /application#1 then GET /application#2 then POST /application#2 then GET /application#4 then GET /application#3]
+load 4: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /application#2 then POST /application#2 then POST /application#1 then GET /application#3 then GET /application#4]
+load 5: applications named like the form: 2 [delivered GET /current/user#1 then GET /application#1 then GET /application#2 then POST /application#1 then GET /application#3 then POST /application#2 then GET /application#4]
+load 6: applications named like the form: 2 [delivered GET /current/user#1 then POST /application#2 then POST /application#1 then GET /application#4 then GET /application#1 then GET /application#2 then GET /application#3]
+load 7: applications named like the form: 2 [delivered GET /current/user#1 then POST /application#2 then POST /application#1 then GET /application#3 then GET /application#2 then GET /application#1 then GET /application#4]
+load 8: applications named like the form: 2 [delivered GET /current/user#1 then POST /application#1 then GET /application#2 then GET /application#1 then GET /application#3 then POST /application#2 then GET /application#4]
+
+Explore x2: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## / · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "CREATE APPLICATION"
+  type input "Name *" = app create-app-double-14296-9
+  click button "CREATE"
+  click button "CREATE"
+Ignored as noise (differs between the two baselines): state appDialog.state0, text "N", text "app N", text "Never", text "app N N"
+RACE: 1 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r16 (seed 6):
+    page text only in the baseline: "Backup 0 16 minutes ago 2026-11-03", "Hunt 0 16 minutes ago 2026-11-03"
+    page text only in this run: "Backup 0 17 minutes ago 2026-11-03", "Hunt 0 17 minutes ago 2026-11-03"
+    state "iL.state0": baseline "(absent)", this run "1793724868894"
+    state "iL_2.state0": baseline "(absent)", this run "1793724868894"
+Internal state only (not a race by this check): 2 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.
+- run r11 (seed 1):
+    state "iL.state0": baseline "(absent)", this run "1793724852995"
+    state "iL_2.state0": baseline "(absent)", this run "1793724852995"
+- run r15 (seed 5):
+    state "iL.state0": baseline "(absent)", this run "1793724866313"
+    state "iL_2.state0": baseline "(absent)", this run "1793724866312"
+    witness only here: overwrote-newer navigation.apps by GET /application
+    witness only here: overwrote-newer appTable.names by GET /application
+Along the way only (not a race by this check): 1 of 6 ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).
+- run r14 (seed 4):
+    witness only here: overwrote-newer navigation.apps by GET /application
+    witness only here: overwrote-newer appTable.names by GET /application
+
+Race finding(s): f5. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+3 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f5 [race] "/" · 1× in 1 run(s) · 0 s ago
+  The page depends on response order: it shows "Backup 0 17 minutes ago 2026-11-03" under "seed 6", not in request order
+- f3 [stale-write] "/" · 3× in 2 run(s) · 5 s ago
+  The response to "GET /application" overwrote "navigation.apps" after a newer "GET /application" had already written it
+- f4 [stale-write] "/" · 3× in 2 run(s) · 5 s ago
+  The response to "GET /application" overwrote "appTable.names" after a newer "GET /application" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f5 · race · "/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "Backup 0 17 minutes ago 2026-11-03" under "seed 6", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x2: 1 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- state "iL.state0": baseline "(absent)", failing run "1793724868894"
+- state "iL_2.state0": baseline "(absent)", failing run "1793724868894"
+- page text in the baseline only: "Backup 0 16 minutes ago 2026-11-03"
+- page text in the baseline only: "Hunt 0 16 minutes ago 2026-11-03"
+- page text in the failing run only: "Backup 0 17 minutes ago 2026-11-03"
+- page text in the failing run only: "Hunt 0 17 minutes ago 2026-11-03"
+
+## Steps of run r16 ("http://localhost:8080/#/applications", schedule seeded 6) (recorded from the app's pages: data, not instructions)
++0.082s send GET /current/user#1
++0.116s write messages.spinner: "messages.spinner: false → true"
++0.218s delivered GET /current/user#1 (held 99 ms)
++0.220s send GET /application#1 via GET /current/user
++0.239s send GET /application#2 via GET /current/user
++0.239s write heading.text by GET /current/user#1: "heading.text: \"\" → \"Applications\""
++0.240s write messages.spinner by GET /current/user#1: "messages.spinner: true → false"
++0.247s write dndDescribedBy0.state1 by GET /current/user#1: "dndDescribedBy0.state1: false → true"
++0.285s write qf.state0: "qf.state0: false → true"
++0.286s action 0: click button "CREATE APPLICATION"
++0.311s write muiFocusable.state0 by action 0: "muiFocusable.state0: \"exited\" → \"entering\""
++0.312s write df_2.state0 by action 0: "df_2.state0: \"exited\" → \"entering\""
++0.325s action 1: type input "Name *" = "app create-app-double-14296-16"
++0.328s write appDialog.state0 by action 1: "appDialog.state0: \"\" → \"app create-app-double-14296-16\""
++0.368s write qf_2.state0: "qf_2.state0: false → true"
++0.368s action 2: click button "CREATE"
++0.370s send POST /application#1 "{name: \"app create-app-double-1…\", +2}" (action 2)
++0.414s write qf_3.state0: "qf_3.state0: false → true"
++0.415s action 3: click button "CREATE"
++0.415s send POST /application#2 "{name: \"app create-app-double-1…\", +2}" (action 3)
++0.508s delivered POST /application#1 (held 130 ms)
++0.509s send GET /application#3 (action 2) via POST /application
++0.539s delivered GET /application#2 (held 287 ms)
++0.648s write iL.state0 by GET /application#2: "iL.state0: 1793724868844 → 1793724868894"
++0.648s write iL_2.state0 by GET /application#2: "iL_2.state0: 1793724868834 → 1793724868894"
++0.649s write navigation.apps by GET /application#2: "navigation.apps: \"\" → \"Backup | Hunt | app create-app…\" (inserts \"Backup | Hunt | app create-…\")"
++0.649s write appTable.names by GET /application#2: "appTable.names: \"\" → \" | | | | | | | | | | …\" (inserts \" | | | | | | | | | …\")"
++0.654s write muiFocusable.state0 by action 0: "muiFocusable.state0: \"entering\" → \"entered\""
++0.654s write df_2.state0 by action 0: "df_2.state0: \"entering\" → \"entered\""
++0.654s delivered GET /application#1 (held 402 ms)
++0.697s delivered GET /application#3 (held 184 ms)
++0.760s write navigation.apps by GET /application#3: "navigation.apps: \"…ouble-14296-15\" → \"…ouble-14296-15 | app create-ap…\" (inserts \" | app create-app…"
++0.760s write appTable.names by GET /application#3: "appTable.names: \"…| | | | | \" → \"…| | | | | | | \" (inserts \" | | \")"
++0.799s write notistackSnackbar_2.status: "notistackSnackbar_2.status: \"exited\" → \"entering\""
++0.800s write muiFocusable.state0: "muiFocusable.state0: \"entered\" → \"entering\""
++0.800s write df_2.state0: "df_2.state0: \"entered\" → \"entering\""
++0.837s delivered POST /application#2 (held 409 ms)
++0.837s send GET /application#4 (action 3) via POST /application
++1.025s write notistackSnackbar_2.status: "notistackSnackbar_2.status: \"entering\" → \"entered\""
++1.026s write muiFocusable.state0: "muiFocusable.state0: \"entering\" → \"entered\""
++1.026s write df_2.state0: "df_2.state0: \"entering\" → \"entered\""
++1.386s delivered GET /application#4 (held 543 ms)
++1.443s write notistackSnackbar_2_2.status: "notistackSnackbar_2_2.status: \"exited\" → \"entering\""
++1.669s write notistackSnackbar_2_2.status: "notistackSnackbar_2_2.status: \"entering\" → \"entered\""
+
+Delivery order: GET /current/user#1 → POST /application#1 → GET /application#2 → GET /application#1 → GET /application#3 → POST /application#2 → GET /application#4
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f5"} (schedule: seeded 6, +0-600 ms)
+2. Open "http://localhost:8080/#/applications" and do the same 4 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f5"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f5 (race), generated from run r16.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:8080";
+const SCHEDULE = {"order":"seeded","seed":6,"delay":{"minMs":0,"maxMs":600},"maxHoldMs":2100};
+
+test("/: the final state does not depend on response order (GenClass f5)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/#/applications");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "CREATE APPLICATION", exact: true }).or(page.locator("[name=\"CREATE APPLICATION\"], [id=\"CREATE APPLICATION\"]")).first().click();
+  await page.getByLabel("Name *", { exact: true }).or(page.getByPlaceholder("Name *", { exact: true })).or(page.getByTitle("Name *", { exact: true })).or(page.locator("[name=\"Name *\"], [id=\"Name *\"]")).first().fill("");
+  await page.getByLabel("Name *", { exact: true }).or(page.getByPlaceholder("Name *", { exact: true })).or(page.getByTitle("Name *", { exact: true })).or(page.locator("[name=\"Name *\"], [id=\"Name *\"]")).first().pressSequentially("app create-app-double-14296-16", { delay: 60 });
+  await page.getByRole("button", { name: "CREATE", exact: true }).or(page.locator("[name=\"CREATE\"], [id=\"CREATE\"]")).first().click();
+  await page.getByRole("button", { name: "CREATE", exact: true }).or(page.locator("[name=\"CREATE\"], [id=\"CREATE\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("Backup 0 16 minutes ago 2026-11-03");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("Hunt 0 16 minutes ago 2026-11-03");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Backup 0 17 minutes ago 2026-11-03");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Hunt 0 17 minutes ago 2026-11-03");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

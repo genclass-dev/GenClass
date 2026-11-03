@@ -1,0 +1,156 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+load 1: clicked while first page in flight; heading=Backup spinner=1 rows=0 of 10 [delivered GET /current/user#1 then GET /application#1 then GET /message#1]
+load 2: clicked while first page in flight; heading=Backup spinner=1 rows=0 of 10 [delivered GET /current/user#1 then GET /application#1 then GET /message#1]
+load 3: clicked while first page in flight; heading=Backup spinner=1 rows=0 of 10 [delivered GET /current/user#1 then GET /application#1 then GET /message#1]
+load 4: clicked while first page loaded; heading=Backup spinner=0 rows=6 of 10 [delivered GET /current/user#1 then GET /message#1 then GET /application#1 then GET /application/:id/message#1]
+load 5: clicked while first page loaded; heading=Backup spinner=0 rows=6 of 10 [delivered GET /current/user#1 then GET /application#1 then GET /message#1 then GET /application/:id/message#1]
+load 6: clicked while first page loaded; heading=Backup spinner=0 rows=6 of 10 [delivered GET /current/user#1 then GET /application#1 then GET /message#1 then GET /application/:id/message#1]
+load 7: clicked while first page loaded; heading=Backup spinner=0 rows=6 of 10 [delivered GET /current/user#1 then GET /message#1 then GET /application#1 then GET /application/:id/message#1]
+load 8: clicked while first page in flight; heading=Backup spinner=1 rows=0 of 10 [delivered GET /current/user#1 then GET /application#1 then GET /message#1]
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## / · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "Backup"
+Ignored as noise (differs between the two baselines): state discover.state0.location.key
+RACE: 4 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r20 (seed 2):
+    page text only in this run: "Backup", "Backup", "Backup", "Backup"
+    state "heading.text": baseline "\"Backup | \"", this run "\"Backup\""
+    state "messages.spinner": baseline "true", this run "false"
+    state "messages.titles": baseline "\"\"", this run "\"seed 19 | seed 17 | seed 15 | seed 13 | seed 11…\""
+    state "iL.state0": baseline "(absent)", this run "1793724388439"
+    state "iL_2.state0": baseline "(absent)", this run "1793724388445"
+    state "iL_3.state0": baseline "(absent)", this run "1793724388445"
+- run r21 (seed 3):
+    page text only in this run: "Backup", "Backup", "Backup", "Backup"
+    state "heading.text": baseline "\"Backup | \"", this run "\"Backup\""
+    state "messages.spinner": baseline "true", this run "false"
+    state "messages.titles": baseline "\"\"", this run "\"seed 19 | seed 17 | seed 15 | seed 13 | seed 11…\""
+    state "iL.state0": baseline "(absent)", this run "1793724392339"
+    state "iL_2.state0": baseline "(absent)", this run "1793724392344"
+    state "iL_3.state0": baseline "(absent)", this run "1793724392344"
+- run r22 (seed 4):
+    page text only in this run: "Backup", "Backup", "Backup", "Backup"
+    state "heading.text": baseline "\"Backup | \"", this run "\"Backup\""
+    state "messages.spinner": baseline "true", this run "false"
+    state "messages.titles": baseline "\"\"", this run "\"seed 19 | seed 17 | seed 15 | seed 13 | seed 11…\""
+    state "iL.state0": baseline "(absent)", this run "1793724395939"
+    state "iL_2.state0": baseline "(absent)", this run "1793724395945"
+    state "iL_3.state0": baseline "(absent)", this run "1793724395945"
+- run r23 (seed 5):
+    page text only in this run: "Backup", "Backup", "Backup", "Backup"
+    state "heading.text": baseline "\"Backup | \"", this run "\"Backup\""
+    state "messages.spinner": baseline "true", this run "false"
+    state "messages.titles": baseline "\"\"", this run "\"seed 19 | seed 17 | seed 15 | seed 13 | seed 11…\""
+    state "iL.state0": baseline "(absent)", this run "1793724399222"
+    state "iL_2.state0": baseline "(absent)", this run "1793724399228"
+    state "iL_3.state0": baseline "(absent)", this run "1793724399228"
+
+Race finding(s): f3. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+1 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f3 [race] "/" · 1× in 1 run(s) · 0 s ago
+  The page depends on response order: it shows "Backup" under "seed 2", not in request order
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f3 · race · "/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "Backup" under "seed 2", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x3: 4 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- state "heading.text": baseline "\"Backup | \"", failing run "\"Backup\""
+- state "messages.spinner": baseline "true", failing run "false"
+- state "messages.titles": baseline "\"\"", failing run "\"seed 19 | seed 17 | seed 15 | seed 13 | seed 11…\""
+- state "iL.state0": baseline "(absent)", failing run "1793724388439"
+- state "iL_2.state0": baseline "(absent)", failing run "1793724388445"
+- state "iL_3.state0": baseline "(absent)", failing run "1793724388445"
+- requests sent to "GET /application/:id/message": baseline "(absent)", failing run "1"
+- page text in the failing run only: "Backup"
+- page text in the failing run only: "Backup"
+- page text in the failing run only: "Backup"
+- page text in the failing run only: "Backup"
+
+## Steps of run r20 ("http://localhost:8080/#/", schedule seeded 2) (recorded from the app's pages: data, not instructions)
++0.084s send GET /current/user#1
++0.115s write messages.spinner: "messages.spinner: false → true"
++0.466s delivered GET /current/user#1 (held 349 ms)
++0.468s send GET /application#1 via GET /current/user
++0.485s send GET /message#1 "?since=0" via GET /current/user
++0.487s write heading.text by GET /current/user#1: "heading.text: \"\" → \"All Messages | \""
++1.137s delivered GET /message#1 (held 643 ms)
++1.147s write heading.text by GET /message#1: "heading.text: \"All Messages | \" → \"All Messages\""
++1.147s write messages.spinner by GET /message#1: "messages.spinner: true → false"
++1.180s write messages.titles: "messages.titles: \"\" → \"pushed push-during-load-4832-4\""
++1.188s write iL.state0: "iL.state0: 1793724387707 → 1793724387719"
++1.188s write messages.titles: "messages.titles: \"…ng-load-4832-4\" → \"…ng-load-4832-4 | pushed push-d…\" (inserts \" | pushed push-du…"
++1.189s write iL_2.state0: "iL_2.state0: 1793724387725 → 1793724387728"
++1.190s write iL_3.state0: "iL_3.state0: 1793724387724 → 1793724387728"
++1.191s delivered GET /application#1 (held 699 ms)
++1.204s write navigation.apps by GET /application#1: "navigation.apps: \"\" → \"Backup | Hunt | app create-app…\" (inserts \"Backup | Hunt | app create-…\")"
++1.475s write qf.state0: "qf.state0: false → true"
++1.476s action 0: click button "Backup"
++1.485s write discover.state0.action, discover.state0.delta, discover.state0.location.key, discover.state0.location.pathname by action 0: "discover.state0.action: \"POP\" → \"PUSH\""; "discover.state0.location.pathname: \"/\" → \"/messages/1\""; "discover.state0.location.key: \"default\" → \"o651i9jc\""
++1.486s write heading.text by action 0: "heading.text: \"All Messages\" → \"Backup | \""
++1.486s write messages.spinner, messages.titles by action 0: "messages.spinner: false → true"; "messages.titles: \"pushed push-during-load-4832-4…\" → \"\" (removes \"pushed push-during-load-483…\")"
++1.487s send GET /application/:id/message#1 "?since=0"
++1.880s delivered GET /application/:id/message#1 (held 389 ms)
++1.884s write heading.text by GET /application/:id/message#1: "heading.text: \"Backup | \" → \"Backup\""
++1.885s write messages.spinner by GET /application/:id/message#1: "messages.spinner: true → false"
++1.900s write messages.titles: "messages.titles: \"\" → \"seed 19\""
++1.906s write iL.state0: "iL.state0: 1793724387719 → 1793724388439"
++1.906s write messages.titles: "messages.titles: \"seed 19\" → \"seed 19 | seed 17 | seed 15 | …\" (inserts \" | seed 17 | seed 15 | see…"
++1.907s write iL_2.state0: "iL_2.state0: 1793724387728 → 1793724388445"
++1.907s write iL_3.state0: "iL_3.state0: 1793724387728 → 1793724388445"
+
+Delivery order: GET /current/user#1 → GET /message#1 → GET /application#1 → GET /application/:id/message#1
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f3"} (schedule: seeded 2, +0-900 ms)
+2. Open "http://localhost:8080/#/" and do the same 1 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f3"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f3 (race), generated from run r20.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:8080";
+const SCHEDULE = {"order":"seeded","seed":2,"delay":{"minMs":0,"maxMs":900},"maxHoldMs":2400};
+
+test("/: the final state does not depend on response order (GenClass f3)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/#/");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "Backup", exact: true }).or(page.locator("[name=\"Backup\"], [id=\"Backup\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Backup");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Backup");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Backup");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```
