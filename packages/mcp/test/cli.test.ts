@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CLIENTS } from "../src/clients.js";
-import { SKILL_MARK, SKILL_PATH, configCmd, hookCmd, init, runCli, skillText } from "../src/cli.js";
+import { OPENCODE_COMMAND_PATH, SKILL_MARK, SKILL_PATH, configCmd, hookCmd, init, opencodeCommandText, runCli, skillText } from "../src/cli.js";
 import { VERSION } from "../src/http.js";
 import { startBridge, type Bridge } from "../src/http.js";
 import { Store } from "../src/store.js";
@@ -105,6 +105,39 @@ describe("cli (AGENT.md §4.4)", () => {
     expect(init(b, false)).toBe(0);
     expect(readFileSync(file, "utf8")).toBe("---\nname: genclass\ndescription: mine\n---\n\n# mine\n");
     expect(b.o.join("")).toContain(`${SKILL_PATH} exists without the ${SKILL_MARK} marker (yours, or edited); leaving it.`);
+  });
+
+  it("init writes the OpenCode command only when the project has .opencode/, replaces its own and leaves the user's", () => {
+    const none = mkdtempSync(join(tmpdir(), "gc-init-"));
+    const n = io(none);
+    expect(init(n, false)).toBe(0);
+    expect(existsSync(join(none, ".opencode"))).toBe(false);
+    expect(n.o.join("")).not.toContain("OpenCode");
+
+    const dir = mkdtempSync(join(tmpdir(), "gc-init-"));
+    mkdirSync(join(dir, ".opencode"));
+    const file = join(dir, OPENCODE_COMMAND_PATH);
+    const a = io(dir);
+    expect(init(a, false)).toBe(0);
+    const text = readFileSync(file, "utf8");
+    expect(text).toBe(opencodeCommandText(VERSION));
+    expect(text.startsWith("---\ndescription: Explore response orders on a page with GenClass\n# genclass:init: ")).toBe(true);
+    expect(text).toContain(`@genclass/mcp@${VERSION} init`);
+    expect(text).toContain("$1");
+    expect(text).toContain("window.__GENCLASS_AGENT__.whenSettled()");
+    expect(a.o.join("")).toContain(`Wrote the OpenCode command /genclass-explore to ${file}`);
+    // an older init's file: replaced
+    writeFileSync(file, `---\ndescription: old\n# ${SKILL_MARK}: older\n---\nstale\n`);
+    const b2 = io(dir);
+    expect(init(b2, false)).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe(opencodeCommandText(VERSION));
+    expect(b2.o.join("")).toContain(`Replaced the OpenCode command at ${file}`);
+    // the user's own: left alone
+    writeFileSync(file, "---\ndescription: mine\n---\nmine\n");
+    const c = io(dir);
+    expect(init(c, false)).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe("---\ndescription: mine\n---\nmine\n");
+    expect(c.o.join("")).toContain(`${OPENCODE_COMMAND_PATH} exists without the ${SKILL_MARK} marker`);
   });
 
   it("init --no-skill writes .mcp.json and nothing under .claude", async () => {

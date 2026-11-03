@@ -262,7 +262,7 @@ AI Assistant: Settings, Tools, AI Assistant, Model Context Protocol (MCP), Add, 
 
 ### OpenCode
 
-`opencode.json` in the project (`~/.config/opencode/opencode.json` for all projects), or `opencode mcp add`:
+`opencode.json` in the project (`~/.config/opencode/opencode.json` for all projects):
 
 ```json
 {
@@ -280,6 +280,14 @@ AI Assistant: Settings, Tools, AI Assistant, Model Context Protocol (MCP), Add, 
   }
 }
 ```
+
+Or from the command line. OpenCode 1.x writes it to the global configuration (`~/.config/opencode/opencode.jsonc` when there is none yet), so use the JSON above for one project; OpenCode 2.x writes the project's `opencode.json` (as `mcp.servers.genclass`; `--global` for the global one):
+
+```bash
+opencode mcp add genclass -- npx -y @genclass/mcp@0.2.1
+```
+
+OpenCode also loads the `genclass` skill from `.claude/skills/`, where `npx -y @genclass/mcp@0.2.1 init` writes it, and from `.agents/skills/`, where `npx skills add genclass-dev/genclass-plugin -a opencode` installs it.
 
 <!-- install:end -->
 

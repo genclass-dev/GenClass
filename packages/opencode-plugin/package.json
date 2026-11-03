@@ -1,0 +1,63 @@
+{
+  "name": "opencode-genclass",
+  "version": "0.1.0",
+  "description": "GenClass for OpenCode: registers the GenClass MCP server (@genclass/mcp, race conditions found by replaying your app's network responses in different orders) and brings findings recorded since the last prompt into each prompt. One plugin for OpenCode 1.x and 2.x. No dependencies.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/genclass-dev/GenClass-lib.git",
+    "directory": "packages/opencode-plugin"
+  },
+  "homepage": "https://github.com/genclass-dev/GenClass-lib/tree/main/packages/opencode-plugin#readme",
+  "bugs": { "url": "https://github.com/genclass-dev/GenClass-lib/issues" },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "mcp",
+    "coding-agent",
+    "race-condition",
+    "stale-response",
+    "debugging",
+    "genclass"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

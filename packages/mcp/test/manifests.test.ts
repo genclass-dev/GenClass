@@ -73,6 +73,10 @@ const PINS: Pin[] = [
   { file: "skills/genclass/SKILL.md", text: () => read("packages/mcp/plugin/skills/genclass/SKILL.md") },
   { file: "llms-install.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "docs/adoption/listings/mcp.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  { file: "docs/adoption/listings/opencode.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  // the OpenCode plugin (packages/opencode-plugin) starts this exact server
+  { file: "packages/opencode-plugin/src/index.ts", text: (s) => s.replace(PINNED, pinned(V)) },
+  { file: "packages/opencode-plugin/README.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "docs/runtime/AGENT.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "README.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "packages/runtime/README.md", text: (s) => s.replace(PINNED, pinned(V)) },
