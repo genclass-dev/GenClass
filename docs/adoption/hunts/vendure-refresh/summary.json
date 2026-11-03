@@ -1,0 +1,529 @@
+{
+  "date": "2026-11-03",
+  "vendure": {
+    "repo": "vendurehq/vendure",
+    "commit": "f97b18759178bd22cbd88062edcff6c308652342",
+    "version": "3.8.1"
+  },
+  "genclass": {
+    "commit": "c1c9e14",
+    "runtime": "packages/runtime/dist (script tag + agent link)",
+    "mcp": "@genclass/mcp 0.2.1 in-process"
+  },
+  "browser": "Chromium 153.0.8010.12 headless",
+  "node": "22.23.4",
+  "bun": "1.4.4",
+  "method": "docs/adoption/hunts/vendure-hunt.mjs, TRIALS=3, GAPS=0,30,80,150, ENTITIES=collection,product,facet,customer, LATENCY=0, production builds of the dashboard (vite build + vite preview) against the SQLite dev server",
+  "sweeps": {
+    "master-nogc": {
+      "label": "refresh-master-nogc",
+      "base": "http://localhost:5175",
+      "latencyMs": 0,
+      "genclass": false,
+      "failed": 0,
+      "errors": [
+        "The email address is not available."
+      ],
+      "total": {
+        "create": {
+          "trials": 48,
+          "twoMutations": 21,
+          "duplicateEntities": 15,
+          "trialsWithTwoEntities": 15,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update": {
+          "trials": 48,
+          "twoMutations": 25,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        }
+      },
+      "byActionGap": {
+        "create 0": {
+          "trials": 12,
+          "twoMutations": 12,
+          "duplicateEntities": 9,
+          "trialsWithTwoEntities": 9,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create 30": {
+          "trials": 12,
+          "twoMutations": 9,
+          "duplicateEntities": 6,
+          "trialsWithTwoEntities": 6,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create 80": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create 150": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update 0": {
+          "trials": 12,
+          "twoMutations": 12,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update 30": {
+          "trials": 12,
+          "twoMutations": 9,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update 80": {
+          "trials": 12,
+          "twoMutations": 4,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update 150": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        }
+      },
+      "byPage": {
+        "create collection": {
+          "trials": 12,
+          "twoMutations": 6,
+          "duplicateEntities": 6,
+          "trialsWithTwoEntities": 6,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create product": {
+          "trials": 12,
+          "twoMutations": 6,
+          "duplicateEntities": 6,
+          "trialsWithTwoEntities": 6,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create facet": {
+          "trials": 12,
+          "twoMutations": 3,
+          "duplicateEntities": 3,
+          "trialsWithTwoEntities": 3,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create customer": {
+          "trials": 12,
+          "twoMutations": 6,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update collection": {
+          "trials": 12,
+          "twoMutations": 9,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update product": {
+          "trials": 12,
+          "twoMutations": 7,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update facet": {
+          "trials": 12,
+          "twoMutations": 6,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update customer": {
+          "trials": 12,
+          "twoMutations": 3,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        }
+      }
+    },
+    "patch-nogc": {
+      "label": "refresh-patch-nogc",
+      "base": "http://localhost:5177",
+      "latencyMs": 0,
+      "genclass": false,
+      "failed": 0,
+      "errors": [],
+      "total": {
+        "create": {
+          "trials": 48,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update": {
+          "trials": 48,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        }
+      },
+      "byActionGap": {
+        "create 0": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create 30": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create 80": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create 150": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update 0": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update 30": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update 80": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update 150": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        }
+      },
+      "byPage": {
+        "create collection": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create product": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create facet": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "create customer": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update collection": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update product": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update facet": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        },
+        "update customer": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": null,
+          "trialsWithTwoEntities": null,
+          "genclassDuplicate": null,
+          "genclassFalse": null
+        }
+      }
+    },
+    "master-gc": {
+      "label": "refresh-master-gc",
+      "base": "http://localhost:5175",
+      "latencyMs": 0,
+      "genclass": true,
+      "failed": 0,
+      "errors": [
+        "The email address is not available."
+      ],
+      "total": {
+        "create": {
+          "trials": 48,
+          "twoMutations": 25,
+          "duplicateEntities": 19,
+          "trialsWithTwoEntities": 19,
+          "genclassDuplicate": 24,
+          "genclassFalse": 0
+        }
+      },
+      "byActionGap": {
+        "create 0": {
+          "trials": 12,
+          "twoMutations": 12,
+          "duplicateEntities": 9,
+          "trialsWithTwoEntities": 9,
+          "genclassDuplicate": 12,
+          "genclassFalse": 0
+        },
+        "create 30": {
+          "trials": 12,
+          "twoMutations": 12,
+          "duplicateEntities": 9,
+          "trialsWithTwoEntities": 9,
+          "genclassDuplicate": 11,
+          "genclassFalse": 0
+        },
+        "create 80": {
+          "trials": 12,
+          "twoMutations": 1,
+          "duplicateEntities": 1,
+          "trialsWithTwoEntities": 1,
+          "genclassDuplicate": 1,
+          "genclassFalse": 0
+        },
+        "create 150": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        }
+      },
+      "byPage": {
+        "create collection": {
+          "trials": 12,
+          "twoMutations": 7,
+          "duplicateEntities": 7,
+          "trialsWithTwoEntities": 7,
+          "genclassDuplicate": 7,
+          "genclassFalse": 0
+        },
+        "create product": {
+          "trials": 12,
+          "twoMutations": 6,
+          "duplicateEntities": 6,
+          "trialsWithTwoEntities": 6,
+          "genclassDuplicate": 6,
+          "genclassFalse": 0
+        },
+        "create facet": {
+          "trials": 12,
+          "twoMutations": 6,
+          "duplicateEntities": 6,
+          "trialsWithTwoEntities": 6,
+          "genclassDuplicate": 5,
+          "genclassFalse": 0
+        },
+        "create customer": {
+          "trials": 12,
+          "twoMutations": 6,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 6,
+          "genclassFalse": 0
+        }
+      }
+    },
+    "patch-gc": {
+      "label": "refresh-patch-gc",
+      "base": "http://localhost:5177",
+      "latencyMs": 0,
+      "genclass": true,
+      "failed": 0,
+      "errors": [],
+      "total": {
+        "create": {
+          "trials": 48,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        }
+      },
+      "byActionGap": {
+        "create 0": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        },
+        "create 30": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        },
+        "create 80": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        },
+        "create 150": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        }
+      },
+      "byPage": {
+        "create collection": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        },
+        "create product": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        },
+        "create facet": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        },
+        "create customer": {
+          "trials": 12,
+          "twoMutations": 0,
+          "duplicateEntities": 0,
+          "trialsWithTwoEntities": 0,
+          "genclassDuplicate": 0,
+          "genclassFalse": 0
+        }
+      }
+    }
+  },
+  "unitTests": {
+    "file": "src/lib/framework/form-engine/use-generated-form.spec.tsx",
+    "unfixed": "3 of 3 runs: 2 failed, 4 passed (the two submit-guard tests fail)",
+    "fixed": "3 of 3 runs: 6 passed",
+    "dashboardSuite": "fixed: 87 files passed, 1 skipped; 972 tests passed, 4 skipped"
+  },
+  "e2eTests": {
+    "spec": "e2e/tests/catalog/collections.spec.ts -g \"Issue #2117\" --retries=0, Vendure Playwright 1.58.2 with executablePath /opt/pw-browsers/chromium",
+    "unfixed": "3 of 3 runs: Create and Update both fail (2 mutations each)",
+    "fixed": "3 of 3 runs: both pass",
+    "fixedWholeFile": "27 tests passed",
+    "fixedRepeatEach3": "6 of 6 passed"
+  },
+  "checks": {
+    "checkTypes": "clean (fixed)",
+    "eslint": "no errors on the changed files",
+    "prettier": "clean on the changed source files; collections.spec.ts additions clean, two pre-existing deviations upstream (lines 802, 815) left alone"
+  }
+}
