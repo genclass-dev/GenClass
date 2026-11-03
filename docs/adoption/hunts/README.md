@@ -7,6 +7,7 @@ the project's maintainers to take or leave. One report per target; nothing here 
 | target | report | patch and draft text | harness |
 |---|---|---|---|
 | Strapi admin panel (5.59.0) | [strapi.md](strapi.md) | [strapi.patch](strapi.patch), [strapi-issue.md](strapi-issue.md) | [strapi/](strapi/) |
+| Prometheus web UI, mantine-ui (main 4a933f8): no race found; a non-race duplicate-request fix, needs owner decision | [prometheus-mantine-ui.md](prometheus-mantine-ui.md) | [prometheus-mantine-ui.patch](prometheus-mantine-ui.patch), [prometheus-mantine-ui-issue.md](prometheus-mantine-ui-issue.md) | [prometheus-mantine-ui/](prometheus-mantine-ui/) |
 
 Every report gives the versions and commits, the exact commands, every scenario with its verdict including the
 negatives, the finding with its evidence in causal order, the root cause, the fix, the test result, the check on the

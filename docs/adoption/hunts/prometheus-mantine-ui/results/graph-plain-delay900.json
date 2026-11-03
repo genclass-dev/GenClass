@@ -1,0 +1,268 @@
+{
+  "scenario": "graph",
+  "app": "http://localhost:4173",
+  "plain": true,
+  "slow_ms": null,
+  "delay_ms": 900,
+  "runs": 8,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query_range?query=up&step=14&start=1793722259.841&end=1793725859.841",
+        "/query_range?query=count by (job) (up)&step=14&start=1793722260.08&end=1793725860.08"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722259.841&end=1793725859.841",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722260.08&end=1793725860.08",
+        "ABORTED /query_range?query=up&step=14&start=1793722259.841&end=1793725859.841",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724060.142&end=1793725860.142",
+        "ABORTED /query_range?query=count by (job) (up)&step=14&start=1793722260.08&end=1793725860.08"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query_range?query=up&step=14&start=1793722266.618&end=1793725866.618",
+        "/query_range?query=count by (job) (up)&step=14&start=1793722266.839&end=1793725866.839"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722266.618&end=1793725866.618",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722266.839&end=1793725866.839",
+        "ABORTED /query_range?query=up&step=14&start=1793722266.618&end=1793725866.618",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724066.892&end=1793725866.892",
+        "ABORTED /query_range?query=count by (job) (up)&step=14&start=1793722266.839&end=1793725866.839"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query_range?query=up&step=14&start=1793722273.323&end=1793725873.323",
+        "/query_range?query=count by (job) (up)&step=14&start=1793722273.533&end=1793725873.533"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722273.323&end=1793725873.323",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722273.533&end=1793725873.533",
+        "ABORTED /query_range?query=up&step=14&start=1793722273.323&end=1793725873.323",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724073.59&end=1793725873.59",
+        "ABORTED /query_range?query=count by (job) (up)&step=14&start=1793722273.533&end=1793725873.533"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query_range?query=up&step=14&start=1793722280.054&end=1793725880.054",
+        "/query_range?query=count by (job) (up)&step=14&start=1793722280.262&end=1793725880.262"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722280.054&end=1793725880.054",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722280.262&end=1793725880.262",
+        "ABORTED /query_range?query=up&step=14&start=1793722280.054&end=1793725880.054",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724080.323&end=1793725880.323",
+        "ABORTED /query_range?query=count by (job) (up)&step=14&start=1793722280.262&end=1793725880.262"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query_range?query=up&step=14&start=1793722286.752&end=1793725886.752",
+        "/query_range?query=count by (job) (up)&step=14&start=1793722286.959&end=1793725886.959"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722286.752&end=1793725886.752",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722286.959&end=1793725886.959",
+        "ABORTED /query_range?query=up&step=14&start=1793722286.752&end=1793725886.752",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724087.008&end=1793725887.008",
+        "ABORTED /query_range?query=count by (job) (up)&step=14&start=1793722286.959&end=1793725886.959"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query_range?query=up&step=14&start=1793722293.536&end=1793725893.536",
+        "/query_range?query=count by (job) (up)&step=14&start=1793722293.78&end=1793725893.78"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722293.536&end=1793725893.536",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722293.78&end=1793725893.78",
+        "ABORTED /query_range?query=up&step=14&start=1793722293.536&end=1793725893.536",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724093.84&end=1793725893.84",
+        "ABORTED /query_range?query=count by (job) (up)&step=14&start=1793722293.78&end=1793725893.78"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query_range?query=up&step=14&start=1793722300.243&end=1793725900.243",
+        "/query_range?query=count by (job) (up)&step=14&start=1793722300.469&end=1793725900.469"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722300.243&end=1793725900.243",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722300.469&end=1793725900.469",
+        "ABORTED /query_range?query=up&step=14&start=1793722300.243&end=1793725900.243",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724100.521&end=1793725900.521",
+        "ABORTED /query_range?query=count by (job) (up)&step=14&start=1793722300.469&end=1793725900.469"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query_range?query=up&step=14&start=1793722306.955&end=1793725906.955",
+        "/query_range?query=count by (job) (up)&step=14&start=1793722307.173&end=1793725907.173"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722306.955&end=1793725906.955",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722307.173&end=1793725907.173",
+        "ABORTED /query_range?query=up&step=14&start=1793722306.955&end=1793725906.955",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724107.244&end=1793725907.244",
+        "ABORTED /query_range?query=count by (job) (up)&step=14&start=1793722307.173&end=1793725907.173"
+      ]
+    }
+  ],
+  "oracle": "8 of 8 loads showed the reference state"
+}

@@ -1,0 +1,330 @@
+{
+  "scenario": "delete",
+  "app": "http://localhost:4173",
+  "plain": false,
+  "slow_ms": 600,
+  "delay_ms": null,
+  "runs": 6,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r1",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "baseline 1 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r2",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "baseline 2 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r3",
+        "schedule": {
+          "order": "seeded",
+          "seed": 1,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 1"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r4",
+        "schedule": {
+          "order": "seeded",
+          "seed": 2,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 2"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 1
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r5",
+        "schedule": {
+          "order": "seeded",
+          "seed": 3,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 3"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r6",
+        "schedule": {
+          "order": "seeded",
+          "seed": 4,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 4"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 2
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r7",
+        "schedule": {
+          "order": "seeded",
+          "seed": 5,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 5"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "GET /status/tsdb",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r8",
+        "schedule": {
+          "order": "seeded",
+          "seed": 6,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 6"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "GET /status/tsdb",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of \"/tsdb-status\" get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /tsdb-status · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  type textarea \"Series selector(s)\" = go_gc_duration_seconds{job=\"self-a\"}\n  click button \"Delete series\"\nIgnored as noise (differs between the two baselines): text \"Current Max Time N\", text \"job N\", text \"slice N\"\nNo race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.\nInternal state only (not a race by this check): 6 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.\n- run r3 (seed 1) (4 hold(s) ran out):\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"2\"\n- run r4 (seed 2) (1 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"1\"\n- run r5 (seed 3) (4 hold(s) ran out):\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"2\"",
+  "findings": "No findings match. Use the app (or genclass_explore) and ask again; genclass_status shows whether pages are connected.",
+  "explains": {},
+  "oracle": "8 of 8 loads showed the reference state"
+}

@@ -1,0 +1,212 @@
+{
+  "scenario": "delete",
+  "app": "http://localhost:4173",
+  "plain": true,
+  "slow_ms": null,
+  "delay_ms": 900,
+  "runs": 8,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [
+        "/admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}",
+        "ABORTED /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [
+        "/admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}",
+        "ABORTED /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [
+        "/admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}",
+        "ABORTED /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [
+        "/admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}",
+        "ABORTED /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [
+        "/admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}",
+        "ABORTED /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [
+        "/admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}",
+        "ABORTED /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [
+        "/admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}",
+        "ABORTED /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "alerts": [
+          "SuccessSuccessfully deleted series matching: go_gc_duration_seconds{job=\"self-a\"}"
+        ],
+        "posts": 1
+      },
+      "want": "(same)",
+      "held": [
+        "/admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/tsdb",
+        "GET /features",
+        "POST /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}",
+        "ABORTED /admin/tsdb/delete_series?match[]=go_gc_duration_seconds{job=\"self-a\"}"
+      ]
+    }
+  ],
+  "oracle": "8 of 8 loads showed the reference state"
+}

@@ -1,0 +1,212 @@
+{
+  "scenario": "sd",
+  "app": "http://localhost:4173",
+  "plain": true,
+  "slow_ms": null,
+  "delay_ms": 900,
+  "runs": 8,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b4 / 4"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/targets?scrapePool=self-a"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?scrapePool=",
+        "GET /targets?scrapePool=self-a",
+        "GET /targets?scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b4 / 4"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/targets?scrapePool=self-a"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?scrapePool=",
+        "GET /targets?scrapePool=self-a",
+        "GET /targets?scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b4 / 4"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/targets?scrapePool=self-a"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?scrapePool=",
+        "GET /targets?scrapePool=self-a",
+        "GET /targets?scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b4 / 4"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/targets?scrapePool=self-a"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?scrapePool=",
+        "GET /targets?scrapePool=self-a",
+        "GET /targets?scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b4 / 4"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/targets?scrapePool=self-a"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?scrapePool=",
+        "GET /targets?scrapePool=self-a",
+        "GET /targets?scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b4 / 4"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/targets?scrapePool=self-a"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?scrapePool=",
+        "GET /targets?scrapePool=self-a",
+        "GET /targets?scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b4 / 4"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/targets?scrapePool=self-a"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?scrapePool=",
+        "GET /targets?scrapePool=self-a",
+        "GET /targets?scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b4 / 4"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/targets?scrapePool=self-a"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?scrapePool=",
+        "GET /targets?scrapePool=self-a",
+        "GET /targets?scrapePool=self-b"
+      ]
+    }
+  ],
+  "oracle": "8 of 8 loads showed the reference state"
+}

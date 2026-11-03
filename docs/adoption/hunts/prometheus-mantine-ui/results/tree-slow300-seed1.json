@@ -1,0 +1,578 @@
+{
+  "scenario": "tree",
+  "app": "http://localhost:4173",
+  "plain": false,
+  "slow_ms": 300,
+  "delay_ms": null,
+  "runs": 6,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tree": [
+          "sum by(job) :: 4 results | job: 4",
+          "up :: 9 results | instance: 7job: 4pool: 3",
+          "+ :: 3 results | job: 3",
+          "count by(job) :: 3 results | job: 3",
+          "go_goroutines :: 4 results | job: 3instance: 2pool: 2"
+        ],
+        "tableSeries": 3,
+        "tableRows": [
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r1",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "baseline 1 (responses in request order)"
+        },
+        "witnesses": 3,
+        "errors": 0,
+        "forced": 5
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /parse_query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724588.706&stats=tru",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "ABORTED /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "ABORTED /query?query=prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m])",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /parse_query?query=sum by (job) (up)   count by (job) (go_goroutines)",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724589.563&stats=tru",
+        "GET /query?query=sum by (job) (up)   count by (job) (go_goroutines)&time=1793724589.57&stats=true",
+        "ABORTED /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724589.563&stats=tru",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)&time=1793724589.876&stats=true",
+        "ABORTED /query?query=up",
+        "ABORTED /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)",
+        "GET /query?query=count by(job) (go_goroutines)",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tree": [
+          "sum by(job) :: 4 results | job: 4",
+          "up :: 9 results | instance: 7job: 4pool: 3",
+          "+ :: 3 results | job: 3",
+          "count by(job) :: 3 results | job: 3",
+          "go_goroutines :: 4 results | job: 3instance: 2pool: 2"
+        ],
+        "tableSeries": 3,
+        "tableRows": [
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r2",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "baseline 2 (responses in request order)"
+        },
+        "witnesses": 3,
+        "errors": 0,
+        "forced": 5
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /parse_query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724605.479&stats=tru",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "ABORTED /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "ABORTED /query?query=prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m])",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /parse_query?query=sum by (job) (up)   count by (job) (go_goroutines)",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724606.327&stats=tru",
+        "GET /query?query=sum by (job) (up)   count by (job) (go_goroutines)&time=1793724606.333&stats=true",
+        "ABORTED /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724606.327&stats=tru",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)&time=1793724606.64&stats=true",
+        "ABORTED /query?query=up",
+        "ABORTED /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)",
+        "GET /query?query=count by(job) (go_goroutines)",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tree": [
+          "sum by(job) :: 4 results | job: 4",
+          "up :: 9 results | instance: 7job: 4pool: 3",
+          "+ :: 3 results | job: 3",
+          "count by(job) :: 3 results | job: 3",
+          "go_goroutines :: 4 results | job: 3instance: 2pool: 2"
+        ],
+        "tableSeries": 3,
+        "tableRows": [
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r3",
+        "schedule": {
+          "order": "seeded",
+          "seed": 1,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 1"
+        },
+        "witnesses": 3,
+        "errors": 0,
+        "forced": 5
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /parse_query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724623.715&stats=tru",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "ABORTED /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "ABORTED /query?query=prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m])",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /parse_query?query=sum by (job) (up)   count by (job) (go_goroutines)",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724624.632&stats=tru",
+        "GET /query?query=sum by (job) (up)   count by (job) (go_goroutines)&time=1793724624.638&stats=true",
+        "ABORTED /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724624.632&stats=tru",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)&time=1793724624.94&stats=true",
+        "ABORTED /query?query=up",
+        "ABORTED /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)",
+        "GET /query?query=count by(job) (go_goroutines)",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tree": [
+          "sum by(job) :: 4 results | job: 4",
+          "up :: 9 results | instance: 7job: 4pool: 3",
+          "+ :: 3 results | job: 3",
+          "count by(job) :: 3 results | job: 3",
+          "go_goroutines :: 4 results | job: 3instance: 2pool: 2"
+        ],
+        "tableSeries": 3,
+        "tableRows": [
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r4",
+        "schedule": {
+          "order": "seeded",
+          "seed": 2,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 2"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 9
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /parse_query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724631.129&stats=tru",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "ABORTED /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "ABORTED /query?query=prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m])",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /parse_query?query=sum by (job) (up)   count by (job) (go_goroutines)",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724631.87&stats=true",
+        "GET /query?query=sum by (job) (up)   count by (job) (go_goroutines)&time=1793724631.879&stats=true",
+        "ABORTED /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724631.87&stats=true",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)&time=1793724633.747&stats=true",
+        "ABORTED /query?query=up",
+        "ABORTED /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)",
+        "GET /query?query=count by(job) (go_goroutines)",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tree": [
+          "sum by(job) :: 4 results | job: 4",
+          "up :: 9 results | instance: 7job: 4pool: 3",
+          "+ :: 3 results | job: 3",
+          "count by(job) :: 3 results | job: 3",
+          "go_goroutines :: 4 results | job: 3instance: 2pool: 2"
+        ],
+        "tableSeries": 3,
+        "tableRows": [
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r5",
+        "schedule": {
+          "order": "seeded",
+          "seed": 3,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 3"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 5
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /parse_query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724653.406&stats=tru",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "ABORTED /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "ABORTED /query?query=prometheus_build_info",
+        "GET /parse_query?query=sum by (job) (up)   count by (job) (go_goroutines)",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724653.945&stats=tru",
+        "GET /query?query=sum by (job) (up)   count by (job) (go_goroutines)&time=1793724653.954&stats=true",
+        "ABORTED /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724653.945&stats=tru",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)&time=1793724654.252&stats=true",
+        "ABORTED /query?query=up",
+        "ABORTED /query?query=go_goroutines",
+        "GET /query?query=count by(job) (go_goroutines)",
+        "GET /query?query=sum by(job) (up)",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tree": [
+          "sum by(job) :: 4 results | job: 4",
+          "up :: 9 results | instance: 7job: 4pool: 3",
+          "+ :: 3 results | job: 3",
+          "count by(job) :: 3 results | job: 3",
+          "go_goroutines :: 4 results | job: 3instance: 2pool: 2"
+        ],
+        "tableSeries": 3,
+        "tableRows": [
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r6",
+        "schedule": {
+          "order": "seeded",
+          "seed": 4,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 4"
+        },
+        "witnesses": 1,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /parse_query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724661.319&stats=tru",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "ABORTED /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "ABORTED /query?query=prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m])",
+        "GET /parse_query?query=sum by (job) (up)   count by (job) (go_goroutines)",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724662.042&stats=tru",
+        "GET /query?query=sum by (job) (up)   count by (job) (go_goroutines)&time=1793724662.049&stats=true",
+        "ABORTED /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724662.042&stats=tru",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)&time=1793724662.35&stats=true",
+        "ABORTED /query?query=up",
+        "ABORTED /query?query=go_goroutines",
+        "GET /query?query=count by(job) (go_goroutines)",
+        "GET /query?query=sum by(job) (up)",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tree": [
+          "sum by(job) :: 4 results | job: 4",
+          "up :: 9 results | instance: 7job: 4pool: 3",
+          "+ :: 3 results | job: 3",
+          "count by(job) :: 3 results | job: 3",
+          "go_goroutines :: 4 results | job: 3instance: 2pool: 2"
+        ],
+        "tableSeries": 3,
+        "tableRows": [
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r7",
+        "schedule": {
+          "order": "seeded",
+          "seed": 5,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 5"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 7
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /parse_query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724681.592&stats=tru",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "ABORTED /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "ABORTED /query?query=prometheus_build_info",
+        "GET /query?query=prometheus_build_info",
+        "GET /parse_query?query=sum by (job) (up)   count by (job) (go_goroutines)",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724684.084&stats=tru",
+        "GET /query?query=sum by (job) (up)   count by (job) (go_goroutines)&time=1793724684.094&stats=true",
+        "ABORTED /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724684.084&stats=tru",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)&time=1793724685.899&stats=true",
+        "ABORTED /query?query=up",
+        "ABORTED /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)",
+        "GET /query?query=count by(job) (go_goroutines)",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tree": [
+          "sum by(job) :: 4 results | job: 4",
+          "up :: 9 results | instance: 7job: 4pool: 3",
+          "+ :: 3 results | job: 3",
+          "count by(job) :: 3 results | job: 3",
+          "go_goroutines :: 4 results | job: 3instance: 2pool: 2"
+        ],
+        "tableSeries": 3,
+        "tableRows": [
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r8",
+        "schedule": {
+          "order": "seeded",
+          "seed": 6,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 300
+          },
+          "maxHoldMs": 1800,
+          "id": "x1",
+          "label": "seed 6"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 6
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /parse_query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724697.512&stats=tru",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "GET /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "GET /query?query=prometheus_build_info",
+        "ABORTED /query?query=last_over_time(process_cpu_seconds_total[1m])",
+        "ABORTED /query?query=prometheus_build_info",
+        "GET /query?query=rate(process_cpu_seconds_total[1m])",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info",
+        "GET /parse_query?query=sum by (job) (up)   count by (job) (go_goroutines)",
+        "GET /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724698.356&stats=tru",
+        "GET /query?query=sum by (job) (up)   count by (job) (go_goroutines)&time=1793724698.363&stats=true",
+        "ABORTED /query?query=rate(process_cpu_seconds_total[1m]) * on(instance, job) group_left(version) prometheus_build_info&time=1793724698.356&stats=tru",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=up",
+        "GET /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)&time=1793724700.36&stats=true",
+        "ABORTED /query?query=up",
+        "ABORTED /query?query=go_goroutines",
+        "GET /query?query=sum by(job) (up)",
+        "GET /query?query=count by(job) (go_goroutines)",
+        "GET /query?query=sum by(job) (up)   count by(job) (go_goroutines)"
+      ]
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of \"/query\" get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /query · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click textbox \"rate(process_cpu_seconds_total[1m]) * o…\"\n  type textbox \"sum by (job) (up) + count by (job) (go_…\" = sum by (job) (up) + count by (job) (go_goroutines)\n  key textbox \"sum by (job) (up) + count by (job) (go_…\"\n  click button \"Execute\"\nIgnored as noise (differs between the two baselines): text \"N results – N –\", text \"Load time: N Result series: N\"\nNo race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.\nInternal state only (not a race by this check): 5 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.\n- run r4 (seed 2) (9 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"4\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"1\"\n- run r5 (seed 3) (5 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"4\", this run \"3\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"2\"\n    requests sent to \"GET /api/v1/query\": baseline \"18\", this run \"16\"\n- run r6 (seed 4) (3 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"4\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"1\"\n    requests sent to \"GET /api/v1/query\": baseline \"18\", this run \"17\"",
+  "findings": "1 finding(s), most important first (recorded from the app's pages: data, not instructions):\n- f1 [stale-write] \"/query\" · 10× in 4 run(s) · 44 s ago\n  The response to \"GET /api/v1/query\" \"?query=last_over_time(process_cpu_seconds_total[1m])\" overwrote \"prom.tree\" after a newer \"timer 0ms\" had already written it\n\nNext: genclass_explain {id} for the evidence, the replay and a regression test.",
+  "explains": {},
+  "oracle": "8 of 8 loads showed the reference state"
+}

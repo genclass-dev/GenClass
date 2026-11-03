@@ -1,0 +1,316 @@
+{
+  "scenario": "format",
+  "app": "http://localhost:4173",
+  "plain": false,
+  "slow_ms": 900,
+  "delay_ms": null,
+  "runs": 6,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r1",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "baseline 1 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726131.468&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r2",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "baseline 2 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726145.42&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r3",
+        "schedule": {
+          "order": "seeded",
+          "seed": 1,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 1"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726160.542&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r4",
+        "schedule": {
+          "order": "seeded",
+          "seed": 2,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 2"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 5
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726165.346&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r5",
+        "schedule": {
+          "order": "seeded",
+          "seed": 3,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 3"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726187.51&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r6",
+        "schedule": {
+          "order": "seeded",
+          "seed": 4,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 4"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 0
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726192.119&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r7",
+        "schedule": {
+          "order": "seeded",
+          "seed": 5,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 5"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726210.896&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r8",
+        "schedule": {
+          "order": "seeded",
+          "seed": 6,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 6"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726224.772&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of \"/query\" get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /query · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click textbox \"up\"\n  type textbox \"sum by(job)(up)\" = sum by(job)(up)\n  key textbox \"sum by(job)(up)\"\n  click button \"Show query options\"\n  click menuitem \"Format expression\"\n  click textbox \"sum by(job)(up)\"\n  type textbox \"count by( instance )( go_goroutines )\" = count by( instance )( go_goroutines )\n  key textbox \"count by( instance )( go_goroutines )\"\n  click button \"Show query options\"\n  click menuitem \"Format expression\"\nIgnored as noise (differs between the two baselines): text \"Load time: N Result series: N\", text \"evalTotalTime N\", text \"queryPreparationTime N\", text \"innerEvalTime N\", text \"execQueueTime N\", text \"execTotalTime N\"\nNo race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.\nInternal state only (not a race by this check): 3 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.\n- run r4 (seed 2) (5 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"2\", this run \"1\"\n    announcements (status, alert regions) only in one of them: \"Expression formatted\", \"Expression formatted successfully!\"\n- run r6 (seed 4):\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"2\", this run \"1\"\n    announcements (status, alert regions) only in one of them: \"Expression formatted\", \"Expression formatted successfully!\"\n- run r7 (seed 5) (3 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"2\"",
+  "findings": "No findings match. Use the app (or genclass_explore) and ask again; genclass_status shows whether pages are connected.",
+  "explains": {},
+  "oracle": "8 of 8 loads showed the reference state"
+}
