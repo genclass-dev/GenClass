@@ -31,7 +31,7 @@ Done by the refresh session (2026-11-03), nothing left to do unless the date mov
   with it; the throttled reproduction without any tool reproduces it (numbers below).
 - [x] `pnpm build` and `pnpm lint` on the patched tree (CONTRIBUTING's checks): build passes; lint has the same 6
   errors, 12 warnings and 11 infos as `dev` without the change, none in the changed files; `biome check` on the two
-  files is clean.
+  files is clean; `pnpm test` (vitest, as CI runs it) passes, 164 files and 1236 tests.
 
 By hand, by the sender, before sending (the disclosure paragraph says you did these):
 
@@ -80,9 +80,15 @@ Measured: headless Chromium with the network emulation DevTools throttling uses 
 latency only, no request interception), production build on localhost, typing at 90 ms per key with a 700 ms pause;
 10 trials per cell, counting trials where the box did not end with the full text:
 
-<!-- refresh-throttle-table -->
+| added latency | `/websites`: `shop`, pause, ` stu` | `/admin/users`: `anna`, pause, `_sto` |
+|---|---|---|
+| 0 ms | 0 of 10 | 0 of 10 |
+| 150 ms | 0 of 10 | 0 of 10 |
+| 200 ms | 10 of 10 (`shopstu`) | 10 of 10 (`annasto`) |
+| 300 ms | 10 of 10 (`shoptu`, `shopstu`) | 10 of 10 (`annato`, `annasto`) |
 
-With the fix below, 0 of 10 at every latency on both pages.
+(`dev` at c958b3772, 2026-11-03; an earlier run on `dev` at 12cdf5777, 2026-10-24, gave the same rows and also 10 of 10 at
+250 and 400 ms.) With the fix below, 0 of 10 at every latency on both pages.
 
 Cause: `src/components/common/DataGrid.tsx` keeps the box's text in local state and syncs it with the URL both ways
 (added in 079cfdde, first released in v3.3.0):
@@ -164,7 +170,10 @@ pnpm build && pnpm start
 PLAYWRIGHT_SKIP_WEB_SERVER=1 npx playwright test tests/e2e/data-grid-search.spec.ts --workers 1
 ```
 
-<!-- refresh-pr-checks -->
+On `dev` at c958b3772: the first test fails 3 of 3 runs without the fix and passes 3 of 3 with it; the control passes
+3 of 3 both ways. `pnpm build` passes; `pnpm lint` reports the same 6 errors, 12 warnings and 11 infos as `dev`
+without the change, none in these files; `biome check` is clean on both files; `pnpm test` passes (164 files, 1236
+tests).
 
 AI assistance: I used Claude (Claude Code) to investigate this, write the fix and the tests, and draft this
 description; I reviewed the change and ran the tests and the manual check myself. The race was found with GenClass, a
