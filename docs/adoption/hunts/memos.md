@@ -14,26 +14,27 @@ reply that is older than the page's data is written over it, and stays.
 1. **Two quick updates of one memo** (`useUpdateMemo`): Pin then Unpin, or "Check all tasks" then "Uncheck all
    tasks", from the memo's More menu on its detail page. When the first reply arrives last, the page shows the first
    change (pinned; all tasks checked) while the server saved both in order and holds the second. Explore: the page
-   disagreed with the server in 5 of 18 reordered pin loads and 1 of 18 task loads, 0 of 12 request-order baselines;
+   disagreed with the server in 5 of 18 reordered pin loads (and 2 of 6 in a first pin session) and 1 of 18 task
+   loads, 0 of 12 request-order baselines;
    GenClass's verdict named the task case as a RACE on the checkboxes, and reported the pin case as "internal state
    only" (the pinned mark has no text, section 6). Without GenClass, holding the first `UpdateMemo` reply 1.5 s: 10 of
    10 trials showed the memo pinned, still pinned 30 s later; 0 of 3 without the hold.
 2. **Two quick reactions** (`useReactionActions`): 👍 then ❤️. The 👍 click's own `getMemo`, answered before ❤️ was
    saved, lands last and removes ❤️ from the page; the server has both. Explore: RACE in 1 of 6 reordered loads at
-   300 ms (the page text lost "❤ 1"), 0 of 6 baselines. Without GenClass, holding the replies to the `GetMemo`
+   300 ms (the page text lost "❤ 1"); the oracle saw it in 1 of 18 reordered loads, 0 of 6 baselines. Without GenClass, holding the replies to the `GetMemo`
    requests sent between the 👍 reply and the ❤️ upsert: 10 of 10 trials lost ❤️, still lost 30 s later in 10 of 10;
    0 of 3 without the hold.
 
 The patch has two commits, 13 changed lines of source and three Vitest tests that fail on main and pass with the fix
 (3 runs each way); Memos' `pnpm lint` and `pnpm test` (193 files, 1,619 tests) pass. On the fixed build the
 GenClass-free reproductions showed the stale state in 0 of 10 (pin) and 0 of 10 (reactions) trials, and
-explore's oracle in ⟨EF⟩ of ⟨EFN⟩ reordered loads (section 5.3).
+explore's oracle in 0 of 54 reordered loads on pin, tasks and reactions (7 of 54 unfixed, the same sessions; section 5.3).
 
 The comment surface showed no order-dependent page. Archive then Restore on the detail page ends on a page that
 depends on the reply order (section 4.3). Of GenClass's own verdicts on the 12 complete unfixed sessions outside
 archive, 2 were true races (tasks 900, reaction 300), 5 were false RACE verdicts resting only on request counts, and
-5 said no race; in 3 of the pin sessions marked "no race" or false, the stale pin was there but listed as internal
-state. The false ones have one cause: Memos' API is Connect RPC, which sends reads (`GetMemo`, `ListMemoComments`,
+5 said no race; in two of those (pin 600, a false RACE, and pin 900, no race) and in the first pin session, the
+stale pin was there but listed as internal state. The false ones have one cause: Memos' API is Connect RPC, which sends reads (`GetMemo`, `ListMemoComments`,
 `GetUserStats`) as POST, and explore counts a different number of POSTs as a different number of writes (section 6,
 item 1).
 
@@ -126,7 +127,9 @@ sessions and of pin at 600 ms are next to them.
 | comment | 300 | 0 of 6 / 0 of 2 | RACE 4 of 6 (false) | counts of `GetUserStats` POSTs |
 | comment | 600 | 0 of 6 / 0 of 2 | RACE 5 of 6 (false) | counts of `GetUserStats` POSTs |
 | comment | 900 | 0 of 6 / 0 of 2 | RACE 6 of 6 (false) | counts of `GetUserStats` and `ListMemoComments` POSTs |
-| archive | 300, 600, 900 | see section 4.3 | ⟨archive verdicts⟩ | |
+| archive | 300 | 2 of 3 / 2 of 2 | RACE 1 of 3 | not a usable session: 3 loads timed out, and the baselines too ended on the Archived page (section 4.3) |
+| archive | 600 | 3 of 4 / 0 of 2 | RACE 4 of 4 | the end page and `AbortError: Transition was skipped` only in the reordered runs, next to request counts |
+| archive | 900 | 4 of 6 / 0 of 2 | RACE 5 of 6 | the same |
 
 The first pin session's report file was overwritten by the batch's 300 ms session; its eight load lines are in this
 session's log (loads 3 and 5 DIFFER, both with `UpdateMemo#1` delivered after `UpdateMemo#2`). Two void sessions are
@@ -248,7 +251,14 @@ and the seeded loads ended on `/archived` (while the memo was restored, so the p
 4 of 6; at 300 ms the archive reply often arrived before the second click, the Restore click then happened on the
 Archived page's card (no navigation) and the baselines too ended on `/archived`. GenClass's verdicts here ("RACE 3 of 5",
 "3 of 5", "5 of 6") mixed that end page with request counts and an `AbortError: Transition was skipped` page error that
-the double navigation raises in one run. ⟨archive rerun with the corrected oracle, unfixed and fixed⟩
+the double navigation raises in one run. Rerun with the corrected oracle (the end page against the page that lists the
+memo in its saved state): unfixed, 3 of 4 completed seeded loads at 600 ms and 4 of 6 at 900 ms ended on `/archived`
+with the memo restored, 0 of 4 baselines; fixed, 0 of 5 at 600 ms and 1 of 6 at 900 ms, 0 of 4 baselines. The fixed
+run's one load (900 ms, seed 6) delivered `UpdateMemo#1` and the Archived page's `ListMemos#1` before the second update
+was even sent: the Restore click happened on the Archived page's own card, which does not navigate, so it is the step
+landing on another page, not a crossing (the 300 ms sessions are all like that). The patch fixes this case through the
+same serialisation (the navigations now follow the click order), but it has no test of its own and the drafts mention
+it only as one symptom.
 
 ### 4.4 Comments
 
@@ -301,7 +311,18 @@ pin, fixed, held 1500 ms:       0 of 10 trials stale; 30 s later: 0 of 10
 reaction, fixed, held 1500 ms:  0 of 10 trials stale; 30 s later: 0 of 10
 ```
 
-⟨explore on the fixed build⟩
+Explore on the fixed build (`memos/results/fixed/*-summary.json`), 6 seeded loads and 2 baselines per session:
+
+| surface | 300 ms | 600 ms | 900 ms | GenClass verdicts |
+|---|---|---|---|---|
+| pin | 0 of 6 / 0 of 2 | 0 of 6 / 0 of 2 | 0 of 6 / 0 of 2 | no race, no race, no race; nothing about `pinned` in "internal state only" |
+| tasks | 0 of 6 / 0 of 2 | 0 of 6 / 0 of 2 | 0 of 6 / 0 of 2 | no race ×3 |
+| reaction | 0 of 6 / 0 of 2 | 0 of 6 / 0 of 2 | 0 of 6 / 0 of 2 | no race, RACE 6 of 6 (false: `ListMemoComments` counts only), no race |
+| archive | not usable (as unfixed) | 0 of 5 / 0 of 2 | 1 of 6 / 0 of 2 (the click on the Archived page, above) | no race, RACE 4 of 5, RACE 5 of 6 (false: `ListUserStats` and `ListMemos` counts only) |
+
+Pin, tasks and reactions: 0 of 54 reordered loads disagreed with the server, against 7 of 54 on the unfixed build in the
+same sessions. On the fixed build the agent link labels the second `UpdateMemo`, now sent after the first one's reply,
+`UpdateMemo#1~hedge` (6 times in the pin 600 ms report), a label for a repeated request; it did not affect the verdicts.
 
 ## 6. Problems with GenClass itself
 
@@ -331,7 +352,13 @@ reaction, fixed, held 1500 ms:  0 of 10 trials stale; 30 s later: 0 of 10
 5. **A step that the order makes impossible.** On archive at 300 ms, a fast first reply navigated away before the
    second click, so one load per session timed out and was left out ("3 of 5 compared"); explore handled it, the
    harness had to tolerate it.
-6. **Harness items, not GenClass bugs:** the reaction button appears only on hover, the comment editor is a
+6. **The same steps on another page are grouped as the same scenario.** On archive, when the first reply navigated to
+   the Archived page before the second click, the recorded actions were still "click button More, click menuitem
+   Restore" (on the Archived page's card), so the run was compared with the others and counted as different. The
+   page of each action is recorded; grouping by it would have set those runs apart. On the fixed build the second
+   `UpdateMemo` (sent after the first one's reply) is labelled `UpdateMemo#1~hedge` in the delivery orders, which reads
+   as a repeat of the first request; it is a second, different update.
+7. **Harness items, not GenClass bugs:** the reaction button appears only on hover, the comment editor is a
    `contenteditable`, the server limits writes to 120 per minute per user (the reset waits out a 429), and the first
    pin report file was overwritten by a later session with the same name (the harness names files by surface and
    latency only).
@@ -352,11 +379,13 @@ reaction, fixed, held 1500 ms:  0 of 10 trials stale; 30 s later: 0 of 10
 
 ## 8. Time spent
 
-About ⟨T⟩ of session time, from 16:33 UTC: 15 minutes to read the brief, clone, build the backend, install Node 24 and
+About 2 hours of session time, from 16:33 UTC: 15 minutes to read the brief, clone, build the backend, install Node 24 and
 the web dependencies; 15 minutes to read the hooks, seed (the write limit cost one rerun) and write the harness; the
 first explore session (pin, 300 ms) found the stale pin at 16:42; 10 minutes for the first fix and its tests; 40
 minutes of explore sessions on the unfixed build (two void sessions rerun after harness fixes); 15 minutes for the
-reaction fix and its test; ⟨rest⟩.
+reaction fix and its test; 25 minutes for the GenClass-free reproductions (10 trials of 37 s each per variant; the
+reaction script's first version held the wrong request and was redone); 30 minutes of explore on the fixed build and the
+archive rerun; the rest writing.
 
 ## 9. Reproducing
 

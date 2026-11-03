@@ -1,0 +1,58 @@
+{
+  "surface": "archive",
+  "memos": "http://localhost:3001",
+  "genclass": true,
+  "runs": 6,
+  "pause": 0,
+  "tail": 2500,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "race in 1 of 3",
+      "differ": 4,
+      "finding": "f9",
+      "shown": [
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then ListMemos#1 then UpdateMemo#2 then ListMemos#2 then ListMemos#3]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then ListMemos#1 then UpdateMemo#2 then ListMemos#2 then ListMemos#3]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then ListMemos#1]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then GetMemo#3 then UpdateMemo#1 then ListMemoComments#3 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#2 then ListMemos#1]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then ListMemos#1]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemos#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#2 then ListMemos#3 then ListMemos#2]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then ListMemos#1 then GetMemo#2 then UpdateMemo#2 then ListMemos#3 then ListMemos#2]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then ListMemos#1 then GetMemo#2]"
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "race in 4 of 4",
+      "differ": 3,
+      "finding": "f24",
+      "shown": [
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3 then ListMemos#1 then ListMemos#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3 then ListMemos#1 then ListMemos#2]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#3 then GetMemo#2 then UpdateMemo#2 then UpdateMemo#1 then ListMemos#1] [pageerror: AbortError: Transition was skipped. New ViewTransition started]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#2 then ListMemos#1]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then GetMemo#3 then ListMemoComments#3 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#2 then UpdateMemo#1 then ListMemos#1]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#2 then ListMemoComments#3 then GetMemo#3 then UpdateMemo#1 then ListMemoComments#2 then GetMemo#2 then ListMemos#1]",
+        "ERROR TimeoutError: locator.click: Timeout 30000ms exceeded. [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemos#1 then ListMemoComments#2 then GetMemo#2]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#3 then UpdateMemo#1 then UpdateMemo#2 then ListMemoComments#2 then GetMemo#3 then GetMemo#2 then ListMemos#1] [pageerror: AbortError: Transition was skipped. New ViewTransition started]"
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 5 of 6",
+      "differ": 4,
+      "finding": "f35",
+      "shown": [
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3 then ListMemos#1]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#3 then ListMemoComments#3 then ListMemos#1]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then ListMemoComments#3 then GetMemo#3 then GetMemo#2 then UpdateMemo#2 then UpdateMemo#1 then ListMemos#1] [pageerror: AbortError: Transition was skipped. New ViewTransition started]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then GetMemo#3 then UpdateMemo#1 then ListMemoComments#3 then ListMemoComments#1 then ListMemoComments#2 then UpdateMemo#2 then GetMemo#2 then ListMemos#1]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#3 then ListMemoComments#3 then UpdateMemo#2 then GetMemo#2 then UpdateMemo#1 then ListMemos#1]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then UpdateMemo#2 then ListMemoComments#3 then ListMemos#1 then GetMemo#3 then UpdateMemo#1 then ListMemos#3 then ListMemos#4 then ListMemos#5 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then ListMemos#2 then ListMemos#6 then ListMemos#7 then ListMemos#8 then ListMemos#9 then ListMemos#10 then ListMemos#11]",
+        "same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#3 then ListMemos#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#2 then ListMemos#3 then ListMemos#2 then GetMemo#3]",
+        "DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemos#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#2 then ListMemos#3 then ListMemos#2]"
+      ]
+    }
+  ]
+}

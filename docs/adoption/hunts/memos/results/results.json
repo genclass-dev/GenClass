@@ -1,0 +1,299 @@
+{
+  "out": {
+    "pin": [
+      {
+        "slow_ms": 300,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 600,
+        "genclass": "race in 1 of 6",
+        "oracle_differ_of_8": 2,
+        "oracle_differ_seeded_of_6": 2,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": [
+          "load 3: DIFFER shown pinned=true | server pinned=false; writes delivered UpdateMemo#2, UpdateMemo#1",
+          "load 6: DIFFER shown pinned=true | server pinned=false; writes delivered UpdateMemo#2, UpdateMemo#1"
+        ]
+      },
+      {
+        "slow_ms": 900,
+        "genclass": "no race",
+        "oracle_differ_of_8": 3,
+        "oracle_differ_seeded_of_6": 3,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": [
+          "load 3: DIFFER shown pinned=true | server pinned=false; writes delivered UpdateMemo#2, UpdateMemo#1",
+          "load 5: DIFFER shown pinned=true | server pinned=false; writes delivered UpdateMemo#2, UpdateMemo#1",
+          "load 6: DIFFER shown pinned=true | server pinned=false; writes delivered UpdateMemo#2, UpdateMemo#1"
+        ]
+      }
+    ],
+    "archive": [
+      {
+        "slow_ms": 300,
+        "genclass": "race in 1 of 3",
+        "oracle_differ_of_8": 4,
+        "oracle_differ_seeded_of_6": 2,
+        "baselines_differ": 2,
+        "errors": 3,
+        "differ_loads": [
+          "load 1: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2",
+          "load 2: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2",
+          "load 6: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2",
+          "load 7: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2"
+        ]
+      },
+      {
+        "slow_ms": 600,
+        "genclass": "race in 4 of 4",
+        "oracle_differ_of_8": 3,
+        "oracle_differ_seeded_of_6": 3,
+        "baselines_differ": 0,
+        "errors": 2,
+        "differ_loads": [
+          "load 3: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#2, UpdateMemo#1",
+          "load 5: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#2, UpdateMemo#1",
+          "load 6: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#2, UpdateMemo#1"
+        ]
+      },
+      {
+        "slow_ms": 900,
+        "genclass": "race in 5 of 6",
+        "oracle_differ_of_8": 4,
+        "oracle_differ_seeded_of_6": 4,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": [
+          "load 3: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#2, UpdateMemo#1",
+          "load 5: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#2, UpdateMemo#1",
+          "load 6: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#2, UpdateMemo#1",
+          "load 8: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2"
+        ]
+      }
+    ],
+    "tasks": [
+      {
+        "slow_ms": 300,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 600,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 900,
+        "genclass": "race in 1 of 6",
+        "oracle_differ_of_8": 1,
+        "oracle_differ_seeded_of_6": 1,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": [
+          "load 5: DIFFER shown tasks=xxx | server tasks=___; writes delivered UpdateMemo#2, UpdateMemo#1"
+        ]
+      }
+    ],
+    "reaction": [
+      {
+        "slow_ms": 300,
+        "genclass": "race in 1 of 6",
+        "oracle_differ_of_8": 1,
+        "oracle_differ_seeded_of_6": 1,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": [
+          "load 3: DIFFER shown reactions=👍1 | server reactions=👍1 ❤️1; writes delivered UpsertMemoReaction#1, UpsertMemoReaction#2"
+        ]
+      },
+      {
+        "slow_ms": 600,
+        "genclass": "race in 6 of 6",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 900,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      }
+    ],
+    "comment": [
+      {
+        "slow_ms": 300,
+        "genclass": "race in 4 of 6",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 600,
+        "genclass": "race in 5 of 6",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 900,
+        "genclass": "race in 6 of 6",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      }
+    ]
+  },
+  "out-fixed": {
+    "pin": [
+      {
+        "slow_ms": 300,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 600,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 900,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      }
+    ],
+    "archive": [
+      {
+        "slow_ms": 300,
+        "genclass": "no race",
+        "oracle_differ_of_8": 4,
+        "oracle_differ_seeded_of_6": 2,
+        "baselines_differ": 2,
+        "errors": 4,
+        "differ_loads": [
+          "load 1: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2",
+          "load 2: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2",
+          "load 6: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2",
+          "load 7: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2"
+        ]
+      },
+      {
+        "slow_ms": 600,
+        "genclass": "race in 4 of 5",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 1,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 900,
+        "genclass": "race in 5 of 6",
+        "oracle_differ_of_8": 1,
+        "oracle_differ_seeded_of_6": 1,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": [
+          "load 8: DIFFER shown page=archived | server page=home-or-detail; writes delivered UpdateMemo#1, UpdateMemo#2"
+        ]
+      }
+    ],
+    "tasks": [
+      {
+        "slow_ms": 300,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 600,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 900,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      }
+    ],
+    "reaction": [
+      {
+        "slow_ms": 300,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 600,
+        "genclass": "race in 6 of 6",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      },
+      {
+        "slow_ms": 900,
+        "genclass": "no race",
+        "oracle_differ_of_8": 0,
+        "oracle_differ_seeded_of_6": 0,
+        "baselines_differ": 0,
+        "errors": 0,
+        "differ_loads": []
+      }
+    ]
+  }
+}

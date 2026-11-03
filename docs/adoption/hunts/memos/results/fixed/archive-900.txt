@@ -1,0 +1,253 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+load 1: same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#1~hedge then GetMemo#3 then ListMemoComments#3 then ListMemos#1 then ListMemos#2]
+load 2: same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#2 then ListMemoComments#2 then UpdateMemo#1~hedge then GetMemo#3 then ListMemoComments#3 then ListMemos#1 then ListMemos#2]
+load 3: same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then ListMemoComments#3 then GetMemo#3 then ListMemos#1 then UpdateMemo#1~hedge then ListMemos#3 then ListMemos#2]
+load 4: same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then GetMemo#3 then ListMemos#1 then ListMemoComments#3 then ListMemoComments#2 then UpdateMemo#1~hedge then GetMemo#2 then ListMemos#3 then ListMemos#2]
+load 5: same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#1 then GetMemo#3 then ListMemos#1 then ListMemoComments#3 then UpdateMemo#1~hedge then ListMemos#2 then ListMemos#3]
+load 6: same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then UpdateMemo#1 then UpdateMemo#1~hedge then ListMemoComments#3 then ListMemos#1 then GetMemo#3 then ListMemoComments#2 then GetMemo#2 then ListMemoComments#1 then ListMemos#2]
+load 7: same   shown page=home-or-detail | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemoComments#3 then ListMemos#1 then ListMemoComments#2 then GetMemo#2 then GetMemo#3 then UpdateMemo#1~hedge then ListMemos#3 then ListMemos#2]
+load 8: DIFFER shown page=archived | server page=home-or-detail [delivered GetMemo#1 then ListMemoComments#1 then UpdateMemo#1 then ListMemos#1 then ListMemoComments#2 then GetMemo#2 then UpdateMemo#2 then ListMemos#3 then ListMemos#2]
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /memos/Qc6UsEqSDZKLxmKCaAvDQh · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button "More"
+  click menuitem "Archive"
+  click button "More"
+  click menuitem "Restore"
+Ignored as noise (differs between the two baselines): state CreateSpaceDialog.state5, state CreateSpaceDialog_2.state5, state MemoActionMenu.external2.submittedAt, state rhtToaster.state0.pausedAt, state rhtToaster.state0.toasts
+RACE: 5 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r19 (seed 1):
+    requests sent to "POST /memos.api.UserService/ListUserStats": baseline "2", this run "4"
+    requests sent to "POST /memos.api.MemoService/ListMemos": baseline "2", this run "3"
+- run r20 (seed 2) (1 hold(s) ran out):
+    requests sent to "POST /memos.api.UserService/ListUserStats": baseline "2", this run "4"
+    requests sent to "POST /memos.api.MemoService/ListMemos": baseline "2", this run "3"
+- run r21 (seed 3):
+    requests sent to "POST /memos.api.UserService/ListUserStats": baseline "2", this run "4"
+    requests sent to "POST /memos.api.MemoService/ListMemos": baseline "2", this run "3"
+- run r23 (seed 5):
+    requests sent to "POST /memos.api.UserService/ListUserStats": baseline "2", this run "4"
+    requests sent to "POST /memos.api.MemoService/ListMemos": baseline "2", this run "3"
+    state "CompositeList.state0": baseline "false", this run "(absent)"
+    state "MenuItem.state0": baseline "4", this run "0"
+    state "MenuItem_2.state0": baseline "0", this run "1"
+    state "MenuItem_3.state0": baseline "2", this run "1"
+- run r24 (seed 6):
+    page text only in the baseline: "hunter", "1", "1", "TAGS"
+    page text only in this run: "Memos", "Archived", "No data found."
+    field "first task": baseline "unchecked", this run "(absent)"
+    field "second task": baseline "unchecked", this run "(absent)"
+    field "third task": baseline "unchecked", this run "(absent)"
+    requests sent to "POST /memos.api.InstanceService/GetInstanceSetting": baseline "2", this run "1"
+    requests sent to "POST /memos.api.MemoService/GetMemo": baseline "3", this run "2"
+    requests sent to "POST /memos.api.MemoService/ListMemoComments": baseline "3", this run "2"
+    announcements (status, alert regions) only in one of them: "Restored successfully", "Archived successfully"
+    witness only here: overwrote-newer MemoActionMenu.external2.isPending by POST /memos.api.MemoService/UpdateMemo
+    witness only here: overwrote-newer MemoActionMenu.external2.status by POST /memos.api.MemoService/UpdateMemo
+Along the way only (not a race by this check): 1 of 6 ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).
+- run r22 (seed 4):
+    witness only here: overwrote-newer PagedMemoList.state3 by POST /memos.api.UserService/ListUserStats
+
+Race finding(s): f17. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+7 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f17 [race] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 0 s ago
+  The final state depends on response order: requests to "POST /memos.api.UserService/ListUserStats" ("2" in request order, "4" under "seed 1"); requests to "POST /memos.api.MemoService/ListMemos" ("2" in request order, "3" under "seed 1")
+- f12 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 12× in 8 run(s) · 5 s ago
+  The response to "POST /memos.api.MemoService/ListMemos" "66 bytes" overwrote "PagedMemoList.state3" after a newer "timer 250ms" had already written it
+- f11 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 7× in 7 run(s) · 16 s ago
+  The response to "POST /memos.api.MemoService/UpdateMemo" "43 bytes" overwrote "MemoActionMenu.external2.isPaused" after a newer "timer 0ms" had already written it
+- f15 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 6 s ago
+  The response to "POST /memos.api.MemoService/UpdateMemo" "43 bytes" overwrote "MemoActionMenu.external2.isPending" after a newer "timer 0ms" had already written it
+- f16 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 6 s ago
+  The response to "POST /memos.api.MemoService/UpdateMemo" "43 bytes" overwrote "MemoActionMenu.external2.status" after a newer "timer 0ms" had already written it
+- f14 [stale-write] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · 26 s ago
+  The response to "POST /memos.api.UserService/ListUserStats" "11 bytes" overwrote "PagedMemoList.state3" after a newer "POST /memos.api.MemoService/ListMemos" had already written it
+- f13 [check] "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 4× in 4 run(s) · 24 s ago
+  Visual check "text-invisible": "[GenClass] Check (measured): text contrast 1.35:1 on span.aspect-square.tabular-nums \"1\", below 1.5:1 (WCAG 2.2 contrast formula; unreadable-text threshold): #…"
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f17 · race · "/memos/Qc6UsEqSDZKLxmKCaAvDQh" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The final state depends on response order: requests to "POST /memos.api.UserService/ListUserStats" ("2" in request order, "4" under "seed 1"); requests to "POST /memos.api.MemoService/ListMemos" ("2" in request order, "3" under "seed 1") (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x3: 5 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- requests sent to "POST /memos.api.UserService/ListUserStats": baseline "2", failing run "4"
+- requests sent to "POST /memos.api.MemoService/ListMemos": baseline "2", failing run "3"
+
+## Steps of run r19 ("http://localhost:3002/memos/Qc6UsEqSDZKLxmKCaAvDQh", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++3.903s write MenuRoot.state1 by action 0: "MenuRoot.state1: \"starting\" → undefined"
++3.905s write MenuPositioner.external8 by action 0: "MenuPositioner.external8: \"starting\" → undefined"
++3.905s write MenuPopup.external1 by action 0: "MenuPopup.external1: \"starting\" → undefined"
++3.984s delivered POST /memos.api.MemoService/ListMemoComments#1 (held 619 ms)
++4.154s write MenuItem.external1: "MenuItem.external1: false → true"
++4.158s action 1: click menuitem "Archive"
++4.167s write MenuRoot.state1 by action 1: "MenuRoot.state1: undefined → \"ending\""
++4.167s write MenuPositioner.external12, MenuPositioner.external4 by action 1: "MenuPositioner.external4: true → false"; "MenuPositioner.external12: \"trigger-press\" → \"item-press\""
++4.168s write MenuPopup.external0, MenuPopup.external12, MenuPopup.external7 by action 1: "MenuPopup.external0: true → false"; "MenuPopup.external7: \"trigger-press\" → \"item-press\""; "MenuPopup.external12: true → false"
++4.168s write MenuItem_2.external4 by action 1: "MenuItem_2.external4: true → false"
++4.168s write MenuItem.external4 by action 1: "MenuItem.external4: true → false"
++4.168s write MenuItem_3.external4 by action 1: "MenuItem_3.external4: true → false"
++4.168s write MenuTrigger.external1 by action 1: "MenuTrigger.external1: 4 → 5"
++4.175s write MenuRoot.state0 by action 1: "MenuRoot.state0: \"mouse\" → null"
++4.175s write MenuPositioner.external8 by action 1: "MenuPositioner.external8: undefined → \"ending\""
++4.175s write MenuPopup.external1, MenuPopup.external12, MenuPopup.external15 by action 1: "MenuPopup.external1: undefined → \"ending\""; "MenuPopup.external12: false → true"; "MenuPopup.external15: true → false"
++4.176s write FloatingFocusManager.external0 by action 1: "FloatingFocusManager.external0: true → false"
++4.176s write MenuTrigger.external1 by action 1: "MenuTrigger.external1: 5 → 6"
++4.181s write MenuPositioner.external6 by action 1: "MenuPositioner.external6: \"mouse\" → null"
++4.181s write MenuPopup.external14 by action 1: "MenuPopup.external14: \"mouse\" → null"
++4.181s write MenuItem.external1 by action 1: "MenuItem.external1: true → false"
++4.184s write MemoEditorView.external0.state by action 1: "MemoEditorView.external0.state: 1 → 2"
++4.186s send POST /memos.api.MemoService/UpdateMemo#1 "43 bytes" (action 1)
++4.194s write MemoActionMenu.external2.context, MemoActionMenu.external2.context.previousMemo.$typeName, MemoActionMenu.external2.context.previousMemo.attachments, MemoActionMenu.external2.context.previousMemo.content, MemoActionMenu.external2.context.previousMemo.createTime, MemoActionMenu.external2.context.previousMemo.creator, MemoActionMenu.external2.context.previousMemo.name, MemoActionMenu.external2.context.previousMemo.pinned, MemoActionMenu.external2.context.previousMemo.property, MemoActionMenu.external2.context.previousMemo.reactions, MemoActionMenu.external2.context.previousMemo.relations, MemoActionMenu.external2.context.previousMemo.snippet by action 1: "MemoActionMenu.external2.context.previousMemo.$typeName: undefined → \"memos.api.Memo\""; "MemoActionMenu.external2.context.previousMemo.name: undefined → \"memos/Qc6UsEqSDZKLxmKCaAvDQh\""; "MemoActionMenu.external2.context.previousMemo.creator: undefined → \"users/hunter\""
++4.210s write AppSidebarProvider.state2.from, AppSidebarProvider.state2.memo.state by action 1: "AppSidebarProvider.state2.memo.state: 1 → 2"; "AppSidebarProvider.state2.from: \"/\" → \"/archived\""
++4.210s write CompositeList.state0 by action 1: "CompositeList.state0: false → true"
++4.211s write MenuItem.state0 by action 1: "MenuItem.state0: 2 → 1"
++4.217s write MenuPositioner.state4.middlewareData.arrow.x, MenuPositioner.state4.x by action 1: "MenuPositioner.state4.x: 924.7 → 927"; "MenuPositioner.state4.middlewareData.arrow.x: 86.16 → 84"
++4.220s send POST /memos.api.MemoService/GetMemo#2 "30 bytes"
++4.221s send POST /memos.api.MemoService/ListMemoComments#2 "32 bytes"
++4.267s write MenuRoot.state0: "MenuRoot.state0: null → \"mouse\""
++4.269s write MenuPositioner.external6: "MenuPositioner.external6: null → \"mouse\""
++4.269s write MenuPopup.external14: "MenuPopup.external14: null → \"mouse\""
++4.272s action 2: click button "More"
++4.278s write MenuPositioner.external12, MenuPositioner.external4 by action 2: "MenuPositioner.external4: false → true"; "MenuPositioner.external12: \"item-press\" → \"trigger-press\""
++4.279s write MenuPopup.external0, MenuPopup.external7 by action 2: "MenuPopup.external0: false → true"; "MenuPopup.external7: \"item-press\" → \"trigger-press\""
++4.279s write MenuItem.external4 by action 2: "MenuItem.external4: false → true"
++4.279s write MenuItem_2.external4, MenuItem_2.state0 by action 2: "MenuItem_2.state0: 4 → 0"; "MenuItem_2.external4: false → true"
++4.279s write MenuTrigger.external1 by action 2: "MenuTrigger.external1: 6 → 7"
++4.282s write MenuPopup.external15 by action 2: "MenuPopup.external15: false → true"
++4.282s write FloatingFocusManager.external0 by action 2: "FloatingFocusManager.external0: false → true"
++4.282s write MenuTrigger.external1 by action 2: "MenuTrigger.external1: 7 → 8"
++4.296s write MenuRoot.state1: "MenuRoot.state1: \"ending\" → undefined"
++4.298s write MenuPositioner.external8: "MenuPositioner.external8: \"ending\" → undefined"
++4.298s write MenuPopup.external1: "MenuPopup.external1: \"ending\" → undefined"
++4.551s write MenuItem_2.external1: "MenuItem_2.external1: false → true"
++4.552s action 3: click menuitem "Restore"
++4.557s write MenuRoot.state1 by action 3: "MenuRoot.state1: undefined → \"ending\""
++4.558s write MenuPositioner.external12, MenuPositioner.external4 by action 3: "MenuPositioner.external4: true → false"; "MenuPositioner.external12: \"trigger-press\" → \"item-press\""
++4.558s write MenuPopup.external0, MenuPopup.external12, MenuPopup.external7 by action 3: "MenuPopup.external0: true → false"; "MenuPopup.external7: \"trigger-press\" → \"item-press\""; "MenuPopup.external12: true → false"
++4.558s write MenuItem.external4 by action 3: "MenuItem.external4: true → false"
++4.558s write MenuItem_2.external4 by action 3: "MenuItem_2.external4: true → false"
++4.558s write MenuTrigger.external1 by action 3: "MenuTrigger.external1: 8 → 9"
++4.560s write MenuRoot.state0 by action 3: "MenuRoot.state0: \"mouse\" → null"
++4.560s write MenuPositioner.external8 by action 3: "MenuPositioner.external8: undefined → \"ending\""
++4.560s write MenuPopup.external1, MenuPopup.external12, MenuPopup.external15 by action 3: "MenuPopup.external1: undefined → \"ending\""; "MenuPopup.external12: false → true"; "MenuPopup.external15: true → false"
++4.561s write FloatingFocusManager.external0 by action 3: "FloatingFocusManager.external0: true → false"
++4.561s write MenuTrigger.external1 by action 3: "MenuTrigger.external1: 9 → 10"
++4.563s write MenuPositioner.external6 by action 3: "MenuPositioner.external6: \"mouse\" → null"
++4.563s write MenuPopup.external14 by action 3: "MenuPopup.external14: \"mouse\" → null"
++4.563s write MenuItem_2.external1 by action 3: "MenuItem_2.external1: true → false"
++4.564s write MemoEditorView.external0.state by action 3: "MemoEditorView.external0.state: 2 → 1"
++4.569s write MemoActionMenu.external2.context.previousMemo.state, MemoActionMenu.external2.isPaused, MemoActionMenu.external2.submittedAt, MemoActionMenu.external2.variables.update.state by action 3: "MemoActionMenu.external2.context.previousMemo.state: 1 → 2"; "MemoActionMenu.external2.isPaused: false → true"; "MemoActionMenu.external2.variables.update.state: 2 → 1"
++4.587s write AppSidebarProvider.state2.from, AppSidebarProvider.state2.memo.state by action 3: "AppSidebarProvider.state2.memo.state: 2 → 1"; "AppSidebarProvider.state2.from: \"/archived\" → \"/\""
++4.587s write CompositeList.state0 by action 3: "CompositeList.state0: true → false"
++4.587s write MenuItem.state0 by action 3: "MenuItem.state0: 1 → 4"
++4.588s write MenuSubmenuTrigger.external11, MenuSubmenuTrigger.external11.aria-expanded, MenuSubmenuTrigger.external11.aria-haspopup, MenuSubmenuTrigger.external11.onBlur, MenuSubmenuTrigger.external11.onClick, MenuSubmenuTrigger.external11.onFocus, MenuSubmenuTrigger.external11.onKeyDown, MenuSubmenuTrigger.external11.onMouseDown, MenuSubmenuTrigger.external11.onMouseMove, MenuSubmenuTrigger.external11.onPointerDown, MenuSubmenuTrigger.external11.onPointerEnter by action 3: "MenuSubmenuTrigger.external11: undefined → {}"; "MenuSubmenuTrigger.external11.onKeyDown: function → undefined"; "MenuSubmenuTrigger.external11.onBlur: function → undefined"
++4.588s write MenuSubmenuTrigger.external11, MenuSubmenuTrigger.external11.aria-expanded, MenuSubmenuTrigger.external11.aria-haspopup, MenuSubmenuTrigger.external11.onBlur, MenuSubmenuTrigger.external11.onClick, MenuSubmenuTrigger.external11.onFocus, MenuSubmenuTrigger.external11.onKeyDown, MenuSubmenuTrigger.external11.onMouseDown, MenuSubmenuTrigger.external11.onMouseMove, MenuSubmenuTrigger.external11.onPointerDown, MenuSubmenuTrigger.external11.onPointerEnter by action 3: "MenuSubmenuTrigger.external11.onKeyDown: undefined → function"; "MenuSubmenuTrigger.external11.onBlur: undefined → function"; "MenuSubmenuTrigger.external11.onFocus: undefined → function"
++4.588s write MenuItem_3.state0 by action 3: "MenuItem_3.state0: 1 → 2"
++4.596s write MenuPositioner.state4.middlewareData.arrow.x, MenuPositioner.state4.x by action 3: "MenuPositioner.state4.x: 927 → 924.7"; "MenuPositioner.state4.middlewareData.arrow.x: 84 → 86.16"
++4.599s delivered POST /memos.api.MemoService/ListMemoComments#2 (held 364 ms)
++4.629s delivered POST /memos.api.MemoService/GetMemo#2 (held 397 ms)
++4.659s delivered POST /memos.api.MemoService/UpdateMemo#1 (held 437 ms)
++4.667s send POST /memos.api.MemoService/UpdateMemo#1~hedge "43 bytes" (action 1) via POST /memos.api.MemoService/UpdateMemo
++4.701s write rhtToaster.state0.toasts by POST /memos.api.MemoService/UpdateMemo#1: "rhtToaster.state0.toasts: 0 items → 1 item [{id: \"1\", createdAt: 1793729067238,…"
++4.702s write MemoActionMenu.external2.isPaused by POST /memos.api.MemoService/UpdateMemo#1: "MemoActionMenu.external2.isPaused: true → false"
++4.705s write rhtToaster.state0.toasts by POST /memos.api.MemoService/UpdateMemo#1: "rhtToaster.state0.toasts: 1 items, 1 changed: {id: \"1\", height: undefined → 44.8}"
++4.716s send POST /memos.api.MemoService/GetMemo#3 "30 bytes"
++4.717s send POST /memos.api.MemoService/ListMemoComments#3 "32 bytes"
++4.750s write MenuRoot.state2: "MenuRoot.state2: true → false"
++4.750s write MenuRoot.state1: "MenuRoot.state1: \"ending\" → undefined"
++4.750s write MenuPortal.external0: "MenuPortal.external0: true → false"
++4.750s write MenuTrigger.external1: "MenuTrigger.external1: 10 → 11"
++4.753s write memoCard.path: "memoCard.path: \"/memos/:uid\" → \"/archived\""
++4.872s write AppSidebarProvider.state2, AppSidebarProvider.state2.commentCount, AppSidebarProvider.state2.contentHidden, AppSidebarProvider.state2.from, AppSidebarProvider.state2.memo.$typeName, AppSidebarProvider.state2.memo.attachments, AppSidebarProvider.state2.memo.content, AppSidebarProvider.state2.memo.createTime.$typeName, AppSidebarProvider.state2.memo.createTime.nanos, AppSidebarProvider.state2.memo.createTime.seconds, AppSidebarProvider.state2.memo.creator, AppSidebarProvider.state2.memo.name: "AppSidebarProvider.state2: undefined → undefined"; "AppSidebarProvider.state2.memo.$typeName: \"memos.api.Memo\" → undefined"; "AppSidebarProvider.state2.memo.name: \"memos/Qc6UsEqSDZKLxmKCaAvDQh\" → undefined"
++4.873s write PagedMemoList.state1: "PagedMemoList.state1: undefined → true"
++4.874s send POST /memos.api.UserService/ListUserStats#1 "11 bytes"
++4.875s send POST /memos.api.MemoService/ListMemos#1 "66 bytes"
++5.118s write PagedMemoList.state3: "PagedMemoList.state3: false → true"
++5.283s delivered POST /memos.api.MemoService/ListMemoComments#3 (held 543 ms)
++5.314s delivered POST /memos.api.MemoService/GetMemo#3 (held 580 ms)
++5.463s delivered POST /memos.api.UserService/ListUserStats#1 (held 579 ms)
++5.555s delivered POST /memos.api.MemoService/ListMemos#1 (held 668 ms)
++5.559s write PagedMemoList.state3 by POST /memos.api.MemoService/ListMemos#1: "PagedMemoList.state3: true → false"
++5.585s delivered POST /memos.api.MemoService/UpdateMemo#1~hedge (held 867 ms)
++5.586s send POST /memos.api.MemoService/ListMemos#2 "66 bytes" (action 1) via POST /memos.api.MemoService/UpdateMemo
++5.587s send POST /memos.api.UserService/ListUserStats#2 "11 bytes" (action 1) via POST /memos.api.MemoService/UpdateMemo
++5.588s send POST /memos.api.UserService/ListUserStats#3 "11 bytes" (action 1) via POST /memos.api.MemoService/UpdateMemo
++5.597s write rhtToaster.state0.toasts: "rhtToaster.state0.toasts: 1 → 2 items: added {id: \"2\", createdAt: 1793729068160, +6}"
++5.600s write rhtToaster.state0.toasts: "rhtToaster.state0.toasts: 2 items, 1 changed: {id: \"2\", height: undefined → 44.8}"
++5.754s delivered POST /memos.api.UserService/ListUserStats#2 (held 148 ms)
++5.759s write memoCard.path: "memoCard.path: \"/archived\" → \"/\""
++5.842s write EditSession.state6: "EditSession.state6: false → true"
++5.842s write MenuTrigger.external1: "MenuTrigger.external1: 11 → 2"
++5.843s send POST /memos.api.UserService/ListUserStats#4 "40 bytes"
++5.844s send POST /memos.api.UserService/GetUserStats#1 "14 bytes"
++5.845s send POST /memos.api.InstanceService/GetInstanceSetting#2 "22 bytes"
++5.845s send POST /memos.api.MemoService/ListMemos#3 "66 bytes"
++5.934s write rhtToaster.state0.pausedAt: "rhtToaster.state0.pausedAt: undefined → 1793729068503"
++5.934s delivered POST /memos.api.InstanceService/GetInstanceSetting#2 (held 51 ms)
++5.939s write InstanceProvider.state0.settings by POST /memos.api.InstanceService/GetInstanceSetting#2: "InstanceProvider.state0.settings: 2 → 3 items: added {name: \"instance/settings/AI\", +2}"
++6.084s write PagedMemoList.state3: "PagedMemoList.state3: false → true"
++6.649s delivered POST /memos.api.MemoService/ListMemos#3 (held 763 ms)
++6.863s write PagedMemoList.state3 by POST /memos.api.MemoService/ListMemos#3: "PagedMemoList.state3: true → false"
++6.863s write MenuTrigger_3.external1 by POST /memos.api.MemoService/ListMemos#3: "MenuTrigger_3.external1: 1 → 2"
++6.867s write memoCard.tasks by POST /memos.api.MemoService/ListMemos#3: "memoCard.tasks: \"\" → \"___\""
++6.876s delivered POST /memos.api.UserService/ListUserStats#3 (held 1.3 s)
++6.906s delivered POST /memos.api.MemoService/ListMemos#2 (held 1.3 s)
++6.936s delivered POST /memos.api.UserService/GetUserStats#1 (held 1.1 s)
++6.967s delivered POST /memos.api.UserService/ListUserStats#4 (held 1.1 s)
+
+Delivery order: POST /memos.api.InstanceService/BatchGetInstanceSettings#1 → POST /memos.api.InstanceService/GetInstanceSetting#1 → POST /memos.api.InstanceService/GetInstanceProfile#1 → POST /memos.api.AuthService/RefreshToken#1 → POST /memos.api.AuthService/GetCurrentUser#1 → POST /memos.api.UserService/ListMemoViews#1 → POST /memos.api.UserService/ListUserSettings#1 → GET /api/sse#1 → POST /memos.api.MemoService/GetMemo#1 → POST /memos.api.SpaceService/ListSpaces#1 → POST /memos.api.MemoService/ListMemoComments#1 → POST /memos.api.MemoService/ListMemoComments#2 → POST /memos.api.MemoService/GetMemo#2 → POST /memos.api.MemoService/UpdateMemo#1 → POST /memos.api.MemoService/ListMemoComments#3 → POST /memos.api.MemoService/GetMemo#3 → POST /memos.api.UserService/ListUserStats#1 → POST /memos.api.MemoService/ListMemos#1 → POST /memos.api.MemoService/UpdateMemo#1~hedge → POST /memos.api.UserService/ListUserStats#2 → POST /memos.api.InstanceService/GetInstanceSetting#2 → POST /memos.api.MemoService/ListMemos#3 → POST /memos.api.UserService/ListUserStats#3 → POST /memos.api.MemoService/ListMemos#2 → POST /memos.api.UserService/GetUserStats#1 → POST /memos.api.UserService/ListUserStats#4
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f17"} (schedule: seeded 1, +0-900 ms)
+2. Open "http://localhost:3002/memos/Qc6UsEqSDZKLxmKCaAvDQh" and do the same 4 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f17"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f17 (race), generated from run r19.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://localhost:3002";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":900},"maxHoldMs":2400};
+
+test("/memos/Qc6UsEqSDZKLxmKCaAvDQh: the final state does not depend on response order (GenClass f17)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/memos/Qc6UsEqSDZKLxmKCaAvDQh");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.getByRole("button", { name: "More", exact: true }).or(page.locator("[name=\"More\"], [id=\"More\"]")).first().click();
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).or(page.locator("[name=\"Archive\"], [id=\"Archive\"]")).first().click();
+  await page.getByRole("button", { name: "More", exact: true }).or(page.locator("[name=\"More\"], [id=\"More\"]")).first().click();
+  await page.getByRole("menuitem", { name: "Restore", exact: true }).or(page.locator("[name=\"Restore\"], [id=\"Restore\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.requests["POST /memos.api.UserService/ListUserStats"] ?? 0, "requests sent, as with responses in request order").toBe(2);
+  expect(snap.requests["POST /memos.api.MemoService/ListMemos"] ?? 0, "requests sent, as with responses in request order").toBe(2);
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```
