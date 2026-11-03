@@ -24,7 +24,7 @@ import { CMD, PKG, PKG_DIR, VERSION, compareVersions, distTags, installedVersion
 
 const MODES = ["observe", "guard", "heal"];
 
-const REPO = "https://github.com/genclass-dev/GenClass-lib/blob/main";
+const REPO = "https://github.com/genclass-dev/GenClass/blob/main";
 export const TELEMETRY_URL = `${REPO}/packages/runtime/TELEMETRY.md`;
 export const INTERCEPTION_URL = "https://genclass.dev/docs/interception";
 export const PRIVACY_URL = `${REPO}/PRIVACY.md`;

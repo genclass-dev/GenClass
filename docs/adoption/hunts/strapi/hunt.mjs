@@ -5,7 +5,7 @@
 // is untouched), the real @genclass/mcp server in-process (its bridge on a free port), and the same tool calls a coding
 // agent makes: genclass_explore start → one page load per armed run → report → genclass_explain → genclass_replay.
 //
-//   npm run build -w @genclass/runtime && npm run build -w @genclass/mcp     # in GenClass-lib
+//   npm run build -w @genclass/runtime && npm run build -w @genclass/mcp     # in GenClass
 //   node docs/adoption/hunts/strapi/hunt.mjs login                           # once: saves the admin session
 //   node docs/adoption/hunts/strapi/hunt.mjs probe /admin/content-manager/collection-types/api::article.article
 //   node docs/adoption/hunts/strapi/hunt.mjs once <scenario>                 # one natural load, the recording printed

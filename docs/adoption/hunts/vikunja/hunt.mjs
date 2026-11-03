@@ -6,7 +6,7 @@
 // @genclass/mcp server in-process (its bridge on a free port), and the same tool calls a coding agent makes:
 // genclass_explore start → one page load per armed run → report → genclass_explain → genclass_replay.
 //
-//   npm run build -w @genclass/runtime && npm run build -w @genclass/mcp     # in GenClass-lib
+//   npm run build -w @genclass/runtime && npm run build -w @genclass/mcp     # in GenClass
 //   node docs/adoption/hunts/vikunja/hunt.mjs setup                          # once: user, project, task, board
 //   node docs/adoption/hunts/vikunja/hunt.mjs once <scenario> [slow_ms]      # one load, the recording printed
 //   node docs/adoption/hunts/vikunja/hunt.mjs explore <scenario> <slow_ms> [runs]

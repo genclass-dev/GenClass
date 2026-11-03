@@ -3,7 +3,7 @@
 // (packages/mcp/plugin) at the repository root with the server vendored into it, the marketplace files that point at
 // that root (Claude Code, Codex, Cursor), the Gemini CLI manifest, the licence, and the workflow that re-runs this
 // script there daily. Why a second repository: Anthropic's directory stops validating a repository whose GitHub
-// archive is over 50 MiB (GenClass-lib's is 51), and Codex, Gemini CLI, `gh skill` and the skills CLI clone or read a
+// archive is over 50 MiB (GenClass's is 51), and Codex, Gemini CLI, `gh skill` and the skills CLI clone or read a
 // whole repository for one plugin. Why the server is vendored there: the directory holds a plugin whose launcher runs
 // `npx <package>` for a reviewer, and a lockfile next to that launcher adds a second hold; its own text names the way
 // out, the package's built files inside the plugin (each under 256 KiB) run from ${CLAUDE_PLUGIN_ROOT}, with no
@@ -11,7 +11,7 @@
 // `node ${CLAUDE_PLUGIN_ROOT}/server/genclass-mcp.mjs`: server/cli.mjs is the published package's dist/cli.js at
 // package.json's version, byte for byte (fetched from npm with nothing run; `--server <package dir>` takes a local
 // build instead, for the tests and offline runs), and server/genclass-mcp.mjs is the package's bin/genclass-mcp.mjs
-// with its import pointed at that file. The plugin folder in GenClass-lib keeps the npx launchers (the marketplace
+// with its import pointed at that file. The plugin folder in GenClass keeps the npx launchers (the marketplace
 // there lists it too, and nothing built is committed here), and the Agent Plugins mcp.json keeps npx everywhere,
 // because that format has no plugin-root variable (Codex and Cursor read it).
 // Invariants: everything in that repository comes from here (its sync.yml overwrites all but .git and .github); the
@@ -89,12 +89,12 @@ export function generated(version) {
       plugins: [{ name: "genclass", source: "./", description: DESCRIPTION, version, category: "development" }],
     }),
     ".gitignore": ".DS_Store\nThumbs.db\n",
-    ".github/workflows/sync.yml": `# Keeps this repository equal to what packages/mcp/scripts/plugin-repo.mjs in genclass-dev/GenClass-lib assembles
+    ".github/workflows/sync.yml": `# Keeps this repository equal to what packages/mcp/scripts/plugin-repo.mjs in genclass-dev/GenClass assembles
 # (that script fetches the released server from npm and vendors it under server/). Nothing here is edited by hand:
 # this workflow overwrites everything but .git and .github (the default token cannot change workflow files, so this
-# file is updated from GenClass-lib by a person). Exit code 3 from the script means GenClass-lib's version is not on
+# file is updated from GenClass by a person). Exit code 3 from the script means GenClass's version is not on
 # npm yet (between a bump and its release): the repository then stays as it is.
-name: Sync from GenClass-lib
+name: Sync from GenClass
 on:
   schedule:
     - cron: "23 6 * * *"
@@ -108,26 +108,26 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: genclass-dev/GenClass-lib
+          repository: genclass-dev/GenClass
           ref: main
           path: lib
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Assemble from GenClass-lib
+      - name: Assemble from GenClass
         run: |
           SHA=$(git -C lib rev-parse --short HEAD)
           rc=0; node lib/packages/mcp/scripts/plugin-repo.mjs out || rc=$?
           if [ "$rc" = 0 ]; then rsync -a --delete --exclude .git --exclude .github --exclude lib --exclude out out/ ./; fi
           rm -rf lib out
-          if [ "$rc" = 3 ]; then echo "GenClass-lib's version is not on npm yet: nothing to do until the release"; exit 0; fi
+          if [ "$rc" = 3 ]; then echo "GenClass's version is not on npm yet: nothing to do until the release"; exit 0; fi
           [ "$rc" = 0 ] || exit "$rc"
           echo "SHA=$SHA" >> "$GITHUB_ENV"
       - name: Commit and push when something changed
         run: |
           git add -A
           if git diff --cached --quiet; then echo "nothing changed"; exit 0; fi
-          git -c user.name=genclass-sync -c user.email=noreply@genclass.dev commit -m "sync from GenClass-lib $SHA"
+          git -c user.name=genclass-sync -c user.email=noreply@genclass.dev commit -m "sync from GenClass $SHA"
           git push
 `,
   };
@@ -154,7 +154,7 @@ export function vendoredBin(bin, version) {
   const from = 'from "../dist/cli.js"';
   if (!bin.includes(from)) throw new Error(`bin/genclass-mcp.mjs no longer imports ../dist/cli.js; update plugin-repo.mjs`);
   const note =
-    `// Vendored from ${PACKAGE}@${version} by packages/mcp/scripts/plugin-repo.mjs in genclass-dev/GenClass-lib: cli.mjs next\n` +
+    `// Vendored from ${PACKAGE}@${version} by packages/mcp/scripts/plugin-repo.mjs in genclass-dev/GenClass: cli.mjs next\n` +
     `// to this file is that package's dist/cli.js, byte for byte, and this file is its bin/genclass-mcp.mjs importing it.\n`;
   const i = bin.startsWith("#!") ? bin.indexOf("\n") + 1 : 0;
   return bin.slice(0, i) + note + bin.slice(i).replace(from, 'from "./cli.mjs"');

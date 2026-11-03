@@ -32,7 +32,7 @@ const sc = SCENARIOS[scenarioName];
 if (!sc) throw new Error(`unknown scenario ${scenarioName}`);
 
 const APP = "http://localhost:3000";
-const RT_DIST = "/home/user/GenClass-lib/packages/runtime/dist";
+const RT_DIST = "/home/user/GenClass/packages/runtime/dist";
 const OUT = "/home/user/hunt/out";
 mkdirSync(OUT, { recursive: true });
 
