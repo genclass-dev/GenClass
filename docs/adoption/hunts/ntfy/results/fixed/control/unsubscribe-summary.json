@@ -1,0 +1,20 @@
+{
+  "surface": "unsubscribe",
+  "ntfy": "http://127.0.0.1:12587",
+  "genclass": false,
+  "runs": 6,
+  "sessions": [
+    {
+      "slow_ms": 0,
+      "oracleDiffers": 0,
+      "loads": [
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] > [alphaixevys,bravoixevys] > [bravoixevys] > []",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] > [alphaixevys,bravoixevys] > [bravoixevys] > []",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] > [alphaixevys,bravoixevys] > [bravoixevys] > []",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] > [alphaixevys,bravoixevys] > [bravoixevys] > []",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] > [alphaixevys,bravoixevys] > [bravoixevys] > []",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] > [alphaixevys,bravoixevys] > [bravoixevys] > []"
+      ]
+    }
+  ]
+}

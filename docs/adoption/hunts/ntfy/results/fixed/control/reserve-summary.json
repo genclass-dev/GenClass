@@ -1,0 +1,20 @@
+{
+  "surface": "reserve",
+  "ntfy": "http://127.0.0.1:12587",
+  "genclass": false,
+  "runs": 6,
+  "sessions": [
+    {
+      "slow_ms": 0,
+      "oracleDiffers": 0,
+      "loads": [
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} sidebar [] > [bravogwmaqx] > [alphagwmaqx,bravogwmaqx]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} sidebar [] > [bravogwmaqx] > [alphagwmaqx,bravogwmaqx]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} sidebar [] > [bravogwmaqx] > [alphagwmaqx,bravogwmaqx]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} sidebar [] > [bravogwmaqx] > [alphagwmaqx,bravogwmaqx]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} sidebar [] > [bravogwmaqx] > [alphagwmaqx,bravogwmaqx]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphagwmaqx+reserved (2 msg)\",\"bravogwmaqx\"]} sidebar [] > [bravogwmaqx] > [alphagwmaqx,bravogwmaqx]"
+      ]
+    }
+  ]
+}

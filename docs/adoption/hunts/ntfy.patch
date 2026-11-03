@@ -1,0 +1,267 @@
+From d4a219aa7fd0ea57d5ffe7469816f25a186b3ffd Mon Sep 17 00:00:00 2001
+From: Sender Name <sender@example.com>
+Date: Tue, 3 Nov 2026 17:20:53 +0000
+Subject: [PATCH] Web app: don't let an account sync undo a change made while
+ it was fetching
+
+An account sync applies whatever GET /v1/account returns. When the account is changed locally while
+that fetch is in flight (subscribing, unsubscribing, renaming, reserving, changing a setting), the
+response can predate the change and undo it: a topic just subscribed to is removed again, with its
+notifications; one just unsubscribed from comes back; a setting flips back. Skip such a sync; the
+change makes the server send its own sync event, and that sync applies it.
+
+Also apply an empty subscription list: the server leaves "subscriptions" out when there are none, so
+unsubscribing from the last topic never removed it in other browsers (and a topic re-added by a
+stale sync stayed).
+---
+ web/e2e/reservations.spec.js   | 28 +++++++++++++++++++++
+ web/e2e/settings.spec.js       | 45 +++++++++++++++++++++++++++++++++-
+ web/e2e/subscribe.spec.js      |  2 ++
+ web/src/app/AccountApi.js      | 20 ++++++++++++---
+ web/src/app/AccountApi.test.js | 33 +++++++++++++++++++++++++
+ 5 files changed, 124 insertions(+), 4 deletions(-)
+
+diff --git a/web/e2e/reservations.spec.js b/web/e2e/reservations.spec.js
+index 7fb5c86d..06e32dff 100644
+--- a/web/e2e/reservations.spec.js
++++ b/web/e2e/reservations.spec.js
+@@ -19,6 +19,34 @@ test("reserve a topic while subscribing", async ({ page, request, users }) => {
+   await expect.poll(() => anonymous(request, topic)).toEqual({ publish: 403, subscribe: 403 });
+ });
+ 
++test("reserving a topic while subscribing keeps its messages", async ({ page, request, users }) => {
++  await login(page, await users.create({ paid: true }));
++  await subscribe(page, unique("other")); // with a subscription, every account sync applies the list
++  const topic = unique("reserved");
++  await request.post(`/${topic}`, { data: "first message" });
++  await request.post(`/${topic}`, { data: "second message" });
++
++  // Reserving makes the server send a sync event before the topic is added to the account. Hold the
++  // account fetches until the app stored the topic's messages (or three seconds passed), as a slower
++  // network would; on a fast one the first fetch often lands after the topic was added locally anyway.
++  let polled;
++  const stored = new Promise((resolve) => {
++    polled = resolve;
++  });
++  page.on("response", (response) => {
++    if (new URL(response.url()).pathname === `/${topic}/json`) setTimeout(polled, 1000); // Let the poller store what it fetched
++  });
++  await page.route("**/v1/account", async (route) => {
++    const response = await route.fetch();
++    await Promise.race([stored, new Promise((resolve) => setTimeout(resolve, 3000))]);
++    await route.fulfill({ response });
++  });
++  await subscribe(page, topic, { reserve: true });
++  await page.waitForTimeout(1000); // Let the app store what it got
++  await expect(page.getByRole("button", { name: topic, exact: true })).toBeVisible();
++  await expect(page.getByRole("listitem", { name: "Notification" })).toHaveCount(2);
++});
++
+ test("reserve switch is disabled without a tier", async ({ page, users }) => {
+   await login(page, await users.create());
+   await page.getByRole("button", { name: "Subscribe to topic" }).click();
+diff --git a/web/e2e/settings.spec.js b/web/e2e/settings.spec.js
+index 89b1e7e4..57454773 100644
+--- a/web/e2e/settings.spec.js
++++ b/web/e2e/settings.spec.js
+@@ -1,4 +1,4 @@
+-import { test, expect, account, apiToken, login, selectPref, subscribe } from "./fixtures.js";
++import { test, expect, account, apiToken, connected, login, selectPref, subscribe } from "./fixtures.js";
+ import { baseURL, unique } from "./env.js";
+ 
+ test("settings page renders", async ({ page }) => {
+@@ -30,6 +30,49 @@ test("notification prefs sync to the account", async ({ page, request, users })
+   await expect.poll(async () => (await account(request, token)).notification).toEqual({ sound: "none", min_priority: 5, delete_after: 0 });
+ });
+ 
++test("a slow account sync doesn't undo a newer settings change", async ({ page, request, users }) => {
++  const username = await users.create();
++  await login(page, username);
++  const token = await apiToken(request, username);
++  const live = connected(page, (await account(request, token)).sync_topic);
++  await page.goto("/settings");
++  await live;
++
++  // Each change makes the server send a sync event, and the app fetch the account. Hold the account
++  // fetched after the first change until the one fetched after the second change was answered (or
++  // two seconds passed), as a slow network might.
++  let fetches = 0;
++  let released = false;
++  let answered;
++  const second = new Promise((resolve) => {
++    answered = resolve;
++  });
++  await page.route("**/v1/account", async (route) => {
++    if (route.request().method() !== "GET") {
++      await route.fallback();
++      return;
++    }
++    const response = await route.fetch();
++    fetches += 1;
++    if (fetches === 1) {
++      await Promise.race([second, new Promise((resolve) => setTimeout(resolve, 2000))]);
++      await route.fulfill({ response });
++      released = true;
++    } else {
++      await route.fulfill({ response });
++      answered();
++    }
++  });
++
++  await selectPref(page, "Notification sound", "No sound");
++  await expect.poll(() => fetches).toBe(1);
++  await selectPref(page, "Notification sound", "Pop");
++  await expect.poll(() => released).toBe(true);
++  await page.waitForTimeout(1000); // Let the app store what it got
++  await expect(page.getByText("Notifications play the Pop sound when they arrive")).toBeVisible();
++  expect((await account(request, token)).notification.sound).toBe("pop");
++});
++
+ test("theme", async ({ page }) => {
+   await page.goto("/settings");
+   await selectPref(page, "Theme", "Dark mode");
+diff --git a/web/e2e/subscribe.spec.js b/web/e2e/subscribe.spec.js
+index 4a4b6238..aa1bdf72 100644
+--- a/web/e2e/subscribe.spec.js
++++ b/web/e2e/subscribe.spec.js
+@@ -180,5 +180,7 @@ test("subscriptions and display names sync to the account", async ({ page, brows
+   await openTopicMenu(page, "Synced name");
+   await page.getByRole("menuitem", { name: "Unsubscribe" }).click();
+   await expect.poll(async () => (await account(request, token)).subscriptions ?? []).toEqual([]);
++  // ... and from the second browser, also when it was the account's last subscription
++  await expect(other.getByRole("button", { name: "Synced name", exact: true })).toBeHidden();
+   await context.close();
+ });
+diff --git a/web/src/app/AccountApi.js b/web/src/app/AccountApi.js
+index 6b731ca3..03aa017a 100644
+--- a/web/src/app/AccountApi.js
++++ b/web/src/app/AccountApi.js
+@@ -37,6 +37,7 @@ class AccountApi {
+     this.timer = null;
+     this.listener = null; // Fired when account is fetched from remote
+     this.tiers = null; // Cached
++    this.changes = 0; // Counts local changes to what sync() applies, see sync()
+   }
+ 
+   registerListener(listener) {
+@@ -177,6 +178,7 @@ class AccountApi {
+   }
+ 
+   async updateSettings(payload) {
++    this.changes += 1;
+     const url = accountSettingsUrl(config.base_url);
+     const body = JSON.stringify(payload);
+     console.log(`[AccountApi] Updating user account ${url}: ${body}`);
+@@ -188,6 +190,7 @@ class AccountApi {
+   }
+ 
+   async addSubscription(baseUrl, topic) {
++    this.changes += 1;
+     const url = accountSubscriptionUrl(config.base_url);
+     const body = JSON.stringify({
+       base_url: baseUrl,
+@@ -205,6 +208,7 @@ class AccountApi {
+   }
+ 
+   async updateSubscription(baseUrl, topic, payload) {
++    this.changes += 1;
+     const url = accountSubscriptionUrl(config.base_url);
+     const body = JSON.stringify({
+       base_url: baseUrl,
+@@ -223,6 +227,7 @@ class AccountApi {
+   }
+ 
+   async deleteSubscription(baseUrl, topic) {
++    this.changes += 1;
+     const url = accountSubscriptionUrl(config.base_url);
+     console.log(`[AccountApi] Removing user subscription ${url}`);
+     const headers = {
+@@ -236,6 +241,7 @@ class AccountApi {
+   }
+ 
+   async upsertReservation(topic, everyone) {
++    this.changes += 1;
+     const url = accountReservationUrl(config.base_url);
+     console.log(`[AccountApi] Upserting user access to topic ${topic}, everyone=${everyone}`);
+     await fetchOrThrow(url, {
+@@ -249,6 +255,7 @@ class AccountApi {
+   }
+ 
+   async deleteReservation(topic, deleteMessages) {
++    this.changes += 1;
+     const url = accountReservationSingleUrl(config.base_url, topic);
+     console.log(`[AccountApi] Removing topic reservation ${url}`);
+     const headers = {
+@@ -448,7 +455,15 @@ class AccountApi {
+         return null;
+       }
+       console.log(`[AccountApi] Syncing account`);
++      const changes = this.changes;
+       const account = await this.get();
++      if (this.changes !== changes) {
++        // The account was changed here while it was being fetched, so it may not have the change yet; applying it
++        // would undo the change locally (e.g. remove a topic that was just subscribed to, and its notifications).
++        // The server sends another sync event for the change, and that sync applies it.
++        console.log(`[AccountApi] Account changed while syncing, skipping this sync`);
++        return account;
++      }
+       if (account.language) {
+         await i18n.changeLanguage(account.language);
+       }
+@@ -469,9 +484,8 @@ class AccountApi {
+           await prefs.setMinPriority(account.notification.min_priority);
+         }
+       }
+-      if (account.subscriptions) {
+-        await subscriptionManager.syncFromRemote(account.subscriptions, account.reservations);
+-      }
++      // The server leaves "subscriptions" out when there are none; that removes the last one here too
++      await subscriptionManager.syncFromRemote(account.subscriptions ?? [], account.reservations);
+       return account;
+     } catch (e) {
+       console.log(`[AccountApi] Error fetching account`, e);
+diff --git a/web/src/app/AccountApi.test.js b/web/src/app/AccountApi.test.js
+index af3977cc..a5c7752b 100644
+--- a/web/src/app/AccountApi.test.js
++++ b/web/src/app/AccountApi.test.js
+@@ -212,4 +212,37 @@ describe("AccountApi.sync", () => {
+     expect(prefs.setMinPriority).toHaveBeenCalledWith(3);
+     expect(subscriptionManager.syncFromRemote).toHaveBeenCalledWith([{ topic: "t" }], [{ topic: "t" }]);
+   });
++
++  it("removes the last local subscription when the account has none", async () => {
++    // The server omits an empty "subscriptions" list (omitempty)
++    fetchMock.mockResolvedValue(ok({ notification: { sound: "ding" } }));
++    await accountApi.sync();
++    expect(subscriptionManager.syncFromRemote).toHaveBeenCalledWith([], undefined);
++  });
++
++  it("skips an account that was fetched while the account was changed locally", async () => {
++    // Subscribing while a sync is in flight: the account it fetched may not have the new topic yet,
++    // and applying it would remove the topic again. The change's own sync event applies it instead.
++    let respond;
++    fetchMock
++      .mockImplementationOnce(
++        () =>
++          new Promise((resolve) => {
++            respond = resolve;
++          }),
++      )
++      .mockResolvedValueOnce(ok({ id: "sub_1" }));
++
++    const sync = accountApi.sync();
++    await accountApi.addSubscription("https://ntfy.sh", "new");
++    respond(ok({ notification: { min_priority: 1 }, subscriptions: [{ topic: "old" }] }));
++    await sync;
++
++    expect(prefs.setMinPriority).not.toHaveBeenCalled();
++    expect(subscriptionManager.syncFromRemote).not.toHaveBeenCalled();
++
++    fetchMock.mockResolvedValueOnce(ok({ subscriptions: [{ topic: "old" }, { topic: "new" }] }));
++    await accountApi.sync();
++    expect(subscriptionManager.syncFromRemote).toHaveBeenCalledWith([{ topic: "old" }, { topic: "new" }], undefined);
++  });
+ });
+-- 
+2.43.0
+

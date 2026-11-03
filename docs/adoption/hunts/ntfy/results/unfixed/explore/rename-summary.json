@@ -1,0 +1,56 @@
+{
+  "surface": "rename",
+  "ntfy": "http://127.0.0.1:12586",
+  "genclass": true,
+  "runs": 6,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "no race",
+      "finding": null,
+      "oracleDiffers": 0,
+      "loads": [
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then GET /v1/account#3 then PATCH /v1/account/subscription#2]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then PATCH /v1/account/subscription#2 then GET /v1/account#3]"
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "no race",
+      "finding": null,
+      "oracleDiffers": 0,
+      "loads": [
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then GET /v1/account#3 then PATCH /v1/account/subscription#2]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then PATCH /v1/account/subscription#2 then GET /v1/account#3]"
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "no race",
+      "finding": null,
+      "oracleDiffers": 0,
+      "loads": [
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then PATCH /v1/account/subscription#1 then GET /v1/account#2 then PATCH /v1/account/subscription#2 then GET /v1/account#3]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then GET /v1/account#3 then PATCH /v1/account/subscription#2]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphalffhvj=Second name\"]} sidebar [] > [alphalffhvj] > [First name] > [Second name] [delivered GET /v1/account#1 then GET /v1/account#2 then PATCH /v1/account/subscription#1 then PATCH /v1/account/subscription#2 then GET /v1/account#3]"
+      ]
+    }
+  ]
+}
