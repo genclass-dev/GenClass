@@ -1,0 +1,49 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /checkout · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click combobox "Select Country"
+  click option "United States"
+  click combobox "United States"
+  click option "Canada"
+Ignored as noise (differs between the two baselines): state evershopGlobal.state0.data
+RACE: 3 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r20 (seed 1):
+    field "base-ui-_r_i_": baseline "", this run "(absent)"
+    requests sent to "POST /api/graphql": baseline "8", this run "7"
+    field "base-ui-_r_f_": baseline "(absent)", this run ""
+- run r21 (seed 2):
+    field "base-ui-_r_i_": baseline "", this run "(absent)"
+    requests sent to "POST /api/graphql": baseline "8", this run "7"
+    field "base-ui-_r_f_": baseline "(absent)", this run ""
+- run r23 (seed 4):
+    field "base-ui-_r_i_": baseline "", this run "(absent)"
+    requests sent to "POST /api/graphql": baseline "8", this run "7"
+    field "base-ui-_r_f_": baseline "(absent)", this run ""
+    state "baseUiRLpksiujcm_2.state0": baseline "2", this run "(absent)"
+    state "baseUiRMraksiujcm.state0": baseline "1", this run "0"
+    state "baseUiRMraksiujcm_2.state0": baseline "0", this run "(absent)"
+Internal state only (not a race by this check): 1 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.
+- run r24 (seed 5):
+    state "baseUiRLpksiujcm_2.state0": baseline "2", this run "(absent)"
+    state "baseUiRMraksiujcm.state0": baseline "1", this run "0"
+    state "baseUiRMraksiujcm_2.state0": baseline "0", this run "(absent)"
+    state "fieldContactEmail.state0": baseline "\"\"", this run "(absent)"
+    state "invalid_2.state0": baseline "0 items", this run "(absent)"
+    state "invalid_2.state2": baseline "\"\"", this run "(absent)"
+

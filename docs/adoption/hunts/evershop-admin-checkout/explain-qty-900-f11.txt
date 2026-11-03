@@ -1,0 +1,48 @@
+# f11 · race · "/cart" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "3" under "seed 1", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x3: 4 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- page text in the baseline only: "4"
+- page text in the baseline only: "$30.00"
+- page text in the baseline only: "$54.00"
+- page text in the baseline only: "$54.00"
+- page text in the failing run only: "3"
+- page text in the failing run only: "$15.00"
+- page text in the failing run only: "$39.00"
+- page text in the failing run only: "$39.00"
+- witness in the failing run only: overwrote-newer evershopGlobal.state0.loadingStates.updatingItem by POST /api/graphql
+
+## Steps of run r21 ("http://localhost:3000/cart", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++-0.006s write f.state0: "f.state0: false → true"
++-0.005s write f_2.state0: "f_2.state0: false → true"
++-0.005s write f_3.state0: "f_3.state0: false → true"
++-0.004s write invalid.state0.isReady: "invalid.state0.isReady: false → true"
++-0.004s write eD.state1: "eD.state1: false → true"
++-0.004s write eD_2.state1: "eD_2.state1: false → true"
++-0.003s write mainMenu.state0: "mainMenu.state0: false → true"
++-0.003s write u.state0: "u.state0: 0 → 2"
++-0.002s write i.state0: "i.state0: -1 → 1"
++-0.002s write i_2.state0: "i_2.state0: -1 → 0"
++0.058s action 0: click button
++0.060s write t4.state0 by action 0: "t4.state0: 1 → 2"
++0.240s action 1: click button
++0.240s write t4_2.state0 by action 1: "t4_2.state0: 1 → 2"
++0.561s send PATCH /api/cart/:id/items/:id#1 "{qty: 1, action: \"increase\"}" (action 0) via timer 500ms
++0.569s write evershopGlobal.state0.loading, evershopGlobal.state0.loadingStates.updatingItem by action 0: "evershopGlobal.state0.loading: false → true"; "evershopGlobal.state0.loadingStates.updatingItem: null → \"122\""
++0.615s delivered PATCH /api/cart/:id/items/:id#1 (held 28 ms)
++0.624s send POST /api/graphql#1 "{query: \"query Query {\\n myCart …\", +2}" (action 0) via PATCH /api/cart/:id/items/:id
++0.628s write evershopGlobal.state0.syncStatus.syncing, evershopGlobal.state0.syncStatus.trigger by PATCH /api/cart/:id/items/:id#1: "evershopGlobal.state0.syncStatus.syncing: false → true"; "evershopGlobal.state0.syncStatus.trigger: undefined → \"updateItem\""
++0.741s send PATCH /api/cart/:id/items/:id#2 "{qty: 1, action: \"increase\"}" (action 1) via timer 500ms
++0.744s write evershopGlobal.state0.loadingStates.updatingItem by action 1: "evershopGlobal.state0.loadingStates.updatingItem: \"122\" → \"121\""
++0.915s delivered PATCH /api/cart/:id/items/:id#2 (held 149 ms)
++1.091s delivered POST /api/graphql#1 (held 445 ms)
++1.096s write evershopGlobal.state0.data, evershopGlobal.state0.loading, evershopGlobal.state0.loadingStates.updatingItem, evershopGlobal.state0.syncStatus.synced, evershopGlobal.state0.syncStatus.syncing by POST /api/graphql#1: "evershopGlobal.state0.loading: true → false"; "evershopGlobal.state0.loadingStates.updatingItem: \"121\" → null"; "evershopGlobal.state0.syncStatus.syncing: true → false"
+
+Delivery order: PATCH /api/cart/:id/items/:id#1 → PATCH /api/cart/:id/items/:id#2 → POST /api/graphql#1
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f11"} (schedule: seeded 1, +0-900 ms)
+2. Open "http://localhost:3000/cart" and do the same 2 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f11"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
