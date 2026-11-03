@@ -21,13 +21,13 @@ The skill alone, in any agent the skills CLI knows: `npx skills add genclass-dev
 
 Then connect your app's development build (two lines; `genclass_setup` prints them for your framework) and load a
 page of the dev server. The page side needs `@genclass/runtime` 0.3.0-beta.1 or later. See the
-[package README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/mcp/README.md).
+[package README](https://github.com/genclass-dev/GenClass/blob/main/packages/mcp/README.md).
 
 ## What it installs
 
 | part | file | what it does |
 |---|---|---|
-| MCP server `genclass` | `.mcp.json` | runs the GenClass MCP server, `@genclass/mcp@0.2.1` (vendored as `server/cli.mjs` in the plugin repository and run with `node`; the copy inside GenClass-lib runs `npx -y @genclass/mcp@0.2.1`): nine tools (`genclass_status`, `genclass_findings`, `genclass_explain`, `genclass_explore`, `genclass_replay`, `genclass_analytics`, `genclass_setup`, `genclass_scan`, `genclass_clear`) and a bridge on 127.0.0.1:47357 that your app's pages connect to |
+| MCP server `genclass` | `.mcp.json` | runs the GenClass MCP server, `@genclass/mcp@0.2.1` (vendored as `server/cli.mjs` in the plugin repository and run with `node`; the copy inside GenClass runs `npx -y @genclass/mcp@0.2.1`): nine tools (`genclass_status`, `genclass_findings`, `genclass_explain`, `genclass_explore`, `genclass_replay`, `genclass_analytics`, `genclass_setup`, `genclass_scan`, `genclass_clear`) and a bridge on 127.0.0.1:47357 that your app's pages connect to |
 | `UserPromptSubmit` hook | `hooks/hooks.json` | runs the same server's `hook` command before each prompt: up to five findings recorded since the last prompt are added to the prompt as context |
 | skill `genclass` | `skills/genclass/SKILL.md` | the procedure once Claude reaches for the tools (the explore arguments and Playwright pairing, how to read a report, what to say when done, what to do when the tools are missing); its description carries the triggers (an intermittent frontend bug; after changing code that fetches, submits, autosaves, polls or debounces; before calling a UI change done), as do the server's instructions. Without the plugin, `npx -y @genclass/mcp@0.2.1 init` writes the same file to `.claude/skills/genclass/SKILL.md` |
 
@@ -35,7 +35,7 @@ In the plugin repository the server is vendored: `server/cli.mjs` is the publish
 `dist/cli.js`, byte for byte, fetched from npm by the daily sync), `server/genclass-mcp.mjs` is the package's command
 importing it, and `.mcp.json` and the hook run them with `node` from `${CLAUDE_PLUGIN_ROOT}`, so installing the plugin
 installs nothing and runs the exact release it was reviewed with; there is no `package.json` or lockfile. The copy of
-this folder inside GenClass-lib runs `npx -y @genclass/mcp@0.2.1` instead (nothing built is committed there).
+this folder inside GenClass runs `npx -y @genclass/mcp@0.2.1` instead (nothing built is committed there).
 `plugin.json` and `mcp.json` at this folder's root are the same server in the
 [Agent Plugins](https://agent-plugins.org) format, for Cursor, Codex and other clients that read it (server and skill,
 no hook); that format has no plugin-root variable, so they keep `npx`.
@@ -54,13 +54,13 @@ or origins you list in `GENCLASS_AGENT_ORIGINS`. Nothing leaves your machine, ex
 `{source: "production"}`, which reads your own GenClass dashboard when you set `GENCLASS_DASHBOARD` to its link, and
 `genclass_scan` with `hosted: true`, which sends the URL to the genclass.dev page check (without it, the page loads
 in a local headless browser).
-Details: [AGENT.md section 6](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/AGENT.md#6-untrusted-input-and-security).
+Details: [AGENT.md section 6](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md#6-untrusted-input-and-security).
 
 ## Privacy
 
 The plugin collects nothing and sends nothing to GenClass or anyone else. Findings stay in `.genclass/agent/` in your
 project (gitignored by the server) and in the bridge's memory. The runtime in your app has its own disclosed
-diagnostics, which `GenClass.init({ telemetry: false })` turns off ([PRIVACY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/PRIVACY.md)).
+diagnostics, which `GenClass.init({ telemetry: false })` turns off ([PRIVACY.md](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md)).
 
 ## Turn it off
 
@@ -72,11 +72,11 @@ diagnostics, which `GenClass.init({ telemetry: false })` turns off ([PRIVACY.md]
 
 ## Where this comes from
 
-This folder is `packages/mcp/plugin` in [genclass-dev/GenClass-lib](https://github.com/genclass-dev/GenClass-lib).
+This folder is `packages/mcp/plugin` in [genclass-dev/GenClass](https://github.com/genclass-dev/GenClass).
 The repository [genclass-dev/genclass-plugin](https://github.com/genclass-dev/genclass-plugin) is this folder at a
 repository root with the marketplace files and the vendored server, assembled by
-`node packages/mcp/scripts/plugin-repo.mjs` and re-synced daily, so issues and pull requests go to GenClass-lib.
+`node packages/mcp/scripts/plugin-repo.mjs` and re-synced daily, so issues and pull requests go to GenClass.
 
 ## License
 
-Apache-2.0. Source: [packages/mcp](https://github.com/genclass-dev/GenClass-lib/tree/main/packages/mcp).
+Apache-2.0. Source: [packages/mcp](https://github.com/genclass-dev/GenClass/tree/main/packages/mcp).

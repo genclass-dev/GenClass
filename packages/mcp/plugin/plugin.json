@@ -8,7 +8,7 @@
     "url": "https://genclass.dev"
   },
   "homepage": "https://genclass.dev",
-  "repository": "https://github.com/genclass-dev/GenClass-lib",
+  "repository": "https://github.com/genclass-dev/GenClass",
   "license": "Apache-2.0",
   "keywords": [
     "race-condition",

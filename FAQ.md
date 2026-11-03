@@ -4,10 +4,10 @@ Short answers to the questions developers ask about GenClass Runtime, for `@genc
 `beta`) and 0.2.2 (npm `latest`; the dist-tags on 2026-10-22), both with the model
 `@genclass/runtime-model@0.2.0`. Each answer comes first and the link after it has the details. Every measured number
 is from
-[RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md) (the compatibility
-details from [compat/RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md)), which
+[RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md) (the compatibility
+details from [compat/RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/compat/RESULTS.md)), which
 say how and on what each was measured; defaults and limits come from the code. The headline numbers are under
-[current numbers in one place](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#current-numbers-in-one-place).
+[current numbers in one place](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#current-numbers-in-one-place).
 
 ## What is GenClass Runtime?
 
@@ -18,8 +18,8 @@ and each report comes with its evidence. By default it only reports (`observe`):
 request, a response or a state write. The opt-in `guard` mode may act on a few of them
 ([how often](#can-it-prevent-these-bugs-or-only-report-them)), and `heal` is experimental.
 
-Details: [README](https://github.com/genclass-dev/GenClass-lib#readme),
-[package README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md).
+Details: [README](https://github.com/genclass-dev/GenClass#readme),
+[package README](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md).
 
 ## How do I find race conditions in a React app?
 
@@ -29,7 +29,7 @@ first in your entry file. React component state is found automatically, and in `
 console line with its evidence.
 
 Details: [guide: race conditions in React](https://genclass.dev/guides/race-conditions-react),
-[what a detection looks like](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#what-it-looks-like).
+[what a detection looks like](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#what-it-looks-like).
 
 ## Why does my search box show results for an older query?
 
@@ -40,7 +40,7 @@ state and Zustand stores with the `devtools` middleware are found automatically;
 or `rt.guard`. In `guard`, for state it can write, it can drop the stale write when its gate clears.
 
 Details: [guide: stale responses out of order](https://genclass.dev/guides/stale-responses-out-of-order),
-[state it can protect](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#state-it-can-protect).
+[state it can protect](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#state-it-can-protect).
 
 ## Is AbortController enough to stop stale responses?
 
@@ -58,7 +58,7 @@ duplicate submits on held-out real apps with the right diagnosis, under a false-
 decision that held on held-out test. The 0.3.0 changes to observe were not measured end to end (§11).
 
 Details: [guide: prevent duplicate submissions](https://genclass.dev/guides/prevent-duplicate-submissions),
-[RESULTS.md §11](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#observe-detection).
+[RESULTS.md §11](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#observe-detection).
 
 ## Does GenClass change what my app does?
 
@@ -69,8 +69,8 @@ show with GenClass although it took no action (1 in observe, 3 in guard or heal:
 the app's race), and in 38 more guard and heal runs where the bug showed without GenClass, it still showed but the
 page or server ended in a different state. `guard` and `heal` act only when their gate clears.
 
-Details: [RESULTS.md §16](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#16-compatibility-matrix-summary),
-[INTERCEPTION.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/INTERCEPTION.md).
+Details: [RESULTS.md §16](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#16-compatibility-matrix-summary),
+[INTERCEPTION.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/INTERCEPTION.md).
 
 ## How accurate is it?
 
@@ -89,8 +89,8 @@ state; false-detection limit 5% on real apps and 6% on simulated, met on held-ou
 end on 0.3.0; how many false detections the possible tier adds, and what share of possible detections is false, are
 not measured.
 
-Details: [Measured results](https://github.com/genclass-dev/GenClass-lib#measured-results),
-[current numbers in one place](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#current-numbers-in-one-place) (RESULTS.md §1, §11).
+Details: [Measured results](https://github.com/genclass-dev/GenClass#measured-results),
+[current numbers in one place](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#current-numbers-in-one-place) (RESULTS.md §1, §11).
 
 ## Can it prevent these bugs, or only report them?
 
@@ -102,8 +102,8 @@ actions on correct apps in 1,760 runs. In the six demos under network chaos no m
 GenClass, 70% observe, 72% guard, 73% heal; differences under about 5 points are noise; runtime 0.1.0-beta.4, model
 0.2.0), with 0 false interventions in 30 clean trials each in guard and heal.
 
-Details: [Modes](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#modes),
-[RESULTS.md §16](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#16-compatibility-matrix-summary).
+Details: [Modes](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#modes),
+[RESULTS.md §16](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#16-compatibility-matrix-summary).
 
 ## Which frameworks and data libraries does it work with?
 
@@ -118,8 +118,8 @@ automatically, and so are Zustand stores with the `devtools` middleware (in prod
 import `@genclass/runtime/discover` first and pass `autoState: true`. Vue / Pinia, Svelte stores, signals, MobX,
 Jotai and Recoil are not discovered: register such state with `rt.atom` / `rt.guard`.
 
-Details: [compat/RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md),
-[automatic state discovery](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#automatic-state-discovery).
+Details: [compat/RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/compat/RESULTS.md),
+[automatic state discovery](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#automatic-state-discovery).
 
 ## How much does it add to my page?
 
@@ -128,9 +128,9 @@ About 108 KB of JavaScript (minified, gzip) on every page for `@genclass/runtime
 13 MB downloaded once on WASM, then cached, and +190 to 280 MB of renderer memory while loaded (one pilot app,
 runtime 0.1.0-beta.3). From 0.3.0, devices reporting 2 GB of memory or less, and Save-Data connections, skip it.
 
-Details: [RESULTS.md §10](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#first-load)
-and [§17](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#17-browser-cost-on-a-pilot-app-2026-10-09-and-2026-10-10),
-[Costs](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#costs).
+Details: [RESULTS.md §10](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#first-load)
+and [§17](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#17-browser-cost-on-a-pilot-app-2026-10-09-and-2026-10-10),
+[Costs](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#costs).
 
 ## Does it work without the model, or on phones?
 
@@ -142,8 +142,8 @@ If no Web Worker can start, the model runs on the main thread unless `model: { i
 ignores it and always falls back to the main thread); each model pass then blocks it (about 180 to 600 ms at 500 to
 1,170 tokens on one WASM thread, estimated from runs in Node, not in a browser).
 
-Details: [Costs](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#costs),
-[Content-Security-Policy and self-hosting](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting).
+Details: [Costs](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#costs),
+[Content-Security-Policy and self-hosting](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting).
 
 ## Does it send my data anywhere?
 
@@ -157,8 +157,8 @@ also carry the token and the names of `protect()`ed functions. Opt out with `Gen
 `npx @genclass/runtime@beta init --no-telemetry`, `?genclass=no-telemetry` or
 `localStorage.setItem("genclass.telemetry", "off")`; Global Privacy Control is honoured.
 
-Details: [TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md),
-[PRIVACY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/PRIVACY.md).
+Details: [TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md),
+[PRIVACY.md](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md).
 
 ## What does it cost? Does it need an API key?
 
@@ -169,7 +169,7 @@ request. Enterprise, agreed by email, adds GenClass's models in its cloud, a yea
 Nothing is sold on the site. The pricing page shows the plans in force.
 
 Details: [genclass.dev/pricing](https://genclass.dev/pricing),
-[billing/plans.json](https://github.com/genclass-dev/GenClass-lib/blob/main/billing/plans.json).
+[billing/plans.json](https://github.com/genclass-dev/GenClass/blob/main/billing/plans.json).
 
 ## Can I use it without an account?
 
@@ -187,7 +187,7 @@ nothing they could collect. Tests usually run on fast, ordered networks, where t
 GenClass looks for them inside the page while people use it, and its reports can go to your own logging.
 Use it next to both.
 
-Details: [How GenClass compares](https://github.com/genclass-dev/GenClass-lib#how-genclass-compares).
+Details: [How GenClass compares](https://github.com/genclass-dev/GenClass#how-genclass-compares).
 
 ## Can it explain flaky Playwright tests?
 
@@ -195,7 +195,7 @@ Not as a packaged tool yet. `@genclass/playwright`, a reporter that turns what G
 one markdown report for the pull request, is in this repository but not on npm, and the fixture it reads has not
 shipped. Today you can load the runtime in the app under test and read its `[GenClass]` console lines.
 
-Details: [packages/playwright](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/playwright/README.md).
+Details: [packages/playwright](https://github.com/genclass-dev/GenClass/blob/main/packages/playwright/README.md).
 
 ## How do I turn it off or remove it?
 
@@ -206,7 +206,7 @@ when nothing else imports it (if you edited a marked line, it changes nothing an
 `.genclass.local` and its `.gitignore` line, and a dashboard `init` created stays on genclass.dev.
 `?genclass=no-telemetry` turns off only the diagnostics.
 
-Details: [INTERCEPTION.md, turning it off](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/INTERCEPTION.md#turning-it-off-and-restoring-the-page).
+Details: [INTERCEPTION.md, turning it off](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/INTERCEPTION.md#turning-it-off-and-restoring-the-page).
 
 ## How was it measured, and does that apply to my app?
 
@@ -214,12 +214,12 @@ On held-out data never used in training: simulated apps, real apps run in headle
 of seven apps (six frameworks and plain HTML) and six demo apps under network chaos. Each recall is reported next
 to its false rate. It was not evaluated on your app, so watch `observe` before turning on `guard`.
 
-Details: [RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md),
-[model card](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime-model/MODEL_CARD.md).
+Details: [RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md),
+[model card](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime-model/MODEL_CARD.md).
 
 ## Where can I ask something else?
 
-In [GitHub Discussions](https://github.com/genclass-dev/GenClass-lib/discussions/categories/q-a) or on
+In [GitHub Discussions](https://github.com/genclass-dev/GenClass/discussions/categories/q-a) or on
 [Discord](https://discord.gg/kN9kRnFtZm). Report bugs and false detections in
-[Issues](https://github.com/genclass-dev/GenClass-lib/issues); the false-detection template asks for the console
+[Issues](https://github.com/genclass-dev/GenClass/issues); the false-detection template asks for the console
 group and `rt.explain(id)`.

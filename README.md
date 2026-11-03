@@ -2,9 +2,9 @@
 
 [![npm](https://img.shields.io/npm/v/@genclass/runtime/latest?label=npm)](https://www.npmjs.com/package/@genclass/runtime)
 [![npm beta](https://img.shields.io/npm/v/@genclass/runtime/beta?label=beta)](https://www.npmjs.com/package/@genclass/runtime?activeTab=versions)
-[![CI](https://github.com/genclass-dev/GenClass-lib/actions/workflows/ci.yml/badge.svg)](https://github.com/genclass-dev/GenClass-lib/actions/workflows/ci.yml)
-[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/genclass-dev/GenClass-lib/blob/main/LICENSE)
-[![model](https://img.shields.io/badge/model-runs%20in%20the%20browser-brightgreen)](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime-model/MODEL_CARD.md)
+[![CI](https://github.com/genclass-dev/GenClass/actions/workflows/ci.yml/badge.svg)](https://github.com/genclass-dev/GenClass/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/genclass-dev/GenClass/blob/main/LICENSE)
+[![model](https://img.shields.io/badge/model-runs%20in%20the%20browser-brightgreen)](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime-model/MODEL_CARD.md)
 
 **Website and docs: [genclass.dev](https://genclass.dev)** · [Docs](https://genclass.dev/docs) · [Guides](https://genclass.dev/guides) · [Benchmarks](https://genclass.dev/benchmarks) · [Pricing](https://genclass.dev/pricing) · [FAQ](FAQ.md) · [Discord](https://discord.gg/kN9kRnFtZm)
 
@@ -16,7 +16,7 @@ request, a response or a state write. The opt-in `guard` mode may act on a few o
 ([how often](#what-it-finds-measured)), and `heal` is experimental. It runs in React, Next.js, Vue, SvelteKit,
 Angular, Solid and plain-HTML apps (measured in Chromium with an unpublished 0.1.0-beta.4 build and model 0.2.0 on
 2026-10-10, not re-run on 0.2.2 or 0.3.0:
-[compatibility matrix](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md)).
+[compatibility matrix](https://github.com/genclass-dev/GenClass/blob/main/compat/RESULTS.md)).
 
 **Status: `@genclass/runtime@0.3.0-beta.6`, the newest line (npm `beta` dist-tag: `npm install @genclass/runtime@beta`;
 the stable line is `0.2.x`), with model `@genclass/runtime-model@0.2.0`.** npm dist-tags on 2026-11-03: `latest` is
@@ -71,7 +71,7 @@ Or with no build step, first in `<head>`:
   with `devtools(..., { enabled: true })`) are discovered automatically; discovered React and Zustand state is
   observed only. Vue / Pinia, Svelte stores, signals, MobX, Jotai and Recoil are not discovered: register such state
   with `rt.atom` / `rt.guard`
-  ([state it can protect](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#state-it-can-protect)).
+  ([state it can protect](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#state-it-can-protect)).
   `GenClass.init()` is the explicit setup; it discovers state only if you import `@genclass/runtime/discover` first
   and pass `autoState: true`.
 - **Pin the version in the script tag**, as above: the unversioned URL serves `latest`, and the CDN cache may serve an
@@ -86,18 +86,18 @@ Or with no build step, first in `<head>`:
 Full install guide, with every `init` and `remove` flag, the app token and the tested project setups:
 [docs/runtime/INSTALL.md](docs/runtime/INSTALL.md). The short version, with page configuration and the script-tag
 attributes, is in the
-[package README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#install).
+[package README](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#install).
 
 To audit any page for visual bugs without adding anything to it: `npx @genclass/runtime@beta scan <url>` (alias
 `audit`; a score and each problem with its element and a suggested CSS fix;
-[Audit a page](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#audit-a-page)).
+[Audit a page](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#audit-a-page)).
 Coding agents get the same as `genclass_scan` in [`@genclass/mcp`](packages/mcp).
 
 ## What it finds (measured)
 
 Model `@genclass/runtime-model@0.2.0` at the default profile, `balanced`, on held-out data never used in training
-([RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md) §1, §11; every headline number is under
-[current numbers in one place](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#current-numbers-in-one-place)):
+([RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md) §1, §11; every headline number is under
+[current numbers in one place](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#current-numbers-in-one-place)):
 
 | problem | reported with the right diagnosis (observe, held-out real apps; false detections limited to 2% per clean decision) |
 |---|---|
@@ -111,7 +111,7 @@ Model `@genclass/runtime-model@0.2.0` at the default profile, `balanced`, on hel
   false ones included, at a rate not measured (§11). In the compatibility matrix (an unpublished 0.1.0-beta.4 build,
   commit `d04eff3`, 2026-10-10), observe made 49 false findings in 880 runs of correct apps, all in one polling and
   fan-out scenario
-  ([RESULTS.md §16](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#16-compatibility-matrix-summary)).
+  ([RESULTS.md §16](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#16-compatibility-matrix-summary)).
 - **Possible detections (0.3.0).** Observe in `0.3.0-beta.0` also records detections below the report gate, at the
   `eager` profile's gate (0.70), to `console.debug`, the devtools and telemetry. Likely and possible together are
   expected to match the `eager` profile's offline rates (77% of duplicate submits, 45% of stale overwrites, 40% on
@@ -144,15 +144,15 @@ The full tables, with every false-intervention rate next to its recall, are unde
   load is never a delivery decision: the runtime first has to see what that request writes.
 - The devtools overlay: `Alt+Shift+G` on localhost (the `init` command loads it in development only).
 - The first-visit cost, measured on one pilot app with runtime 0.1.0-beta.3 and model 0.2.0
-  ([RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md) §17): about 13 MB
+  ([RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md) §17): about 13 MB
   downloaded from jsDelivr on WASM (12.7 MB measured, with the q8 model at 9.45 MB as recorded, ONNX Runtime's wasm
   at 3.07 MB brotli and the tokenizer; the q8 file itself is 10.2 MB); on WebGPU with `shader-f16`, the 13.6 MB fp16
   model plus a larger ONNX Runtime build. Both are cached afterwards. The renderer process uses 190 to 280 MB more
   memory while the model is loaded. Devices that report 2 GB of memory or less, and Save-Data connections, do not
   load the model by default (they observe without it and say so in one console line; new in `0.3.0`: `0.2.x` loads
   everywhere and only lazily on Save-Data). For phones and strict Content-Security-Policies see
-  [self-hosting](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting)
-  and [`loadIf`](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#costs).
+  [self-hosting](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting)
+  and [`loadIf`](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#costs).
 
 ## New: your coding agent can see the race, replay it, and prove the fix
 
@@ -184,7 +184,7 @@ showed it on the developer's fast backend, with no false report on the fixed pag
 
 Since `0.3.0-beta.0` (the `beta` line on npm). `0.2.x` ignores `token`, has no `protect()` export (an import of it
 fails), and its `init` creates no token. Details:
-[CHANGELOG](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/CHANGELOG.md), 0.3.0-beta.0.
+[CHANGELOG](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/CHANGELOG.md), 0.3.0-beta.0.
 
 ```ts
 import { GenClass, protect } from "@genclass/runtime"; // 0.3.0
@@ -206,13 +206,13 @@ export const submitOrder = protect("checkout submit", (cart) => fetch("/api/orde
   [docs/runtime/DASHBOARD.md](docs/runtime/DASHBOARD.md).
 - **`protect(name, fn)`** returns a function with the same signature (same `this`, arguments, return value and
   errors); decisions about what it causes carry `fn: name`. Without a runtime it just calls `fn`.
-  [Package README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#function-specific-protect).
+  [Package README](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#function-specific-protect).
 - **More sensitive observe mode.** Observe also reports *possible* detections, below the report gate at the `eager`
   profile's value: one `console.debug` line each, ending in `(possible)`. Your `rt.on("detect")` and report function
   get them only with `detect: "possible"`; `detect: "likely"` turns them off. Situations raised while the model loads
   or the tab is hidden are decided once it can, and reported at the possible tier at most until their false-report
   rate is measured.
-  [Package README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#modes).
+  [Package README](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#modes).
 
 ## How it works
 
@@ -282,7 +282,7 @@ very heavy page can cause a long task, which the runtime records as a `perf` eve
 
 Every recall is reported next to its false-intervention rate (FIR): the share of cases where doing nothing was best
 but the gate fired anyway. Source and history:
-[RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md).
+[RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md).
 
 **Shipped model:** `genclass-runtime-r17` 2.0.0-rc4t (`@genclass/runtime-model@0.2.0`, run `r17-v2dT`, gain gate),
 10.2 MB q8, about 180 to 600 ms per model pass at 500 to 1,170 tokens on one WASM thread (estimated from runs in Node,
@@ -300,11 +300,11 @@ The FIR columns are on simulated apps; on held-out real apps FIR was 0.00% for e
 FIR ≤ 0.1% and heal FIR ≤ 0.5%: `cautious` stays under both, `balanced` is slightly over both, `eager` is well over.
 Recall is still low: at `balanced`, guard acts on under 8% of the cases where acting would help. Calibration error
 is not yet measured for this model (r17-v2b: 0.021 to 0.023). See the
-[model card](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime-model/MODEL_CARD.md).
+[model card](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime-model/MODEL_CARD.md).
 
 | what | result |
 |---|---|
-| Compatibility matrix (7 apps: 6 frameworks and plain HTML; 15 data layers, 8 scenarios, 10 seeds; an unpublished 0.1.0-beta.4 build, commit `d04eff3`, which does not contain 0.2.0's audit trail, protect presets, hold-budget ceilings and invariant fixes (committed on another branch) and predates 0.2.1's first-request hold and telemetry defaults; model 0.2.0, `balanced`, 2026-10-10; not re-run on 0.2.2 or 0.3.0) | 0 bugs introduced in 3,510 runs; 0 actions on correct apps in 1,760 guard and heal runs; observe: 49 false findings in 880 correct-app runs; of 250 runs where the app's own bug showed, guard left 249 buggy and heal 240. 350 of 351 cells left the app at least as correct as without GenClass on every seed (observe: the same final page and server state); the other is observe on Next.js + SWR, scenario d, where on seed 7 GenClass's timing tipped the app's own race to the correct result without any action ([compat/RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md), §16). |
+| Compatibility matrix (7 apps: 6 frameworks and plain HTML; 15 data layers, 8 scenarios, 10 seeds; an unpublished 0.1.0-beta.4 build, commit `d04eff3`, which does not contain 0.2.0's audit trail, protect presets, hold-budget ceilings and invariant fixes (committed on another branch) and predates 0.2.1's first-request hold and telemetry defaults; model 0.2.0, `balanced`, 2026-10-10; not re-run on 0.2.2 or 0.3.0) | 0 bugs introduced in 3,510 runs; 0 actions on correct apps in 1,760 guard and heal runs; observe: 49 false findings in 880 correct-app runs; of 250 runs where the app's own bug showed, guard left 249 buggy and heal 240. 350 of 351 cells left the app at least as correct as without GenClass on every seed (observe: the same final page and server state); the other is observe on Next.js + SWR, scenario d, where on seed 7 GenClass's timing tipped the app's own race to the correct result without any action ([compat/RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/compat/RESULTS.md), §16). |
 | Never make a correct app worse (always-passive model, heal vs observe, 66 real apps × 6 seeds; runtime as of 0.1.0-alpha.1, not re-run) | 0 of 396 clean runs changed (final page text, inputs and alerts excluded, and server state). Request timing and store contents are not compared, nor is observe against no runtime. With chaos: 3 of 198. In the demos (guard, same runtime and model), a clean typeahead made 0 model calls and held for 0 ms (§4). |
 | Six demo apps under network chaos (model 0.2.0, `balanced`, runtime 0.1.0-beta.4, an unpublished build of 2026-10-09; 10 chaos + 5 clean seeds per demo and mode) | Bug rate 72% off, 70% observe, 72% guard, 73% heal (differences under 5 points are noise): nothing is healed at the shipped gates, because candidate gains rarely clear the margins; 0 false interventions on clean runs (§5). |
 
@@ -356,7 +356,7 @@ rows and 837,623 real-browser rows (§6). Recall is the open problem.
   whether the browser visited before; `runtime.analytics.stop()` removes it); never used for a decision, and every
   opt-out above turns them off. Where consent is needed (the EU, EEA and UK), leave `analytics` unset and call
   `runtime.analytics.start()` once the visitor consents
-  ([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md#interaction-analytics)).
+  ([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md#interaction-analytics)).
 - **The measured visual checks send counts only** (from `0.3.0-beta.5`): whether they run on the page and whether
   their runtime fixes are on, and in each summary the findings per check and per page path (at most 20 paths), the
   fixes applied and undone, and their cost. Never a selector, element text, colour, URL, size or one event per finding;
@@ -364,8 +364,8 @@ rows and 837,623 real-browser rows (§6). Recall is the open problem.
 - **The CLI** contacts genclass.dev only for the command you run (`init` creates a dashboard only after you approve
   its diff).
 - Apps that ship GenClass may need to disclose this to their users (GDPR/CCPA). Full schema, storage and guidance:
-  [TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md); what an
-  account stores: [PRIVACY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/PRIVACY.md).
+  [TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md); what an
+  account stores: [PRIVACY.md](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md).
 
 ## Security
 
@@ -381,14 +381,14 @@ rows and 837,623 real-browser rows (§6). Recall is the open problem.
 ## Documentation
 
 - [Docs index and glossary](docs/runtime/README.md): every document, what it answers and its status.
-- [Package README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md): the full guide
+- [Package README](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md): the full guide
   (modes, triggers, adapters, observability, performance, privacy, known limitations).
 - [API reference](docs/runtime/API.md), [interception surface](packages/runtime/INTERCEPTION.md),
   [CHANGELOG](packages/runtime/CHANGELOG.md).
-- Measurements: [RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md) (every
-  measured number), [compat/RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md) (the
+- Measurements: [RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md) (every
+  measured number), [compat/RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/compat/RESULTS.md) (the
   compatibility matrix), the
-  [model card](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime-model/MODEL_CARD.md).
+  [model card](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime-model/MODEL_CARD.md).
 - Guides on genclass.dev: [race conditions in React](https://genclass.dev/guides/race-conditions-react),
   [stale responses out of order](https://genclass.dev/guides/stale-responses-out-of-order),
   [preventing duplicate submissions](https://genclass.dev/guides/prevent-duplicate-submissions).
@@ -397,9 +397,9 @@ rows and 837,623 real-browser rows (§6). Recall is the open problem.
 
 Short answers to the common questions (race conditions in React, stale responses, double submits, whether it changes
 your app, what it sends, how big it is, what it costs, how it compares) are in [FAQ.md](FAQ.md). Ask in
-[GitHub Discussions](https://github.com/genclass-dev/GenClass-lib/discussions/categories/q-a) or on
+[GitHub Discussions](https://github.com/genclass-dev/GenClass/discussions/categories/q-a) or on
 [Discord](https://discord.gg/kN9kRnFtZm); report bugs and false detections in
-[Issues](https://github.com/genclass-dev/GenClass-lib/issues).
+[Issues](https://github.com/genclass-dev/GenClass/issues).
 
 ## Development
 

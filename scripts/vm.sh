@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build/test GenClass-lib on the Azure `train` VM. The Mac only edits files (8 GB RAM; never run builds,
+# Build/test GenClass on the Azure `train` VM. The Mac only edits files (8 GB RAM; never run builds,
 # browsers or models on it).
 #
 #   scripts/vm.sh sync SLOT                 rsync this repo to ~/gcl/SLOT on the VM (no node_modules/.git/data)

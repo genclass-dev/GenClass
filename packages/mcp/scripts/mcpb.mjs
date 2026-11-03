@@ -26,10 +26,10 @@ export function manifestFor(pkg, server, tools) {
     long_description:
       "GenClass records what happens inside the web pages of your app running on this machine (each click, request and response, the order responses were delivered, what each response wrote into the app's state, uncaught errors), re-runs a page with the network answering in different orders to find race conditions, replays one exact order to prove a fix, and writes a Playwright regression test. The page connects through @genclass/runtime's agent link in a development build. Everything stays on your machine: the bridge listens on 127.0.0.1 only.",
     author: { name: "GenClass", url: "https://genclass.dev" },
-    repository: { type: "git", url: "https://github.com/genclass-dev/GenClass-lib" },
+    repository: { type: "git", url: "https://github.com/genclass-dev/GenClass" },
     homepage: "https://genclass.dev",
-    documentation: "https://github.com/genclass-dev/GenClass-lib/tree/main/packages/mcp#readme",
-    support: "https://github.com/genclass-dev/GenClass-lib/issues",
+    documentation: "https://github.com/genclass-dev/GenClass/tree/main/packages/mcp#readme",
+    support: "https://github.com/genclass-dev/GenClass/issues",
     server: {
       type: "node",
       entry_point: "bin/genclass-mcp.mjs",
@@ -43,7 +43,7 @@ export function manifestFor(pkg, server, tools) {
     tools: tools.map((t) => ({ name: t.name, description: t.description })),
     keywords: ["race-condition", "debugging", "playwright", "frontend", "stale-response", "double-submit"],
     license: pkg.license,
-    privacy_policies: ["https://github.com/genclass-dev/GenClass-lib/blob/main/packages/mcp/README.md#privacy"],
+    privacy_policies: ["https://github.com/genclass-dev/GenClass/blob/main/packages/mcp/README.md#privacy"],
     compatibility: { platforms: ["darwin", "win32", "linux"], runtimes: { node: pkg.engines.node } },
   };
 }

@@ -46,13 +46,13 @@ disabled while a save runs. Ghost's own tests cover these paths (`save-engine.qu
 ## What could be said, if asked
 
 > We ran Ghost 6.73.0-rc.0's admin (commit 268846ab) under a response-reordering harness
-> (https://github.com/genclass-dev/GenClass-lib, `@genclass/mcp` explore: the same user steps, responses delivered in
+> (https://github.com/genclass-dev/GenClass, `@genclass/mcp` explore: the same user steps, responses delivered in
 > seeded different orders with up to 900 ms of extra latency, final state compared with in-order runs) across the
 > editor's autosave, post creation, switching posts, the list filters, Publish and Update double-clicks and the tag and
 > author pickers: 114 reordered page loads, no lost edit, no stale list, no duplicate write. The save engine's
 > single-flight queue, the slug machine's ticketing and the session's `updated_at` checks held in every order we
 > tried. Nothing to report; the write-up with every verdict is at
-> https://github.com/genclass-dev/GenClass-lib/blob/main/docs/adoption/hunts/ghost.md.
+> https://github.com/genclass-dev/GenClass/blob/main/docs/adoption/hunts/ghost.md.
 
 ## The template that was not needed
 
@@ -70,6 +70,6 @@ Actual:
 Root cause: <file>:<lines> (<one sentence>)
 Fix: <attached patch, N lines>; regression test: e2e/tests/admin/posts/<behaviour>.test.ts in the style of
   editor-react.test.ts (writes recorded through page.on('request'), the server read back through page.request)
-Found with: a response-reordering harness (https://github.com/genclass-dev/GenClass-lib); the harness is not needed
+Found with: a response-reordering harness (https://github.com/genclass-dev/GenClass); the harness is not needed
   to reproduce or to run the test.
 ```
