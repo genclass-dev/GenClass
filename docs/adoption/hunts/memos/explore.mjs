@@ -22,7 +22,7 @@
 //   pin       More > Pin, then More > Unpin                      (useUpdateMemo, updateMask pinned)
 //   archive   More > Archive, then More > Restore                (useUpdateMemo, updateMask state; navigates on success)
 //   tasks     More > Check all tasks, then More > Uncheck all    (useUpdateMemo, updateMask content)
-//   reaction  Add reaction > 👍, then (picker still open) ❤️      (useReactionActions: upsert, then getMemo -> detail)
+//   reaction  Add reaction > 👍, then Add reaction > ❤️            (useReactionActions: upsert, then getMemo -> detail)
 //   comment   comment "first", then comment "second"             (useCreateMemo with parent)
 // --pause waits between the two writes (default 0: Playwright's pace). For each --slow value it runs one explore
 // session: 2 fifo baselines + --runs seeded loads, the same steps each load. Each load's line ends with the delivery
@@ -193,7 +193,10 @@ const shownCard = (page) =>
       pinned: !!main.querySelector('[role="img"][aria-label="Pinned"]'),
       tasks: [...main.querySelectorAll('input[type="checkbox"]')].map((c) => (c.checked ? "x" : "_")).join(""),
       reactions: [...article.querySelectorAll("button[aria-pressed]")].map((b) => b.textContent.replace(/\s+/g, "")).join(" "),
-      comments: [...main.querySelectorAll("p")].map((p) => p.textContent.trim()).filter((t) => /^comment (first|second)$/.test(t)),
+      comments: [...main.querySelectorAll("p")]
+        .map((p) => p.textContent.trim())
+        .filter((t) => /^comment (first|second)$/.test(t))
+        .sort(),
     };
   });
 
@@ -240,6 +243,11 @@ const surfaces = {
       await page.getByRole("button", { name: "Add reaction" }).first().click();
       await page.getByRole("button", { name: "👍", exact: true }).click();
       await nap(page);
+      // The picker closes once the first reaction's refetch lands (onComplete), at a different moment in each order:
+      // close it either way and open it again, so every load records the same steps.
+      await page.keyboard.press("Escape");
+      await page.locator("main article, main .group\\/memo").first().hover();
+      await page.getByRole("button", { name: "Add reaction" }).first().click();
       await page.getByRole("button", { name: "❤️", exact: true }).click();
     },
     oracle: (shown, server) => ({
@@ -258,10 +266,14 @@ const surfaces = {
     async steps(page) {
       for (const text of ["comment first", "comment second"]) {
         await page.getByRole("button", { name: "Write a comment" }).last().click();
-        const box = page.locator("main textarea").last();
-        await box.fill(text);
-        await page.keyboard.press("Control+Enter");
-        await page.waitForFunction(() => !document.querySelector("main textarea")?.value, null, { timeout: 15_000 }).catch(() => {});
+        const box = page.locator('main [role="textbox"][contenteditable="true"]').last(); // the @usememos/editor surface
+        await box.click();
+        await page.keyboard.type(text);
+        await page.getByRole("button", { name: "Comment", exact: true }).click();
+        // the editor closes (or empties) once the comment is saved: the second comment is written after that
+        await page
+          .waitForFunction(() => !document.querySelector('main [role="textbox"][contenteditable="true"]')?.textContent?.trim(), null, { timeout: 15_000 })
+          .catch(() => {});
         await nap(page);
       }
     },
@@ -307,7 +319,7 @@ async function scenario(s) {
     const server = await call("GetMemo", { name: s.memo() });
     if (arg.surface === "comment") {
       const c = await call("ListMemoComments", { parent: s.memo() });
-      server.__comments = (c.memos ?? c.comments ?? []).map((m) => m.content).sort().join("+") || "none";
+      server.__comments = (c.memos ?? c.comments ?? []).map((m) => m.content.trim()).sort().join("+") || "none";
     }
     const o = s.oracle(shown, server);
     line = `${o.shown === o.server ? "same  " : "DIFFER"} shown ${o.shown} | server ${o.server}`;
