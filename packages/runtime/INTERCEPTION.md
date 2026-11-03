@@ -7,9 +7,9 @@ browser global, compares what changed with the inventory at the end of this page
 and counts the patch sites in `src/` (a new `addEventListener`, `defineProperty` or global assignment fails the test
 until this page is updated).
 
-> **Version.** Written for `@genclass/runtime` 0.3.0-beta.5 as it is on GitHub `main` (released 2026-11-02). The
-> copy in an npm package describes that package's version. As of 2026-11-02, `npm i @genclass/runtime@beta` installs
-> 0.3.0-beta.5 (the 0.3.0 line: 0.3.0-beta.1 to 0.3.0-beta.5, released 2026-10-22 to 2026-11-02), and
+> **Version.** Written for `@genclass/runtime` 0.3.0-beta.6 as it is on GitHub `main` (released 2026-11-03). The
+> copy in an npm package describes that package's version. As of 2026-11-03, `npm i @genclass/runtime@beta` installs
+> 0.3.0-beta.6 (the 0.3.0 line: 0.3.0-beta.1 to 0.3.0-beta.6, released 2026-10-22 to 2026-11-03), and
 > `npm i @genclass/runtime` installs 0.2.3 (`latest`, 2026-10-28), which has no measured visual checks, no `protect()`,
 > no webhook sink and no interaction analytics. Items marked 0.3.0 are not in 0.2.x; the interaction analytics rows
 > (`src/analytics/`) and the devtools overlay's `theme: "dark"` default are 0.3.0-beta.1, the `genclass.analytics.<token>`

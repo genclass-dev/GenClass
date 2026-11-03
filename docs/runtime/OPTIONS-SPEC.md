@@ -3,7 +3,7 @@
 This page is the design spec for the configuration options of `@genclass/runtime`: why each option exists and how
 the options combine. The reference for each option is [API.md](API.md) and the JSDoc in
 `packages/runtime/src/types.ts`; where they differ from this spec, they describe the code. `npm i @genclass/runtime@beta`
-installs 0.3.0-beta.5 (npm's `beta` dist-tag, 2026-11-02); plain `npm i @genclass/runtime` installs the stable line,
+installs 0.3.0-beta.6 (npm's `beta` dist-tag, 2026-11-03); plain `npm i @genclass/runtime` installs the stable line,
 0.2.3 (`latest`). Items marked 0.3.0 are not in 0.2.x.
 
 Status: built. Most options here shipped in 0.1.0-beta.1 (the CHANGELOG's "Batch 12, 19 options") and are in every

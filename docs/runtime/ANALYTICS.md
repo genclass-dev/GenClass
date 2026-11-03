@@ -6,7 +6,7 @@ app's token (or a custom telemetry endpoint), are turned off by every telemetry 
 never record element text, and never reach the model or a decision. Status: merged into `main` on 2026-10-18 and
 shipped in `@genclass/runtime` 0.3.0-beta.1 (2026-10-22, npm's `beta` dist-tag); visits, funnels, navigation paths
 and the version check (sections 1.2, 3.1, 11 and 4.1) followed in 0.3.0-beta.2 (2026-10-25); the newest release is
-0.3.0-beta.5 (2026-11-02). npm's `latest`, 0.2.3, has no analytics (section 4.1).
+0.3.0-beta.6 (2026-11-03). npm's `latest`, 0.2.3, has no analytics (section 4.1).
 
 Design written 2026-10-17 and **approved by the owner the same day** with every recommendation in
 [section 9](#9-decisions-for-the-owner) (AGENTS.md rule 8: widening what telemetry sends needs that OK). **Built**
