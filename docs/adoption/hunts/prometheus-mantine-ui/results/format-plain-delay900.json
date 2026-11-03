@@ -1,0 +1,204 @@
+{
+  "scenario": "format",
+  "app": "http://localhost:4173",
+  "plain": true,
+  "slow_ms": null,
+  "delay_ms": 900,
+  "runs": 8,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [
+        "/format_query?query=sum   by(job)(up)"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726229.493&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "ABORTED /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [
+        "/format_query?query=sum   by(job)(up)"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726233.632&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "ABORTED /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [
+        "/format_query?query=sum   by(job)(up)"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726237.73&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "ABORTED /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [
+        "/format_query?query=sum   by(job)(up)"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726241.777&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "ABORTED /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [
+        "/format_query?query=sum   by(job)(up)"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726245.858&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "ABORTED /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [
+        "/format_query?query=sum   by(job)(up)"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726249.901&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "ABORTED /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [
+        "/format_query?query=sum   by(job)(up)"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726253.981&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "ABORTED /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "input": "count by (instance) (go_goroutines)"
+      },
+      "want": "(same)",
+      "held": [
+        "/format_query?query=sum   by(job)(up)"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793726258.011&stats=true",
+        "GET /format_query?query=sum   by(job)(up)",
+        "ABORTED /format_query?query=sum   by(job)(up)",
+        "GET /format_query?query=count by(  instance )( go_goroutines )"
+      ]
+    }
+  ],
+  "oracle": "8 of 8 loads showed the reference state"
+}

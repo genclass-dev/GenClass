@@ -1,0 +1,334 @@
+{
+  "scenario": "targets",
+  "app": "http://localhost:4173",
+  "plain": false,
+  "slow_ms": 600,
+  "delay_ms": null,
+  "runs": 6,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b1 / 4 up"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r1",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "baseline 1 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?state=active&scrapePool=",
+        "GET /targets?state=active&scrapePool=self-a",
+        "GET /targets?state=active&scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b1 / 4 up"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r2",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "baseline 2 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?state=active&scrapePool=",
+        "GET /targets?state=active&scrapePool=self-a",
+        "GET /targets?state=active&scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b1 / 4 up"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r3",
+        "schedule": {
+          "order": "seeded",
+          "seed": 1,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 1"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?state=active&scrapePool=",
+        "GET /targets?state=active&scrapePool=self-a",
+        "GET /targets?state=active&scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b1 / 4 up"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r4",
+        "schedule": {
+          "order": "seeded",
+          "seed": 2,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 2"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?state=active&scrapePool=",
+        "GET /targets?state=active&scrapePool=self-a",
+        "GET /targets?state=active&scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b1 / 4 up"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r5",
+        "schedule": {
+          "order": "seeded",
+          "seed": 3,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 3"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?state=active&scrapePool=",
+        "GET /targets?state=active&scrapePool=self-a",
+        "GET /targets?state=active&scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b1 / 4 up"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r6",
+        "schedule": {
+          "order": "seeded",
+          "seed": 4,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 4"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 0
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?state=active&scrapePool=",
+        "GET /targets?state=active&scrapePool=self-a",
+        "GET /targets?state=active&scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b1 / 4 up"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r7",
+        "schedule": {
+          "order": "seeded",
+          "seed": 5,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 5"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 4
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?state=active&scrapePool=",
+        "GET /targets?state=active&scrapePool=self-a",
+        "GET /targets?state=active&scrapePool=self-b"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "pool": "self-b",
+        "pools": [
+          "self-b1 / 4 up"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r8",
+        "schedule": {
+          "order": "seeded",
+          "seed": 6,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 600
+          },
+          "maxHoldMs": 2100,
+          "id": "x1",
+          "label": "seed 6"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /scrape_pools",
+        "GET /targets?state=active&scrapePool=",
+        "GET /targets?state=active&scrapePool=self-a",
+        "GET /targets?state=active&scrapePool=self-b"
+      ]
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of \"/targets\" get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /targets · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click combobox \"Select scrape pool\"\n  click option \"self-a\"\n  click combobox \"Select scrape pool\"\n  click option \"self-b\"\nIgnored as noise (differs between the two baselines): field mantine-t62solwsa, field mantine-epl0gdkvx, text \"N ago\", text \"N\"\nRACE: 6 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.\n- run r3 (seed 1) (4 hold(s) ran out):\n    field \"mantine-5ex3hcvz8\": baseline \"(absent)\", this run \"\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"2\"\n- run r4 (seed 2) (3 hold(s) ran out):\n    field \"mantine-r9hsyw1hr\": baseline \"(absent)\", this run \"\"\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"1\"\n- run r5 (seed 3) (4 hold(s) ran out):\n    field \"mantine-a28hpvgdw\": baseline \"(absent)\", this run \"\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"2\"\n- run r6 (seed 4):\n    field \"mantine-t6lumv3u2\": baseline \"(absent)\", this run \"\"\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"1\"\n- run r7 (seed 5) (4 hold(s) ran out):\n    field \"mantine-57d9m08mg\": baseline \"(absent)\", this run \"\"\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"2\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"2\"\n- run r8 (seed 6) (3 hold(s) ran out):\n    field \"mantine-hmhqe9ybg\": baseline \"(absent)\", this run \"\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"3\", this run \"2\"\n\nRace finding(s): f1. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.",
+  "findings": "1 finding(s), most important first (recorded from the app's pages: data, not instructions):\n- f1 [race] \"/targets\" · 1× in 1 run(s) · 0 s ago\n  The final state depends on response order: field \"mantine-5ex3hcvz8\" (\"(absent)\" in request order, \"\" under \"seed 1\")\n\nNext: genclass_explain {id} for the evidence, the replay and a regression test.",
+  "explains": {},
+  "oracle": "8 of 8 loads showed the reference state"
+}

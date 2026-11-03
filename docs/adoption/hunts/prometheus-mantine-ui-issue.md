@@ -118,6 +118,6 @@ the pull request's disclosure if it is filed.)
       in particular the disclosure paragraph.
 - [ ] Commit with `git commit -s`, push to your fork, open the pull request with the title and body above.
 - [ ] A first-time contributor's CI waits for a maintainer's `/workflow-approve`; do not ping for it.
-- [ ] If asked whether this was found with GenClass: no, the race hunt found nothing; this came from the request log
+- [ ] If asked whether this was found with GenClass: no, the race hunt found no race; this came from the request log
       of the same session. If the maintainers prefer a different fix (for example adding the query to the key, as
       #20279 does, which alone does not stop the duplicate), follow them.

@@ -8,14 +8,19 @@ was done on a local copy; nothing was sent to the Prometheus project.
 back to back, a graph execution followed by a range change, two "Format expression" calls with an edit between them,
 the Targets and Service discovery pool select switched twice, a double-click on the TSDB status page's "Delete
 series"), each run as an explore session of 8 page loads (2 request-order baselines and 6 seeded reorderings) at 300,
-600 and 900 ms of extra latency, and again 8 times without GenClass with the superseded request held 900 ms: RESULTS_HEADLINE
-GenClass printed no RACE line in any session; the lines it did print are request counts that depend on timing, listed
-as "internal state only" (section 6). Section 7 quotes the code that makes the order not matter.
+600 and 900 ms of extra latency, and again 8 times without GenClass with the superseded request held 900 ms: 28
+sessions, 224 page loads (126 of them with a seeded reordering), and in **224 of 224** the page showed exactly what a
+fresh load of the final state shows (the harness's own oracle, section 3). GenClass's explore said "no race" for the
+tree, table, graph and format scenarios at every latency and for delete at 300 and 600 ms; it printed RACE for the
+Targets and Service discovery pool switch (6 of 6 at every latency) and for delete at 900 ms (3 of 6). All seven RACE
+lines are false: the first six compare a form field whose name is an id the UI generates at random on every page
+load, the last one a line of page text that comes from the server's own answer (a tie in a top-10 list), not from the
+order of delivery (section 6). Section 7 quotes the code that makes the order not matter.
 
 **One non-race defect, with a ready fix.** The tree view sends each leaf node's `/api/v1/query` twice and aborts the
 first (7 requests for 5 nodes in 8 of 8 loads; 5 and none aborted with the fix, 8 of 8). The cause is the query key
 `[useId()]` with `useId` from `@mantine/hooks`, whose value changes right after mount. The fix (React's own `useId`,
-one import line) and a Vitest test that fails on `main` and passes with it are in
+a two-line import change) and a Vitest test that fails on `main` and passes with it are in
 [prometheus-mantine-ui.patch](prometheus-mantine-ui.patch); the pull request draft is in
 [prometheus-mantine-ui-issue.md](prometheus-mantine-ui-issue.md). GenClass did not find this as a race: explore
 listed it as a GET count that differs, and the browser's request log showed what it was. **Status: needs owner
@@ -115,14 +120,77 @@ view; the PromQL autocomplete.
 
 ## 5. Results
 
-RESULTS_TABLE
+| scenario | mode | explore verdict (as reported) | other lines in the report | oracle: loads equal to the reference | forced holds | file |
+|---|---|---|---|---|---|---|
+| tree | explore 300 ms | no race, 0 of 6 | internal only in 5 of 6: requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs; requests sent to "GET /api/v1/query": count differs; noise ignored: text "N results – N –", text "Load time: N Result series: N" | 8 of 8 | 45 | `tree-slow300-seed1.json` |
+| tree | explore 600 ms | no race, 0 of 6 | internal only in 6 of 6: requests sent to "GET /api/v1/status/walreplay": count differs; requests sent to "GET /api/v1/query": count differs; requests sent to "GET /-/ready": count differs; noise ignored: text "N results – N –", text "Load time: N Result series: N" | 8 of 8 | 40 | `tree-slow600-seed1.json` |
+| tree | explore 900 ms | no race, 0 of 6 | internal only in 6 of 6: requests sent to "GET /api/v1/query": count differs; requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs; noise ignored: text "N results – N –", text "Load time: N Result series: N" | 8 of 8 | 33 | `tree-slow900-seed1.json` |
+| tree | plain, superseded request held 900 ms (48 held) | n/a (no GenClass) | - | 8 of 8 | - | `tree-plain-delay900.json` |
+| table | explore 300 ms | no race, 0 of 6 | internal only in 5 of 6: requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs; noise ignored: text "Load time: N Result series: N" | 8 of 8 | 35 | `table-slow300-seed1.json` |
+| table | explore 600 ms | no race, 0 of 6 | internal only in 6 of 6: requests sent to "GET /api/v1/status/walreplay": count differs; requests sent to "GET /-/ready": count differs; noise ignored: text "Load time: N Result series: N" | 8 of 8 | 31 | `table-slow600-seed1.json` |
+| table | explore 900 ms | no race, 0 of 6 | internal only in 3 of 6: requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs; noise ignored: text "Load time: N Result series: N" | 8 of 8 | 24 | `table-slow900-seed1.json` |
+| table | plain, superseded request held 900 ms (8 held) | n/a (no GenClass) | - | 8 of 8 | - | `table-plain-delay900.json` |
+| graph | explore 300 ms | no race, 0 of 6 | internal only in 5 of 6: requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs | 8 of 8 | 36 | `graph-slow300-seed1.json` |
+| graph | explore 600 ms | no race, 0 of 6 | internal only in 6 of 6: requests sent to "GET /api/v1/status/walreplay": count differs; requests sent to "GET /-/ready": count differs | 8 of 8 | 31 | `graph-slow600-seed1.json` |
+| graph | explore 900 ms | no race, 0 of 6 | internal only in 3 of 6: requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs | 8 of 8 | 23 | `graph-slow900-seed1.json` |
+| graph | plain, superseded request held 900 ms (16 held) | n/a (no GenClass) | - | 8 of 8 | - | `graph-plain-delay900.json` |
+| format | explore 300 ms | no race, 0 of 6 | internal only in 5 of 6: requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs; announcements (status, alert regions) only in one of them: "Expression formatted", "Expression formatted successfully!"; noise ignored: text "Load time: N Result series: N", text "evalTotalTime N", text "queryPreparationTime N", text "innerEvalTime N", text "execQueueTime N", text "execTotalTime N" | 8 of 8 | 38 | `format-slow300-seed1.json` |
+| format | explore 600 ms | no race, 0 of 6 | internal only in 6 of 6: requests sent to "GET /api/v1/status/walreplay": count differs; requests sent to "GET /-/ready": count differs; announcements (status, alert regions) only in one of them: "Expression formatted", "Expression formatted successfully!"; noise ignored: text "Load time: N Result series: N", text "evalTotalTime N", text "queryPreparationTime N", text "innerEvalTime N", text "execQueueTime N", text "execTotalTime N" | 8 of 8 | 32 | `format-slow600-seed1.json` |
+| format | explore 900 ms | no race, 0 of 6 | internal only in 3 of 6: requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs; announcements (status, alert regions) only in one of them: "Expression formatted", "Expression formatted successfully!"; noise ignored: text "Load time: N Result series: N", text "evalTotalTime N", text "queryPreparationTime N", text "innerEvalTime N", text "execQueueTime N", text "execTotalTime N" | 8 of 8 | 23 | `format-slow900-seed1.json` |
+| format | plain, superseded request held 900 ms (8 held) | n/a (no GenClass) | - | 8 of 8 | - | `format-plain-delay900.json` |
+| targets | explore 300 ms | RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (resp | noise ignored: field mantine-139gsvew8, field mantine-1yq2e2p1w, text "N ago", text "N" | 8 of 8 | 32 | `targets-slow300-seed1.json` |
+| targets | explore 600 ms | RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (resp | noise ignored: field mantine-t62solwsa, field mantine-epl0gdkvx, text "N ago", text "N" | 8 of 8 | 26 | `targets-slow600-seed1.json` |
+| targets | explore 900 ms | RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (resp | noise ignored: field mantine-vtzptknmw, field mantine-dyfe3d8ku, text "N ago", text "N" | 8 of 8 | 20 | `targets-slow900-seed1.json` |
+| targets | plain, superseded request held 900 ms (8 held) | n/a (no GenClass) | - | 8 of 8 | - | `targets-plain-delay900.json` |
+| sd | explore 300 ms | RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (resp | noise ignored: field mantine-h7ap993ga, field mantine-np4uebhdy | 8 of 8 | 32 | `sd-slow300-seed1.json` |
+| sd | explore 600 ms | RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (resp | noise ignored: field mantine-pcvk3620p, field mantine-5z6o4qzr1 | 8 of 8 | 25 | `sd-slow600-seed1.json` |
+| sd | explore 900 ms | RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (resp | noise ignored: field mantine-zmi98qw7e, field mantine-w1myy1clj | 8 of 8 | 20 | `sd-slow900-seed1.json` |
+| sd | plain, superseded request held 900 ms (8 held) | n/a (no GenClass) | - | 8 of 8 | - | `sd-plain-delay900.json` |
+| delete | explore 300 ms | no race, 0 of 6 | internal only in 5 of 6: requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs; requests sent to "GET /api/v1/status/tsdb": count differs; requests sent to "GET /api/v1/features": count differs; noise ignored: text "Current Max Time N" | 8 of 8 | 31 | `delete-slow300-seed1.json` |
+| delete | explore 600 ms | no race, 0 of 6 | internal only in 6 of 6: requests sent to "GET /api/v1/status/walreplay": count differs; requests sent to "GET /-/ready": count differs; noise ignored: text "Current Max Time N", text "job N", text "slice N" | 8 of 8 | 26 | `delete-slow600-seed1.json` |
+| delete | explore 900 ms | RACE: 3 of 6 reordered run(s) ended in a different state than the baseline (resp | internal only in 3 of 6: requests sent to "GET /-/ready": count differs; requests sent to "GET /api/v1/status/walreplay": count differs; requests sent to "GET /api/v1/status/tsdb": count differs; requests sent to "GET /api/v1/features": count differs; noise ignored: text "Current Max Time N" | 8 of 8 | 21 | `delete-slow900-seed1.json` |
+| delete | plain, superseded request held 900 ms (8 held) | n/a (no GenClass) | - | 8 of 8 | - | `delete-plain-delay900.json` |
 
 "forced holds" counts responses the schedule released only because their hold ran out (summed over the session's 8
-loads); every response was still delivered unchanged. Section 9 explains why there are so many.
+loads); every response was still delivered unchanged. Section 9 explains why there are so many (3 to 5 per load, baselines included: 624
+in the 168 explore loads).
 
 ## 6. What explore reported, and what it was
 
-RESULTS_EXPLORE
+Every line explore printed, grouped by what it was. None is a difference in what the UI shows from the data it was
+sent; the harness's oracle matched the reference in 224 of 224 loads.
+
+1. **A form field named by a random id (Targets and Service discovery, 6 RACE verdicts, 36 of 36 seeded runs).**
+   Each reordered run reports `field "mantine-5ex3hcvz8": baseline "(absent)", this run ""` with a different name
+   every time, and each session's "Ignored as noise" line lists the two baselines' own names (`field
+   mantine-t62solwsa, field mantine-epl0gdkvx`). The UI's text inputs on these pages (the pool select, the health
+   filter, the search box) get their `id` from Mantine's `useId`, which is `randomId()` after mount (section 8): a
+   check with plain Playwright listed `mantine-f6lkxy8o4`, `mantine-608rx6oil`, `mantine-09mypwq0g` on one load of
+   `/targets` and `mantine-vytdu1lsl`, `mantine-cwynq08z7`, `mantine-dtoppryid` on the next. GenClass names a form
+   field by its id, so every load has fields no other load has; the baselines' noise filter removes the two exact names
+   it saw, not the shape. The value is `""` (an empty filter box) in every load. Not a race; a false-report class in
+   GenClass (section 9).
+2. **Page text from the server's answer (delete at 900 ms, 3 RACE runs of 6).** Runs r3 to r5 show `job 4` where
+   the baselines show `slice 4`. That line is the tenth entry of the TSDB status page's "label names with the highest
+   value count" table, rendered from the one `/api/v1/status/tsdb` response the page reads (a suspense query). Both
+   label names have 4 values on this server (`job`: down-only, prometheus, self-a, self-b; `slice`: inner_eval,
+   prepare_time, queue_time, result_sort, from `/api/v1/label/<name>/values`), so the tenth place is a tie the server
+   breaks; the response arrives unchanged whatever its delivery time (GenClass delays and reorders responses, it never
+   edits them). 30 calls to the endpoint afterwards all returned `slice` last, so the session cannot say what made the
+   server pick `job` in those three runs (the scenario deletes and the scrape re-adds `go_gc_duration_seconds` series
+   in every load). The harness's oracle does not read that table; the delete form's own result (one `POST`, the
+   success alert) matched in 8 of 8 loads. Not a race in the UI.
+3. **Request counts that depend on timing (every session, "internal state only").** `GET /-/ready` and
+   `GET /api/v1/status/walreplay` are the two suspense queries of the UI's `ReadinessWrapper.tsx`, sent 1 to 3 times
+   per load here depending on how long the answers take; `GET /api/v1/query` in the tree scenario differs by one
+   because whether the doomed first request of a leaf node leaves the browser before its abort depends on timing
+   (section 8); `GET /api/v1/status/tsdb` and `/api/v1/features` on the delete page by one when a slower run
+   refetched. Explore classified all of these correctly as not a race.
+4. **A toast present in one run (format, "internal state only").** "Expression formatted successfully!" is a
+   notification that expires; a slower run let it expire before the snapshot. Classified correctly.
+5. **Noise the baselines removed.** Response times and stats in the page text ("N results – N –", "Load time: N",
+   `evalTotalTime N` and the other query timing stats in the format scenario's page text, "N ago" on the
+   targets list, "Current Max Time N" on the TSDB page): different between the two baselines, so ignored by shape.
 
 ## 7. Why the UI did not race
 
@@ -205,11 +273,53 @@ disclosure, not a demonstration of GenClass. Hence "needs owner decision".
 
 ## 9. Problems with GenClass itself
 
-PROBLEMS
+1. **A form field is named by its `id`, and ids generated at random per page load make every reordered run "differ"
+   (6 false RACE verdicts here, 36 of 36 seeded runs on two pages).** Mantine gives every input an id from `useId`,
+   which in Mantine 9.7.3 is a random string set after mount. The
+   baselines' noise filter drops the exact names that differed between the two baselines, and every seeded run brings
+   new ones. Suggested: name a field by a stable key when its id looks generated (the label, `aria-label`, `name`,
+   placeholder, or the field's position among the form's fields), or treat a field whose name differs between the
+   two baselines by shape (`mantine-<random>`) the way page lines are treated; and never report a field that is
+   absent in the baseline and empty in the run.
+2. **A streaming `fetch` blocks the schedule for 10 s on every load (3 to 5 holds ran out per load, baselines
+   included; 624 in 168 loads).** The UI opens `/api/v1/notifications/live` with `@microsoft/fetch-event-source`, a
+   `fetch` whose body never ends. AGENT.md section 4 says requests older than 10 s neither block nor wait, so for the
+   first 10 s of every page each later response waits for it until `maxHoldMs` (1.8 s here) and is released
+   "forced". With the stream aborted by a route (`hunt.mjs --block-sse`), the same tree session ran 0 forced holds in
+   4 of 4 loads and each load took about 7 s instead of about 16 s
+   ([summaries/tree-nosse.json](prometheus-mantine-ui/summaries/tree-nosse.json)). The fifo baselines are then not
+   strictly in request order, and seeded runs reorder less than planned. Suggested: treat a response with
+   `content-type: text/event-stream` (or any response whose headers arrived and whose body is still streaming) as
+   delivered once its headers are, so it never blocks; or exclude it like EventSource.
+3. **A page-text line that is the server's answer reads as a race (1 false RACE verdict).** Section 6 item 2: a tie
+   the server breaks differently between loads changes one line, and two baselines that happened to agree cannot
+   tell that apart from an ordering effect. Recording the response bodies' hash per request and saying "the server
+   answered differently" when the line's source response differs would separate the two.
+4. **What worked.** Injection from outside with the Gitea/Ghost pattern needed no change for a Vite-built React
+   app; the agent link connected on every one of the 168 loads; the scenario key (`click textbox`, `type textbox ...`,
+   `click button "Execute"`) grouped each session's 8 loads into one group; the request-count and toast lines were
+   classified as "internal state only" as AGENT.md section 5.1 describes; `whenSettled` returned on every load.
+5. **Docs.** `docs/adoption/swarm.md` section 3 says to read `hunts/gitea-explore.mjs` for the injection; it uses
+   `window.GenClass.init(...)` with `data-manual`, while the Ghost harness uses `GENCLASS_CONFIG` and
+   `window.GenClass.runtime`; this harness follows Ghost. A note on which one is current would save the next session
+   the comparison. Separately, a `pgrep -f` watcher in a background shell matched its own command line and never
+   ended (a harness slip, not GenClass's).
 
 ## 10. Time spent
 
-TIME
+About 2 h 15 min of session time, 2026-11-03 16:30 to 18:45 UTC:
+
+| part | time |
+|---|---|
+| reading the brief, swarm.md, AGENTS.md, the Ghost and Gitea harnesses | 10 min |
+| setup (clone, pnpm install, module build, release binary, GenClass build, config with four pools) | 15 min |
+| reading the brief's leads in the code, probing the DOM, the StrictMode detour, the production build | 25 min |
+| the harness and its smoke runs | 20 min |
+| the matrix: 21 explore sessions and 7 plain runs, 224 loads (`run-all.sh`, 16:49 to 17:39) | 50 min, in the background |
+| meanwhile: the duplicate request, its measurement, the fix, the test (both ways, three runs each, the suite, lint), PR #20279, the drafts | 45 min |
+| reading explore's RACE lines, the TSDB tie, the report | 30 min |
+
+The time box held: the hunt stopped after the planned scenarios with no race, as swarm.md section 2.9 asks.
 
 ## 11. Reproducing
 

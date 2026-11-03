@@ -1,0 +1,364 @@
+{
+  "scenario": "graph",
+  "app": "http://localhost:4173",
+  "plain": false,
+  "slow_ms": 900,
+  "delay_ms": null,
+  "runs": 6,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r1",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "baseline 1 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722140.56&end=1793725740.56",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722140.771&end=1793725740.771",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793723940.836&end=1793725740.836"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r2",
+        "schedule": {
+          "order": "fifo",
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "baseline 2 (responses in request order)"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722156.966&end=1793725756.966",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722157.17&end=1793725757.17",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793723957.233&end=1793725757.233"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r3",
+        "schedule": {
+          "order": "seeded",
+          "seed": 1,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 1"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722174.528&end=1793725774.528",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722174.968&end=1793725774.968",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793723975.028&end=1793725775.028"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r4",
+        "schedule": {
+          "order": "seeded",
+          "seed": 2,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 2"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722181.972&end=1793725781.972",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722182.466&end=1793725782.466",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793723982.527&end=1793725782.527"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r5",
+        "schedule": {
+          "order": "seeded",
+          "seed": 3,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 3"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722206.907&end=1793725806.907",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722207.099&end=1793725807.099",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724007.161&end=1793725807.161"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r6",
+        "schedule": {
+          "order": "seeded",
+          "seed": 4,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 4"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 2
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722213.926&end=1793725813.926",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722214.369&end=1793725814.369",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724014.427&end=1793725814.427"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r7",
+        "schedule": {
+          "order": "seeded",
+          "seed": 5,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 5"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722235.567&end=1793725835.567",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722235.947&end=1793725835.947",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724036.01&end=1793725836.01"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "graphRange": "30m",
+        "graphLegend": [
+          "{job=\"down-only\"}",
+          "{job=\"prometheus\"}",
+          "{job=\"self-a\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [],
+      "agent": {
+        "run": "r8",
+        "schedule": {
+          "order": "seeded",
+          "seed": 6,
+          "delay": {
+            "minMs": 0,
+            "maxMs": 900
+          },
+          "maxHoldMs": 2400,
+          "id": "x1",
+          "label": "seed 6"
+        },
+        "witnesses": 0,
+        "errors": 0,
+        "forced": 3
+      },
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query_range?query=up&step=14&start=1793722252.52&end=1793725852.52",
+        "GET /query_range?query=count by (job) (up)&step=14&start=1793722253.097&end=1793725853.097",
+        "GET /query_range?query=count by (job) (up)&step=7&start=1793724053.179&end=1793725853.179"
+      ]
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of \"/query\" get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /query · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click textbox \"up\"\n  type textbox \"count by (job) (up)\" = count by (job) (up)\n  key textbox \"count by (job) (up)\"\n  click button \"Execute\"\n  click button \"Decrease range\"\nNo race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.\nInternal state only (not a race by this check): 3 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.\n- run r4 (seed 2) (3 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"2\", this run \"1\"\n- run r6 (seed 4) (2 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"1\"\n    requests sent to \"GET /api/v1/status/walreplay\": baseline \"2\", this run \"1\"\n- run r7 (seed 5) (3 hold(s) ran out):\n    requests sent to \"GET /-/ready\": baseline \"3\", this run \"2\"",
+  "findings": "No findings match. Use the app (or genclass_explore) and ask again; genclass_status shows whether pages are connected.",
+  "explains": {},
+  "oracle": "8 of 8 loads showed the reference state"
+}

@@ -1,0 +1,236 @@
+{
+  "scenario": "table",
+  "app": "http://localhost:4173",
+  "plain": true,
+  "slow_ms": null,
+  "delay_ms": 900,
+  "runs": 8,
+  "seed": 1,
+  "loads": [
+    {
+      "n": 1,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query?query=count by (job) (up)&time=1793725427.763&stats=true"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725427.486&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725427.763&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725427.886&stats=true",
+        "ABORTED /query?query=count by (job) (up)&time=1793725427.763&stats=true"
+      ]
+    },
+    {
+      "n": 2,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query?query=count by (job) (up)&time=1793725434.505&stats=true"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725434.264&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725434.505&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725434.619&stats=true",
+        "ABORTED /query?query=count by (job) (up)&time=1793725434.505&stats=true"
+      ]
+    },
+    {
+      "n": 3,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query?query=count by (job) (up)&time=1793725441.29&stats=true"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725440.988&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725441.29&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725441.403&stats=true",
+        "ABORTED /query?query=count by (job) (up)&time=1793725441.29&stats=true"
+      ]
+    },
+    {
+      "n": 4,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query?query=count by (job) (up)&time=1793725448.04&stats=true"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725447.768&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725448.04&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725448.155&stats=true",
+        "ABORTED /query?query=count by (job) (up)&time=1793725448.04&stats=true"
+      ]
+    },
+    {
+      "n": 5,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query?query=count by (job) (up)&time=1793725454.79&stats=true"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725454.518&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725454.79&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725454.906&stats=true",
+        "ABORTED /query?query=count by (job) (up)&time=1793725454.79&stats=true"
+      ]
+    },
+    {
+      "n": 6,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query?query=count by (job) (up)&time=1793725461.581&stats=true"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725461.302&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725461.581&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725461.702&stats=true",
+        "ABORTED /query?query=count by (job) (up)&time=1793725461.581&stats=true"
+      ]
+    },
+    {
+      "n": 7,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query?query=count by (job) (up)&time=1793725468.288&stats=true"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725468.036&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725468.288&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725468.401&stats=true",
+        "ABORTED /query?query=count by (job) (up)&time=1793725468.288&stats=true"
+      ]
+    },
+    {
+      "n": 8,
+      "error": null,
+      "pageErrors": [],
+      "same": true,
+      "got": {
+        "tableSeries": 2,
+        "tableRows": [
+          "{job=\"down-only\"}",
+          "{job=\"self-b\"}"
+        ]
+      },
+      "want": "(same)",
+      "held": [
+        "/query?query=count by (job) (up)&time=1793725475.005&stats=true"
+      ],
+      "agent": null,
+      "wire": [
+        "GET /notifications/live",
+        "GET /status/walreplay",
+        "GET /label/__name__/values",
+        "GET /query?query=time()",
+        "GET /query?query=up&time=1793725474.736&stats=true",
+        "GET /query?query=count by (job) (up)&time=1793725475.005&stats=true",
+        "GET /query?query=sum by (job) (up == 0)&time=1793725475.117&stats=true",
+        "ABORTED /query?query=count by (job) (up)&time=1793725475.005&stats=true"
+      ]
+    }
+  ],
+  "oracle": "8 of 8 loads showed the reference state"
+}
