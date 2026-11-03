@@ -1,0 +1,14 @@
+unfixed nightly (2026-11-03 07:54 UTC asset), repro-lost-update.mjs
+route delay 0 ms: 0 of 3 lost; 300 ms: 3 of 3 lost; 1000 ms: 3 of 3 lost
+CDP latency 2000 ms + pause 800 ms: 3 of 3 lost
+CDP latency 2000 ms + pause 3000 ms: 0 of 3 lost
+CDP latency 300 ms + pause 800 ms: 0 of 3 lost
+CDP latency 600 ms + pause 400 ms: 0 of 3 lost
+regression test (general.spec.ts, "two tabs"), chromium, --repeat-each 3: 3 of 3 failed (server displayName "Display name before the save")
+--- fixed (Vite dev server on the patched checkout, server with --admin-dev)
+route delay 0 ms: 0 of 3 lost; 300 ms: 0 of 3; 1000 ms: 0 of 3
+CDP latency 2000 ms + pause 800 ms: 0 of 3 lost
+regression test, --repeat-each 3: fixed 3 of 3 passed; src fix stashed (same Vite build): 3 of 3 failed ("Display name before the save")
+(the fixed rows above were measured twice: with the first version of the fix and again with the final one, which also
+keeps the realm's id in the context; same counts both times)
+related suites on the fixed console (general, login, session, tokens .spec.ts, chromium): 15 passed, 0 failed

@@ -1,0 +1,346 @@
+[
+ {
+  "scenario": "login-switches",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 300,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null
+ },
+ {
+  "scenario": "login-switches",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 600,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null
+ },
+ {
+  "scenario": "login-switches",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 900,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "fixed",
+  "pause_ms": 0,
+  "slow_ms": 300,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "fixed",
+  "pause_ms": 0,
+  "slow_ms": 600,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "fixed",
+  "pause_ms": 0,
+  "slow_ms": 900,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 300,
+  "verdict": "race 5 of 6",
+  "replay": "No finding .",
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "5 of 6",
+  "errors": 0,
+  "example": {
+   "displayName": "Original display name",
+   "registrationAllowed": true,
+   "title": "Original display name"
+  }
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 600,
+  "verdict": "race 3 of 6",
+  "replay": "No finding .",
+  "oracle_wrong_baselines": "2 of 2",
+  "oracle_wrong_seeded": "3 of 6",
+  "errors": 0,
+  "example": {
+   "displayName": "Original display name",
+   "registrationAllowed": true,
+   "title": "Original display name"
+  }
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 900,
+  "verdict": "race 3 of 6",
+  "replay": "No finding .",
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "3 of 6",
+  "errors": 0,
+  "example": {
+   "displayName": "Original display name",
+   "registrationAllowed": true,
+   "title": "Original display name"
+  }
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "unfixed-rerun",
+  "pause_ms": 0,
+  "slow_ms": 300,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "1 of 2",
+  "oracle_wrong_seeded": "5 of 6",
+  "errors": 0,
+  "example": {
+   "displayName": "Original display name",
+   "registrationAllowed": true,
+   "title": "Original display name"
+  },
+  "source": "rebuilt from the run log (the session file was deleted by mistake)"
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "fixed",
+  "pause_ms": 400,
+  "slow_ms": 900,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "unfixed",
+  "pause_ms": 400,
+  "slow_ms": 300,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "unfixed",
+  "pause_ms": 400,
+  "slow_ms": 600,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "unfixed",
+  "pause_ms": 400,
+  "slow_ms": 900,
+  "verdict": "race 1 of 6",
+  "replay": "No finding .",
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "1 of 6",
+  "errors": 0,
+  "example": {
+   "displayName": "Original display name",
+   "registrationAllowed": true,
+   "title": "Original display name"
+  }
+ },
+ {
+  "scenario": "realm-tabs",
+  "variant": "unfixed-rerun",
+  "pause_ms": 400,
+  "slow_ms": 900,
+  "verdict": "race 2 of 6",
+  "replay": "not reproduced",
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "2 of 6",
+  "errors": 0,
+  "example": {
+   "displayName": "Original display name",
+   "registrationAllowed": true,
+   "title": "Original display name"
+  },
+  "source": "rebuilt from the run log (the session file was deleted by mistake)"
+ },
+ {
+  "scenario": "user-create-double",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 300,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "2 of 2",
+  "oracle_wrong_seeded": "6 of 6",
+  "errors": 0,
+  "example": {
+   "users": 1,
+   "alerts": [
+    "Could not create user: User exists with same username",
+    "The user has been created"
+   ],
+   "route": "#/genclass-hunt/users/:id/settings"
+  }
+ },
+ {
+  "scenario": "user-create-double",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 600,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "2 of 2",
+  "oracle_wrong_seeded": "6 of 6",
+  "errors": 0,
+  "example": {
+   "users": 1,
+   "alerts": [
+    "Could not create user: User exists with same username or email",
+    "The user has been created"
+   ],
+   "route": "#/genclass-hunt/users/:id/settings"
+  }
+ },
+ {
+  "scenario": "user-create-double",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 900,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "2 of 2",
+  "oracle_wrong_seeded": "6 of 6",
+  "errors": 0,
+  "example": {
+   "users": 1,
+   "alerts": [
+    "Could not create user: User exists with same username or email",
+    "The user has been created"
+   ],
+   "route": "#/genclass-hunt/users/:id/settings"
+  }
+ },
+ {
+  "scenario": "user-search",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 300,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "2 of 2",
+  "oracle_wrong_seeded": "6 of 6",
+  "errors": 0,
+  "example": {
+   "rows": []
+  }
+ },
+ {
+  "scenario": "user-search",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 600,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "2 of 2",
+  "oracle_wrong_seeded": "6 of 6",
+  "errors": 0,
+  "example": {
+   "rows": []
+  }
+ },
+ {
+  "scenario": "user-search",
+  "variant": "unfixed",
+  "pause_ms": 0,
+  "slow_ms": 900,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "2 of 2",
+  "oracle_wrong_seeded": "6 of 6",
+  "errors": 0,
+  "example": {
+   "rows": []
+  }
+ },
+ {
+  "scenario": "user-search",
+  "variant": "unfixed-rerun",
+  "pause_ms": 0,
+  "slow_ms": 300,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null,
+  "source": "rebuilt from the run log (the session file was deleted by mistake)"
+ },
+ {
+  "scenario": "user-search",
+  "variant": "unfixed-rerun",
+  "pause_ms": 0,
+  "slow_ms": 600,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null,
+  "source": "rebuilt from the run log (the session file was deleted by mistake)"
+ },
+ {
+  "scenario": "user-search",
+  "variant": "unfixed-rerun",
+  "pause_ms": 0,
+  "slow_ms": 900,
+  "verdict": "no race",
+  "replay": null,
+  "oracle_wrong_baselines": "0 of 2",
+  "oracle_wrong_seeded": "0 of 6",
+  "errors": 0,
+  "example": null,
+  "source": "rebuilt from the run log (the session file was deleted by mistake)"
+ }
+]

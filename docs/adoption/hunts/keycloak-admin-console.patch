@@ -1,0 +1,119 @@
+diff --git a/js/apps/admin-ui/src/context/realm-context/RealmContext.tsx b/js/apps/admin-ui/src/context/realm-context/RealmContext.tsx
+index c8da793c..b14750f3 100644
+--- a/js/apps/admin-ui/src/context/realm-context/RealmContext.tsx
++++ b/js/apps/admin-ui/src/context/realm-context/RealmContext.tsx
+@@ -15,6 +15,8 @@ type RealmContextType = {
+   realm: string;
+   realmRepresentation: RealmRepresentation;
+   refresh: () => void;
++  /** Replaces the realm representation, e.g. with the one just saved, until the next refresh lands. */
++  setRealmRepresentation: (realm: RealmRepresentation) => void;
+ };
+ 
+ export const RealmContext = createNamedContext<RealmContextType | undefined>(
+@@ -55,7 +57,12 @@ export const RealmContextProvider = ({ children }: PropsWithChildren) => {
+ 
+   return (
+     <RealmContext.Provider
+-      value={{ realm, realmRepresentation: realmRepresentation!, refresh }}
++      value={{
++        realm,
++        realmRepresentation: realmRepresentation!,
++        refresh,
++        setRealmRepresentation,
++      }}
+     >
+       {children}
+     </RealmContext.Provider>
+diff --git a/js/apps/admin-ui/src/realm-settings/RealmSettingsTabs.tsx b/js/apps/admin-ui/src/realm-settings/RealmSettingsTabs.tsx
+index 60cd6e0b..8e3f501c 100644
+--- a/js/apps/admin-ui/src/realm-settings/RealmSettingsTabs.tsx
++++ b/js/apps/admin-ui/src/realm-settings/RealmSettingsTabs.tsx
+@@ -12,6 +12,7 @@ import {
+   TabTitleText,
+   Tooltip,
+ } from "@patternfly/react-core";
++import { omit } from "lodash-es";
+ import { useEffect, useState } from "react";
+ import { Controller, FormProvider, useForm } from "react-hook-form";
+ import { useTranslation } from "react-i18next";
+@@ -181,7 +182,12 @@ export const RealmSettingsTabs = () => {
+   const { adminClient } = useAdminClient();
+   const { t } = useTranslation();
+   const { addAlert, addError } = useAlerts();
+-  const { realm: realmName, realmRepresentation: realm, refresh } = useRealm();
++  const {
++    realm: realmName,
++    realmRepresentation: realm,
++    refresh,
++    setRealmRepresentation,
++  } = useRealm();
+   const combinedLocales = useLocale();
+   const navigate = useNavigate();
+   const isFeatureEnabled = useIsFeatureEnabled();
+@@ -286,6 +292,9 @@ export const RealmSettingsTabs = () => {
+         },
+       );
+       if (!response.ok) throw new Error(response.statusText);
++      // The other tabs build their saves on the realm in the context, so use what was just saved
++      // until the refetch lands; otherwise a save from another tab in the meantime reverts this one.
++      setRealmRepresentation({ ...omit(savedRealm, "upConfig"), id: realm.id });
+       addAlert(t("realmSaveSuccess"), AlertVariant.success);
+     } catch (error) {
+       addError("realmSaveError", error);
+diff --git a/js/apps/admin-ui/test/realm-settings/general.spec.ts b/js/apps/admin-ui/test/realm-settings/general.spec.ts
+index 98222ee5..30632119 100644
+--- a/js/apps/admin-ui/test/realm-settings/general.spec.ts
++++ b/js/apps/admin-ui/test/realm-settings/general.spec.ts
+@@ -20,6 +20,7 @@ import {
+   fillRequireSSL,
+ } from "./general.ts";
+ import { SERVER_URL } from "../utils/constants.ts";
++import { goToLoginTab, toggleLoginSettingAndExpectSuccess } from "./login.ts";
+ 
+ test.describe.serial("Realm settings general tab tests", () => {
+   const realmName = `general-realm-settings-${uuid()}`;
+@@ -149,3 +150,43 @@ test.describe("Realm settings delete", () => {
+     expect(await adminClient.getRealm(realmName)).toBeNull();
+   });
+ });
++
++test.describe("Realm settings saves on two tabs", () => {
++  const realmName = `two-tabs-realm-settings-${uuid()}`;
++  const displayName = "Display name saved on the General tab";
++
++  test.beforeAll(() =>
++    adminClient.createRealm(realmName, {
++      displayName: "Display name before the save",
++    }),
++  );
++  test.afterAll(() => adminClient.deleteRealm(realmName));
++
++  test("keeps the General tab's save when the Login tab saves before the realm is reloaded", async ({
++    page,
++  }) => {
++    await login(page);
++    await goToRealm(page, realmName);
++    await goToRealmSettings(page);
++
++    // Hold the reload of the realm that follows the first save until the Login tab has saved,
++    // as a slow network does.
++    let loginTabSaved!: () => void;
++    const saved = new Promise<void>((resolve) => (loginTabSaved = resolve));
++    await page.route(`**/admin/realms/${realmName}`, async (route) => {
++      if (route.request().method() === "PUT") loginTabSaved();
++      if (route.request().method() === "GET") await saved;
++      await route.continue();
++    });
++
++    await fillDisplayName(page, displayName);
++    await clickSaveRealm(page);
++    await assertNotificationMessage(page, "Realm successfully updated");
++    await goToLoginTab(page);
++    await toggleLoginSettingAndExpectSuccess(page, "user-reg-switch");
++
++    const realm = await adminClient.getRealm(realmName);
++    expect(realm?.displayName).toBe(displayName);
++    expect(realm?.registrationAllowed).toBe(true);
++  });
++});
