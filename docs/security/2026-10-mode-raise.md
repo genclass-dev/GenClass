@@ -13,9 +13,9 @@ Everything below was checked against the tags, the npm tarballs and the commits 
 | Ecosystem | npm |
 | Package | `@genclass/runtime` |
 | Affected versions | `>= 0.1.0-alpha.0, <= 0.2.2` (every 0.1.x prerelease, 0.2.0, 0.2.1, 0.2.2, npm's `latest`); `>= 0.3.0-beta.0, <= 0.3.0-beta.1` |
-| Patched versions | `0.3.0-beta.2` (npm dist-tag `beta`, 2026-10-25); `0.2.3` on dist-tag `latest` (pending, not published at the time of this draft) |
+| Patched versions | `0.3.0-beta.2` (npm dist-tag `beta`, 2026-10-25); `0.2.3` on dist-tag `latest` (published 2026-10-28) |
 | Not affected | `0.0.0-stage` (a placeholder package with no code), `0.3.0-beta.2` and later (for the review findings F1 to F4 below: `0.2.3`, `0.3.0-beta.5` and later) |
-| Review findings | F1 to F4 under "Further findings from the review of the fix" (2026-10-27): patched in `0.2.3` (tagged `v0.2.3`, npm pending) and `0.3.0-beta.5` (pending). F1 is reachable from a link and bounded by the app's own global mode; F2 and F3 need the app's configuration or a script in the origin; F4 is hardening |
+| Review findings | F1 to F4 under "Further findings from the review of the fix" (2026-10-27): patched in `0.2.3` (npm's `latest`, 2026-10-28) and `0.3.0-beta.5` (`beta`, 2026-11-03). F1 is reachable from a link and bounded by the app's own global mode; F2 and F3 need the app's configuration or a script in the origin; F4 is hardening |
 | Severity | Medium, CVSS 3.1 5.4 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:L`), see "Severity" |
 | CWE | CWE-15 (External Control of System or Configuration Setting); secondary CWE-489 (Active Debug Code) for the `debug` bypass |
 | Credits | the GenClass maintainers (found while testing 0.3.0-beta.0 in a pilot app, 2026-10-17) |
@@ -167,12 +167,11 @@ GHSA ranges: `>= 0.1.0-alpha.0, <= 0.2.2` and `>= 0.3.0-beta.0, < 0.3.0-beta.2`.
 ## Patched versions
 
 - `0.3.0-beta.2` (npm dist-tag `beta`), published 2026-10-25; `0.3.0-beta.3` and `0.3.0-beta.4` carry the fix.
-  `npm install @genclass/runtime@beta`; script tags: pin `@0.3.0-beta.4` (or the newest beta).
-- `0.2.3` (npm dist-tag `latest`): tagged `v0.2.3` (commit `8694211`, 2026-10-27, on origin), not on npm at the time
-  of this draft (`latest` is still `0.2.2`). Until it is published, a project on the stable line should either move to
-  `@beta` or apply the workarounds below. (owner: `release.yml` publishes from the `v0.2.3` tag; then fill the form's
-  patched version for the `<= 0.2.2` range; until then the form can state "no patched version on the 0.2 line yet".)
-  `@beta` (`0.3.0-beta.4`) carries the headline fix but not F1 to F4 until `0.3.0-beta.5`.
+  `npm install @genclass/runtime@beta`; script tags: pin `@0.3.0-beta.5` (or the newest beta).
+- `0.2.3` (npm dist-tag `latest`): tagged `v0.2.3` (commit `8694211`, 2026-10-27, on origin), on npm since
+  2026-10-28. (owner: the form's patched version for the `<= 0.2.2` range is `0.2.3`.)
+  `@beta` (`0.3.0-beta.5`, 2026-11-03) carries the headline fix and F1 to F4; `0.3.0-beta.2` to `0.3.0-beta.4` carry only
+  the headline fix.
 
 Where the fix lives: `packages/runtime/src/devhost.ts` (new), `src/index.ts` (`initUnsafe`), `src/runtime.ts`
 (constructor and `sampleBucket`), `src/visual/start.ts` (re-exports `devHost`), `test/mode-switch.test.ts` (new) and
@@ -289,9 +288,9 @@ every version).
 
 ### Patched versions for F1 to F4
 
-- `0.2.3` (stable line): commit `8694211`, tag `v0.2.3` on origin (2026-10-27); not on npm at the time of this draft.
-- `0.3.0-beta.5` (beta line): the port to `main` on branch `security/advisory-mode-raise`; not tagged or published at
-  the time of this draft. `0.3.0-beta.2` to `0.3.0-beta.4` carry the headline fix but not F1 to F4.
+- `0.2.3` (stable line): commit `8694211`, tag `v0.2.3` on origin (2026-10-27); on npm's `latest` since 2026-10-28.
+- `0.3.0-beta.5` (beta line): the port to `main` (PR #123), tagged `v0.3.0-beta.5` and on npm's `beta` since 2026-11-03.
+  `0.3.0-beta.2` to `0.3.0-beta.4` carry the headline fix but not F1 to F4.
 
 GHSA ranges: F1, F3 and F4 `>= 0.1.0-beta.1, <= 0.2.2` and `>= 0.3.0-beta.0, <= 0.3.0-beta.4`; F2
 `>= 0.1.0-alpha.0, <= 0.2.2` and `>= 0.3.0-beta.0, <= 0.3.0-beta.4`. (owner: either widen this advisory's affected
@@ -384,7 +383,9 @@ Found by the GenClass maintainers while testing `0.3.0-beta.0` in a pilot app on
 | 2026-10-26, 2026-10-27 | `0.3.0-beta.3`, `0.3.0-beta.4` carry it |
 | 2026-10-27 | the adversarial review of the 0.2.3 backport finds F1 to F4; fixed in `8694211` on `release/0.2.3`, tagged `v0.2.3` (not yet on npm) |
 | 2026-10-27 | F1 to F4 ported to `main` for `0.3.0-beta.5` (branch `security/advisory-mode-raise`), with the docs below |
-| pending | `0.2.3` on npm's `latest`; `0.3.0-beta.5` tagged and published; this advisory; docs on `main` updated (see the notes below) |
+| 2026-10-28 | `0.2.3` on npm's `latest` |
+| 2026-11-03 | `0.3.0-beta.5` tagged and published (npm's `beta`); docs on `main` updated |
+| pending | this advisory (the GHSA range decision below) |
 
 ## References
 
@@ -396,7 +397,7 @@ Found by the GenClass maintainers while testing `0.3.0-beta.0` in a pilot app on
   reversibility"), `docs/runtime/THREAT-MODEL.md` T8, `SECURITY.md` ("Recommended for production").
 - `packages/runtime/CHANGELOG.md`, the `0.2.2` security entry (the earlier, partial fix).
 - Review findings F1 to F4: commit `8694211` (`release/0.2.3`, tag `v0.2.3`); the `main` port on branch
-  `security/advisory-mode-raise`; `packages/runtime/CHANGELOG.md` "Unreleased (0.3.0-beta.5)" and "0.2.3";
+  `security/advisory-mode-raise`; `packages/runtime/CHANGELOG.md` "0.3.0-beta.5 (2026-11-02)" and "0.2.3";
   `packages/runtime/src/util/match.ts` `normalizeRoute`, `src/runtime.ts` (constructor, `sampleBucket`,
   `computeScope`), `src/cdn/config.ts` `readWindowConfig`, `src/decide/policy.ts` (`aggressivenessLevel`, `modeAllows`).
 
