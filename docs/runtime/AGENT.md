@@ -45,11 +45,11 @@ claude mcp add genclass -- npx -y @genclass/mcp@0.2.1   # or: npx -y @genclass/m
 
 Or as a Claude Code plugin from this repository's marketplace (`.claude-plugin/marketplace.json`; the plugin is
 `packages/mcp/plugin`: the server, a `UserPromptSubmit` hook and the `genclass` skill):
-`/plugin marketplace add genclass-dev/GenClass-lib`, then `/plugin install genclass@genclass`. The server's
+`/plugin marketplace add genclass-dev/GenClass`, then `/plugin install genclass@genclass`. The server's
 `instructions` carry the triggers (the symptom words, the code changes that call for an explore, the scan before a UI
 change is done) and the first call for each, so every client that passes them on gets the "when"; the skill carries
 the procedure (section 4.2) and does not need the plugin: `init` writes it into the project, and
-`npx skills add genclass-dev/GenClass-lib` installs the repository-root copy (`skills/genclass/SKILL.md`, kept
+`npx skills add genclass-dev/GenClass` installs the repository-root copy (`skills/genclass/SKILL.md`, kept
 identical to the plugin's by the version sync) through a skill directory. Other clients
 (Cursor, VS Code, Codex CLI, Gemini CLI, Windsurf, Cline, Goose, Zed, JetBrains, OpenCode): the install blocks in
 [packages/mcp/README.md](../../packages/mcp/README.md#install), or `npx -y @genclass/mcp@0.2.1 config <client>`.

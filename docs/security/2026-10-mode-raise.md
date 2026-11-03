@@ -1,7 +1,7 @@
 DRAFT for the owner to publish through GitHub's security advisory form. Do not publish this file as is.
 
 <!--
-Draft of a GitHub Security Advisory (GHSA) for the GenClass-lib repository. The headings follow the form's fields.
+Draft of a GitHub Security Advisory (GHSA) for the GenClass repository. The headings follow the form's fields.
 Everything below was checked against the tags, the npm tarballs and the commits named in "Evidence"; the lines marked
 "owner" are decisions or follow-ups the form will ask for or that the repository still needs.
 -->

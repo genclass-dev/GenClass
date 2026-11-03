@@ -43,7 +43,7 @@ claude mcp add --scope project genclass -- npx -y @genclass/mcp@0.2.1
 # or: npx -y @genclass/mcp@0.2.1 init --hook   (.mcp.json and the skill, plus the prompt hook in .claude/settings.json)
 ```
 
-Or just the skill (no server): `npx skills add genclass-dev/genclass-plugin`. (`genclass-dev/genclass-plugin` is this plugin at a repository root, assembled from this package; the marketplace in `genclass-dev/GenClass-lib` lists the same plugin.)
+Or just the skill (no server): `npx skills add genclass-dev/genclass-plugin`. (`genclass-dev/genclass-plugin` is this plugin at a repository root, assembled from this package; the marketplace in `genclass-dev/GenClass` lists the same plugin.)
 
 ### Claude Desktop
 
@@ -301,7 +301,7 @@ read a report, what to say when done, what to do when the tools are missing) is 
   leaves one without it (yours, or edited), and says which;
 - `npx skills add genclass-dev/genclass-plugin` (the skills CLI: Codex, Cursor, Copilot, Gemini CLI, Claude Code and
   others) or `gh skill install genclass-dev/genclass-plugin genclass` (GitHub CLI 2.90 or later, for Copilot) installs
-  the skill alone, with no server (the skill then says how to add one). `npx skills add genclass-dev/GenClass-lib`
+  the skill alone, with no server (the skill then says how to add one). `npx skills add genclass-dev/GenClass`
   installs the same file from this repository's root copy, `skills/genclass/SKILL.md`.
 
 To remove it: delete `.claude/skills/genclass/` (or the directory the skill tool wrote to); with the plugin,
@@ -338,7 +338,7 @@ agent:  genclass_findings → f1 [stale-write] /search: the response to GET /api
 
 On a real page in headless Chromium (the package's end-to-end check), explore found that race in 5 of 6 reordered runs
 of a page that never showed it on the developer's fast backend, the generated test failed on the buggy page and passed
-on the fixed one, and explore on the fixed page reported nothing. Details: [docs/runtime/AGENT.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/AGENT.md).
+on the fixed one, and explore on the fixed page reported nothing. Details: [docs/runtime/AGENT.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md).
 
 ## Tools
 
@@ -369,7 +369,7 @@ on the fixed one, and explore on the fixed page reported nothing. Details: [docs
 | `GENCLASS_AGENT_PORT` | `47357` | the bridge's port (the page then needs `connectAgent(rt, { url })`) |
 | `GENCLASS_STATE_DIR` | `.genclass/agent` | where findings persist between sessions; `none` keeps them in memory |
 | `GENCLASS_DASHBOARD` | | your dashboard's private link, for `genclass_analytics` `production` (`sample` reads the public sample) |
-| `GENCLASS_REPORT` | | `on` (with `GENCLASS_DASHBOARD`), or a dashboard link or secret: mirror this server's log of the loop to that dashboard's Closed-loop development view (each finding, each time its evidence is read, each replay armed and its verdict, each regression test written, each explore report, each clear), which draws every issue's path (found, reproduced, fix proven, closed, or round again) with counts and lists the log. Ids, kinds, page paths, verdicts, counts and times only, never page text; off unless set ([AGENT.md section 4.5](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/AGENT.md)) |
+| `GENCLASS_REPORT` | | `on` (with `GENCLASS_DASHBOARD`), or a dashboard link or secret: mirror this server's log of the loop to that dashboard's Closed-loop development view (each finding, each time its evidence is read, each replay armed and its verdict, each regression test written, each explore report, each clear), which draws every issue's path (found, reproduced, fix proven, closed, or round again) with counts and lists the log. Ids, kinds, page paths, verdicts, counts and times only, never page text; off unless set ([AGENT.md section 4.5](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md)) |
 | `GENCLASS_AGENT_ORIGINS` | | exact page origins allowed besides this machine's, e.g. `http://192.168.1.20:5173` (the page then needs `connectAgent(rt, { anyHost: true })`) |
 | `GENCLASS_TOKEN_DIR` | `~/.genclass` | where the bridge keeps its API token (mode 0600) for the hook and other sessions |
 
@@ -381,7 +381,7 @@ website, a router page or a captive portal you visit cannot plant findings, and 
 The agent API refuses browsers and needs a token only your user can read. Everything a page sends is validated,
 capped, stripped of invisible characters and shown to the agent as quoted data, never as instructions. Nothing leaves
 your machine (the exceptions are under Privacy). See section 6 of
-[AGENT.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/AGENT.md).
+[AGENT.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md).
 
 ## Privacy
 
@@ -397,7 +397,7 @@ each finding, when its evidence was read, each replay armed and its verdict, whe
 explore report (page loads compared, races found) and each clear, so the dashboard's Closed-loop development view
 draws every issue's path (found, reproduced, fix proven, closed, or round again) and lists what the agent did; never a
 title, an evidence line, a snapshot or any page text, and nothing it sends feeds a decision. The runtime in your app has its
-own disclosed diagnostics ([PRIVACY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/PRIVACY.md)), which
+own disclosed diagnostics ([PRIVACY.md](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md)), which
 `GenClass.init({ telemetry: false })` turns off; the agent link is not part of them.
 
 ## License

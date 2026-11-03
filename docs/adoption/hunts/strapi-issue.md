@@ -111,7 +111,7 @@ fix.
 **How it was found**
 
 By reordering the admin's responses with GenClass, an open-source library that reports races in web apps
-(https://github.com/genclass-dev/GenClass-lib): on this page, 2 of 6 reordered loads ended on the 403 page, and the
+(https://github.com/genclass-dev/GenClass): on this page, 2 of 6 reordered loads ended on the 403 page, and the
 delayed-response script above is the reproduction without it.
 
 ## Pull request

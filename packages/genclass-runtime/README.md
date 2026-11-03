@@ -36,7 +36,7 @@ though the package manager still installs from its registry. Docs:
 ## What does this package install?
 
 The newest published version, `genclass-runtime@0.1.0-beta.3`, depends on `@genclass/runtime@0.1.0-beta.3`, which is
-no longer supported ([SECURITY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/SECURITY.md)). With its
+no longer supported ([SECURITY.md](https://github.com/genclass-dev/GenClass/blob/main/SECURITY.md)). With its
 defaults that version sends anonymous diagnostics from local hosts too, and they include the redacted situation text
 the model read. Its `observe` mode can also delay a `fetch` whose `Request` or `Blob` body GenClass reads to identify
 it, by a few microtasks to 100 ms (fixed in `0.2.0`).
@@ -54,7 +54,7 @@ same diagnostics also feed your app's private dashboard. They are off on `localh
 redacted situation text by default. Opt out with `GenClass.init({ telemetry: false })`, `?genclass=no-telemetry`,
 `localStorage.setItem("genclass.telemetry", "off")` or `init --no-telemetry` (which also skips the token); browsers
 sending Global Privacy Control are never collected. Details:
-[TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md).
+[TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md).
 
 <!-- Maintainers: npmjs.com shows the README and package.json fields of the published version. On 2026-10-27 npm has
 genclass-runtime 0.1.0-beta.3 (latest, published 2026-10-09) with its older README and description ("Short alias for

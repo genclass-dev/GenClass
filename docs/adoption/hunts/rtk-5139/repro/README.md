@@ -16,9 +16,9 @@ npm run dev        # http://localhost:5173
 ```
 
 Or open it on StackBlitz:
-https://stackblitz.com/github/genclass-dev/GenClass-lib/tree/main/docs/adoption/hunts/rtk-5139/repro
+https://stackblitz.com/github/genclass-dev/GenClass/tree/main/docs/adoption/hunts/rtk-5139/repro
 
-Or copy just this folder: `npx degit genclass-dev/GenClass-lib/docs/adoption/hunts/rtk-5139/repro rtk-5139`.
+Or copy just this folder: `npx degit genclass-dev/GenClass/docs/adoption/hunts/rtk-5139/repro rtk-5139`.
 
 Press **Rename item 1**. The name changes to `Edited 1` at once (the optimistic update), goes back to `Original`
 within about 100 ms (the next poll's `executeQuery/fulfilled`), and shows `Edited 1` again after the PUT returns and

@@ -47,7 +47,7 @@ Before submitting:
 
 - **Type:** Library
 - **Title:** GenClass
-- **Link:** https://github.com/genclass-dev/GenClass-lib/tree/main/templates/sveltekit (or the npm package)
+- **Link:** https://github.com/genclass-dev/GenClass/tree/main/templates/sveltekit (or the npm package)
 - **Tags:** DevTools, SvelteKit, Utility (Testing fits the coding-agent link in `@genclass/mcp`, but that package is
   not what a Svelte reader installs; leave it out unless the form asks for every applicable tag)
 - **Description (draft):** Reports race conditions, stale responses and duplicate submits in the browser while they

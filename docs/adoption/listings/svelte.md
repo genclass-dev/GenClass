@@ -20,9 +20,9 @@ on the form itself; check them when submitting.
 | Type / category | Package (or "Add-on" if the form offers it) |
 | Title | @genclass/sv |
 | Short description | `npx sv add @genclass` sets up GenClass in a SvelteKit app: it reports race conditions in the browser (stale responses, duplicate submits, failure storms) with a small on-device model. |
-| URL | https://github.com/genclass-dev/GenClass-lib/tree/main/packages/sv |
+| URL | https://github.com/genclass-dev/GenClass/tree/main/packages/sv |
 | npm package | @genclass/sv |
-| Repository | https://github.com/genclass-dev/GenClass-lib |
+| Repository | https://github.com/genclass-dev/GenClass |
 | Tags | sv-add, sveltekit, debugging, testing, network, developer-tools |
 | License | Apache-2.0 |
 

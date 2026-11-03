@@ -12,7 +12,7 @@ abstract: >-
 authors:
   - name: "Daybot Solutions Inc."
     website: "https://genclass.dev"
-repository-code: "https://github.com/genclass-dev/GenClass-lib"
+repository-code: "https://github.com/genclass-dev/GenClass"
 url: "https://genclass.dev"
 license: Apache-2.0
 # The newest published release of @genclass/runtime (npm `beta`; `latest` is 0.2.2, dated 2026-10-13 in the

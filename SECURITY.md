@@ -9,8 +9,8 @@ state writes proceed. We take reports about it seriously.
 Please report security issues privately, not in public GitHub issues, discussions or pull requests.
 
 - **Email:** [mehar@daybot.ca](mailto:mehar@daybot.ca)
-- **GitHub:** a private vulnerability report on the GenClass-lib repository
-  ([Security → Report a vulnerability](https://github.com/genclass-dev/GenClass-lib/security/advisories/new)).
+- **GitHub:** a private vulnerability report on the GenClass repository
+  ([Security → Report a vulnerability](https://github.com/genclass-dev/GenClass/security/advisories/new)).
 
 Include what you can of: the affected package and version (`GenClass.runtime.status`, or the version in
 `package.json`), how GenClass was installed (`@genclass/runtime/auto`, `GenClass.init`, the script tag), the mode
@@ -107,7 +107,7 @@ npm pack @genclass/runtime@$V                       # the published tarball, byt
 npm view @genclass/runtime@$V dist.shasum dist.integrity gitHead
 shasum -a 1 genclass-runtime-$V.tgz                 # equals dist.shasum
 mkdir published && tar -xzf genclass-runtime-$V.tgz -C published
-git clone https://github.com/genclass-dev/GenClass-lib.git src && cd src
+git clone https://github.com/genclass-dev/GenClass.git src && cd src
 git checkout v$V                                    # or the commit in the provenance / gitHead
 ONNXRUNTIME_NODE_INSTALL=skip npm ci --no-audit --no-fund
 npm run build -w @genclass/runtime
