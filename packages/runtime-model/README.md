@@ -7,8 +7,8 @@ or WASM. Inference happens on the user's device and the model itself sends nothi
 diagnostics are separate (see [Privacy](#privacy)).
 
 This page covers `@genclass/runtime-model@0.2.0` (model `genclass-runtime-r17` 2.0.0-rc4t, training run
-`r17-v2dT`), the default model of `@genclass/runtime` 0.1.0-beta.1 and later, including `0.2.2` (npm `latest`) and
-`0.3.0-beta.4` (`beta`, 2026-10-27). Training data, held-out results, thresholds and limits are in the
+`r17-v2dT`), the default model of `@genclass/runtime` 0.1.0-beta.1 and later, including `0.2.3` (npm `latest`) and
+`0.3.0-beta.5` (`beta`, 2026-11-03). Training data, held-out results, thresholds and limits are in the
 [model card](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime-model/MODEL_CARD.md).
 
 ## At a glance
