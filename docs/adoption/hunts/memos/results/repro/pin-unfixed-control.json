@@ -1,0 +1,39 @@
+{
+  "surface": "pin",
+  "memos": "http://localhost:3001",
+  "held": "UpdateMemo",
+  "delay_ms": 0,
+  "later_ms": 30000,
+  "trials": 3,
+  "stale_after_3s": 0,
+  "stale_after_later": 0,
+  "results": [
+    {
+      "trial": 1,
+      "shownSoon": "pinned=false",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=false",
+      "serverLater": "pinned=false",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 2,
+      "shownSoon": "pinned=false",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=false",
+      "serverLater": "pinned=false",
+      "stale": false,
+      "staleLater": false
+    },
+    {
+      "trial": 3,
+      "shownSoon": "pinned=false",
+      "serverSoon": "pinned=false",
+      "shownLater": "pinned=false",
+      "serverLater": "pinned=false",
+      "stale": false,
+      "staleLater": false
+    }
+  ]
+}

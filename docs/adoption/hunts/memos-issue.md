@@ -75,8 +75,8 @@ Reactions:
 3. While it is held, "Add reaction" > ❤️.
 4. The ❤️ pill disappears when the held reply lands; the server has 👍 and ❤️.
 
-With those delays, pin showed the stale state in TBD of 10 trials and reactions in TBD of 10 (0 of 3 each without the
-delay); 30 s later it was still shown in TBD and TBD of them.
+With those delays, pin showed the stale state in 10 of 10 trials and reactions in 10 of 10 (0 of 3 each without the
+delay); 30 s later it was still shown in all 20.
 
 **Memos version**
 
@@ -109,7 +109,7 @@ restore ended on the Archived page, and adding two reactions quickly dropped the
 changes in order each time; only the client cache held the older state, until the memo was fetched again.
 
 Reproduced on main@b40d8a7 by delaying one reply by 1.5 s (the first `UpdateMemo`; the `GetMemo` after the first
-reaction's upsert): the stale state showed in TBD of 10 trials for pin and TBD of 10 for reactions, and 0 of 3 without
+reaction's upsert): the stale state showed in 10 of 10 trials for pin and 10 of 10 for reactions, and 0 of 3 each without
 the delay. With this branch: 0 of 10 and 0 of 10.
 
 Two commits:

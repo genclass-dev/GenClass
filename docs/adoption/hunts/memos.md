@@ -21,12 +21,12 @@ reply that is older than the page's data is written over it, and stays.
 2. **Two quick reactions** (`useReactionActions`): 👍 then ❤️. The 👍 click's own `getMemo`, answered before ❤️ was
    saved, lands last and removes ❤️ from the page; the server has both. Explore: RACE in 1 of 6 reordered loads at
    300 ms (the page text lost "❤ 1"), 0 of 6 baselines. Without GenClass, holding the replies to the `GetMemo`
-   requests sent between the 👍 reply and the ❤️ upsert: ⟨R⟩ of 10 trials lost ❤️, still lost 30 s later in ⟨RL⟩;
-   ⟨RC⟩ of 3 without the hold.
+   requests sent between the 👍 reply and the ❤️ upsert: 10 of 10 trials lost ❤️, still lost 30 s later in 10 of 10;
+   0 of 3 without the hold.
 
 The patch has two commits, 13 changed lines of source and three Vitest tests that fail on main and pass with the fix
 (3 runs each way); Memos' `pnpm lint` and `pnpm test` (193 files, 1,619 tests) pass. On the fixed build the
-GenClass-free reproductions showed the stale state in ⟨PF⟩ of 10 (pin) and ⟨RF⟩ of 10 (reactions) trials, and
+GenClass-free reproductions showed the stale state in 0 of 10 (pin) and 0 of 10 (reactions) trials, and
 explore's oracle in ⟨EF⟩ of ⟨EFN⟩ reordered loads (section 5.3).
 
 The comment surface showed no order-dependent page. Archive then Restore on the detail page ends on a page that
@@ -223,8 +223,8 @@ every `GetMemo` sent after the 👍 upsert's reply and before the ❤️ upsert 
 refetch in that window); between the clicks the script waits 300 ms and opens the picker again:
 
 ```
-reaction, unfixed, held 1500 ms:  ❤️ missing, server 👍 + ❤️ in ⟨R⟩ of 10 trials; 30 s later: ⟨RL⟩ of 10
-reaction, unfixed, held 0 ms:     ⟨RC⟩ of 3
+reaction, unfixed, held 1500 ms:  ❤️ missing, server 👍 + ❤️ in 10 of 10 trials; 30 s later: 10 of 10 of 10
+reaction, unfixed, held 0 ms:     0 of 3
 ```
 
 (The script's first version held only the first `GetMemo` after the upsert, which in all 10 trials was the live
@@ -297,8 +297,8 @@ cd web && pnpm test          Test Files 193 passed (193), Tests 1619 passed (161
 The second Vite server (:3002) serves the worktree with the patch; same backend, same memos.
 
 ```
-pin, fixed, held 1500 ms:       ⟨PF⟩ of 10 trials stale; 30 s later: ⟨PFL⟩ of 10
-reaction, fixed, held 1500 ms:  ⟨RF⟩ of 10 trials stale; 30 s later: ⟨RFL⟩ of 10
+pin, fixed, held 1500 ms:       0 of 10 trials stale; 30 s later: 0 of 10
+reaction, fixed, held 1500 ms:  0 of 10 trials stale; 30 s later: 0 of 10
 ```
 
 ⟨explore on the fixed build⟩
