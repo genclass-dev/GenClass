@@ -1,0 +1,24 @@
+From 874ffff838e68b8180d0fe36f62568631d78a2b6 Mon Sep 17 00:00:00 2001
+From: Sender Name <sender@example.invalid>
+Date: Tue, 3 Nov 2026 12:00:00 +0000
+Subject: [PATCH] Add GenClass to Tooling
+
+https://github.com/genclass-dev/GenClass
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ README.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/README.md b/README.md
+index 73f6803..2fc0fcc 100644
+--- a/README.md
++++ b/README.md
+@@ -168,6 +168,7 @@ _more coming soon..._
+ 
+ - [bun-plugin-solid](https://github.com/DaniGuardiola/bun-plugin-solid) - A plugin to compile Solid.js with Bun.
+ - [ArkEnv](https://github.com/yamcodes/arkenv) - Environment variable validation from editor to runtime, integrates with Solid and SolidStart via its Vite plugin.
++- [GenClass](https://github.com/genclass-dev/GenClass) - Reports race conditions in a Solid app while they happen with a small on-device model; one import, and observe mode never changes a request or a state write.
+ 
+ ## 📦 Components & Libraries
+ 

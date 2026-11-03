@@ -1,0 +1,24 @@
+From ca2c3b0d22483516da28407041956347407ba4a9 Mon Sep 17 00:00:00 2001
+From: Sender Name <sender@example.invalid>
+Date: Tue, 3 Nov 2026 12:00:00 +0000
+Subject: [PATCH] Add GenClass to Extensions
+
+https://github.com/genclass-dev/GenClass
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ README.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/README.md b/README.md
+index 7573724..b42fbae 100644
+--- a/README.md
++++ b/README.md
+@@ -181,6 +181,7 @@ _List inspired by the [awesome](https://github.com/sindresorhus/awesome) list th
+ - [ShotOG](https://github.com/nicepkg/shotog) - Dynamic OG image generation API for Next.js apps, powered by Cloudflare Workers.
+ - [Frontman](https://github.com/frontman-ai/frontman) - An open-source AI coding agent that lives in your browser, enabling visual element selection and plain-English code edits with hot reload.
+ - [@farming-labs/docs](https://github.com/farming-labs/docs) - A modern documentation framework that works. One config file, zero boilerplate.
++- [GenClass](https://github.com/genclass-dev/GenClass) - Race-condition reporter for Next.js apps: one client-side import, a small on-device model, and an observe mode that never holds or changes a request.
+ 
+ ## Apps
+ 
