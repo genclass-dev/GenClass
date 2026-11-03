@@ -5,7 +5,7 @@
   "description": "Find race conditions in your web app by reordering its responses, replay one, prove the fix.",
   "websiteUrl": "https://genclass.dev",
   "repository": {
-    "url": "https://github.com/genclass-dev/GenClass-lib",
+    "url": "https://github.com/genclass-dev/GenClass",
     "source": "github",
     "subfolder": "packages/mcp"
   },

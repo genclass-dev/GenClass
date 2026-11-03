@@ -185,7 +185,7 @@ can also contact your local data protection authority.
 
 The data comes from your users' browsers. Depending on where you operate, you may need to mention GenClass in your
 own privacy policy, or keep `telemetry: false` until your users consent to analytics. Full technical details are in
-[TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md).
+[TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md).
 
 ## Changes
 
