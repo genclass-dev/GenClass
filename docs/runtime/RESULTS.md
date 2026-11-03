@@ -1033,6 +1033,39 @@ gzip; limits 108.6 / 100.48 KB): the agent link is its own entry (`dist/agent.js
 load; the XHR fix adds about 10 bytes. Tests: 36 in `test/agent.test.ts`, 57 in `packages/mcp`; the runtime suite
 passes (1,101 tests, 14 model-parity skips); `review-perf` 4 of 4.
 
+### 18.1 A real app: Directus Studio 12.5.1 (cloud container, 2026-10-25)
+
+[docs/adoption/hunts/directus.md](../adoption/hunts/directus.md). The Studio (Vue 3, Vite dev server, SQLite) with the
+script-tag build and `dist/agent.js` injected from the test (`model: false`, telemetry off), the form mirrored into an
+`rt.atom` (Vue state is not discovered). Scenario: open an item, follow a relation link to another item, click the back
+arrow after 50 to 300 ms; 2 fifo baselines + 6 seeded orders per session, `slow_ms` 300, 600, 900. Seeds 1 to 6 in
+every session, so the sessions are a robustness check over gap and latency, not independent trials.
+
+| measurement | buggy Studio | fixed Studio (generation guards, the hunt's patch) |
+|---|---|---|
+| fifo baselines | 24 of 24 right | 8 of 8 right |
+| `genclass_explore`, item navigation | **72 of 72** reordered runs differ; by what the page shows: 29 stale form, 15 stale header, 12 stale M2O display, 16 request counts only | **23 of 24 flagged, all false reports**: 0 stale views; 17 differ only in request counts (follow-ups of the discarded response are not sent), 6 only in a duplicate-request witness |
+| `genclass_explore`, autocomplete interface | 12 of 36 menus with an earlier input's suggestions | 0 of 18 (no false report) |
+| `genclass_explore`, relation picker | 0 of 18 (no race found) | not run |
+| plain Playwright, no GenClass, article 2's response delayed 300 to 900 ms | 31 of 38 stale | 0 of 35 stale |
+
+The item-navigation false reports come from the explore verdict comparing per-signature request counts as final
+state, and from counting `identical-in-flight` witnesses under the "older response overwrote newer data" summary line
+(`packages/mcp/src/compare.ts`, `src/tools.ts`); both are open follow-ups.
+
+Refresh on Directus `main` `88c5c47` (after 12.6.0; Node 26.13.0), 2026-11-03, with `@genclass/runtime` 0.3.0-beta.5
+and `@genclass/mcp` 0.2.1 built from GenClass-lib `c1c9e14`, item navigation at four settings (`slow_ms`/gap 300/50,
+300/300, 600/100, 900/200), the same harness (hunt report section 14):
+
+| measurement | unfixed `main` | fixed (the same patch) |
+|---|---|---|
+| fifo baselines | 8 of 8 right | 8 of 8 right |
+| `genclass_explore`, item navigation | **21 of 23** compared runs flagged (1 load not compared: harness timeout); 11 stale form, 6 stale header, 4 stale M2O display; the 2 request-count-only runs reported as internal, not as races | **1 of 24 flagged, a false report** (one more `PATCH /users/me/track/page`, a tracking write, than the baselines); 0 stale views; 13 request-count-only runs reported as internal |
+| plain Playwright, no GenClass, article 2's response delayed 300 to 900 ms | 33 of 36 stale (0 of 12 with no delay) | 0 of 36 stale (0 of 12 with no delay) |
+
+At the same four settings on 12.5.1 (GenClass 0.3.0-beta.1) the fixed build was flagged in 23 of 24 runs (17 by
+request counts, 6 by an `identical-in-flight` witness only); today 1 of 24, and that one is a write's count.
+
 ## 19. Coding agents on a real library issue: redux-toolkit#5139 (local, 2026-10-25, Chromium through Playwright 1.63.0)
 
 [docs/adoption/hunts/rtk-5139.md](../adoption/hunts/rtk-5139.md). The agent link and `@genclass/mcp` (both built from
