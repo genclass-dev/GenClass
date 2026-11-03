@@ -1,0 +1,142 @@
+{
+ "date": "2026-11-03",
+ "abs_commit": "ce41ce489cebaf00e008919f6f2901b428acfd56",
+ "genclass_commit": "c1c9e14",
+ "build": "unfixed",
+ "sessions": [
+  {
+   "surface": "edit",
+   "slow_ms": 300,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": true,
+   "oracle_not_ok": 8,
+   "oracle_kinds": [
+    "SUBTITLE WIPED"
+   ]
+  },
+  {
+   "surface": "edit",
+   "slow_ms": 600,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": true,
+   "oracle_not_ok": 8,
+   "oracle_kinds": [
+    "SUBTITLE WIPED"
+   ]
+  },
+  {
+   "surface": "edit",
+   "slow_ms": 900,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 8,
+   "oracle_kinds": [
+    "SUBTITLE WIPED"
+   ]
+  },
+  {
+   "surface": "search",
+   "slow_ms": 300,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0,
+   "oracle_kinds": [
+    "ok"
+   ]
+  },
+  {
+   "surface": "search",
+   "slow_ms": 600,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0,
+   "oracle_kinds": [
+    "ok"
+   ]
+  },
+  {
+   "surface": "search",
+   "slow_ms": 1500,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "RACE 1 of 6",
+   "internal_only": false,
+   "oracle_not_ok": 1,
+   "oracle_kinds": [
+    "STALE (Hart Keep, Harbor Sea)",
+    "ok"
+   ]
+  },
+  {
+   "surface": "search",
+   "slow_ms": 2500,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "RACE 3 of 6",
+   "internal_only": false,
+   "oracle_not_ok": 5,
+   "oracle_kinds": [
+    "STALE (Hart Keep, Harbor Sea)",
+    "ok"
+   ]
+  },
+  {
+   "surface": "search",
+   "slow_ms": 900,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0,
+   "oracle_kinds": [
+    "ok"
+   ]
+  },
+  {
+   "surface": "sort",
+   "slow_ms": 300,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0,
+   "oracle_kinds": [
+    "ok"
+   ]
+  },
+  {
+   "surface": "sort",
+   "slow_ms": 600,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0,
+   "oracle_kinds": [
+    "ok"
+   ]
+  },
+  {
+   "surface": "sort",
+   "slow_ms": 900,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0,
+   "oracle_kinds": [
+    "ok"
+   ]
+  }
+ ]
+}

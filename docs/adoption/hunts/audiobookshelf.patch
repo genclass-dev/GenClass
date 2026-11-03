@@ -1,0 +1,131 @@
+diff --git a/client/components/widgets/BookDetailsEdit.vue b/client/components/widgets/BookDetailsEdit.vue
+index db3b86ed..de7ac757 100644
+--- a/client/components/widgets/BookDetailsEdit.vue
++++ b/client/components/widgets/BookDetailsEdit.vue
+@@ -97,14 +97,30 @@ export default {
+         explicit: false,
+         abridged: false
+       },
+-      newTags: []
++      newTags: [],
++      initialValues: null
+     }
+   },
+   watch: {
+     libraryItem: {
+       immediate: true,
+-      handler(newVal) {
+-        if (newVal) this.init()
++      handler(newVal, oldVal) {
++        if (!newVal) return
++        const isSameItem = oldVal && oldVal.id === newVal.id
++        const editedValues = isSameItem ? this.getFormValues() : null
++        const previousValues = this.initialValues
++        this.init()
++        if (!editedValues || !previousValues) return
++
++        // Same item updated by the server (e.g. item_updated after a match, scan or edit elsewhere)
++        // Keep unsaved edits to fields this update did not change
++        for (const key in editedValues) {
++          const isEdited = JSON.stringify(editedValues[key]) !== JSON.stringify(previousValues[key])
++          const isUpdated = JSON.stringify(this.initialValues[key]) !== JSON.stringify(previousValues[key])
++          if (!isEdited || isUpdated) continue
++          if (key === 'tags') this.newTags = editedValues.tags
++          else this.details[key] = editedValues[key]
++        }
+       }
+     }
+   },
+@@ -286,6 +302,10 @@ export default {
+       this.details.explicit = !!this.mediaMetadata.explicit
+       this.details.abridged = !!this.mediaMetadata.abridged
+       this.newTags = [...(this.media.tags || [])]
++      this.initialValues = this.getFormValues()
++    },
++    getFormValues() {
++      return JSON.parse(JSON.stringify({ ...this.details, tags: this.newTags }))
+     },
+     submitForm() {
+       this.$emit('submit')
+diff --git a/client/cypress/tests/components/widgets/BookDetailsEdit.cy.js b/client/cypress/tests/components/widgets/BookDetailsEdit.cy.js
+new file mode 100644
+index 00000000..7c548ee6
+--- /dev/null
++++ b/client/cypress/tests/components/widgets/BookDetailsEdit.cy.js
+@@ -0,0 +1,76 @@
++import BookDetailsEdit from '@/components/widgets/BookDetailsEdit.vue'
++import TextInputWithLabel from '@/components/ui/TextInputWithLabel.vue'
++import TextInput from '@/components/ui/TextInput.vue'
++
++describe('BookDetailsEdit', () => {
++  const libraryItem = {
++    id: 'li_1',
++    mediaType: 'book',
++    media: {
++      metadata: {
++        title: 'Original Title',
++        subtitle: null,
++        description: null,
++        authors: [],
++        narrators: [],
++        genres: [],
++        series: [],
++        publishedYear: '2001',
++        publisher: 'Original Publisher',
++        language: null,
++        isbn: null,
++        asin: null,
++        explicit: false,
++        abridged: false
++      },
++      tags: []
++    }
++  }
++
++  const withMetadata = (item, metadata) => ({ ...item, media: { ...item.media, metadata: { ...item.media.metadata, ...metadata } } })
++
++  const mountOptions = {
++    propsData: { libraryItem },
++    mocks: {
++      $store: {
++        state: {
++          libraries: { filterData: {} }
++        }
++      }
++    },
++    stubs: {
++      'ui-text-input-with-label': TextInputWithLabel,
++      'ui-text-input': TextInput,
++      'ui-multi-select-query-input': true,
++      'ui-multi-select': true,
++      'ui-rich-text-editor': true,
++      'ui-checkbox': true,
++      'widgets-series-input-widget': true
++    }
++  }
++
++  it('keeps unsaved edits when the same item is updated', () => {
++    cy.mount(BookDetailsEdit, mountOptions).then(({ wrapper }) => {
++      cy.get('input[placeholder="Title"]').should('have.value', 'Original Title').clear().type('Edited Title')
++
++      // e.g. the item_updated socket event after a match or a scan
++      cy.then(() => wrapper.setProps({ libraryItem: withMetadata(libraryItem, { publisher: 'New Publisher' }) }))
++
++      cy.get('input[placeholder="Title"]').should('have.value', 'Edited Title')
++      cy.get('input[placeholder="Publisher"]').should('have.value', 'New Publisher')
++      cy.then(() => {
++        expect(wrapper.vm.checkForChanges().updatePayload).to.deep.equal({ metadata: { title: 'Edited Title' } })
++      })
++    })
++  })
++
++  it('resets the form when a different item is loaded', () => {
++    cy.mount(BookDetailsEdit, mountOptions).then(({ wrapper }) => {
++      cy.get('input[placeholder="Title"]').clear().type('Edited Title')
++
++      cy.then(() => wrapper.setProps({ libraryItem: withMetadata({ ...libraryItem, id: 'li_2' }, { title: 'Other Title' }) }))
++
++      cy.get('input[placeholder="Title"]').should('have.value', 'Other Title')
++    })
++  })
++})

@@ -1,0 +1,52 @@
+{
+ "date": "2026-11-03",
+ "build": "fixed: ce41ce48 + audiobookshelf.patch + the one-line GlobalSearch fix (report section 5)",
+ "genclass_commit": "c1c9e14",
+ "sessions": [
+  {
+   "surface": "edit",
+   "slow_ms": 300,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0
+  },
+  {
+   "surface": "edit",
+   "slow_ms": 600,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": true,
+   "oracle_not_ok": 0
+  },
+  {
+   "surface": "edit",
+   "slow_ms": 900,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0
+  },
+  {
+   "surface": "search",
+   "slow_ms": 1500,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0
+  },
+  {
+   "surface": "search",
+   "slow_ms": 2500,
+   "loads": 8,
+   "compared": "Compared: 6 of 6",
+   "explore": "no race",
+   "internal_only": false,
+   "oracle_not_ok": 0
+  }
+ ]
+}
