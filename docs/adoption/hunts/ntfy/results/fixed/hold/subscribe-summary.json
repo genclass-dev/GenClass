@@ -1,0 +1,17 @@
+{
+  "surface": "subscribe",
+  "ntfy": "http://127.0.0.1:12587",
+  "genclass": false,
+  "runs": 3,
+  "sessions": [
+    {
+      "slow_ms": 0,
+      "oracleDiffers": 0,
+      "loads": [
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphaurfpzg\",\"bravourfpzg\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphaurfpzg\",\"bravourfpzg\"]} sidebar [] > [alphaurfpzg] > [alphaurfpzg,bravourfpzg] [stale last]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphaurfpzg\",\"bravourfpzg\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphaurfpzg\",\"bravourfpzg\"]} sidebar [] > [alphaurfpzg] > [alphaurfpzg,bravourfpzg] [stale last]",
+        "same local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphaurfpzg\",\"bravourfpzg\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphaurfpzg\",\"bravourfpzg\"]} sidebar [] > [alphaurfpzg] > [alphaurfpzg,bravourfpzg] [stale last]"
+      ]
+    }
+  ]
+}

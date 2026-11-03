@@ -1,0 +1,20 @@
+{
+  "surface": "prefs",
+  "ntfy": "http://127.0.0.1:12586",
+  "genclass": false,
+  "runs": 6,
+  "sessions": [
+    {
+      "slow_ms": 0,
+      "oracleDiffers": 0,
+      "loads": [
+        "same local={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} sidebar []",
+        "same local={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} sidebar []",
+        "same local={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} sidebar []",
+        "same local={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} sidebar []",
+        "same local={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} sidebar []",
+        "same local={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"none\",\"minPriority\":\"5\"},\"subs\":[]} sidebar []"
+      ]
+    }
+  ]
+}

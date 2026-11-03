@@ -1,0 +1,17 @@
+{
+  "surface": "unsubscribe",
+  "ntfy": "http://127.0.0.1:12586",
+  "genclass": false,
+  "runs": 3,
+  "sessions": [
+    {
+      "slow_ms": 0,
+      "oracleDiffers": 3,
+      "loads": [
+        "DIFFERS local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"bravophbtom\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] > [alphaphbtom,bravophbtom] > [bravophbtom] > [] > [bravophbtom] [stale last]",
+        "DIFFERS local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"bravophbtom\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] > [alphaphbtom,bravophbtom] > [bravophbtom] > [] > [bravophbtom] [stale last]",
+        "DIFFERS local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"bravophbtom\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] > [alphaphbtom,bravophbtom] > [bravophbtom] > [] > [bravophbtom] [stale last]"
+      ]
+    }
+  ]
+}

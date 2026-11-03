@@ -1,0 +1,17 @@
+{
+  "surface": "prefs-twice",
+  "ntfy": "http://127.0.0.1:12587",
+  "genclass": false,
+  "runs": 3,
+  "sessions": [
+    {
+      "slow_ms": 0,
+      "oracleDiffers": 0,
+      "loads": [
+        "same local={\"prefs\":{\"sound\":\"juntos\",\"minPriority\":\"1\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"juntos\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] [stale last]",
+        "same local={\"prefs\":{\"sound\":\"juntos\",\"minPriority\":\"1\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"juntos\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] [stale last]",
+        "same local={\"prefs\":{\"sound\":\"juntos\",\"minPriority\":\"1\"},\"subs\":[]} server={\"prefs\":{\"sound\":\"juntos\",\"minPriority\":\"1\"},\"subs\":[]} sidebar [] [stale last]"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+Explore x3 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x3"}.
+
+load 1: same local={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} server={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} sidebar [] > [alphaznzvbd,bravoznzvbd] > [bravoznzvbd] > [] > [bravoznzvbd] > [] [delivered GET /v1/account#1 then DELETE /v1/account/subscription#1 then GET /v1/account#2 then DELETE /v1/account/subscription#2 then GET /v1/account#3]
+load 2: same local={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} server={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} sidebar [] > [alphaznzvbd,bravoznzvbd] > [bravoznzvbd] > [] > [bravoznzvbd] > [] [delivered GET /v1/account#1 then DELETE /v1/account/subscription#1 then GET /v1/account#2 then DELETE /v1/account/subscription#2 then GET /v1/account#3]
+load 3: same local={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} server={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} sidebar [] > [alphaznzvbd,bravoznzvbd] > [bravoznzvbd] > [] [delivered GET /v1/account#1 then DELETE /v1/account/subscription#1 then DELETE /v1/account/subscription#2 then GET /v1/account#2 then GET /v1/account#3]
+load 4: same local={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} server={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} sidebar [] > [alphaznzvbd,bravoznzvbd] > [bravoznzvbd] > [] [delivered GET /v1/account#1 then GET /v1/account#2 then DELETE /v1/account/subscription#1 then GET /v1/account#3 then DELETE /v1/account/subscription#2]
+load 5: same local={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} server={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} sidebar [] > [alphaznzvbd,bravoznzvbd] > [bravoznzvbd] > [] [delivered GET /v1/account#1 then DELETE /v1/account/subscription#1 then GET /v1/account#2 then GET /v1/account#3 then DELETE /v1/account/subscription#2]
+load 6: same local={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} server={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} sidebar [] > [alphaznzvbd,bravoznzvbd] > [bravoznzvbd] > [] [delivered GET /v1/account#1 then DELETE /v1/account/subscription#1 then DELETE /v1/account/subscription#2 then GET /v1/account#3 then GET /v1/account#2]
+load 7: same local={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} server={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} sidebar [] > [alphaznzvbd,bravoznzvbd] > [bravoznzvbd] > [] [delivered GET /v1/account#1 then DELETE /v1/account/subscription#2 then GET /v1/account#2 then GET /v1/account#3 then DELETE /v1/account/subscription#1]
+load 8: same local={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} server={"prefs":{"sound":"ding","minPriority":"1"},"subs":[]} sidebar [] > [alphaznzvbd,bravoznzvbd] > [bravoznzvbd] > [] [delivered GET /v1/account#1 then GET /v1/account#2 then DELETE /v1/account/subscription#2 then GET /v1/account#3 then DELETE /v1/account/subscription#1]
+
+Explore x3: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /app · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  click button
+  click menuitem "Unsubscribe"
+  click button
+  click menuitem "Unsubscribe"
+Ignored as noise (differs between the two baselines): state showMenu_4.state0.location.key
+RACE: 6 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r19 (seed 1):
+    page text only in the baseline: "Loading notifications …"
+    page text only in this run: "It looks like you don't have any subscriptions yet.", "Click the \"Subscribe to topic\" link to create or subscribe to a topic. After th…", "For more information, check out the website or documentation."
+    state "showMenu.state3": baseline "11", this run "8"
+    state "showMenu_3.state0": baseline "4", this run "3"
+    state "showMenu_4.state0.location.pathname": baseline "\"/bravoznzvbd\"", this run "\"/\""
+- run r20 (seed 2):
+    page text only in the baseline: "Loading notifications …"
+    page text only in this run: "It looks like you don't have any subscriptions yet.", "Click the \"Subscribe to topic\" link to create or subscribe to a topic. After th…", "For more information, check out the website or documentation."
+    state "showMenu.state3": baseline "11", this run "8"
+    state "showMenu_3.state0": baseline "4", this run "3"
+    state "showMenu_4.state0.location.pathname": baseline "\"/bravoznzvbd\"", this run "\"/\""
+- run r21 (seed 3):
+    page text only in the baseline: "Loading notifications …"
+    page text only in this run: "It looks like you don't have any subscriptions yet.", "Click the \"Subscribe to topic\" link to create or subscribe to a topic. After th…", "For more information, check out the website or documentation."
+    state "showMenu.state3": baseline "11", this run "8"
+    state "showMenu_3.state0": baseline "4", this run "3"
+    state "showMenu_4.state0.location.pathname": baseline "\"/bravoznzvbd\"", this run "\"/\""
+- run r22 (seed 4):
+    page text only in the baseline: "Loading notifications …"
+    page text only in this run: "It looks like you don't have any subscriptions yet.", "Click the \"Subscribe to topic\" link to create or subscribe to a topic. After th…", "For more information, check out the website or documentation."
+    state "showMenu.state3": baseline "11", this run "8"
+    state "showMenu_3.state0": baseline "4", this run "3"
+    state "showMenu_4.state0.location.pathname": baseline "\"/bravoznzvbd\"", this run "\"/\""
+    state "showMenu_2.state1.subscriptions": baseline "(absent)", this run "1 item [{base_url: \"http://127.0.0.1:12587\", +2}]"
+    witness only here: overwrote-newer showMenu_2.state1.subscriptions by GET /v1/account
+- run r23 (seed 5):
+    page text only in the baseline: "Loading notifications …"
+    page text only in this run: "It looks like you don't have any subscriptions yet.", "Click the \"Subscribe to topic\" link to create or subscribe to a topic. After th…", "For more information, check out the website or documentation."
+    state "showMenu.state3": baseline "11", this run "8"
+    state "showMenu_3.state0": baseline "4", this run "2"
+    state "showMenu_4.state0.location.pathname": baseline "\"/bravoznzvbd\"", this run "\"/\""
+- run r24 (seed 6):
+    page text only in the baseline: "Loading notifications …"
+    page text only in this run: "It looks like you don't have any subscriptions yet.", "Click the \"Subscribe to topic\" link to create or subscribe to a topic. After th…", "For more information, check out the website or documentation."
+    state "showMenu.state3": baseline "11", this run "8"
+    state "showMenu_4.state0.location.pathname": baseline "\"/bravoznzvbd\"", this run "\"/\""
+
+Race finding(s): f5. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+2 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f5 [race] "/app" · 1× in 1 run(s) · 0 s ago
+  The page depends on response order: it shows "It looks like you don't have any subscriptions yet." under "seed 1", not in request order
+- f4 [stale-write] "/app" · 1× in 1 run(s) · 19 s ago
+  The response to "GET /v1/account" overwrote "showMenu_2.state1.subscriptions" after a newer "GET /v1/account" had already written it
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f5 · race · "/app" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The page depends on response order: it shows "It looks like you don't have any subscriptions yet." under "seed 1", not in request order (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x3: 6 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- state "showMenu.state3": baseline "11", failing run "8"
+- state "showMenu_3.state0": baseline "4", failing run "3"
+- state "showMenu_4.state0.location.pathname": baseline "\"/bravoznzvbd\"", failing run "\"/\""
+- page text in the baseline only: "Loading notifications …"
+- page text in the failing run only: "It looks like you don't have any subscriptions yet."
+- page text in the failing run only: "Click the \"Subscribe to topic\" link to create or subscribe to a topic. After that, you can send mes…"
+- page text in the failing run only: "For more information, check out the website or documentation."
+
+## Steps of run r19 ("http://127.0.0.1:12587/app", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++0.129s send GET /static/langs/en-US.json#1 via timer 0ms
++0.133s send GET /static/langs/en.json#1 via timer 0ms
++0.412s delivered GET /static/langs/en.json#1 (held 228 ms)
++0.443s delivered GET /static/langs/en-US.json#1 (held 260 ms)
++0.518s send GET /v1/account#1
++0.554s write pj.state1: "pj.state1: \"\" → \"http://127.0.0.1:12587\""
++0.555s write pj.state4: "pj.state4: true → false"
++0.596s write showMenu.state6: "showMenu.state6: 0 → 1"
++0.639s write showMenu.state2: "showMenu.state2: 0 → 1"
++0.640s write showMenu.state3: "showMenu.state3: 0 → 1"
++0.663s write showMenu_2.state2: "showMenu_2.state2: 0 → 1"
++0.663s write showMenu.state4: "showMenu.state4: 0 → 1"
++0.663s write GO.state0: "GO.state0: false → true"
++0.681s write showMenu_3.state0: "showMenu_3.state0: 0 → 1"
++0.770s write hk.state0: "hk.state0: false → true"
++1.132s delivered GET /v1/account#1 (held 556 ms)
++1.156s write showMenu_2.state1, showMenu_2.state1.limits.attachment_bandwidth, showMenu_2.state1.limits.attachment_expiry_duration, showMenu_2.state1.limits.attachment_file_size, showMenu_2.state1.limits.attachment_total_size, showMenu_2.state1.limits.basis, showMenu_2.state1.limits.calls, showMenu_2.state1.limits.emails, showMenu_2.state1.limits.messages, showMenu_2.state1.limits.messages_expiry_duration, showMenu_2.state1.limits.reservations, showMenu_2.state1.notification.delete_after by GET /v1/account#1: "showMenu_2.state1.username: undefined → \"huntmw0yc0mj\""; "showMenu_2.state1.role: undefined → \"user\""; "showMenu_2.state1.sync_topic: undefined → \"st_LDz4gwojK4D1q\""
++1.206s write showMenu.state3: "showMenu.state3: 1 → 2"
++1.264s write showMenu.state3: "showMenu.state3: 2 → 3"
++1.329s write showMenu.state3: "showMenu.state3: 3 → 4"
++1.350s write showMenu_3.state0: "showMenu_3.state0: 1 → 2"
++1.379s write showMenu.state3: "showMenu.state3: 4 → 5"
++1.401s write showMenu.state3: "showMenu.state3: 5 → 6"
++2.529s send GET /alphaznzvbd/json#1 "?poll=1"
++2.531s send GET /bravoznzvbd/json#1 "?poll=1"
++2.532s send GET /:id/json#1 "?poll=1"
++2.932s delivered GET /:id/json#1 (held 381 ms)
++3.130s delivered GET /bravoznzvbd/json#1 (held 578 ms)
++3.318s delivered GET /alphaznzvbd/json#1 (held 775 ms)
++3.522s write l.state0: "l.state0: false → true"
++3.525s action 0: click button
++3.559s write Rc.state0 by action 0: "Rc.state0: \"exited\" → \"entering\""
++3.560s write Rc_2.state0 by action 0: "Rc_2.state0: \"exited\" → \"entering\""
++3.634s write l_2.state0: "l_2.state0: false → true"
++3.634s action 1: click menuitem "Unsubscribe"
++3.647s write Rc.state0 by action 1: "Rc.state0: \"entering\" → \"exiting\""
++3.647s write Rc_2.state0 by action 1: "Rc_2.state0: \"entering\" → \"exiting\""
++3.672s write showMenu.state3: "showMenu.state3: 6 → 7"
++3.686s send DELETE /v1/account/subscription#1
++3.704s send GET /v1/account#2
++3.787s delivered DELETE /v1/account/subscription#1 (held 85 ms)
++3.798s action 2: click button
++3.810s write Rc.state0 by action 2: "Rc.state0: \"exiting\" → \"entering\""
++3.810s write Rc_2.state0 by action 2: "Rc_2.state0: \"exiting\" → \"entering\""
++3.876s write showMenu_4.state0.action, showMenu_4.state0.delta, showMenu_4.state0.location.key, showMenu_4.state0.location.pathname: "showMenu_4.state0.action: \"POP\" → \"PUSH\""; "showMenu_4.state0.location.pathname: \"/app\" → \"/bravoznzvbd\""; "showMenu_4.state0.location.key: \"default\" → \"ldhc76np\""
++3.883s write pj.state2: "pj.state2: \"\" → \"bravoznzvbd\""
++3.883s write pj.state4: "pj.state4: false → true"
++3.926s action 3: click menuitem "Unsubscribe"
++3.937s write Rc.state0 by action 3: "Rc.state0: \"entering\" → \"exiting\""
++3.938s write Rc_2.state0 by action 3: "Rc_2.state0: \"entering\" → \"exiting\""
++3.968s write showMenu.state3: "showMenu.state3: 7 → 8"
++3.973s write pj.state2: "pj.state2: \"bravoznzvbd\" → \"\""
++3.973s write pj.state4: "pj.state4: true → false"
++3.985s send DELETE /v1/account/subscription#2
++3.996s send GET /v1/account#3
++4.807s delivered DELETE /v1/account/subscription#2 (held 808 ms)
++4.845s write showMenu_4.state0.location.key, showMenu_4.state0.location.pathname: "showMenu_4.state0.location.pathname: \"/bravoznzvbd\" → \"/\""; "showMenu_4.state0.location.key: \"ldhc76np\" → \"ib7m4336\""
++4.847s delivered GET /v1/account#2 (held 1.1 s)
++4.869s write showMenu_2.state1.subscriptions by GET /v1/account#2: "showMenu_2.state1.subscriptions: 2 → 1 items: removed 1 item"
++4.878s delivered GET /v1/account#3 (held 872 ms)
++4.895s write showMenu_2.state1.subscriptions by GET /v1/account#3: "showMenu_2.state1.subscriptions: 1 item [{base_url: \"http://127.0.0.… → undefined"
++4.924s write showMenu_3.state0: "showMenu_3.state0: 2 → 3"
+
+Delivery order: GET /static/langs/en.json#1 → GET /static/langs/en-US.json#1 → GET /v1/account#1 → GET /:id/json#1 → GET /bravoznzvbd/json#1 → GET /alphaznzvbd/json#1 → DELETE /v1/account/subscription#1 → DELETE /v1/account/subscription#2 → GET /v1/account#2 → GET /v1/account#3
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f5"} (schedule: seeded 1, +0-900 ms)
+2. Open "http://127.0.0.1:12587/app" and do the same 4 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f5"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f5 (race), generated from run r19.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://127.0.0.1:12587";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":900},"maxHoldMs":2400};
+
+test("/app: the final state does not depend on response order (GenClass f5)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/app");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  // TODO: the recorded element "button" had no name; check that this locator finds it
+  await page.locator("button").first().click();
+  await page.getByRole("menuitem", { name: "Unsubscribe", exact: true }).or(page.locator("[name=\"Unsubscribe\"], [id=\"Unsubscribe\"]")).first().click();
+  // TODO: the recorded element "button" had no name; check that this locator finds it
+  await page.locator("button").first().click();
+  await page.getByRole("menuitem", { name: "Unsubscribe", exact: true }).or(page.locator("[name=\"Unsubscribe\"], [id=\"Unsubscribe\"]")).first().click();
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("Loading notifications …");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("It looks like you don't have any subscriptions yet.");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("Click the \"Subscribe to topic\" link to create or subscribe to a topic. After that, you can send messages via PUT or POST and you'll receive notifications here.");
+  expect(snap.text, "the page does not show what only the failing order showed").not.toContain("For more information, check out the website or documentation.");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

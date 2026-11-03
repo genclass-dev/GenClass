@@ -1,0 +1,20 @@
+{
+  "surface": "reserve",
+  "ntfy": "http://127.0.0.1:12586",
+  "genclass": false,
+  "runs": 6,
+  "sessions": [
+    {
+      "slow_ms": 0,
+      "oracleDiffers": 6,
+      "loads": [
+        "DIFFERS local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved\",\"bravomjswro\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved (2 msg)\",\"bravomjswro\"]} sidebar [] > [bravomjswro] > [alphamjswro,bravomjswro] > [bravomjswro] > [alphamjswro,bravomjswro]",
+        "DIFFERS local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved\",\"bravomjswro\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved (2 msg)\",\"bravomjswro\"]} sidebar [] > [bravomjswro] > [alphamjswro,bravomjswro] > [bravomjswro] > [alphamjswro,bravomjswro]",
+        "DIFFERS local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved\",\"bravomjswro\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved (2 msg)\",\"bravomjswro\"]} sidebar [] > [bravomjswro] > [alphamjswro,bravomjswro] > [bravomjswro] > [alphamjswro,bravomjswro]",
+        "DIFFERS local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved\",\"bravomjswro\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved (2 msg)\",\"bravomjswro\"]} sidebar [] > [bravomjswro] > [alphamjswro,bravomjswro] > [bravomjswro] > [alphamjswro,bravomjswro]",
+        "DIFFERS local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved\",\"bravomjswro\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved (2 msg)\",\"bravomjswro\"]} sidebar [] > [bravomjswro] > [alphamjswro,bravomjswro] > [bravomjswro] > [alphamjswro,bravomjswro]",
+        "DIFFERS local={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved\",\"bravomjswro\"]} server={\"prefs\":{\"sound\":\"ding\",\"minPriority\":\"1\"},\"subs\":[\"alphamjswro+reserved (2 msg)\",\"bravomjswro\"]} sidebar [] > [bravomjswro] > [alphamjswro,bravomjswro] > [bravomjswro] > [alphamjswro,bravomjswro]"
+      ]
+    }
+  ]
+}
