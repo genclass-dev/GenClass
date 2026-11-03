@@ -1,13 +1,13 @@
 # @genclass/sv
 
 A community add-on for the [Svelte CLI](https://svelte.dev/docs/cli/sv-add) that sets up
-[GenClass](https://github.com/genclass-dev/GenClass-lib) in a SvelteKit app. GenClass is a browser library that
+[GenClass](https://github.com/genclass-dev/GenClass) in a SvelteKit app. GenClass is a browser library that
 reports race conditions while your app runs: a stale response landing over newer data, duplicate submits, failure
 storms, retries and stalls.
 
 > [!IMPORTANT]
 > Svelte maintainers have not reviewed community add-ons for malicious code. This one is open source:
-> [packages/sv](https://github.com/genclass-dev/GenClass-lib/tree/main/packages/sv). Read it before you run it.
+> [packages/sv](https://github.com/genclass-dev/GenClass/tree/main/packages/sv). Read it before you run it.
 
 ## Install
 
@@ -61,13 +61,13 @@ yourself.
   WASM (the model plus ONNX Runtime's wasm) or 18 MB on WebGPU, cached afterwards, and run in a Web Worker
   (190 to 280 MB of memory while loaded). Devices that report 2 GB of memory or less and Save-Data connections do
   not load it and observe without it. For a strict Content-Security-Policy or to serve the model yourself, see
-  [self-hosting](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting).
+  [self-hosting](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting).
 - **The console.** One line when the model is ready (`[GenClass] Model ready (...). Mode: observe.`), then one
   plain-English line per finding. The overlay (development only) sits bottom right; `Alt+Shift+G` toggles it.
 - **What it sees in Svelte.** Automatic state discovery covers React, Redux and Zustand, not Svelte runes or stores
   yet, so in SvelteKit GenClass works from the network and user input. To compare a late response with newer data in
   your state, register that state (`genclass.atom(...)`, see
-  [State it can protect](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#state-it-can-protect)).
+  [State it can protect](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#state-it-can-protect)).
 
 ## What GenClass sends, and why this add-on turns it off
 
@@ -76,7 +76,7 @@ trigger, the diagnosis and its confidence, the chosen action, latency and counts
 route with ids replaced by `:id`. No text from the page unless the app opts in. It never sends from `localhost`,
 private networks or `*.local` / `*.test` hosts, browsers with Global Privacy Control are never collected, and it
 never feeds a decision. The full list is in
-[TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md).
+[TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md).
 
 GenClass itself sends by default. This add-on writes the opt-out unless you answer yes, because `npx sv create --add`
 often installs several add-ons in one go, and a site deployed from that scaffold would then send diagnostics from
@@ -109,7 +109,7 @@ npm run build -w @genclass/sv
 cd packages/sv
 npx vitest run --project unit                   # the edits, no network
 npx vitest run --project e2e                    # sv's add-on harness: scaffold, apply, build, Chromium
-npx sv add file:../path/to/GenClass-lib/packages/sv   # try it in an app of your own
+npx sv add file:../path/to/GenClass/packages/sv   # try it in an app of your own
 ```
 
 The end-to-end test scaffolds SvelteKit apps in TypeScript and JavaScript with `sv/testing`, applies the add-on,

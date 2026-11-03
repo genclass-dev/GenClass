@@ -56,7 +56,7 @@ if (import.meta.env.DEV) import("@genclass/runtime/devtools").then((d) => d.moun
 ## Privacy
 
 In a browser, GenClass sends anonymous, redacted diagnostics by default
-([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md)).
+([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md)).
 To turn that off, add a meta tag to the `<head>` in `app/root.tsx`:
 
 ```tsx
@@ -67,4 +67,4 @@ To turn that off, add a meta tag to the `<head>` in `app/root.tsx`:
 
 React Router 8 in framework mode (Vite 8, SSR). The runtime's `init` command is tested end to end on a fresh
 React Router framework-mode project; React 19 with plain state, TanStack Query, Zustand, Redux Toolkit and Apollo is
-part of the public [compatibility matrix](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md).
+part of the public [compatibility matrix](https://github.com/genclass-dev/GenClass/blob/main/compat/RESULTS.md).

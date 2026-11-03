@@ -86,11 +86,11 @@ model is unchanged.
 - **Docs and package metadata.** The npm description, keywords and author are new, and `CHANGELOG.md` now ships in
   the package. `repository` and `bugs` follow the repository's rename to `genclass-dev/GenClass` (the old name,
   `GenClass-lib`, redirects; npm's provenance check requires the current name). The README is shorter: the full install guide, the dashboard and the sinks moved to
-  [INSTALL.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/INSTALL.md),
-  [DASHBOARD.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/DASHBOARD.md) and
-  [SINKS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/SINKS.md), next to a new
-  [FAQ](https://github.com/genclass-dev/GenClass-lib/blob/main/FAQ.md) and a
-  [docs index](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/README.md) with a glossary.
+  [INSTALL.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/INSTALL.md),
+  [DASHBOARD.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/DASHBOARD.md) and
+  [SINKS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/SINKS.md), next to a new
+  [FAQ](https://github.com/genclass-dev/GenClass/blob/main/FAQ.md) and a
+  [docs index](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/README.md) with a glossary.
   TELEMETRY.md gives the six larger events (`session`, `model`, `decision`, `detect`, `summary`, `interactions`) a
   section each, adds `init --no-telemetry` (with its one exception: in an Astro layout where GenClass is inline in
   `<head>`, add the `telemetry=off` meta tag yourself) and the `genclass` kill switch to its opt-out table and opens
@@ -350,7 +350,7 @@ model-visible text changed (`situation-v2.3`); the default model is still `@genc
   no longer names Inter or JetBrains Mono, so a page that declares either as a web font no longer downloads it for
   the overlay. The tab row scrolls sideways instead of hiding Expectations and Now past the panel's edge, and the
   header no longer clips the name. Every view, control and string is the same; no model-visible text changed.
-- **Interaction analytics, off by default (`analytics: true`; [docs/runtime/ANALYTICS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/ANALYTICS.md)).**
+- **Interaction analytics, off by default (`analytics: true`; [docs/runtime/ANALYTICS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/ANALYTICS.md)).**
   An app that sets `analytics: true` with its token also sends `interactions` telemetry events for its dashboard: per
   page view, the route, engaged time (the tab visible, at most 30 s after the last input), scroll depth milestones
   (25 / 50 / 75 / 100 %), and clicks, rage clicks (3 within 1 s on one element) and dead clicks (a link or button
@@ -833,7 +833,7 @@ observer does not record the runtime's own writes.
 
 ### Measured visual checks
 
-- **New: measured visual checks** ([docs/runtime/VISUAL.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/VISUAL.md)). GenClass now finds visual
+- **New: measured visual checks** ([docs/runtime/VISUAL.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/VISUAL.md)). GenClass now finds visual
   and CSS bugs that never throw an error: text you cannot read because it is nearly the colour of its background
   (below 1.5:1, including on hover, on focus and in dark mode), images, CSS background images, stylesheets, web fonts,
   icon fonts and media that failed to load, styles and images a Content-Security-Policy blocked, `[object Object]`,
@@ -881,7 +881,7 @@ observer does not record the runtime's own writes.
     the visitor is not using, layout shifts and failed CSS images outside Chromium, low contrast that is readable but
     below WCAG AA.
   - **Measured** by a new bench (`bench/visual`, GitHub Actions only;
-    [RESULTS.md section 14](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#visual-bench)): 0 false reports in 128 views of the demos, templates and
+    [RESULTS.md section 14](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#visual-bench)): 0 false reports in 128 views of the demos, templates and
     compat apps (desktop and phone, light and dark), and recall 1.00 on planted faults for 19 of the 23 kinds
     (`click-blocked` and `scroll-lock-stuck` 0.67, `pointer-events-leak` 0.94, `css-var-undefined` 0.96; run 5). On
     about 40 public home pages the checks
