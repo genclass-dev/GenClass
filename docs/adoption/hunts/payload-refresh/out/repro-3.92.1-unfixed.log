@@ -1,0 +1,36 @@
+== DELAY_MS=0 run 1
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    0 ms  GET /api/users  where[id][in]=1
++  192 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
+category cells with a title: 10; batch requests: 3; ids requested more than once: 10
+exit 1
+== DELAY_MS=0 run 2
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    3 ms  GET /api/users  where[id][in]=1
++  199 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
+category cells with a title: 10; batch requests: 3; ids requested more than once: 10
+exit 1
+== DELAY_MS=0 run 3
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    5 ms  GET /api/users  where[id][in]=1
++  168 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
+category cells with a title: 10; batch requests: 3; ids requested more than once: 10
+exit 1
+== DELAY_MS=1500 run 1
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    1 ms  GET /api/users  where[id][in]=1
++  135 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
+category cells with a title: 10; batch requests: 3; ids requested more than once: 10
+exit 1
+== DELAY_MS=1500 run 2
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    0 ms  GET /api/users  where[id][in]=1
++  180 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
+category cells with a title: 10; batch requests: 3; ids requested more than once: 10
+exit 1
+== DELAY_MS=1500 run 3
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    0 ms  GET /api/users  where[id][in]=1
++  169 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
+category cells with a title: 10; batch requests: 3; ids requested more than once: 10
+exit 1

@@ -1,0 +1,30 @@
+== no hook, THROTTLE=off run 1
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    0 ms  GET /api/users  where[id][in]=1
+throttle: off; batch requests: 2; ids requested more than once: 0
+exit 0
+== no hook, THROTTLE=off run 2
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    1 ms  GET /api/users  where[id][in]=1
+throttle: off; batch requests: 2; ids requested more than once: 0
+exit 0
+== no hook, THROTTLE=off run 3
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    0 ms  GET /api/users  where[id][in]=1
+throttle: off; batch requests: 2; ids requested more than once: 0
+exit 0
+== no hook, THROTTLE=1 run 1
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    0 ms  GET /api/users  where[id][in]=1
+throttle: Slow 4G; batch requests: 2; ids requested more than once: 0
+exit 0
+== no hook, THROTTLE=1 run 2
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    2 ms  GET /api/users  where[id][in]=1
+throttle: Slow 4G; batch requests: 2; ids requested more than once: 0
+exit 0
+== no hook, THROTTLE=1 run 3
++    0 ms  GET /api/categories  where[id][in]=1,2,3,4,5,6,7,8,9,10
++    5 ms  GET /api/users  where[id][in]=1
+throttle: Slow 4G; batch requests: 2; ids requested more than once: 0
+exit 0

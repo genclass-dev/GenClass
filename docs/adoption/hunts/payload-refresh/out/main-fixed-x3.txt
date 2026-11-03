@@ -1,0 +1,32 @@
+
+Running 3 tests using 1 worker
+
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Compilation not done yet. Retrying in 2 seconds...
+Checking if compilation is done (attempt 2/15)... http://localhost:3100/admin
+Compilation not done yet. Retrying in 2 seconds...
+Checking if compilation is done (attempt 3/15)... http://localhost:3100/admin
+Compilation not done yet. Retrying in 2 seconds...
+Checking if compilation is done (attempt 4/15)... http://localhost:3100/admin
+Successfully compiled
+Attempting to reinitialize DB (attempt 1/50)...
+Successfully reinitialized DB (took 1464ms)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+  ✓  1 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (10.9s)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+Attempting to reinitialize DB (attempt 1/50)...
+Successfully reinitialized DB (took 2114ms)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+  ✓  2 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (11.4s)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+Attempting to reinitialize DB (attempt 1/50)...
+Successfully reinitialized DB (took 1559ms)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+  ✓  3 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (10.3s)
+
+  3 passed (1.4m)

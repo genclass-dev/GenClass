@@ -1,0 +1,111 @@
+
+Running 3 tests using 1 worker
+
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+Attempting to reinitialize DB (attempt 1/50)...
+Successfully reinitialized DB (took 1896ms)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+  ✘  1 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (11.1s)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+Attempting to reinitialize DB (attempt 1/50)...
+Successfully reinitialized DB (took 1884ms)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+  ✘  2 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (11.0s)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+Attempting to reinitialize DB (attempt 1/50)...
+Successfully reinitialized DB (took 1387ms)
+Checking if compilation is done (attempt 1/15)... http://localhost:3100/admin
+Successfully compiled
+  ✘  3 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (10.1s)
+
+
+  1) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending 
+
+    Error: expect(received).toHaveLength(expected)
+
+    Expected length: 3
+    Received length: 4
+    Received array:  ["array-fields:1", "text-fields:1", "text-fields:2", "array-fields:1"]
+
+      778 |       await wait(500)
+      779 |
+    > 780 |       expect(requestedIDs).toHaveLength(new Set(requestedIDs).size)
+          |                            ^
+      781 |     })
+      782 |   })
+      783 |
+        at /root/targets/payload/test/fields/collections/Relationship/e2e.spec.ts:780:28
+
+    Error Context: test/test-results/fields-collections-Relatio-67163-hile-their-batch-is-pending-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test/test-results/fields-collections-Relatio-67163-hile-their-batch-is-pending-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test/test-results/fields-collections-Relatio-67163-hile-their-batch-is-pending-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending 
+
+    Error: expect(received).toHaveLength(expected)
+
+    Expected length: 3
+    Received length: 5
+    Received array:  ["array-fields:1", "text-fields:1", "text-fields:2", "array-fields:1", "array-fields:1"]
+
+      778 |       await wait(500)
+      779 |
+    > 780 |       expect(requestedIDs).toHaveLength(new Set(requestedIDs).size)
+          |                            ^
+      781 |     })
+      782 |   })
+      783 |
+        at /root/targets/payload/test/fields/collections/Relationship/e2e.spec.ts:780:28
+
+    Error Context: test/test-results/fields-collections-Relatio-67163-hile-their-batch-is-pending-chromium-repeat1/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test/test-results/fields-collections-Relatio-67163-hile-their-batch-is-pending-chromium-repeat1/trace.zip
+    Usage:
+
+        npx playwright show-trace test/test-results/fields-collections-Relatio-67163-hile-their-batch-is-pending-chromium-repeat1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending 
+
+    Error: expect(received).toHaveLength(expected)
+
+    Expected length: 3
+    Received length: 7
+    Received array:  ["array-fields:1", "text-fields:1", "text-fields:2", "array-fields:1", "text-fields:1", "text-fields:2", "array-fields:1"]
+
+      778 |       await wait(500)
+      779 |
+    > 780 |       expect(requestedIDs).toHaveLength(new Set(requestedIDs).size)
+          |                            ^
+      781 |     })
+      782 |   })
+      783 |
+        at /root/targets/payload/test/fields/collections/Relationship/e2e.spec.ts:780:28
+
+    Error Context: test/test-results/fields-collections-Relatio-67163-hile-their-batch-is-pending-chromium-repeat2/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test/test-results/fields-collections-Relatio-67163-hile-their-batch-is-pending-chromium-repeat2/trace.zip
+    Usage:
+
+        npx playwright show-trace test/test-results/fields-collections-Relatio-67163-hile-their-batch-is-pending-chromium-repeat2/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending 
+    [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending 
+    [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending 
