@@ -1,0 +1,324 @@
+{
+  "scenario": "create-click",
+  "slow_ms": 600,
+  "runs": 6,
+  "seed": 1,
+  "inject": true,
+  "started": "2026-11-03T16:56:27.643Z",
+  "loads": [
+    {
+      "n": 1,
+      "dom": {
+        "path": "/tags/cmw0xjnqi00cll87dllim4ip2",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r1",
+          "schedule": {
+            "order": "fifo",
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "baseline 1 (responses in request order)"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 2,
+      "dom": {
+        "path": "/tags/cmw0xjr6r00cml87dqla3xzrv",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r2",
+          "schedule": {
+            "order": "fifo",
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "baseline 2 (responses in request order)"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 3,
+      "dom": {
+        "path": "/tags/cmw0xjv2u00cnl87dv8gs6b1b",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r3",
+          "schedule": {
+            "order": "seeded",
+            "seed": 1,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 1"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 4,
+      "dom": {
+        "path": "/tags/cmw0xjyqf00col87dc9w9m6s5",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r4",
+          "schedule": {
+            "order": "seeded",
+            "seed": 2,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 2"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 5,
+      "dom": {
+        "path": "/tags/cmw0xk32900cpl87drc01t65e",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r5",
+          "schedule": {
+            "order": "seeded",
+            "seed": 3,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 3"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 6,
+      "dom": {
+        "path": "/tags/cmw0xk78e00cql87d5p4g9nbd",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r6",
+          "schedule": {
+            "order": "seeded",
+            "seed": 4,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 4"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 7,
+      "dom": {
+        "path": "/tags/cmw0xkbpw00crl87d8mf294uz",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r7",
+          "schedule": {
+            "order": "seeded",
+            "seed": 5,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 5"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 8,
+      "dom": {
+        "path": "/tags/cmw0xkefp00csl87dms1xaxvv",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r8",
+          "schedule": {
+            "order": "seeded",
+            "seed": 6,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 6"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /tags/create · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click input \"Name\"\n  type input \"Name\" = hunt tag 0001 87656\n  click button \"Create\"\n  submit form\n  click button \"Create\" ×2\nIgnored as noise (differs between the two baselines): field Name, field Item ID, text \"hunt tag N N\", text \"Keystone - N\"\nNo race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.",
+  "findings": "No findings match. Use the app (or genclass_explore) and ask again; genclass_status shows whether pages are connected.",
+  "explains": {}
+}

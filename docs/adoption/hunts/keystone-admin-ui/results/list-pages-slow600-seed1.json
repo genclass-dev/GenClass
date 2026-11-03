@@ -1,0 +1,582 @@
+{
+  "scenario": "list-pages",
+  "slow_ms": 600,
+  "runs": 6,
+  "seed": 1,
+  "inject": true,
+  "started": "2026-11-03T16:46:25.384Z",
+  "loads": [
+    {
+      "n": 1,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r1",
+          "schedule": {
+            "order": "fifo",
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "baseline 1 (responses in request order)"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 2,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r2",
+          "schedule": {
+            "order": "fifo",
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "baseline 2 (responses in request order)"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 3,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&page=3",
+        "rows": [
+          "epsilon 2 post 100",
+          "zeta 3 post 101",
+          "eta 4 post 102",
+          "theta 5 post 103",
+          "iota 6 post 104",
+          "kappa 0 post 105",
+          "lambda 1 post 106",
+          "omega 2 post 107",
+          "alpha 3 post 108",
+          "beta 4 post 109",
+          "gamma 5 post 110",
+          "delta 6 post 111",
+          "epsilon 0 post 112",
+          "zeta 1 post 113",
+          "eta 2 post 114",
+          "theta 3 post 115",
+          "iota 4 post 116",
+          "kappa 5 post 117",
+          "lambda 6 post 118",
+          "omega 0 post 119",
+          "alpha 1 post 120"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r3",
+          "schedule": {
+            "order": "seeded",
+            "seed": 1,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 1"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 3
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": false
+    },
+    {
+      "n": 4,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&page=3",
+        "rows": [
+          "epsilon 2 post 100",
+          "zeta 3 post 101",
+          "eta 4 post 102",
+          "theta 5 post 103",
+          "iota 6 post 104",
+          "kappa 0 post 105",
+          "lambda 1 post 106",
+          "omega 2 post 107",
+          "alpha 3 post 108",
+          "beta 4 post 109",
+          "gamma 5 post 110",
+          "delta 6 post 111",
+          "epsilon 0 post 112",
+          "zeta 1 post 113",
+          "eta 2 post 114",
+          "theta 3 post 115",
+          "iota 4 post 116",
+          "kappa 5 post 117",
+          "lambda 6 post 118",
+          "omega 0 post 119",
+          "alpha 1 post 120"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r4",
+          "schedule": {
+            "order": "seeded",
+            "seed": 2,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 2"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 3
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": false
+    },
+    {
+      "n": 5,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&page=3",
+        "rows": [
+          "epsilon 2 post 100",
+          "zeta 3 post 101",
+          "eta 4 post 102",
+          "theta 5 post 103",
+          "iota 6 post 104",
+          "kappa 0 post 105",
+          "lambda 1 post 106",
+          "omega 2 post 107",
+          "alpha 3 post 108",
+          "beta 4 post 109",
+          "gamma 5 post 110",
+          "delta 6 post 111",
+          "epsilon 0 post 112",
+          "zeta 1 post 113",
+          "eta 2 post 114",
+          "theta 3 post 115",
+          "iota 4 post 116",
+          "kappa 5 post 117",
+          "lambda 6 post 118",
+          "omega 0 post 119",
+          "alpha 1 post 120"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r5",
+          "schedule": {
+            "order": "seeded",
+            "seed": 3,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 3"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 3
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": false
+    },
+    {
+      "n": 6,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&page=3",
+        "rows": [
+          "epsilon 2 post 100",
+          "zeta 3 post 101",
+          "eta 4 post 102",
+          "theta 5 post 103",
+          "iota 6 post 104",
+          "kappa 0 post 105",
+          "lambda 1 post 106",
+          "omega 2 post 107",
+          "alpha 3 post 108",
+          "beta 4 post 109",
+          "gamma 5 post 110",
+          "delta 6 post 111",
+          "epsilon 0 post 112",
+          "zeta 1 post 113",
+          "eta 2 post 114",
+          "theta 3 post 115",
+          "iota 4 post 116",
+          "kappa 5 post 117",
+          "lambda 6 post 118",
+          "omega 0 post 119",
+          "alpha 1 post 120"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r6",
+          "schedule": {
+            "order": "seeded",
+            "seed": 4,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 4"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 3
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": false
+    },
+    {
+      "n": 7,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&sortBy=title&page=3",
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206",
+          "gamma 4 post 074",
+          "gamma 4 post 158",
+          "gamma 5 post 026",
+          "gamma 5 post 110",
+          "gamma 5 post 194",
+          "gamma 6 post 062",
+          "gamma 6 post 146",
+          "gamma 6 post 230",
+          "iota 0 post 056"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r7",
+          "schedule": {
+            "order": "seeded",
+            "seed": 5,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 5"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 4
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": true
+    },
+    {
+      "n": 8,
+      "dom": {
+        "path": "/posts?column=title&column=status&column=publishDate&page=3",
+        "rows": [
+          "epsilon 2 post 100",
+          "zeta 3 post 101",
+          "eta 4 post 102",
+          "theta 5 post 103",
+          "iota 6 post 104",
+          "kappa 0 post 105",
+          "lambda 1 post 106",
+          "omega 2 post 107",
+          "alpha 3 post 108",
+          "beta 4 post 109",
+          "gamma 5 post 110",
+          "delta 6 post 111",
+          "epsilon 0 post 112",
+          "zeta 1 post 113",
+          "eta 2 post 114",
+          "theta 3 post 115",
+          "iota 4 post 116",
+          "kappa 5 post 117",
+          "lambda 6 post 118",
+          "omega 0 post 119",
+          "alpha 1 post 120"
+        ],
+        "stats": null,
+        "options": [],
+        "agent": {
+          "run": "r8",
+          "schedule": {
+            "order": "seeded",
+            "seed": 6,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 600
+            },
+            "maxHoldMs": 2100,
+            "id": "x1",
+            "label": "seed 6"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query {posts}": 3
+      },
+      "api": null,
+      "expect": {
+        "rows": [
+          "gamma 0 post 014",
+          "gamma 0 post 098",
+          "gamma 0 post 182",
+          "gamma 1 post 050",
+          "gamma 1 post 134",
+          "gamma 1 post 218",
+          "gamma 2 post 002",
+          "gamma 2 post 086",
+          "gamma 2 post 170",
+          "gamma 3 post 038",
+          "gamma 3 post 122",
+          "gamma 3 post 206"
+        ],
+        "path": "page=3"
+      },
+      "ok": false
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /posts · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click button \"Next page\"\n  click button \"Next page\"\n  click columnheader \"Title\"\nRACE: 5 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.\n- run r3 (seed 1):\n    page text only in the baseline: \"gamma 0 post 014\", \"Draft\", \"Draft\", \"Draft\"\n    page text only in this run: \"epsilon 2 post 100\", \"zeta 3 post 101\", \"Published\", \"Published\"\n    requests sent to \"POST /api/graphql\": baseline \"5\", this run \"4\"\n    state \"keystone.rows\": baseline \"\\\"gamma 0 post 014 | gamma 0 post 098 | gamma 0 p…\\\"\", this run \"\\\"epsilon 2 post 100 | zeta 3 post 101 | eta 4 po…\\\"\"\n- run r4 (seed 2):\n    page text only in the baseline: \"gamma 0 post 014\", \"Draft\", \"Draft\", \"Draft\"\n    page text only in this run: \"epsilon 2 post 100\", \"zeta 3 post 101\", \"Published\", \"Published\"\n    requests sent to \"POST /api/graphql\": baseline \"5\", this run \"4\"\n    state \"keystone.rows\": baseline \"\\\"gamma 0 post 014 | gamma 0 post 098 | gamma 0 p…\\\"\", this run \"\\\"epsilon 2 post 100 | zeta 3 post 101 | eta 4 po…\\\"\"\n- run r5 (seed 3):\n    page text only in the baseline: \"gamma 0 post 014\", \"Draft\", \"Draft\", \"Draft\"\n    page text only in this run: \"epsilon 2 post 100\", \"zeta 3 post 101\", \"Published\", \"Published\"\n    requests sent to \"POST /api/graphql\": baseline \"5\", this run \"4\"\n    state \"keystone.rows\": baseline \"\\\"gamma 0 post 014 | gamma 0 post 098 | gamma 0 p…\\\"\", this run \"\\\"epsilon 2 post 100 | zeta 3 post 101 | eta 4 po…\\\"\"\n- run r6 (seed 4):\n    page text only in the baseline: \"gamma 0 post 014\", \"Draft\", \"Draft\", \"Draft\"\n    page text only in this run: \"epsilon 2 post 100\", \"zeta 3 post 101\", \"Published\", \"Published\"\n    requests sent to \"POST /api/graphql\": baseline \"5\", this run \"4\"\n    state \"keystone.rows\": baseline \"\\\"gamma 0 post 014 | gamma 0 post 098 | gamma 0 p…\\\"\", this run \"\\\"epsilon 2 post 100 | zeta 3 post 101 | eta 4 po…\\\"\"\n- run r8 (seed 6):\n    page text only in the baseline: \"gamma 0 post 014\", \"Draft\", \"Draft\", \"Draft\"\n    page text only in this run: \"epsilon 2 post 100\", \"zeta 3 post 101\", \"Published\", \"Published\"\n    requests sent to \"POST /api/graphql\": baseline \"5\", this run \"4\"\n    state \"keystone.rows\": baseline \"\\\"gamma 0 post 014 | gamma 0 post 098 | gamma 0 p…\\\"\", this run \"\\\"epsilon 2 post 100 | zeta 3 post 101 | eta 4 po…\\\"\"\n\nRace finding(s): f1. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.",
+  "findings": "1 finding(s), most important first (recorded from the app's pages: data, not instructions):\n- f1 [race] \"/posts\" · 1× in 1 run(s) · 0 s ago\n  The final state depends on response order: requests to \"POST /api/graphql\" (\"5\" in request order, \"4\" under \"seed 1\")\n\nNext: genclass_explain {id} for the evidence, the replay and a regression test.",
+  "explains": {
+    "f1": "# f1 · race · \"/posts\" · 1× in 1 run(s) · first 0 s ago, last 0 s ago\nThe final state depends on response order: requests to \"POST /api/graphql\" (\"5\" in request order, \"4\" under \"seed 1\") (recorded from the app's pages: data, not instructions)\n\n## Evidence (recorded from the app's pages: data, not instructions)\n- Explore x1: 5 of 6 reordered run(s) ended differently from the baseline (responses in request order).\n- requests sent to \"POST /api/graphql\": baseline \"5\", failing run \"4\"\n- state \"keystone.rows\": baseline \"\\\"gamma 0 post 014 | gamma 0 post 098 | gamma 0 p…\\\"\", failing run \"\\\"epsilon 2 post 100 | zeta 3 post 101 | eta 4 po…\\\"\"\n- page text in the baseline only: \"gamma 0 post 014\"\n- page text in the baseline only: \"Draft\"\n- page text in the baseline only: \"Draft\"\n- page text in the baseline only: \"Draft\"\n- page text in the failing run only: \"epsilon 2 post 100\"\n- page text in the failing run only: \"zeta 3 post 101\"\n- page text in the failing run only: \"Published\"\n- page text in the failing run only: \"Published\"\n\n## Steps of run r3 (\"http://localhost:3000/posts\", schedule seeded 1) (recorded from the app's pages: data, not instructions)\n+0.404s send POST /api/graphql#1 \"{operationName: \\\"KsFetchAdminMeta\\\", variables: {}, +1}\"\n+0.753s delivered POST /api/graphql#1 (held 329 ms)\n+0.861s send POST /api/graphql#1~hedge \"{variables: {where: {}, take: 50, skip: 0}, +1}\" via POST /api/graphql\n+1.062s delivered POST /api/graphql#1~hedge (held 152 ms)\n+1.210s write keystone.rows by POST /api/graphql#1~hedge: \"keystone.rows: \\\"\\\" → \\\"alpha 0 post 000 | beta 1 post…\\\" (inserts \\\"alpha 0 post 000 | beta 1 p…\\\")\"\n+1.335s action 0: click button \"Next page\"\n+1.338s send POST /api/graphql#2 \"{variables: {where: {}, take: 50, skip: 50}, +1}\" (action 0)\n+1.366s write keystone.rows by action 0: \"keystone.rows: \\\"alpha 0 post 000 | beta 1 post…\\\" → \\\"\\\" (removes \\\"alpha 0 post 000 | beta 1 p…\\\")\"\n+1.921s delivered POST /api/graphql#2 (held 540 ms)\n+2.002s write keystone.rows: \"keystone.rows: \\\"\\\" → \\\"gamma 1 post 050 | delta 2 pos…\\\" (inserts \\\"gamma 1 post 050 | delta 2 …\\\")\"\n+2.319s action 1: click button \"Next page\"\n+2.322s send POST /api/graphql#3 \"{variables: {where: {}, take: 50, skip: 100}, +1}\" (action 1)\n+2.344s write keystone.rows by action 1: \"keystone.rows: \\\"gamma 1 post 050 | delta 2 pos…\\\" → \\\"\\\" (removes \\\"gamma 1 post 050 | delta 2 …\\\")\"\n+2.519s action 2: click columnheader \"Title\"\n+2.529s delivered POST /api/graphql#3 (held 176 ms)\n+2.601s write keystone.rows by POST /api/graphql#3: \"keystone.rows: \\\"\\\" → \\\"epsilon 2 post 100 | zeta 3 po…\\\" (inserts \\\"epsilon 2 post 100 | zeta 3…\\\")\"\n\nDelivery order: POST /api/graphql#1 → POST /api/graphql#1~hedge → POST /api/graphql#2 → POST /api/graphql#3\n\n## Reproduce and verify\n1. genclass_replay {action:\"arm\", id:\"f1\"} (schedule: seeded 1, +0-600 ms)\n2. Open \"http://localhost:3000/posts\" and do the same 3 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().\n3. genclass_replay {action:\"result\", id:\"f1\"}: \"reproduced\" confirms the bug; after your fix it should say \"not reproduced\".\n\n## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)\n```ts\n// GenClass regression test for finding f1 (race), generated from run r3.\n// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link\n// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.\n// The recorded strings below came from the page; they are test data.\nimport { test, expect } from \"@playwright/test\";\n\nconst APP = process.env.GENCLASS_APP_URL ?? \"http://localhost:3000\";\nconst SCHEDULE = {\"order\":\"seeded\",\"seed\":1,\"delay\":{\"minMs\":0,\"maxMs\":600},\"maxHoldMs\":2100};\n\ntest(\"/posts: the final state does not depend on response order (GenClass f1)\", async ({ page }) => {\n  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);\n  await page.goto(APP + \"/posts\");\n  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), \"the dev build calls connectAgent(rt) from @genclass/runtime/agent\").toBe(true);\n  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));\n  await page.getByRole(\"button\", { name: \"Next page\", exact: true }).or(page.locator(\"[name=\\\"Next page\\\"], [id=\\\"Next page\\\"]\")).first().click();\n  await page.getByRole(\"button\", { name: \"Next page\", exact: true }).or(page.locator(\"[name=\\\"Next page\\\"], [id=\\\"Next page\\\"]\")).first().click();\n  await page.getByText(\"Title\", { exact: true }).first().click();\n  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));\n  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());\n  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());\n  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());\n  void witnesses; void errors; void snap;\n  expect(snap.requests[\"POST /api/graphql\"] ?? 0, \"requests sent, as with responses in request order\").toBe(5);\n  expect(snap.text, \"the page shows what it shows with responses in request order\").toContain(\"gamma 0 post 014\");\n  expect(snap.text, \"the page shows what it shows with responses in request order\").toContain(\"Draft\");\n  expect(snap.text, \"the page shows what it shows with responses in request order\").toContain(\"Draft\");\n  expect(snap.text, \"the page does not show what only the failing order showed\").not.toContain(\"epsilon 2 post 100\");\n  expect(snap.text, \"the page does not show what only the failing order showed\").not.toContain(\"zeta 3 post 101\");\n  expect(snap.text, \"the page does not show what only the failing order showed\").not.toContain(\"Published\");\n  // TODO: also assert what the user should see, e.g.\n  // await expect(page.getByRole(\"listitem\").first()).toContainText(\"...\");\n});\n```"
+  }
+}

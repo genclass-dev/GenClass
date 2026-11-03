@@ -1,0 +1,195 @@
+{
+  "scenario": "create-enter",
+  "slow_ms": 600,
+  "runs": 6,
+  "seed": 1,
+  "inject": false,
+  "started": "2026-11-03T17:19:08.504Z",
+  "loads": [
+    {
+      "n": 1,
+      "dom": {
+        "path": "/tags/cmw0yctme000oi07djpfllwse",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 3,
+        "mutation {updateTag}": 1
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 2,
+      "dom": {
+        "path": "/tags/cmw0ycvma000pi07d2simrgu1",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 3,
+      "dom": {
+        "path": "/tags/cmw0ycxi9000qi07dhx98pe8u",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 4,
+      "dom": {
+        "path": "/tags/cmw0yczdy000ri07dxi8zndfq",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 5,
+      "dom": {
+        "path": "/tags/cmw0yd199000si07dv3876nyj",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 6,
+      "dom": {
+        "path": "/tags/cmw0yd345000ti07dogochlz7",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 7,
+      "dom": {
+        "path": "/tags/cmw0yd4y9000ui07dw55my94l",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    },
+    {
+      "n": 8,
+      "dom": {
+        "path": "/tags/cmw0yd6tj000vi07dinm7ss8z",
+        "rows": [],
+        "stats": null,
+        "options": [],
+        "agent": null
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 3,
+        "query RelationshipSelect": 2,
+        "mutation {createTag}": 1,
+        "query KsFetchItem": 2
+      },
+      "api": {
+        "tags": 1
+      },
+      "expect": {
+        "tags": 1
+      },
+      "ok": true
+    }
+  ]
+}

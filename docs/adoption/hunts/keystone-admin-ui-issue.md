@@ -16,7 +16,8 @@ The patch is [keystone-admin-ui.patch](keystone-admin-ui.patch), against `keysto
       quickly. Two `createTag` requests leave and two tags exist.
 - [ ] Apply the patch (`git am keystone-admin-ui.patch`) and run the new test unfixed and fixed:
       `DATABASE_URL=file:./test.db pnpm vitest run --maxWorkers=1 tests/admin-ui-tests/create-item.test.ts`
-      (the test fails without the `useCreateItem.ts` change and passes with it).
+      (the test fails without the `useCreateItem.ts` change and passes with it; measured 3 of 3 each way in this
+      hunt, each run being the dev and the production pass `adminUITests` makes).
 - [ ] Read the whole diff (one hook, one test file, one CI matrix line, one changeset).
 - [ ] Make every sentence of the AI-assistance paragraph true (you ran the test and the manual check yourself), and
       send from your own account. Keystone has no template for pull requests and a 6-line template for issues (below).
@@ -33,13 +34,16 @@ Title: **Pressing Enter twice on the create item page creates the item twice**
 3. Open http://localhost:3000/tags/create, type a name into the Name field and press Enter twice quickly.
 4. Two `createTag` mutations are sent and two tags with that name exist (the page navigates to the first one).
 
-The same happens on every create page (`/authors/create`, `/posts/create`, ...): pressing Enter in a text field while
-the create is in flight submits the form again. Clicking or double clicking the Create button does not, because the
-button is pending.
+Every create page goes through the same form and hook, so this is not specific to tags. On `/authors/create` (where
+`email` is unique) the second create fails, and the user sees "Unable to create author" although the author was
+created. Clicking or double clicking the Create button does not trigger it, because that button is pending while the
+create runs.
 
-Measured on `main` at 88da2cc with the Admin UI's production build (`keystone build && keystone start`) and
-Playwright: with the `createTag` request held 300 ms, Enter pressed twice 60 ms apart created two tags in 3 of 3 tries;
-without added latency, in 1 of 3. A double click on Create created one tag in 3 of 3 (with and without latency).
+Measured on `main` at 88da2cc with the Admin UI's production build (`keystone build && keystone start`), headless
+Chromium with its network throttling (no request intercepted), Enter pressed twice 60 ms apart, 10 tries each: two
+`createTag` requests and two tags in 10 of 10 tries at 400 ms and at 150 ms of added latency and in 9 of 10 with none;
+on `/authors/create` at 400 ms, two `createAuthor` requests and the error toast in 10 of 10; a double click on Create
+at 400 ms, one request and one tag in 10 of 10.
 
 <!-- Please describe what you expected to happen -->
 
@@ -59,8 +63,8 @@ already in flight. The item page already guards its save the same way (`ItemPage
 
 <!-- Please add contextual information such as your node version (node -v), or the web browser you used -->
 
-Node 22.23.4, Chromium 153 (Playwright 1.63 headless) and Chrome with DevTools throttling; `@keystone-6/core` from
-`main` at 88da2cc (8.2.x line).
+Node 22.23.4, headless Chromium 153 (Playwright 1.63) with Chromium's network throttling; `@keystone-6/core` 8.3.0
+from `main` at 88da2cc.
 
 I used Claude (Claude Code) to investigate this, write the fix and the tests, and draft this description; I reviewed
 the change and ran the tests and the manual check myself. The race was found with GenClass, a tool I work on, which
@@ -76,12 +80,13 @@ Fixes #<issue number> (if the issue is sent first; otherwise drop this line)
 
 Pressing Enter in a field of the create item page submits the form through the hidden submit button, which is not
 pending while the create mutation is in flight, so pressing Enter twice (or Enter after clicking Create) sends a second
-create and creates the item twice. `useCreateItem().create()` now ignores a call while a create is in flight, with a
-ref so that a second submit in the same frame is also caught; the item page already ignores a second save the same way
-(`if (isSaving) return`).
+create and creates the item twice. `useCreateItem().create()` now ignores a call while a create is in flight or after it has
+succeeded (the page navigates to the new item, but a second Enter can land before the navigation finishes), with a ref
+so that a second submit in the same frame is also caught; the item page already ignores a second save while one is in
+flight (`if (isSaving) return`).
 
-- `packages/core/src/admin-ui/utils/useCreateItem.ts`: an `isCreatingRef` guard around the mutation (reset in
-  `finally`, so a failed create can be retried).
+- `packages/core/src/admin-ui/utils/useCreateItem.ts`: an `isCreatingRef` guard around the mutation, cleared when the
+  create fails so it can be retried.
 - `tests/admin-ui-tests/create-item.test.ts`: holds the `createTask` request for 500 ms, presses Enter twice in the
   Label field and asserts one create request and one task. It fails on `main` (2 requests, 2 tasks) and passes with the
   fix, in the dev and production runs `adminUITests` makes.
@@ -89,7 +94,9 @@ ref so that a second submit in the same frame is also caught; the item page alre
 - `.changeset/fix-create-item-double-submit.md`: patch for `@keystone-6/core`.
 
 To check by hand: `examples/usecase-blog`, DevTools throttling "Slow 4G", `/tags/create`, type a name, Enter twice:
-one tag (two before).
+one tag (two before). Measured with Chromium's throttling, 10 tries each: before, two tags in 10 of 10 at 400 ms and
+150 ms of latency and 9 of 10 with none; after, one tag in 30 of 30. `relations.test.ts` and `list-view-crud.test.ts`
+pass with the change.
 
 I used Claude (Claude Code) to investigate this, write the fix and the tests, and draft this description; I reviewed
 the change and ran the tests and the manual check myself. The race was found with GenClass, a tool I work on, which

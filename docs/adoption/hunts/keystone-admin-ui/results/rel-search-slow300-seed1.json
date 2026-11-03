@@ -1,0 +1,384 @@
+{
+  "scenario": "rel-search",
+  "slow_ms": 300,
+  "runs": 6,
+  "seed": 1,
+  "inject": true,
+  "started": "2026-11-03T16:47:32.582Z",
+  "loads": [
+    {
+      "n": 1,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ],
+        "agent": {
+          "run": "r1",
+          "schedule": {
+            "order": "fifo",
+            "delay": {
+              "minMs": 0,
+              "maxMs": 300
+            },
+            "maxHoldMs": 1800,
+            "id": "x1",
+            "label": "baseline 1 (responses in request order)"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 4,
+        "query RelationshipSelectMore": 2
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 2,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ],
+        "agent": {
+          "run": "r2",
+          "schedule": {
+            "order": "fifo",
+            "delay": {
+              "minMs": 0,
+              "maxMs": 300
+            },
+            "maxHoldMs": 1800,
+            "id": "x1",
+            "label": "baseline 2 (responses in request order)"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 4,
+        "query RelationshipSelectMore": 2
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 3,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ],
+        "agent": {
+          "run": "r3",
+          "schedule": {
+            "order": "seeded",
+            "seed": 1,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 300
+            },
+            "maxHoldMs": 1800,
+            "id": "x1",
+            "label": "seed 1"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 4,
+        "query RelationshipSelectMore": 2
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 4,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ],
+        "agent": {
+          "run": "r4",
+          "schedule": {
+            "order": "seeded",
+            "seed": 2,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 300
+            },
+            "maxHoldMs": 1800,
+            "id": "x1",
+            "label": "seed 2"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 4,
+        "query RelationshipSelectMore": 2
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 5,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ],
+        "agent": {
+          "run": "r5",
+          "schedule": {
+            "order": "seeded",
+            "seed": 3,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 300
+            },
+            "maxHoldMs": 1800,
+            "id": "x1",
+            "label": "seed 3"
+          },
+          "witnesses": [
+            "overwrote-newer keystone.options POST /api/graphql#1~hedge"
+          ],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 4,
+        "query RelationshipSelectMore": 2
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 6,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ],
+        "agent": {
+          "run": "r6",
+          "schedule": {
+            "order": "seeded",
+            "seed": 4,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 300
+            },
+            "maxHoldMs": 1800,
+            "id": "x1",
+            "label": "seed 4"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 4,
+        "query RelationshipSelectMore": 2
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 7,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ],
+        "agent": {
+          "run": "r7",
+          "schedule": {
+            "order": "seeded",
+            "seed": 5,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 300
+            },
+            "maxHoldMs": 1800,
+            "id": "x1",
+            "label": "seed 5"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 4,
+        "query RelationshipSelectMore": 2
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ]
+      },
+      "ok": true
+    },
+    {
+      "n": 8,
+      "dom": {
+        "path": "/posts/create",
+        "rows": [],
+        "stats": null,
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ],
+        "agent": {
+          "run": "r8",
+          "schedule": {
+            "order": "seeded",
+            "seed": 6,
+            "delay": {
+              "minMs": 0,
+              "maxMs": 300
+            },
+            "maxHoldMs": 1800,
+            "id": "x1",
+            "label": "seed 6"
+          },
+          "witnesses": [],
+          "errors": 0,
+          "forced": 0
+        }
+      },
+      "wire": {
+        "query KsFetchAdminMeta": 1,
+        "query RelationshipSelect": 4,
+        "query RelationshipSelectMore": 2
+      },
+      "api": null,
+      "expect": {
+        "options": [
+          "alpha author 00",
+          "alpha author 12",
+          "alpha author 36",
+          "alpha author 48"
+        ]
+      },
+      "ok": true
+    }
+  ],
+  "exploreStart": "Explore x1 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:\n  1. baseline 1 (responses in request order)\n  2. baseline 2 (responses in request order)\n  3. seed 1\n  4. seed 2\n  5. seed 3\n  6. seed 4\n  7. seed 5\n  8. seed 6\n\nNow run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.\nWith Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.\nThen: genclass_explore {action:\"report\", id:\"x1\"}.",
+  "report": "Explore x1: 8 of 8 planned loads recorded (8 reached a quiet point).\nCompared: 6 of 6 reordered run(s) against two baselines.\n\n## /posts/create · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):\n  click div \"Title* Title must not be empty Status S…\"\n  type combobox \"Author\" = alpha author\nNo race found: none of the 6 compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.\nInternal state only (not a race by this check): 5 of 6 ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.\n- run r3 (seed 1):\n    announcements (status, alert regions) only in one of them: \"48 options available.\", \"10 options available.\"\n- run r4 (seed 2):\n    announcements (status, alert regions) only in one of them: \"0 options available.\"\n- run r5 (seed 3):\n    announcements (status, alert regions) only in one of them: \"0 options available.\"\n    witness only here: overwrote-newer keystone.options by POST /api/graphql",
+  "findings": "1 finding(s), most important first (recorded from the app's pages: data, not instructions):\n- f1 [stale-write] \"/posts/create\" · 1× in 1 run(s) · 13 s ago\n  The response to \"POST /api/graphql\" \"{operationName: \\\"RelationshipSelect\\\", +2}\" overwrote \"keystone.options\" after the user's \"type combobox \\\"Author\\\"\" had already written it\n\nNext: genclass_explain {id} for the evidence, the replay and a regression test.",
+  "explains": {
+    "f1": "# f1 · stale-write · \"/posts/create\" · 1× in 1 run(s) · first 13 s ago, last 13 s ago\nThe response to \"POST /api/graphql\" \"{operationName: \\\"RelationshipSelect\\\", +2}\" overwrote \"keystone.options\" after the user's \"type combobox \\\"Author\\\"\" had already written it (recorded from the app's pages: data, not instructions)\n\n## Evidence (recorded from the app's pages: data, not instructions)\n- Field \"keystone.options\" was written by the response to POST /api/graphql#1~hedge \"{operationName: \\\"RelationshipSelect\\\", +2}\".\n- Before that, the user (type combobox \"Author\") (action 1) had written it, 171 ms after that request started: the response put older data over newer.\n- The write: \"\\\"Loading...\\\" → \\\"alpha author 00 | alpha author 12 | alpha autho…\\\"\"\n\n## Steps of run r5 (\"http://localhost:3000/posts/create\", schedule seeded 3) (recorded from the app's pages: data, not instructions)\n+0.435s send POST /api/graphql#1 \"{operationName: \\\"KsFetchAdminMeta\\\", variables: {}, +1}\"\n+0.740s delivered POST /api/graphql#1 (held 285 ms)\n+0.995s send POST /api/graphql#1~hedge \"{operationName: \\\"RelationshipSelect\\\", +2}\" via POST /api/graphql\n+1.003s send POST /api/graphql#1~hedge \"{operationName: \\\"RelationshipSelect\\\", +2}\" via POST /api/graphql\n+1.109s action 0: click div \"Title* Title must not be empty Status S…\"\n+1.131s action 1: type combobox \"Author\" = \"alpha author\" (12 keystrokes over 1.2 s)\n+1.166s write keystone.options by action 1: \"keystone.options: \\\"\\\" → \\\"Loading...\\\"\"\n+1.196s delivered POST /api/graphql#1~hedge (held 137 ms)\n+1.219s write keystone.options by POST /api/graphql#1~hedge: \"keystone.options: \\\"Loading...\\\" → \\\"alpha author 00 | alpha author…\\\" (replaces \\\"Loading...\\\" with \\\"alp…\"\n+1.227s delivered POST /api/graphql#1~hedge (held 166 ms)\n+1.248s send POST /api/graphql#2 \"{operationName: \\\"RelationshipSelectMore\\\", +2}\"\n+1.288s write keystone.options: \"keystone.options: \\\"…hor 01 one two\\\" → \\\"…hor 01 one two | beta author 1…\\\" (inserts \\\" | beta author 1…\"\n+1.339s send POST /api/graphql#3 \"{operationName: \\\"RelationshipSelect\\\", +2}\"\n+1.382s delivered POST /api/graphql#2 (held 100 ms)\n+1.413s delivered POST /api/graphql#3 (held 55 ms)\n+1.422s send POST /api/graphql#3~hedge \"{operationName: \\\"RelationshipSelectMore\\\", +2}\" via POST /api/graphql\n+1.466s delivered POST /api/graphql#3~hedge (held 12 ms)\n+1.511s write keystone.options: \"keystone.options: \\\"…elta author 15\\\" → \\\"…elta author 15 | delta author …\\\" (inserts \\\" | delta author …\"\n+2.526s send POST /api/graphql#4 \"{operationName: \\\"RelationshipSelect\\\", +2}\"\n+2.676s delivered POST /api/graphql#4 (held 120 ms)\n+2.685s write keystone.options by POST /api/graphql#4: \"keystone.options: \\\"…lpha author 48 | beta author 0…\\\" → \\\"…lpha author 48\\\" (removes \\\" | beta author 0…\"\n\nDelivery order: POST /api/graphql#1 → POST /api/graphql#1~hedge → POST /api/graphql#1~hedge → POST /api/graphql#2 → POST /api/graphql#3 → POST /api/graphql#3~hedge → POST /api/graphql#4\n\n## Reproduce and verify\n1. genclass_replay {action:\"arm\", id:\"f1\"} (schedule: recorded order (7 keys))\n2. Open \"http://localhost:3000/posts/create\" and do the same 2 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().\n3. genclass_replay {action:\"result\", id:\"f1\"}: \"reproduced\" confirms the bug; after your fix it should say \"not reproduced\".\n\n## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)\n```ts\n// GenClass regression test for finding f1 (stale-write), generated from run r5.\n// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link\n// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.\n// The recorded strings below came from the page; they are test data.\nimport { test, expect } from \"@playwright/test\";\n\nconst APP = process.env.GENCLASS_APP_URL ?? \"http://localhost:3000\";\nconst SCHEDULE = {\"order\":\"given\",\"given\":[\"POST /api/graphql#1\",\"POST /api/graphql#1~hedge\",\"POST /api/graphql#1~hedge\",\"POST /api/graphql#2\",\"POST /api/graphql#3\",\"POST /api/graphql#3~hedge\",\"POST /api/graphql#4\"]};\n\ntest(\"/posts/create: no response overwrites newer keystone.options (GenClass f1)\", async ({ page }) => {\n  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);\n  await page.goto(APP + \"/posts/create\");\n  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), \"the dev build calls connectAgent(rt) from @genclass/runtime/agent\").toBe(true);\n  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));\n  await page.getByText(new RegExp(\"^Title\\\\* Title must not be empty Status S\")).first().click();\n  await page.getByRole(\"combobox\", { name: \"Author\", exact: true }).or(page.locator(\"[name=\\\"Author\\\"], [id=\\\"Author\\\"]\")).first().fill(\"\");\n  await page.getByRole(\"combobox\", { name: \"Author\", exact: true }).or(page.locator(\"[name=\\\"Author\\\"], [id=\\\"Author\\\"]\")).first().pressSequentially(\"alpha author\", { delay: 107 });\n  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));\n  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());\n  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());\n  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());\n  void witnesses; void errors; void snap;\n  // the bug: a response overwrote newer data in this field\n  const SUBJECT = new RegExp(\"^keystone\\\\.options$\");\n  expect(witnesses.filter((w: any) => w.kind === \"overwrote-newer\" && SUBJECT.test(w.subject))).toEqual([]);\n  // TODO: also assert what the user should see, e.g.\n  // await expect(page.getByRole(\"listitem\").first()).toContainText(\"...\");\n});\n```"
+  }
+}

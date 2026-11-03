@@ -12,6 +12,7 @@ const files = readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "summa
 const rows = [];
 for (const f of files) {
   const s = JSON.parse(readFileSync(join(dir, f), "utf8"));
+  if (!s.scenario) continue; // throttle.json and other summaries
   const loads = s.loads ?? [];
   const okLoads = loads.filter((l) => l.ok === true).length;
   const failed = loads.filter((l) => l.error).length;
@@ -40,5 +41,5 @@ writeFileSync(join(dir, "summary.json"), JSON.stringify(rows, null, 2));
 console.log("| scenario | slow_ms | GenClass | explore verdict (as reported) | what differed | harness oracle as expected | holds ran out | witnesses | GraphQL operations per load (min/max) |");
 console.log("|---|---|---|---|---|---|---|---|---|");
 for (const r of rows) {
-  console.log(`| ${r.scenario} | ${r.slow_ms} | ${r.inject ? "on" : "off"} | ${r.verdict} | ${r.what.replace(/\|/g, "\\|")} | ${r.oracle}${r.failed ? ` (${r.failed} failed)` : ""} | ${r.forced} | ${r.witnesses} | ${r.wire} |`);
+  console.log(`| ${r.scenario} | ${r.inject ? r.slow_ms : "none (natural, local)"} | ${r.inject ? "on" : "off"} | ${r.verdict} | ${r.what.replace(/\|/g, "\\|")} | ${r.oracle}${r.failed ? ` (${r.failed} failed)` : ""} | ${r.forced} | ${r.witnesses} | ${r.wire} |`);
 }
