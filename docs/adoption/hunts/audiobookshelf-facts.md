@@ -55,8 +55,8 @@ the patch is [audiobookshelf.patch](audiobookshelf.patch).
      no server-side change, the title was kept in 3 of 3 (control).
    - A new file is written into the book's folder on disk while the title is being edited: the watcher rescanned
      **12.8 s** later (12766-12792 ms) and the title reverted in **3 of 3** runs.
-   - Title edited, Save clicked, subtitle typed at once: subtitle wiped in **every one of 24 loads** (3 sessions × 8)
-     (see the report, section 3; the session numbers there also include the fixed build).
+   - Title edited, Save clicked, subtitle typed at once: subtitle wiped in **every one of 24 loads** (3 sessions × 8
+     loads, with up to 300, 600 and 900 ms of added response latency; report, section 3).
 5. **The fix (the patch).** When the watcher sees a new `libraryItem` with the same `id`, the form takes the server's
    values. It then puts back each field the user changed, as long as this update did not change that field. If the
    update did change it, the server's value wins: the user just saved it, or someone else changed it. A different item

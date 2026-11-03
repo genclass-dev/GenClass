@@ -266,7 +266,9 @@ On the fixed build (below): 0 of 3 in each row.
 
 A superseded response now returns without touching `isFetching`, so the newer one still renders, and a clear (which
 sets `lastSearch = null`) still cancels. On the fixed build: `repro-search.mjs` 0 of 3 stale in all three rows;
-explore FIXED_SEARCH_RESULT.
+explore at 1500 and 2500 ms said "No race found" in both sessions (12 reordered runs compared, 2 of them delivering
+"Harmony" first), and the menu was right in 16 of 16 loads. That is a false-report rate of 0 of 12 on this fixed
+variant, next to 4 of 12 reordered runs flagged on the unfixed build at the same latencies.
 
 It is not in the patch. The project asks first-time contributors for small pull requests, and #2231 has an open issue.
 A regression test for it would be a Cypress component test of `GlobalSearch.vue` with a mocked `$axios.$get` that
