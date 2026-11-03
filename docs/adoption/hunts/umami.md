@@ -15,6 +15,10 @@ navigation with `page.route` **fails 5 of 5 before the fix and passes 5 of 5 aft
 text or showed the wrong list: 0 of 96 explore loads, 0 of 120 throttled trials. The fix is 12 lines in `DataGrid.tsx`
 (`umami.patch`, with the test); a draft issue and PR body are in `umami-issue.md`. Nothing was filed upstream.
 
+**Refreshed 2026-11-03 (section 15): ready to send.** On `dev` at `c958b3772` the patch applies unchanged, the test fails
+3 of 3 without it and passes 3 of 3 with it, throttling alone still loses text in 10 of 10 trials from 200 ms (0 of 80
+fixed), and nothing on this bug has been filed upstream.
+
 GenClass's part, measured honestly (sections 11 and 12): the bug was the hunt brief's prime suspect from reading the
 code; GenClass's explore made it happen on a fast local server where plain typing never shows it (0 of 10 throttled
 trials at 0 ms), and its verdict pointed at the search box in 5 of the 12 sessions on the broken build; in each of those its baselines were the broken runs and the runs it listed as
@@ -482,3 +486,85 @@ were made while the broken-build matrix ran, neither touching what a load does: 
 ids written as `f1.` (the first three `/websites` sessions have the report but no `explains`; the evidence session
 covers the first of them), and the per-load `genclass` field (GenClass's own snapshot of the form field and string
 state) was added before the evidence session, so the twelve broken-build session files do not have it.
+
+## 15. Refresh (2026-11-03)
+
+A `hunt-refresh` session (`docs/adoption/swarm.md` section 4.2, slug `umami-refresh`) re-ran the test and the
+reproduction on today's Umami, checked the tracker and the contribution rules, and brought the drafts up to date.
+Status: **ready to send**. What is left is the by-hand list in `umami-issue.md` ("Before sending"): re-search the
+tracker on the send date, reproduce by hand in Chrome, run the test, read the diff, file the issue and then the PR.
+
+**What was run.** Umami cloned to `~/targets/umami`. The default branch, `master`, has not moved since the hunt
+(`559e3c607`, 3.4.1, 2026-10-23); pull requests go to `dev`, which is now at
+`c958b37721e263994d2551888efb56f8fb4524c0` (2026-11-02, 64 commits after the hunt's `12cdf5777`, `package.json` still
+3.4.1, Next.js 16.4.2, React 19.3.1, `@playwright/test` 1.64.0). Setup as in section 2 (PostgreSQL 16.15 from Ubuntu's
+packages, already installed; the same `.env`; `npx -y pnpm@12.3.4 install`, `build`, `start`; `umami/seed.mjs`), Node
+22.23.4. Umami's spec ran with Umami's `playwright.config.ts` wrapped by an untracked local config that only sets
+`launchOptions.executablePath` to the container's Chromium (`/opt/pw-browsers/chromium-1243`), with
+`PLAYWRIGHT_SKIP_WEB_SERVER=1 CI=1 ... --workers 1 --retries 0`. `throttle.mjs` ran unchanged from this repository
+(Playwright 1.63.0, same Chromium). GenClass's explore was not re-run: the brief asks for the test and the
+reproduction without GenClass, and none of the drafts quote explore's numbers beyond the one disclosure sentence.
+
+**What changed upstream.** Nothing the patch touches: `src/components/common/DataGrid.tsx` (blob `de4459702`),
+`src/components/hooks/useNavigation.ts` and `tests/e2e/helpers.ts` are byte-identical to the hunt's commit, so every
+line number in section 8 still holds, and the 18 `DataGrid` call sites with `allowSearch` are still 18. `umami.patch`
+applies with `git apply` to `dev` at `c958b3772`, to `12cdf5777` and to `master`; its diff was regenerated against
+`c958b3772` and is identical, only its header changed (the new base and a suggested commit message). The open pull
+request #4725 (a page-size picker, 2026-11-01) also edits `DataGrid.tsx`; the patch applies on top of its branch with
+the hunks offset by 11 lines (`git apply --check` in a worktree of `pull/4725/head`).
+
+**Numbers, `dev` at `c958b3772`.**
+
+| check | unfixed | with `umami.patch` |
+|---|---|---|
+| `keeps text typed while the search navigation is loading` | **failed 3 of 3** (`Expected pattern: /[?&]search=revert(\+\|%20)beta(&\|$)/`, `Received string: "http://localhost:3000/websites?search=revert&page=1"`) | **passed 3 of 3** |
+| `control: going back restores the previous search` | passed 3 of 3 | passed 3 of 3 |
+| throttled typing, no GenClass, no interception, 0 / 150 ms, both pages | 0 of 40 lost text | 0 of 40 |
+| throttled typing, 200 ms, `/websites` and `/admin/users` | **10 of 10** (`shopstu`) and **10 of 10** (`annasto`) | 0 of 10 and 0 of 10 |
+| throttled typing, 300 ms, `/websites` and `/admin/users` | **10 of 10** (`shoptu`, `shopstu`) and **10 of 10** (`annato`, `annasto`) | 0 of 10 and 0 of 10 |
+| `pnpm lint` (`biome lint .`) | 6 errors, 12 warnings, 11 infos | the same, none in the changed files |
+| `biome check` on the two changed files | | clean |
+| `pnpm build` | passes | passes |
+| `pnpm test` (vitest, what CI runs) | | 164 files, 1236 tests passed |
+
+The throttled rows are `node docs/adoption/hunts/umami/throttle.mjs --trials 10 --latency 0,150,200,300`, typing at 90
+ms per key with a 700 ms pause, 10 trials per cell (`umami/results/refresh-2026-11-03/throttle-unfixed.json`,
+`throttle-fixed.json`). They match section 10 row for row, including the values the box ended with. 250 and 400 ms were
+not re-run.
+
+**Tracker and pull requests** (`gh api -X GET search/issues`, `repo:umami-software/umami` with `is:issue` and
+`is:pull-request`, 3 s apart): "search typed text", "search box reverts", "DataGrid search", "search input loses",
+"search typing", "debounce", "search reset", "search field", "SearchField", and every issue (20) and pull request (32)
+created since 2026-10-24, titles read. Nothing on this bug. Close but different: #4705 (search `LIKE` escaping on the
+server, opened 2026-10-28, fixed on `dev` by "Fix inconsistent search. ... Closes #4705") and #4717 (an open PR for the
+same; it touches `src/lib/like.ts` and `src/queries/sql/*`, not `DataGrid`). The issue and pull
+request endpoints refused this session (its GitHub access covers only GenClass), so comments were not read; #4705's
+body (through search), the titles and the pull requests' diffs (`git fetch origin pull/N/head`) were enough to tell
+them apart. Recent issues have been fixed on `dev` within days by the maintainers' own commits (#4683, #4699, #4700,
+#4702, #4703, #4704 and #4705 are closed by commits in `dev`'s log), so filing the issue is worthwhile even if the
+PR is not taken.
+
+**Contribution rules** (`CONTRIBUTING.md`, `.github/` on `dev` at `c958b3772`): pull requests to `dev`, one logical
+change, `pnpm install && pnpm build && pnpm lint` clean, link related issues, search issues first, bugs with steps,
+expected and actual, and environment; issues through a form (Describe the Bug, Database, log output, version, deploy,
+browser), blank issues off; MIT, no CLA or DCO; no pull request template; no AI or LLM policy anywhere in the repository's
+contribution files. The swarm's disclosure paragraph is used.
+
+**Drafts changed.** `umami-issue.md`: the issue now follows Umami's form field by field; the measured table is today's;
+the environment names `dev` at `c958b3772`; the disclosure paragraph is in both the issue and the PR body (the old draft
+had only a one-line GenClass mention); a "Before sending" list records what this session did and what the sender must
+do; the PR title follows the `fix(<area>): ...` style of recent contributor fixes and says `Closes #<issue>`; the PR's
+test numbers are today's (3 of 3). `umami.patch`: new header, same diff.
+
+**Problems with GenClass itself.** None new: GenClass was not run in this refresh. The problems in section 12 stand as
+measured on 2026-10-24 with `@genclass/runtime` 0.3.0-beta.1 and `@genclass/mcp` 0.1.0; they were not re-checked
+against today's builds.
+
+**Slips in this session**, none affecting a number: a command meant to list #4725's diff also ran
+`git checkout pr4725 -- .` and `git stash` in the Umami tree while the first build was running; the tree was restored to
+`dev` (verified clean with `git diff --quiet HEAD`) and Umami rebuilt before any test ran. A `pkill -f` pattern matched
+the session's own shell once; it was re-run with a PID.
+
+**Time spent.** About 35 minutes of wall-clock time (16:34 to about 17:10 UTC): clone, install and the first build
+4 min, the tracker search 5 min (during the build), two throttled runs of about 7 min each (80 trials each), two more
+builds of 65 s, the tests and the checks 5 min, the rest reading and writing.

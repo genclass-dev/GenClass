@@ -1,6 +1,8 @@
 Umami: keep typed search text when the URL catches up with an earlier search.
-Base: umami-software/umami dev at 12cdf5777f082f18001be63076789ab4ef618d27 (3.4.1).
+Base: umami-software/umami dev at c958b37721e263994d2551888efb56f8fb4524c0 (3.4.1, 2026-11-02); also applies unchanged to
+12cdf5777f082f18001be63076789ab4ef618d27 (the hunt's base, 2026-10-23) and to master 559e3c607 (3.4.1).
 Apply with: git apply umami.patch
+Suggested commit message: fix(common): keep typed search text when the URL catches up with an earlier search
 
 diff --git a/src/components/common/DataGrid.tsx b/src/components/common/DataGrid.tsx
 index de4459702..adff4265b 100644
