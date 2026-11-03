@@ -1,0 +1,68 @@
+Rebased fix and test against strapi/strapi develop at 200d300ef1203c42f1daa172c14a1ce41e8dd793 (2026-11-03).
+Kept for the record only: develop no longer needs it (upstream #27368, see docs/adoption/hunts/strapi.md, "Refresh (2026-11-03)").
+Apply with: git apply develop.patch (git ignores these lines).
+
+diff --git a/packages/core/content-manager/admin/src/hooks/useContentManagerInitData.ts b/packages/core/content-manager/admin/src/hooks/useContentManagerInitData.ts
+index d3a34a0..0426144 100644
+--- a/packages/core/content-manager/admin/src/hooks/useContentManagerInitData.ts
++++ b/packages/core/content-manager/admin/src/hooks/useContentManagerInitData.ts
+@@ -185,6 +185,16 @@ const useContentManagerInitData = (): AppState => {
+   );
+ 
+   useEffect(() => {
++    /**
++     * The links are authorised against the user's permissions, which the AuthProvider loads with
++     * a request of its own. Until that request has answered, `checkUserHasPermissions` matches
++     * against an empty list: every content type would be refused, and the Layout would send the
++     * user to the 403 page, where nothing brings them back once the permissions arrive.
++     */
++    if (isLoadingAuth) {
++      return undefined;
++    }
++
+     let cancelled = false;
+ 
+     if (initialDataQuery.data && contentTypeSettingsQuery.data) {
+@@ -219,6 +229,7 @@ const useContentManagerInitData = (): AppState => {
+     formatData,
+     initialDataQuery.data,
+     contentTypeSettingsQuery.data,
++    isLoadingAuth,
+     toggleNotification,
+   ]);
+ 
+diff --git a/tests/e2e/tests/content-manager/permissions-loading.spec.ts b/tests/e2e/tests/content-manager/permissions-loading.spec.ts
+new file mode 100644
+index 0000000..c8f7367
+--- /dev/null
++++ b/tests/e2e/tests/content-manager/permissions-loading.spec.ts
+@@ -0,0 +1,29 @@
++import { test, expect } from '@playwright/test';
++import { loginWithApi } from '../../../utils/login';
++import { resetDatabaseAndImportDataFromPath } from '../../../utils/dts-import';
++
++test.describe('Content Manager while the permissions are loading', () => {
++  test.beforeEach(async ({ page }) => {
++    await resetDatabaseAndImportDataFromPath('with-admin');
++    await loginWithApi({ page });
++  });
++
++  test('A collection type opened by its URL shows its list, not the 403 page, when the permissions answer last', async ({
++    page,
++  }) => {
++    // Only the user's permissions are delayed, as on a slow network: they now arrive after the
++    // content manager's own init and content-types-settings responses.
++    await page.route('**/admin/users/me/permissions', async (route) => {
++      await new Promise((resolve) => setTimeout(resolve, 1500));
++      await route.continue();
++    });
++
++    await page.goto('/admin/content-manager/collection-types/api::article.article');
++
++    await expect(page.getByRole('heading', { name: 'Article', exact: true })).toBeVisible();
++    await expect(page).not.toHaveURL(/\/content-manager\/403/);
++    await expect(
++      page.getByText("You don't have the permissions to access that content")
++    ).not.toBeVisible();
++  });
++});

@@ -3,6 +3,29 @@
 Drafts for the GenClass owner to send, or not. Nothing here has been posted anywhere. Facts and commands are from
 `strapi.md` in this directory; the patch is `strapi.patch`.
 
+> **Do not send (refresh, 2026-11-03).** Strapi fixed this on its default branch, `develop`, on 2026-11-02 through
+> strapi/strapi#27368 (merged as `00afc67`): the admin now waits for the permissions before mounting the Content
+> Manager. On `develop` at `200d300` the regression test below passes 3 of 3 without the fix and the reproduction
+> script reaches the list 3 of 3 with the permissions delayed 1.5 s and 5 s; on `66d9d05`, the commit before #27368,
+> the test fails 3 of 3 and the script ends on the 403 page 3 of 3 (`strapi.md` section 8). The fix is not released
+> (5.60.0 has the old code; the 5.61.0 candidate, strapi/strapi#28371, does not include it). The texts below are kept,
+> with their facts updated, as the record; `strapi.patch` still applies to 5.60.0, and
+> `strapi-refresh/develop.patch` is its rebase onto `develop`, redundant there.
+>
+> If this is ever revived (a regression after #27368, or a test-only contribution a maintainer asked for), before
+> sending:
+>
+> - [x] Search the tracker for the same bug since the hunt (done 2026-11-03, `strapi.md` section 8.3: nothing filed;
+>   #27368 fixed it). Search again on the day of sending.
+> - [x] Read the current contribution rules (done 2026-11-03, section 8.4: CLA required, Conventional Commits, target
+>   `develop`, no AI policy; the issue template is now the YAML form `BUG_REPORT.yml`, so fill its fields from the
+>   text below).
+> - [x] Re-run the reproduction and the test on the current default branch (done 2026-11-03, section 8.2).
+> - [ ] Reproduce by hand on your own machine (the script below, or Chrome DevTools' request blocking or throttling of
+>   `GET /admin/users/me/permissions`).
+> - [ ] Run the test yourself in Strapi's harness (`yarn test:e2e --setup --domains content-manager --concurrency=1`).
+> - [ ] Read the whole diff, sign the CLA (cla.strapi.io), and keep the AI assistance paragraph true.
+
 ## Issue
 
 **Title:** Content Manager redirects to its 403 page when the permissions response arrives after its init responses
@@ -93,7 +116,9 @@ permissions do not cover any content type.
   (`layout.tsx` lines 113 to 118) is skipped on that path, so the user stays there.
 
 Related: #20332 (Strapi 5 beta, "You don't have permission" on a fresh install until a refresh), closed in June 2024
-through #20609. The ordering case above is still present in 5.59.0.
+through #20609; #16039 (Strapi 4.6.1, "Getting 403 when the page reloads in content-manager", closed). The ordering
+case above is still present in 5.59.0 and 5.60.0. On `develop` it was fixed by #27368 (merged 2026-11-02), which
+makes the admin wait for the permissions before it mounts the Content Manager.
 
 **Fix**
 
@@ -113,6 +138,12 @@ fix.
 By reordering the admin's responses with GenClass, an open-source library that reports races in web apps
 (https://github.com/genclass-dev/GenClass-lib): on this page, 2 of 6 reordered loads ended on the 403 page, and the
 delayed-response script above is the reproduction without it.
+
+**AI assistance**
+
+I used Claude (Claude Code) to investigate this, write the fix and the tests, and draft this description; I reviewed
+the change and ran the tests and the manual check myself. The race was found with GenClass, a tool I work on, which
+replays the same steps with the server's responses delivered in different orders.
 
 ## Pull request
 
@@ -137,14 +168,20 @@ the permissions have arrived. Fixes (issue number).
 ### How to test it?
 
 - `tests/e2e/tests/content-manager/permissions-loading.spec.ts` delays the permissions response by 1.5 s and opens
-  the Article list URL directly: it fails on `main` (the page ends on `/admin/content-manager/403`) and passes with
-  this change.
+  the Article list URL directly: it fails on 5.59.0 and on `develop` before #27368 (`66d9d05`; the page ends on
+  `/admin/content-manager/403`) and passes with this change. (Since #27368 it also passes on `develop` without it.)
 - Manually: in a Playwright script or with a proxy, delay `GET /admin/users/me/permissions` by about 1.5 s and open
   `/admin/content-manager/collection-types/<uid>` while logged in.
 
 ### Related issue(s)/PR(s)
 
-(issue number); related to #20332 and #20609.
+(issue number); related to #20332, #20609, #16039 and #27368.
+
+### AI assistance
+
+I used Claude (Claude Code) to investigate this, write the fix and the tests, and draft this description; I reviewed
+the change and ran the tests and the manual check myself. The race was found with GenClass, a tool I work on, which
+replays the same steps with the server's responses delivered in different orders.
 
 ## A second, smaller observation (not in the patch)
 

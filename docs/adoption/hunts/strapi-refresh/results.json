@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-03",
+  "upstream": "strapi/strapi",
+  "default_branch": "develop",
+  "develop_head": "200d300ef1203c42f1daa172c14a1ce41e8dd793",
+  "pre_27368": "66d9d05",
+  "fix_27368": "00afc67214e6e5d3d73123ac3addd78012942b4f (merged 2026-11-02T16:39:23Z)",
+  "v5_60_0": "9f3af72b99be721cc692769f160eff2026516db4 (same useContentManagerInitData.ts, useMenu.ts and layout.tsx as 66d9d05; #27368 not in it)",
+  "harness": "Strapi's own e2e runner: yarn test:e2e --setup --domains content-manager --concurrency=1 -- --project chromium --retries=0 permissions-loading; runs 2 and 3: yarn playwright test --config test-apps/e2e/test-app-0/playwright.config.js --project chromium --retries=0 permissions-loading",
+  "browser": "Playwright 1.56.1 (Strapi's pin) on the preinstalled Chromium 153.0.8010.12 headless shell",
+  "variants": [
+    {
+      "name": "A: develop 200d300, no patch",
+      "spec": ["passed", "passed", "passed"],
+      "repro_403_without_genclass": { "0ms": "list 3 of 3", "1500ms": "list 3 of 3", "5000ms": "list 3 of 3" },
+      "server_order": "in all 12 Content Manager loads the server logged during the repro runs, GET /content-manager/init was answered 122 to 252 ms after GET /admin/users/me/permissions (which Playwright forwards only after the delay)"
+    },
+    {
+      "name": "B: develop 200d300 + develop.patch",
+      "spec": ["passed", "passed", "passed"],
+      "repro_403_without_genclass": { "0ms": "list 3 of 3", "1500ms": "list 3 of 3", "5000ms": "list 3 of 3" },
+      "unit": "useContentManagerInitData.test.tsx 7 of 7 passed (7 of 7 without the patch too)"
+    },
+    {
+      "name": "C: 66d9d05 (develop just before #27368), no patch",
+      "spec": ["failed", "failed", "failed"],
+      "spec_failure": "getByRole('heading', { name: 'Article', exact: true }) not found; page snapshot: \"You don't have the permissions to access that content\"",
+      "repro_403_without_genclass": { "0ms": "list 3 of 3", "1500ms": "403 page 3 of 3" },
+      "server_order": "GET /content-manager/init and content-types-settings answered before the delayed GET /admin/users/me/permissions"
+    }
+  ]
+}
