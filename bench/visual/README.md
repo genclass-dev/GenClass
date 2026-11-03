@@ -81,9 +81,9 @@ finding kinds and uploaded per-site artifacts; deleting their logs and artifacts
 ## Run
 
 ```bash
-gh workflow run visual-measure.yml --repo genclass-dev/GenClass-lib --ref <branch>
-gh run list --repo genclass-dev/GenClass-lib --workflow visual-measure.yml --limit 1
-gh run download <id> --repo genclass-dev/GenClass-lib --name visual-summary
+gh workflow run visual-measure.yml --repo genclass-dev/GenClass --ref <branch>
+gh run list --repo genclass-dev/GenClass --workflow visual-measure.yml --limit 1
+gh run download <id> --repo genclass-dev/GenClass --name visual-summary
 ```
 
 On the visual branch, a push that changes `bench/visual/` starts it (`[smoke]` in the commit message: two pages per

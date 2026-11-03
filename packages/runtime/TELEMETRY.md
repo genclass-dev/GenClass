@@ -32,7 +32,7 @@ Details under [Opting out](#opting-out).
 
 In `0.2.1` the local-host row did not apply to `GenClass.init()` (and so to `/auto` and the script tag): it passed
 an explicit `telemetry: true` internally, so local and private hosts sent too. Fixed in `0.2.2`
-([CHANGELOG](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/CHANGELOG.md)).
+([CHANGELOG](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/CHANGELOG.md)).
 
 When it is on, the console shows one notice per page:
 
@@ -48,7 +48,7 @@ When it is on, the console shows one notice per page:
 
 (The coding-agent link, `connectAgent` from `@genclass/runtime/agent`, is not telemetry: it runs in development builds
 on development hosts and sends its recording only to a bridge on the same machine, `http://127.0.0.1:47357`. It changes
-nothing below. [docs/runtime/AGENT.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/AGENT.md)
+nothing below. [docs/runtime/AGENT.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md)
 section 6.)
 
 Only data the runtime already computes for its own decisions. **By default, no text from the page is sent:**
@@ -59,7 +59,7 @@ segment holding an `@`, such as an e-mail address, is `:id` too).
 - **The situation text the model read is sent only with `include: { situation: true }`** (default off since
   `0.2.1`). It is the text exactly as built for the model, after the redactor (`InitOptions.redact`, default:
   secret-named fields such as passwords, tokens, card numbers, API keys are replaced by `[redacted]`; see the
-  README's [Privacy](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#privacy-and-telemetry) section for the rules and their known gaps). It describes
+  README's [Privacy](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#privacy-and-telemetry) section for the rules and their known gaps). It describes
   operations (e.g. `GET /api/items/:id`), store fields and short value summaries, timing and the facts GenClass
   computed. **Before enabling it, know what it can contain:** request names with their query strings (parameter
   values are redacted only when the parameter name looks secret), route changes with query string and fragment,
@@ -68,7 +68,7 @@ segment holding an `@`, such as an e-mail address, is `:id` too).
   (up to 60 characters) and store leaf values up to 48 characters, including state the runtime discovered on its
   own (`autoState`: React, Redux or Zustand state the app never registered; those decisions carry
   `autoState: true`). Add a `redact` function for fields with ordinary names and personal values.
-- **Interaction analytics** (new in `0.3.0-beta.1`; [design](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/ANALYTICS.md)): **off unless the app
+- **Interaction analytics** (new in `0.3.0-beta.1`; [design](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/ANALYTICS.md)): **off unless the app
   turns them on** with `analytics: true`, and only with the app's token (or your own `telemetry.endpoint`). Then the
   page also sends `interactions` events: per page view, the route, engaged time, scroll depth milestones and clicks,
   rage clicks and dead clicks per element, the element named from markup (a `data-genclass-name`, a `data-testid`, an
@@ -76,7 +76,7 @@ segment holding an `@`, such as an e-mail address, is `:id` too).
   a random visit id kept 30 minutes, where the visit came from (the referring host, utm values), the device class,
   browser and OS families and whether the browser visited before (a flag in `localStorage`). See
   [Interaction analytics](#interaction-analytics).
-- **Measured visual checks** ([VISUAL.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/VISUAL.md) section 10; counts sent from `0.3.0-beta.5`,
+- **Measured visual checks** ([VISUAL.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/VISUAL.md) section 10; counts sent from `0.3.0-beta.5`,
   approved by the maintainers on 2026-10-27): **counts only.** The `session` event says whether the checks run on the
   page (`visual`: `off`, `local` or `on`) and whether the app turned their runtime fixes on (`fix`). Once the checks
   have run on the page, every `summary` event carries how many findings each check made (`counts.checks`), the same
@@ -129,11 +129,11 @@ Every event has `t` (type), `seq` (0, 1, 2, … per page) and `at` (ms since sta
 | `interactions` | only with `analytics: true` and a token (or a custom endpoint; 0.3.0-beta.1): when a page view ends, when the tab is hidden and before a `summary`, if anything changed | see [`interactions` event](#interactions-event) |
 
 Not sent: `expectation` reports (a learned step that did not happen,
-[EXPECTATIONS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/EXPECTATIONS.md)) and anything
+[EXPECTATIONS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/EXPECTATIONS.md)) and anything
 else learned about the page (flows, profiles, relations); those stay in the browser (`localStorage`, `rt.learned()`).
 
 Numbers are rounded to 4 decimals. The source of truth is
-[`packages/runtime/src/telemetry/client.ts`](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/src/telemetry/client.ts).
+[`packages/runtime/src/telemetry/client.ts`](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/src/telemetry/client.ts).
 
 #### `session` event
 
@@ -306,7 +306,7 @@ Counts are deltas since the view's previous event.
   before; absent when storage is blocked)
 
 **Navigation paths** (0.3.0-beta.2;
-[design](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/ANALYTICS.md#11-navigation-paths-2026-10-25)):
+[design](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/ANALYTICS.md#11-navigation-paths-2026-10-25)):
 
 - on the view's first event, `nav` (how it was reached: `load`, `reload`, `back_forward`, `push`, `back`, `forward`,
   `pop`) and, from a page load's second view on, `from` (the previous view's route) and `fromMs`
@@ -337,7 +337,7 @@ says how many decisions' records were sent (`decisionRecords`), and how many rou
 (`decisionsSampledOut`) and capped (`decisionsCapped`), so a collector can scale what it received.
 `telemetry: { decisionSample: 1, maxDecisions: Infinity }` sends every record (your own collector, debugging).
 
-How much that is, measured in CI ([RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#10-release-030-beta0-first-load-and-telemetry-volume-ci) §10)
+How much that is, measured in CI ([RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#10-release-030-beta0-first-load-and-telemetry-volume-ci) §10)
 by `test/telemetry.test.ts` "an hour at the built-in model's maximum rate": one page, 30 decisions a minute for a
 simulated hour (1,800 decisions from a scripted decider, not the model; situation text off), all bytes of all
 request bodies counted:
@@ -409,7 +409,7 @@ What is recorded, per page view (a page load, and each route change to a new pat
   up to 4 levels under a named ancestor or a landmark. At most 120 characters. Any attribute value that looks like data
   (an e-mail address, a URL, 4 or more digits, 12 or more hex digits) is not used;
 - **navigation within the page load** (`0.3.0-beta.2`,
-  [design](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/ANALYTICS.md#11-navigation-paths-2026-10-25)):
+  [design](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/ANALYTICS.md#11-navigation-paths-2026-10-25)):
   how each view was reached (a page load, a reload, the browser's back or forward button, an in-app route change, an
   in-app back or forward), the previous view's route and the time from its start to this view's, the element key of
   the view's first interaction (a click, or a focus on a form field right after a key press) and the time to it, and
@@ -494,7 +494,7 @@ or at https://genclass.dev/start.
   that name, the creation time, the times of the first and the last batch, a SHA-256 hash of the dashboard secret
   (never the secret itself) and, when the app belongs to a genclass.dev account, that account. Project records have
   no automatic expiry; the aggregated dashboard data does (90 days). To delete a project and its dashboard data,
-  write to the contact in [PRIVACY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/PRIVACY.md) with the
+  write to the contact in [PRIVACY.md](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md) with the
   token.
 - An app can also belong to an optional **genclass.dev account** (a passkey, Google, an email and password, or GitHub
   sign-in), which opens its
@@ -502,7 +502,7 @@ or at https://genclass.dev/start.
   added to an account and keeps working until the owner turns that link off on the account page. This changes
   nothing the runtime sends: pages send the same batches with the same token, and nothing in a batch identifies a
   person or an account. What an account itself stores is listed in full in
-  [PRIVACY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/PRIVACY.md); among other things, an email as
+  [PRIVACY.md](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md); among other things, an email as
   typed or as Google returned it and whether it is verified; a salted one-way hash of the password if one is set,
   with when it was set and last used and the count of wrong passwords in a row; a one-way hash of the device cookie
   of each browser where the password was right; passkey public keys; the Google `sub` and the GitHub id and login if
@@ -526,7 +526,7 @@ kind and page path of each finding it made in the app's development build, when 
 replay armed and its verdict (reproduced or not), when a regression test was written, each explore report (how many
 page loads it compared and how many races it found) and each clear; never page text, evidence, snapshots or values.
 The dashboard keeps them 90 days (at most 500 log rows per app) and shows them in its Closed-loop development view.
-Details: [docs/runtime/AGENT.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/AGENT.md)
+Details: [docs/runtime/AGENT.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md)
 section 4.5.
 
 ## Where it goes
@@ -534,7 +534,7 @@ section 4.5.
 - **Endpoint:** `https://genclass.dev/api/v1/events` (`DEFAULT_TELEMETRY_ENDPOINT`; before 0.2.2 the same worker's
   `https://genclass-telemetry.mehar-144.workers.dev/v1/events`, which still works), a Cloudflare Worker operated by the
   GenClass maintainers (source:
-  [`telemetry-worker/`](https://github.com/genclass-dev/GenClass-lib/tree/main/telemetry-worker) in the repository).
+  [`telemetry-worker/`](https://github.com/genclass-dev/GenClass/tree/main/telemetry-worker) in the repository).
   With a Content-Security-Policy, allow
   `https://genclass.dev` in `connect-src` or turn telemetry off; after 3 failed requests in a row a page stops sending
   (a 429 is a back-off, not a failure, since 0.3.0).
@@ -552,11 +552,11 @@ section 4.5.
   batch is kept for its export under `export/<token>/` for up to 1 year (another lifecycle rule, 366 days), and its
   dashboard data for 1 year; both are deleted when the grant ends (30 days after the paid period ends, for a paid
   plan), and at once when the app or its account is deleted. The maintainers may change this later; changes are
-  recorded in the [CHANGELOG](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/CHANGELOG.md).
+  recorded in the [CHANGELOG](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/CHANGELOG.md).
 - **Your own endpoint (private mode):** `telemetry: { endpoint: "https://…" }` sends the same batches to a
   collector you run instead, so nothing reaches GenClass: the worker in `telemetry-worker/` deploys to any Cloudflare
   account with `wrangler.selfhost.toml`, dashboards and accounts included (telemetry-worker/README.md,
-  ["Self-host the collector (private mode)"](https://github.com/genclass-dev/GenClass-lib/blob/main/telemetry-worker/README.md#self-host-the-collector-private-mode)).
+  ["Self-host the collector (private mode)"](https://github.com/genclass-dev/GenClass/blob/main/telemetry-worker/README.md#self-host-the-collector-private-mode)).
 
 ## Options
 
@@ -622,5 +622,5 @@ the session event names your hostname. Depending on your users and jurisdiction 
   telemetry: the telemetry opt-outs (`telemetry: false`, `?genclass=no-telemetry`, the `localStorage` switch) and
   Global Privacy Control do not turn them off; `?genclass=off` turns GenClass off altogether.
 
-Privacy policy for this collection: [PRIVACY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/PRIVACY.md). Data processing terms are not published yet
+Privacy policy for this collection: [PRIVACY.md](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md). Data processing terms are not published yet
 (planned); if you cannot disclose a third-party diagnostics recipient, set `telemetry: false`.

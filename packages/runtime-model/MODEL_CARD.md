@@ -9,22 +9,22 @@ diagnose stale responses, duplicate requests, inconsistent state and failure sto
 `situation-v2.3`.
 
 The numbers below are copied from
-[`training/EVAL.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/training/EVAL.md) and
-[`docs/runtime/RESULTS.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md) in the
-GenClass-lib repository; those files have the definitions and full tables. Two latency measurements come from
+[`training/EVAL.md`](https://github.com/genclass-dev/GenClass/blob/main/training/EVAL.md) and
+[`docs/runtime/RESULTS.md`](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md) in the
+GenClass repository; those files have the definitions and full tables. Two latency measurements come from
 elsewhere and are linked where they are used: the runtime's changelog (WebGPU) and
-[`packages/runtime/src/model/README.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/src/model/README.md)
+[`packages/runtime/src/model/README.md`](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/src/model/README.md)
 (WASM threads); the app counts come from
-[`realapps/README.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/realapps/README.md). The quality
+[`realapps/README.md`](https://github.com/genclass-dev/GenClass/blob/main/realapps/README.md). The quality
 numbers (accuracy, false-intervention rates, recall, detections, calibration) are on held-out data.
 
 ## What it is
 
 A typed-decision encoder for `@genclass/runtime`, built like the project's earlier research encoder, GenClass 0.1
-([`research/`](https://github.com/genclass-dev/GenClass-lib/tree/main/research)). Older docs call this design
+([`research/`](https://github.com/genclass-dev/GenClass/tree/main/research)). Older docs call this design
 "Jev-style" after Jev, a TypeSafe AI product whose System One request format of typed questions GenClass 0.1
 reimplemented; GenClass is not affiliated with or endorsed by TypeSafe AI
-([`research/GENCLASS.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/research/GENCLASS.md)).
+([`research/GENCLASS.md`](https://github.com/genclass-dev/GenClass/blob/main/research/GENCLASS.md)).
 
 One forward pass reads a *situation* (the runtime's `app / trigger / facts / in_flight / timeline / state / stats`
 text) together with typed questions (choice, noul for yes/no, score). Each question gets calibrated answers, and
@@ -55,15 +55,15 @@ of the best permitted non-passive action clears the margin for that tier and tri
 
 **Latency** (onnxruntime-web 1.30, WASM, 1 thread, q8; a least-squares fit over the validation requests, run in
 Node on the training VM, not in a browser, so these are estimates at those lengths, not single measurements;
-[`training/ortweb/validate.mjs`](https://github.com/genclass-dev/GenClass-lib/blob/main/training/ortweb/validate.mjs),
-[RESULTS.md §2](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#2-r17-vs-r32-choosing-the-shipping-model)):
+[`training/ortweb/validate.mjs`](https://github.com/genclass-dev/GenClass/blob/main/training/ortweb/validate.mjs),
+[RESULTS.md §2](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#2-r17-vs-r32-choosing-the-shipping-model)):
 about 182, 330 and 599 ms per forward pass at 500, 780 and 1,170 sequence tokens. On WebGPU, on one Apple GPU with
 this model, a ~430-token warm-up pass took 49–74 ms and the first real decision 137 ms
-([runtime 0.2.2 changelog](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/CHANGELOG.md#022-2026-10-13));
+([runtime 0.2.2 changelog](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/CHANGELOG.md#022-2026-10-13));
 no systematic WebGPU latency benchmark has been published. Four WASM threads on a crossOriginIsolated page were
 about 3× faster than one in headless Chromium in an earlier measurement with GenClass 0.1's 32M-parameter model
 (271–360 ms against 837–981 ms at 780 sequence tokens;
-[`packages/runtime/src/model/README.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/src/model/README.md));
+[`packages/runtime/src/model/README.md`](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/src/model/README.md));
 this has not been re-measured for 0.2.0. Normal traffic makes no model calls: the runtime asks only about salient
 situations.
 
@@ -124,12 +124,12 @@ reaches the `eager` report value (0.70) but not the profile's report gate, on `c
 telemetry; at `balanced`, the *likely* detections (those at the report gate) and the possible ones together are then
 the `eager` row's detections (duplicate / stale / broken 77% / 45% / 13%, false detections held to at most 5% / 6%). Neither tier has been measured end to end on 0.3.0, and the share of possible
 detections that are false is not measured
-([RESULTS.md §11](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#11-observe-mode-detection-in-030-the-possible-tier-and-deferred-situations)).
+([RESULTS.md §11](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#11-observe-mode-detection-in-030-the-possible-tier-and-deferred-situations)).
 For 0.1.0 (`gate.report` 0.85): 0.36% on clean or benign real-app traffic; 3.78% of held-out real-app
 decisions whose correct diagnosis was `expected` (305 / 8,079; on the `real2e` slice, 240 of its 303 false
 detections came from one held-out app, flagged as `stale` on one field, and without that app the slice is 1.05%);
 1.1% / 1.7% of simulated `expected` rows (`sim2e` / `sim2f`), but 3.1% on the on-policy round b test set, over the
-2% limit ([RESULTS.md §1](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#1-model-stages-compared-held-out-simulated-apps)).
+2% limit ([RESULTS.md §1](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#1-model-stages-compared-held-out-simulated-apps)).
 It detected about 76% of duplicate submits and 28% of stale overwrites on real apps never trained on.
 
 **Reading.** The model rarely acts, and misses most problems. In guard mode at `balanced` it intervenes in 7.8% of
@@ -137,7 +137,7 @@ the clear simulated cases where acting would help (FIR 0.13%). Precision among i
 0.2.0 (on-policy round b, `r17-v2b` with its data-derived gates: 11% of its actions were false). Its main value
 today is observe mode: plain-English detections with the evidence. Recall is the open problem: a 150M teacher was
 trained and scored below `r17-v2b` on every held-out set, so distillation was skipped
-([RESULTS.md §1](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#1-model-stages-compared-held-out-simulated-apps)).
+([RESULTS.md §1](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#1-model-stages-compared-held-out-simulated-apps)).
 
 ## Training data and licence
 
@@ -156,7 +156,7 @@ project:
   `situation-v2` rows, all 158 for the `situation-v2.3` top-up; `realapps/README.md`), 837,623 rows: 616,437
   `situation-v2` and 221,186 `situation-v2.3`, labelled the same counterfactual way. 144 apps were written for the
   corpus. 14 are MIT-licensed open-source RealWorld front-ends, listed in
-  [`realapps/corpus/LICENSES.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/realapps/corpus/LICENSES.md);
+  [`realapps/corpus/LICENSES.md`](https://github.com/genclass-dev/GenClass/blob/main/realapps/corpus/LICENSES.md);
   their code is not part of this model, only traces of running them. Every row of the real-app evaluation sets was
   excluded from training.
 - **On-policy rows:** 1,248,131 situations from `r17-v2a` acting in the simulator (round a, DAgger-style; of them
@@ -165,7 +165,7 @@ project:
   rounds a and b were used to fit and test the gates.
 - **Replay:** GenClass 0.1's synthetic generic data.
 
-Row counts are from [RESULTS.md §6](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md#6-data-volume)
+Row counts are from [RESULTS.md §6](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#6-data-volume)
 and count every row generated, held-out dev and test splits included (splits are per trajectory). The 51M unlabeled
 simulated rows listed there were generated for teacher labelling and not used, since distillation was skipped.
 
@@ -188,7 +188,7 @@ No benchmark, scraped or third-party dataset was used, and no weights from other
   (`realapps/README.md`), and 75% of decision rows in `sim2e` (9,464 of 12,696) and 74% in `sim2f` (8,703 of
   11,756), the held-out `situation-v2` simulated test sets (the guard FIR denominators in `training/EVAL.md`). The
   share in the training split has not been published. Please report false interventions and false detections from
-  your app ([GitHub Issues](https://github.com/genclass-dev/GenClass-lib/issues)).
+  your app ([GitHub Issues](https://github.com/genclass-dev/GenClass/issues)).
 - Recall on actionable cases is low (see above). The runtime fails open: while the model is loading, after an error,
   or when it answers too late, the app runs unchanged.
 - Developer `ask` / `decide` questions work for short factual questions about the current situation. It is a small

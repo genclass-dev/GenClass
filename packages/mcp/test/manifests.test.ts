@@ -299,9 +299,9 @@ describe("the plugin's own repository (packages/mcp/scripts/plugin-repo.mjs asse
     }
   });
 
-  it("its workflow re-runs this script from GenClass-lib, stands still while npm does not serve the version, and touches nothing by hand", () => {
+  it("its workflow re-runs this script from GenClass, stands still while npm does not serve the version, and touches nothing by hand", () => {
     const y = at(".github/workflows/sync.yml");
-    expect(y).toContain("repository: genclass-dev/GenClass-lib");
+    expect(y).toMatch(/^\s*repository: genclass-dev\/GenClass$/m); // the exact name: the old GenClass-lib would also contain this prefix
     expect(y).toContain("node lib/packages/mcp/scripts/plugin-repo.mjs out");
     expect(y).toContain("--exclude .git --exclude .github");
     expect(y).toContain('[ "$rc" = 3 ]');

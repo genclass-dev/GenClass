@@ -7,7 +7,7 @@ name: Release
 # Authentication: npm trusted publishing (OIDC, `id-token: write`); no npm token is stored in the repository.
 # Owner setup before the first run: on npmjs.com, package
 # @genclass/runtime → Settings → Trusted publishing → GitHub Actions: organization genclass-dev, repository
-# GenClass-lib, workflow filename release.yml, environment npm-publish; and a GitHub environment `npm-publish`
+# GenClass, workflow filename release.yml, environment npm-publish; and a GitHub environment `npm-publish`
 # (Settings → Environments), ideally with required reviewers.
 #
 # Before you push the tag (the order is load-bearing from 0.3.0; packages/runtime/CHANGELOG.md "Dashboard counts"):

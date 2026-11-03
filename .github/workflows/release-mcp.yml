@@ -9,13 +9,13 @@ name: Release MCP
 #   before this workflow can publish it. Run this workflow once (push the tag): it builds, tests and uploads the tarball
 #   as the `mcp-tarball` artifact, and its publish step fails without a trusted publisher. Publish that exact tarball
 #   once from your own npm login (`npm publish genclass-mcp-<version>.tgz --access public`), then on npmjs.com:
-#   @genclass/mcp → Settings → Trusted publishing → GitHub Actions: organization genclass-dev, repository GenClass-lib,
+#   @genclass/mcp → Settings → Trusted publishing → GitHub Actions: organization genclass-dev, repository GenClass,
 #   workflow filename release-mcp.yml, environment npm-publish. Later versions publish from here. Then run this
 #   workflow by hand on the same tag: it publishes server.json to the MCP Registry only (the `registry` job).
 # - The npm-publish GitHub environment (shared with release.yml) asks its reviewers to approve each run.
 # - The official MCP Registry: the `registry` job publishes packages/mcp/server.json after npm has the version, with
 #   `mcp-publisher login github-oidc` (this workflow's OIDC token; no secret). OIDC grants the namespace of the
-#   repository's owner (io.github.<owner>/*), so it must run in genclass-dev/GenClass-lib for
+#   repository's owner (io.github.<owner>/*), so it must run in genclass-dev/GenClass for
 #   io.github.genclass-dev/genclass; `mcp-publisher login github` (device flow) cannot publish to an organization
 #   namespace (modelcontextprotocol/registry#1468). If that job fails, re-run it alone: npm is already done.
 # - The MCP Bundle (`mcp-bundle` artifact, genclass-<version>.mcpb and its sha256) is built and uploaded, never

@@ -336,7 +336,7 @@ What it does so the comment is safe to post:
 
 ### What the comment looks like
 
-This is the exact output for the unit-test fixture in [`test/fixtures/races`](https://github.com/genclass-dev/GenClass-lib/tree/main/packages/playwright/test/fixtures/races): two tests, two
+This is the exact output for the unit-test fixture in [`test/fixtures/races`](https://github.com/genclass-dev/GenClass/tree/main/packages/playwright/test/fixtures/races): two tests, two
 seeds each, one signature flagged in both seeds and one in a single seed, both model detections (a run with
 `model: "load"`). The fixture is synthetic (the evidence lines are written for the test, not taken from a real run);
 `test/package.test.ts` fails if this block and the summariser drift apart. Each `#` of a request id below is
@@ -467,13 +467,13 @@ The same with the GitHub CLI only (it updates the bot's comment that starts with
 
 With `model: "load"`, the report passes on what the runtime's model flagged. That was measured on the framework
 compatibility matrix
-([`compat/RESULTS.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/compat/RESULTS.md), run of
+([`compat/RESULTS.md`](https://github.com/genclass-dev/GenClass/blob/main/compat/RESULTS.md), run of
 2026-10-10; headless Chromium, 10 seeds per cell, model `genclass-runtime-r17` 2.0.0-rc4t, the default of
 `@genclass/runtime-model` 0.2.0, WASM, balanced profile, whose report threshold is 0.90). The runtime was
 `@genclass/runtime` packed at commit `d04eff3` (version string 0.1.0-beta.4, never published): the 0.1.0-beta.4 code
 plus the "Model ready" log fix. 0.2.0's audit trail, protect presets, hold-budget ceilings and invariant fixes, 0.2.1's
 first-request hold and telemetry defaults and every later release were not run through the matrix
-([`docs/runtime/RESULTS.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md) §16):
+([`docs/runtime/RESULTS.md`](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md) §16):
 
 - **Double submit** (scenario b, a create form clicked twice): 10 `request:duplicate` detections over 10 seeds in
   each of the 14 data layers where the scenario applies (React state, TanStack Query, Zustand with its devtools
@@ -515,7 +515,7 @@ from local hosts too, and `0.1.0-beta.3` to `0.2.0` include the redacted situati
 versions, or with a test server on a non-local host name, pass `telemetry: false` to the runtime under test; the
 other opt-outs are `?genclass=no-telemetry`, `localStorage.setItem("genclass.telemetry", "off")` and Global Privacy
 Control. Details:
-[`TELEMETRY.md`](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md).
+[`TELEMETRY.md`](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md).
 
 ## Development
 

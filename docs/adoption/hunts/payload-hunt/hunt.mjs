@@ -17,7 +17,7 @@ import { extname, join } from "node:path";
 import { PassThrough } from "node:stream";
 import { chromium } from "@playwright/test";
 
-// GenClass-lib: this repository (four directories up from docs/adoption/hunts/payload-hunt/), or GENCLASS_LIB
+// GenClass: this repository (four directories up from docs/adoption/hunts/payload-hunt/), or GENCLASS_LIB
 const LIB = (process.env.GENCLASS_LIB ?? new URL("../../../../", import.meta.url).pathname).replace(/\/+$/, "");
 const { serve } = await import(`${LIB}/packages/mcp/dist/index.js`);
 

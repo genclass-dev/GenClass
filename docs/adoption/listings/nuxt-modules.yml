@@ -7,7 +7,7 @@
 #
 # Steps (a pull request, no issue first):
 #   1. Fork https://github.com/nuxt/modules, clone it, `pnpm install`.
-#   2. `pnpm sync genclass genclass-dev/GenClass-lib#main/packages/nuxt`
+#   2. `pnpm sync genclass genclass-dev/GenClass#main/packages/nuxt`
 #      This writes modules/genclass.yml from the package on npm and the repository. Compare it with the entry below.
 #   3. In the generated file set `category` (a value from lib/categories.ts; the choice below is "Monitoring &
 #      Logging", where Sentry's module is; "Devtools" is the other candidate), and `type: 3rd-party`. Optionally add
@@ -25,12 +25,12 @@
 
 name: genclass
 description: Reports race conditions, stale responses and duplicate submits in the browser while they happen, with a small local model; observe mode changes nothing
-repo: genclass-dev/GenClass-lib#main/packages/nuxt
+repo: genclass-dev/GenClass#main/packages/nuxt
 npm: '@genclass/nuxt'
 icon: genclass.svg
-github: https://github.com/genclass-dev/GenClass-lib
+github: https://github.com/genclass-dev/GenClass
 website: https://genclass.dev
-learn_more: https://github.com/genclass-dev/GenClass-lib/tree/main/packages/nuxt
+learn_more: https://github.com/genclass-dev/GenClass/tree/main/packages/nuxt
 category: Monitoring & Logging
 type: 3rd-party
 maintainers:

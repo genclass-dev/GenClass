@@ -10,7 +10,7 @@
 // atom plus React state discovery and the page text), the Admin API read-back of the post (what the server holds
 // against what was typed last), and a DOM snapshot of the editor.
 //
-// Usage (from the GenClass-lib repo root, both packages built, Ghost running on 2368 with the owner account below):
+// Usage (from the GenClass repo root, both packages built, Ghost running on 2368 with the owner account below):
 //   node docs/adoption/hunts/ghost/hunt.mjs <scenario> [--slow 600] [--runs 6] [--seed 1] [--replay] [--out dir]
 // Scenarios: smoke, autosave, switch, list, publish, pickers.
 // Environment: GHOST_URL (default http://localhost:2368), GHOST_EMAIL / GHOST_PASSWORD (the owner account),

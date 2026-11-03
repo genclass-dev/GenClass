@@ -320,8 +320,8 @@ export function startPage(nonce: string, opts: { runtimeReady?: boolean; endpoin
   <div class="card stack"><h2 class="h2l">Install</h2>${notYet}<p class="muted small">The token needs @genclass/runtime ${KEY_RUNTIME} or later; earlier versions ignore it. ${LOCAL_HOSTS}</p><div id="snips" class="stack"></div></div>
 </section>
 <footer>Dashboards show counts only (never the situation text). Data is kept for 90 days.
-See <a href="https://github.com/genclass-dev/GenClass-lib/blob/main/PRIVACY.md">privacy</a> and
-<a href="https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md">what is sent</a>.</footer>`;
+See <a href="https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md">privacy</a> and
+<a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">what is sent</a>.</footer>`;
   const script = `
 (function(){
   var f = document.getElementById("f"), go = document.getElementById("go"), err = document.getElementById("err");
@@ -401,7 +401,7 @@ export function openSourcePrompt(c: OpenSourceChoices = {}, n: PromptNames = PRO
   // function: Wrangler's bundler (keepNames) would wrap it in a __name() helper that the page script, which runs this
   // function's source, lacks.
   const out: (string | [string])[] = [
-    "Add GenClass's open-source parts to this web app (Apache-2.0, https://github.com/genclass-dev/GenClass-lib): the @genclass/runtime library in its pages, which reports the bugs that never throw (double submits, stale responses that overwrite newer data, write races, visual bugs), and the @genclass/mcp server on this machine, so you, the coding agent, can see what happens on the dev pages, replay it and prove fixes. No GenClass account and no token: nothing is sent to genclass.dev. Do every step yourself.",
+    "Add GenClass's open-source parts to this web app (Apache-2.0, https://github.com/genclass-dev/GenClass): the @genclass/runtime library in its pages, which reports the bugs that never throw (double submits, stale responses that overwrite newer data, write races, visual bugs), and the @genclass/mcp server on this machine, so you, the coding agent, can see what happens on the dev pages, replay it and prove fixes. No GenClass account and no token: nothing is sent to genclass.dev. Do every step yourself.",
     "",
     [`Install the runtime with the project's package manager: npm install ${n.pkg} (or pnpm add / yarn add / bun add ${n.pkg}). A site with no build step (plain HTML pages, no bundler) installs nothing: it uses the script tags below.`],
     [
@@ -498,7 +498,7 @@ export function openSourcePage(nonce: string): string {
   const prompt = openSourcePrompt();
   const cmd = (label: string, code: string) =>
     `<div class="snip"><div class="row between"><h3>${label}</h3><button class="btn sm ghost" type="button" data-copy="${esc(code)}" aria-label="Copy ${esc(label)}">Copy</button></div><pre class="code" tabindex="0">${esc(code)}</pre></div>`;
-  const repo = "https://github.com/genclass-dev/GenClass-lib";
+  const repo = "https://github.com/genclass-dev/GenClass";
   const body = `
 <style nonce="${nonce}">${OSS_CSS}</style>
 <section class="stack mt-xl">
@@ -2657,14 +2657,14 @@ export function dashboardPage(
   const data = demo ? { ...base, demo: { types: demo.types, actions: demo.actions, slots: demo.slots } } : base;
   const t = esc(project.token);
   const keep = opts.keepDays ?? 90;
-  const report = '<a href="https://github.com/genclass-dev/GenClass-lib/issues/new?title=False%20detection%3A%20">Report a false detection</a>';
+  const report = '<a href="https://github.com/genclass-dev/GenClass/issues/new?title=False%20detection%3A%20">Report a false detection</a>';
   const privacy = acct
     ? `${
         opts.privateLink
           ? "This app also has the private dashboard link it had before it joined your account, and anyone with that link can see these stats. You can turn the link off on your <a href=\"/account#apps\">Projects page</a>."
           : "Only you can open this page, while signed in."
-      } <a href="https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · ${report} · <a href="/account">All projects</a> · <a href="/account/billing">Plan and billing</a>`
-    : `Keep this link private: anyone with it can see these stats. <a href="https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · <a href="/start">Get another token</a>`;
+      } <a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · ${report} · <a href="/account">All projects</a> · <a href="/account/billing">Plan and billing</a>`
+    : `Keep this link private: anyone with it can see these stats. <a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · <a href="/start">Get another token</a>`;
   const where = acct && opts.id ? `this app's GenClass dashboard, under Visitors (${ORIGIN_OF(opts)}/account/apps/${opts.id}#visits)` : "this app's GenClass dashboard (the private link I opened it from), under Visitors";
   const connect = connectDialog({
     token: project.token,
@@ -2956,7 +2956,7 @@ function lockedDashboardPage(
   <div class="blk-h"><h2 id="connect-h">Connect to your project</h2></div>
   ${connectSection({ token: project.token, account: true, runtimeReady: opts.runtimeReady === true, endpoint: opts.endpoint ?? null, analytics: "", mcp: false })}
 </section>
-<footer class="dfoot">${privacy} <a href="https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · <a href="/account">All projects</a></footer>
+<footer class="dfoot">${privacy} <a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · <a href="/account">All projects</a></footer>
 </div>`;
   return studioPage(nonce, {
     title: `${project.name} | GenClass dashboard`,

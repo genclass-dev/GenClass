@@ -84,7 +84,7 @@ export const CLIENTS: ClientInstall[] = [
         fence("", "/plugin marketplace add genclass-dev/genclass-plugin\n/plugin install genclass@genclass"),
         "Or the server alone (`--scope project` writes `.mcp.json` for everyone on the project; `--scope user` for all your projects). `init` also writes the skill to `.claude/skills/genclass/SKILL.md` (`--no-skill` leaves it out):",
         fence("bash", `claude mcp add --scope project ${NAME} -- npx -y ${pinned(v)}\n# or: npx -y ${pinned(v)} init --hook   (.mcp.json and the skill, plus the prompt hook in .claude/settings.json)`),
-        "Or just the skill (no server): `npx skills add genclass-dev/genclass-plugin`. (`genclass-dev/genclass-plugin` is this plugin at a repository root, assembled from this package; the marketplace in `genclass-dev/GenClass-lib` lists the same plugin.)",
+        "Or just the skill (no server): `npx skills add genclass-dev/genclass-plugin`. (`genclass-dev/genclass-plugin` is this plugin at a repository root, assembled from this package; the marketplace in `genclass-dev/GenClass` lists the same plugin.)",
       ].join("\n\n"),
   },
   {
