@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const dir = process.argv[2];
 const label = process.argv[3] ?? "unfixed";
-const REL = /^(less than a minute ago|\d+ (second|minute|hour|day)s? ago|a minute ago|an hour ago)$/;
+const REL = /^(less than a minute ago|(about )?(\d+|a|an) (second|minute|hour|day)s? ago)$/;
 
 function kinds(runBlock) {
   const k = new Set();

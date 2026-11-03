@@ -472,5 +472,151 @@
   "endState": [
    "[\"12\"] return_request:RETURN_ITEM:12"
   ]
+ },
+ {
+  "scenario": "claim-add-dbl",
+  "slow_ms": 600,
+  "label": "fixed",
+  "loads": 8,
+  "errors": 0,
+  "verdict": "RACE",
+  "endedDifferently": "2 of 6",
+  "internalOnly": "1 of 6",
+  "raceRunKinds": [
+   "seed 1: relative-time, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count",
+   "seed 5: relative-time, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count"
+  ],
+  "duplicateRequest": null,
+  "forced": 4,
+  "ownOracle": {
+   "baselinesAgree": true,
+   "seededDiffering": []
+  },
+  "endState": [
+   "[\"1\"] claim:RETURN_ITEM:1"
+  ]
+ },
+ {
+  "scenario": "exchange-add-dbl",
+  "slow_ms": 300,
+  "label": "fixed",
+  "loads": 8,
+  "errors": 0,
+  "verdict": "RACE",
+  "endedDifferently": "4 of 6",
+  "internalOnly": "1 of 6",
+  "raceRunKinds": [
+   "seed 1: relative-time, page-text: Cancel, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count",
+   "seed 3: relative-time, page-text: Cancel, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count",
+   "seed 5: relative-time, page-text: Cancel, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count",
+   "seed 6: relative-time"
+  ],
+  "duplicateRequest": null,
+  "forced": 4,
+  "ownOracle": {
+   "baselinesAgree": true,
+   "seededDiffering": []
+  },
+  "endState": [
+   "[\"1\"] exchange:RETURN_ITEM:1"
+  ]
+ },
+ {
+  "scenario": "exchange-add-dbl",
+  "slow_ms": 600,
+  "label": "fixed",
+  "loads": 8,
+  "errors": 0,
+  "verdict": "RACE",
+  "endedDifferently": "5 of 6",
+  "internalOnly": "1 of 6",
+  "raceRunKinds": [
+   "seed 1: relative-time, page-text: Cancel, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count",
+   "seed 3: relative-time, page-text: Cancel, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count",
+   "seed 4: relative-time",
+   "seed 5: relative-time, page-text: Cancel, page-text: 40 items, request-count",
+   "seed 6: relative-time"
+  ],
+  "duplicateRequest": null,
+  "forced": 8,
+  "ownOracle": {
+   "baselinesAgree": true,
+   "seededDiffering": []
+  },
+  "endState": [
+   "[\"1\"] exchange:RETURN_ITEM:1"
+  ]
+ },
+ {
+  "scenario": "exchange-add-dbl",
+  "slow_ms": 900,
+  "label": "fixed",
+  "loads": 8,
+  "errors": 0,
+  "verdict": "RACE",
+  "endedDifferently": "6 of 6",
+  "internalOnly": "0",
+  "raceRunKinds": [
+   "seed 1: relative-time, page-text: Cancel, page-text: 40 items, request-count",
+   "seed 2: relative-time, request-count",
+   "seed 3: relative-time, page-text: Cancel, page-text: 40 items, request-count",
+   "seed 4: relative-time",
+   "seed 5: relative-time, page-text: Cancel, page-text: 40 items, request-count",
+   "seed 6: relative-time"
+  ],
+  "duplicateRequest": null,
+  "forced": 9,
+  "ownOracle": {
+   "baselinesAgree": true,
+   "seededDiffering": []
+  },
+  "endState": [
+   "[\"1\"] exchange:RETURN_ITEM:1"
+  ]
+ },
+ {
+  "scenario": "exchange-add-reopen",
+  "slow_ms": 600,
+  "label": "fixed",
+  "loads": 8,
+  "errors": 0,
+  "verdict": "no verdict line",
+  "endedDifferently": "0",
+  "internalOnly": "0",
+  "raceRunKinds": [],
+  "duplicateRequest": null,
+  "forced": 6,
+  "ownOracle": {
+   "baselinesAgree": true,
+   "seededDiffering": []
+  },
+  "endState": [
+   "[\"1\"] exchange:RETURN_ITEM:1"
+  ]
+ },
+ {
+  "scenario": "exchange-out-dbl",
+  "slow_ms": 600,
+  "label": "fixed",
+  "loads": 8,
+  "errors": 0,
+  "verdict": "RACE",
+  "endedDifferently": "4 of 6",
+  "internalOnly": "0",
+  "raceRunKinds": [
+   "seed 1: relative-time, page-text: Cancel, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count",
+   "seed 2: page-text: Exchange #SVCHACK requested, request-count",
+   "seed 3: relative-time, page-text: Cancel, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count",
+   "seed 5: relative-time, page-text: Cancel, page-text: Show 2 more activities, page-text: 40 items, page-text: Items fulfilled, page-text: Show 1 more activity, request-count"
+  ],
+  "duplicateRequest": null,
+  "forced": 6,
+  "ownOracle": {
+   "baselinesAgree": true,
+   "seededDiffering": []
+  },
+  "endState": [
+   "[\"1\"] exchange:ITEM_ADD:1"
+  ]
  }
 ]

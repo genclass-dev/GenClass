@@ -20,7 +20,9 @@ observation:
    GenClass it reproduces in 12 of 12 plain Playwright trials (3 per variant), and never with one click (0 of 2). The
    cause is a module-level selection (`let itemsToAdd`) that is never cleared plus a Save with no pending state. The
    patch (4 files, +92 −8, and a Vitest spec of 2 tests) fails 2 of 2 tests on develop and passes 2 of 2 with the fix
-   (3 runs each); the dashboard's 190 tests pass. Fixed build: section 4.6.
+   (3 runs each); the dashboard's 190 tests pass. On the fixed build in the browser: one action in 21 of 21 plain
+   trials (12 double clicks at 0 to 250 ms, 3 reopens, 3 claim, 3 outbound) and no `duplicate-request` in 6 explore
+   sessions (48 loads): section 4.6.
 2. **The order timeline can miss the exchange the exchange page has just created** (section 5): when the timeline's
    first `GET /admin/exchanges` answer arrives after the exchange is created, TanStack Query dedupes the invalidation
    onto that in-flight request and keeps the pre-exchange list as fresh for its 90 s `staleTime`. Explore showed it
@@ -314,7 +316,38 @@ selection" (Save, render again, Save). Run with `yarn test <spec>` in `packages/
 
 ### 4.6 The fixed variant in the browser
 
-<!-- fixed -->
+The patch's change, applied line for line to the installed 2.22.2 build ([medusa-admin/patch-dist.mjs](medusa-admin/patch-dist.mjs):
+the two dist chunks `order-create-exchange-*.mjs` and `order-create-claim-*.mjs`, 2 handlers each), Vite's dependency
+cache (`apps/backend/node_modules/.vite`) removed, `medusa develop` restarted; before measuring, the batch checked in a
+browser that the exchange chunk the admin serves contains the change ("served exchange chunk has the patch: true").
+
+Without GenClass (`repro.mjs`, the same orders and steps as section 4.2):
+
+| case | unfixed | fixed |
+|---|---|---|
+| exchange inbound, double click 0 / 40 / 120 / 250 ms apart | 120 ms: 3 of 3 two `RETURN_ITEM` (40, 120, 250 ms by `hunt.mjs control`: 2 of 2 each) | one `RETURN_ITEM`, 1 add request, quantity 1: 3 of 3 at each gap (12 of 12) |
+| exchange, save, reopen, save again | 3 of 3 two `RETURN_ITEM` | 3 of 3 one |
+| claim inbound, double click 120 ms | 3 of 3 two `RETURN_ITEM` | 3 of 3 one |
+| exchange outbound, double click 120 ms | 3 of 3 two `ITEM_ADD` | 3 of 3 one |
+| one click (`hunt.mjs control exchange-add-dbl 2 --gap -1`) | 2 of 2 one | 2 of 2 one |
+
+Explore on the fixed build (same scenarios, 8 loads each):
+
+| scenario | slow_ms | explore verdict | what differed in the RACE runs | duplicate-request | own oracle: seeded loads differing | forced | end state (all 8 loads) |
+|---|---|---|---|---|---|---|---|
+| exchange-add-dbl | 300 | RACE: 4 of 6, internal only 1 of 6 | relative time; order timeline text (3 of 6, section 5); GET counts | none | 0 of 6 | 4 | quantity 1; `RETURN_ITEM:1` |
+| exchange-add-dbl | 600 | RACE: 5 of 6, internal only 1 of 6 | relative time; order timeline text (3 of 6); GET counts | none | 0 of 6 | 8 | quantity 1; `RETURN_ITEM:1` |
+| exchange-add-dbl | 900 | RACE: 6 of 6 | relative time; order timeline text (3 of 6); GET counts | none | 0 of 6 | 9 | quantity 1; `RETURN_ITEM:1` |
+| claim-add-dbl | 600 | RACE: 2 of 6, internal only 1 of 6 | relative time; order timeline text (2 of 6); GET counts | none | 0 of 6 | 4 | quantity 1; claim `RETURN_ITEM:1` |
+| exchange-out-dbl | 600 | RACE: 4 of 6 | relative time; order timeline text (4 of 6); GET counts | none | 0 of 6 | 6 | quantity 1; `ITEM_ADD:1` |
+| exchange-add-reopen | 600 | no verdict: "8 of 8 planned loads recorded (0 reached a quiet point)" (section 6, item 8) | - | none | 0 of 6 | 6 | quantity 1; `RETURN_ITEM:1` |
+
+So: the `duplicate-request` finding that every unfixed session carried (5 sessions, 8× in 8 runs each) is in none of
+the 6 fixed sessions, and every one of the 48 fixed loads ended with one action per ticked item, against 2 in every
+one of the unfixed loads. The RACE verdicts that remain are section 5's timeline (unchanged by this patch, as
+expected) and relative times; `genclass_findings` on the fixed sessions lists the relative-time race and the two
+`stale-write` findings on the mutation's `isPending` and `status` (section 6, item 3), 8× in 8 runs each. The installed
+build was left patched at the end of the session (the `.orig` files beside it; `patch-dist.mjs --revert` restores them).
 
 ## 5. A second finding (not patched): the order timeline misses a just-created exchange
 
@@ -395,7 +428,12 @@ Recorded as they were hit; none changed the findings.
    the page), so the brief's per-keystroke return quantity (surface 1) could only be tested for wrong values from
    reordered answers, not for two writes applied in the other order. And the reopen form of section 4 (no timing at
    all) is the same in every run, so neither explore nor a witness flags it; it was found by reading the cause.
-8. **Harness notes, not GenClass:** the own oracle first counted the order of `ITEM_UPDATE` actions inside an order
+8. **No verdict for a session whose loads all settled.** The fixed `exchange-add-reopen` session's report says
+   "8 of 8 planned loads recorded (0 reached a quiet point). No run reached a quiet point yet: wait for whenSettled()
+   after the steps", although each load awaited `whenSettled(30000)` after every step group and finished in 9.7 to 11.0 s (so none
+   waited out the 30 s); the same steps on the unfixed build gave a verdict. Not investigated further; the own oracle
+   covers that session (0 of 6 differing, quantity 1 in all 8).
+9. **Harness notes, not GenClass:** the own oracle first counted the order of `ITEM_UPDATE` actions inside an order
    change, which the server records in arrival order for two requests in flight together (4 "differing" loads,
    all with the same quantities); `summarise.mjs` marks them "order-only". The first fixed-variant batch ran against
    the unfixed build (the old `medusa develop` was not stopped: a `pkill -f` pattern with a literal `+` is a regex
@@ -405,7 +443,7 @@ Recorded as they were hit; none changed the findings.
 
 ## 7. Time spent
 
-About <!-- time --> of session time by the container clock, from the first `npm ci` at 16:34 UTC to the final commit:
+About 1 hour of session time by the container clock, from the first `npm ci` at 16:34 UTC to the final commit at about 17:35 UTC:
 GenClass build and the Medusa starter with Postgres, migrations and the admin user took about 10 minutes (no blocker:
 Node 22.23.4 met the starter's engines; the only change to its `.env` was dropping `REDIS_URL`); the order seed and the
 harness about 15 minutes; the explore batch (18 sessions of 8 loads, 7 to 15 s a load) ran in the background while the
