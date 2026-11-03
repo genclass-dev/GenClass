@@ -7,11 +7,11 @@
     "url": "https://genclass.dev"
   },
   "homepage": "https://genclass.dev",
-  "repository": "https://github.com/genclass-dev/GenClass-lib",
+  "repository": "https://github.com/genclass-dev/GenClass",
   "license": "Apache-2.0",
-  "documentationUrl": "https://github.com/genclass-dev/GenClass-lib/blob/main/packages/mcp/plugin/README.md",
-  "supportUrl": "https://github.com/genclass-dev/GenClass-lib/issues",
-  "privacyPolicyUrl": "https://github.com/genclass-dev/GenClass-lib/blob/main/packages/mcp/plugin/README.md#privacy",
+  "documentationUrl": "https://github.com/genclass-dev/GenClass/blob/main/packages/mcp/plugin/README.md",
+  "supportUrl": "https://github.com/genclass-dev/GenClass/issues",
+  "privacyPolicyUrl": "https://github.com/genclass-dev/GenClass/blob/main/packages/mcp/plugin/README.md#privacy",
   "keywords": [
     "race-condition",
     "debugging",
