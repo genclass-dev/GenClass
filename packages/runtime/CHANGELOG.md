@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.3.0-beta.6)
+## 0.3.0-beta.6 (2026-11-03)
 
 - **The open-source setup is two commands** (`bin/lib/`, owner request 2026-11-02). `init --agent` adds the dev-only
   agent link next to the import it writes, the same way it adds the devtools line: `if (<dev>)
