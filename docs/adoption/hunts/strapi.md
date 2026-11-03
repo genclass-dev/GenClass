@@ -1,5 +1,9 @@
 # Race hunt: Strapi admin panel (5.59.0)
 
+> **Status (refresh, 2026-11-03): not worth sending.** Strapi fixed the race on `develop` on 2026-11-02 through
+> strapi/strapi#27368, which was written for another bug (the regression test passes there 3 of 3 without this
+> patch). It is not released yet: 5.60.0 still has it. See section 8, "Refresh (2026-11-03)".
+
 A GenClass race hunt on the Strapi admin panel, run on 2026-10-24 in a cloud session, with the real
 `@genclass/runtime` (0.3.0-beta.1, this repository at `d77ffd8`) injected into the admin by Playwright and the real
 `@genclass/mcp` driven the way a coding agent drives it. Strapi's source was not modified for the hunt; the fix is a
@@ -20,7 +24,7 @@ pagination) showed no order-dependent page: their verdicts, with the false repor
 section 3.
 
 Sections: 1 setup, 2 how the admin was driven, 3 scenarios and verdicts, 4 the finding, 5 a second observation,
-6 problems with GenClass itself, 7 time spent.
+6 problems with GenClass itself, 7 time spent, 8 refresh (2026-11-03).
 
 ## 1. Setup
 
@@ -394,3 +398,145 @@ reproduction and the patch; 50 minutes of explore sessions (29 sessions of 8 loa
 discarded for the expired admin session and run again); 10 minutes for the fixed-variant checks; the rest writing.
 The racing page was the first page the harness was pointed at: the finding took one explore session; the other
 scenarios and the fixed-variant check took the rest.
+
+## 8. Refresh (2026-11-03)
+
+A swarm session (slug `strapi-refresh`, `docs/adoption/swarm.md` section 4.2) re-ran the finding against Strapi's
+current default branch. **Status: not worth sending.** Strapi's `develop` no longer has the race: strapi/strapi#27368
+("fix(admin): previous user's cached permissions after login without a page reload", fixes #27367, merged
+2026-11-02 as `00afc67`) makes the admin wait for the user's permissions before it mounts the Content Manager, so the
+Content Manager's init requests are no longer sent before the permissions arrive. The regression test from the patch
+passes on `develop` without the fix, and fails on the commit just before #27368. The fix is not released: 5.60.0 has
+the 5.59.0 code, and the 5.61.0 release candidate (strapi/strapi#28371, head `c2d59b3`) does not contain `00afc67`.
+Nothing was sent to Strapi.
+
+### 8.1 What changed upstream since the hunt
+
+- **Default branch.** `develop` now (the repository's `AGENTS.md`: "Target branch: `develop` (not `main`). All PRs go
+  to `develop`"). Cloned at `200d300ef1203c42f1daa172c14a1ce41e8dd793` (2026-11-03 17:35 +0100, `v5.60.0-133`,
+  packages at 5.60.0).
+- **#27368**, in the files the hunt's root cause names:
+  - `packages/core/admin/admin/src/hooks/useMenu.ts`: the menu effect returns early while the auth context's
+    `isLoading` is true, and the hook returns `isLoading: true` until the links were resolved for the current admin
+    and permissions (lines 106 to 168 at `200d300`). `AuthenticatedLayout.tsx` line 75 shows its loading state while
+    the menu loads, so the routes, the Content Manager among them, mount only after the permissions have arrived.
+  - `packages/core/content-manager/admin/src/hooks/useContentManagerInitData.ts`: reads `isLoadingAuth` and the admin
+    id, dispatches `setInitialData` only if the effect was not cancelled, and returns the initial (loading) state
+    while auth loads or while the stored links belong to another admin (lines 77, 78 and 225 to 227). Its effect still
+    runs `formatData` while the permissions load; the layout gate above is what keeps the hunt's order from
+    happening.
+  - New unit tests: `hooks/tests/useContentManagerInitData.test.tsx` (session switch, batched permission checks).
+    None covers a deep link with a slow permissions response.
+- **The hunt's patch** no longer applies to `develop` (`git apply --check`: "patch failed:
+  .../useContentManagerInitData.ts:73"). It still applies cleanly to the 5.60.0 hook (`9f3af72`, the same file as at
+  `66d9d05`). A minimal rebase onto `200d300` is kept for the record in `strapi-refresh/develop.patch` (the same early
+  return in the effect, `isLoadingAuth` in its dependencies; the spec now signs in with `loginWithApi`, as
+  `listview.spec.ts` does today). It is redundant on `develop`.
+- **Line numbers** of section 4.3 are for `c04f9bc` and differ on `develop`; not rewritten, since nothing is sent.
+
+### 8.2 What was re-run
+
+Strapi run natively from the monorepo, as its `CONTRIBUTING.md` and `AGENTS.md` say: `yarn install` (Yarn 4.12.0,
+Node 22.23.4, 1 min 15 s), `yarn build:code` (50 s), then Strapi's own e2e runner, which generates the test app from
+`tests/app-template` with the packages published through yalc, builds the admin and starts the app on port 8000 with
+SQLite. Strapi pins Playwright 1.56.1; the container's preinstalled Chromium (153.0.8010.12) was mapped into a
+`PLAYWRIGHT_BROWSERS_PATH` directory under the revision that version expects (`chromium_headless_shell-1194`), since
+`playwright install` is not available here. Only the `chromium` project was run (no WebKit here). No GenClass on any
+of these runs.
+
+```bash
+cd ~/targets/strapi
+yarn install && yarn build:code
+# test 1 of 3, with the app set up for the variant:
+PLAYWRIGHT_BROWSERS_PATH=~/targets/pw yarn test:e2e --setup --domains content-manager --concurrency=1 -- \
+  --project chromium --retries=0 permissions-loading
+# tests 2 and 3:
+PLAYWRIGHT_BROWSERS_PATH=~/targets/pw yarn playwright test --config test-apps/e2e/test-app-0/playwright.config.js \
+  --project chromium --retries=0 permissions-loading
+# the reproduction without GenClass, against the same test app:
+(cd test-apps/e2e/test-app-0 && PORT=8000 HOST=127.0.0.1 npm run develop -- --no-watch-admin --no-build-admin)
+STRAPI_URL=http://127.0.0.1:8000 HUNT_OUT=$PWD/out node login.mjs     # docs/adoption/hunts/strapi-refresh/login.mjs
+STRAPI_URL=http://127.0.0.1:8000 HUNT_OUT=$PWD/out node repro-403.mjs 1500 3   # docs/adoption/hunts/strapi/
+```
+
+Variant C is `git checkout 66d9d05` (the parent of `00afc67`), `yarn install && yarn build:code` and a fresh
+`--setup`; its `tests/utils/login.ts` has no `loginWithApi` yet, so `develop`'s copy of that test helper was used for
+C's three runs (the application code stayed at `66d9d05`). The patch was never applied to the installed packages this
+time: B is `develop` with the patch applied to the source and rebuilt (`dist` checked for the new early return).
+
+| variant | `permissions-loading.spec.ts` (3 runs) | `repro-403.mjs`, no GenClass: 0 ms | 1,500 ms | 5,000 ms |
+|---|---|---|---|---|
+| A: `develop` `200d300`, no patch | **passed 3 of 3** (20.3 s, 16.2 s, 16.6 s) | list 3 of 3 | **list 3 of 3** | list 3 of 3 |
+| B: `develop` `200d300` + `strapi-refresh/develop.patch` | passed 3 of 3 (15.1 s, 16.2 s, 15.1 s) | list 3 of 3 | list 3 of 3 | list 3 of 3 |
+| C: `66d9d05` (just before #27368), no patch | **failed 3 of 3**: the "Article" heading never visible; the page snapshot reads "You don't have the permissions to access that content" | list 3 of 3 | **403 page 3 of 3** (`/admin/content-manager/403`) | not run |
+
+Server logs, the order behind those outcomes: on A, in all 12 Content Manager loads logged during the reproduction,
+`GET /content-manager/init` was answered 122 to 252 ms after `GET /admin/users/me/permissions` (which the script lets
+through only after its delay), so the init requests were sent after the permissions; on C, both init responses were
+answered before the delayed permissions, as in the hunt. Unit tests: `npx jest --config jest.config.front.js
+admin/src/hooks/tests/useContentManagerInitData.test.tsx` in `packages/core/content-manager` passed 7 of 7 on
+`develop` with and without the patch. Lint: Prettier `--check` passes on both changed files; `npx eslint` on them
+reports `import/no-unresolved` for `@strapi/admin/strapi-admin` and a parsing error on the spec, and reports the same
+two errors on the untouched `useDocument.ts` and `listview.spec.ts`, so they come from this setup (types not built),
+not from the change. GenClass's explore was not re-run: the brief asks for the reproduction without it, and on A
+there is no order left for it to find on this path.
+
+Summary: `strapi-refresh/results.json`.
+
+### 8.3 Tracker search (since 2026-10-24)
+
+`gh api -X GET search/issues` on `repo:strapi/strapi`, `is:issue` and `is:pr` each, 3 s apart: `"content-manager/403"`,
+`"don't have the permissions to access that content"` (0 issues, 0 PRs), `permissions 403 content manager
+created:>=2026-10-24`, `useContentManagerInitData`, `permissions refresh 403 created:>=2026-10-01`. Nothing filed on
+this ordering since the hunt. Relevant results:
+
+- strapi/strapi#27368 (PR, opened 2026-08-14, merged 2026-11-02): the upstream change that removes the race (8.1).
+  Its description: "shows loading state until the new admin identity and permission-derived navigation are
+  available".
+- strapi/strapi#27367 (issue, closed): the bug #27368 fixes, "Admin panel keeps the previous user's cached
+  permissions after a login without a page reload".
+- strapi/strapi#16039 (issue, Strapi 4.6.1, 2023, closed): "Getting 403 when the page reloads in content-manager",
+  "only seen in production": the same symptom, on v4. Not linked in the hunt's draft; added to it now.
+- strapi/strapi#28371 (open): the 5.61.0 release candidate, range `v5.60.0` to `c2d59b3`; `00afc67` is not an
+  ancestor of `c2d59b3` (checked in the clone), so the fix ships in a later release unless the candidate is refreshed.
+
+The issue and pull request endpoints for single items (`repos/strapi/strapi/pulls/27368`) were refused to this
+session ("GitHub access to this repository is not enabled"); the search endpoint was enough.
+
+### 8.4 The project's rules, read today
+
+`CONTRIBUTING.md` (at `200d300`): talk to a maintainer before a large pull request; a CLA is required
+(cla.strapi.io); `yarn test:unit`, `yarn test:front`, `yarn test:e2e`, `yarn lint` before submitting. `AGENTS.md`:
+Conventional Commits, branch from and target `develop`, the pull request template's sections only. No AI or LLM
+contribution policy: neither file restricts or asks for disclosure of AI assistance, and the repository ships AI
+tooling (`.ai/skills/`, `yarn ai:sync`); some of its own recent commits carry a `Co-authored-by: Claude` trailer. The
+issue template is now a YAML form (`.github/ISSUE_TEMPLATE/BUG_REPORT.yml`: Node version, package manager and its
+version, Strapi version, OS, database, JS or TS, reproduction URL, description, steps, expected behaviour, logs,
+snippets, media, additional information, a duplicates checkbox); the draft's "Required system information" layout is
+from the old Markdown template.
+
+### 8.5 Status and what a person could still do
+
+**Not worth sending**, as an issue or as the fix: the bug is fixed on `develop`, by a change made for a different
+reason, a day before this refresh. `strapi-issue.md` carries a banner saying so, its facts updated.
+
+Two optional follow-ups, neither recommended without a maintainer asking:
+
+1. A test-only pull request adding `permissions-loading.spec.ts` (from `strapi-refresh/develop.patch`) as e2e
+   coverage of the deep-link case #27368 fixed in passing: it fails on `66d9d05` and passes on `develop`, 3 of 3 each
+   way. Strapi's CONTRIBUTING asks contributors to talk to a maintainer first, and its `AGENTS.md` calls the e2e
+   suite "slow", so a comment on #27368 offering the test would come before any pull request.
+2. If a user reports the 403 on 5.60.x before the next release, the answer is "fixed on `develop` by #27368", not
+   this patch.
+
+### 8.6 Problems with GenClass itself
+
+None new: GenClass was not run in this refresh (the brief's re-run is the reproduction without it). One process
+note for the swarm brief: a `hunt-refresh` of a fast-moving project should start with `git log` on the files of the
+root cause since the hunt's commit; here that one command answered the status before any build.
+
+### 8.7 Time spent
+
+About 50 minutes of session time: 8 minutes cloning (a slow network: 7.5 minutes for a depth-50 clone), 5 reading the
+diff of #27368 and the tracker search, 25 for the three builds and nine e2e runs and the reproductions, the rest
+writing.
