@@ -401,7 +401,7 @@ export function openSourcePrompt(c: OpenSourceChoices = {}, n: PromptNames = PRO
   // function: Wrangler's bundler (keepNames) would wrap it in a __name() helper that the page script, which runs this
   // function's source, lacks.
   const out: (string | [string])[] = [
-    "Add GenClass's open-source parts to this web app (Apache-2.0, https://github.com/genclass-dev/GenClass-lib): the @genclass/runtime library in its pages, which reports the bugs that never throw (double submits, stale responses that overwrite newer data, write races, visual bugs), and the @genclass/mcp server on this machine, so you, the coding agent, can see what happens on the dev pages, replay it and prove fixes. No GenClass account and no token: nothing is sent to genclass.dev. Do every step yourself.",
+    "Add GenClass's open-source parts to this web app (Apache-2.0, https://github.com/genclass-dev/GenClass): the @genclass/runtime library in its pages, which reports the bugs that never throw (double submits, stale responses that overwrite newer data, write races, visual bugs), and the @genclass/mcp server on this machine, so you, the coding agent, can see what happens on the dev pages, replay it and prove fixes. No GenClass account and no token: nothing is sent to genclass.dev. Do every step yourself.",
     "",
     [`Install the runtime with the project's package manager: npm install ${n.pkg} (or pnpm add / yarn add / bun add ${n.pkg}). A site with no build step (plain HTML pages, no bundler) installs nothing: it uses the script tags below.`],
     [
