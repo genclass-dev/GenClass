@@ -1,0 +1,4213 @@
+[
+ {
+  "scenario": "edit-name",
+  "slow_ms": 300,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 6,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 20,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 12242
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 12752
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 13035
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 12624
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 12420
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 12221
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 12726
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 12532
+   }
+  ]
+ },
+ {
+  "scenario": "edit-name",
+  "slow_ms": 600,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 6,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 1,
+  "errors": 0,
+  "staleWriteFindings": 20,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 27421
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 14253
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 14151
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 13856
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 13411
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 14707
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 14568
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 14593
+   }
+  ]
+ },
+ {
+  "scenario": "edit-name",
+  "slow_ms": 900,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 6,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 1,
+  "errors": 0,
+  "staleWriteFindings": 20,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 16131
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 16297
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 15859
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 15013
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 15832
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 15063
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 16916
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT links/:id#1",
+    "shown": {
+     "cards": [
+      "renamed during a poll",
+      "golf article 118",
+      "renamed during a poll"
+     ]
+    },
+    "server": {
+     "name": "renamed during a poll",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 15307
+   }
+  ]
+ },
+ {
+  "scenario": "pin-unpin",
+  "slow_ms": 300,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 6,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 20,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 9649
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8422
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8689
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8767
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8762
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8777
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 9030
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8477
+   }
+  ]
+ },
+ {
+  "scenario": "pin-unpin",
+  "slow_ms": 600,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 6,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 20,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 10642
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 10194
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 10034
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 9810
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 10876
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 10862
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT links/:id#2 → PUT links/:id#1",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 11007
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 10853
+   }
+  ]
+ },
+ {
+  "scenario": "pin-unpin",
+  "slow_ms": 900,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 6,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 2,
+  "errors": 0,
+  "staleWriteFindings": 20,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 12476
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 11821
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT links/:id#2 → PUT links/:id#1",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 13417
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 11313
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 12545
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 11717
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT links/:id#2 → PUT links/:id#1",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 13588
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT links/:id#1 → PUT links/:id#2",
+    "shown": {
+     "menu": [
+      "Pin to Dashboard"
+     ]
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 11989
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 300,
+  "seeds": "1-6",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 5,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6466
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 5862
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6093
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 5968
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6089
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 5902
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6196
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6467
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 300,
+  "seeds": "7-12",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 4,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 5947
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 5940
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6041
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6051
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6329
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6186
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 5951
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6155
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 600,
+  "seeds": "1-6",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 5,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7098
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7163
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6785
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7075
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7209
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7864
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7651
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7610
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 600,
+  "seeds": "7-12",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 4,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 19,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7066
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7174
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7805
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7960
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7181
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7728
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7168
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7321
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 900,
+  "seeds": "1-6",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 5,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8477
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8465
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8380
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6920
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 9228
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8147
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8571
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7682
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 900,
+  "seeds": "7-12",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 4,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 16,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8229
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8022
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7848
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7606
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8376
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7539
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7248
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7475
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 300,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 5,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6524
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6057
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6519
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 5977
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6325
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6375
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6237
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 5954
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 300,
+  "seeds": "7-12",
+  "variant": "unfixed",
+  "verdict": "race: 3 of 6",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 2,
+  "alongTheWay": 1,
+  "oracleDiffering": [
+   7,
+   8,
+   11
+  ],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 14,
+  "replay": "reproduced",
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6088
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6088
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6535
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 5786
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6470
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6274
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6210
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6665
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 600,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 5,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7072
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6943
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6244
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6403
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 6918
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 16299
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7496
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7393
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 600,
+  "seeds": "7-12",
+  "variant": "unfixed",
+  "verdict": "race: 3 of 6",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 3,
+  "alongTheWay": 0,
+  "oracleDiffering": [
+   7,
+   8,
+   12
+  ],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 16,
+  "replay": "reproduced",
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7164
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7000
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7458
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7442
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7986
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7604
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7520
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7884
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 900,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 5,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8292
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8139
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8377
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7401
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 9557
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8068
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8172
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7732
+   }
+  ]
+ },
+ {
+  "scenario": "theme-twice",
+  "slow_ms": 900,
+  "seeds": "7-12",
+  "variant": "unfixed",
+  "verdict": "race: 4 of 6",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 2,
+  "alongTheWay": 0,
+  "oracleDiffering": [
+   7,
+   8,
+   11,
+   12
+  ],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 16,
+  "replay": "reproduced",
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8498
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8350
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7515
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7742
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8750
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2",
+    "shown": {
+     "dataTheme": "light",
+     "switchChecked": false
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 8122
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7272
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "dataTheme": "dark",
+     "switchChecked": true
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "20px"
+    },
+    "ms": 7197
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 300,
+  "seeds": "1-6",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 3,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6209
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6238
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7045
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6374
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6579
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6206
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6552
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6230
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 300,
+  "seeds": "7-12",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 2,
+  "alongTheWay": 1,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 14,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6335
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6685
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6634
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6486
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6573
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7135
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6773
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6559
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 600,
+  "seeds": "1-6",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 3,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7411
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8098
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7146
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7614
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7462
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8279
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7748
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7752
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 600,
+  "seeds": "7-12",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 2,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8035
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7674
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7541
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7436
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7281
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7789
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7320
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7338
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 900,
+  "seeds": "1-6",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 3,
+  "alongTheWay": 0,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8442
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8452
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 9520
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7586
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 9533
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8461
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8699
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8944
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 900,
+  "seeds": "7-12",
+  "variant": "fixed",
+  "verdict": "no race",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 2,
+  "alongTheWay": 1,
+  "oracleDiffering": [],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 14,
+  "replay": null,
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8578
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8669
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8132
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7847
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 9730
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8151
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7570
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7736
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 300,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "race: 3 of 6",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 1,
+  "alongTheWay": 0,
+  "oracleDiffering": [
+   2,
+   4,
+   5
+  ],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": "reproduced",
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6384
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6978
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7364
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7033
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7061
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "24px"
+    },
+    "ms": 6399
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7198
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6689
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 300,
+  "seeds": "7-12",
+  "variant": "unfixed",
+  "verdict": "race: 4 of 6",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 1,
+  "alongTheWay": 1,
+  "oracleDiffering": [
+   7,
+   8,
+   9,
+   11
+  ],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 14,
+  "replay": "reproduced",
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6471
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6487
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6479
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6651
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "24px"
+    },
+    "ms": 6659
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7160
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6473
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 6641
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 600,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "race: 4 of 6",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 0,
+  "alongTheWay": 0,
+  "oracleDiffering": [
+   2,
+   3,
+   4,
+   5
+  ],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": "reproduced",
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7536
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7583
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7102
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7064
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "24px"
+    },
+    "ms": 7217
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8011
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7901
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7594
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 600,
+  "seeds": "7-12",
+  "variant": "unfixed",
+  "verdict": "race: 4 of 6",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 1,
+  "alongTheWay": 0,
+  "oracleDiffering": [
+   7,
+   8,
+   11,
+   12
+  ],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": "reproduced",
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7602
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7428
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7718
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7595
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7319
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7235
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7194
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7216
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 900,
+  "seeds": "1-6",
+  "variant": "unfixed",
+  "verdict": "race: 3 of 6",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 1,
+  "alongTheWay": 0,
+  "oracleDiffering": [
+   2,
+   4,
+   5
+  ],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 12,
+  "replay": "reproduced",
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8400
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8385
+   },
+   {
+    "schedule": "seed 1",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8704
+   },
+   {
+    "schedule": "seed 2",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7327
+   },
+   {
+    "schedule": "seed 3",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 9653
+   },
+   {
+    "schedule": "seed 4",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8560
+   },
+   {
+    "schedule": "seed 5",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#3 → PUT users/:id/preference#2",
+    "shown": {
+     "fontSize": "24px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8640
+   },
+   {
+    "schedule": "seed 6",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7946
+   }
+  ]
+ },
+ {
+  "scenario": "font-size",
+  "slow_ms": 900,
+  "seeds": "7-12",
+  "variant": "unfixed",
+  "verdict": "race: 4 of 6",
+  "compared": "6 of 6",
+  "groups": 1,
+  "internalOnly": 1,
+  "alongTheWay": 1,
+  "oracleDiffering": [
+   7,
+   8,
+   11,
+   12
+  ],
+  "baselinesAgree": true,
+  "forced": 0,
+  "errors": 0,
+  "staleWriteFindings": 14,
+  "replay": "reproduced",
+  "loads": [
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8530
+   },
+   {
+    "schedule": "fifo",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8681
+   },
+   {
+    "schedule": "seed 7",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7846
+   },
+   {
+    "schedule": "seed 8",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7839
+   },
+   {
+    "schedule": "seed 9",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 9037
+   },
+   {
+    "schedule": "seed 10",
+    "writes": "PUT users/:id/preference#1 → PUT users/:id/preference#2 → PUT users/:id/preference#3",
+    "shown": {
+     "fontSize": "26px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7960
+   },
+   {
+    "schedule": "seed 11",
+    "writes": "PUT users/:id/preference#3 → PUT users/:id/preference#2 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 8014
+   },
+   {
+    "schedule": "seed 12",
+    "writes": "PUT users/:id/preference#2 → PUT users/:id/preference#3 → PUT users/:id/preference#1",
+    "shown": {
+     "fontSize": "22px"
+    },
+    "server": {
+     "name": "hotel article 119",
+     "pinned": 0,
+     "theme": "light",
+     "fontSize": "26px"
+    },
+    "ms": 7783
+   }
+  ]
+ }
+]

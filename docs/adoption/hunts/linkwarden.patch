@@ -1,0 +1,169 @@
+diff --git a/packages/router/user.test.ts b/packages/router/user.test.ts
+new file mode 100644
+index 00000000..2c700c01
+--- /dev/null
++++ b/packages/router/user.test.ts
+@@ -0,0 +1,118 @@
++// @vitest-environment jsdom
++
++import { act, createElement } from "react";
++import { createRoot, Root } from "react-dom/client";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++vi.mock("next-auth/react", () => ({
++  useSession: () => ({ data: { user: { id: 1 } }, status: "authenticated" }),
++}));
++
++import { useUpdateUserPreference } from "./user";
++
++(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++
++// Each PUT /api/v1/users/1/preference waits until the test answers it, so the
++// test decides the order in which the responses come back.
++let answers: (() => void)[] = [];
++
++function answerablePreferenceFetch() {
++  return vi.fn(
++    (_url: string, init: { body: string }) =>
++      new Promise((resolve) => {
++        const preference = JSON.parse(init.body);
++        answers.push(() =>
++          resolve({
++            ok: true,
++            json: async () => ({ response: { id: 1, ...preference } }),
++          })
++        );
++      })
++  );
++}
++
++async function renderUpdateUserPreference(queryClient: QueryClient) {
++  let mutation: ReturnType<typeof useUpdateUserPreference> | undefined;
++
++  function Probe() {
++    mutation = useUpdateUserPreference();
++    return null;
++  }
++
++  const root: Root = createRoot(document.createElement("div"));
++  await act(async () => {
++    root.render(
++      createElement(
++        QueryClientProvider,
++        { client: queryClient },
++        createElement(Probe)
++      )
++    );
++  });
++
++  return {
++    mutate: (theme: "dark" | "light") => mutation!.mutate({ theme }),
++    root,
++  };
++}
++
++async function settle(queryClient: QueryClient) {
++  await vi.waitFor(() => expect(queryClient.isMutating()).toBe(0));
++}
++
++describe("useUpdateUserPreference", () => {
++  let queryClient: QueryClient;
++  let root: Root | undefined;
++
++  beforeEach(() => {
++    answers = [];
++    vi.stubGlobal("fetch", answerablePreferenceFetch());
++    queryClient = new QueryClient();
++    queryClient.setQueryData(["user"], { id: 1, theme: "light" });
++    document.documentElement.setAttribute("data-theme", "light");
++  });
++
++  afterEach(() => {
++    act(() => root?.unmount());
++    vi.unstubAllGlobals();
++  });
++
++  it("keeps the last theme picked when the responses come back in order", async () => {
++    const rendered = await renderUpdateUserPreference(queryClient);
++    root = rendered.root;
++
++    await act(async () => {
++      rendered.mutate("dark");
++      rendered.mutate("light");
++    });
++    await vi.waitFor(() => expect(answers).toHaveLength(2));
++
++    await act(async () => answers[0]());
++    await act(async () => answers[1]());
++    await settle(queryClient);
++
++    expect(queryClient.getQueryData<any>(["user"]).theme).toBe("light");
++    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
++  });
++
++  it("keeps the last theme picked when the first response comes back last", async () => {
++    const rendered = await renderUpdateUserPreference(queryClient);
++    root = rendered.root;
++
++    await act(async () => {
++      rendered.mutate("dark");
++      rendered.mutate("light");
++    });
++    await vi.waitFor(() => expect(answers).toHaveLength(2));
++
++    // the response to the second change (light) arrives first, the response to
++    // the first change (dark) last
++    await act(async () => answers[1]());
++    await act(async () => answers[0]());
++    await settle(queryClient);
++
++    expect(queryClient.getQueryData<any>(["user"]).theme).toBe("light");
++    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
++  });
++});
+diff --git a/packages/router/user.tsx b/packages/router/user.tsx
+index c3c45e3f..4364b180 100644
+--- a/packages/router/user.tsx
++++ b/packages/router/user.tsx
+@@ -90,6 +90,11 @@ const useUpdateUser = () => {
+   });
+ };
+ 
++// Preference updates can be in flight together (two quick theme toggles, a few
++// font size steps) and their responses can arrive in any order. Only the latest
++// update writes its response, so an older response never replaces a newer choice.
++let latestPreferenceUpdate = 0;
++
+ const useUpdateUserPreference = () => {
+   const queryClient = useQueryClient();
+   const { data: session } = useSession();
+@@ -119,17 +124,27 @@ const useUpdateUserPreference = () => {
+           };
+         };
+     },
+-    onSuccess: (data) => {
++    onSuccess: (
++      data,
++      _preference,
++      context: { update?: number } | undefined
++    ) => {
++      if (context?.update !== latestPreferenceUpdate) return;
++
+       queryClient.setQueryData(["user"], data);
+       document
+         .querySelector("html")
+         ?.setAttribute("data-theme", resolveTheme(data.theme) || "dark");
+     },
+     onMutate: async (user) => {
++      const update = ++latestPreferenceUpdate;
++
+       await queryClient.cancelQueries({ queryKey: ["user"] });
+       queryClient.setQueryData(["user"], (oldData: any) => {
+         return { ...oldData, ...user };
+       });
++
++      return { update };
+     },
+   });
+ };
