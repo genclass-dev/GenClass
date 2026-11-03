@@ -1,0 +1,435 @@
+diff --git a/.changeset/dashboard-add-items-double-save.md b/.changeset/dashboard-add-items-double-save.md
+new file mode 100644
+index 00000000..3c7fa19d
+--- /dev/null
++++ b/.changeset/dashboard-add-items-double-save.md
+@@ -0,0 +1,5 @@
++---
++"@medusajs/dashboard": patch
++---
++
++fix(dashboard): add the selected items once in the exchange and claim "Add items" modals when Save is pressed twice or the modal is saved again without a new selection
+diff --git a/packages/admin/dashboard/src/routes/orders/order-create-claim/components/claim-create-form/claim-create-form.tsx b/packages/admin/dashboard/src/routes/orders/order-create-claim/components/claim-create-form/claim-create-form.tsx
+index 33737e63..5ba19e1c 100644
+--- a/packages/admin/dashboard/src/routes/orders/order-create-claim/components/claim-create-form/claim-create-form.tsx
++++ b/packages/admin/dashboard/src/routes/orders/order-create-claim/components/claim-create-form/claim-create-form.tsx
+@@ -18,7 +18,7 @@ import {
+   Tooltip,
+   usePrompt,
+ } from "@medusajs/ui"
+-import { useEffect, useMemo, useState } from "react"
++import { useEffect, useMemo, useRef, useState } from "react"
+ import { useFieldArray, useForm } from "react-hook-form"
+ import { useTranslation } from "react-i18next"
+ 
+@@ -426,7 +426,7 @@ export const ClaimCreateForm = ({
+     )
+   })
+ 
+-  const onItemsSelected = async () => {
++  const addSelectedItems = async () => {
+     itemsToAdd.length &&
+       (await addInboundItem(
+         {
+@@ -442,6 +442,8 @@ export const ClaimCreateForm = ({
+         }
+       ))
+ 
++    itemsToAdd = []
++
+     for (const itemToRemove of itemsToRemove) {
+       const actionId = previewItems
+         .find((i) => i.id === itemToRemove)
+@@ -456,9 +458,28 @@ export const ClaimCreateForm = ({
+       }
+     }
+ 
++    itemsToRemove = []
++
+     setIsOpen("inbound-items", false)
+   }
+ 
++  const isSavingItems = useRef(false)
++
++  const onItemsSelected = async () => {
++    // a second press of Save before the first one is applied would add the same items again
++    if (isSavingItems.current) {
++      return
++    }
++
++    isSavingItems.current = true
++
++    try {
++      await addSelectedItems()
++    } finally {
++      isSavingItems.current = false
++    }
++  }
++
+   const onLocationChange = async (selectedLocationId?: string | null) => {
+     await updateReturn({ location_id: selectedLocationId })
+   }
+diff --git a/packages/admin/dashboard/src/routes/orders/order-create-claim/components/claim-create-form/claim-outbound-section.tsx b/packages/admin/dashboard/src/routes/orders/order-create-claim/components/claim-create-form/claim-outbound-section.tsx
+index 640a75a8..7509ba9d 100644
+--- a/packages/admin/dashboard/src/routes/orders/order-create-claim/components/claim-create-form/claim-outbound-section.tsx
++++ b/packages/admin/dashboard/src/routes/orders/order-create-claim/components/claim-create-form/claim-outbound-section.tsx
+@@ -5,7 +5,7 @@ import {
+   AdminOrderPreview,
+ } from "@medusajs/types"
+ import { Alert, Button, Heading, Text, toast } from "@medusajs/ui"
+-import { useEffect, useMemo, useState } from "react"
++import { useEffect, useMemo, useRef, useState } from "react"
+ import { useFieldArray, UseFormReturn } from "react-hook-form"
+ import { useTranslation } from "react-i18next"
+ 
+@@ -162,7 +162,7 @@ export const ClaimOutboundSection = ({
+   const locationId = form.watch("location_id")
+   const showOutboundItemsPlaceholder = !outboundItems.length
+ 
+-  const onItemsSelected = async () => {
++  const addSelectedItems = async () => {
+     itemsToAdd.length &&
+       (await addOutboundItem(
+         {
+@@ -178,6 +178,8 @@ export const ClaimOutboundSection = ({
+         }
+       ))
+ 
++    itemsToAdd = []
++
+     for (const itemToRemove of itemsToRemove) {
+       const action = previewOutboundItems
+         .find((i) => i.variant_id === itemToRemove)
+@@ -192,9 +194,28 @@ export const ClaimOutboundSection = ({
+       }
+     }
+ 
++    itemsToRemove = []
++
+     setIsOpen("outbound-items", false)
+   }
+ 
++  const isSavingItems = useRef(false)
++
++  const onItemsSelected = async () => {
++    // a second press of Save before the first one is applied would add the same items again
++    if (isSavingItems.current) {
++      return
++    }
++
++    isSavingItems.current = true
++
++    try {
++      await addSelectedItems()
++    } finally {
++      isSavingItems.current = false
++    }
++  }
++
+   const onShippingOptionChange = async (
+     selectedOptionId: string | undefined
+   ) => {
+diff --git a/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-inbound-section.spec.tsx b/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-inbound-section.spec.tsx
+new file mode 100644
+index 00000000..fb2355df
+--- /dev/null
++++ b/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-inbound-section.spec.tsx
+@@ -0,0 +1,178 @@
++import React from "react"
++import { renderToString } from "react-dom/server"
++import { useForm } from "react-hook-form"
++import { afterEach, describe, expect, it, vi } from "vitest"
++
++import { ExchangeInboundSection } from "./exchange-inbound-section"
++
++const mocks = vi.hoisted(() => ({
++  addInboundItem: vi.fn(),
++  setIsOpen: vi.fn(),
++  buttonClicks: {} as Record<string, () => Promise<unknown>>,
++  onSelectionChange: undefined as undefined | ((ids: string[]) => void),
++}))
++
++vi.mock("react-i18next", () => ({
++  useTranslation: () => ({
++    t: (key: string) => key,
++  }),
++}))
++
++vi.mock("@medusajs/ui", () => ({
++  Alert: () => null,
++  Button: ({ children, onClick }: React.ComponentProps<"button">) => {
++    if (typeof children === "string" && onClick) {
++      mocks.buttonClicks[children] = onClick as () => Promise<unknown>
++    }
++    return <button>{children}</button>
++  },
++  Heading: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
++  Text: () => null,
++  toast: {
++    error: vi.fn(),
++  },
++}))
++
++vi.mock("../../../../../components/modals", () => {
++  const Passthrough = ({ children }: { children?: React.ReactNode }) => (
++    <>{children}</>
++  )
++
++  return {
++    RouteFocusModal: { Close: Passthrough },
++    StackedFocusModal: Object.assign(Passthrough, {
++      Trigger: Passthrough,
++      Content: Passthrough,
++      Header: () => null,
++      Footer: Passthrough,
++    }),
++    useStackedModal: () => ({ setIsOpen: mocks.setIsOpen }),
++  }
++})
++
++vi.mock("../../../../../components/common/form", () => ({
++  Form: { Field: () => null },
++}))
++
++vi.mock("../../../../../components/inputs/combobox", () => ({
++  Combobox: () => null,
++}))
++
++vi.mock("../../../../../hooks/api", () => ({
++  useShippingOptions: () => ({ shipping_options: [] }),
++  useStockLocations: () => ({ stock_locations: [] }),
++}))
++
++vi.mock("../../../../../hooks/api/exchanges", () => ({
++  useAddExchangeInboundItems: () => ({ mutateAsync: mocks.addInboundItem }),
++  useAddExchangeInboundShipping: () => ({ mutateAsync: vi.fn() }),
++  useDeleteExchangeInboundShipping: () => ({ mutateAsync: vi.fn() }),
++  useRemoveExchangeInboundItem: () => ({ mutateAsync: vi.fn() }),
++  useUpdateExchangeInboundItem: () => ({ mutateAsync: vi.fn() }),
++}))
++
++vi.mock("../../../../../hooks/api/returns", () => ({
++  useUpdateReturn: () => ({ mutateAsync: vi.fn() }),
++}))
++
++vi.mock("../../../../../lib/client", () => ({ sdk: {} }))
++
++vi.mock("../../../common/placeholders", () => ({
++  ReturnShippingPlaceholder: () => null,
++}))
++
++vi.mock(
++  "../../../order-create-claim/components/claim-create-form/item-placeholder",
++  () => ({ ItemPlaceholder: () => null })
++)
++
++vi.mock("../add-exchange-inbound-items-table", () => ({
++  AddExchangeInboundItemsTable: ({
++    onSelectionChange,
++  }: {
++    onSelectionChange: (ids: string[]) => void
++  }) => {
++    mocks.onSelectionChange = onSelectionChange
++    return null
++  },
++}))
++
++vi.mock("./exchange-inbound-item", () => ({
++  ExchangeInboundItem: () => null,
++}))
++
++const order = {
++  id: "order_1",
++  currency_code: "eur",
++  items: [{ id: "item_1" }, { id: "item_2" }],
++} as any
++
++const preview = { items: [], shipping_methods: [] } as any
++
++const Section = () => {
++  const form = useForm<any>({ defaultValues: { inbound_items: [] } })
++
++  return (
++    <ExchangeInboundSection
++      order={order}
++      preview={preview}
++      exchange={{ id: "exchange_1" } as any}
++      form={form}
++    />
++  )
++}
++
++const render = () => {
++  renderToString(<Section />)
++
++  return {
++    select: (ids: string[]) => mocks.onSelectionChange!(ids),
++    save: () => mocks.buttonClicks["actions.save"](),
++  }
++}
++
++describe("ExchangeInboundSection add items", () => {
++  afterEach(() => {
++    mocks.addInboundItem.mockReset()
++    mocks.setIsOpen.mockReset()
++    mocks.buttonClicks = {}
++    mocks.onSelectionChange = undefined
++  })
++
++  it("adds the selected items once when Save is pressed twice in a row", async () => {
++    let resolve: () => void = () => {}
++    mocks.addInboundItem.mockReturnValue(
++      new Promise<void>((r) => {
++        resolve = r
++      })
++    )
++
++    const { select, save } = render()
++    select(["item_1"])
++
++    const first = save()
++    const second = save()
++    resolve()
++    await Promise.all([first, second])
++
++    expect(mocks.addInboundItem).toHaveBeenCalledTimes(1)
++    expect(mocks.addInboundItem).toHaveBeenCalledWith(
++      { items: [{ id: "item_1", quantity: 1 }] },
++      expect.anything()
++    )
++  })
++
++  it("does not add the previous selection again when Save is pressed without a new selection", async () => {
++    mocks.addInboundItem.mockResolvedValue({})
++
++    const { select, save } = render()
++    select(["item_1"])
++    await save()
++
++    // the modal is opened again and saved without changing the selection
++    await render().save()
++
++    expect(mocks.addInboundItem).toHaveBeenCalledTimes(1)
++    expect(mocks.setIsOpen).toHaveBeenCalledTimes(2)
++  })
++})
+diff --git a/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-inbound-section.tsx b/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-inbound-section.tsx
+index 6e0e554d..b6481241 100644
+--- a/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-inbound-section.tsx
++++ b/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-inbound-section.tsx
+@@ -6,7 +6,7 @@ import {
+   AdminReturn,
+ } from "@medusajs/types"
+ import { Alert, Button, Heading, Text, toast } from "@medusajs/ui"
+-import { useEffect, useMemo, useState } from "react"
++import { useEffect, useMemo, useRef, useState } from "react"
+ import { useFieldArray, UseFormReturn } from "react-hook-form"
+ import { useTranslation } from "react-i18next"
+ 
+@@ -210,7 +210,7 @@ export const ExchangeInboundSection = ({
+ 
+   const showInboundItemsPlaceholder = !inboundItems.length
+ 
+-  const onItemsSelected = async () => {
++  const addSelectedItems = async () => {
+     itemsToAdd.length &&
+       (await addInboundItem(
+         {
+@@ -226,6 +226,8 @@ export const ExchangeInboundSection = ({
+         }
+       ))
+ 
++    itemsToAdd = []
++
+     for (const itemToRemove of itemsToRemove) {
+       const actionId = previewInboundItems
+         .find((i) => i.id === itemToRemove)
+@@ -240,9 +242,28 @@ export const ExchangeInboundSection = ({
+       }
+     }
+ 
++    itemsToRemove = []
++
+     setIsOpen("inbound-items", false)
+   }
+ 
++  const isSavingItems = useRef(false)
++
++  const onItemsSelected = async () => {
++    // a second press of Save before the first one is applied would add the same items again
++    if (isSavingItems.current) {
++      return
++    }
++
++    isSavingItems.current = true
++
++    try {
++      await addSelectedItems()
++    } finally {
++      isSavingItems.current = false
++    }
++  }
++
+   const onLocationChange = async (selectedLocationId?: string | null) => {
+     await updateReturn({ location_id: selectedLocationId })
+   }
+diff --git a/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-outbound-section.tsx b/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-outbound-section.tsx
+index f1b05e66..32ca23ff 100644
+--- a/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-outbound-section.tsx
++++ b/packages/admin/dashboard/src/routes/orders/order-create-exchange/components/exchange-create-form/exchange-outbound-section.tsx
+@@ -5,7 +5,7 @@ import {
+   AdminOrderPreview,
+ } from "@medusajs/types"
+ import { Alert, Button, Heading, Text, toast } from "@medusajs/ui"
+-import { useEffect, useMemo, useState } from "react"
++import { useEffect, useMemo, useRef, useState } from "react"
+ import { useFieldArray, UseFormReturn } from "react-hook-form"
+ import { useTranslation } from "react-i18next"
+ 
+@@ -161,7 +161,7 @@ export const ExchangeOutboundSection = ({
+   const locationId = form.watch("location_id")
+   const showOutboundItemsPlaceholder = !outboundItems.length
+ 
+-  const onItemsSelected = async () => {
++  const addSelectedItems = async () => {
+     itemsToAdd.length &&
+       (await addOutboundItem(
+         {
+@@ -177,6 +177,8 @@ export const ExchangeOutboundSection = ({
+         }
+       ))
+ 
++    itemsToAdd = []
++
+     for (const itemToRemove of itemsToRemove) {
+       const action = previewOutboundItems
+         .find((i) => i.variant_id === itemToRemove)
+@@ -191,9 +193,28 @@ export const ExchangeOutboundSection = ({
+       }
+     }
+ 
++    itemsToRemove = []
++
+     setIsOpen("outbound-items", false)
+   }
+ 
++  const isSavingItems = useRef(false)
++
++  const onItemsSelected = async () => {
++    // a second press of Save before the first one is applied would add the same items again
++    if (isSavingItems.current) {
++      return
++    }
++
++    isSavingItems.current = true
++
++    try {
++      await addSelectedItems()
++    } finally {
++      isSavingItems.current = false
++    }
++  }
++
+   useEffect(() => {
+     const outboundShipping = preview.shipping_methods.find(
+       (s) =>
