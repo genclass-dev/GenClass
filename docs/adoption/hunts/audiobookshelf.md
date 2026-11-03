@@ -26,8 +26,9 @@ API level.
    search is still in flight when the "Harmony" search starts, and the responses arrive in request order, the menu
    lists "Hart Keep" and "Harbor Sea" under the box that says "Harmony". This happened in 3 of 3 runs with both
    responses held 1.5 s, and in 0 of 3 with the responses reversed or not held. The first response clears a shared
-   `isFetching` flag, so the second is dropped as "canceled". Explore at 300 and 600 ms found no race, because at
-   those latencies the two searches never overlap (the box debounces for 750 ms). The slower sessions are in section 3.
+   `isFetching` flag, so the second is dropped as "canceled". Explore found it once responses were slow enough for
+   the searches to overlap (the box debounces for 750 ms): no race at 300, 600 or 900 ms, 1 of 6 reordered runs at
+   1500 ms, 3 of 6 at 2500 ms. On the fixed build it found 0 of 12.
    One-line fix (section 5). It is not in the patch: the project asks first-time contributors for small PRs.
 3. **#5627's class, a stale session's close rolls progress back**, confirmed with three API calls (section 6). Not
    patched: open PR #5640 works in the same place.
@@ -73,7 +74,7 @@ curl -X POST localhost:3333/api/libraries/<id>/scan -H "authorization: Bearer $T
 
 The seed is 220 books named "<Word> <Noun>" (20 words × 11 nouns: Harbor, Hardy, Harvest, Harmony, Hart, Silver, ...)
 by 40 authors, each one 2 s sine mp3 made by ffmpeg, so the prefix "Har" matches five words' books. Setup took about
-25 minutes, most of it the two `npm ci` runs and `npm run generate`.
+10 minutes, most of it the two `npm ci` runs and `npm run generate`.
 
 ## 2. How the app was driven
 
@@ -217,7 +218,10 @@ the bug by reading the code path the brief pointed at, then reproduced it direct
 - **End to end on the fixed build** (the client regenerated from the patched source and served by the same server):
   `repro-2231.mjs` kept the typed title in 3 of 3 runs with `patch` (server updated 24 to 30 ms after the call),
   3 of 3 with `watcher`, and 3 of 3 with `none`.
-- **Explore on the fixed build**, edit scenario: FIXED_EDIT_RESULT
+- **Explore on the fixed build**, edit scenario (type a title, Save, type a subtitle at once): the subtitle was kept in
+  **24 of 24** loads (8 at each of 300, 600 and 900 ms; 0 of 24 before the fix), and explore said "No race found" in
+  all three sessions (18 reordered runs compared; at 600 ms, 3 runs "internal state only": the
+  `GET /api/search/providers` count again).
 - Prettier (`npx prettier --check`, the repository's `.prettierrc`) passes on both files. The repository's
   `npm run lint` (`eslint .`) ignores `client/`. The server's `npm test` was not run: the change is client-only, and
   the dev server's nodemon watches `test/`.
@@ -344,12 +348,18 @@ could go in a comment on #5627.
 
 ## 8. Time spent
 
-About 1 hour 10 minutes of session time (16:27 to about 17:35 UTC): roughly 25 minutes for Node 24, the two
-`npm ci` runs, `npm run generate` and the seed (the pinned ffmpeg 5.1 download failing cost a restart); 15 minutes for
-the #2231 reproduction (the client's `/audiobookshelf` base path and the Edit button that opens the Cover tab cost
-three attempts); 10 minutes for the fix, the Cypress spec and the stand-in, after the Cypress binary turned out to be
-unreachable; 25 minutes of explore sessions (14 sessions of 8 loads on the unfixed build, two discarded for harness
-mistakes, plus the fixed build); the rest writing.
+About 45 minutes of wall-clock session time (16:27 to 17:12 UTC, writing included), with several things running in
+parallel:
+- about 10 minutes for Node 24, the two `npm ci` runs, `npm run generate` and the seed. The pinned ffmpeg 5.1 download
+  failed and cost a restart.
+- about 5 minutes for the #2231 reproduction. The client's `/audiobookshelf` base path and the Edit button that opens
+  the Cover tab cost a few attempts.
+- about 5 minutes for the fix, the Cypress spec and the stand-in, after the Cypress binary turned out to be
+  unreachable.
+- the explore sessions (in the background most of the time):
+  - unfixed build: 11 sessions of 8 loads (search at 5 latencies, sort at 3, edit at 3), plus 2 batches discarded for
+    harness mistakes;
+  - fixed build: 5 sessions, plus 1 batch discarded for a harness lookup.
 
 ## 9. Reproducing
 

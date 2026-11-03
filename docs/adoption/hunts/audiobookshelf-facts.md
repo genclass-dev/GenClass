@@ -73,7 +73,7 @@ the patch is [audiobookshelf.patch](audiobookshelf.patch).
      the same two cases gave: unfixed, the edit case **failed 3 of 3** and the different-item case passed 3 of 3;
      fixed, both passed 3 of 3 (`hunts/audiobookshelf/standin-component-test.mjs`).
    - On the fixed build, the end-to-end reproduction kept the title in 3 of 3 (PATCH) and 3 of 3 (watcher), and the
-     Save-then-type scenario kept the subtitle (report, section 4.5).
+     Save-then-type scenario kept the subtitle in 24 of 24 loads (report, section 4.5).
    - Prettier (`npx prettier --check`, the repository's `.prettierrc`) passes on both files. The repository's
      `npm run lint` ignores `client/`.
 
