@@ -1,0 +1,65 @@
+  ✓   1 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:81:3 › relationship › should create inline relationship within field with many relations (17.3s)
+  ✓   2 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:101:3 › relationship › should save correct relationTo when creating doc in second collection (bug #14728) (15.2s)
+  ✘   3 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:127:3 › relationship › should create nested inline relationships (20.0s)
+  ✓   4 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:178:3 › relationship › should hide relationship add new button (7.3s)
+  ✓   5 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:195:3 › relationship › should hide relationship edit button (8.1s)
+  ✓   6 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:215:3 › relationship › should hide edit button in main doc when relationship deleted (7.1s)
+  -   7 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:248:8 › relationship › should clear relationship values
+  -   8 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:266:8 › relationship › should display `hasMany` polymorphic relationships
+  ✓   9 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:302:3 › relationship › should populate relationship dynamic default value (6.9s)
+  ✓  10 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:313:3 › relationship › should filter relationship options (13.2s)
+  ✘  11 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:323:3 › relationship › should edit document in relationship drawer (20.0s)
+  ✓  12 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:388:3 › relationship › should open related document in a new tab when meta key is applied (9.4s)
+  ✓  13 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:405:3 › relationship › multi value relationship should open document in a new tab (10.5s)
+  ✓  14 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:431:3 › relationship › should save using hotkey in document drawer (15.4s)
+  ✘  15 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:478:5 › relationship › should create document within document drawer › has one (20.0s)
+  ✘  16 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:525:5 › relationship › should duplicate document within document drawer › has one (20.0s)
+  ✘  17 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:584:5 › relationship › should delete document within document drawer › has one (17.8s)
+  -  18 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:642:8 › relationship › should bypass min rows validation when no rows present and field is not required
+  ✓  19 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:654:3 › relationship › should fail min rows validation when rows are present (12.1s)
+  ✓  20 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:676:3 › relationship › should sort relationship options by sortOptions property (ID in ascending order) (7.5s)
+  ✓  21 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:689:3 › relationship › should sort relationHasManyPolymorphic options by sortOptions property: text-fields collection (items in descending order) (7.9s)
+  ✓  22 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:715:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (9.8s)
+  ✓  23 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:784:3 › relationship › should allow filtering by relationship field / equals (14.2s)
+  ✓  24 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:801:3 › relationship › should allow filtering by non-polymorphic hasMany relationship field / equals (15.7s)
+  ✘  25 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:834:3 › relationship › should allow filtering by polymorphic hasMany relationship field / equals (1.6s)
+  ✘  26 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:869:3 › relationship › should not duplicate relationship filter options when switching operators (20.0s)
+  ✓  27 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:923:3 › relationship › should be able to select relationship with drawer appearance (15.1s)
+  ✓  28 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:946:3 › relationship › should be able to search within relationship list drawer (10.0s)
+  ✓  29 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:965:3 › relationship › should handle read-only relationship field when `appearance: "drawer"` (6.6s)
+  ✓  30 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:974:3 › relationship › should handle polymorphic relationship when `appearance: "drawer"` (16.0s)
+  ✓  31 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1004:3 › relationship › should handle `hasMany` relationship when `appearance: "drawer"` (12.3s)
+  ✓  32 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1029:3 › relationship › should handle `hasMany` polymorphic relationship when `appearance: "drawer"` (9.5s)
+  ✓  33 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1046:3 › relationship › should not be allowed to create in relationship list drawer when `allowCreate` is `false` (7.1s)
+  ✓  34 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1058:3 › relationship › should respect `filterOptions` in the relationship list drawer for filtered relationship (13.9s)
+  ✓  35 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1073:3 › relationship › should filter out existing values from relationship list drawer (12.9s)
+  ✓  36 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1094:3 › relationship › should filter out existing values from polymorphic relationship list drawer (19.0s)
+  ✓  37 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1139:3 › relationship › should update label for *all* relationship fields pointing to the same document, if the useAsTitle is updated from drawer (15.1s)
+  -  38 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1189:10 › relationship › A11y › Create view should have no accessibility violations
+  -  39 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1203:10 › relationship › A11y › Edit view should have no accessibility violations
+  -  40 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:1220:10 › relationship › A11y › Relationship fields have focus indicators
+  1) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:127:3 › relationship › should create nested inline relationships 
+    Error: locator.click: Test ended.
+    Error Context: test/test-results/fields-collections-Relatio-31385-nested-inline-relationships-chromium/error-context.md
+  2) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:323:3 › relationship › should edit document in relationship drawer 
+    Error: locator.count: Test ended.
+    Error Context: test/test-results/fields-collections-Relatio-19143-ment-in-relationship-drawer-chromium/error-context.md
+  3) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:478:5 › relationship › should create document within document drawer › has one 
+    Error: locator.dispatchEvent: Target page, context or browser has been closed
+    Error Context: test/test-results/fields-collections-Relatio-c8b20-hin-document-drawer-has-one-chromium/error-context.md
+  4) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:525:5 › relationship › should duplicate document within document drawer › has one 
+    Error: locator.scrollIntoViewIfNeeded: Test ended.
+    Error Context: test/test-results/fields-collections-Relatio-4601f-hin-document-drawer-has-one-chromium/error-context.md
+  5) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:584:5 › relationship › should delete document within document drawer › has one 
+    Error: locator.click: Error: strict mode violation: locator('[id^=delete-].payload__modal-item[open] button[id$="-confirm"]').and(locator(':not(body > [style*="display: none !important"], body > [style*="display: none !important"] *)')) resolved to 2 eleme
+    Error Context: test/test-results/fields-collections-Relatio-0a185-hin-document-drawer-has-one-chromium/error-context.md
+  6) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:834:3 › relationship › should allow filtering by polymorphic hasMany relationship field / equals 
+    Error: Browser console error: There was a problem loading the document with ID of 10.
+    Error Context: test/test-results/fields-collections-Relatio-eceb9-y-relationship-field-equals-chromium/error-context.md
+  7) [chromium] › test/fields/collections/Relationship/e2e.spec.ts:869:3 › relationship › should not duplicate relationship filter options when switching operators 
+    Error: locator.click: Test ended.
+    Error Context: test/test-results/fields-collections-Relatio-87d56-ns-when-switching-operators-chromium/error-context.md
+  7 failed
+  6 skipped
+  27 passed (8.3m)
+exit 1

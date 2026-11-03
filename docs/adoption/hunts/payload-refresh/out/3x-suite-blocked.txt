@@ -1,0 +1,39 @@
+=== 3x-unfixed-x3
+      1   3 failed
+      1   ✘  1 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      1   ✘  2 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      1   ✘  3 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      9 Failed to reinitialize DB Error: HTTP error! status: 400
+=== 3x-fixed-x3
+      1   3 failed
+      1   ✘  1 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      1   ✘  2 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      1   ✘  3 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      9 Failed to reinitialize DB Error: HTTP error! status: 400
+=== 3x-pg-fixed-x3
+      1   3 failed
+      1   ✘  1 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      1   ✘  2 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      1   ✘  3 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      9 Failed to reinitialize DB Error: HTTP error! status: 400
+=== 3x-pg-unfixed-x3
+      1   3 failed
+      1   ✘  1 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      1   ✘  2 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      1   ✘  3 [chromium] › test/fields/collections/Relationship/e2e.spec.ts:722:5 › relationship › list view relationship batches › should not request related documents again while their batch is pending (20.0
+      9 Failed to reinitialize DB Error: HTTP error! status: 400
+=== dev server, SQLite
+      1 [17:30:49] ERROR: The following field is invalid: readOnlySlug
+      1 [17:30:56] ERROR: The following field is invalid: readOnlySlug
+      1 [17:31:03] ERROR: The following field is invalid: readOnlySlug
+      1 [17:31:12] ERROR: The following field is invalid: readOnlySlug
+      1 [17:31:19] ERROR: The following field is invalid: readOnlySlug
+      1 [17:31:26] ERROR: The following field is invalid: readOnlySlug
+      1 [17:31:36] ERROR: The following field is invalid: readOnlySlug
+      1 [17:31:43] ERROR: The following field is invalid: readOnlySlug
+      1 [17:31:50] ERROR: The following field is invalid: readOnlySlug
+=== dev server, Postgres + PostGIS
+      9 ValidationError: The following field is invalid: slug
+      1 [17:39:15] ERROR: The following field is invalid: slug
+      1 [17:39:22] ERROR: The following field is invalid: slug
+      1 [17:39:29] ERROR: The following field is invalid: slug

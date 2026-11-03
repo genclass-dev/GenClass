@@ -1,0 +1,106 @@
+diff --git a/src/collections/Categories.ts b/src/collections/Categories.ts
+new file mode 100644
+index 0000000..3cfb0cb
+--- /dev/null
++++ b/src/collections/Categories.ts
+@@ -0,0 +1,26 @@
++import type { CollectionConfig } from 'payload'
++
++// Reproduction only: every read of `categories` answers 1 s late, so the list view's `users` batch lands
++// while the `categories` batch is still pending.
++export const Categories: CollectionConfig = {
++  slug: 'categories',
++  admin: {
++    useAsTitle: 'name',
++  },
++  hooks: {
++    beforeOperation: [
++      async ({ operation }) => {
++        if (operation === 'read') {
++          await new Promise((resolve) => setTimeout(resolve, 1000))
++        }
++      },
++    ],
++  },
++  fields: [
++    {
++      name: 'name',
++      type: 'text',
++      required: true,
++    },
++  ],
++}
+diff --git a/src/collections/Posts.ts b/src/collections/Posts.ts
+new file mode 100644
+index 0000000..7628ff9
+--- /dev/null
++++ b/src/collections/Posts.ts
+@@ -0,0 +1,25 @@
++import type { CollectionConfig } from 'payload'
++
++export const Posts: CollectionConfig = {
++  slug: 'posts',
++  admin: {
++    useAsTitle: 'title',
++    defaultColumns: ['title', 'category', 'author'],
++  },
++  fields: [
++    {
++      name: 'title',
++      type: 'text',
++    },
++    {
++      name: 'category',
++      type: 'relationship',
++      relationTo: 'categories',
++    },
++    {
++      name: 'author',
++      type: 'relationship',
++      relationTo: 'users',
++    },
++  ],
++}
+diff --git a/src/payload.config.ts b/src/payload.config.ts
+index 91cef06..7fa07c5 100644
+--- a/src/payload.config.ts
++++ b/src/payload.config.ts
+@@ -7,6 +7,8 @@ import sharp from 'sharp'
+ 
+ import { Users } from './collections/Users'
+ import { Media } from './collections/Media'
++import { Categories } from './collections/Categories'
++import { Posts } from './collections/Posts'
+ 
+ const filename = fileURLToPath(import.meta.url)
+ const dirname = path.dirname(filename)
+@@ -18,7 +20,7 @@ export default buildConfig({
+       baseDir: path.resolve(dirname),
+     },
+   },
+-  collections: [Users, Media],
++  collections: [Users, Media, Categories, Posts],
+   editor: lexicalEditor(),
+   secret: process.env.PAYLOAD_SECRET || '',
+   typescript: {
+@@ -31,4 +33,20 @@ export default buildConfig({
+   }),
+   sharp,
+   plugins: [],
++  onInit: async (payload) => {
++    // Reproduction only: one user, 10 categories and 10 posts, each post related to a category and the user
++    const { totalDocs } = await payload.count({ collection: 'users' })
++    if (totalDocs > 0) return
++    const user = await payload.create({
++      collection: 'users',
++      data: { email: 'dev@payloadcms.com', password: 'test' },
++    })
++    for (let i = 1; i <= 10; i++) {
++      const category = await payload.create({ collection: 'categories', data: { name: `Category ${i}` } })
++      await payload.create({
++        collection: 'posts',
++        data: { title: `Post ${i}`, category: category.id, author: user.id },
++      })
++    }
++  },
+ })

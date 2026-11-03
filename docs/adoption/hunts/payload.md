@@ -577,3 +577,79 @@ all.
 | the review (five auditors and a skeptic; the first attempt was stopped by the account's spend limit) | in parallel |
 | the review's fix and test revisions, the suite runs on both codes, isolating the flaky tests | 60 min |
 | the hunt-app reruns on the same page, the corrections to the report and the issue draft | 30 min |
+
+## Refresh (2026-11-03)
+
+A second session brought the finding up to date for sending (`docs/adoption/swarm.md` section 4.2, slug
+`payload-refresh`); it did not re-run explore. About 1 h 20 min of session time, 16:34 to 17:55 UTC. Files:
+[payload-refresh/](payload-refresh/) (harness, reproduction repository files, logs),
+[payload-refresh-main.patch](payload-refresh-main.patch), [payload-refresh-3x.patch](payload-refresh-3x.patch), and
+[payload-issue.md](payload-issue.md), rewritten.
+
+### What changed upstream since the hunt
+
+| fact | hunt (2026-10-24) | today |
+|---|---|---|
+| `main` | `aebbf75`, v3 development | `c2a3239` (2026-11-03), **4.0.0-beta.6**: v4. Node pinned to 24.22.1 (`.tool-versions`), pnpm 11.28.6, lint and format by `oxlint` and `oxfmt` (no ESLint, no Prettier), `babel-plugin-react-compiler` 1.0.0 |
+| v3 | the release line | `3.x` maintenance branch, `49b3c0b` (2026-11-02); latest release 3.92.1 (2026-10-27). "Only bug fixes are being accepted against v3" (the issue form) |
+| the two files | `RelationshipProvider/index.tsx`, `Relationship/e2e.spec.ts` | unchanged on `main` since `aebbf75`; on `3.x` byte-identical to v3.92.0 (and v3.92.1). The bug's code path is the same on both (`value === null` at line 59 on `main`, 58 on `3.x`) |
+| issue form | | "Functionality Bug (v3)" is the only bug form; it requires a public reproduction link and `payload info` output |
+| PR template | What, Why, How, checklist | asks for the target branch (`main` v4, `3.x` v3 fixes), then What, Why, How, `Fixes #`; CONTRIBUTING asks to leave "Allow edits by maintainers" on |
+| AI policy | | none restrictive: CONTRIBUTING.md has an "AI Code Tool Compatibility" section and the repository ships Claude Code, Cursor and Copilot configuration. An opt-in AI PR reviewer (`/ai-review`, `.github/ai-reviewer-prompt.md`, there since 2026-05-19) flags `try/finally` in e2e tests as "Important" |
+| related open work | | payloadcms/payload#19110 (content branching, a maintainer's, open) wraps this provider in `RelationshipProviderForBranch` and adds a `branch` parameter; `payload-refresh-main.patch` applies cleanly on its head `a735998`. payloadcms/payload#18108 and payloadcms/payload#18109 (list cells stuck on "<No Reference>", `useIntersect`, open) concern the same cells, a different bug |
+
+### The patch
+
+Both of the hunt's patches are current: `payload-main.patch` applies to today's `main` with plain `git apply` and
+`payload.patch` to today's `3.x`. One change, in the test only: its cleanup moved from `try/finally` into a
+`test.afterEach` of a new `describe('list view relationship batches')` around it (Payload's reviewer prompt flags
+`try/finally` in e2e tests, and the Blocks and Tags specs clean up the shared page the same way). The fix is unchanged.
+The results: `payload-refresh-main.patch` (against `c2a3239`) and `payload-refresh-3x.patch` (against `49b3c0b`),
+52 lines added and 19 removed in the provider, 77 added in the spec.
+
+### Re-run
+
+All without GenClass. Commands in [payload-refresh/README.md](payload-refresh/README.md), logs in
+[payload-refresh/out/](payload-refresh/out/).
+
+| check | code | result |
+|---|---|---|
+| the new test, `--repeat-each=3`, `pnpm dev fields` on SQLite, Node 24.22.1, Playwright 1.63.0, Chromium 153 | `main` `c2a3239` | fails 3 of 3: `Expected length: 3`, received 4, 5 and 7 (`array-fields:1` requested 2, 3 and 3 times; in the third run `text-fields:1,2` twice too) |
+| the same | `main` with the fix | passes 3 of 3 (the served chunk built from `packages/ui/src` contains the fix) |
+| the whole relationship spec (40 tests, 6 skipped by the spec), one worker, no retries | `main` | 25 passed, 9 failed |
+| the same | `main` with the fix | 27 passed, 7 failed: the same 7 as unfixed (nested inline relationships, the edit/create/duplicate/delete drawer tests, polymorphic hasMany filter, filter operators); unfixed's other 2 are the new test (by design) and the `filterOptions` drawer test, flaky in the hunt on both codes |
+| `oxfmt --check` / `oxlint` | `main` with the fix | both files formatted; no finding in the provider; 3 warnings in the new test's lines: `payload(no-wait-function)` on the two `wait(500)` and `payload(no-flaky-assertions)` on `toHaveLength` (the spec has the same kinds elsewhere) |
+| the React compiler (`react-compiler-check.cjs`) | `main` (compiler 1.0.0) / `3.x` (19.1.0-rc.3) | unfixed `_c(15)`, fixed `_c(19)`, `CompileSuccess`, on both |
+| ESLint and Prettier on `3.x` | `3.x` with the fix | Prettier clean; ESLint 0 errors, nothing in the provider, the same 3 warnings in the new lines. Correction to section 7: its "none in the new test's lines" does not hold here, and the hunt's version of the test has the same two `wait(500)` and the same assertion |
+| the new test on `3.x` | `3.x` unfixed and fixed | **not run**: on SQLite the suite's `/api/re-initialize` fails with `The following field is invalid: readOnlySlug` (as in the hunt, section 7), on Postgres 16 with PostGIS with `... invalid: slug`, on both codes, so every test fails in `beforeEach`; MongoDB could not be installed (below). The hunt's MongoDB runs on v3.92.0, whose two files are byte-identical, stand: 3 of 3 failing, 3 of 3 passing (with the `try/finally` cleanup) |
+| `dup-requests.spec.mjs` (the hunt's reproduction), a `create-payload-app@3.92.1` blank SQLite app with `posts` → `categories`, `users` and a 1 s `beforeOperation` read delay on `categories` ([payload-refresh/repro/](payload-refresh/repro/)), `DELAY_MS=0` and `1500` | payload 3.92.1 as published | 6 of 6: 3 batch requests, the 10 category ids requested twice, the second request 135 to 199 ms after the first, exit 1 |
+| the same | 3.92.1 with the fix in the client bundle (`apply-to-bundle.mjs`; its anchors match 3.92.1's bundle unchanged) | 0 of 6: 2 batch requests, exit 0 |
+| `throttle-control.mjs`, no route, the hook on | 3.92.1 | 3 of 3 repeat (second request 112 to 211 ms after the first) |
+| the same, the hook removed; as served and under DevTools "Slow 4G" values by CDP | 3.92.1 | 0 of 3 and 0 of 3: 2 batch requests. So the repeat needs one collection answering more than the debounce later than another, as the issue says, and a uniform throttle does not show it (this was reasoned in the hunt; measured now) |
+
+### Tracker search
+
+`gh api -X GET search/issues`, `repo:payloadcms/payload` with `is:issue` and with `is:pull-request`, sorted by
+creation, 3 s apart: `RelationshipProvider`, `loadRelationshipDocs`, `"where[id][in]"`, `unreturnedIDs`,
+`relationship requested twice`, `relationship cell loading`, `relationship list view duplicate requests`. Nothing on
+this bug, before or since 2026-10-24. The related items are in the table above; the open PRs' file lists were read from
+their `pull/<n>/head` refs with `git fetch` (the session's GitHub API access does not cover payloadcms/payload).
+
+### Problems met (the environment, not GenClass)
+
+- `fastdl.mongodb.org` (MongoDB's binaries, which `mongodb-memory-server` downloads) and `www.gravatar.com` were
+  denied by this container's network policy. The first ruled out MongoDB, Payload's default test database; the second
+  made Payload's console-error check fail every e2e test on the admin's default avatar, worked around locally with
+  `GRAVATAR_OFF` in [payload-refresh/playwright.local.config.ts](payload-refresh/playwright.local.config.ts) (no image
+  loads), which is not part of the patch.
+- Payload's `fields` seed fails on SQL adapters on `3.x` (above); on `main` it runs on SQLite.
+- No GenClass problem: GenClass was not run in this refresh.
+
+### Status
+
+**Ready to send**, with the by-hand items in [payload-issue.md](payload-issue.md), "Before sending": make and push the
+public reproduction repository the issue form requires (from `payload-refresh/repro/`), reproduce in a browser, paste
+`payload info`, read the diff, run the test (with MongoDB, as Payload's CI does; and on `3.x` before offering the
+backport), search the tracker again, then the issue, then the PR against `main`. The fix is a redundant-request bug
+fix with no visible effect on the data shown; a maintainer may reasonably weigh its 52-line provider change against
+the cost of an extra request, and may prefer to fold it into the content-branching rework (payloadcms/payload#19110).

@@ -1,0 +1,25 @@
+import type { CollectionConfig } from 'payload'
+
+export const Posts: CollectionConfig = {
+  slug: 'posts',
+  admin: {
+    useAsTitle: 'title',
+    defaultColumns: ['title', 'category', 'author'],
+  },
+  fields: [
+    {
+      name: 'title',
+      type: 'text',
+    },
+    {
+      name: 'category',
+      type: 'relationship',
+      relationTo: 'categories',
+    },
+    {
+      name: 'author',
+      type: 'relationship',
+      relationTo: 'users',
+    },
+  ],
+}
