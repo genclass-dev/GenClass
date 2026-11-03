@@ -7,11 +7,11 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/genclass-dev/GenClass-lib.git",
+    "url": "git+https://github.com/genclass-dev/GenClass.git",
     "directory": "packages/mcp"
   },
   "homepage": "https://genclass.dev",
-  "bugs": { "url": "https://github.com/genclass-dev/GenClass-lib/issues" },
+  "bugs": { "url": "https://github.com/genclass-dev/GenClass/issues" },
   "keywords": [
     "mcp",
     "mcp-server",
