@@ -135,7 +135,7 @@ const bridgeUrl = served ? `http://127.0.0.1:${served.port}` : null;
 // --------------------------------------------------------------------------- data for the oracles
 const a = await api();
 const lib = await a.library();
-const editItem = await a.itemByTitle(lib.id, "Silver Gate");
+const editItem = (await a.itemByTitle(lib.id, "Silver Gate")) ?? (await a.itemByTitle(lib.id, "Silver Gate Revised")); // a previous edit run may have left it revised
 const authorSorted = await a.get(`/api/libraries/${lib.id}/items?sort=media.metadata.authorNameLF&desc=0&limit=24&page=0&minified=1`);
 const expectedShelf = authorSorted.results.map((i) => i.media.metadata.title);
 
