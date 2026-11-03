@@ -1,34 +1,19 @@
-diff --git a/packages/dashboard/e2e/tests/regression/double-submit-on-save.spec.ts b/packages/dashboard/e2e/tests/regression/double-submit-on-save.spec.ts
-new file mode 100644
-index 0000000..42fc2f0
---- /dev/null
-+++ b/packages/dashboard/e2e/tests/regression/double-submit-on-save.spec.ts
-@@ -0,0 +1,121 @@
-+import { type Page, expect, test } from '@playwright/test';
+diff --git a/packages/dashboard/e2e/tests/catalog/collections.spec.ts b/packages/dashboard/e2e/tests/catalog/collections.spec.ts
+index 39f5be770..1dfba789c 100644
+--- a/packages/dashboard/e2e/tests/catalog/collections.spec.ts
++++ b/packages/dashboard/e2e/tests/catalog/collections.spec.ts
+@@ -871,3 +871,120 @@ test.describe('Issue #5393: Collections Move dialog filter input', () => {
+         await expect(dialog.getByRole('button', { name: COLLECTION_A_NAME })).not.toBeVisible();
+     });
+ });
 +
-+import { BaseDetailPage } from '../../page-objects/detail-page.base.js';
-+import { VendureAdminClient } from '../../utils/vendure-admin-client.js';
-+
-+// #2117: a double-click on the save button of a detail page must send the create or update
++// #2117 — a double-click on the Create or Update button of a detail page must send the
 +// mutation only once. The form validates asynchronously before it calls the mutation, and the
 +// button is only disabled on the next render, so the second click used to submit the form again
 +// and, on a "new" page, create the entity twice.
-+
-+/** Counts the admin-api requests that carry the given mutation. */
-+function countMutations(page: Page, mutationName: string) {
-+    const sent: string[] = [];
-+    page.on('request', request => {
-+        const body = request.postData() ?? '';
-+        if (request.method() === 'POST' && body.includes('mutation') && body.includes(`${mutationName}(`)) {
-+            sent.push(body);
-+        }
-+    });
-+    return sent;
-+}
-+
-+test.describe('Double-click on the save button submits once (#2117)', () => {
-+    const createdName = `E2E Double Click Create ${Date.now()}`;
-+    const updatedName = `E2E Double Click Update ${Date.now()}`;
++test.describe('Issue #2117: Double-click on Create or Update submits once', () => {
++    const TARGET_NAME = 'E2E Double Click Target';
++    const createdIds: string[] = [];
 +    let updateTargetId: string;
 +
 +    const detailConfig = {
@@ -36,6 +21,22 @@ index 0000000..42fc2f0
 +        pathPrefix: '/collections/',
 +        newTitle: 'New collection',
 +    };
++
++    /** Collects the admin-api requests that carry the given mutation. */
++    function captureMutations(page: Page, mutationName: string) {
++        const sent: string[] = [];
++        page.on('request', request => {
++            const body = request.postData() ?? '';
++            if (
++                request.method() === 'POST' &&
++                body.includes('mutation') &&
++                body.includes(`${mutationName}(`)
++            ) {
++                sent.push(body);
++            }
++        });
++        return sent;
++    }
 +
 +    test.beforeAll(async ({ browser }) => {
 +        const page = await browser.newPage();
@@ -51,7 +52,7 @@ index 0000000..42fc2f0
 +                    translations: [
 +                        {
 +                            languageCode: 'en',
-+                            name: 'E2E Double Click Target',
++                            name: TARGET_NAME,
 +                            slug: `e2e-double-click-target-${Date.now()}`,
 +                            description: '',
 +                        },
@@ -60,6 +61,7 @@ index 0000000..42fc2f0
 +            },
 +        );
 +        updateTargetId = createCollection.id as string;
++        createdIds.push(updateTargetId);
 +        await page.close();
 +    });
 +
@@ -67,13 +69,7 @@ index 0000000..42fc2f0
 +        const page = await browser.newPage();
 +        const client = new VendureAdminClient(page);
 +        await client.login();
-+        const { collections } = await client.gql(
-+            `query ($names: [String!]!) {
-+                collections(options: { filter: { name: { in: $names } } }) { items { id } }
-+            }`,
-+            { names: [createdName, updatedName, 'E2E Double Click Target'] },
-+        );
-+        for (const { id } of collections.items) {
++        for (const id of createdIds) {
 +            await client.gql(`mutation ($id: ID!) { deleteCollection(id: $id) { result } }`, { id });
 +        }
 +        await page.close();
@@ -81,7 +77,8 @@ index 0000000..42fc2f0
 +
 +    test('double-clicking Create creates one collection', async ({ page }) => {
 +        const detail = new BaseDetailPage(page, detailConfig);
-+        const creates = countMutations(page, 'createCollection');
++        const creates = captureMutations(page, 'createCollection');
++        const createdName = `E2E Double Click Create ${Date.now()}`;
 +
 +        await detail.gotoNew();
 +        await detail.expectNewPageLoaded();
@@ -95,27 +92,28 @@ index 0000000..42fc2f0
 +        // A second submit would have been sent by now
 +        await page.waitForTimeout(1000);
 +
-+        expect(creates).toHaveLength(1);
 +        const client = new VendureAdminClient(page);
 +        await client.login();
 +        const { collections } = await client.gql(
 +            `query ($name: String!) {
-+                collections(options: { filter: { name: { eq: $name } } }) { totalItems }
++                collections(options: { filter: { name: { eq: $name } } }) { items { id } }
 +            }`,
 +            { name: createdName },
 +        );
-+        expect(collections.totalItems).toBe(1);
++        createdIds.push(...collections.items.map((item: { id: string }) => item.id));
++        expect(creates).toHaveLength(1);
++        expect(collections.items).toHaveLength(1);
 +    });
 +
 +    test('double-clicking Update sends one update', async ({ page }) => {
 +        const detail = new BaseDetailPage(page, detailConfig);
-+        const updates = countMutations(page, 'updateCollection');
++        const updates = captureMutations(page, 'updateCollection');
 +
 +        await detail.gotoExisting(updateTargetId);
-+        await expect(detail.formItem('Name').getByRole('textbox')).toHaveValue('E2E Double Click Target', {
++        await expect(detail.formItem('Name').getByRole('textbox')).toHaveValue(TARGET_NAME, {
 +            timeout: 10_000,
 +        });
-+        await detail.fillInput('Name', updatedName);
++        await detail.fillInput('Name', `E2E Double Click Update ${Date.now()}`);
 +        await expect(detail.updateButton).toBeEnabled();
 +
 +        await detail.updateButton.dblclick();
@@ -126,7 +124,7 @@ index 0000000..42fc2f0
 +    });
 +});
 diff --git a/packages/dashboard/src/lib/framework/form-engine/use-generated-form.spec.tsx b/packages/dashboard/src/lib/framework/form-engine/use-generated-form.spec.tsx
-index bc2def4..42eca38 100644
+index bc2def4b1..42eca38cf 100644
 --- a/packages/dashboard/src/lib/framework/form-engine/use-generated-form.spec.tsx
 +++ b/packages/dashboard/src/lib/framework/form-engine/use-generated-form.spec.tsx
 @@ -131,3 +131,91 @@ describe('useGeneratedForm with a nullable: false custom field', () => {
@@ -222,7 +220,7 @@ index bc2def4..42eca38 100644
 +    });
 +});
 diff --git a/packages/dashboard/src/lib/framework/form-engine/use-generated-form.tsx b/packages/dashboard/src/lib/framework/form-engine/use-generated-form.tsx
-index d4559fb..5468668 100644
+index d4559fb37..5468668a1 100644
 --- a/packages/dashboard/src/lib/framework/form-engine/use-generated-form.tsx
 +++ b/packages/dashboard/src/lib/framework/form-engine/use-generated-form.tsx
 @@ -123,10 +123,17 @@ export interface GeneratedFormOptions<
@@ -289,7 +287,7 @@ index d4559fb..5468668 100644
      }
  
 diff --git a/packages/dashboard/src/lib/framework/page/use-detail-page.ts b/packages/dashboard/src/lib/framework/page/use-detail-page.ts
-index 60ab050..f4f798a 100644
+index 60ab05031..f4f798ae4 100644
 --- a/packages/dashboard/src/lib/framework/page/use-detail-page.ts
 +++ b/packages/dashboard/src/lib/framework/page/use-detail-page.ts
 @@ -412,10 +412,14 @@ export function useDetailPage<

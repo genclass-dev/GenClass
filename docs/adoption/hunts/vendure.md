@@ -1,9 +1,12 @@
 # Race hunt: Vendure dashboard, duplicate submit on detail pages
 
-Status: **reproduced, fix and regression tests ready, not sent.** Nothing was posted to vendurehq/vendure; the owner
-sends the issue and PR drafted in [`vendure-issue.md`](./vendure-issue.md). The fix is
-[`vendure.patch`](./vendure.patch) (against `master` at `aba3e9c`). The harness is
-[`vendure-hunt.mjs`](./vendure-hunt.mjs).
+Status: **ready to send (refreshed 2026-11-03, [section 9](#9-refresh-2026-11-03)).** Nothing was posted to
+vendurehq/vendure. The owner sends the new issue and the PR drafted in [`vendure-issue.md`](./vendure-issue.md); the
+draft recommends a new dashboard issue and no comment on #2117. The fix is [`vendure.patch`](./vendure.patch), against
+`master` at `f97b187` (2026-11-02); it also applies to `aba3e9c`. The harness is
+[`vendure-hunt.mjs`](./vendure-hunt.mjs). Sections 1 to 8 are the record of the 2026-10-24 hunt at `aba3e9c`. Since
+the refresh, the patch's e2e test lives in `e2e/tests/catalog/collections.spec.ts`, not in
+`e2e/tests/regression/double-submit-on-save.spec.ts` (section 9.3).
 
 ## Summary
 
@@ -465,3 +468,208 @@ Network Access block and the awaited-click limitation), 10 min on the root cause
 the unit and e2e tests (three builds each), 30 min of sweeps (two in parallel; the plan of 10 trials everywhere was cut
 to 3 for the secondary cells to finish sooner), 10 min on the admin-ui and the write-up. One sweep pair was lost and
 rerun when the dev server hit the session's background time limit.
+
+## 9. Refresh (2026-11-03)
+
+A cloud session re-ran the hunt on today's `master`, rebased the patch, re-ran every test and the reproduction without
+GenClass, checked the tracker and the contribution rules, and rewrote the drafts. Summary of every number below:
+[`vendure-refresh/summary.json`](./vendure-refresh/summary.json), produced from the harness's raw run files by
+[`vendure-refresh/summarize.mjs`](./vendure-refresh/summarize.mjs). The raw files are not committed.
+
+**Status: ready to send.** The sender has only the by-hand items in
+[`vendure-issue.md`](./vendure-issue.md#before-filing-what-the-2026-11-03-refresh-did-and-what-is-left) left: search
+once more on the day, reproduce by hand, apply the patch and run the tests, read the diff, file the issue, open the PR,
+sign the CLA.
+
+### 9.1 Versions and setup
+
+| what | 2026-10-24 hunt | 2026-11-03 refresh |
+|---|---|---|
+| upstream | `vendurehq/vendure` `master` `aba3e9c` | `master` `f97b187` (2026-11-02, "docs: Regenerate manifest.json"), 25 commits later |
+| packages | 3.8.1 | 3.8.1 (no release in between) |
+| runtime | Node 22.22.0, bun 1.4.4 | Node 22.23.4, bun 1.4.4 |
+| browser | Chromium 153.0.8010.12 | the same |
+| GenClass | `d77ffd8`, runtime 0.3.0-beta.1, `@genclass/mcp` 0.1.0 | `c1c9e14` (this repo's `main`), built `packages/runtime/dist` and `@genclass/mcp` 0.2.1, in-process |
+
+Only one of the 25 new commits touches the dashboard's e2e or framework folders. It is `eb09daff8` (user settings
+after logout; `e2e/tests/auth/login.spec.ts`, `sales/orders.spec.ts`), and it changes none of the patched files.
+`use-detail-page.ts` and `use-generated-form.tsx` are byte-identical to `aba3e9c`, so every line number in the
+drafts still holds (446, 379, 418, 430; 293 to 351, 297, 348, 350). The Create buttons cited are unchanged too
+(`collections_.$id.tsx` 171, `products_.$id.tsx` 245).
+
+Commands (no Docker daemon; SQLite):
+
+```bash
+git clone https://github.com/vendure-ecommerce/vendure ~/targets/vendure   # redirects to vendurehq/vendure
+cd ~/targets/vendure && bun install
+NODE_OPTIONS=--max-old-space-size=8192 bun run build     # all 18 projects, the dashboard's check-types included
+cd packages/dev-server && DB=sqlite bun run populate
+VENDURE_DISABLE_TELEMETRY=true DB=sqlite bun run dev:server                   # the API on :3000, no watchers
+cd ../dashboard
+VITE_ADMIN_API_PORT=3000 VITE_ADMIN_API_HOST=http://localhost npx vite build --outDir ~/targets/dash-buggy --emptyOutDir
+npx vite preview --outDir ~/targets/dash-buggy --port 5175 --strictPort         # unfixed; the patch's build on :5177
+```
+
+Two differences from the 2026-10-24 setup:
+
+- With the 8 GB heap, the full `bun run build` passed, the dashboard's type check included. The hunt had to build the
+  dashboard separately.
+- The sweeps ran against `dev:server` alone, not `dev:direct`. `dev:direct` watches the source tree, and a
+  `vite build` of the dashboard rewrites `packages/dev-server/graphql/*.ts`. That restarted the server twice, and
+  then the workflow's watchers exited (logged `SIGTERM`), taking the API down. `bun run start` (server and worker) did
+  not come up either: both processes open the same SQLite file and the second got `SqliteError: database is locked`.
+  The manual reproduction in the issue uses `dev:direct`, which works as long as nothing rebuilds the dashboard
+  meanwhile.
+
+### 9.2 The reproduction without GenClass, re-run
+
+`GENCLASS=0` sweeps, 3 trials per page and gap (4 pages, gaps 0, 30, 80 and 150 ms), local latency, CDP double
+press, production builds:
+
+| variant | Create: trials with 2 mutations | duplicate entities in the DB | Update: trials with 2 mutations | failed trials |
+|---|---|---|---|---|
+| `master` `f97b187` | **21 of 48** (12/12 at 0 ms, 9/12 at 30 ms, 0/12 at 80, 0/12 at 150) | **15** (Collection 6, Product 6, Facet 3; Customer 0: second create rejected, "The email address is not available.") | **25 of 48** (12/12, 9/12, 4/12, 0/12) | 0 |
+| patch | **0 of 48** (48 entities from 48 trials) | **0** | **0 of 48** | 0 |
+
+It still reproduces on today's `master` in the same pattern as the hunt's control (18 of 48 Create trials, 15
+duplicate entities). With the patch, every trial sent exactly one mutation and got one successful response. The
+second press still hit an enabled button in 37 of the 96 patched trials, and the new submit guard ignored it.
+
+Run with:
+
+```bash
+BASE=http://localhost:5175 GENCLASS=0 TRIALS=3 VENDURE=$HOME/targets/vendure OUT=master-nogc.json node docs/adoption/hunts/vendure-hunt.mjs
+BASE=http://localhost:5177 GENCLASS=0 TRIALS=3 VENDURE=$HOME/targets/vendure OUT=patch-nogc.json node docs/adoption/hunts/vendure-hunt.mjs
+```
+
+PR #5007 (merged 2026-08-26, released in 3.8.0, already in `aba3e9c`) added a unique constraint on translation rows
+for concurrent saves. All of these counts were measured with it in place. It does not stop a double Create from
+making two entities.
+
+### 9.3 The patch, rebased, and its tests
+
+The patch applied to `f97b187` without changes. One change was made for Vendure's own rules. Their `AGENTS.md`
+(present at `aba3e9c` too; the hunt missed it) says for dashboard e2e tests: "**always check existing suites
+first** … `tests/regression/` — **only** for tests that genuinely don't fit any existing suite", and "Add a comment
+referencing the issue number above the test". The test therefore moved from a new
+`e2e/tests/regression/double-submit-on-save.spec.ts` into the existing `e2e/tests/catalog/collections.spec.ts`. It is
+appended as `test.describe('Issue #2117: Double-click on Create or Update submits once', ...)` with a `// #2117 — ...`
+comment, the pattern of that file's other issue blocks.
+
+While moving it, two robustness problems in the 2026-10-24 test were fixed:
+
+- **Cleanup by name could delete another worker's data.** The dashboard's Playwright config is `fullyParallel`, so
+  the two tests can run in different workers, each with its own `beforeAll` target. `afterAll` deleted every
+  collection named `E2E Double Click Target`, which included another worker's target in the middle of its Update test.
+  It now deletes only the ids its own worker created.
+- **A retry could fail on its own leftovers.** The created name was fixed at module load, so a CI retry (`retries: 1`
+  under `CI`) of Create in the same worker would find two collections with that name. Names are now made per test.
+
+A `test.describe.configure({ mode: 'serial' })` was tried and dropped. With it, a failing Create skips Update, so the
+unfixed run hid the Update failure.
+
+The patch is now 4 files, 240 added and 9 removed lines. It adds no file and no dependency. The source changes are
+identical to the hunt's.
+
+| test (3 runs each way) | `master` `f97b187` | patch |
+|---|---|---|
+| `use-generated-form.spec.tsx`: second submit during validation ignored | fails 3/3 | passes 3/3 |
+| `use-generated-form.spec.tsx`: submits ignored until the `onSubmit` promise settles | fails 3/3 | passes 3/3 |
+| `use-generated-form.spec.tsx`: a submit that failed validation releases the guard | passes 3/3 | passes 3/3 |
+| `collections.spec.ts` `Issue #2117`: double-clicking Create creates one collection (`dblclick()`) | fails 3/3 (2 `createCollection` mutations) | passes 3/3 |
+| `collections.spec.ts` `Issue #2117`: double-clicking Update sends one update | fails 3/3 (2 `updateCollection` mutations) | passes 3/3 |
+
+With the patch:
+
+- `npm run check-types` is clean.
+- The dashboard unit suite (`npx vitest run`) passed: 87 files, 972 tests passed, 4 skipped.
+- The whole `collections.spec.ts` passed (27 tests), and the new block passed with `--repeat-each=3` (6 of 6).
+- eslint reported no errors on the changed files. It ignores `e2e/` and `*.spec.tsx` by configuration and warns
+  "File ignored".
+- prettier is clean on the changed source files. Upstream's `collections.spec.ts` already has two prettier deviations
+  of its own (lines 802 and 815). The patch adds only lines and leaves those alone.
+
+The e2e runs used Vendure's harness, with this command from `packages/dashboard`:
+`CI=true VITE_TEST_PORT=5176 npx playwright test --config e2e/playwright.local.config.ts e2e/tests/catalog/collections.spec.ts -g "Issue #2117" --retries=0`.
+The local wrapper config only points Playwright 1.58.2 at `/opt/pw-browsers/chromium`, and it is not in the patch.
+The dashboard's full e2e suite and the plugin unit config (`vitest.plugin.config.mts`) were not run: they touch
+nothing the patch changes, and there was not enough time.
+
+### 9.4 Tracker, rules, and the #2117 decision
+
+Searches went through `gh api -X GET search/issues` on `repo:vendurehq/vendure`, 3 seconds apart, each as `is:issue`
+and as `is:pull-request`, for the 8 queries in the draft. They found nothing filed on the dashboard's double submit
+since 2026-10-24. (The old name `vendure-ecommerce/vendure` answers 422 to the search API; the clone URL
+redirects.) Related:
+
+- **#2117** (read 2026-11-03) is unchanged since the hunt's description: open, `@vendure/admin-ui`, assigned to
+  michaelbromley, last comment dlhck 2025-04-02, no linked PR. The only later event is a `T3: Systemic` label added and
+  removed on 2026-07-17, with no comment.
+- **#4884** (opened 2026-06-27, closed 2026-09-30 by #5007) is about duplicate translation rows from a double-click
+  save in the legacy Admin UI. Its body says "the React dashboard does avoid the double-click". The measurements above
+  contradict that for 3.8.1. The new issue says so, with the steps.
+- **#5007** (`fix(core): prevent duplicate translations from concurrent saves`, merged 2026-08-26 into `minor`) is
+  server-side only. It touches no dashboard files and does not mention #2117.
+
+Rules, read in the clone at `f97b187`:
+
+- `CONTRIBUTING.md` asks for an issue first for a bug fix ("please first create an issue detailing the bug, and
+  indicate that you intend to fix it"). Bug fixes go to `master`. Commit messages are Conventional Commits with a
+  lower-case subject, linted; PR titles are checked the same way. A bot asks for the CLA when the PR opens. There is
+  no DCO.
+- `.github/ISSUE_TEMPLATE/config.yml` turns blank issues off, so the bug template is the way in.
+- `AGENTS.md` asks for `Fixes #N` or `Relates to #N` in the commit body, and sets the e2e test placement above.
+- Neither file has an AI or LLM policy. 36 of the 270 commits on `master` since 2026-10-01 carry a
+  `Co-authored-by: Claude` trailer.
+
+The draft therefore keeps the swarm's default disclosure paragraph, now added at the end of both the issue and the PR
+text. The 2026-10-24 drafts had only a one-line GenClass mention and no AI-assistance paragraph.
+
+Decision: **a new dashboard issue, no comment on #2117** (reasons in the draft). `Fixes #2117` would close the
+admin-ui report, which the patch does not fix and which still reproduces (section 6). After filing, the sender
+replaces `#2117` in the patch's comments and test title with the new number.
+
+### 9.5 GenClass, re-run on the same builds
+
+The GenClass sweeps used `GENCLASS=1`, Create only, 3 trials per page and gap:
+
+| run | trials with 2 mutations | duplicate witness on them | missed | trials with 1 mutation | false duplicate reports |
+|---|---|---|---|---|---|
+| `master` | 25 of 48 | 24 | 1 (Facet, 30 ms gap) | 23 | 0 |
+| patch | 0 of 48 | 0 | 0 | 48 | 0 |
+
+That matches the hunt: the witness still misses some trials at a 30 ms gap, and it never fired on a single submit.
+The control sweep without GenClass gives the same pattern, so the injection does not change the app.
+
+### 9.6 Problems with GenClass itself (new or changed)
+
+- **The TanStack `timer 0ms` false `stale-write` got more frequent.** It reads, for example: the response "overwrote
+  `pageHeading.external#.isPending` after a newer `timer 0ms` had already written it". On 2026-10-24 it appeared on
+  about half of the clean patched runs. On 2026-11-03, with `c1c9e14` and `@genclass/mcp` 0.2.1, it appeared on 12 of
+  12 patched runs on every page, for both `.isPending` and `.status` (8 of the 13 findings). The cause is the same as
+  section 7 describes: TanStack Query's notify manager batches its `useMutation` state from a `setTimeout(0)`, and
+  the agent link treats that timer as a newer operation.
+- **New `stale-write` findings on base-ui component state** came up on the patched build: a response "overwrote
+  `baseUiR#k.state#` after the user's `click button "base-ui-_r_#k_"`", on 1 or 2 runs of a page (4 findings). The
+  page had no visible fault. This is likely another false report; it was not diagnosed.
+- **Some `stale-write` findings were true and duplicate the witness.** On unfixed `master`, react-hook-form state
+  findings (`pageHeading.state#.submitCount`, `.isSubmitted`, `.isSubmitSuccessful`: the first response overwrote
+  them after the second "submit form") occurred in exactly as many runs per page as trials with two mutations
+  (Collection 7, Facet 6, Customer 6; Product's were not among the 20 findings the bridge lists). They are a consequence of the duplicate submit, but each double submit
+  shows up as about seven findings plus the timer noise above. The `genclass_findings` list (20 shown) is therefore
+  no help to a reader. The hunt again reports only the duplicate-request witness.
+- **The swarm docs name the upstream `vendure-ecommerce/vendure`.** `gh api search/issues` rejects that name
+  (HTTP 422, "cannot be searched"). The canonical name is `vendurehq/vendure`.
+
+### 9.7 Time spent
+
+About 1 h 15 min wall clock (2026-11-03, 16:30 to 17:45 UTC):
+
+| step | time |
+|---|---|
+| reading the brief, the drafts and the rules; the tracker search | 10 min |
+| clone, `bun install`, full build | 12 min |
+| the dev server's restart and lock problems | 8 min |
+| four sweeps of 48 or 96 trials, with the drafts written in parallel | 30 min |
+| unit and e2e runs (three each way, twice because of the serial-mode detour) | 15 min |
+| the write-up | the rest |
