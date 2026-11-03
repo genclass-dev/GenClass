@@ -157,9 +157,11 @@ with a 503) or retried, and reversible writes to stores the app registered.
 | 0.1.0-alpha.0, 0.1.0-alpha.1, 0.1.0-beta.0 | 2026-10-08 | yes, worst | `?genclass=` sets the mode on every host, no condition (unsupported line) |
 | 0.1.0-beta.1 | 2026-10-08 | yes | raise needs `debug: true` (default mode was guard); `-mode` / `-aggr` / `-sample` debug bypasses |
 | 0.1.0-beta.2, 0.1.0-beta.3, 0.2.0, 0.2.1 | 2026-10-08 to 2026-10-11 | yes | `?genclass=guard` raises an app that set no `mode` on every host; `heal` and the other switches need `debug` |
-| 0.2.2 (`latest`) | 2026-10-15 | yes | raise needs `debug: true` or a host `isLocalHost` accepts; `-mode` / `-aggr` / `-sample` debug bypasses |
+| 0.2.2 | 2026-10-15 | yes | raise needs `debug: true` or a host `isLocalHost` accepts; `-mode` / `-aggr` / `-sample` debug bypasses |
+| 0.2.3 (`latest`) | 2026-10-28 | no | fixed (the backport to the stable line, with F1 to F4) |
 | 0.3.0-beta.0, 0.3.0-beta.1 | 2026-10-15, 2026-10-24 | yes | same as 0.2.2 |
-| 0.3.0-beta.2, 0.3.0-beta.3, 0.3.0-beta.4 (`beta`) | 2026-10-25 to 2026-10-27 | no | fixed |
+| 0.3.0-beta.2, 0.3.0-beta.3, 0.3.0-beta.4 | 2026-10-25 to 2026-10-27 | no | fixed |
+| 0.3.0-beta.5 (`beta`) | 2026-11-03 | no | fixed (with F1 to F4) |
 
 GHSA ranges: `>= 0.1.0-alpha.0, <= 0.2.2` and `>= 0.3.0-beta.0, < 0.3.0-beta.2`. Every version on npm except
 `0.0.0-stage` has a matching `v*` tag in this repository; there is no other npm-only version.
@@ -294,7 +296,7 @@ every version).
 
 GHSA ranges: F1, F3 and F4 `>= 0.1.0-beta.1, <= 0.2.2` and `>= 0.3.0-beta.0, <= 0.3.0-beta.4`; F2
 `>= 0.1.0-alpha.0, <= 0.2.2` and `>= 0.3.0-beta.0, <= 0.3.0-beta.4`. (owner: either widen this advisory's affected
-range to `<= 0.3.0-beta.4` with `0.3.0-beta.5` as the patched version once it is published and name F1 to F4 in it, or
+range to `<= 0.3.0-beta.4` with `0.3.0-beta.5` as the patched version and name F1 to F4 in it, or
 publish F1, the only one reachable from a link, as its own advisory and keep F2 to F4 in the CHANGELOG. The version
 tables above are for the headline issue only.)
 
@@ -384,7 +386,7 @@ Found by the GenClass maintainers while testing `0.3.0-beta.0` in a pilot app on
 | 2026-10-27 | the adversarial review of the 0.2.3 backport finds F1 to F4; fixed in `8694211` on `release/0.2.3`, tagged `v0.2.3` (not yet on npm) |
 | 2026-10-27 | F1 to F4 ported to `main` for `0.3.0-beta.5` (branch `security/advisory-mode-raise`), with the docs below |
 | 2026-10-28 | `0.2.3` on npm's `latest` |
-| 2026-11-03 | `0.3.0-beta.5` tagged and published (npm's `beta`); docs on `main` updated |
+| 2026-11-02 (tag), 2026-11-03 (npm) | `0.3.0-beta.5` tagged and published (npm's `beta`); docs on `main` updated |
 | pending | this advisory (the GHSA range decision below) |
 
 ## References
@@ -415,13 +417,11 @@ Found by the GenClass maintainers while testing `0.3.0-beta.0` in a pilot app on
   `debug: true` or on a development host"). PR #64 holds the updated wording (CONTRACT §2 and §13 are binding and need
   your OK).
 - PR #64 is still open; the advisory can cite the commits on `main` instead if it is closed without merging.
-- `0.2.3` is not tagged or published yet. The form's "patched versions" for the `<= 0.2.2` range depends on it; the
-  release goes through `.github/workflows/release.yml` on a `v0.2.3` tag whose version equals
-  `packages/runtime/package.json` on that branch.
+- `0.2.3` is on npm's `latest` since 2026-10-28; the form's patched version for the `<= 0.2.2` range is `0.2.3`.
 - The CVSS Attack Complexity choice (L, 5.4, or H, 4.2) is yours; the table above explains both.
-- F1 to F4 are on no published version yet: `0.2.3` is tagged, `0.3.0-beta.5` is not. Decide whether this advisory
-  covers them (then its affected range becomes `<= 0.3.0-beta.4` and the patched versions `0.2.3` / `0.3.0-beta.5`) or
-  F1 gets its own; F2 to F4 can stay CHANGELOG entries either way.
+- F1 to F4 are on `0.2.3` (npm `latest`, 2026-10-28) and `0.3.0-beta.5` (`beta`, 2026-11-03). Decide whether this
+  advisory covers them (then its affected range becomes `<= 0.3.0-beta.4` and the patched versions `0.2.3` /
+  `0.3.0-beta.5`) or F1 gets its own; F2 to F4 can stay CHANGELOG entries either way.
 - The `main` port of F1 to F4 raises `packages/runtime/test/bundle.test.ts`'s `/auto` first-load limit from 108.6 to
   108.9 KB (the fixes add 0.27 KB to `/auto` and 0.17 KB to the main entry; RESULTS.md section 10), pending your OK as
   the earlier limits were. It also brings OPTIONS-SPEC §3 and THREAT-MODEL T8 in line with `0.3.0-beta.2`'s code (the
