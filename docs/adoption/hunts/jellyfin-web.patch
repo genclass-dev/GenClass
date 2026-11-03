@@ -1,0 +1,150 @@
+From 55b2058e086037f6e1e59a38cc42870cade7ad72 Mon Sep 17 00:00:00 2001
+From: Reference-fix <reference-fix@invalid.example>
+Date: Tue, 3 Nov 2026 17:04:12 +0000
+Subject: [PATCH 1/2] Add helper to track the latest of a sequence of requests
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/utils/requestSequence.test.ts | 60 +++++++++++++++++++++++++++++++
+ src/utils/requestSequence.ts      | 15 ++++++++
+ 2 files changed, 75 insertions(+)
+ create mode 100644 src/utils/requestSequence.test.ts
+ create mode 100644 src/utils/requestSequence.ts
+
+diff --git a/src/utils/requestSequence.test.ts b/src/utils/requestSequence.test.ts
+new file mode 100644
+index 0000000000..64c02a6a8c
+--- /dev/null
++++ b/src/utils/requestSequence.test.ts
+@@ -0,0 +1,60 @@
++import { describe, expect, it } from 'vitest';
++
++import { createRequestSequence } from './requestSequence';
++
++/** A promise that the test resolves by hand, to deliver responses in any order. */
++function deferred<T>() {
++    let resolve!: (value: T) => void;
++    const promise = new Promise<T>(r => {
++        resolve = r;
++    });
++    return { promise, resolve };
++}
++
++describe('createRequestSequence', () => {
++    it('reports a single request as the latest', () => {
++        const start = createRequestSequence();
++        const isLatest = start();
++
++        expect(isLatest()).toBe(true);
++    });
++
++    it('reports an older request as superseded once a newer one starts', () => {
++        const start = createRequestSequence();
++        const first = start();
++        const second = start();
++
++        expect(first()).toBe(false);
++        expect(second()).toBe(true);
++    });
++
++    it('keeps the newer results when the older response arrives last', async () => {
++        const start = createRequestSequence();
++        const rendered: string[] = [];
++        const request = (response: Promise<string>) => {
++            const isLatest = start();
++            return response.then(result => {
++                if (isLatest()) rendered.push(result);
++            });
++        };
++
++        const b = deferred<string>();
++        const c = deferred<string>();
++        const done = Promise.all([ request(b.promise), request(c.promise) ]);
++
++        c.resolve('C');
++        b.resolve('B');
++        await done;
++
++        expect(rendered).toEqual([ 'C' ]);
++    });
++
++    it('keeps sequences independent of each other', () => {
++        const startA = createRequestSequence();
++        const startB = createRequestSequence();
++        const a = startA();
++        startB();
++
++        expect(a()).toBe(true);
++    });
++});
+diff --git a/src/utils/requestSequence.ts b/src/utils/requestSequence.ts
+new file mode 100644
+index 0000000000..c97718416a
+--- /dev/null
++++ b/src/utils/requestSequence.ts
+@@ -0,0 +1,15 @@
++/**
++ * Creates a sequence of requests where only the latest one counts.
++ *
++ * Call the returned function when starting a request. It returns a check that tells,
++ * once the response arrives, whether the request is still the latest one, so a slow
++ * response to an older request does not replace the results of a newer request.
++ */
++export function createRequestSequence(): () => () => boolean {
++    let latest = 0;
++
++    return () => {
++        const id = ++latest;
++        return () => id === latest;
++    };
++}
+-- 
+2.43.0
+
+
+From 2b1c0dcad3ff754e4ccdb7fb5354f3ebc0c1a8f5 Mon Sep 17 00:00:00 2001
+From: Reference-fix <reference-fix@invalid.example>
+Date: Tue, 3 Nov 2026 17:04:12 +0000
+Subject: [PATCH 2/2] Ignore superseded responses in items container refresh
+
+Changing a letter, the sort or a filter twice in a row sends two item
+requests. When the older one arrives last, its items replaced the
+newer results, so the grid did not match the selected letter or sort.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../emby-itemscontainer/emby-itemscontainer.js        | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/src/elements/emby-itemscontainer/emby-itemscontainer.js b/src/elements/emby-itemscontainer/emby-itemscontainer.js
+index 3cac9dcb17..164168d4ec 100644
+--- a/src/elements/emby-itemscontainer/emby-itemscontainer.js
++++ b/src/elements/emby-itemscontainer/emby-itemscontainer.js
+@@ -13,6 +13,7 @@ import browser from 'scripts/browser';
+ import inputManager from 'scripts/inputManager';
+ import dom from 'utils/dom';
+ import Events from 'utils/events';
++import { createRequestSequence } from 'utils/requestSequence';
+ 
+ const ItemsContainerPrototype = Object.create(HTMLDivElement.prototype);
+ 
+@@ -370,7 +371,15 @@ ItemsContainerPrototype.refreshItems = function () {
+ 
+     this.needsRefresh = false;
+ 
+-    return this.fetchData().then(onDataFetched.bind(this));
++    // A response that arrives after a newer refresh started must not replace the newer results
++    this.startRefresh ??= createRequestSequence();
++    const isLatestRefresh = this.startRefresh();
++
++    return this.fetchData().then(result => {
++        if (isLatestRefresh()) {
++            onDataFetched.call(this, result);
++        }
++    });
+ };
+ 
+ ItemsContainerPrototype.notifyRefreshNeeded = function (isInForeground) {
+-- 
+2.43.0
+

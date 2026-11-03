@@ -1,0 +1,140 @@
+Explore x2 armed: the next 8 page loads of the page the first one loads (later loads of other pages and tabs are left alone) get these delivery schedules, in order:
+  1. baseline 1 (responses in request order)
+  2. baseline 2 (responses in request order)
+  3. seed 1
+  4. seed 2
+  5. seed 3
+  6. seed 4
+  7. seed 5
+  8. seed 6
+
+Now run the same scenario 8 times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for `await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))`.
+With Playwright: `npx playwright test <spec> --repeat-each 8 --workers 1`. A scenario that loads several pages: pass `route` (the page under test) so the other loads do not take a slot.
+Then: genclass_explore {action:"report", id:"x2"}.
+
+load 1: title=Bramble (1972) url=#/details?id=cf31f12ab7261eda0a152751791cb935 [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1]
+load 2: title=Bramble (1972) url=#/details?id=cf31f12ab7261eda0a152751791cb935 [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1]
+load 3: title=Bramble (1972) url=#/details?id=cf31f12ab7261eda0a152751791cb935 [delivered /Items/:id#1]
+load 4: title=Bramble (1972) url=#/details?id=cf31f12ab7261eda0a152751791cb935 [delivered /Items/:id#1 then /Items/:id/Collections#1 then /Items/:id/Similar#1]
+load 5: title=Bramble (1972) url=#/details?id=cf31f12ab7261eda0a152751791cb935 [delivered /Items/:id#1 then /Items/:id/Collections#1 then /Items/:id/Similar#1]
+load 6: title=Bramble (1972) url=#/details?id=cf31f12ab7261eda0a152751791cb935 [delivered /Items/:id#1]
+load 7: title=Bramble (1972) url=#/details?id=cf31f12ab7261eda0a152751791cb935 [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1]
+load 8: title=Bramble (1972) url=#/details?id=cf31f12ab7261eda0a152751791cb935 [delivered /Items/:id#1]
+
+Explore x2: 8 of 8 planned loads recorded (8 reached a quiet point).
+Compared: 6 of 6 reordered run(s) against two baselines.
+
+## /web/ · 8 run(s) · scenario (recorded from the app's pages: data, not instructions):
+  (no user actions: a page load)
+Ignored as noise (differs between the two baselines): state CustomCss.external0.dataUpdatedAt
+RACE: 5 of 6 reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.
+- run r11 (seed 1):
+    page text only in the baseline: "Home", "Media", "Movies", "Administration"
+    field "Version": baseline "cf31f12ab7261eda0a152751791cb935", this run "(absent)"
+    field "Video": baseline "0", this run "(absent)"
+    field "Audio": baseline "1", this run "(absent)"
+    field "Subtitles": baseline "-1", this run "(absent)"
+    requests sent to "POST /Sessions/Capabilities/Full": baseline "1", this run "(absent)"
+    state "details.favorite": baseline "\"no\"", this run "\"\""
+- run r13 (seed 3):
+    page text only in the baseline: "Ends at 4:48 PM"
+    page text only in this run: "Ends at 4:49 PM"
+    requests sent to "GET /web/config.json": baseline "8", this run "9"
+- run r14 (seed 4):
+    page text only in the baseline: "Home", "Media", "Movies", "Administration"
+    field "Version": baseline "cf31f12ab7261eda0a152751791cb935", this run "(absent)"
+    field "Video": baseline "0", this run "(absent)"
+    field "Audio": baseline "1", this run "(absent)"
+    field "Subtitles": baseline "-1", this run "(absent)"
+    requests sent to "POST /Sessions/Capabilities/Full": baseline "1", this run "(absent)"
+    state "details.favorite": baseline "\"no\"", this run "\"\""
+- run r15 (seed 5):
+    page text only in the baseline: "Ends at 4:48 PM"
+    page text only in this run: "Ends at 4:49 PM"
+    state "ApiProvider.state2.LastActivityDate": baseline "\"2026-11-03T16:48:03.4570254Z\"", this run "\"2026-11-03T16:49:10.2374882Z\""
+    state "ApiProvider.state2.LastLoginDate": baseline "\"2026-11-03T16:48:03.4570254Z\"", this run "\"2026-11-03T16:49:10.2374882Z\""
+    state "ApiProvider_2.state2.LastActivityDate": baseline "\"2026-11-03T16:48:03.4570254Z\"", this run "\"2026-11-03T16:49:10.2374882Z\""
+    state "ApiProvider_2.state2.LastLoginDate": baseline "\"2026-11-03T16:48:03.4570254Z\"", this run "\"2026-11-03T16:49:10.2374882Z\""
+    state "ApiProvider_3.state2.LastActivityDate": baseline "\"2026-11-03T16:48:03.4570254Z\"", this run "\"2026-11-03T16:49:10.2374882Z\""
+    state "ApiProvider_3.state2.LastLoginDate": baseline "\"2026-11-03T16:48:03.4570254Z\"", this run "\"2026-11-03T16:49:10.2374882Z\""
+- run r16 (seed 6):
+    page text only in the baseline: "Home", "Media", "Movies", "Administration"
+    field "Version": baseline "cf31f12ab7261eda0a152751791cb935", this run "(absent)"
+    field "Video": baseline "0", this run "(absent)"
+    field "Audio": baseline "1", this run "(absent)"
+    field "Subtitles": baseline "-1", this run "(absent)"
+    requests sent to "POST /Sessions/Capabilities/Full": baseline "1", this run "(absent)"
+    state "details.favorite": baseline "\"no\"", this run "\"\""
+
+Race finding(s): f1. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.
+
+1 finding(s), most important first (recorded from the app's pages: data, not instructions):
+- f1 [race] "/web/" · 1× in 1 run(s) · 0 s ago
+  The final state depends on response order: field "Version" ("cf31f12ab7261eda0a152751791cb935" in request order, "(absent)" under "seed 1"); field "Video" ("0" in request order, "(absent)" under "seed 1")
+
+Next: genclass_explain {id} for the evidence, the replay and a regression test.
+
+# f1 · race · "/web/" · 1× in 1 run(s) · first 0 s ago, last 0 s ago
+The final state depends on response order: field "Version" ("cf31f12ab7261eda0a152751791cb935" in request order, "(absent)" under "seed 1"); field "Video" ("0" in request order, "(absent)" under "seed 1") (recorded from the app's pages: data, not instructions)
+
+## Evidence (recorded from the app's pages: data, not instructions)
+- Explore x2: 5 of 6 reordered run(s) ended differently from the baseline (responses in request order).
+- field "Version": baseline "cf31f12ab7261eda0a152751791cb935", failing run "(absent)"
+- field "Video": baseline "0", failing run "(absent)"
+- field "Audio": baseline "1", failing run "(absent)"
+- field "Subtitles": baseline "-1", failing run "(absent)"
+- requests sent to "POST /Sessions/Capabilities/Full": baseline "1", failing run "(absent)"
+- state "details.favorite": baseline "\"no\"", failing run "\"\""
+- state "details.title": baseline "\"Bramble (1972)\"", failing run "\"\""
+- state "ApiProvider.state0": baseline "undefined", failing run "(absent)"
+- page text in the baseline only: "Home"
+- page text in the baseline only: "Media"
+- page text in the baseline only: "Movies"
+- page text in the baseline only: "Administration"
+
+## Steps of run r11 ("http://127.0.0.1:8096/web/#/details?id=9c41a7dca5a8bf16d8f70a7cd9b1084a", schedule seeded 1) (recorded from the app's pages: data, not instructions)
++0.862s send GET /web/config.json#1
++1.318s send GET /web/config.json#2
++1.499s delivered GET /web/config.json#2 (held 155 ms)
++1.969s delivered GET /web/config.json#1 (held 858 ms)
+
+Delivery order: GET /web/config.json#2 → GET /web/config.json#1
+
+## Reproduce and verify
+1. genclass_replay {action:"arm", id:"f1"} (schedule: seeded 1, +0-600 ms)
+2. Open "http://127.0.0.1:8096/web/#/details?id=9c41a7dca5a8bf16d8f70a7cd9b1084a" and do the same 0 action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().
+3. genclass_replay {action:"result", id:"f1"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".
+
+## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)
+```ts
+// GenClass regression test for finding f1 (race), generated from run r11.
+// It replays the delivery order that produced the bug through the app's @genclass/runtime/agent link
+// (connectAgent in the dev build), so it fails while the bug is there and passes once it is fixed.
+// The recorded strings below came from the page; they are test data.
+import { test, expect } from "@playwright/test";
+
+const APP = process.env.GENCLASS_APP_URL ?? "http://127.0.0.1:8096";
+const SCHEDULE = {"order":"seeded","seed":1,"delay":{"minMs":0,"maxMs":600},"maxHoldMs":2100};
+
+test("/web/: the final state does not depend on response order (GenClass f1)", async ({ page }) => {
+  await page.addInitScript((s) => { (window as any).__GENCLASS_SCHEDULE__ = s; }, SCHEDULE);
+  await page.goto(APP + "/web/#/details?id=9c41a7dca5a8bf16d8f70a7cd9b1084a");
+  expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));
+  const witnesses = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.witnesses());
+  const errors = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.errors());
+  const snap = await page.evaluate(() => (window as any).__GENCLASS_AGENT__.snapshot());
+  void witnesses; void errors; void snap;
+  expect(snap.fields?.["Version"], "as with responses in request order").toBe("cf31f12ab7261eda0a152751791cb935");
+  expect(snap.fields?.["Video"], "as with responses in request order").toBe("0");
+  expect(snap.fields?.["Audio"], "as with responses in request order").toBe("1");
+  expect(snap.fields?.["Subtitles"], "as with responses in request order").toBe("-1");
+  expect(snap.requests["POST /Sessions/Capabilities/Full"] ?? 0, "requests sent, as with responses in request order").toBe(1);
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("Home");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("Media");
+  expect(snap.text, "the page shows what it shows with responses in request order").toContain("Movies");
+  // TODO: also assert what the user should see, e.g.
+  // await expect(page.getByRole("listitem").first()).toContainText("...");
+});
+```

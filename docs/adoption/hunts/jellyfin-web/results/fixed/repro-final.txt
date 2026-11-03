@@ -1,0 +1,2 @@
+alpha legacy delay=800ms: grid disagrees with the selected control in 0 of 10 runs
+sort legacy delay=800ms: grid disagrees with the selected control in 0 of 10 runs

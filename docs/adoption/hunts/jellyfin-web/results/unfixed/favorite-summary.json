@@ -1,0 +1,52 @@
+{
+  "surface": "favorite",
+  "jellyfin": "http://127.0.0.1:8096",
+  "runs": 6,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "verdict": "no race",
+      "finding": null,
+      "shown": [
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#2]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /Items/:id/Similar#1 then /FavoriteItems/:id#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /Items/:id/Similar#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#2 then /FavoriteItems/:id#1 then /Items/:id/Collections#1 then /Items/:id/Similar#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /FavoriteItems/:id#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#2]"
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "verdict": "race in 6 of 6",
+      "finding": "f3",
+      "shown": [
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#2]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /Items/:id/Similar#1 then /FavoriteItems/:id#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /Items/:id/Similar#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#2 then /FavoriteItems/:id#1 then /Items/:id/Collections#1 then /Items/:id/Similar#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /FavoriteItems/:id#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#2]"
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "verdict": "race in 6 of 6",
+      "finding": "f5",
+      "shown": [
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#2]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /Items/:id/Similar#1 then /FavoriteItems/:id#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /Items/:id/Similar#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#2 then /FavoriteItems/:id#1 then /Items/:id/Collections#1 then /Items/:id/Similar#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /Items/:id/Similar#1 then /FavoriteItems/:id#2 then /Items/:id/Collections#1 then /FavoriteItems/:id#1]",
+        "shown=favorite server=favorite [delivered /Items/:id#1 then /FavoriteItems/:id#1 then /Items/:id/Similar#1 then /Items/:id/Collections#1 then /FavoriteItems/:id#2]"
+      ]
+    }
+  ]
+}
