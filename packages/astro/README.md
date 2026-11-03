@@ -11,8 +11,8 @@ In the default `observe` mode it reports (one console line per finding, the devt
 `guard` mode, opt-in, lets it drop a stale response or reuse a duplicate's result when the model is confident. It is
 Apache-2.0, runs on-device, and never sends page content unless you opt in. What it finds and how often, with the
 false-intervention rate next to every recall number, is in the runtime's
-[README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md) and
-[RESULTS.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/RESULTS.md).
+[README](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md) and
+[RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md).
 
 ## Install
 
@@ -64,7 +64,7 @@ export default defineConfig({
 |---|---|---|---|
 | `mode` | `"observe"`, `"guard"` | `"observe"` | `observe` reports what GenClass finds and never holds, delays or changes anything. `guard` also prevents failures with small, reversible actions (drop a stale response, reuse a duplicate's result) when the model is confident. The script imports `@genclass/runtime/auto` or `@genclass/runtime/auto/guard` accordingly. |
 | `token` | `"gc_..."` | none | Your app's token from [genclass.dev](https://genclass.dev) or `npx @genclass/runtime@beta login`; with telemetry on, findings also reach your dashboard. Needs `@genclass/runtime` 0.3.0 or later (0.2.x ignores it). |
-| `telemetry` | `true`, `false` | the runtime's default | Anonymous, redacted diagnostics to the GenClass maintainers ([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md)). Unset: on from public hosts, off on localhost and private networks. `false`: off. `true`: an explicit opt-in that also sends from local hosts. |
+| `telemetry` | `true`, `false` | the runtime's default | Anonymous, redacted diagnostics to the GenClass maintainers ([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md)). Unset: on from public hosts, off on localhost and private networks. `false`: off. `true`: an explicit opt-in that also sends from local hosts. |
 | `devtools` | `"dev"`, `"always"`, `"never"` | `"dev"` | The devtools overlay (detections, actions, the evidence behind each decision, a mode switch). `"dev"` loads it under `astro dev` only; a production build carries no reference to it. `"always"` loads it in production too. The overlay is a lazy chunk, never part of the first load. |
 
 `token` and `telemetry` are passed to the runtime as `window.GENCLASS_CONFIG`, the page configuration it documents, by
@@ -80,7 +80,7 @@ storms, retries and stalls, whether the code is a plain `<script>` or a framewor
 finds component state on its own (automatic state discovery: `useState`, `useReducer`, Redux, Zustand), so it can tell
 when a late response overwrites newer data. Vue, Svelte, Solid and Preact state is not discovered yet; decisions that
 need it can register the state with `genclass.atom(...)` / `genclass.guard(...)`
-([State it can protect](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#state-it-can-protect)).
+([State it can protect](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#state-it-can-protect)).
 The runtime the script started is `GenClass.runtime` from `@genclass/runtime`.
 
 ## Turning it off
@@ -93,7 +93,7 @@ The runtime the script started is `GenClass.runtime` from `@genclass/runtime`.
 
 In a browser on a public host, GenClass sends anonymous, redacted diagnostics by default: session info, decisions and
 their outcomes, detections, model errors and periodic counts; never raw input values, cookies, headers, storage or page
-text unless you opt in ([TELEMETRY.md](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/TELEMETRY.md)).
+text unless you opt in ([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md)).
 It is off on localhost and private networks, and for visitors whose browser sends Global Privacy Control. To turn it
 off for everyone:
 
@@ -107,7 +107,7 @@ Visitors can also opt out with `?genclass=no-telemetry` or `localStorage["gencla
 
 If your site sets a CSP, allow `https://cdn.jsdelivr.net` in `connect-src` (the model is downloaded from there once
 and cached) and `'wasm-unsafe-eval'` in `script-src`, or self-host the model
-([README](https://github.com/genclass-dev/GenClass-lib/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting)).
+([README](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting)).
 
 ## Development
 
@@ -118,7 +118,7 @@ npm test             # the generated script, the hook's calls, and one astro bui
 
 Tested with Astro 7.4; the integration uses only `injectScript("page", ...)` and `updateConfig`, available since
 Astro 4, which is what the peer range says. A starter site with the integration installed is in
-[templates/astro](https://github.com/genclass-dev/GenClass-lib/tree/main/templates/astro).
+[templates/astro](https://github.com/genclass-dev/GenClass/tree/main/templates/astro).
 
 ## License
 

@@ -42,7 +42,7 @@ monitoring of component renders and reactive dependency tracking"). The alternat
 **Draft entry** (Dev Tools > Inspect, appended at the end of the list):
 
 ```
-- [GenClass](https://github.com/genclass-dev/GenClass-lib) - Reports race conditions, stale responses and duplicate submits in the browser while they happen; one import (or the Nuxt module), a small local model, changes nothing by default.
+- [GenClass](https://github.com/genclass-dev/GenClass) - Reports race conditions, stale responses and duplicate submits in the browser while they happen; one import (or the Nuxt module), a small local model, changes nothing by default.
 ```
 
 ## Angular
@@ -93,7 +93,7 @@ discovered automatically; the description must not imply they are.
 **Draft entry** (Development Utilities > Debugging, appended at the bottom):
 
 ```
-* [GenClass](https://github.com/genclass-dev/GenClass-lib) - Reports race conditions, stale responses and duplicate submits in the browser while they happen; one import in main.ts, a small local model, changes nothing by default.
+* [GenClass](https://github.com/genclass-dev/GenClass) - Reports race conditions, stale responses and duplicate submits in the browser while they happen; one import in main.ts, a small local model, changes nothing by default.
 ```
 
 ## Checklist for either PR
