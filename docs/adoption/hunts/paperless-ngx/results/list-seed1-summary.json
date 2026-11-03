@@ -1,0 +1,317 @@
+{
+  "surface": "list",
+  "ui": "http://localhost:4200",
+  "runs": 6,
+  "seed": 1,
+  "sessions": [
+    {
+      "slow_ms": 300,
+      "explore": "no race, 0 of 6",
+      "oracleWrong": 0,
+      "loads": [
+        {
+          "load": 1,
+          "fifo": true,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 2,
+          "fifo": true,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 3,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 4,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 5,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 6,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 7,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #2",
+            "GET #1",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 8,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        }
+      ]
+    },
+    {
+      "slow_ms": 600,
+      "explore": "no race, 0 of 6",
+      "oracleWrong": 0,
+      "loads": [
+        {
+          "load": 1,
+          "fifo": true,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 2,
+          "fifo": true,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 3,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 4,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 5,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 6,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 7,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #2",
+            "GET #1",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 8,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        }
+      ]
+    },
+    {
+      "slow_ms": 900,
+      "explore": "no race, 0 of 6",
+      "oracleWrong": 0,
+      "loads": [
+        {
+          "load": 1,
+          "fifo": true,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 2,
+          "fifo": true,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 3,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 4,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 5,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 6,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #2",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 7,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #2",
+            "GET #1",
+            "GET #3",
+            "GET #4"
+          ]
+        },
+        {
+          "load": 8,
+          "fifo": false,
+          "ok": null,
+          "shown": "filter=\"test document 1\" 11 documents",
+          "delivered": [
+            "GET #1",
+            "GET #3",
+            "GET #2",
+            "GET #4"
+          ]
+        }
+      ]
+    }
+  ]
+}

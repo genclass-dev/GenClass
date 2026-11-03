@@ -1,0 +1,46 @@
+search #1: WRONG input "document 12", dropdown [test document 2, test document 3, test document 4]
+search #2: WRONG input "document 12", dropdown [test document 2, test document 3, test document 4]
+search #3: WRONG input "document 12", dropdown [test document 2, test document 3, test document 4]
+search #4: WRONG input "document 12", dropdown [test document 2, test document 3, test document 4]
+search #5: WRONG input "document 12", dropdown [test document 2, test document 3, test document 4]
+search-control #1: ok input "document 12", dropdown [document 12]
+search-control #2: ok input "document 12", dropdown [document 12]
+search-control #3: ok input "document 12", dropdown [document 12]
+search-control #4: ok input "document 12", dropdown [document 12]
+search-control #5: ok input "document 12", dropdown [document 12]
+escape #1: WRONG after Escape input ""; then input "", dropdown open [test document 2, test document 3, test document 4]
+escape #2: WRONG after Escape input ""; then input "", dropdown open [test document 2, test document 3, test document 4]
+escape #3: WRONG after Escape input "doc"; then input "", dropdown open [test document 2, test document 3, test document 4]
+escape #4: WRONG after Escape input "doc"; then input "", dropdown open [test document 2, test document 3, test document 4]
+escape #5: WRONG after Escape input "doc"; then input "", dropdown open [test document 2, test document 3, test document 4]
+escape-control #1: ok after Escape input "doc"; then input "doc", dropdown closed [test document 2, test document 3, test document 4]
+escape-control #2: ok after Escape input "doc"; then input "doc", dropdown closed [test document 2, test document 3, test document 4]
+escape-control #3: ok after Escape input "doc"; then input "doc", dropdown closed [test document 2, test document 3, test document 4]
+escape-control #4: ok after Escape input "doc"; then input "doc", dropdown closed [test document 2, test document 3, test document 4]
+escape-control #5: ok after Escape input "doc"; then input "doc", dropdown closed [test document 2, test document 3, test document 4]
+notes-double #1: WRONG server holds the note 2x; page lists 6 of 6 notes; tab "Notes 6"
+notes-double #2: WRONG server holds the note 2x; page lists 6 of 6 notes; tab "Notes 6"
+notes-double #3: WRONG server holds the note 2x; page lists 6 of 6 notes; tab "Notes 6"
+notes-double #4: WRONG server holds the note 2x; page lists 6 of 6 notes; tab "Notes 6"
+notes-double #5: WRONG server holds the note 2x; page lists 6 of 6 notes; tab "Notes 6"
+notes-single #1: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-single #2: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-single #3: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-single #4: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-single #5: ok server holds the note 1x; page lists 5 of 5 notes; tab "Notes 5"
+notes-order #1: ok server holds 6 notes (the new one 2x); page lists 6; tab "Notes 6"
+notes-order #2: ok server holds 6 notes (the new one 2x); page lists 6; tab "Notes 6"
+notes-order #3: ok server holds 6 notes (the new one 2x); page lists 6; tab "Notes 6"
+notes-order #4: ok server holds 6 notes (the new one 2x); page lists 6; tab "Notes 6"
+notes-order #5: ok server holds 6 notes (the new one 2x); page lists 6; tab "Notes 6"
+names #1: WRONG footers [- Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note]
+names #2: WRONG footers [- Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note]
+names #3: WRONG footers [- Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note]
+names #4: WRONG footers [- Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note]
+names #5: WRONG footers [- Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note]
+names-control #1: WRONG footers [- Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note]
+names-control #2: WRONG footers [playwright - Nov 3, 2026 | Delete note | playwright - Nov 3, 2026 | Delete note | playwright - Nov 3, 2026 | Delete note | playwright - Nov 3, 2026 | Delete note]
+names-control #3: WRONG footers [- Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note]
+names-control #4: WRONG footers [- Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note | - Nov 3, 2026 | Delete note]
+names-control #5: WRONG footers [playwright - Nov 3, 2026 | Delete note | playwright - Nov 3, 2026 | Delete note | playwright - Nov 3, 2026 | Delete note | playwright - Nov 3, 2026 | Delete note]
+{"search":"5 of 5 wrong","search-control":"0 of 5 wrong","escape":"5 of 5 wrong","escape-control":"0 of 5 wrong","notes-double":"5 of 5 wrong","notes-single":"0 of 5 wrong","notes-order":"0 of 5 wrong","names":"5 of 5 wrong","names-control":"5 of 5 wrong"}
