@@ -49,7 +49,7 @@ the package name, nothing else) and keeps anonymous diagnostics on, as every `in
 local hosts; `init --no-telemetry --agent` turns them off and creates no link); the second writes
 `.mcp.json` and `.claude/skills/genclass/SKILL.md` (other agents: `npx -y @genclass/mcp@0.2.1 config <client>`). Nothing
 else is needed; `npx @genclass/runtime@beta remove` undoes the first
-([the open-source setup](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only)).
+([the open-source setup](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only)).
 
 Or by hand:
 

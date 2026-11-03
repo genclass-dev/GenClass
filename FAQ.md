@@ -178,7 +178,7 @@ Yes. Two commands set up every open-source part, and nothing asks you to sign in
 app's free dashboard link; `--agent` is new in `0.3.0-beta.6`) and `npx -y @genclass/mcp@0.2.1 init` (the MCP server and the `genclass` skill for Claude Code).
 Anonymous diagnostics stay on, as with every `init` (never page text, never from local hosts);
 `init --no-telemetry --agent` turns them off and creates no dashboard link. Details:
-[INSTALL.md](https://github.com/genclass-dev/GenClass-lib/blob/main/docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only).
+[INSTALL.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only).
 
 ## How is it different from Sentry, Datadog or my tests?
 
