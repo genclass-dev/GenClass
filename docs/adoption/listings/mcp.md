@@ -101,7 +101,7 @@ official registry); docs.github.com "Extend Copilot Chat with MCP" (VS Code adds
   > in the GitHub MCP Registry. It is a local server for coding agents: it shows the agent what happened inside a web
   > app's pages on the developer's machine in causal order, re-runs a page with network responses delivered in
   > different orders to find race conditions, replays one exact order to prove a fix, and writes a Playwright
-  > regression test. It needs no account or API key and sends nothing off the machine. Measured so far on one page
+  > regression test. It needs no account or API key and sends nothing off the machine unless you turn that on. Measured so far on one page
   > (a stale-response race): it found the race in 5 of 6 reordered runs and reported nothing on the fixed page.
   > Install in VS Code: `code --add-mcp '{"name":"genclass","command":"npx","args":["-y","@genclass/mcp@0.2.1"]}'`.
   > Thank you.
@@ -120,9 +120,11 @@ support.claude.com "Anthropic Software Directory Policy".
   `genclass-dev/genclass-plugin`, no plugin path (the plugin is the repository root), branch `main`; Validate.
   GenClass itself cannot be submitted: the portal stops validating a repository whose GitHub archive is over
   50 MiB (pre-submission checklist), and GenClass's is 51 MiB. Listing details are read from
-  `.claude-plugin/plugin.json` and `README.md` at that root (the same files as `packages/mcp/plugin/`). Data handling: the plugin
+  `.claude-plugin/plugin.json` and `README.md` at that root (the same files as `packages/mcp/plugin/`). Data handling: by default the plugin
   collects and sends nothing; it reads and writes `.genclass/agent/` in the project and `~/.genclass/` (the bridge
-  token); the optional dashboard read is the only network request off the machine. Compliance: contact email and
+  token); what goes off the machine is opt-in: the dashboard read (`GENCLASS_DASHBOARD`), the dashboard mirror
+  (`GENCLASS_REPORT`) and `genclass_scan` with `hosted: true`; `genclass_scan` also downloads the runtime from npm when
+  the project does not have it. Compliance: contact email and
   the four acknowledgements. Updates: GitHub push webhook.
 - **What the checks will say.** Local run of `claude plugin validate --profile directory` on the assembled
   repository and on `packages/mcp/plugin` (Claude Code 2.1.311, 2026-10-28): passes with nothing to report; the
@@ -252,7 +254,7 @@ Source: cline/mcp-marketplace `README.md` and `.github/ISSUE_TEMPLATE/mcp-server
   > in a web app (stale responses that overwrite newer data, double submits, errors that happen "sometimes"): it
   > records what happened inside the app's pages on the developer's machine in causal order, re-runs a page with
   > network responses delivered in different orders, replays one exact order to confirm a bug and its fix, and
-  > writes a Playwright regression test. Local only: no API key, nothing sent off the machine. Measured so far on one
+  > writes a Playwright regression test. Runs on your machine: no API key, nothing sent off it unless you turn that on. Measured so far on one
   > page: the race was found in 5 of 6 reordered runs, with no false report on the fixed page.
 
 ## 7. mcpservers.org
