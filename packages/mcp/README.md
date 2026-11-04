@@ -307,9 +307,10 @@ read a report, what to say when done, what to do when the tools are missing) is 
 To remove it: delete `.claude/skills/genclass/` (or the directory the skill tool wrote to); with the plugin,
 `/plugin uninstall genclass@genclass`.
 
-Then connect the app's development build (once). The agent link needs the newest runtime line, `@genclass/runtime`
-0.3.0-beta.1 or later: `npm install @genclass/runtime@beta` (a bare `npm install @genclass/runtime` gets npm's
-`latest`, the older 0.2.x, which has no agent entry):
+Then connect the app's development build (once): `npx @genclass/runtime@beta init --agent` (0.3.0-beta.6 or later) adds a dev-only line next to
+the import it writes (plain HTML: a module script after the tag), installing the runtime first if needed. By hand, the
+agent link needs the newest runtime line, `@genclass/runtime` 0.3.0-beta.1 or later: `npm install @genclass/runtime@beta`
+(a bare `npm install @genclass/runtime` gets npm's `latest`, the older 0.2.x, which has no agent entry):
 
 ```ts
 import { GenClass } from "@genclass/runtime";

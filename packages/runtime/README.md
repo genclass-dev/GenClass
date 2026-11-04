@@ -35,6 +35,22 @@ Once you approve the diff, `init` also creates your app's free dashboard at genc
 `package.json` `name`; `--no-token`, `--token`, `--no-telemetry` and `--dry-run` create no dashboard and never contact
 genclass.dev ([Your dashboard](#your-dashboard)).
 
+**Two commands, no account.** They set up every open-source part, and nothing asks you to sign in (`--agent` is new
+in `0.3.0-beta.6`):
+
+```bash
+npx @genclass/runtime@beta init --agent   # the runtime (observe), the dev-only overlay and agent link, your free dashboard link
+npx -y @genclass/mcp@0.2.1 init           # the GenClass MCP server and the `genclass` skill for Claude Code
+```
+
+The first adds one marked import plus an option file with the app's token (plain HTML: the script tag with
+`data-token`; Astro: a `<meta name="genclass">` line), creates the app's free dashboard link at genclass.dev (it sends
+the package name, nothing else) and keeps anonymous diagnostics on, as every `init` does (never page text, never from
+local hosts; `init --no-telemetry --agent` turns them off and creates no link); the second writes
+`.mcp.json` and `.claude/skills/genclass/SKILL.md` (other agents: `npx -y @genclass/mcp@0.2.1 config <client>`). Nothing
+else is needed; `npx @genclass/runtime@beta remove` undoes the first
+([the open-source setup](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only)).
+
 Or by hand:
 
 ```bash
@@ -50,7 +66,7 @@ import "@genclass/runtime/auto"; // first line of your entry file (Next.js 15.3+
 Or with no build step, first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.6"></script>
 ```
 
 That is the whole setup. Network traffic, user actions, errors and timing are observed, and so is your app's state:
@@ -59,7 +75,7 @@ React component state, Redux and Redux Toolkit stores, and Zustand stores with `
 are not: there, stale responses are reported only for stores you register (double submits need no state).
 
 **Versions:** this README describes `0.3.0` with model `@genclass/runtime-model@0.2.0`. The newest line is
-`0.3.0-beta.5`, npm's `beta` dist-tag (`0.3.0-beta.1` to `beta.5` were released between 2026-10-22 and 2026-11-02);
+`0.3.0-beta.6`, npm's `beta` dist-tag (`0.3.0-beta.1` to `beta.6` were released between 2026-10-22 and 2026-11-03);
 npm's `latest` is still the older `0.2.3` (`npm view @genclass/runtime dist-tags` shows them now). Every npm and npx
 command here names `@beta`: without it npm installs `0.2.x`, which has no token, dashboard, interaction analytics,
 visual checks or agent link and ignores those options without a word (a TypeScript app gets a type error for
@@ -468,7 +484,9 @@ npx @genclass/runtime@beta remove             # undo exactly what init added
 
 Other flags: `--yes`, `--no-telemetry` (`--telemetry` undoes it on a later run and writes no telemetry option, so
 the default applies: on, but off on local hosts), `--no-token`, `--token gc_...`, `--sink`, `--model-url`, `--no-install`,
-`--no-devtools`, and from `0.3.0-beta.2` `--no-network` and `--sync` (plain HTML).
+`--no-devtools`, `--agent` (from `0.3.0-beta.6`: the dev-only agent link too, so your coding agent sees the dev
+pages; [Your coding agent](#your-coding-agent-replay-and-explore)), and from `0.3.0-beta.2` `--no-network` and
+`--sync` (plain HTML).
 
 **Which version** (from `0.3.0-beta.2`). `init` (and `login`, `connect`) first prints its own version and the npm
 dist-tag it came from, asks npm's dist-tags once (`npm view @genclass/runtime dist-tags`, at most 3 s; never with
@@ -476,11 +494,11 @@ dist-tag it came from, asks npm's dist-tags once (`npm view @genclass/runtime di
 on npm, with the command that runs it:
 
 ```
-  ✔ Version    @genclass/runtime 0.3.0-beta.4 (npm dist-tag beta)
-  ▲ Newer      @genclass/runtime 0.3.0-beta.5 is on npm (dist-tag beta): run npx @genclass/runtime@beta init instead
+  ✔ Version    @genclass/runtime 0.3.0-beta.5 (npm dist-tag beta)
+  ▲ Newer      @genclass/runtime 0.3.0-beta.6 is on npm (dist-tag beta): run npx @genclass/runtime@beta init instead
 ```
 
-It installs its own version (`@genclass/runtime@^0.3.0-beta.5` today), and a project that already has an older one
+It installs its own version (`@genclass/runtime@^0.3.0-beta.6` today), and a project that already has an older one
 (a `0.2.x` from `npx @genclass/runtime init` without `@beta`) is upgraded, after the same diff and question. Every
 command it prints names `@beta` while it is a prerelease.
 
@@ -509,7 +527,7 @@ Options go in `window.GENCLASS_CONFIG = { ... }` (any `InitOptions`, set before 
 **3. One script tag** (no build step), first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5" data-mode="observe" data-devtools="local"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.6" data-mode="observe" data-devtools="local"></script>
 ```
 
 It exposes `window.GenClass` and loads the model worker and the overlay on demand from the same version; `data-mode`,
@@ -675,8 +693,13 @@ Claude Code and other coding agents, and lets the agent:
 - **keep the proof:** a generated Playwright test that sets the same order and fails while the bug is there.
 
 ```bash
-claude mcp add genclass -- npx -y @genclass/mcp@0.2.1
+npx @genclass/runtime@beta init --agent   # the app side: a dev-only line next to the import init writes (0.3.0-beta.6)
+npx -y @genclass/mcp@0.2.1 init                 # the server in .mcp.json and the `genclass` skill, for Claude Code
 ```
+
+Other agents: `npx -y @genclass/mcp@0.2.1 config <client>`, or `claude mcp add genclass -- npx -y @genclass/mcp@0.2.1`. By
+hand, the app side is one line in a development build (plain HTML: a module script after the tag, which `init --agent`
+writes too):
 
 ```ts
 import { GenClass } from "@genclass/runtime";

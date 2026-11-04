@@ -76,6 +76,10 @@ const PINS: Pin[] = [
   { file: "docs/runtime/AGENT.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "README.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "packages/runtime/README.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  { file: "docs/runtime/INSTALL.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  { file: "FAQ.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  // the runtime CLI's own text (init --help, the Next line after init --agent) names the server's launcher
+  { file: "packages/runtime/bin/lib/version.mjs", text: (s) => s.replace(PINNED, pinned(V)) },
 ];
 
 function read(file: string): string {

@@ -171,6 +171,15 @@ Nothing is sold on the site. The pricing page shows the plans in force.
 Details: [genclass.dev/pricing](https://genclass.dev/pricing),
 [billing/plans.json](https://github.com/genclass-dev/GenClass/blob/main/billing/plans.json).
 
+## Can I use it without an account?
+
+Yes. Two commands set up every open-source part, and nothing asks you to sign in:
+`npx @genclass/runtime@beta init --agent` (the runtime in observe mode, the dev-only overlay and agent link, and the
+app's free dashboard link; `--agent` is new in `0.3.0-beta.6`) and `npx -y @genclass/mcp@0.2.1 init` (the MCP server and the `genclass` skill for Claude Code).
+Anonymous diagnostics stay on, as with every `init` (never page text, never from local hosts);
+`init --no-telemetry --agent` turns them off and creates no dashboard link. Details:
+[INSTALL.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/INSTALL.md#how-do-i-set-up-the-open-source-parts-only).
+
 ## How is it different from Sentry, Datadog or my tests?
 
 Error trackers and APM collect exceptions, traces and timings; a stale response or a double submit usually throws

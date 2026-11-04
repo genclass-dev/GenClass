@@ -1,9 +1,10 @@
 // Text edits for `genclass-runtime init|remove`. Everything init adds carries a marker:
 //   - single lines:  `import genclass from "@genclass/runtime/auto"; // genclass:init`
 //   - blocks (files init creates): from a line containing `genclass:init start` to one containing `genclass:init end`
-//   - three inline forms, used only when the place to insert shares its line with other code (a one-line <head> or
-//     <body>): `<GenClassInit />{/* genclass:inline */}`, `<script>... // genclass:inline</script>` (Astro) and
-//     `<script ...></script><!-- genclass:inline -->` (HTML)
+//   - four inline forms, used only when the place to insert shares its line with other code (a one-line <head> or
+//     <body>): `<GenClassInit />{/* genclass:inline */}`, `<script>... // genclass:inline</script>` (Astro),
+//     `<script ...></script><!-- genclass:inline -->` (HTML) and `<script type="module">...</script><!-- genclass:inline -->`
+//     (HTML with --agent: the agent link's module script)
 // `planRemoval` deletes exactly those (a marked statement together with its line break), so a file init only added
 // to comes back byte for byte, and refuses (reports a problem, deletes nothing there) when a marked line or block is
 // not what init wrote. `switchMode` re-points the same marked code at another mode.
@@ -119,6 +120,8 @@ export const AUTO = (mode) => (mode ? `@genclass/runtime/auto/${mode}` : "@gencl
 
 const AUTO_SPEC = String.raw`"@genclass/runtime/auto(?:/(?:observe|guard|heal))?"`;
 const DEVTOOLS_CALL = String.raw`import\("@genclass/runtime/devtools"\)\.then\(d=>d\.mountDevtools\(genclass\)\)`;
+// the dev-only agent link (init --agent): the same shape, @genclass/runtime/agent's connectAgent on the runtime
+const AGENT_CALL = String.raw`import\("@genclass/runtime/agent"\)\.then\(a=>a\.connectAgent\(genclass\)\)`;
 const COND = String.raw`[^;{}]+?`;
 const IMPORT_AUTO = String.raw`import(?:genclassfrom)?${AUTO_SPEC};?`;
 // the options file init writes with --no-telemetry / --telemetry / --model-url, imported right before /auto
@@ -126,8 +129,12 @@ const IMPORT_CONFIG = String.raw`import"(?:\.{1,2}/)+(?:[\w.-]+/)*genclass\.conf
 const CONFIG_STATEMENT = String.raw`(?:\(globalThisas\{GENCLASS_CONFIG\?:\w+\}\)|globalThis)\.GENCLASS_CONFIG=\{[^;]*\};?`;
 const META_CONFIG = String.raw`<metaname="genclass"content="[^"]*"/?>`;
 const DEV_LINE = String.raw`if\(${COND}\)${DEVTOOLS_CALL};?`;
-// the same with braces (ESLint's `curly` fix)
-const DEV_BLOCK = String.raw`if\(${COND}\)\{${DEVTOOLS_CALL};?\}`;
+const AGENT_LINE = String.raw`if\(${COND}\)${AGENT_CALL};?`;
+// the same with braces (ESLint's `curly` fix), and the one block Next.js's created files hold both calls in
+const DEV_BLOCK = String.raw`if\(${COND}\)\{(?:${DEVTOOLS_CALL};?(?:${AGENT_CALL};?)?|${AGENT_CALL};?)\}`;
+const AGENT_BLOCK = String.raw`if\(${COND}\)\{${AGENT_CALL};?\}`;
+// plain HTML with --agent: a module script after the runtime's tag (module scripts run after deferred ones, in order)
+const AGENT_SCRIPT = String.raw`<scripttype="module">if\(\["localhost","127\.0\.0\.1"\]\.includes\(location\.hostname\)\)import\("[^"]*"\)\.then\(a=>a\.connectAgent\(GenClass\.runtime\)\);?</script>`;
 /** Statements init writes on one marked line (normalised, see norm()). */
 const LINE_RE = new RegExp(
   "^(?:" +
@@ -137,11 +144,13 @@ const LINE_RE = new RegExp(
       META_CONFIG,
       DEV_LINE,
       DEV_BLOCK,
+      AGENT_LINE,
+      AGENT_SCRIPT,
       String.raw`import\{isDevModeasgenclassDevMode\}from"@angular/core";?`,
       String.raw`import\{GenClassInit\}from"[^"]*genclass-init";?`,
       String.raw`<GenClassInit/>`,
       String.raw`<script[^<>]*></script>`,
-      String.raw`<script>${IMPORT_AUTO}(?:${DEV_LINE})?</script>`,
+      String.raw`<script>${IMPORT_AUTO}(?:${DEV_LINE})?(?:${AGENT_LINE})?</script>`,
     ].join("|") +
     ")$",
 );
@@ -155,20 +164,23 @@ const BLOCK_RE = new RegExp(
       CONFIG_STATEMENT,
       DEV_LINE,
       DEV_BLOCK,
+      AGENT_LINE,
       String.raw`importtype\{AppProps\}from"next/app";?`,
       String.raw`exportfunctionGenClassInit\(\)\{returnnull;?\}`,
-      String.raw`exportdefaultdefineNuxtPlugin\(\(\)=>\{(?:${DEV_LINE}|${DEV_BLOCK})?\}\);?`,
+      String.raw`exportdefaultdefineNuxtPlugin\(\(\)=>\{(?:${DEV_LINE}|${DEV_BLOCK})?(?:${AGENT_LINE}|${AGENT_BLOCK})?\}\);?`,
       String.raw`exportdefaultfunctionApp\(\{Component,pageProps\}(?::AppProps)?\)\{return\(?<Component\{\.\.\.pageProps\}/>\)?;?\}`,
     ].join("|") +
     ")*$",
 );
 // Inline forms (init puts them on a line shared with other code); whitespace a formatter adds between the element and
 // its marker is taken out with them. `ok` checks the element is still what init wrote (an Astro <script> holds code).
-const INLINE_SCRIPT_RE = new RegExp(String.raw`^<script>(?:${IMPORT_AUTO})(?:${DEV_LINE})?</script>$`);
+const INLINE_SCRIPT_RE = new RegExp(String.raw`^<script>(?:${IMPORT_AUTO})(?:${DEV_LINE})?(?:${AGENT_LINE})?</script>$`);
+const AGENT_SCRIPT_RE = new RegExp(`^${AGENT_SCRIPT}$`);
 const INLINE = [
   { re: /<GenClassInit\s*\/>\s*\{\s*\/\*\s*genclass:inline\s*\*\/\s*\}/g },
   { re: /<script>(?:(?!<\/script>)[\s\S])*?\/\/\s*genclass:inline\s*<\/script>/g, ok: (m) => INLINE_SCRIPT_RE.test(norm(m)) },
   { re: /<script\b[^>]*><\/script>\s*<!--\s*genclass:inline\s*-->/g },
+  { re: /<script type="module">(?:(?!<\/script>)[\s\S])*?<\/script>\s*<!--\s*genclass:inline\s*-->/g, ok: (m) => AGENT_SCRIPT_RE.test(norm(m)) },
 ];
 const INLINE_RES = INLINE.map((x) => x.re);
 // The only comment line init writes inside a block (planNext, the layout strategy's genclass-init component).
