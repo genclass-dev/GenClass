@@ -5,7 +5,7 @@ These are the steps for an agent (Cline or another) that is asked to install Gen
 re-runs a page with network responses delivered in different orders to find race conditions, replays one exact order,
 and writes a Playwright regression test; it also audits any page for visual bugs (`genclass_scan`). It is free, it
 needs no API key and no account, and it sends nothing off the machine (unless the agent asks `genclass_scan` for
-`hosted: true`, which sends that URL to the genclass.dev page check). (Closed-loop development as a service, with the MCP server, collector and dashboard run for a customer's
+`hosted: true`, which sends that URL to the genclass.dev page check, or you set `GENCLASS_DASHBOARD` or `GENCLASS_REPORT`, which talk to your own dashboard). (Closed-loop development as a service, with the MCP server, collector and dashboard run for a customer's
 developers by GenClass or inside their network, is an Enterprise offer: https://genclass.dev/enterprise.)
 
 ## 1. Requirements
