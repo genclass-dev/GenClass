@@ -1,5 +1,7 @@
 # Race hunt: Mealie recipe search
 
+Refreshed 2026-11-03 at Mealie d4d6f7135 (v3.30.0): the patch applies unchanged and the bug still reproduces. See [Refresh (2026-11-03)](#refresh-2026-11-03) at the end.
+
 Result: **reproduced.** Mealie's recipe search can show the results of an earlier search term. When the response to
 a partial term ("chi") arrives after the response to the full term ("chicken"), it replaces the newer results and
 stays on screen. GenClass explore found it in 5 of 30 reordered runs on the search dialog. It reported none of the 10
@@ -268,3 +270,120 @@ warm-up waits for `load`.
 About 1 hour of wall-clock time (23:26 to 00:25 UTC): 15 minutes for setup (Python 3.14, go-task, LDAP headers,
 seeding), 20 for the harness (injection, LNA, Vuetify menus), 20 for the explore sessions (about 1.6 minutes each),
 and 5 for the fix and its tests.
+
+## Refresh (2026-11-03)
+
+Status: **ready to send.** The bug is still in Mealie's current `mealie-next`. The patch applies unchanged, and the
+tests and both reproductions without GenClass give the same results as on 2026-10-24. Nothing has been filed upstream
+since the hunt. What is left for the sender is in [mealie-pr.md](mealie-pr.md), "Before sending": read the diff,
+reproduce by hand (a console snippet, 2 minutes), run `task ui:check`, search the tracker once more, then send.
+
+### What was re-run
+
+| what | 2026-10-24 | 2026-11-03 |
+|---|---|---|
+| Mealie | `mealie-next` 4391aa8a5 (v3.29.0) | `mealie-next` **d4d6f7135** (2026-11-03 12:24 UTC, v3.30.0 + 27 commits; 79 commits after 4391aa8a5) |
+| toolchain | Python 3.14.6 (uv 0.11.32), go-task 3.54.0, Node 22.22.0, pnpm 11.23.0 | Python 3.14.6 (uv 0.11.32), go-task 3.54.0, Node 22.23.4, pnpm 11.23.0 |
+| GenClass | d77ffd8, runtime 0.3.0-beta.1, mcp 0.1.0 | c1c9e14, runtime 0.3.0-beta.5, mcp 0.2.1, both built locally |
+| browser | Playwright 1.63.0, Chromium 153 headless shell | the same |
+
+Setup, as in section 1 (`apt-get install libldap2-dev libsasl2-dev`, `go install github.com/go-task/task/v3/cmd/task@latest`,
+`uv python install 3.14`, `task setup`, `task py`, `pnpm run dev --no-fork` in `frontend/`, then `seed.mjs`,
+`login.mjs`, `login2.mjs`). One new step: on a fresh clone the frontend unit tests fail with
+`Failed to load tsconfig '.nuxt/tsconfig.json'` until `pnpm exec nuxi prepare` (or `task ui`) has generated `.nuxt/`.
+The backend tests need NLTK's tagger data. The dev setup does not install it, and Docker's
+`docker/setup_nltk_data.sh` does. Without it, 18 tests in `test_nlp_parser.py` fail. With the same 300 seeded recipes, "chi" returns 60 recipes (first page: 15 Chicken, 5 Chickpea) and "chicken"
+returns 15, as before.
+
+Code: none of the 79 new commits touches `use-recipe-search.ts`, `RecipeDialogSearch.vue` or
+`RecipeIngredientEditor.vue`, so every file and line number in sections 2 and 6 still holds at d4d6f7135.
+The patch applies with `git apply`. Regenerated with `git diff mealie-next`, it is byte-identical to
+[mealie.patch](mealie.patch), so the file is unchanged.
+
+### The numbers
+
+| check (commands in section 3; `cd frontend` for vitest) | unpatched | patched |
+|---|---|---|
+| new tests, `pnpm exec vitest run app/composables/recipes/__tests__/use-recipe-search.test.ts`, 3 runs each | **2 failed** in 3 of 3 runs (`expected [ { name: 'chi recipe' } ] to deeply equal [ { name: 'chicken recipe' } ]`; `expected false to be true`) | **2 passed** in 3 of 3 runs |
+| `task ui:check`: `pnpm lint --max-warnings=0` | | clean (exit 0) |
+| `task ui:check`: `pnpm exec vitest run` (whole frontend suite) | | 58 files, 629 tests passed |
+| `task py:check` (ruff format, ruff check, semgrep, mypy, pytest) | | ruff format (751 files unchanged), ruff check, semgrep (0 findings) and mypy (479 files) clean. pytest: 18 failed, 3701 passed, 17 skipped. All 18 failures were in `test_nlp_parser.py` (`LookupError`: NLTK's `averaged_perceptron_tagger_eng` was not installed). After `NLTK_DATA=~/targets/nltk_data bash docker/setup_nltk_data.sh` (the Dockerfile's step): **3719 passed, 17 skipped**, exit 0 |
+| plain Playwright, `repro-plain.mjs` ("chi" response held 2 s with `page.route`) | **3 of 3 stale** (20 shown, 15 expected) | **0 of 6 stale** ("chi" still answered last in 6 of 6) |
+| console snippet, `repro-console.mjs` (new: sending of the "chi" request delayed 2 s by a snippet pasted into the page; no interception) | **3 of 3 stale** | **0 of 6 stale** ("chi" sent and answered after "chicken" in 6 of 6) |
+| GenClass explore, dialog-pause, `--atom`, slow 900, pause 1100, 90 ms keys, 2 fifo + 6 seeded | DOM oracle: 1 of 6 seeded wrong (seed 1), 0 of 2 baselines; explore: **"No race found"**, the run filed as "Internal state only" with the `overwrote-newer searchResults` witness (problem 6) | DOM oracle: 0 of 8 loads wrong; explore: no race in 6 of 6 (2 of 6 seeded runs delivered "chicken" before "chi" to the app) |
+| GenClass explore, the same without `--atom` | DOM oracle: 1 of 6 seeded wrong (seed 1); explore: "No race found" (problem 1, unchanged) | not run |
+
+On 2026-10-24, the same dialog-pause session with the atom flagged seeds 1 and 5 (2 of 6). Today only seed 1 went
+wrong, by the oracle too. Whether a seeded schedule holds "chi" long enough depends on timing, so 1 and 2 of 6 are
+both within what one session of M = 6 can show. Explore ran only these three sessions (24 loads); the other
+scenarios in section 4 were not re-run.
+
+Commands (on top of section 3's):
+
+```bash
+cd ~/targets/mealie && git apply /path/to/mealie.patch          # fixed; `git stash push <composable>` for unfixed
+cd frontend && pnpm exec nuxi prepare && pnpm exec vitest run app/composables/recipes/__tests__/use-recipe-search.test.ts
+pnpm lint --max-warnings=0 && pnpm exec vitest run
+cd .. && NLTK_DATA=~/targets/nltk_data bash docker/setup_nltk_data.sh && NLTK_DATA=~/targets/nltk_data task py:check
+node repro-plain.mjs 3 && node repro-console.mjs 3            # unfixed; 6 each when fixed
+HUNT_PAUSE=1100 node hunt.mjs --atom --scenario dialog-pause --slow 900 --tag buggy
+```
+
+### Upstream tracker and policy (2026-11-03)
+
+- Searches (`gh api -X GET search/issues`, repo `mealie-recipes/mealie`, 3 s apart, each with `is:issue` and
+  `is:pr`): `search stale results`, `search results out of order`, `use-recipe-search`, `search race condition`,
+  `search wrong results typing`, `search debounce`, `"search dialog"`, and everything with `search` created on or
+  after 2026-10-24. No issue or PR covers this bug. The search-related items opened since the hunt are about
+  something else: #8917 (the filter menu's search field on iPhone), #8953 (the filter search open while
+  scrolling), #8927 (filter by owner) and #8952 (On Hand workflow). The diffs of the three open PRs
+  (`git fetch origin pull/N/head`) do not touch `use-recipe-search.ts`; #8953 and #8927 change `SearchFilter.vue`
+  and the explorer's search.
+- #2808 is still open (`bug`, `bug: confirmed`, 11 comments, last updated 2026-09-30), and #8754 is still open (last
+  updated 2026-10-20). Both are unchanged since the hunt, so the decision not to comment there stands
+  (mealie-pr.md, section 1).
+- Policy at d4d6f7135. `.github/pull_request_template.md` (last changed 2026-10-17): Conventional Commits title;
+  "What this PR does", "Which issue(s) this PR fixes" and "AI / LLM Assistance" are required; "Failure to accurately
+  disclose LLM usage may result in review delays or closure of your PR." `AGENTS.md` (= `CLAUDE.md`, 2026-09-23):
+  run `task py:check` and `task ui:check` before a PR; drafts are optional. CONTRIBUTING
+  (`docs/docs/contributors/developers-guide/code-contributions.md`, unchanged since 2024-06-04): branch from
+  `mealie-next`, draft PR first, AGPL, no CLA. No file in the repository bans AI-assisted contributions.
+  `git grep` over `docs/` found no AI policy beyond the template.
+
+### What changed in the drafts
+
+- [mealie-pr.md](mealie-pr.md): commit and version (d4d6f7135, v3.30.0); the AI-policy line now quotes the
+  template. The 2026-10-24 version said Mealie "close[s] AI-generated PRs without review", which nothing in the
+  repository says. The checks line: `task ui:check` and `task py:check` were run. Draft PRs: CONTRIBUTING says
+  draft first, AGENTS.md says optional. The `nuxi prepare` step is new. #2808 and #8754 were re-checked, with
+  links. There is a by-hand reproduction (the console snippet, also in the issue's steps). The draft issue now fills
+  every field the bug-report form requires (First Check, logs, Deployment) and carries the disclosure paragraph. The
+  PR's Testing section has today's suite count (629 tests) and the snippet method, and its AI / LLM Assistance
+  paragraph is unchanged.
+- [mealie-harness/repro-console.mjs](mealie-harness/repro-console.mjs): new. It runs the console snippet from the
+  drafts in Playwright, so the by-hand step is measured as written.
+- [mealie.patch](mealie.patch): unchanged (see above).
+
+### Problems with GenClass itself (new or re-checked)
+
+6. **New since the hunt: a store difference is not a race unless the page text differs, and the page text is capped
+   at 300 lines.** Commit e603695 (2026-10-25, "explore reports a race only when the page differs") files a run
+   whose only differences are store values as "Internal state only (not a race by this check)"
+   (`packages/mcp/src/tools.ts`, line 367). On Mealie the results are on the page, at line 599 of 689. The snapshot
+   keeps lines 1 to 300 (`packages/runtime/src/agent/index.ts`, line 354, problem 1). So the run that showed
+   Chickpea recipes under "chicken" (run r4, seed 1: `state "searchResults": baseline "30: Chicken Bowl ... Chicken
+   Wrap", this run "40: Chicken Bowl ... Chickpea Pasta"`, with `witness only here: overwrote-newer searchResults by
+   GET /api/recipes`) is now reported as "No race found". The atom workaround that found the race on 2026-10-24 no
+   longer gives a verdict. The text adds that "a field that matters belongs on the page or in a test", but here it
+   is on the page. Ideas: fix problem 1 first. Or count an `overwrote-newer` witness that appears only in the
+   differing runs as a race, or at least name it in the verdict line, not only under "Internal state only".
+7. Problems 1 and 2 are unchanged in the code: `.slice(0, 300)` in `snapshot()` and `TYPING_BURST_MS = 1000` in
+   `runtime.ts`, line 152. Problem 4 (Local Network Access) was not re-tested: the harness still launches Chromium
+   with `--disable-features=LocalNetworkAccessChecks`. Problem 3 (the ingredient editor) was not re-run.
+
+### Time spent
+
+About 40 minutes of wall-clock time (16:35 to 17:15 UTC), with `task py:check` running alongside the rest: 10 minutes for the clone and setup (LDAP headers, go-task, Python 3.14,
+`task setup`, `nuxi prepare`), 10 for the tests and `task ui:check`, 10 for the two reproductions and the three
+explore sessions (1.5 minutes each), 5 for the tracker searches and the policy files, 5 for `task py:check` and the
+NLTK re-run, and 5 for the drafts and this section.
