@@ -34,7 +34,7 @@ page of the dev server. The page side needs `@genclass/runtime` 0.3.0-beta.1 or 
 In the plugin repository the server is vendored: `server/cli.mjs` is the published `@genclass/mcp@0.2.1` build (its
 `dist/cli.js`, byte for byte, fetched from npm by the daily sync), `server/genclass-mcp.mjs` is the package's command
 importing it, and `.mcp.json` and the hook run them with `node` from `${CLAUDE_PLUGIN_ROOT}`, so installing the plugin
-installs nothing and runs the exact release it was reviewed with; there is no `package.json` or lockfile. The copy of
+installs nothing and runs the exact release it was reviewed with (the one download is `genclass_scan`'s, below); there is no `package.json` or lockfile. The copy of
 this folder inside GenClass runs `npx -y @genclass/mcp@0.2.1` instead (nothing built is committed there).
 `plugin.json` and `mcp.json` at this folder's root are the same server in the
 [Agent Plugins](https://agent-plugins.org) format, for Cursor, Codex and other clients that read it (server and skill,
@@ -50,15 +50,18 @@ no bridge is running or nothing is new, and gives up after 0.8 seconds if the br
 of a session only sets the cursor (`genclass_findings` has the backlog).
 
 The server listens on 127.0.0.1 only and accepts pages from this machine (`localhost`, `127.0.0.1`, `*.localhost`)
-or origins you list in `GENCLASS_AGENT_ORIGINS`. Nothing leaves your machine, except `genclass_analytics`
-`{source: "production"}`, which reads your own GenClass dashboard when you set `GENCLASS_DASHBOARD` to its link, and
-`genclass_scan` with `hosted: true`, which sends the URL to the genclass.dev page check (without it, the page loads
-in a local headless browser).
+or origins you list in `GENCLASS_AGENT_ORIGINS`. Nothing leaves your machine unless you or your agent ask
+for it: `genclass_analytics` `{source: "production"}` reads your own GenClass dashboard when you set
+`GENCLASS_DASHBOARD` to its link; `genclass_scan` with `hosted: true` sends the URL to the genclass.dev page check
+(without it, the page loads in a local headless browser); and `GENCLASS_REPORT`, off by default, mirrors finding ids,
+kinds, page paths, replay verdicts and counts to that dashboard, never titles or page text. When the project has no
+`@genclass/runtime`, `genclass_scan` downloads it from npm through npx.
 Details: [AGENT.md section 6](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md#6-untrusted-input-and-security).
 
 ## Privacy
 
-The plugin collects nothing and sends nothing to GenClass or anyone else. Findings stay in `.genclass/agent/` in your
+By default the plugin collects nothing and sends nothing to GenClass or anyone else; the exceptions you can turn on are
+listed above. Findings stay in `.genclass/agent/` in your
 project (gitignored by the server) and in the bridge's memory. The runtime in your app has its own disclosed
 diagnostics, which `GenClass.init({ telemetry: false })` turns off ([PRIVACY.md](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md)).
 

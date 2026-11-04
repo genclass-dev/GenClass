@@ -384,10 +384,10 @@ your machine (the exceptions are under Privacy). See section 6 of
 
 ## Privacy
 
-The server collects nothing and sends nothing to GenClass or anyone else. Findings stay on your machine, in
+By default the server collects nothing and sends nothing to GenClass or anyone else. Findings stay on your machine, in
 `.genclass/agent/` in the server's working directory (the project, for clients that start servers there; set
 `GENCLASS_STATE_DIR` for clients that do not, such as Claude Desktop), which the server gitignores, and in the bridge's memory; the bridge's token is in
-`~/.genclass`. The one request that leaves the machine is `genclass_analytics` `{source: "production"}`, which reads
+`~/.genclass`. `genclass_analytics` `{source: "production"}` reads
 your own GenClass dashboard when you set `GENCLASS_DASHBOARD` to its private link. `genclass_scan` loads the page the
 agent names (that is the page's own traffic) in a local browser; only with `hosted: true` is the URL sent to the
 genclass.dev page check, and when the project has no `@genclass/runtime` with `scan`, npx downloads it from npm. With `GENCLASS_REPORT` set (off by
