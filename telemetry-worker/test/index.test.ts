@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { gunzipSync } from "node:zlib";
 import { handle, MAX_BODY_BYTES, MAX_EVENTS, validate } from "../src/collector.js";
+import { resetTokenCache } from "../src/dashboard.js";
+import { d1 } from "./d1.js";
 
 function bucket() {
   const puts: { key: string; body: Uint8Array }[] = [];
@@ -123,5 +125,37 @@ describe("collector", () => {
     const res = await handle(new Request("https://c.example/v1/events", { method: "OPTIONS" }), bucket(), opts);
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("a client that goes away cannot cancel ingest: waitUntil holds it from the start, and only those promises finish the batch", async () => {
+    resetTokenCache();
+    const token = "gc_aaaaaaaaaaaaaaaaaaaaaa";
+    const db = d1();
+    db.db.prepare("INSERT INTO projects (token, secret_hash, name, created) VALUES (?, 'x', 'x', '2026-10-08')").run(token);
+    let ack = () => {};
+    const acked = new Promise<void>((res) => (ack = res));
+    const puts: string[] = [];
+    const env = { DB: db.api, BUCKET: { async put(key: string) { puts.push(key); await acked; } } };
+    const waits: Promise<unknown>[] = [];
+    // the reply is never read, as when the client is gone
+    void handle(post(JSON.stringify(batch({ token }))), env, { ...opts, waitUntil: (p) => waits.push(p) });
+    // held before anything is awaited, so no moment of ingest is left to the client's connection
+    expect(waits).toHaveLength(1);
+    await new Promise((res) => setTimeout(res, 5));
+    expect(puts).toHaveLength(1);
+    expect(db.rows("SELECT sid_hash FROM sessions")).toHaveLength(0);
+    ack();
+    for (let i = 0; i < waits.length; i++) await waits[i];
+    expect(db.rows("SELECT sid_hash FROM sessions")).toHaveLength(1);
+    expect(db.rows("SELECT count FROM daily WHERE metric = 'sessions'")).toEqual([{ count: 1 }]);
+  });
+
+  it("a request that fails part way rejects as before, and what waitUntil holds never rejects", async () => {
+    const waits: Promise<unknown>[] = [];
+    const broken = new ReadableStream({ pull(c) { c.error(new Error("client gone")); } });
+    const req = new Request("https://c.example/v1/events", { method: "POST", body: broken, duplex: "half", headers: { "content-type": "text/plain" } } as RequestInit);
+    await expect(handle(req, bucket(), { ...opts, waitUntil: (p) => waits.push(p) })).rejects.toThrow("client gone");
+    expect(waits).toHaveLength(1);
+    await expect(waits[0]).resolves.toBeUndefined();
   });
 });

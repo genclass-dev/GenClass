@@ -193,7 +193,7 @@ export interface HandleOptions {
   uuid?: () => string;
   /** Outgoing requests to Google and GitHub during sign-in (the global fetch in production; tests mock it). */
   fetch?: (input: string, init?: RequestInit) => Promise<Response>;
-  /** ctx.waitUntil in production (aggregation runs after the response); tests await inline. */
+  /** ctx.waitUntil in production (it holds ingest if the client goes away; aggregation runs after the response); tests await inline. */
   waitUntil?: (p: Promise<unknown>) => void;
   /** Requests on genclass.dev that this worker does not serve go on to the site (fetch in production). */
   passthrough?: (request: Request) => Promise<Response>;
@@ -206,7 +206,13 @@ export async function handle(request: Request, env: Env, opts: HandleOptions = {
   if (path === "/v1/health" && (request.method === "GET" || request.method === "HEAD")) {
     return reply(200, { ok: true, schema: SCHEMA });
   }
-  if (path === "/v1/events" || path === "/api/v1/events") return ingest(request, env, opts);
+  if (path === "/v1/events" || path === "/api/v1/events") {
+    // A client that goes away (a browser being shut down) cancels the handler unless waitUntil holds it: without this a
+    // batch could reach R2 and never be counted, or be lost before R2.
+    const res = ingest(request, env, opts);
+    opts.waitUntil?.(res.catch(() => undefined));
+    return res;
+  }
   const billing = await routeBilling(request, url, path, env, opts);
   if (billing) return billing;
   const account = await routeAuth(request, url, path, env, opts);

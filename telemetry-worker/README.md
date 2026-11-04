@@ -169,7 +169,8 @@ carries no sampling settings (rule 8), so the worker cannot reweight them; the p
 Each batch is aggregated in one `db.batch()` (multi-row upserts `count = count + excluded.count`, at most 300 distinct
 event counters and 300 exact ones per batch) after one `SELECT` of its page load's state (both again, for the exact part
 only, when another batch of the same page load wrote first). Aggregation runs in `ctx.waitUntil` after the
-202 and its failures are swallowed, so D1 can never break ingest.
+202 and its failures are swallowed, so D1 can never break ingest. `ctx.waitUntil` also holds ingest itself from its first
+line, so a client that goes away mid-request (a browser being shut down) cancels neither the R2 write nor the counting.
 
 ## Privacy invariants
 
