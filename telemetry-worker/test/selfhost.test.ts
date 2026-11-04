@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CDN_SCRIPT, dashboardPage, esc, ownEndpoint, RUNTIME_PKG, startPage } from "../src/pages.js";
+import { CDN_SCRIPT, dashboardPage, esc, ownEndpoint, RUNTIME_PKG, setupPage, startPage } from "../src/pages.js";
+
+const setupOf = (endpoint: string | null) => setupPage("n", { token: "gc_TestToken0123456789abc", secret: "a".repeat(32), lastEvent: null, endpoint });
 import { call, setup } from "./account-helpers.js";
 
 // Private mode (README "Self-host the collector (private mode)"): the same worker on the app owner's own Cloudflare
@@ -31,8 +33,9 @@ describe("private mode: a self-hosted collector's snippets name its own endpoint
   });
 
   it("/start: every snippet sends to the endpoint, through GENCLASS_CONFIG or GenClass.init; no npx init", () => {
-    const html = startPage("n", { endpoint: EP });
-    expect(html).toContain(`renderSnippets(document.getElementById("snips"), j.token, ${JSON.stringify(EP)})`);
+    const html = setupOf(EP);
+    expect(html).toContain('renderSnippets(document.getElementById("snips"), C.token, C.endpoint)');
+    expect(html).toContain(`"endpoint":${JSON.stringify(EP)}`);
     const snippets = clientSnippets(html);
     const s = snippets("gc_TestToken0123456789abc", EP);
     expect(s.map((x) => x[0])).toEqual(["Easy: one script tag", "Easy: with a bundler", "Function-specific"]);
@@ -49,7 +52,7 @@ describe("private mode: a self-hosted collector's snippets name its own endpoint
     expect(d.map((x) => x[0])).toEqual(["Easy: one script tag", "Easy: with a bundler", "Function-specific", "Automatic setup"]);
     expect(d[0]![2]).toBe(`<script src="${CDN_SCRIPT}" data-token="gc_TestToken0123456789abc"></script>`);
     expect(JSON.stringify(d)).not.toContain("GENCLASS_CONFIG");
-    expect(startPage("n")).toContain('renderSnippets(document.getElementById("snips"), j.token, "")');
+    expect(setupOf(null)).toContain('"endpoint":""');
   });
 
   it("the account Connect panel: the key with the endpoint, no npx login; a private link's setup passes the endpoint", () => {
@@ -72,10 +75,10 @@ describe("private mode: a self-hosted collector's snippets name its own endpoint
 
   it("a collector with DASHBOARD_ORIGIN set: /start names its endpoint, new links point to it, and it takes events", async () => {
     const { env } = setup({ DASHBOARD_ORIGIN: ORIGIN });
-    const start = await (await call(env, "GET", "/start", {})).text();
-    expect(start).toContain(JSON.stringify(EP));
     const j = (await (await call(env, "POST", "/api/projects", { body: { name: "Private app" }, origin: null })).json()) as any;
     expect(j.dashboardUrl.startsWith(`${ORIGIN}/dashboard/`)).toBe(true);
+    const start = await (await call(env, "GET", `/start/${j.dashboardUrl.split("/").pop()}`, {})).text();
+    expect(start).toContain(JSON.stringify(EP));
     const r = await call(env, "POST", "/v1/events", {
       body: { schema: "genclass-telemetry/1", sid: "aaaaaaaaaaaa", sent: 1, runtime: "0.3.0", model: "0.2.0", token: j.token, events: [{ t: "session", seq: 0, host: "app.example", route: "/" }] },
       origin: null,

@@ -345,7 +345,7 @@ export const SCAN_CMD = "npx @genclass/runtime@beta scan <url>";
 function printLittleToWatch(kind) {
   if (!kind) return;
   const why = kind === "none" ? "No fetch, XHR, WebSocket or EventSource call was found in your sources" : "Your page has one script";
-  out(`  ${c.bold("Note")} ${why}, so GenClass will have little to find here beyond request health (runtime.summary().requests); the measured visual checks (visual: true) and the page scan (${c.cyan(SCAN_CMD)}) apply to a mostly static site.`);
+  out(`  ${c.bold("Note")} ${why}, so GenClass will have little to find here. For a mostly static site, try ${c.cyan(SCAN_CMD)}.`);
   out();
 }
 
@@ -395,13 +395,9 @@ function telemetryNotice(cfg, where) {
     return;
   }
   row("Telemetry", `${c.bold("on")}${cfg.telemetry ? c.gray(" (--telemetry)") : c.gray(" (the default)")}`);
-  out(`             GenClass sends anonymous diagnostics to its maintainers: its decisions, action outcomes,`);
-  out(`             model status and counts. No text from the page (the situation text the model read is sent`);
-  out(`             only with telemetry: { include: { situation: true } }); never cookies or IP addresses;`);
-  out(`             never from localhost or private hosts. Turn it off: ${c.cyan(`${CMD} init --no-telemetry`)}`);
-  out(`             (or GenClass.init({ telemetry: false }), ?genclass=no-telemetry in the URL).`);
-  out(`             What is sent: ${TELEMETRY_URL}`);
-  out(`             Privacy policy: ${PRIVACY_URL}`);
+  out(`             Anonymous counts and decisions go to GenClass's maintainers: no page text, cookies or IP`);
+  out(`             addresses, never from localhost. Off: ${c.cyan(`${CMD} init --no-telemetry`)}`);
+  out(`             What is sent: ${TELEMETRY_URL} · Privacy: ${PRIVACY_URL}`);
 }
 
 /** Where to put the self-hosted model: the folder the framework serves as-is. */
@@ -984,16 +980,14 @@ export async function init(o, ctx = {}) {
   const script = project.pkg?.scripts?.dev ? "dev" : project.pkg?.scripts?.start ? "start" : null;
   if (project.framework === "html") out(`    ${sym.dot} Open your page. ${o.sync ? "GenClass starts before your other scripts." : "GenClass starts once the page is parsed, before your deferred and module scripts (--sync: before every script)."}`);
   else if (script) out(`    ${sym.dot} Run ${c.cyan(runCmd(project.pm, script))} and open the app.`);
-  out(`    ${sym.dot} Detections and actions appear in the browser console as ${c.cyan("[GenClass] ...")} lines.`);
+  if (devtools && changes.some((ch) => /devtools/.test(ch.after))) out(`    ${sym.dot} An overlay at the bottom right of dev pages shows what GenClass sees (${c.bold("Alt+Shift+G")}).`);
+  out(`    ${sym.dot} Findings also appear in the browser console as ${c.cyan("[GenClass] ...")} lines.`);
   if (cfg.sinks?.length) out(`    ${sym.dot} They also reach ${c.cyan(cfg.sinks.join(", "))}: ${cfg.sinks.map((s) => SINK_WHAT[sinkBase(s)] ?? s).join("; ")}.`);
-  if (devtools && changes.some((ch) => /devtools/.test(ch.after))) out(`    ${sym.dot} In development an overlay shows what GenClass sees (bottom-right, ${c.bold("Alt+Shift+G")}).`);
-  out(`    ${sym.dot} Rule it out while debugging: add ${c.cyan("?genclass=off")} to the URL.`);
-
   out();
-  printRecommendations(recs);
   printMoneyAdvice(money, cfgAt);
   printLittleToWatch(quiet);
-  out(`  Undo: ${c.cyan(`${CMD} remove`)}`);
+  if (recs.length) out(`  ${c.gray(`${recs.length} optional upgrade${recs.length === 1 ? "" : "s"}:`)} ${c.cyan(`${CMD} init --dry-run`)}`);
+  out(`  Off for one page: ${c.cyan("?genclass=off")}. Undo: ${c.cyan(`${CMD} remove`)}`);
   out();
   return 0;
 }
