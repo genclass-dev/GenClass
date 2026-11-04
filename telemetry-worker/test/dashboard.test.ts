@@ -6,6 +6,7 @@ import { handle, MAX_PROJECTS_PER_MINUTE, validate, type Env } from "../src/coll
 import { aggregate, RECENT_CAP, resetTokenCache, retention, sanitizeName, SESSION_KEEP_MS, sha256Hex, stats, TOKEN_RE, type D1Like, type D1Stmt } from "../src/dashboard.js";
 import { sampleStats } from "../src/sample.js";
 import { MIGRATIONS } from "./d1.js";
+import { agentLinks, agentPrompt, setupCommand } from "../src/pages.js";
 
 // On the plans as they were before 2026-10-19 (test/fixtures/plans-two-paid.json), where Free has no dashboard, so the
 // locked private link stays tested. With the real plans (test/plans.test.ts) every private link opens its dashboard.
@@ -412,12 +413,12 @@ describe("dashboard pages", () => {
     const start = await handle(new Request("https://genclass.dev/start"), env, opts);
     expect(start.status).toBe(200);
     const html = await start.text();
-    expect(html).toContain("Get a token");
-    expect(html).toContain("The dashboard is free.");
+    expect(html).toContain("Add to my app");
+    expect(html).toContain("No sign-up, no card.");
     expect(html).not.toMatch(/trial/i);
-    expect(html).not.toContain("Free, no account");
-    expect(html).toContain('fetch("/api/projects"');
-    expect(html).toContain("https://cdn.jsdelivr.net/npm/@genclass/runtime");
+    expect(html).not.toContain("<input");
+    expect(html).toContain('fetch("/start"');
+    expect(start.headers.get("content-security-policy")).toContain("form-action 'self'");
     expect((await handle(new Request("https://genclass.dev/dashboard"), env, opts)).headers.get("location")).toBe("/start");
     // the open-source parts with no account: a static page under the same nonce CSP, nothing written
     const TABLES = ["projects", "accounts", "auth_sessions", "challenges", "sessions"];
@@ -763,12 +764,12 @@ describe("dashboard counts (display fixes)", () => {
 
   it("/start and the empty dashboard say local hosts do not send by default and the token needs 0.3.0-beta.0", async () => {
     const { env, sql } = setup();
-    const start = await (await handle(new Request("https://genclass.dev/start"), env, opts)).text();
     const { json } = await create(env);
     unlock(sql, json.token);
+    const start = await (await handle(new Request(`https://genclass.dev/start/${json.dashboardUrl.split("/").pop()}`), env, opts)).text();
     const dash = await (await handle(new Request(json.dashboardUrl), env, opts)).text();
+    expect(dash).toContain("needs @genclass/runtime 0.3.0-beta.0 or later");
     for (const html of [start, dash]) {
-      expect(html).toContain("needs @genclass/runtime 0.3.0-beta.0 or later");
       expect(html).toContain("do not send by default, token or not; telemetry: true or a telemetry options object opts them in");
       expect(html).not.toContain("only send data with an explicit token");
       // RUNTIME_ON_NPM unset: the runtime that reads keys is not on npm yet, and the pages say so first
@@ -776,9 +777,9 @@ describe("dashboard counts (display fixes)", () => {
     }
     const { env: ready, sql: readySql } = setup();
     ready.RUNTIME_ON_NPM = "0.3.0-beta.0";
-    expect(await (await handle(new Request("https://genclass.dev/start"), ready, opts)).text()).not.toContain("Not on npm yet.");
     const made = await create(ready);
     unlock(readySql, made.json.token);
+    expect(await (await handle(new Request(`https://genclass.dev/start/${made.json.dashboardUrl.split("/").pop()}`), ready, opts)).text()).not.toContain("Not on npm yet.");
     expect(await (await handle(new Request(made.json.dashboardUrl), ready, opts)).text()).not.toContain("Not on npm yet.");
   });
 });
@@ -993,5 +994,118 @@ describe("measured visual checks: counts from page-load summaries (docs/runtime/
     expect(s.series.reduce((a, b) => a + b.checks, 0)).toBe(s.totals.checks);
     expect(s.checkSeries).toHaveLength(7);
     expect(s.breakdowns.detect_issue!.reduce((a, x) => a + x.count, 0)).toBe(s.totals.detections);
+  });
+});
+
+describe("/start: one click to an app and the one command that connects it", () => {
+  const post = (accept?: string) => new Request("https://genclass.dev/start", { method: "POST", headers: accept ? { accept } : {} });
+  const tokens = (sql: ReturnType<typeof d1>) => sql.rows("SELECT token, name, private_link, account_id FROM projects");
+
+  it("a form post makes the app and goes to its setup page, which has the command, the agent links and the dashboard", async () => {
+    const { env, sql } = setup();
+    env.RUNTIME_ON_NPM = "0.3.0-beta.5";
+    const res = await handle(post(), env, opts);
+    expect(res.status).toBe(303);
+    const to = res.headers.get("location")!;
+    expect(to).toMatch(/^\/start\/[A-Za-z0-9]{32}$/);
+    const [row] = tokens(sql);
+    expect(row).toMatchObject({ private_link: 1, account_id: null });
+    const token = row!.token as string;
+    const secret = to.split("/").pop()!;
+    const page = await handle(new Request(`https://genclass.dev${to}`), env, opts);
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain(`npx @genclass/runtime@beta init --token ${token}`);
+    expect(html).toContain("Your app is ready");
+    expect(html).toContain("Run this in your project's folder.");
+    expect(html).toContain(`href="/dashboard/${secret}"`);
+    expect(html).toContain("Waiting for your first visitor.");
+    expect(html).toContain("no page text");
+    expect(html).toContain("--no-telemetry");
+    // the private link goes to no other site, as the dashboard's does
+    expect(page.headers.get("referrer-policy")).toBe("same-origin");
+    expect(page.headers.get("x-robots-tag")).toContain("noindex");
+    const links = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]!);
+    for (const l of links) if (/^(https?:|claude-cli:|vscode:)/.test(l)) expect(l, l).not.toContain(secret);
+    expect(html).not.toContain("Not on npm yet.");
+    // ?copied=1 comes from the button's script, which already put the command on the clipboard
+    expect(await (await handle(new Request(`https://genclass.dev${to}?copied=1`), env, opts)).text()).toContain("The command is on your clipboard.");
+  });
+
+  it("the agent links hold a short prompt with --yes, inside the limits Cursor and Claude Code set, and run nothing", () => {
+    const token = "gc_TestToken0123456789abc";
+    expect(setupCommand(token)).toBe(`npx @genclass/runtime@beta init --token ${token}`);
+    const prompt = agentPrompt(token);
+    expect(prompt).toContain(`${setupCommand(token)} --yes`);
+    expect(prompt.length).toBeLessThan(400);
+    const links = agentLinks(prompt);
+    expect(links.map((l) => l.label)).toEqual(["Cursor", "Claude Code", "Claude in VS Code"]);
+    expect(links[0]!.href.startsWith("https://cursor.com/link/prompt?text=")).toBe(true);
+    expect(links[1]!.href.startsWith("claude-cli://open?q=")).toBe(true);
+    expect(links[2]!.href.startsWith("vscode://anthropic.claude-code/open?prompt=")).toBe(true);
+    for (const l of links) {
+      expect(decodeURIComponent(l.href.split("=").slice(1).join("="))).toBe(prompt);
+      expect(l.href.length).toBeLessThan(5000);
+    }
+  });
+
+  it("the page's script asks for JSON, so it can copy the command in the click", async () => {
+    const { env, sql } = setup();
+    const res = await handle(post("application/json"), env, opts);
+    expect(res.status).toBe(201);
+    const j = (await res.json()) as Record<string, string>;
+    const token = tokens(sql)[0]!.token as string;
+    expect(j.token).toBe(token);
+    expect(j.command).toBe(`npx @genclass/runtime@beta init --token ${token}`);
+    expect(j.url).toMatch(/^\/start\/[A-Za-z0-9]{32}$/);
+    expect(j.copiedUrl).toBe(`${j.url}?copied=1`);
+  });
+
+  it("over the limit, nothing is made: the form post gets the page with why, the script gets JSON", async () => {
+    const { env, sql } = setup({ async limit() { return { success: false }; } });
+    const page = await handle(post(), env, opts);
+    expect(page.status).toBe(429);
+    expect(page.headers.get("retry-after")).toBe("60");
+    expect(await page.text()).toContain("try again in a minute");
+    const j = await handle(post("application/json"), env, opts);
+    expect(j.status).toBe(429);
+    expect(((await j.json()) as { error: string }).error).toContain("try again in a minute");
+    expect(tokens(sql)).toHaveLength(0);
+  });
+
+  it("an unknown secret is a 404, and other methods on a setup page are not served", async () => {
+    const { env } = setup();
+    expect((await handle(new Request(`https://genclass.dev/start/${"Z".repeat(32)}`), env, opts)).status).toBe(404);
+    const made = await handle(post(), env, opts);
+    const to = made.headers.get("location")!;
+    expect((await handle(new Request(`https://genclass.dev${to}`, { method: "POST" }), env, opts)).status).toBe(404);
+  });
+
+  it("the setup page's status read says when the first page load has arrived, and needs the secret", async () => {
+    const { env } = setup();
+    const made = await handle(post("application/json"), env, opts);
+    const j = (await made.json()) as Record<string, string>;
+    const secret = j.url!.split("/").pop()!;
+    const status = async (s: string) => handle(new Request(`https://genclass.dev/api/projects/${s}/status`), env, opts);
+    expect(await (await status(secret)).json()).toEqual({ lastEvent: null, firstEvent: null });
+    expect((await status("Z".repeat(32))).status).toBe(404);
+    expect((await status("sample")).status).toBe(404);
+    const batch = { schema: "genclass-telemetry/1", sid: "abcdEFGH12345678", sent: 1, runtime: "0.3.0-beta.5", model: null, token: j.token, events: [{ t: "session", seq: 0, host: "shop.example", route: "/" }] };
+    expect((await handle(new Request("https://genclass.dev/v1/events", { method: "POST", body: JSON.stringify(batch), headers: { "content-type": "text/plain" } }), env, opts)).status).toBe(202);
+    const after = (await (await status(secret)).json()) as { lastEvent: string; firstEvent: string };
+    expect(after.lastEvent).toBeTruthy();
+    expect(after.firstEvent).toBeTruthy();
+    expect(await (await handle(new Request(`https://genclass.dev${j.url}`), env, opts)).text()).toContain("Connected.");
+  });
+
+  it("a self-hosted collector's page leaves out the command, which uses genclass.dev, and opens the snippets", async () => {
+    const { env } = setup();
+    env.DASHBOARD_ORIGIN = "https://telemetry.acme.example";
+    const made = await handle(post(), env, opts);
+    const html = await (await handle(new Request(`https://telemetry.acme.example${made.headers.get("location")}`), env, opts)).text();
+    expect(html).not.toContain('id="cmd"');
+    expect(html).not.toContain("cursor.com/link/prompt");
+    expect(html).toContain("<details class=\"mt-l\" open>");
+    expect(html).toContain("https://telemetry.acme.example/v1/events");
   });
 });

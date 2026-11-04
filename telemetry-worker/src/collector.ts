@@ -11,7 +11,7 @@
 // OPTIONS /v1/events (CORS preflight), GET /v1/health.
 //
 // Per-app tokens and dashboards (src/dashboard.ts, src/pages.ts; also routed on genclass.dev/{api/*,start*,dashboard*}):
-// POST /api/projects, GET /api/projects/<secret>, GET /start, GET /start/open-source (no account, no token), GET
+// POST /api/projects, GET /api/projects/<secret>, POST and GET /start, GET /start/<secret>, GET /start/open-source (no account, no token), GET
 // /dashboard/<secret>. A batch with a known top-level `token` is also aggregated into D1 for that app's dashboard;
 // without one it is stored in R2 only, exactly as before.
 // Every plan includes the dashboard (billing/plans.json), so a private link opens it, also for an app with no account
@@ -43,7 +43,7 @@ import {
 import { routeBilling } from "./billing.js";
 import { json, readCapped } from "./http.js";
 import { afterBatch } from "./paid.js";
-import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, startPage } from "./pages.js";
+import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, setupCommand, setupPage, startPage } from "./pages.js";
 import { lockedLink } from "./locked.js";
 import { hasDashboard, projectAccess } from "./plans.js";
 import { SAMPLE_PROJECT, SAMPLE_SECRET, sampleStats } from "./sample.js";
@@ -327,6 +327,42 @@ function html(status: number, body: string, nonce: string): Response {
   return new Response(body, { status, headers: securityHeaders(nonce) });
 }
 
+/** Why a new anonymous app must wait, or null: the per-client limiter (a hash of the IP, never stored), then a global ceiling. */
+async function creationLimited(request: Request, db: D1Like, env: Env, now: Date): Promise<string | null> {
+  const busy = "too many projects created; try again in a minute";
+  if (env.CREATE_LIMITER) {
+    const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+    const { success } = await env.CREATE_LIMITER.limit({ key: (await sha256Hex(`create:${ip}`)).slice(0, 32) });
+    if (!success) return busy;
+  }
+  // Backstop for the (per-location, eventually consistent) limiter: a global ceiling on new projects per minute.
+  return (await projectsCreatedSince(db, new Date(now.getTime() - 60_000), "anonymous")) >= MAX_PROJECTS_PER_MINUTE ? busy : null;
+}
+
+function accountHtml(status: number, body: string, nonce: string): Response {
+  return new Response(body, { status, headers: securityHeaders(nonce, {}, { account: true }) });
+}
+
+/**
+ * POST /start, the one click, for someone not signed in (routeAuth takes the signed-in case first). A form post is sent
+ * on to the app's setup page; the page's script asks for JSON, so it can copy the command while the click still counts.
+ */
+async function startApp(request: Request, env: Env, now: Date): Promise<Response> {
+  const wantsJson = (request.headers.get("accept") ?? "").includes("application/json");
+  const refuse = (status: number, error: string, headers: Record<string, string> = {}): Response => {
+    if (wantsJson) return json(status, { ok: false, error }, headers);
+    const nonce = randomBase62(22);
+    return new Response(startPage(nonce, { error }), { status, headers: { ...securityHeaders(nonce, {}, { account: true }), ...headers } });
+  };
+  if (!env.DB) return refuse(503, "dashboards unavailable");
+  const slow = await creationLimited(request, env.DB, env, now);
+  if (slow) return refuse(429, slow, { "retry-after": "60" });
+  const p = await createProject(env.DB, sanitizeName(""), now);
+  const to = `/start/${p.secret}`;
+  if (wantsJson) return json(201, { url: to, copiedUrl: `${to}?copied=1`, token: p.token, command: setupCommand(p.token) });
+  return new Response(null, { status: 303, headers: { location: to, "cache-control": "no-store" } });
+}
+
 async function routeSite(request: Request, url: URL, path: string, env: Env, opts: HandleOptions): Promise<Response | null> {
   const m = request.method;
   const now = (opts.now ?? (() => new Date()))();
@@ -335,16 +371,8 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     if (m === "OPTIONS") return new Response(null, { status: 204, headers: PROJECT_CORS });
     if (m !== "POST") return json(405, { ok: false, error: "method not allowed" }, PROJECT_CORS);
     if (!env.DB) return json(503, { ok: false, error: "dashboards unavailable" }, PROJECT_CORS);
-    if (env.CREATE_LIMITER) {
-      // The limiter key is a hash of the client IP; the IP itself is never stored or logged.
-      const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
-      const { success } = await env.CREATE_LIMITER.limit({ key: (await sha256Hex(`create:${ip}`)).slice(0, 32) });
-      if (!success) return json(429, { ok: false, error: "too many projects created; try again in a minute" }, { ...PROJECT_CORS, "retry-after": "60" });
-    }
-    // Backstop for the (per-location, eventually consistent) limiter: a global ceiling on new projects per minute.
-    if ((await projectsCreatedSince(env.DB, new Date(now.getTime() - 60_000), "anonymous")) >= MAX_PROJECTS_PER_MINUTE) {
-      return json(429, { ok: false, error: "too many projects created; try again in a minute" }, { ...PROJECT_CORS, "retry-after": "60" });
-    }
+    const slow = await creationLimited(request, env.DB, env, now);
+    if (slow) return json(429, { ok: false, error: slow }, { ...PROJECT_CORS, "retry-after": "60" });
     const raw = await readCapped(request, 4096);
     if (raw === null) return json(413, { ok: false, error: "body too large" }, PROJECT_CORS);
     let body: unknown = {};
@@ -395,6 +423,15 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     return putFunnels(request, env.DB, p.token);
   }
 
+  // whether the first page load has arrived (/start/<secret> asks every few seconds): one row, not the whole stats
+  const statusApi = /^\/api\/projects\/([^/]+)\/status$/.exec(path);
+  if (statusApi) {
+    if (m !== "GET" && m !== "HEAD") return json(405, { ok: false, error: "method not allowed" });
+    const p = env.DB && statusApi[1] !== SAMPLE_SECRET ? await projectBySecret(env.DB, statusApi[1]!) : null;
+    if (!p) return json(404, { ok: false, error: "not found" });
+    return json(200, { lastEvent: p.last_event ?? null, firstEvent: p.first_event ?? null });
+  }
+
   const api = /^\/api\/projects\/([^/]+)$/.exec(path);
   if (api) {
     if (m !== "GET" && m !== "HEAD") return json(405, { ok: false, error: "method not allowed" });
@@ -408,9 +445,24 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
   }
 
   if (path === "/start") {
+    if (m === "POST") return startApp(request, env, now);
     if (m !== "GET" && m !== "HEAD") return null;
     const nonce = randomBase62(22);
-    return html(200, startPage(nonce, { runtimeReady: runtimeHasTokens(env), endpoint: ownEndpoint(env) }), nonce);
+    return accountHtml(200, startPage(nonce), nonce);
+  }
+
+  // what to do after the one click: the command, the agent links and whether the first page load has arrived
+  const setup = /^\/start\/([A-Za-z0-9]{32})$/.exec(path);
+  if (setup) {
+    if (m !== "GET" && m !== "HEAD") return null;
+    const p = env.DB ? await projectBySecret(env.DB, setup[1]!) : null;
+    const nonce = randomBase62(22);
+    if (!p) return html(404, notFoundPage(nonce), nonce);
+    return accountHtml(
+      200,
+      setupPage(nonce, { token: p.token, secret: setup[1]!, lastEvent: p.last_event ?? null, runtimeReady: runtimeHasTokens(env), endpoint: ownEndpoint(env), copied: url.searchParams.get("copied") === "1" }),
+      nonce,
+    );
   }
 
   // the open-source parts with no account and no token (pages.ts openSourcePage): static, nothing stored

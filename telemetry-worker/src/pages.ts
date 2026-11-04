@@ -229,7 +229,7 @@ function renderSnippets(host, tok, ep){
 `;
 
 export interface ShellOptions {
-  /** Header links (HTML). Default: Home, Get a token, Docs, Sign in. */
+  /** Header links (HTML). Default: Home, Docs, Sign in, Add to my app. */
   nav?: string;
   /** No top header: the sign-in pages put the logo at the top of their own column. */
   bare?: boolean;
@@ -250,7 +250,7 @@ export const MESH_SCRIPT = "https://genclass.dev/signin-mesh.js?v=2";
 /** As on genclass.dev: plain links, then one compact green button. Narrow screens drop Home (the logo links there),
  * then Docs. */
 const DEFAULT_NAV =
-  '<a class="hm" href="https://genclass.dev/">Home</a><a class="dc" href="https://genclass.dev/docs">Docs</a><a href="/login">Sign in</a><a class="btn" href="/start">Get a token</a>';
+  '<a class="hm" href="https://genclass.dev/">Home</a><a class="dc" href="https://genclass.dev/docs">Docs</a><a href="/login">Sign in</a><a class="btn" href="/start">Add to my app</a>';
 
 /** The page frame shared by every page this worker serves. */
 export function shell(nonce: string, title: string, body: string, script: string, opts: ShellOptions = {}): string {
@@ -286,66 +286,153 @@ export const SIGNED_IN_NAV =
   '<a href="/account">Apps</a><a href="https://genclass.dev/docs">Docs</a><form method="post" action="/logout" class="so"><button type="submit">Sign out</button></form>';
 
 // ------------------------------------------------------------------------------------------------- /start
+// One click: POST /start makes the app and its private link (collector.ts), and /start/<secret> says the one command
+// that connects it. The page has no form to fill in; the app's name can be changed later on its dashboard.
 
-export function startPage(nonce: string, opts: { runtimeReady?: boolean; endpoint?: string | null } = {}): string {
-  const notYet = opts.runtimeReady === true ? "" : `<p class="note small" id="notyet">${NOT_ON_NPM}</p>`;
-  const body = `
-<section class="stack mt-xl">
-  <h1>Get a token for your web app</h1>
-  <p class="lead">One token per app. Add it to GenClass and every page load, detection and fix is collected for the
-  app's private dashboard. The dashboard is free.</p>
-  <p class="muted small">To keep several apps in one place, <a href="/signup">create an account</a> or <a href="/login">sign in</a>.
-  No account and no token: <a href="/start/open-source">use the open-source parts only</a>.</p>
-</section>
-<section>
-  <form id="f" class="card stack" novalidate>
-    <div class="field"><label for="name">App name <span class="muted small">(optional, shown on your dashboard)</span></label>
-    <input id="name" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Acme checkout"></div>
-    <div class="row"><button class="btn green" id="go" type="submit">Get a token</button><span id="err" class="small" role="alert"></span></div>
-  </form>
-</section>
-<section id="out" class="hidden stack" aria-live="polite">
-  <div class="card stack">
-    <h2>Your token</h2>
-    <p class="muted small">Public: it goes in your app's code and only lets data be sent.</p>
-    <div class="row"><code id="tok" class="mono big brk"></code><span id="tokc"></span></div>
-  </div>
-  <div class="card stack">
-    <h2>Your private dashboard link</h2>
-    <div class="note"><strong>Save this link now.</strong> It is the only way back to your dashboard; we cannot recover it.
-    It opens the dashboard, and lets you add the app to your account. Do not commit it to code.</div>
-    <div class="row"><a id="dash" class="mono brk"></a><span id="dashc"></span></div>
-    <div class="row"><a id="open" class="btn green" href="#">Open dashboard</a></div>
-  </div>
-  <div class="card stack"><h2 class="h2l">Install</h2>${notYet}<p class="muted small">The token needs @genclass/runtime ${KEY_RUNTIME} or later; earlier versions ignore it. ${LOCAL_HOSTS}</p><div id="snips" class="stack"></div></div>
-</section>
-<footer>Dashboards show counts only (never the situation text). Data is kept for 90 days.
-See <a href="https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md">privacy</a> and
-<a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">what is sent</a>.</footer>`;
-  const script = `
+/** The command that connects an app: it finds the framework, installs the runtime and adds the import, asking once. */
+export function setupCommand(token: string): string {
+  return `npx ${RUNTIME_PKG} init --token ${token}`;
+}
+
+/** The shortest prompt that gets a coding agent to do the same; --yes because an agent has no Y/n to answer. */
+export function agentPrompt(token: string): string {
+  return `Add GenClass to this web app: run \`${setupCommand(token)} --yes\` in the app's folder (ask me which folder if this one has no web app). Then start the app, check that it still works, and tell me what changed. \`npx ${RUNTIME_PKG} remove\` undoes it.`;
+}
+
+/**
+ * Links that open a coding agent with the prompt filled in. None of them runs anything: the person reads the prompt
+ * and presses Enter (cursor.com/docs/integrations/deeplinks, code.claude.com/docs/en/deep-links).
+ */
+export function agentLinks(prompt: string): { label: string; href: string }[] {
+  const q = encodeURIComponent(prompt);
+  return [
+    { label: "Cursor", href: `https://cursor.com/link/prompt?text=${q}` },
+    { label: "Claude Code", href: `claude-cli://open?q=${q}` },
+    { label: "Claude in VS Code", href: `vscode://anthropic.claude-code/open?prompt=${q}` },
+  ];
+}
+
+const START_CSS = `
+.oneclick .btn.xl{min-height:52px;font-size:16px;padding:0 24px}
+.cmdbox{display:flex;align-items:center;gap:10px;background:var(--code);color:var(--codeink);padding:12px 14px;min-width:0}
+.cmdbox code{flex:1;min-width:0;font:14px/1.5 var(--mono);overflow-wrap:anywhere}
+.cmdbox .btn{flex:none}
+.setup-agents{align-items:center}
+.setup-steps{margin:0;padding-left:20px;display:grid;gap:8px}
+.setup-status{display:inline-flex;align-items:center;gap:8px}
+.setup-status i{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
+.setup-status.live i{background:var(--accent-f)}
+`;
+
+/** The one button, with a <noscript> way that needs nothing from this page. The script copies the command in the click. */
+const ONE_CLICK_JS = `
 (function(){
   var f = document.getElementById("f"), go = document.getElementById("go"), err = document.getElementById("err");
+  if (!f || !window.fetch) return;
   f.addEventListener("submit", function(ev){
     ev.preventDefault(); err.textContent = ""; go.disabled = true; go.textContent = "Creating...";
-    fetch("/api/projects", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: document.getElementById("name").value }) })
-      .then(function(r){ return r.json().then(function(j){ return { s: r.status, j: j }; }); })
-      .then(function(x){
-        if (x.s !== 201) throw new Error(x.s === 429 ? "Too many new tokens from your network. Try again in a minute." : (x.j && x.j.error) || "Something went wrong.");
-        var j = x.j;
-        document.getElementById("tok").textContent = j.token;
-        document.getElementById("tokc").appendChild(copyBtn(function(){ return j.token; }, "token", function(){ return document.getElementById("tok"); }));
-        var d = document.getElementById("dash"); d.textContent = j.dashboardUrl; d.href = j.dashboardUrl;
-        document.getElementById("dashc").appendChild(copyBtn(function(){ return j.dashboardUrl; }, "dashboard link", function(){ return d; }));
-        document.getElementById("open").href = j.dashboardUrl;
-        renderSnippets(document.getElementById("snips"), j.token, ${JSON.stringify(opts.endpoint ?? "")});
-        f.classList.add("hidden");
-        var out = document.getElementById("out"); out.classList.remove("hidden"); out.scrollIntoView({ behavior: "smooth" });
-      })
-      .catch(function(e){ err.textContent = e.message || String(e); go.disabled = false; go.textContent = "Get a token"; });
+    var made = fetch("/start", { method: "POST", headers: { accept: "application/json" } })
+      .then(function(r){ return r.json().then(function(j){ if (!r.ok) throw new Error(j.error || "Something went wrong."); return j; }); });
+    // the copy has to start inside the click, so it is handed a promise of the text (Safari needs this form)
+    var copied = Promise.resolve(false);
+    try {
+      copied = navigator.clipboard.write([new ClipboardItem({ "text/plain": made.then(function(j){ return j.command ? new Blob([j.command], { type: "text/plain" }) : Promise.reject(new Error("no command")); }) })])
+        .then(function(){ return true; }, function(){ return false; });
+    } catch (e) {}
+    made.then(function(j){ return copied.then(function(c){ location.href = c ? j.copiedUrl : j.url; }); })
+      .catch(function(e){ err.textContent = e.message || String(e); go.disabled = false; go.textContent = "Add to my app"; });
   });
 })();`;
-  return shell(nonce, "Get a token | GenClass", body, script);
+
+export function startPage(nonce: string, opts: { error?: string } = {}): string {
+  const body = `
+<section class="stack mt-xl oneclick">
+  <h1>Add GenClass to your app</h1>
+  <p class="lead">One click makes your private dashboard and the one command that connects it. The dashboard is free. No sign-up, no card.</p>
+  <form id="f" method="post" action="/start"><button class="btn green xl" id="go" type="submit">Add to my app</button></form>
+  <p id="err" class="small" role="alert">${opts.error ? esc(opts.error) : ""}</p>
+  <p class="muted small"><a href="/login">Sign in</a> to put it in your account. <a href="/start/open-source">Use it with nothing sent to us</a>.</p>
+</section>
+<footer>On public sites GenClass sends anonymous counts and decisions, no page text.
+<a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is sent</a> ·
+<a href="https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md">Privacy</a></footer>
+<style nonce="${nonce}">${START_CSS}</style>`;
+  return shell(nonce, "Add GenClass to your app | GenClass", body, ONE_CLICK_JS, { account: true });
+}
+
+export interface SetupView {
+  token: string;
+  secret: string;
+  lastEvent: string | null;
+  runtimeReady?: boolean;
+  /** This collector's own ingest URL (self-hosted): the snippets name it, and the CLI, which uses genclass.dev, is left out. */
+  endpoint?: string | null;
+  /** The button's script already put the command on the clipboard. */
+  copied?: boolean;
+}
+
+/** /start/<secret>: what to do next, and whether it has worked yet. The secret is the app's private dashboard link's. */
+export function setupPage(nonce: string, v: SetupView): string {
+  const cmd = setupCommand(v.token);
+  const prompt = agentPrompt(v.token);
+  const notYet = v.runtimeReady === true ? "" : `<p class="note small" id="notyet">${NOT_ON_NPM}</p>`;
+  const agents = agentLinks(prompt)
+    .map((a) => `<a class="btn ghost sm" href="${esc(a.href)}">${esc(a.label)}</a>`)
+    .join("");
+  const connect = v.endpoint
+    ? ""
+    : `<section class="stack mt-l">
+  <div class="cmdbox"><code id="cmd">${esc(cmd)}</code><span id="cmdc"></span></div>
+  <p class="muted small">It shows the change and asks once. <code>npx ${RUNTIME_PKG} remove</code> undoes it.</p>
+  <div class="row setup-agents"><span class="small">Or let your agent do it:</span>${agents}<span id="promptc"></span></div>
+</section>`;
+  const body = `
+<section class="stack mt-xl">
+  <h1>Your app is ready</h1>
+  ${v.endpoint ? "" : `<p class="lead" id="lead">${v.copied ? "The command is on your clipboard. Paste it in your project's folder." : "Run this in your project's folder."}</p>`}
+  ${notYet}
+</section>
+${connect}
+<section class="stack mt-l">
+  <ol class="setup-steps">
+    <li><b>Run your app.</b> A GenClass overlay appears at the bottom right of your dev pages.</li>
+    <li><b>Deploy it.</b> <span class="setup-status${v.lastEvent ? " live" : ""}" id="st" aria-live="polite"><i></i><span id="stt">${v.lastEvent ? "Connected." : "Waiting for your first visitor."}</span></span></li>
+  </ol>
+  <div class="row"><a class="btn green" href="/dashboard/${esc(v.secret)}">Open my dashboard</a><a class="btn ghost" id="save" href="/signup?next=${encodeURIComponent("/account?save=1")}">Save it to a free account</a></div>
+  <p class="muted small">Without an account, this page is your only way back, and we can't recover it. Bookmark it.</p>
+</section>
+<details class="mt-l"${v.endpoint ? " open" : ""}><summary>Other ways: script tag, meta tag</summary><div class="stack mt-s"><p class="muted small">${LOCAL_HOSTS}</p><div id="snips" class="stack"></div></div></details>
+<footer>On public sites GenClass sends anonymous counts and decisions, no page text.
+<a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is sent</a>. Turn it off with <code>--no-telemetry</code>.</footer>
+<style nonce="${nonce}">${START_CSS}</style>
+<script type="application/json" id="cfg">${embed({ token: v.token, secret: v.secret, endpoint: v.endpoint ?? "", cmd, prompt, live: !!v.lastEvent })}</script>`;
+  const script = `
+(function(){
+  var C = JSON.parse(document.getElementById("cfg").textContent);
+  var cmdNode = document.getElementById("cmd");
+  if (cmdNode) {
+    document.getElementById("cmdc").appendChild(copyBtn(function(){ return C.cmd; }, "command", function(){ return cmdNode; }));
+    var pc = copyBtn(function(){ return C.prompt; }, "prompt for your coding agent", function(){ return null; });
+    pc.textContent = "Copy prompt"; pc.setAttribute("data-label", "Copy prompt");
+    document.getElementById("promptc").appendChild(pc);
+  }
+  renderSnippets(document.getElementById("snips"), C.token, C.endpoint);
+  // after signing up, /account?save=1 adds this app to the account (the link is kept in this tab only, never on a server)
+  document.getElementById("save").addEventListener("click", function(){ try { sessionStorage.setItem("gc.save", C.secret); } catch (e) {} });
+  if (C.live) return;
+  var st = document.getElementById("st"), stt = document.getElementById("stt"), started = Date.now();
+  function poll(){
+    var age = Date.now() - started;
+    if (age > 3600000) return;
+    if (document.visibilityState === "hidden") { setTimeout(poll, 15000); return; }
+    fetch("/api/projects/" + C.secret + "/status").then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+      if (j && j.lastEvent) { st.classList.add("live"); stt.textContent = "Connected. Your first page load just arrived."; return; }
+      setTimeout(poll, age < 120000 ? 5000 : 15000);
+    }).catch(function(){ setTimeout(poll, 15000); });
+  }
+  setTimeout(poll, 3000);
+})();`;
+  return shell(nonce, "Your app is ready | GenClass", body, script, { account: true });
 }
 
 // ------------------------------------------------------------------------------------- /start/open-source
@@ -605,6 +692,9 @@ export function notFoundPage(nonce: string): string {
 // Every dynamic string goes through textContent.
 
 export const DASH_CSS = `
+.cmdbox{display:flex;align-items:center;gap:10px;background:var(--code,#111);padding:10px 12px;min-width:0;margin:8px 0}
+.cmdbox code{flex:1;min-width:0;font:13.5px/1.5 var(--mono);overflow-wrap:anywhere}
+.cmdbox .btn{flex:none}
 :root{--t1:#3987E5;--t2:#E8552F;--t3:#2AA3C7;--t4:#C98500;--t5:#B964C9;--t0:#88897F;--grid:#262626}
 /* the measured checks' key: hatched in the muted ink, never a problem type's hue */
 :root{--chk:repeating-linear-gradient(135deg,var(--ink2) 0 2px,transparent 2px 4px)}
@@ -2664,8 +2754,12 @@ export function dashboardPage(
           ? "This app also has the private dashboard link it had before it joined your account, and anyone with that link can see these stats. You can turn the link off on your <a href=\"/account#apps\">Projects page</a>."
           : "Only you can open this page, while signed in."
       } <a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · ${report} · <a href="/account">All projects</a> · <a href="/account/billing">Plan and billing</a>`
-    : `Keep this link private: anyone with it can see these stats. <a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · <a href="/start">Get another token</a>`;
+    : `Keep this link private: anyone with it can see these stats. <a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · <a href="/start">Add another app</a>`;
   const where = acct && opts.id ? `this app's GenClass dashboard, under Visitors (${ORIGIN_OF(opts)}/account/apps/${opts.id}#visits)` : "this app's GenClass dashboard (the private link I opened it from), under Visitors";
+  // what a new app's dashboard says first: the same one command as /start/<secret> (a self-hosted collector has no CLI)
+  const firstStep = opts.endpoint
+    ? `<div><b>Add GenClass with this project's key</b><span>One line of code or a script tag.</span></div><button class="btn sm" type="button" data-open="m-connect" data-tab="fw">Connect</button>`
+    : `<div class="minw0"><b>Run this in your project's folder</b><div class="cmdbox"><code id="ncmd">${esc(setupCommand(project.token))}</code><button class="btn sm" type="button" data-copy="${esc(setupCommand(project.token))}" data-target="ncmd" aria-label="Copy the command">Copy</button></div><span>Or let your coding agent do it, or use a script tag.</span></div><button class="btn sm ghost" type="button" data-open="m-connect" data-tab="fw">Other ways</button>`;
   const connect = connectDialog({
     token: project.token,
     account: !!acct,
@@ -2774,15 +2868,13 @@ ${
 ${connect}
 <section id="nodata" class="blk first hidden" data-v="overview problems pages activity visitors health loop">
   <h2>Connect your app</h2>
-  <p>No data yet. Add the key to your app, load a page, and come back in a minute.
-Events arrive in batches every 10 seconds and when a tab is hidden. The token needs @genclass/runtime ${KEY_RUNTIME} or later; earlier
-versions ignore it. ${LOCAL_HOSTS} Your deployed site sends by default.</p>
   <ol class="steps">
-    <li><span class="no">1</span><div><b>Add GenClass with this project's key</b><span>A prompt for your coding agent, the terminal's login, or one line of code.</span></div><button class="btn sm" type="button" data-open="m-connect" data-tab="fw">Connect</button></li>
-    <li><span class="no">2</span><div><b>Load a page of your deployed site</b><span>The first event arrives within about 10 seconds; this page updates by itself.</span></div><span class="bdg warning"><i></i>Waiting</span></li>
+    <li><span class="no">1</span>${firstStep}</li>
+    <li><span class="no">2</span><div><b>Deploy, then load a page</b><span>The first event arrives within about 10 seconds; this page updates by itself.</span></div><span class="bdg warning"><i></i>Waiting</span></li>
     <li><span class="no">3</span><div><b>Connect your coding agent</b><span>With the MCP server your agent reads these numbers and replays what broke.</span></div><a class="btn sm ghost" href="#mcp" data-goto="mcp">Set up MCP</a></li>
     <li><span class="no">4</span><div><b>Turn on visitor analytics</b><span>Page views, sources, devices and funnels, from one prompt.</span></div><button class="btn sm ghost" type="button" data-open="m-connect" data-tab="ana">Copy prompt</button></li>
   </ol>
+  <details class="more"><summary>Why nothing shows yet</summary><p class="small">Events arrive in batches every 10 seconds and when a tab is hidden. The token needs @genclass/runtime ${KEY_RUNTIME} or later; earlier versions ignore it. ${LOCAL_HOSTS} Your deployed site sends by default.</p></details>
 </section>
 <div id="content" class="hidden">
 <div class="ovtop" data-v="overview">

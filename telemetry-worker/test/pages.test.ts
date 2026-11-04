@@ -2,7 +2,9 @@
 // through packages/runtime): what a developer reads on the page, the possible-issues tier and the display fixes.
 import { describe, expect, it } from "vitest";
 import { Window } from "happy-dom";
-import { ANALYTICS_RUNTIME, analyticsPrompt, CDN_SCRIPT, DASH_CSS, dashboardPage, esc, installPrompt, KEY_RUNTIME, MCP_PKG, MESH_SCRIPT, openSourcePage, openSourcePrompt, orgName, RUNTIME_PKG, securityHeaders, SNIPPET_RUNTIME, startPage, type DashboardOptions } from "../src/pages.js";
+import { ANALYTICS_RUNTIME, analyticsPrompt, CDN_SCRIPT, DASH_CSS, dashboardPage, esc, installPrompt, KEY_RUNTIME, MCP_PKG, MESH_SCRIPT, openSourcePage, openSourcePrompt, orgName, RUNTIME_PKG, securityHeaders, SNIPPET_RUNTIME, setupPage, startPage, type DashboardOptions } from "../src/pages.js";
+
+const setupOf = (o: Record<string, unknown> = {}) => setupPage("n", { token: "gc_TestToken0123456789abc", secret: "a".repeat(32), lastEvent: null, ...o });
 import { accountPage, devicePage, forgotPage, lockedLinkPage, loginPage, messagePage, newProjectPage, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
 import { sampleStats } from "../src/sample.js";
 import type { Stats } from "../src/dashboard.js";
@@ -188,8 +190,8 @@ describe("dashboard page: display fixes", () => {
     expect(r.text("#nodata")).toContain("do not send by default, token or not; telemetry: true or a telemetry options object opts them in");
     expect(r.text("#nodata")).not.toContain("never send anything");
     await r.close();
-    expect(startPage("n")).toContain("telemetry: true or a telemetry options object opts them in");
-    expect(startPage("n")).not.toContain("never send anything");
+    expect(setupOf()).toContain("telemetry: true or a telemetry options object opts them in");
+    expect(setupOf()).not.toContain("never send anything");
   });
 });
 
@@ -257,7 +259,7 @@ describe("snippets: the runtime that reads the token", () => {
     expect(CDN_SCRIPT).toBe(`https://cdn.jsdelivr.net/npm/@genclass/runtime@${SNIPPET_RUNTIME}`);
     // while it is a prerelease the npm and npx commands name its dist-tag (plain `@genclass/runtime` installs latest)
     expect(SNIPPET_RUNTIME.includes("-")).toBe(RUNTIME_PKG === "@genclass/runtime@beta");
-    for (const html of [startPage("n"), startPage("n", { runtimeReady: true }), dashboardPage("n", { name: "a", token: "gc_TestToken0123456789abc", created: "", lastEvent: null })]) {
+    for (const html of [setupOf(), setupOf({ runtimeReady: true }), dashboardPage("n", { name: "a", token: "gc_TestToken0123456789abc", created: "", lastEvent: null })]) {
       expect(html).toContain(CDN_SCRIPT);
       expect(html).not.toMatch(/cdn\.jsdelivr\.net\/npm\/@genclass\/runtime["' ]/);
       // npm and npx name the beta dist-tag while the runtime that reads keys is a prerelease
@@ -266,8 +268,8 @@ describe("snippets: the runtime that reads the token", () => {
       expect(html).not.toMatch(/npx @genclass\/runtime (init|login)/);
     }
     // until RUNTIME_ON_NPM reaches it, /start and private dashboards say first that it is not on npm yet
-    expect(startPage("n")).toContain("Not on npm yet.");
-    expect(startPage("n", { runtimeReady: true })).not.toContain("Not on npm yet.");
+    expect(setupOf()).toContain("Not on npm yet.");
+    expect(setupOf({ runtimeReady: true })).not.toContain("Not on npm yet.");
     expect(dashboardPage("n", { name: "a", token: "gc_TestToken0123456789abc", created: "", lastEvent: null }, { runtimeReady: true })).not.toContain("Not on npm yet.");
   });
 });
@@ -299,6 +301,7 @@ function everyPage(): [string, string][] {
   const providers = { google: true, github: true };
   return [
     ["/start", startPage("n")],
+    ["/start/<secret>", setupOf()],
     ["/start/open-source", openSourcePage("n")],
     ["/dashboard", dashboardPage("n", project)],
     ["/account/apps (locked)", dashboardPage("n", project, { account: acct, id: "0123456789abcdef", locked: true })],
@@ -436,8 +439,8 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
   });
 
   it("the main action of a page is the site's green button; the header ends in its green button", () => {
-    expect(startPage("n")).toContain('<button class="btn green" id="go" type="submit">Get a token</button>');
-    expect(startPage("n")).toContain('<a class="btn" href="/start">Get a token</a>');
+    expect(startPage("n")).toContain('<button class="btn green xl" id="go" type="submit">Add to my app</button>');
+    expect(startPage("n")).toContain('<a class="btn" href="/start">Add to my app</a>');
     // sign-in: the email and password form's button is the green one, whatever is configured; a passkey is a small link
     const none = loginPage("n", { google: false, github: false, next: null });
     expect(none).toContain('<button class="btn prov green" type="submit"><span>Sign in</span></button>');
@@ -1466,7 +1469,7 @@ describe("/start/open-source: the open-source parts with no account, no token an
   });
 
   it("is linked from /start and from the sign-in and sign-up pages", () => {
-    expect(startPage("n")).toContain('<a href="/start/open-source">use the open-source parts only</a>');
+    expect(startPage("n")).toContain('<a href="/start/open-source">Use it with nothing sent to us</a>');
     for (const html of [loginPage("n", { google: false, github: false, next: null }), signupPage("n", { google: false, github: false, next: "/account/new?name=shop" })])
       expect(html).toContain('<a href="/start/open-source">set it up without one</a>');
   });

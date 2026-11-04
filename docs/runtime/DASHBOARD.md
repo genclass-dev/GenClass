@@ -30,7 +30,7 @@ off ([Why does my dashboard show no data?](#why-does-my-dashboard-show-no-data))
 
 Run `npx @genclass/runtime@beta init` while not signed in. After you approve its diff it creates both the token and
 the link, writes the token into what it adds, prints the link and saves it in `.genclass.local`
-([INSTALL.md](INSTALL.md#how-does-init-create-a-token-and-a-dashboard)). Or click "Get a token" at
+([INSTALL.md](INSTALL.md#how-does-init-create-a-token-and-a-dashboard)). Or click "Add to my app" at
 [genclass.dev/start](https://genclass.dev/start). A link can be added to an account later (`connect`, or "Add an
 existing dashboard" on your account page).
 

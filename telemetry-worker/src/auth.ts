@@ -72,7 +72,7 @@ import {
 import { appExtrasData, appExtrasHtml } from "./billing-pages.js";
 import { forgetExports } from "./export.js";
 import { json, mediaType, readCapped } from "./http.js";
-import { dashboardPage, ownEndpoint, securityHeaders } from "./pages.js";
+import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
 import { accountAccess, accountBilling, appLimit, appLimitBody, hasDashboard, pickRange, viewRanges } from "./plans.js";
 import { cancelForDeletion } from "./stripe.js";
@@ -1742,7 +1742,7 @@ async function accountView(c: C, a: Auth): Promise<AccountView> {
     // dashboards: open (every plan today), or locked with the plans to see
     dashboards: hasDashboard(access) ? "open" : "plans",
     plan: access.plan.name,
-    pick: { claim: c.url.searchParams.get("claim") === "1" },
+    pick: { claim: c.url.searchParams.get("claim") === "1", save: c.url.searchParams.get("save") === "1" },
     recovery: RECOVERY_CONTACT,
   };
 }
@@ -1756,7 +1756,7 @@ export function accountContext(request: Request, url: URL, env: Env, opts: Handl
 }
 
 const PREFIXES = ["/auth/", "/api/auth/", "/api/device/", "/api/account/", "/account/"];
-const EXACT = new Set(["/signup", "/login", "/login/device", "/login/passkey", "/login/forgot", "/logout", "/account", "/api/me", "/api/account"]);
+const EXACT = new Set(["/start", "/signup", "/login", "/login/device", "/login/passkey", "/login/forgot", "/logout", "/account", "/api/me", "/api/account"]);
 
 /** Account routes. Returns null for paths this module does not own (the caller continues routing). */
 export async function routeAuth(request: Request, url: URL, path: string, env: Env, opts: HandleOptions): Promise<Response | null> {
@@ -1772,6 +1772,23 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
   const method = (): Response => fail(405, "method not allowed");
 
   switch (path) {
+    case "/start": {
+      // the one click, signed in: the new app goes in the account (not signed in, or any GET: routeSite answers)
+      if (!post) return null;
+      const a = await webSession(c);
+      if (!a) return null;
+      const json201 = (request.headers.get("accept") ?? "").includes("application/json");
+      const elsewhere = (): Response => (json201 ? json(200, { url: "/account/new", copiedUrl: "/account/new", token: null, command: null }) : redirect("/account/new", [], 303));
+      if (!originOk(c) || (await overAppLimit(c, a.account.id))) return elsewhere();
+      if (c.env.CREATE_LIMITER) {
+        const { success } = await c.env.CREATE_LIMITER.limit({ key: (await sha256Hex(`create:account:${a.account.id}`)).slice(0, 32) });
+        if (!success) return elsewhere();
+      }
+      if ((await projectsCreatedSince(c.db, new Date(c.now.getTime() - MINUTE), "account")) >= MAX_ACCOUNT_PROJECTS_PER_MINUTE) return elsewhere();
+      const p = await createProject(c.db, sanitizeName(""), c.now, a.account.id);
+      const to = `/account/apps/${p.id}#connect`;
+      return json201 ? json(201, { url: to, copiedUrl: to, token: p.token, command: setupCommand(p.token) }) : redirect(to, [], 303);
+    }
     case "/signup":
     case "/login": {
       if (!get) return method();
