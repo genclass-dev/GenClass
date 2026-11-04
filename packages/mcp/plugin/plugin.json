@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "genclass",
   "version": "0.2.1",
-  "description": "See what happens inside your app's pages in causal order, find race conditions by replaying different response orders, reproduce a bug exactly and prove the fix with a generated Playwright test. Local only.",
+  "description": "See what happens inside your app's pages in causal order, find race conditions by replaying different response orders, reproduce a bug exactly and prove the fix with a generated Playwright test. Runs on your machine; anything it sends is opt-in.",
   "author": {
     "name": "GenClass",
     "url": "https://genclass.dev"
