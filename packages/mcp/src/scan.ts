@@ -163,7 +163,7 @@ export async function runScan(args: Record<string, unknown>, cwd: string, run: R
   }
   if (!report || report.format !== "genclass-scan/1") {
     const why = clean(r.stderr.trim() || r.stdout.trim() || `exit code ${r.code}`, 1200);
-    const next = /playwright install/i.test(r.stderr) && args.hosted !== true ? " Ask the user which they want and wait for a yes: install it with the command above (a browser download on their machine), or call genclass_scan again with hosted: true (public pages only; the URL is sent to the genclass.dev page check)." : "";
+    const next = /playwright install/i.test(r.stderr) && args.hosted !== true ? " Ask the user which they want and wait for a yes: run the command above (a browser download on their machine; npm i -D playwright also edits package.json and the lockfile), or call genclass_scan again with hosted: true (public pages only; the URL is sent to the genclass.dev page check)." : "";
     return { text: `GenClass scan of ${q(url, 200)} failed (via ${c.via}): ${why}${next}`, isError: true };
   }
   return { text: scanText(report, c.via, r.stderr), json: report };

@@ -27,7 +27,7 @@ or later) and the lines for your framework, behind a development check. See the
 ## What the agent asks first
 
 The skill and the server's instructions tell the agent to show you each of these and wait for your yes: running the
-install or adding the lines `genclass_setup` prints; `npx playwright install chromium`; `genclass_scan` with
+install or adding the lines `genclass_setup` prints; `npx playwright install chromium` and `npm i -D playwright`; `genclass_scan` with
 `hosted: true`; writing a fix or a test when you only asked what broke. These are instructions to the agent, not locks
 in the code; your client's own permission prompts still apply.
 

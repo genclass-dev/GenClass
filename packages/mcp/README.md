@@ -327,7 +327,7 @@ neither entry). Load a page of the dev server and ask the agent for `genclass_st
 which reads your `package.json` and shows the lines for your framework.
 
 The skill and the server's instructions tell the agent to show you each of these and wait for your yes: running that
-install or adding those lines; `npx playwright install chromium`; `genclass_scan` with `hosted: true`; writing a fix or a
+install or adding those lines; `npx playwright install chromium` and `npm i -D playwright`; `genclass_scan` with `hosted: true`; writing a fix or a
 test when you only asked what broke.
 
 ## What the agent does with it

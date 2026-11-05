@@ -30,7 +30,7 @@ What to do first:
 - Before fixing a finding, confirm it: genclass_replay {action:"arm"}, do the same steps, genclass_replay {action:"result"}. If the user only asked what broke, report the cause and wait for a yes before you write a fix or a test. After a fix, replay again; "not reproduced" is the evidence. Offer the regression test from genclass_explain; add it to the repo once the user says yes.
 - Production numbers (sessions affected, which pages, which diagnoses): genclass_analytics {source:"production"}.
 - No connected page in genclass_status: genclass_setup prints an install line and the dev-only lines; show them to the user and wait for a yes before you run or add them.
-- Before calling a page or UI change done, after CSS or layout changes, or to audit a site you do not own: genclass_scan {url} loads it headless and lists unreadable text, broken images and fonts, sideways scrolling, covered controls, each with its element and a suggested fix. Wait for a yes before npx playwright install chromium, and before hosted: true, which sends the URL to the genclass.dev page check.
+- Before calling a page or UI change done, after CSS or layout changes, or to audit a site you do not own: genclass_scan {url} loads it headless and lists unreadable text, broken images and fonts, sideways scrolling, covered controls, each with its element and a suggested fix. Wait for a yes before npx playwright install chromium or npm i -D playwright, and before hosted: true, which sends the URL to the genclass.dev page check.
 
 The genclass skill holds the full procedure (the explore arguments, how to run the scenario, how to read a report, what to say when done): load it when this client has it.
 
@@ -373,7 +373,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
             for (const d of along.slice(0, 3)) diffLines(d);
           }
         }
-        if (r.findings.length) out.push("", `Race finding(s): ${r.findings.map((f) => f.id).join(", ")}. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.`);
+        if (r.findings.length) out.push("", `Race finding(s): ${r.findings.map((f) => f.id).join(", ")}. Next: genclass_explain {id} for the replay and a regression test; if the user asked for a fix, make it, then genclass_replay to verify.`);
         return { text: out.join("\n") };
       }
       return { text: "action must be start, report or stop", isError: true };
