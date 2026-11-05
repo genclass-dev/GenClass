@@ -1,6 +1,6 @@
 {
   "name": "@genclass/mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "mcpName": "io.github.genclass-dev/genclass",
   "description": "GenClass for coding agents: an MCP server that sees what happens inside your app's pages (clicks, requests, the order responses arrived, state writes, errors), re-runs them with the network answering in different orders to find race conditions, and replays one exact order to prove a fix. Runs on your machine; anything it sends is opt-in; no dependencies.",
   "type": "module",

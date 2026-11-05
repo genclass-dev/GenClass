@@ -1,6 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 (2026-11-05)
+
+- **The agent shows each action and waits for a yes.** The skill (the plugin's, the root copy and the one `init`
+  writes) and the server's instructions now stop before what changes someone's project or sends something out: running
+  or adding what `genclass_setup` prints (the tool's answer opens with that step), `npx playwright install chromium`,
+  `genclass_scan` with `hosted: true`, and a fix or a test when the user only asked what broke. The regression test is
+  offered, not added. `genclass_scan`'s "Next" line and its message when Chromium is missing say the same, and the skill's
+  terminal line for the visual checks passes `--local`, so without Chromium it stops instead of sending the URL to the
+  page check. These are instructions to the agent, not locks in the code. Why: directories read the skill at a pinned
+  commit (buildwithclaude closed #636, #627 and #490 over these steps and merged #515 for asking), and it is what
+  someone who only asked a question should get.
+- **The exact runtime.** `genclass_scan`'s `npx` and `genclass_setup`'s install line name
+  `@genclass/runtime@0.3.0-beta.5` instead of `@beta`, as do the skill, `llms-install.md` and the READMEs in this package:
+  what a server runs or an agent copies pins like a script tag, so whoever reads a commit knows what runs. The one
+  source is `RUNTIME_VERSION` in `src/clients.ts`; `npm run sync -w @genclass/mcp` writes it and those files from
+  `packages/runtime/package.json`, the build the e2e runs, `test/manifests.test.ts` fails when they differ or when one of
+  them names a tag or a bare install, and `release-mcp.yml` stops if npm does not serve that version. The text still names
+  the line (`0.3.0-beta.1` or later for the agent entry, npm's `latest` is 0.2.x), and the runtime's own docs keep `@beta`.
+- **`GenClass.init()` is behind the development check too.** `genclass_setup` printed `const rt = GenClass.init();` outside
+  the check, so following it put the runtime in production builds, where it sends anonymous diagnostics from public hosts
+  by default. It now prints both lines inside the check, and a production build drops the runtime (a test bundles the
+  printed lines with esbuild; Vite and Next.js 15 by hand, [RESULTS.md](../../docs/runtime/RESULTS.md) section 26). The same
+  block is in the READMEs, `llms-install.md` and `AGENT.md`, and the text says plainly what moving `GenClass.init()` out of
+  the check would do. An app that already runs GenClass keeps its setup: `init` returns the running runtime.
+- **The READMEs and manifests say what can leave the machine**, instead of "sends nothing" (no code change).
 
 - **The plugin's repository vendors the server, and the lockfile is gone.** In
   [genclass-dev/genclass-plugin](https://github.com/genclass-dev/genclass-plugin), `.mcp.json` and the hook run

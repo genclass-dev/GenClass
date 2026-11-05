@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Api } from "./api.js";
-import { CLIENTS, clientFor, pinned } from "./clients.js";
+import { CLIENTS, clientFor, pinned, pinnedRuntime } from "./clients.js";
 import { VERSION } from "./http.js";
 import { dashboardTarget, fetchProduction, type ProdStats } from "./production.js";
 import { runScan, type Runner, type ScanReport } from "./scan.js";
@@ -17,7 +17,8 @@ export const SERVER_NAME = "genclass";
 
 /**
  * Sent at initialize; Claude Code gives it to the model when the server connects (keep under 4,096 characters). It
- * carries the triggers (the symptom words in the first 500 characters) and the first call for each; the procedure is
+ * carries the triggers (the symptom words in the first 500 characters), the first call for each and what waits for
+ * the user's yes (the same steps as the skill); the procedure is
  * the `genclass` skill (plugin/skills/genclass/SKILL.md, also written by `init`), which it names so a client that has
  * the skill loads it. test/manifests.test.ts checks both.
  */
@@ -26,10 +27,10 @@ export const INSTRUCTIONS = `GenClass finds the web-app bugs that depend on timi
 What to do first:
 - An intermittent bug report (the words above): genclass_findings, then genclass_explain on the top finding. Nothing recorded: genclass_explore on the page the user named.
 - After you change code that fetches, submits, autosaves, polls, debounces, paginates or listens to a socket: genclass_explore {action:"start"}, run the same scenario once per armed page load (Playwright or a browser tool: load the page, do the steps, then await window.__GENCLASS_AGENT__.whenSettled()), then genclass_explore {action:"report"}. Do not call the change done while the report shows a race.
-- Before fixing a finding, confirm it: genclass_replay {action:"arm"}, do the same steps, genclass_replay {action:"result"}. After the fix, replay again; "not reproduced" is the evidence. Add the regression test from genclass_explain to the repo.
+- Before fixing a finding, confirm it: genclass_replay {action:"arm"}, do the same steps, genclass_replay {action:"result"}. If the user only asked what broke, report the cause and wait for a yes before you write a fix or a test. After a fix, replay again; "not reproduced" is the evidence. Offer the regression test from genclass_explain; add it to the repo once the user says yes.
 - Production numbers (sessions affected, which pages, which diagnoses): genclass_analytics {source:"production"}.
-- No connected page in genclass_status: genclass_setup shows the dev-only lines to add.
-- Before calling a page or UI change done, after CSS or layout changes, or to audit a site you do not own: genclass_scan {url} loads it headless and lists unreadable text, broken images and fonts, sideways scrolling, covered controls, each with its element and a suggested fix.
+- No connected page in genclass_status: genclass_setup prints an install line and the dev-only lines; show them to the user and wait for a yes before you run or add them.
+- Before calling a page or UI change done, after CSS or layout changes, or to audit a site you do not own: genclass_scan {url} loads it headless and lists unreadable text, broken images and fonts, sideways scrolling, covered controls, each with its element and a suggested fix. Wait for a yes before npx playwright install chromium, and before hosted: true, which sends the URL to the genclass.dev page check.
 
 The genclass skill holds the full procedure (the explore arguments, how to run the scenario, how to read a report, what to say when done): load it when this client has it.
 
@@ -131,7 +132,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "genclass_setup",
     title: "Set up GenClass",
-    description: "The lines to add so this project's dev build connects to GenClass (detects Vite, Next.js and others from package.json), how to check it works, and this MCP client's config lines for keeping the server configured. It changes no file.",
+    description: "The lines to add so this project's dev build connects to GenClass (detects Vite, Next.js and others from package.json), how to check it works, and this MCP client's config lines for keeping the server configured. It changes no file; show the user the lines and wait for a yes before you run or add them.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { title: "Set up GenClass", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
@@ -145,7 +146,7 @@ export const TOOLS: ToolDef[] = [
       properties: {
         url: { type: "string", description: "The page, e.g. http://localhost:5173/pricing or https://example.com." },
         phone: { type: "boolean", description: "The phone size only (default: desktop and phone)." },
-        hosted: { type: "boolean", description: "Run on the genclass.dev page check instead of this machine (public pages only; adds accessibility, speed and security)." },
+        hosted: { type: "boolean", description: "Run on the genclass.dev page check instead of this machine (public pages only; adds accessibility, speed and security). It sends the URL there, so ask the user first." },
       },
       required: ["url"],
       additionalProperties: false,
@@ -426,7 +427,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
     }
 
     case "genclass_setup":
-      return { text: setupText(ctx.cwd, ctx.client) };
+      return { text: `This changed nothing. Show the user the lines below and wait for a yes before you run or add any of them.\n\n${setupText(ctx.cwd, ctx.client)}` };
 
     case "genclass_scan":
       return runScan(args, ctx.cwd, ctx.run);
@@ -561,19 +562,21 @@ export function setupText(cwd: string, client?: string | null): string {
   const lines = [
     installed
       ? "@genclass/runtime is installed."
-      : `1. Install the newest runtime, 0.3.0-beta.1 or later (the agent entry and analytics; 0.2.x has neither${has("@genclass/runtime") ? `; this project has ${JSON.stringify(range)}${have !== range ? `, installed ${have}` : ""}` : ""}): npm install @genclass/runtime@beta`,
+      : `1. Install the newest runtime line (npm tag beta) at the exact version this server was tested with; the agent entry and analytics need 0.3.0-beta.1 or later, and 0.2.x, npm's latest, has neither${has("@genclass/runtime") ? `; this project has ${JSON.stringify(range)}${have !== range ? `, installed ${have}` : ""}` : ""}: npm install ${pinnedRuntime()}`,
     `${installed ? "1" : "2"}. In ${where}:`,
     "```ts",
     `import { GenClass } from "@genclass/runtime";`,
     `import { connectAgent } from "@genclass/runtime/agent";`,
     ``,
-    `const rt = GenClass.init();`,
-    `// development builds only: the link records and schedules nothing in production (and is tree-shaken out)`,
-    `if (${guard}) connectAgent(rt);`,
+    `// development builds only: a production build drops all of this, so no visitor runs GenClass`,
+    `if (${guard}) {`,
+    `  const rt = GenClass.init();`,
+    `  connectAgent(rt);`,
+    `}`,
     "```",
     `${installed ? "2" : "3"}. Load a page of the dev server, then genclass_status: it should list the page as active.`,
     "",
-    "Notes: connectAgent runs only on pages served from this machine (localhost, 127.0.0.1, *.localhost); for a *.test or *.local name or a LAN address use connectAgent(rt, { anyHost: true }) and allow the origin with GENCLASS_AGENT_ORIGINS=http://host:port in the MCP server's environment. It talks only to this machine's bridge (http://127.0.0.1:47357; GENCLASS_AGENT_PORT changes it, and the page then needs connectAgent(rt, { url })). A Content-Security-Policy in development needs connect-src http://127.0.0.1:47357; a mock service worker (MSW) should let 127.0.0.1:47357 through. Production: GenClass.init() alone, unchanged.",
+    "Notes: connectAgent runs only on pages served from this machine (localhost, 127.0.0.1, *.localhost); for a *.test or *.local name or a LAN address use connectAgent(rt, { anyHost: true }) and allow the origin with GENCLASS_AGENT_ORIGINS=http://host:port in the MCP server's environment. It talks only to this machine's bridge (http://127.0.0.1:47357; GENCLASS_AGENT_PORT changes it, and the page then needs connectAgent(rt, { url })). A Content-Security-Policy in development needs connect-src http://127.0.0.1:47357; a mock service worker (MSW) should let 127.0.0.1:47357 through. On a local or private address the runtime sends no diagnostics. Production is a separate choice none of this needs: GenClass.init() outside the check runs for every visitor and sends anonymous diagnostics from public hosts by default (GenClass.init({ telemetry: false }) turns them off), so do not move it there without asking. An app that already starts GenClass keeps that setup: GenClass.init() returns the running runtime.",
   ];
   const c = clientFor(client);
   if (c) lines.push("", `To keep GenClass configured in ${c.label} (in the project where the client reads a project file):`, "", c.block(VERSION));

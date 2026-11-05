@@ -1419,3 +1419,19 @@ work), GenClass's defaults on a deployed host, and phones. The `0.1.0-beta.3` nu
 2026-10-09) used the same build loaded with `?genclass=off` as the control, which still loads GenClass's code, and
 renderer RSS for memory; they are not comparable with these.
 
+
+## 26. What a production build keeps of the lines `genclass_setup` prints (development Mac, 2026-11-05, `@genclass/runtime` 0.3.0-beta.5)
+
+`GenClass.init()` inside the development check against the older form, `GenClass.init()` outside it with only
+`connectAgent` inside. "Runtime strings" searches the output for `__GENCLASS_AGENT__`, the diagnostics notice and the
+telemetry opt-out key. No false-intervention rate applies: nothing here is a detection.
+
+| build | printed lines | JavaScript written | runtime strings |
+|---|---|---|---|
+| Vite (vitest's copy), `import.meta.env.DEV` | inside the check | 702 bytes | none |
+| Vite, same app | outside the check | 918,333 bytes | yes |
+| esbuild, `process.env.NODE_ENV` set to `"production"` | inside the check | 33 bytes, the app's own line | none |
+| Next.js 15.5.29 (webpack), a client component in the root layout | inside the check | First Load JS 103 kB, what the framework ships | none, in `.next/static` and `.next/server/app` |
+
+Not measured: Turbopack, Parcel, and a plain webpack project. `packages/mcp/test/mcp.test.ts` repeats the esbuild row on
+the exact lines `setupText` prints for Vite and Next.js, whenever the runtime is built.

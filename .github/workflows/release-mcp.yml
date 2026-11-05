@@ -78,6 +78,10 @@ jobs:
           # fully in the unit tests below, this fails before anything is built
           grep -q "@genclass/mcp@$PKG" packages/mcp/plugin/.mcp.json
           grep -q "@genclass/mcp@$PKG hook" packages/mcp/plugin/hooks/hooks.json
+          # the exact runtime the server runs and prints (RUNTIME_VERSION) is the one the e2e below runs, and npm serves it
+          RT=$(node -p "require('./packages/runtime/package.json').version")
+          grep -q "RUNTIME_VERSION = \"$RT\"" packages/mcp/src/clients.ts
+          test "$(npm view "@genclass/runtime@$RT" version)" = "$RT"
 
       - name: Install
         run: npm ci --no-audit --no-fund
