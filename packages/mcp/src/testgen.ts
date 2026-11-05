@@ -11,7 +11,7 @@
 // time with new RegExp from such a literal. Values the page redacted ("[redacted]") become a placeholder.
 
 import type { ActStep, Finding, Run, ScheduleSpec } from "./types.js";
-import { clean, pathShape, shape } from "./text.js";
+import { agesIn, clean, pathShape, shape } from "./text.js";
 import { shownField, type FieldDiff } from "./compare.js";
 
 const lit = (s: unknown): string => JSON.stringify(clean(s, 200));
@@ -192,7 +192,7 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
     lines.push(`  expect(witnesses.filter((w: any) => w.kind === "identical-in-flight" && w.subject === ${lit(ev.subject)})).toEqual([]);`);
     asserts++;
   } else if (f.kind === "race") {
-    const all = (ev.fields as { where: string; name: string; baseline: string }[] | undefined) ?? [];
+    const all = (ev.fields as { where: string; name: string; baseline: string; except?: string[] }[] | undefined) ?? [];
     const onlyBase = (ev.textOnlyBaseline as string[] | undefined) ?? [];
     const onlyRun = (ev.textOnlyRun as string[] | undefined) ?? [];
     const errs = (ev.errors as string[] | undefined) ?? [];
@@ -201,6 +201,7 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
     const visible = shown.length > 0 || onlyBase.length > 0 || onlyRun.length > 0 || errs.length > 0;
     const fields = visible ? shown : all;
     const pooledUsed = fields.slice(0, 5).some((d) => d.where === "state" && d.name.split(".").includes("*"));
+    const pooledField = fields.slice(0, 5).some((d) => d.where === "field" && d.name.includes("*") && !!d.name.replace(/\*/g, "").trim());
     if (pooledUsed) {
       // records under an object whose keys are new each run: compared by their values (as the bridge did)
       lines.push(`  const stateValue = (state: Record<string, string>, name: string) => {`);
@@ -209,20 +210,34 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
       lines.push(`    return list.length === 0 ? undefined : list.length === 1 ? list[0] : "[" + list.sort().join(" | ") + "]";`);
       lines.push(`  };`);
     }
+    if (pooledField) {
+      // a field whose name has a part made for each page load ("el-id-*-32"): found by the rest of its name
+      lines.push(`  const fieldValue = (fields: Record<string, string> = {}, name: string, except: string[] = []) => {`);
+      lines.push(`    const re = new RegExp("^" + name.split("*").map((s) => s.replace(/[.*+?^\${}()|[\\]\\\\]/g, "\\\\$&")).join(".*") + "$");`);
+      lines.push(`    const list = Object.entries(fields).filter(([k]) => re.test(k) && !except.includes(k)).map(([, v]) => v);`);
+      lines.push(`    return list.length === 0 ? undefined : list.length === 1 ? list[0] : "[" + list.sort().join(" | ") + "]";`);
+      lines.push(`  };`);
+    }
     for (const d of fields.slice(0, 5)) {
+      // a name that is nothing but its generated part (":r1a:"): nothing in the page to find the field by
+      if (d.where === "field" && !d.name.replace(/\*/g, "").trim()) {
+        lines.push(`  // the failing run's field ${lit(d.name)} has only a generated name, so no line can find it: assert it by its label or role`);
+        continue;
+      }
       const want = d.baseline === "(absent)" ? ".toBeUndefined()" : `.toBe(${lit(d.baseline)})`;
       const name = lit(d.name);
       if (d.where === "state") lines.push(`  expect(${d.name.split(".").includes("*") ? `stateValue(snap.state, ${name})` : `snap.state[${name}]`}, "as with responses in request order")${want};`);
-      else if (d.where === "field") lines.push(`  expect(snap.fields?.[${name}], "as with responses in request order")${want};`);
+      else if (d.where === "field") lines.push(`  expect(${d.name.includes("*") ? `fieldValue(snap.fields, ${name}${d.except?.length ? `, ${JSON.stringify(d.except.map((k) => clean(k, 200)))}` : ""})` : `snap.fields?.[${name}]`}, "as with responses in request order")${want};`);
       else lines.push(`  expect(snap.requests[${name}] ?? 0, "requests sent, as with responses in request order").toBe(${Number(d.baseline) || 0});`);
       asserts++;
     }
     // page lines are compared with the agent's own snapshot (the same line splitting as the recording)
-    for (const l of onlyBase.slice(0, 3)) {
+    // a line with an age in it reads differently a minute later: it can be no line a test asserts
+    for (const l of onlyBase.filter((x) => !agesIn(x)).slice(0, 3)) {
       lines.push(`  expect(snap.text, "the page shows what it shows with responses in request order").toContain(${lit(l)});`);
       asserts++;
     }
-    for (const l of onlyRun.slice(0, 3)) {
+    for (const l of onlyRun.filter((x) => !agesIn(x)).slice(0, 3)) {
       lines.push(`  expect(snap.text, "the page does not show what only the failing order showed").not.toContain(${lit(l)});`);
       asserts++;
     }

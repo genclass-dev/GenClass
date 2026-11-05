@@ -274,6 +274,139 @@ describe("mcp: tools against a live bridge", () => {
     expect(r2.text).not.toContain("No race found");
   });
 
+  it("explore with slow_ms: a third baseline, named at the start, and what a slow response alone does is the headline", async () => {
+    const { c, port } = await start();
+    const s = await call(c, "genclass_explore", { action: "start", runs: 2, route: "/notes", slow_ms: 600 });
+    expect(s.text).toContain('next 5 page loads of "/notes"');
+    expect(s.text).toContain("3. baseline without added delay");
+    expect(s.text).toContain("--repeat-each 5");
+    const pages = [["Mango note", "Maple note"], ["Mango note", "Maple note"], ["Mango note"], ["Mango note"], ["Mango note"]];
+    for (const text of pages) {
+      const p = await page(port, "/notes");
+      await p.send([{ t: "steps", steps: [act(0, "type", 'input "Search Notes"', "Mango")], order: [] }, { t: "snapshot", snapshot: snap({}, text) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain('RACE: a slow response alone changes the page, no reordering needed: 2 of 2 slow baselines ended the same way, differently from the baseline with no added delay: it shows "Maple note", which the run with no added delay does not.');
+    expect(r.text).toContain('page text only in the slow baselines: "Maple note"');
+    expect(r.text).toContain("none of the 2 reordered run(s) ended differently from both");
+    expect(r.text).not.toContain("No race found");
+    expect(r.text).toContain("Race finding(s): f1");
+    expect(r.text).toContain("If the user asked for a fix: fix it, then genclass_replay to verify.");
+    const ex = await call(c, "genclass_explain", { id: "f1" });
+    expect(ex.text).toContain("2 of 2 slow baselines ended differently from the baseline with no added delay");
+    expect(ex.text).toContain('not.toContain("Maple note")');
+  });
+
+  it("explore report: the headline names the page's own line, the list shows it first, and store values wait", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 1, route: "/notes" });
+    const state = (v: string) => Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`store.field${i}`, v]));
+    const ends: [Record<string, string>, string[]][] = [[state("a"), ["Home", "41"]], [state("a"), ["Home", "41"]], [state("b"), ["Home", "42", "·", "Components", "Mango note 8", "Maple note 8", "Maple note 7", "Maple note 6", "Maple note 5"]]];
+    for (const [st, text] of ends) {
+      const p = await page(port, "/notes");
+      await p.send([{ t: "steps", steps: [act(0, "type", 'input "Search Notes"', "Mango")], order: [] }, { t: "snapshot", snapshot: snap(st, text) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain('RACE: 1 of 1 reordered run(s) ended in a different state than the baseline (responses in request order): under seed 1 it shows "Mango note 8", which the baseline does not.');
+    expect(r.text).toContain('page text only in this run: "Mango note 8", "Maple note 8", "Maple note 7", "Maple note 6", and 4 more');
+    expect(r.text).toContain("and 3 more store value(s) or request count(s) that differ");
+    expect((await call(c, "genclass_findings")).text).toContain('"Mango note 8"');
+  });
+
+  it("explore report: a POST count that changes with the delay, with no evidence, is named apart and is no race", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 1, route: "/save", slow_ms: 300 });
+    for (const n of [2, 2, 1, 2]) {
+      const p = await page(port, "/save");
+      await p.send([{ t: "steps", steps: [act(0, "click", 'button "Save"')], order: [] }, { t: "snapshot", snapshot: snap({}, ["Saved"], { requests: { "POST /api/save": n } }) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("No race found");
+    expect(r.text).toContain('worth a look');
+    expect(r.text).toContain('"POST /api/save" 2 time(s) with added latency, 1 with no added delay');
+    expect(r.text).toContain("what the server holds: a duplicate or lost write may have happened with the page unchanged");
+    expect(r.text).not.toContain("Race finding(s)");
+  });
+
+  it("explore report: a race finding and NO VERDICT never stand together; with only the baselines it says what they show", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 2, route: "/notes", slow_ms: 600 });
+    for (const text of [["Mango note", "Maple note"], ["Mango note", "Maple note"], ["Mango note"]]) {
+      const p = await page(port, "/notes");
+      await p.send([{ t: "steps", steps: [act(0, "type", 'input "Search Notes"', "Mango")], order: [] }, { t: "snapshot", snapshot: snap({}, text) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("Compared: 0 of 0 reordered run(s)");
+    expect(r.text).toContain("RACE, on one load's word: 2 of 2 slow baselines ended the same way");
+    expect(r.text).toContain("Race finding(s): f1");
+    expect(r.text).not.toContain("NO VERDICT");
+    expect(r.text).toContain("No verdict on reordering");
+  });
+
+  it("explore report: what one slow baseline did is worth a look, named, with no race and no finding", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 2, route: "/home", slow_ms: 300 });
+    for (const text of [["Home", "Tip: press save often"], ["Home", "Tip: drag and drop files"], ["Home", "Tip: press save often"], ["Home", "Tip: drag and drop files"], ["Home", "Tip: press save often"]]) {
+      const p = await page(port, "/home");
+      await p.send([{ t: "steps", steps: [act(0, "click", 'button "Refresh"')], order: [] }, { t: "snapshot", snapshot: snap({}, text) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("No race found");
+    expect(r.text).toContain("worth a look");
+    expect(r.text).toContain('"Tip: drag and drop files" only in one slow baseline, and in 1 of 2 reordered run(s)');
+    expect(r.text).not.toContain("Race finding(s)");
+  });
+
+  it("explore report: only the plain load differs, and the headline and the finding say so (second review of PR 168)", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 1, route: "/shop", slow_ms: 300 });
+    for (const text of [["Shop", "Saved"], ["Shop", "Saved"], ["Shop", "Something went wrong"], ["Shop", "Saved"]]) {
+      const p = await page(port, "/shop");
+      await p.send([{ t: "steps", steps: [act(0, "click", 'button "Save"')], order: [] }, { t: "snapshot", snapshot: snap({}, text) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("RACE, on one load's word");
+    expect(r.text).toContain("load the page once more with no added delay before believing it");
+    expect(r.text).not.toContain("a slow response alone changes the page");
+    expect((await call(c, "genclass_findings")).text).toContain("the only load that differs");
+  });
+
+  it("explore report: 'No race found' says a POST count differed, and to check the server (second review of PR 168)", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 2, route: "/pay" });
+    for (const n of [1, 1, 2, 1]) {
+      const p = await page(port, "/pay");
+      await p.send([{ t: "steps", steps: [act(0, "click", 'button "Pay"'), { k: "send", t: 1, key: "POST /api/pay#1", act: 0, via: "timer 0ms" }], order: [] }, { t: "snapshot", snapshot: snap({}, ["Paid"], { requests: { "POST /api/pay": n } }) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("No race found");
+    expect(r.text).toContain("a duplicate write may have happened with the page unchanged, so check what the server holds");
+    expect(r.text).toContain("left one out");
+  });
+
+  it("explore report: nothing compared says so plainly, and a page with a new path on every load is compared", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 1 });
+    const none = await call(c, "genclass_explore", { action: "report" });
+    expect(none.text).toContain("NO VERDICT");
+    expect(none.text).not.toContain("No race found");
+    const first = await page(port, "/session/ses_e58736abdffeddC6WIDC8dXc3z");
+    await first.send([{ t: "steps", steps: [act(0, "click", 'button "Send"')], order: [] }, { t: "snapshot", snapshot: snap({}, ["Same"]) }]);
+    const one = await call(c, "genclass_explore", { action: "report" });
+    expect(one.text).toContain("Compared: 0 of 0 reordered run(s)");
+    expect(one.text).toContain("NO VERDICT: nothing was compared");
+    expect(one.text).not.toContain("No race found");
+    for (const id of ["ses_e585feb52ffemqvLUXoKnNxD72", "ses_e5a1e4c7dffe0B2xPqLwV9yT4m"]) {
+      const p = await page(port, `/session/${id}`);
+      expect(p.schedule).not.toBeNull();
+      await p.send([{ t: "steps", steps: [act(0, "click", 'button "Send"')], order: [] }, { t: "snapshot", snapshot: snap({}, ["Same"]) }]);
+    }
+    const all = await call(c, "genclass_explore", { action: "report" });
+    expect(all.text).toContain("Compared: 1 of 1 reordered run(s)");
+    expect(all.text).toContain("No race found");
+    expect(all.text).not.toContain("NO VERDICT");
+  });
+
   it("pushes a channel event for a new finding", async () => {
     const { c, port } = await start();
     const p = await page(port, "/cart");

@@ -10,7 +10,7 @@
 //
 // A reordered run "differs" when its DOM oracle equals neither baseline's (a title the scenario makes unique per run
 // has its digits blanked). A run explore "reports" is one in a group with two baselines whose difference reaches the
-// race verdict: any difference for the old comparison (it reported every one as "RACE"), the visible tier for the new.
+// race verdict: the visible tier (any difference for a comparison older than tiers, which reported every one as "RACE").
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -41,8 +41,8 @@ function groupsOf(impl, runs) {
   return [...m.values()];
 }
 
-/** Per reordered run: compared with two baselines, reported as a race, and its tier. `isNew`: only the visible tier is a race. */
-function score(impl, runs, isNew) {
+/** Per reordered run: compared with two baselines, reported as a race, and its tier. Only the visible tier is a race (a comparison older than tiers: any difference). */
+function score(impl, runs) {
   const out = new Map();
   const reports = impl.compareRuns(runs);
   const groups = groupsOf(impl, runs);
@@ -53,7 +53,7 @@ function score(impl, runs, isNew) {
       if (r.schedule?.order === "fifo") continue;
       const d = diffs.get(r.id);
       const tier = !d ? "same" : d.tier ?? (d.fields.length || d.textOnlyBaseline.length || d.textOnlyRun.length || d.errors.length ? "ended differently" : "witness only");
-      out.set(r.id, { compared: two, reported: two && !!d && (!isNew || d.tier === "visible"), tier, grouping: g.grouping });
+      out.set(r.id, { compared: two, reported: two && !!d && (d.tier === undefined || d.tier === "visible"), tier, grouping: g.grouping });
     }
   });
   return out;
@@ -71,11 +71,13 @@ for (const f of readdirSync(dir).filter((x) => /^[a-z-]+-\d+(-[a-z]+)?\.json$/.t
   const runs = x.runs.map((id) => byId.get(id)).filter(Boolean);
   // the DOM oracle per run (the harness's own check, secondary)
   const oracle = new Map((d.loads ?? []).filter((l) => l.run).map((l) => [l.run, l]));
+  // the slow baselines and the one with no added delay: a run like any of them ended in a state a baseline did
   const baseKeys = new Set((d.loads ?? []).filter((l) => l.schedule?.order === "fifo").map((l) => key(l.oracle)));
   const seeded = runs.filter((r) => r.schedule?.order !== "fifo");
   const truth = new Map(seeded.map((r) => [r.id, oracle.has(r.id) ? !baseKeys.has(key(oracle.get(r.id).oracle)) : null]));
-  const sNew = score(cur, runs, true);
-  const sOld = old ? score(old, runs, false) : null;
+  const sNew = score(cur, runs);
+  // the older comparison, on what its plan recorded: without the baseline with no added delay (it would read as a baseline)
+  const sOld = old ? score(old, runs.filter((r) => !(r.schedule?.order === "fifo" && !r.schedule?.delay) || !runs.some((o) => o.schedule?.order === "fifo" && o.schedule?.delay))) : null;
   const tally = (s) => {
     if (!s) return null;
     let compared = 0, reported = 0, tp = 0, fp = 0, fn = 0;

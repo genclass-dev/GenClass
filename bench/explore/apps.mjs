@@ -125,12 +125,14 @@ async function session(browser, name, bug, slow) {
   };
   const result = { scenario: `${name}-${bug ? "bug" : "ok"}`, slow_ms: slow, runs: RUNS, loads: [] };
   result.start = await tool("genclass_explore", { action: "start", runs: RUNS, slow_ms: slow });
-  for (let i = 0; i < RUNS + 2; i++) result.loads.push(await load(i));
+  // the plan says how many loads: 2 baselines, with slow_ms a third with no added delay, and the seeded ones
+  const planned = Number(/next (\d+) page loads/.exec(result.start)?.[1] ?? RUNS + 2);
+  for (let i = 0; i < planned; i++) result.loads.push(await load(i));
   result.report = await tool("genclass_explore", { action: "report" });
   const fid = /Race finding\(s\): (f\d+)/.exec(result.report)?.[1];
   if (fid) {
     result.replay = { id: fid, arm: await tool("genclass_replay", { action: "arm", id: fid }) };
-    result.replay.load = await load(RUNS + 2);
+    result.replay.load = await load(planned);
     result.replay.result = await tool("genclass_replay", { action: "result", id: fid });
   }
   writeFileSync(join(OUT, `${tag}.json`), JSON.stringify(result, null, 2));

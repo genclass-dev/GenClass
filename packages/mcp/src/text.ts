@@ -95,3 +95,132 @@ export function shape(s: string): string {
     .trim()
     .slice(0, 160);
 }
+
+/**
+ * A route segment that names a record, not a place: what pathShape() calls an id, or a long token of mixed-case letters
+ * ("FlWEvnXpnxjGWWIU": a generated id can come without a digit; "GettingStarted" has too few capitals to look like one).
+ */
+function routeIdLike(seg: string): boolean {
+  if (pathShape(seg) === "*") return true;
+  return seg.length >= 12 && /^[\w-]+$/.test(seg) && (seg.match(/[A-Z]/g)?.length ?? 0) >= 4 && (seg.match(/[a-z]/g)?.length ?? 0) >= 4;
+}
+
+/**
+ * A route with id-like segments as "*" ("/c/8f3a9c2e-…" → "/c/*"): a page that gets a new path on every load (a fresh
+ * session, a new document) is one page to a schedule, a scenario group and a finding key.
+ */
+export function routeShape(route: string): string {
+  return route
+    .split("/")
+    .map((seg) => (seg && routeIdLike(seg) ? "*" : seg))
+    .join("/");
+}
+
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/**
+ * A form field's name with its generated part as "*": "el-id-2476-32" → "el-id-*-32", "<uuid>-input" → "*-input",
+ * ":r1a:" → "*". A name made for this page load compares with itself on the next one. Only a name without spaces is an
+ * identifier (a UUID is one anywhere): "Address line 2" is a label, and "address-2" keeps its small number, which tells
+ * two fields apart rather than two loads.
+ */
+export function fieldShape(name: string): string {
+  const s = name.replace(UUID, "*").replace(/:[rR][0-9a-zA-Z]*:|«[rR][0-9a-zA-Z]*»/g, "*");
+  if (/\s/.test(s)) return s;
+  return s
+    .split(/([-_.:])/)
+    .map((t) => (/^\d{3,}$/.test(t) || /^[0-9a-f]{8,}$/i.test(t) || (t.length >= 5 && (t.match(/\d/g)?.length ?? 0) >= 2 && (t.match(/[a-z]/gi)?.length ?? 0) >= 2) ? "*" : t))
+    .join("");
+}
+
+const UNITS: [RegExp, number][] = [
+  [/^(?:s|secs?|seconds?)$/i, 1000],
+  [/^(?:m|mins?|minutes?)$/i, 60_000],
+  [/^(?:h|hrs?|hours?)$/i, 3_600_000],
+  [/^(?:d|days?)$/i, 86_400_000],
+  [/^(?:w|wks?|weeks?)$/i, 7 * 86_400_000],
+  [/^(?:mo|mos|months?)$/i, 30 * 86_400_000],
+  [/^(?:y|yrs?|years?)$/i, 365 * 86_400_000],
+];
+const UNIT = "s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?|w|wks?|weeks?|mo|mos|months?|y|yrs?|years?";
+/** A number as a page writes it: "1,000", "1.5". */
+const AMOUNT = String.raw`\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?`;
+const WORDS = "an?|a few|few|several";
+const SPAN = String.raw`(?:(?:${AMOUNT})\s*|(?:${WORDS})\s+)(?:${UNIT})\b\.?`;
+/** "13 minutes ago", "an hour ago", "a few seconds ago", "10m ago", "2h 5m ago", "less than a minute ago", "just now". */
+const AGE = new RegExp(String.raw`(?<![\w.,])(?:(?:less than|about|over|almost|nearly)\s+)?${SPAN}(?:(?:\s+and)?[\s,]+${SPAN})*\s+ago\b|\bjust now\b|\bmoments? ago\b|\b(?:seconds|minutes|hours) ago\b`, "gi");
+
+/** What ageless() puts in place of an age. */
+const AGO = "<ago>";
+
+/** How old a phrase says something is: from `lo` to `hi` ms ("an hour ago" is rounded: 45 to 60 minutes). */
+export interface Age {
+  lo: number;
+  hi: number;
+}
+
+function ageOf(phrase: string): Age {
+  const p = phrase.toLowerCase();
+  if (/^(?:just now|moments? ago|seconds ago)$/.test(p)) return { lo: 0, hi: 60_000 };
+  if (p === "minutes ago") return { lo: 60_000, hi: 50 * 60_000 };
+  if (p === "hours ago") return { lo: 2 * 3_600_000, hi: 86_400_000 };
+  let lo = 0;
+  let hi = 0;
+  for (const m of p.matchAll(new RegExp(String.raw`(?:(${AMOUNT})\s*|(${WORDS})\s+)(${UNIT})\b`, "gi"))) {
+    const unit = UNITS.find(([re]) => re.test(m[3]))?.[1] ?? 60_000;
+    if (m[1]) {
+      // a number is what it says
+      const n = Number(m[1].replace(/,/g, ""));
+      lo += n * unit;
+      hi += n * unit;
+    } else if (/^an?$/.test(m[2])) {
+      // what a library shows from three quarters of a unit: "44 minutes ago" then "an hour ago", not "40 days" for "a month"
+      lo += 0.75 * unit;
+      hi += unit;
+    } else {
+      // "a few": a small number of them ("a few years" is not 9)
+      lo += unit === 1000 ? 0 : 2 * unit;
+      hi += unit === 1000 ? 60_000 : 4 * unit;
+    }
+  }
+  return p.startsWith("less than") ? { lo: 0, hi } : { lo, hi };
+}
+
+/** A line with its ages as one token, and those ages ("Edited 13 minutes ago" → "Edited <ago>", [13 minutes]); null without one. */
+export function agesIn(line: string): { form: string; ages: Age[] } | null {
+  const phrases = line.match(AGE);
+  if (!phrases) return null;
+  return { form: line.replace(AGE, AGO), ages: phrases.map(ageOf) };
+}
+
+/** A line with its ages as one token: for element names, where a label's age says nothing about what was pressed. */
+export const ageless = (line: string): string => line.replace(AGE, AGO);
+
+/** How much later one page load's lines were than another's, at least and at most, on the bridge's clock. */
+export interface Elapsed {
+  min: number;
+  max: number;
+}
+
+/** The minute a shown age can roll over in, however little time passed. */
+const ROLLOVER_MS = 60_000;
+
+/**
+ * The ages of two lines of one form, the second read `later` after the first, are the same age: an age only moves with the
+ * clock, in one direction and by the time that passed, so "26 minutes ago" then "27 minutes ago" is one line, and neither
+ * "just now" against "3 days ago" nor "12 minutes ago" then "2 minutes ago" ten minutes on. Nothing else is taken as moving:
+ * a clock ("3:30 PM"), "today", "in 2 days" and a bare "3d" are values a page can get wrong, compared as they are unless
+ * the baselines themselves show them varying.
+ */
+export function sameAges(a: Age[], b: Age[], later: Elapsed): boolean {
+  return a.length === b.length && a.every((x, i) => b[i].hi - x.lo >= later.min - ROLLOVER_MS && b[i].lo - x.hi <= later.max + ROLLOVER_MS);
+}
+
+/**
+ * How much a page line says, for putting evidence in order: 2 real content (two words or more), 1 a short label
+ * ("Components", "draft-one", "Total 41"), 0 a count or a symbol ("41", "156k", "33%", "·", "/").
+ */
+export function lineWeight(line: string): 0 | 1 | 2 {
+  const words = line.split(/\s+/).filter((w) => /\p{L}{2,}/u.test(w) && !/^[\d.,$€£]+\p{L}{0,3}%?$/u.test(w));
+  return words.length >= 2 ? 2 : words.length === 1 ? 1 : 0;
+}
