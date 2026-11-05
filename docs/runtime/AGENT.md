@@ -300,29 +300,33 @@ final value). In each group, the two `fifo` runs are the baseline; with `slow_ms
 seeded runs, so timing alone never separates them, and a third `fifo` run gets none (the baseline with no added delay,
 below). Anything that differs between the two baselines is **noise** and is ignored: a store field whose value differs;
 the records under a store object whose keys differ (new ids on every run: compared by their values, not their keys); in
-a page line, the tokens that differ at their position (a token holding a digit: times, counters, ids), and no other token
-of that line, so "12 items, version-1" against "13 items, version-1" leaves "version-1" compared; a page line only one of
-them shows. A token that varied stands for tokens of its own shape (a bare number does not stand for "version-2"), and a
-line both baselines show the same is never noise, whatever varied elsewhere on the page. A value the runtime redacted
-(`[redacted]`) equals any value, alone or inside a summary: whether an opaque id is redacted depends on the id itself
-(one with a digit looks like a credential, one without does not), so a redaction is never a difference.
+a page line, the tokens that differ at their position (a token holding a digit: times, counters, ids), so "12 items,
+version-1" against "13 items, version-1" leaves "version-1" compared; a page line only one of them shows. A token that
+varied stands for tokens of its own shape (a bare number does not stand for "version-2"). Another number on that line may
+drift a little, at most 2 or 10% ("CPU 12% memory 40%" against "CPU 13% memory 41%": a second live metric), and no further
+("Order 123 total 40" is not "Order 125 total 90"). A line both baselines show the same is never noise, whatever varied
+elsewhere on the page. A value the runtime redacted (`[redacted]`) equals any value, alone or inside a summary: whether an
+opaque id is redacted depends on the id itself (one with a digit looks like a credential, one without does not), so a
+redaction is never a difference.
 
-Two shapes are normalised whatever the baselines did, because they move on their own and two baselines can agree by
-luck. **Relative times** in a page line ("13 minutes ago", "an hour ago", "a few seconds ago", "just now", "yesterday",
-"today", "10m ago", a line that is only "7m", a clock such as "Today at 3:27 PM") are one token (`src/text.ts`
-`timeless`): two baselines inside one minute agree, and a run a minute later would not. A row more is still a row more:
-lines are compared as counts. **Generated field names** (`fieldShape`) have their random part blanked: `el-id-2476-32` is
-`el-id-*-32`, `<uuid>-input` is `*-input`, `:r1a:` is `*`. Only a name without spaces counts as an identifier (a UUID
-counts anywhere) and small numbers stay: "Address line 2" and `address-2` are as they are. Fields of one shape pool their
-values, as records under fresh ids do. These are rules about the shape of text, in English, and say nothing about any
-bug.
+Two shapes are compared whatever the baselines did, because they move on their own and two baselines can agree by luck.
+**Ages** in a page line ("13 minutes ago", "an hour ago", "a few seconds ago", "just now", "10m ago"; `src/text.ts`
+`agesIn`) are one line within how long the session ran plus the minute an age rolls over in: "26 minutes ago" against "27
+minutes ago" is no difference, "just now" against "3 days ago" is, and rows pair oldest with oldest, so a list whose rows
+all moved a minute is the same list and one wrong row stands out. Nothing else counts as moving on its own. A clock ("Your
+appointment: 3:30 PM"), "today", "yesterday", "tomorrow", a future form ("Ships in 2 days") and a bare "3d" are values a
+page can get wrong, compared as they are unless the baselines themselves show them varying. **Generated field names**
+(`fieldShape`) have their random part blanked when the name differs between the baselines and a partner of its shape is in
+the other: `el-id-2476-32` is `el-id-*-32`, `<uuid>-input` is `*-input`, and fields of one such shape pool their values, as
+records under fresh ids do. A name both baselines have is a name, whatever it looks like: `qty-100` and `qty-200` swapping
+values is a difference. These are rules about the shape of text, ages in English, and say nothing about any bug.
 
 What a seeded run ends with beyond that is sorted by where it shows, from the evidence the run recorded:
 
 | tier | what differs | reported as |
 |---|---|---|
-| visible | what the page shows (a page line outside a live region), a form value, the number of writes to a signature (PUT, PATCH, DELETE, and POST with evidence, below), or an error only this run had | **RACE**, a race finding with a replayable seed |
-| internal | store values, the number of safe requests (GET, HEAD, OPTIONS: a cache refetching once more changes nothing the user sees or the server keeps), the number of POST requests with nothing recorded that makes them writes, or lines of ARIA live regions (status messages, alerts, toasts: a slower run lets a toast expire), while the page showed the same as the baseline | "Internal state only", listed with the fields, no finding |
+| visible | what the page shows (a page line outside a live region), a form value, the number of writes to a signature (PUT, PATCH, DELETE; a POST one side never sent, or a different count with evidence, below), or an error only this run had | **RACE**, a race finding with a replayable seed |
+| internal | store values, the number of safe requests (GET, HEAD, OPTIONS: a cache refetching once more changes nothing the user sees or the server keeps), a different non-zero number of a POST with nothing recorded that makes it a write, or lines of ARIA live regions (status messages, alerts, toasts: a slower run lets a toast expire), while the page showed the same as the baseline | "Internal state only", listed with the fields, no finding |
 | transient | nothing at the end, but an `overwrote-newer` witness the baselines did not have (a later response repaired it) | "Along the way only", listed with the witness, no finding |
 
 The internal tier exists because a data-fetching cache keeps bookkeeping whose final value depends on arrival order by
@@ -336,41 +340,43 @@ state (a button left disabled, a spinner without text) is not in the page text, 
 a per-library default would have been code without a measured purpose.
 
 **POST counts.** POST is the one unsafe method that often only reads (`POST /api/worktree/refresh`,
-`POST /rest/workflow-dependencies/counts`, `POST /api/v1/authz/me/permissions`, GraphQL). So a different count of a POST
-signature, with the page the same, is a difference that shows only when the run recorded what makes it a write: two
-identical requests in flight together that the baseline did not have (or the reverse), or a user action sending it
-directly (no other request or timer in between) a different number of times. Decided from the recorded `send` steps and
-witnesses, with no list of URLs. What it costs: a duplicate POST sent behind another request or a timer, never overlapping
-and with the page unchanged, is internal, and when a slow baseline sent one the report still names it apart ("worth a
-look"). Measured in RESULTS.md, "explore's verdict on real apps".
+`POST /rest/workflow-dependencies/counts`, `POST /api/v1/authz/me/permissions`, GraphQL). A POST one side never sent is a
+lost or an extra write and stays visible, however it was sent: a page that saves only when one answer beats another
+loses its save behind two requests, and shows nothing. A different non-zero count, with the page the same, is a difference
+that shows only when the run recorded what makes it a write: two identical requests in flight together that the baseline
+did not have (or the reverse), or a user action sending it directly (no other request or timer in between) a different
+number of times. Decided from the recorded `send` steps and witnesses, with no list of URLs. What it costs: a duplicate
+POST sent behind another request or a timer, never overlapping and with the page unchanged, is internal. Measured in
+RESULTS.md, "explore's verdict on real apps".
 
 **The baseline with no added delay.** Every slow run shares `slow_ms`, so a bug that needs only a slow response can
 show in both baselines: seeded runs that ended right then read as racing and the bug itself as the reference (Notes in
 Open WebUI, a refresh dropped in OpenCode's file view; each was right without the added latency and wrong with it). With
 `slow_ms` the plan is two slow baselines, then one `fifo` run without it, then the seeded runs: `runs + 3` loads, against
-`runs + 2` without `slow_ms`. It is left out of the noise, and used three ways:
+`runs + 2` without `slow_ms`. It is one load, so it says little on its own, and it never decides what is noise:
 
-- each slow baseline that ends differently from it is reported first, as what a slow response alone does: `RACE: a slow
-  response alone changes the page`, a race finding that replays the slow baseline's schedule (`delay` in the group);
-- a seeded run's line or field that matches it is not that run's difference: a run is listed only for what neither
-  reference shows;
-- it settles a difference between the slow baselines: when they show two different values and it shows one of them, the
-  other is what a slow response did, not noise, and runs are compared with the value it settled. A clock or an id would
-  differ in all three. A bare number is left out (a counter can land on the same value by chance). A line only one slow
-  baseline shows has at most two values, so agreement says less: a short label stays noise (a tree one load expanded), a
-  line of real content (two words or more) does not (a "Flow creation error" one slow baseline ended on), and an error
-  only one slow baseline had is that run's own, not the baselines'. A write sent twice in one slow baseline settles the
-  same way when it has the evidence above.
+- what **both** slow baselines show the same and it does not, or the reverse, is reported first, as what a slow response
+  alone does: `RACE: a slow response alone changes the page`, a race finding that replays the slow baseline's schedule
+  (`delay` in the group). A seeded run is then not listed for showing what it shows on those same lines: that is one of
+  the two endings the headline already names. It is listed for anything else;
+- what **one** slow baseline did against it is one load against one load, which chance can do (a random tip, a toast
+  outside a live region). That stays noise, is no race and makes no finding, and is named apart: "worth a look", with how
+  many reordered runs show it (`look` in the group), lines, errors, form values and writes;
+- also under "worth a look": a different count of writes with both sides having sent some and no evidence the slow side
+  sent more (a save queue sends less often when answers are slow), and a number a little off in both slow baselines with
+  the rest of the line the same (a counter between two loads). Where the slow baselines show two values and it shows a
+  third, nothing is said: no two loads agree on anything.
 
 Without `slow_ms` nothing changes: the two baselines have no added delay already.
 
-**Other sites.** Requests to another site (a signature that starts with a host: `GET api.github.com/repos/x`) leave the
-counts unless a user action led to them or a request to the page's own origin came from their answer; the page's own
-machine (a backend on another port), its sibling hosts (`api.acme.com` from `app.acme.com`) and PUT, PATCH and DELETE
-never do. The report names what it left out. A bare count on the page (`156k`) that differs beside a store field such a
-response wrote is internal too: that site answered differently (a rate limit's `null`), which is no question of this
-page's order. These requests still join the schedule and can make holds run out: leaving them out of it needs the
-runtime's agent entry, and was not done (section 8).
+**Other sites.** Safe requests to another site (a signature that starts with a host: `GET api.github.com/repos/x`) leave
+the counts unless a user action led to them or a request to the page's own origin came from their answer; the page's own
+machine (a backend on another port) and its sibling hosts (`api.acme.com` from `app.acme.com`) never do. Writes stay in
+the counts wherever they go: from a page on localhost, a hosted API of its own and someone else's look alike. The report
+names what it left out. A bare count on the page (`156k`) that differs beside a store field another site's single response
+wrote is internal too: that site answered differently (a rate limit's `null`), which is no question of this page's order.
+Two requests to it can answer out of order, so a count they wrote stays a race. These requests still join the schedule
+and can make holds run out: leaving them out of it needs the runtime's agent entry, and was not done (section 8).
 
 **The report.** Page lines come in reading order, real content (two words or more) before short labels before counts
 and symbols, in each run's list and in which runs are shown first; the headline names the most telling difference
@@ -389,7 +395,7 @@ to two actions, at the kinds level, for a load that did at least one. Routes are
 UUIDs, long ids), so `/session/<id>` and `/c/<uuid>` are one page to a schedule, a scenario group and a finding key, also
 when armed and replayed. The report says which grouping it used, and how many reordered runs it compared ("Compared: 6 of
 6"); a group whose baselines had no reordered run beside them says "No verdict: 0 reordered runs were compared", never
-"No race found", and a report that compared nothing at all says "NO VERDICT: nothing was compared" right under that line.
+"No race found", and a report that compared nothing at all, or that has no run at a quiet point yet, says "NO VERDICT". What the baselines alone show is a verdict of its own: a report with a slow response's race and 0 reordered runs says "No verdict on reordering", so a race finding and "NO VERDICT" never stand together.
 
 A group with only one baseline gets no verdict (its differences are listed unfiltered), and the page of the first armed
 load is the page under test unless `route` says otherwise, so other pages and tabs do not take a slot. A snapshot that
@@ -405,7 +411,7 @@ order as `given`. When the recorded run is gone, it refuses to arm rather than r
 the replay run with the finding: the same witness (field by shape, signature), the same error (by name and shape), the
 failing run's page text, form values, request counts or error again = reproduced; the baseline's = not reproduced
 (a race a slow response alone caused replays that slow baseline's schedule, and its "baseline" is the run with no added
-delay) (relative times and generated field names compared by shape, as above) (page lines count: a line the page always shows once and the failing run showed twice, a product card and a stale
+delay) (ages within the time since the failing run, and fields by name or generated shape, as above) (page lines count: a line the page always shows once and the failing run showed twice, a product card and a stale
 result, is reproduced only when the replay shows it twice too; the finding's evidence keeps the counts, `textCounts`)
 (store values decide only for a finding recorded with nothing else, and a redaction matches any value); a replay whose
 element names changed with the order still counts as the same steps when its actions match by kind and role. It is
@@ -423,7 +429,7 @@ matches by its prefix; a target without a name is flagged for checking; the reco
 that shape, no `identical-in-flight` on that signature, no recurrence of the error (by name and shape), the baseline's
 page lines, form values and request counts for a race and none of the failing run's (compared with the agent's own
 snapshot; store values only when nothing visible differed, so a cache's bookkeeping cannot keep a fixed page failing; a
-line with a relative time in it is no assertion, and a field with a generated name is found by the rest of its name). A finding it
+line with an age in it is no assertion, a field with a generated name is found by the rest of its name, and a field with nothing but a generated name gets a note instead of a line). A finding it
 cannot give a generic assertion produces a test that fails until the domain assertion is written: it never passes
 while asserting nothing. Page strings enter the file only as JSON string literals.
 
@@ -492,7 +498,8 @@ race-like verdict (62 reordered runs, all false by a DOM oracle) and a correct R
 
 On the apps hunted on 2026-11-04 (OpenCode, n8n, Open WebUI, Langflow) the fixed builds read as racing in 85 of 120
 reordered runs, by their own page checks all false, and in 0 of 120 after the rules above, rescored from the stored
-reports (RESULTS.md, "explore's verdict on real apps", which also says what that rescoring cannot see).
+reports; on OpenCode's own recorded runs the correct scenarios went from race to no race and the real file bug to a slow
+response's race (RESULTS.md, "explore's verdict on real apps", which also says what that rescoring cannot see).
 
 This is one page and one bug class, a proof of the mechanism, not a recall figure. The demos' and real apps' numbers
 (with the false-report rate next to each) are the next measurement (section 8).
@@ -503,18 +510,19 @@ This is one page and one bug class, a proof of the mechanism, not a recall figur
   requests come in a different order on each run gets different keys and is not compared reliably. Runs whose recorded
   actions differ by more than two actions are not compared; the report says "0 compared" for them. A load grouped with
   the others by leaving an action out may end differently because of that action: the report says which grouping it used.
-- The baseline with no added delay is one load: a page that varies from load to load in a way the two slow baselines
-  happened to agree on reads as what a slow response does, and a line of real content that comes and goes on its own (a
-  toast outside a live region) reads that way too; the report says "1 of 2 slow baselines" when one alone did it. Its effect on real
-  apps has not been measured (RESULTS.md, "explore's verdict on real apps"). A bare number that varies, and a short label
-  only one slow baseline shows, stay noise, so a bug that shows only that way in the baselines stays hidden.
-- Relative times are recognised in English; other languages fall to the baselines' own noise. A clock-like value that
-  is not a time ("Ratio 3:27") and a short age that is a label ("7d") compare equal to any other of their shape.
-- A POST sent behind another request or a timer, with no overlap and the page unchanged, is not counted as a write
-  (above). Two POSTs from one action through one request (Langflow's New Flow) are the case seen on a real app: that page
-  shows the second flow, which is how it is found.
+- The baseline with no added delay is one load. Both slow baselines landing on one value of a random line, and it on
+  another, reads as what a slow response does (a two-valued tip: 1 session in 4). A number that happens to be far off in
+  it the same way. What one slow baseline alone does, and a bare number that varies between them, stay noise: a bug that
+  shows only that way in the baselines is named under "worth a look" at best (Langflow's New Flow at 600 ms).
+- Ages are recognised in English; other languages fall to the baselines' own noise. Two ages of one form one minute apart,
+  or as far as the session ran, are one line, so "Deployed 3 minutes ago" against "Deployed 4 minutes ago" is hidden. The
+  reverse costs a false report: an age in hours or longer that rolls over during a session, and any clock, "Today" or bare
+  "7m" that moved once between loads while the two baselines happened to agree, read as a difference.
+- A POST sent behind another request or a timer, with no overlap, with the page unchanged and a different non-zero count,
+  is not counted as a write (above). Two POSTs from one action through one request (Langflow's New Flow) are the case seen
+  on a real app: that page shows the second flow, which is how it is found.
 - Third-party requests leave the counts, not the schedule: they can still make holds run out, and a page line that shows
-  their answer (other than a bare count beside the field it wrote) can still differ.
+  their answer (other than a bare count beside the field its one response wrote) can still differ.
 - The verdict looks at what the page shows through its text and form values, the writes it sends and its errors. A
   difference that shows only in a control's state (a button left disabled, a spinner without text, a style), beyond
   the snapshot's 300 page lines, only inside a live region (an alert that an order made persist), or only in the
