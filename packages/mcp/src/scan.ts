@@ -1,15 +1,17 @@
 // genclass_scan: audits one page with the runtime's measured visual checks by running its CLI
 // (`genclass-runtime scan <url> --json`, docs/runtime/AGENT.md section 4.2) and renders the report for the model.
 // The CLI is the project's own @genclass/runtime when it has a version with `scan` (its bin, run with this Node),
-// else `npx -y @genclass/runtime@beta`; it runs in the project's folder so Playwright resolves from the project. The
-// page loads in headless Chromium on this machine (`--local`: without Playwright's Chromium the tool says how to
-// install it and stops, so the server still sends nothing off the machine); only `hosted: true` sends the URL to the
-// genclass.dev page check, never for a local address. Page text in the report is cleaned and quoted, and the text
-// says it is data. (npx itself downloads @genclass/runtime from npm when the project does not have it.)
+// else `npx -y` of the exact runtime this release was tested with (clients.ts, RUNTIME_VERSION); it runs in the
+// project's folder so Playwright resolves from the project. The page loads in headless Chromium on this machine
+// (`--local`: without Playwright's Chromium the tool says how to install it, says to ask the user first, and stops, so
+// the server still sends nothing off the machine); only `hosted: true` sends the URL to the genclass.dev page check,
+// never for a local address. Page text in the report is cleaned and quoted, and the text says it is data. (npx itself
+// downloads that version of @genclass/runtime from npm when the project does not have it.)
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { pinnedRuntime } from "./clients.js";
 import { clean, q } from "./text.js";
 
 /** What running the CLI gave. */
@@ -39,7 +41,7 @@ export function scanCommand(cwd: string, url: string, o: { phone?: boolean; host
   const flags = ["scan", url, "--json", ...(o.phone ? ["--phone"] : []), o.hosted ? "--hosted" : "--local"];
   const bin = localScanBin(cwd);
   if (bin) return { cmd: process.execPath, args: [bin, ...flags], via: "the project's @genclass/runtime" };
-  return { cmd: process.platform === "win32" ? "npx.cmd" : "npx", args: ["-y", "@genclass/runtime@beta", ...flags], via: "npx @genclass/runtime@beta" };
+  return { cmd: process.platform === "win32" ? "npx.cmd" : "npx", args: ["-y", pinnedRuntime(), ...flags], via: `npx ${pinnedRuntime()}` };
 }
 
 /** The default runner: spawn without a shell, stdout and stderr collected, killed at the deadline. */
@@ -129,9 +131,9 @@ export function scanText(r: ScanReport, via: string, stderr: string): string {
   out.push(
     "",
     n
-      ? "Next: fix in the app's own source (the suggested CSS is a starting point, not a patch to paste blindly), reload, and call genclass_scan again until it reports no problems; do not call the page done while a high-severity problem is listed."
+      ? "Next: if the user only asked what is wrong, report this and ask before changing anything. If they asked for a fix, or this is a change you are making for them, fix it in the app's own source (the suggested CSS is a starting point, not a patch to paste blindly), reload, and call genclass_scan again until it reports no problems; do not call the page done while a high-severity problem is listed."
       : r.ranAt === "local"
-        ? "Next: nothing to fix in what the visual checks measure. hosted: true adds accessibility, speed and security audits (public pages only)."
+        ? "Next: nothing to fix in what the visual checks measure. hosted: true adds accessibility, speed and security audits (public pages only; it sends the URL to the genclass.dev page check, so ask the user first)."
         : `Next: nothing to fix. Full report: ${clean(r.fullReport ?? "", 300)}`,
   );
   return out.join("\n");
@@ -161,7 +163,7 @@ export async function runScan(args: Record<string, unknown>, cwd: string, run: R
   }
   if (!report || report.format !== "genclass-scan/1") {
     const why = clean(r.stderr.trim() || r.stdout.trim() || `exit code ${r.code}`, 1200);
-    const next = /playwright install/i.test(r.stderr) && args.hosted !== true ? " To scan without a local browser, call genclass_scan again with hosted: true (public pages only; the URL is sent to the genclass.dev page check)." : "";
+    const next = /playwright install/i.test(r.stderr) && args.hosted !== true ? " Ask the user which they want and wait for a yes: install it with the command above (a browser download on their machine), or call genclass_scan again with hosted: true (public pages only; the URL is sent to the genclass.dev page check)." : "";
     return { text: `GenClass scan of ${q(url, 200)} failed (via ${c.via}): ${why}${next}`, isError: true };
   }
   return { text: scanText(report, c.via, r.stderr), json: report };

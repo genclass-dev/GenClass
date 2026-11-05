@@ -149,15 +149,18 @@ Playwright test that fails until the fix is in. Its `genclass_scan` tool audits 
 `scan <url>` above. Everything stays on your machine.
 
 ```bash
-claude mcp add genclass -- npx -y @genclass/mcp@0.2.1
+claude mcp add genclass -- npx -y @genclass/mcp@0.2.2
 ```
 
 ```ts
 import { GenClass } from "@genclass/runtime";
 import { connectAgent } from "@genclass/runtime/agent";
 
-const rt = GenClass.init();
-if (import.meta.env.DEV) connectAgent(rt); // development builds only
+// development builds only: a production build drops all of this
+if (import.meta.env.DEV) {
+  const rt = GenClass.init();
+  connectAgent(rt);
+}
 ```
 
 On a real page in headless Chromium, it found a stale-results race in 5 of 6 reordered runs of a page that never

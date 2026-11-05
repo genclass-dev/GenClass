@@ -40,7 +40,7 @@ results are in section 7 and in [RESULTS.md](RESULTS.md) section 18.
 ## 1. Setup
 
 ```bash
-claude mcp add genclass -- npx -y @genclass/mcp@0.2.1   # or: npx -y @genclass/mcp@0.2.1 init  (writes .mcp.json and .claude/skills/genclass/SKILL.md)
+claude mcp add genclass -- npx -y @genclass/mcp@0.2.2   # or: npx -y @genclass/mcp@0.2.2 init  (writes .mcp.json and .claude/skills/genclass/SKILL.md)
 ```
 
 Or as a Claude Code plugin from this repository's marketplace (`.claude-plugin/marketplace.json`; the plugin is
@@ -52,7 +52,7 @@ the procedure (section 4.2) and does not need the plugin: `init` writes it into 
 `npx skills add genclass-dev/GenClass` installs the repository-root copy (`skills/genclass/SKILL.md`, kept
 identical to the plugin's by the version sync) through a skill directory. Other clients
 (Cursor, VS Code, Codex CLI, Gemini CLI, Windsurf, Cline, Goose, Zed, JetBrains, OpenCode): the install blocks in
-[packages/mcp/README.md](../../packages/mcp/README.md#install), or `npx -y @genclass/mcp@0.2.1 config <client>`.
+[packages/mcp/README.md](../../packages/mcp/README.md#install), or `npx -y @genclass/mcp@0.2.2 config <client>`.
 Every launcher is pinned to the release. `packages/mcp/server.json` is the entry for the official MCP Registry
 (published by the release workflow with GitHub OIDC after the npm package); the listings for other directories are
 drafted in [docs/adoption/listings/mcp.md](../adoption/listings/mcp.md).
@@ -63,13 +63,20 @@ In the app's browser entry, development builds only (`@genclass/runtime` 0.3.0-b
 import { GenClass } from "@genclass/runtime";
 import { connectAgent } from "@genclass/runtime/agent";
 
-const rt = GenClass.init();
-if (import.meta.env.DEV) connectAgent(rt); // Next.js: process.env.NODE_ENV === "development"
+// Next.js: process.env.NODE_ENV === "development"
+if (import.meta.env.DEV) {
+  const rt = GenClass.init();
+  connectAgent(rt);
+}
 ```
 
 `connectAgent` is a separate entry: one file with no static import of runtime code, so it is never part of the
 first-load bundle (`/auto` and the main entry measure 108.54 KB and 100.40 KB gzip, within the limits), and an app's
-production build drops it with the dead branch (the package's `sideEffects` list does not name `dist/agent.js`).
+production build drops it with the dead branch (the package's `sideEffects` list names neither `dist/agent.js` nor
+`dist/index.js`, so with `GenClass.init()` inside the check the runtime leaves the production build too;
+[RESULTS.md](RESULTS.md) section 26). An app that also runs GenClass in production keeps its own `GenClass.init()` or `/auto`: `init` is
+idempotent and returns that runtime here. `genclass_setup` prints this form, because the link alone needs no runtime in
+production, where `GenClass.init()` would run for every visitor and send anonymous diagnostics from public hosts by default.
 
 It runs only on pages served from this machine (`localhost`, `127.x`, `[::1]`, `*.localhost`: names the browser itself
 resolves to loopback) and talks only to a loopback URL; elsewhere it returns an inert connection. A page on a `*.test`
@@ -193,8 +200,8 @@ after 30 minutes and are not restored after a restart.
 | `genclass_explore` | `start` (two baselines + N seeded loads, optional `slow_ms`, `focus`, `route`), `report` (the verdict per scenario, race findings with a replayable seed), `stop` |
 | `genclass_replay` | `arm` the next page load with a finding's order; `result`: reproduced, not reproduced, or inconclusive (and why) |
 | `genclass_analytics` | `local`: per-endpoint counts, median and p95 latency, error rates, failure streaks, per-page runs, errors and overwritten fields, learned relations and flows; `production`: the GenClass dashboard's sessions, detections by diagnosis and page, latest decisions (`GENCLASS_DASHBOARD`) |
-| `genclass_setup` | the lines to add for this project's framework (read from `package.json`); changes no file |
-| `genclass_scan` | `{url, phone?, hosted?}`: audits any page (no `connectAgent` needed) by running `@genclass/runtime`'s `scan <url> --json` (the project's own runtime when it has the command, else `npx -y @genclass/runtime@beta`) in the project's folder: headless Chromium through Playwright at desktop and phone sizes, the 23 measured visual checks in observe mode; a score and each problem with its element, selector and suggested CSS fix, plus the JSON report (`structuredContent`). `--local` unless `hosted: true` (the genclass.dev page check, public pages only), so the URL leaves the machine only when the agent asks |
+| `genclass_setup` | the pinned install line and the lines to add for this project's framework (read from `package.json`), all behind a development check; changes no file, and tells the agent to show them and wait for a yes |
+| `genclass_scan` | `{url, phone?, hosted?}`: audits any page (no `connectAgent` needed) by running `@genclass/runtime`'s `scan <url> --json` (the project's own runtime when it has the command, else `npx -y` of the exact runtime this release was tested with, `RUNTIME_VERSION` in `packages/mcp/src/clients.ts`) in the project's folder: headless Chromium through Playwright at desktop and phone sizes, the 23 measured visual checks in observe mode; a score and each problem with its element, selector and suggested CSS fix, plus the JSON report (`structuredContent`). `--local` unless `hosted: true` (the genclass.dev page check, public pages only), so the URL leaves the machine only when the agent asks |
 | `genclass_clear` | forget runs and/or findings (runs findings still need are kept) |
 
 The server's `instructions` (sent at initialize, under 4,096 characters; the one piece of guidance every MCP client
@@ -204,7 +211,9 @@ value that "flips back", stale or old results, lost edits, double submits, sidew
 then `genclass_explain`; after changing code that fetches, submits, autosaves, polls, debounces, paginates or listens
 to a socket, `genclass_explore`; before fixing a finding, `genclass_replay`, and again after the fix; before calling a
 UI change done (also after CSS or layout changes and on sites the agent does not own), `genclass_scan`. They name the
-`genclass` skill so a client that has it loads it.
+`genclass` skill so a client that has it loads it. They also carry what waits for the user's yes, the same steps as the
+skill: running or adding what `genclass_setup` prints, `npx playwright install chromium`, `hosted: true`, and a fix or a
+test when the user only asked what broke.
 
 The skill (`packages/mcp/plugin/skills/genclass/SKILL.md`; the plugin installs it, `genclass-mcp init` writes it to
 `.claude/skills/genclass/SKILL.md`, and `skills/genclass/SKILL.md` at the repository root is the identical copy skill
@@ -212,9 +221,9 @@ directories read) carries the "how", which always-loaded context cannot afford: 
 (`runs: 6, slow_ms: 600`), the Playwright pairing (`--repeat-each 8 --workers 1`), how to read a report
 ("Compared: 6 of 6" against "No verdict" and "0 compared"; "Internal state only" and "Along the way only" are not
 races), what a witness, an explore race and a model detection each are, the reporting rule ("reproduced",
-"not reproduced" or "no race in N orders", never "fixed" unless a replay or explore showed it), and what to do when
-the `genclass_*` tools are missing (the one-line install, or `npx @genclass/runtime@beta scan <url> --json` for the
-visual checks alone). Its frontmatter description repeats the triggers, since that is what a client matches a skill
+"not reproduced" or "no race in N orders", never "fixed" unless a replay or explore showed it), where it stops and waits
+for a yes, and what to do when the `genclass_*` tools are missing (the one-line install, or
+`npx @genclass/runtime@<the pinned version> scan <url> --json --local` for the visual checks alone). Its frontmatter description repeats the triggers, since that is what a client matches a skill
 on; its body does not. `packages/mcp/test/manifests.test.ts` checks the frontmatter, that every `genclass_*` name in
 the body is a registered tool, the description's length (Claude Code's 1,024), that the root copy is identical, and
 that the instructions stay under 4,096 characters, put the symptom words first and name the skill.
