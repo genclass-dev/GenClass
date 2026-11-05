@@ -219,7 +219,7 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
   it("the instructions agree with the skill on what waits for a yes", () => {
     expect(INSTRUCTIONS).toContain("genclass_setup prints an install line and the dev-only lines; show them to the user and wait for a yes before you run or add them.");
     expect(INSTRUCTIONS).toContain("If the user only asked what broke, report the cause and wait for a yes before you write a fix or a test.");
-    expect(INSTRUCTIONS).toContain("Wait for a yes before npx playwright install chromium, and before hosted: true, which sends the URL to the genclass.dev page check.");
+    expect(INSTRUCTIONS).toContain("Wait for a yes before npx playwright install chromium or npm i -D playwright, and before hosted: true, which sends the URL to the genclass.dev page check.");
     expect(INSTRUCTIONS).toContain("add it to the repo once the user says yes");
     expect(INSTRUCTIONS).not.toContain("Add the regression test from genclass_explain to the repo.");
   });

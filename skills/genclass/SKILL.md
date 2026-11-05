@@ -63,8 +63,8 @@ asked for a fix, or this is a change you are making for them, fix each high-seve
 scan again until it reports none.
 
 When it says Playwright's Chromium is missing, ask which they want and wait for a yes: `npx playwright install chromium`
-(a browser download on their machine) or, for a public page, `hosted: true` (sends the URL to the genclass.dev page
-check).
+(a browser download on their machine, with `npm i -D playwright` first if the project has no Playwright, which edits
+`package.json` and the lockfile), or, for a public page, `hosted: true` (sends the URL to the genclass.dev page check).
 
 ## Rules
 

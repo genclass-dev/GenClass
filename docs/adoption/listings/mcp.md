@@ -193,7 +193,7 @@ support.claude.com "Anthropic Software Directory Policy".
   `server/cli.mjs`; the server writes and reads its own bridge token under `~/.genclass/`, and the text suggests a
   `user_config` option with `sensitive: true` instead), "Unrecognized field in plugin.json" (the three URL fields),
   "Contains a download-and-run command" in `server/cli.mjs` (the `npx` lines the server prints for other clients, and
-  `genclass_scan`, which runs `npx @genclass/runtime@beta scan`: "where the plugin runs this, ship the script inside
+  `genclass_scan`, which runs `npx` on the pinned `@genclass/runtime` for `scan`: "where the plugin runs this, ship the script inside
   the plugin"; where it is documentation nothing changes), "Uses hooks" and "Runs a local program for an MCP server".
   The first version still goes live only when an Anthropic reviewer publishes it; auto-publish applies after that.
 
