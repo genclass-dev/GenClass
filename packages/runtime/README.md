@@ -675,15 +675,18 @@ Claude Code and other coding agents, and lets the agent:
 - **keep the proof:** a generated Playwright test that sets the same order and fails while the bug is there.
 
 ```bash
-claude mcp add genclass -- npx -y @genclass/mcp@0.2.1
+claude mcp add genclass -- npx -y @genclass/mcp@0.2.2
 ```
 
 ```ts
 import { GenClass } from "@genclass/runtime";
 import { connectAgent } from "@genclass/runtime/agent";
 
-const rt = GenClass.init();
-if (import.meta.env.DEV) connectAgent(rt); // development builds only
+// development builds only: a production build drops all of this
+if (import.meta.env.DEV) {
+  const rt = GenClass.init();
+  connectAgent(rt);
+}
 ```
 
 `connectAgent` is its own entry (no first-load cost), runs only on pages served from your machine, talks only to a
