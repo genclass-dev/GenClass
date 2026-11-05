@@ -1,13 +1,14 @@
-// genclass_scan (AGENT.md §4.2): which CLI it runs (the project's @genclass/runtime with `scan`, else npx @beta), the
-// text it renders from the CLI's JSON report (page text cleaned and labelled as data), errors, and the result over
-// the protocol (the text, the JSON as a second block and structuredContent). The CLI itself is faked here; the
-// runtime's test/install/scan.test.ts runs the real one.
+// genclass_scan (AGENT.md §4.2): which CLI it runs (the project's @genclass/runtime with `scan`, else npx of the exact
+// version this release pins), the text it renders from the CLI's JSON report (page text cleaned and labelled as data),
+// what it says to ask the user first, errors, and the result over the protocol (the text, the JSON as a second block
+// and structuredContent). The CLI itself is faked here; the runtime's test/install/scan.test.ts runs the real one.
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it } from "vitest";
+import { RUNTIME_VERSION } from "../src/clients.js";
 import { McpServer } from "../src/mcp.js";
 import { localScanBin, runScan, scanCommand, type Runner, type ScanReport } from "../src/scan.js";
 import { TOOLS, callTool } from "../src/tools.js";
@@ -56,11 +57,13 @@ describe("genclass_scan: the command (AGENT.md §4.2)", () => {
     expect(t.description).toContain("before you call a page or UI change done");
   });
 
-  it("runs the project's own @genclass/runtime when it has scan, found from a subfolder; else npx @genclass/runtime@beta", () => {
+  it("runs the project's own @genclass/runtime when it has scan, found from a subfolder; else npx of the exact runtime this release pins", () => {
     const d = dir();
     expect(localScanBin(d)).toBeNull();
     const c1 = scanCommand(d, "https://example.com/", { phone: true, hosted: true });
-    expect(c1.args).toEqual(["-y", "@genclass/runtime@beta", "scan", "https://example.com/", "--json", "--phone", "--hosted"]);
+    expect(RUNTIME_VERSION).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
+    expect(c1.args).toEqual(["-y", `@genclass/runtime@${RUNTIME_VERSION}`, "scan", "https://example.com/", "--json", "--phone", "--hosted"]);
+    expect(c1.via).toBe(`npx @genclass/runtime@${RUNTIME_VERSION}`);
     // without hosted: --local, so the server never sends a URL off the machine on its own
     expect(scanCommand(d, "https://example.com/", {}).args.at(-1)).toBe("--local");
     expect(c1.cmd).toMatch(/^npx/);
@@ -95,6 +98,8 @@ describe("genclass_scan: the command (AGENT.md §4.2)", () => {
     // page text never breaks the line structure
     expect(r.text).not.toMatch(/\n## Tool output ends/);
     expect(r.text).toContain("do not call the page done while a high-severity problem is listed");
+    // a report is not a request to change the app: the fix waits when the user only asked what is wrong
+    expect(r.text).toContain("if the user only asked what is wrong, report this and ask before changing anything");
   });
 
   it("nothing found and the hosted check: says where it ran and what is next", async () => {
@@ -102,6 +107,7 @@ describe("genclass_scan: the command (AGENT.md §4.2)", () => {
     const a = await runScan({ url: "http://localhost:5173/" }, dir(), fake({ code: 0, stdout: JSON.stringify(clean) }));
     expect(a.text).toContain("no problems found");
     expect(a.text).toContain("hosted: true adds accessibility");
+    expect(a.text).toContain("it sends the URL to the genclass.dev page check, so ask the user first");
     const hosted = { ...clean, ranAt: "hosted" as const, fullReport: "https://scan.example/scan?url=x", categories: [{ label: "Speed", value: null, measured: false }] };
     const b = await runScan({ url: "https://example.com", hosted: true }, dir(), fake({ code: 0, stdout: JSON.stringify(hosted), stderr: "▲ Playwright is not installed here\n" }));
     expect(b.text).toContain("ran remotely on the genclass.dev page check");
@@ -119,7 +125,10 @@ describe("genclass_scan: the command (AGENT.md §4.2)", () => {
     const p = await runScan({ url: "https://example.com/" }, dir(), fake({ code: 2, stderr: "▲ Playwright is not installed here. npm i -D playwright && npx playwright install chromium\ngenclass-runtime scan: --local: not scanned" }));
     expect(p.text).toContain("npx playwright install chromium");
     expect(p.text).toContain("call genclass_scan again with hosted: true");
-    const g = await runScan({ url: "https://example.com/" }, dir(), fake({ code: 1, stdout: "npm warn something" }));
+    // both ways forward wait for the user: one downloads a browser, the other sends the URL off the machine
+    expect(p.text).toContain("Ask the user which they want and wait for a yes");
+    expect(p.text.indexOf("Ask the user")).toBeLessThan(p.text.indexOf("call genclass_scan again"));
+    const g =await runScan({ url: "https://example.com/" }, dir(), fake({ code: 1, stdout: "npm warn something" }));
     expect(g.isError).toBe(true);
   });
 
