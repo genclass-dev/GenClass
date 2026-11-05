@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **`genclass_explore`'s verdict on real apps.** On 2026-11-04 four hunts ran explore next to their own page checks; on
+  fixed builds where the page was right it said RACE in 85 of 120 reordered runs (OpenCode request counts, n8n's generated
+  field names, Open WebUI's relative times and counts), and it missed real bugs. Rescored from those reports: 0 of 120
+  ([RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md), "explore's verdict on real
+  apps", with what the rescoring cannot see and the recall next to it). What changed:
+  - Relative times compare by shape whatever the baselines did ("13 minutes ago", "an hour ago", "just now",
+    "yesterday", "10m ago", a line that is only "7m", "Today at 3:27 PM").
+  - A POST count alone is no race: only with two identical requests in flight, or a user action sending it directly a
+    different number of times. PUT, PATCH and DELETE counts are as before. A duplicate POST behind another request or
+    a timer, not overlapping, with the page unchanged, is internal now (measured there; named apart when a slow baseline
+    sent it).
+  - Generated field names compare with themselves (`el-id-*-32`, `*-input`).
+  - **With `slow_ms` the plan has one more load**: a baseline with no added delay after the two slow ones (`runs + 3`
+    loads; `--repeat-each 9` for `runs: 6`). What it differs in from the slow baselines is reported first
+    (`RACE: a slow response alone changes the page`, a race finding replaying the slow schedule); a seeded run like it
+    is not listed as racing; and it settles what the slow baselines disagree on (two values, a line of real content, an
+    error).
+  - Noise blanks only the tokens that varied, at their position: "version-1" against "version-2" stays a difference when
+    a number elsewhere varied.
+  - Report text: page content before labels before counts, in each run's list and in which runs come first; the
+    headline and the finding's title name that line; store values and refetch counts capped with a count of the rest.
+  - Routes group by shape (`/session/<id>`, `/c/<uuid>`: a new path on every load also gets its armed schedule), an
+    action only some loads did no longer splits a session, and a report that compared nothing says `NO VERDICT`.
+  - Requests to other sites leave the counts unless a user action or the page's own origin led to them, and a bare count
+    on the page beside a store field such a response wrote is internal. They still join the schedule (that needs the
+    runtime's agent entry).
+  - A race finding's report says to fix only if the user asked for a fix.
+
 - **The plugin's repository vendors the server, and the lockfile is gone.** In
   [genclass-dev/genclass-plugin](https://github.com/genclass-dev/genclass-plugin), `.mcp.json` and the hook run
   `node ${CLAUDE_PLUGIN_ROOT}/server/genclass-mcp.mjs` instead of `npx -y @genclass/mcp@<version>`: `server/cli.mjs`
