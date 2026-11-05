@@ -192,7 +192,7 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
     lines.push(`  expect(witnesses.filter((w: any) => w.kind === "identical-in-flight" && w.subject === ${lit(ev.subject)})).toEqual([]);`);
     asserts++;
   } else if (f.kind === "race") {
-    const all = (ev.fields as { where: string; name: string; baseline: string }[] | undefined) ?? [];
+    const all = (ev.fields as { where: string; name: string; baseline: string; except?: string[] }[] | undefined) ?? [];
     const onlyBase = (ev.textOnlyBaseline as string[] | undefined) ?? [];
     const onlyRun = (ev.textOnlyRun as string[] | undefined) ?? [];
     const errs = (ev.errors as string[] | undefined) ?? [];
@@ -212,9 +212,9 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
     }
     if (pooledField) {
       // a field whose name has a part made for each page load ("el-id-*-32"): found by the rest of its name
-      lines.push(`  const fieldValue = (fields: Record<string, string> = {}, name: string) => {`);
+      lines.push(`  const fieldValue = (fields: Record<string, string> = {}, name: string, except: string[] = []) => {`);
       lines.push(`    const re = new RegExp("^" + name.split("*").map((s) => s.replace(/[.*+?^\${}()|[\\]\\\\]/g, "\\\\$&")).join(".*") + "$");`);
-      lines.push(`    const list = Object.entries(fields).filter(([k]) => re.test(k)).map(([, v]) => v);`);
+      lines.push(`    const list = Object.entries(fields).filter(([k]) => re.test(k) && !except.includes(k)).map(([, v]) => v);`);
       lines.push(`    return list.length === 0 ? undefined : list.length === 1 ? list[0] : "[" + list.sort().join(" | ") + "]";`);
       lines.push(`  };`);
     }
@@ -227,7 +227,7 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
       const want = d.baseline === "(absent)" ? ".toBeUndefined()" : `.toBe(${lit(d.baseline)})`;
       const name = lit(d.name);
       if (d.where === "state") lines.push(`  expect(${d.name.split(".").includes("*") ? `stateValue(snap.state, ${name})` : `snap.state[${name}]`}, "as with responses in request order")${want};`);
-      else if (d.where === "field") lines.push(`  expect(${d.name.includes("*") ? `fieldValue(snap.fields, ${name})` : `snap.fields?.[${name}]`}, "as with responses in request order")${want};`);
+      else if (d.where === "field") lines.push(`  expect(${d.name.includes("*") ? `fieldValue(snap.fields, ${name}${d.except?.length ? `, ${JSON.stringify(d.except.map((k) => clean(k, 200)))}` : ""})` : `snap.fields?.[${name}]`}, "as with responses in request order")${want};`);
       else lines.push(`  expect(snap.requests[${name}] ?? 0, "requests sent, as with responses in request order").toBe(${Number(d.baseline) || 0});`);
       asserts++;
     }

@@ -14,7 +14,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compareRuns, endedDifferently, fieldValue, nameDifference, sameScenario, sameValue, settledAfterActs, shownField, stateValue, strongestFirst, type FieldDiff, type GroupReport, type RunDiff, multiset } from "./compare.js";
-import { agesIn, clean, pathShape, q, routeShape, sameAges, shape, sigOf } from "./text.js";
+import { agesIn, clean, pathShape, q, routeShape, sameAges, shape, sigOf, type Elapsed } from "./text.js";
 import type { ExploreSession, Finding, FindingKind, ReplayArm, Run, ScheduleSpec, Step } from "./types.js";
 import * as V from "./validate.js";
 
@@ -472,7 +472,7 @@ export class Store {
         findings.push(this.upsert(key, "race", g.route, run, { title, evidence, replay, replace: true }));
         counted.add(`${run.id}|${key}`);
       };
-      if (g.delay) finding(g.delay, "slow|", delayTitle(g.delay), { delayOnly: true, plainBaseline: g.plainBaseline, failingRuns: [{ run: g.delay.run, label: g.delay.label, endedDifferently: true }], of: g.delay.of, differing: g.delay.differing });
+      if (g.delay) finding(g.delay, "slow|", delayTitle(g.delay, g.delay.oneLoad), { delayOnly: true, plainBaseline: g.plainBaseline, failingRuns: [{ run: g.delay.run, label: g.delay.label, endedDifferently: true }], of: g.delay.of, differing: g.delay.differing });
       const d = races[0];
       if (d) finding(d, "", raceTitle(d), { failingRuns: races.map((y) => ({ run: y.run, label: y.label, endedDifferently: endedDifferently(y) })), of: g.compared });
     }
@@ -538,8 +538,8 @@ export class Store {
         reproduced = hit;
         note = hit ? "the same error was thrown again" : "the error did not recur";
       } else if (f.kind === "race") {
-        // an age in a line of the finding has moved on by as long as has passed since, and a minute it can roll over in
-        const v = raceVerdict(ev, r, Math.abs(r.started - orig!.started) + 60_000);
+        // an age in a line of the finding has moved on by as long as has passed since
+        const v = raceVerdict(ev, r, { min: r.started - orig!.started - (orig!.snapshot?.t ?? 0), max: r.started + (r.snapshot?.t ?? 0) - orig!.started });
         reproduced = scenarioMatches ? v.reproduced : null;
         note = v.note;
       } else note = "replays verify stale-write, duplicate-request, error and race findings";
@@ -722,15 +722,16 @@ function raceTitle(d: RunDiff): string {
 }
 
 /** The title of what a slow response alone does: the "baseline" in nameDifference() is the run with no added delay. */
-function delayTitle(d: RunDiff): string {
-  return `The page depends on a slow response, no reordering needed: with added latency ${nameDifference(d).replace(/the baseline/g, "the run with no added delay")}`;
+function delayTitle(d: RunDiff, oneLoad?: boolean): string {
+  const said = nameDifference(d).replace(/the baseline/g, "the run with no added delay");
+  return oneLoad ? `With added latency the page ends differently from the one load with no added delay, the only load that differs (it may be the odd one out): ${said}` : `The page depends on a slow response, no reordering needed: with added latency ${said}`;
 }
 
 /** Does a replay run show the race finding's difference again? From the evidence of the failing run. */
-function raceVerdict(ev: Record<string, unknown>, r: Run, toleranceMs: number): { reproduced: boolean | null; note: string } {
+function raceVerdict(ev: Record<string, unknown>, r: Run, later: Elapsed): { reproduced: boolean | null; note: string } {
   const snap = r.snapshot!;
-  const all = (ev.fields as { where: string; name: string; baseline: string; run: string }[] | undefined) ?? [];
-  const val = (d: { where: string; name: string }) => (d.where === "state" ? stateValue(snap.state, d.name) : d.where === "field" ? fieldValue(snap.fields, d.name) : snap.requests[d.name] !== undefined ? String(snap.requests[d.name]) : undefined) ?? "(absent)";
+  const all = (ev.fields as { where: string; name: string; baseline: string; run: string; except?: string[] }[] | undefined) ?? [];
+  const val = (d: { where: string; name: string; except?: string[] }) => (d.where === "state" ? stateValue(snap.state, d.name) : d.where === "field" ? fieldValue(snap.fields, d.name, d.except) : snap.requests[d.name] !== undefined ? String(snap.requests[d.name]) : undefined) ?? "(absent)";
   const byValues = (fields: typeof all): { reproduced: boolean | null; note: string } => {
     const same = fields.every((d) => sameValue(val(d), d.run));
     const fixed = fields.every((d) => sameValue(val(d), d.baseline));
@@ -754,7 +755,7 @@ function raceVerdict(ev: Record<string, unknown>, r: Run, toleranceMs: number): 
     return lines.filter((o) => {
       if (o === l) return true;
       const y = x && agesIn(o);
-      return !!x && !!y && y.form === x.form && sameAges(x.ages, y.ages, toleranceMs);
+      return !!x && !!y && y.form === x.form && sameAges(x.ages, y.ages, later);
     }).length;
   };
   const onlyRun = (ev.textOnlyRun as string[] | undefined) ?? [];

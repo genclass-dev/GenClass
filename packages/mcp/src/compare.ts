@@ -12,9 +12,10 @@
 // A value the runtime redacted ("[redacted]") equals any value: whether an opaque id is redacted depends on the id
 // itself, so a redaction is never a difference.
 //
-// Both slow baselines ending the same way, unlike the baseline with no added delay, is what a slow response alone does
-// (GroupReport.delay), and a run like that baseline is not listed for it. One slow baseline unlike it is one load against
-// one load, which chance can do: it is named apart, "worth a look" (GroupReport.look), and stays noise. A seeded run's
+// Both slow baselines showing the same thing the baseline with no added delay does not is what a slow response alone does
+// (GroupReport.delay), and a run like that baseline is not listed for it. One slow baseline unlike it, or a line only it
+// shows, is one load against one load, which chance can do: it is named apart, "worth a look" (GroupReport.look), and is
+// no race. A seeded run's
 // difference from the slow baselines beyond that depends on network timing. It is sorted by where it shows, from the
 // evidence the run recorded:
 //   visible    what the page shows (its text, its form values), the writes it sent, or an error only it had: a race;
@@ -36,14 +37,14 @@
 // kinds alone, then with up to two actions only some loads did (a dialog to dismiss). A group without two baselines
 // cannot tell noise from a race and gives no verdict.
 //
-// Text shapes are matched here, and none of them is a bug pattern: ages ("13 minutes ago": text.ts agesIn(), the same line
-// within how long the session ran, whatever the baselines did, because they move with the clock), generated field names
-// (fieldShape(), only for names that differ between the baselines) and route segments (routeShape()), tokens holding
-// digits. Whether anything is a bug is only ever asked of the page itself: does what it shows depend on the timing of its
+// Text shapes are matched here, and none of them is a bug pattern: ages ("13 minutes ago": text.ts agesIn(), one line when
+// the later load is older by about the time between the two, whatever the baselines did, because they move with the
+// clock), generated field names (fieldShape(), only for names some baseline lacks) and route segments (routeShape()),
+// tokens holding digits. Whether anything is a bug is only ever asked of the page itself: does what it shows depend on the timing of its
 // responses?
 
 import type { ActStep, Run, Snapshot } from "./types.js";
-import { ageless, agesIn, fieldShape, lineWeight, pathShape, q, routeShape, sameAges, sigOf } from "./text.js";
+import { ageless, agesIn, fieldShape, lineWeight, pathShape, q, routeShape, sameAges, sigOf, type Elapsed } from "./text.js";
 
 /** The runtime's redaction placeholder (packages/runtime/src/util.ts REDACTED). */
 export const REDACTED = "[redacted]";
@@ -122,15 +123,37 @@ export function sameValue(a: string | undefined, b: string | undefined): boolean
   return fits(a, b) || fits(b, a);
 }
 
-/** One value inside a summary, as describe() writes it: a quoted string, a bare token, or another redaction. */
-const ONE_VALUE = String.raw`(?:"(?:[^"\\]|\\.)*"|[^,\s{}\[\]]+|\[redacted\])`;
+/** Where one value inside a summary, as describe() writes it, can end from `at`: a quoted string, a redaction, a bare token. */
+function valueEnds(s: string, at: number): number[] {
+  if (s[at] === '"') {
+    for (let i = at + 1; i < s.length; i++) {
+      if (s[i] === "\\") i++;
+      else if (s[i] === '"') return [i + 1];
+    }
+    return [];
+  }
+  const ends: number[] = s.startsWith(REDACTED, at) ? [at + REDACTED.length] : [];
+  for (let i = at; i < s.length && !/[,\s{}[\]]/.test(s[i]); i++) ends.push(i + 1);
+  return ends;
+}
 
-/** `pattern` with its "[redacted]" standing for the whole value, or each one inside it for one value, matches `s`. */
+/**
+ * `pattern` with its "[redacted]" standing for the whole value, or each one inside it for one value, matches `s`. Walks the
+ * positions each redaction can reach, once each: a page can send many of them in a row, and this runs on what it sends.
+ */
 function fits(pattern: string, s: string): boolean {
   if (pattern === REDACTED) return true;
   if (!pattern.includes(REDACTED)) return false;
-  const re = new RegExp(`^${pattern.split(REDACTED).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(ONE_VALUE)}$`);
-  return re.test(s);
+  const [first, ...pieces] = pattern.split(REDACTED);
+  if (!s.startsWith(first)) return false;
+  let at = new Set<number>([first.length]);
+  for (const piece of pieces) {
+    const next = new Set<number>();
+    for (const p of at) for (const e of valueEnds(s, p)) if (s.startsWith(piece, e)) next.add(e + piece.length);
+    if (!next.size) return false;
+    at = next;
+  }
+  return at.has(s.length);
 }
 
 /** Two lists of values are the same multiset, a redacted value matching any one value. */
@@ -158,6 +181,8 @@ export interface FieldDiff {
   run: string;
   /** A POST count: what the run recorded that makes the difference a write (without it, POST counts are internal). */
   evidence?: string;
+  /** A field name's generated shape ("qty-*"): the names of that shape the baselines all have, which are not of the pool. */
+  except?: string[];
 }
 
 export interface RunDiff {
@@ -202,10 +227,10 @@ export function stateValue(state: Record<string, string>, name: string): string 
 }
 
 /** The value keyed() gives a form field in a raw snapshot: by its name, or by its generated shape, fields of one shape pooled. */
-export function fieldValue(fields: Record<string, string> | undefined, name: string): string | undefined {
+export function fieldValue(fields: Record<string, string> | undefined, name: string, except: string[] = []): string | undefined {
   if (fields?.[name] !== undefined) return fields[name];
   const list = Object.entries(fields ?? {})
-    .filter(([k]) => fieldShape(k) === name)
+    .filter(([k]) => fieldShape(k) === name && !except.includes(k))
     .map(([, v]) => v);
   return list.length === 0 ? undefined : list.length === 1 ? list[0] : `[${list.sort().join(" | ")}]`;
 }
@@ -305,17 +330,21 @@ export interface GroupReport {
   plainBaseline?: string;
   /**
    * What a slow response alone does: what every slow baseline shows that the baseline with no added delay does not, and
-   * the reverse (`textOnlyBaseline` is what that baseline shows, `textOnlyRun` what the slow ones show), in the first slow
-   * baseline's words. Only when it reached the page, its form values, an error, or a write one side never sent or one with
-   * evidence: a different count of writes alone can be a queue saving less often when answers are slow (`look`).
+   * the reverse beside it (`textOnlyBaseline` is what that baseline shows, `textOnlyRun` what the slow ones show), in the
+   * first slow baseline's words. Only when it came from the slow side: a page line, a form value or an error they have and
+   * it has not, or a write one side never sent or one with evidence. A different count of writes alone can be a queue
+   * saving less often when answers are slow, and a line only it shows can be an error page it landed on (`look`).
+   * `oneLoad`: no reordered run sides with that baseline on any of it, so it is the only load that says so, and it may be
+   * the odd one out (the report says so): still reported, since a bug can make every slow load wrong.
    */
-  delay?: RunDiff & { of: number; differing: number };
+  delay?: RunDiff & { of: number; differing: number; oneLoad?: boolean };
   /**
-   * Worth a look, not a race: what only one slow baseline did against the baseline with no added delay (one load against
-   * one load, which chance can do), a number both slow baselines show a little off from it (`drift`: slow line, its line,
-   * a counter that moved between loads), and counts of writes that changed with the delay and nothing else.
+   * Worth a look, not a race: what only one slow baseline did against the baseline with no added delay, and lines only that
+   * baseline shows (one load against one load, which chance can do; an error page it landed on), a number both slow
+   * baselines show a little off from it (`drift`: slow line, its line, a counter that moved between loads), and counts of
+   * writes that changed with the delay and nothing else.
    */
-  look?: { lines: { text: string; only: "slow" | "plain"; runs: number }[]; drift: [string, string][]; errors: string[]; fields: FieldDiff[]; writes: FieldDiff[] };
+  look?: { lines: { text: string; only: "slow" | "plain" | "plain-alone"; runs: number }[]; drift: [string, string][]; errors: string[]; fields: FieldDiff[]; writes: FieldDiff[] };
   /** Requests to other sites left out of the counts (nothing the user did or the page's own origin asked for led to them). */
   thirdParty?: string[];
 }
@@ -332,13 +361,19 @@ function onlyIn(a: Map<string, number>, b: Map<string, number>): string[] {
   return out;
 }
 
-const DIGIT_TOKEN = /[\w.:/-]*\d[\w.:/-]*/g;
+/** A token that holds a digit; a comma before three digits is inside it ("$1,000" is one number, not 1 and 000). */
+/** How much later `y`'s lines were read than `x`'s, on the bridge's clock: each run from its hello to its snapshot. */
+function elapsed(x: Run, y: Run): Elapsed {
+  return { min: y.started - (x.started + (x.snapshot?.t ?? 0)), max: y.started + (y.snapshot?.t ?? 0) - x.started };
+}
+
+const DIGIT_TOKEN = /[\w.:/-]*\d(?:[\w.:/-]|,(?=\d{3}(?!\d)))*/g;
 
 /** A page line with tokens that hold a digit blanked: "Order #A7F3KQ placed 12:01:04" → "Order #N placed N". */
 export const lineShape = (l: string): string => l.replace(DIGIT_TOKEN, "N");
 
 const tokensOf = (l: string): string[] => l.match(DIGIT_TOKEN) ?? [];
-const tokenShape = (t: string): string => t.replace(/\d+/g, "N");
+const tokenShape = (t: string): string => t.replace(/\d[\d,]*/g, "N");
 const kindOf = (l: string): string => l.replace(DIGIT_TOKEN, tokenShape);
 
 /**
@@ -347,7 +382,8 @@ const kindOf = (l: string): string => l.replace(DIGIT_TOKEN, tokenShape);
  */
 type Slot = { exact: string } | { near: number; was: string } | { shape: string };
 
-const NUMBER = /^\d+(?:\.\d+)?$/;
+const NUMBER = /^\d[\d,]*(?:\.\d+)?$/;
+const numberOf = (t: string): number => Number(t.replace(/,/g, ""));
 
 /**
  * Which tokens varied between two lines of one shape. A word with a digit that did not vary stays exact ("12 items,
@@ -355,10 +391,10 @@ const NUMBER = /^\d+(?:\.\d+)?$/;
  * further ("Order 123 total 40" is not "Order 125 total 90").
  */
 function slotsOf(a: string[], b: string[]): Slot[] {
-  return a.map((t, i) => (t !== b[i] ? { shape: tokenShape(t) === tokenShape(b[i]) ? tokenShape(t) : "" } : NUMBER.test(t) ? { near: Number(t), was: t } : { exact: t }));
+  return a.map((t, i) => (t !== b[i] ? { shape: tokenShape(t) === tokenShape(b[i]) ? tokenShape(t) : "" } : NUMBER.test(t) ? { near: numberOf(t), was: t } : { exact: t }));
 }
 
-const nearBy = (n: number, t: string): boolean => NUMBER.test(t) && Math.abs(Number(t) - n) <= Math.max(2, Math.abs(n) * 0.1);
+const nearBy = (n: number, t: string): boolean => NUMBER.test(t) && Math.abs(numberOf(t) - n) <= Math.max(2, Math.abs(n) * 0.1);
 
 const fitsSlots = (slots: Slot[], tokens: string[]): boolean => slots.every((s, i) => ("exact" in s ? s.exact === tokens[i] : "near" in s ? nearBy(s.near, tokens[i]) : !s.shape || tokenShape(tokens[i]) === s.shape));
 
@@ -372,11 +408,11 @@ function slotsText(line: string, slots: Slot[]): string {
 }
 
 /**
- * Lines only in `a` and only in `b`, as counts, after a line with an age met its like: "26 minutes ago" against "27
- * minutes ago" is no difference within the tolerance, "just now" against "3 days ago" is. Oldest with oldest, so a list
- * whose rows all moved a minute pairs row by row.
+ * Lines only in `a` and only in `b`, as counts, after a line with an age met its like: "26 minutes ago" then "27 minutes
+ * ago" is no difference, "just now" against "3 days ago" is; `later` says how much later `b` was read. Oldest with oldest,
+ * so a list whose rows all moved a minute pairs row by row.
  */
-function lineDiff(a: Map<string, number>, b: Map<string, number>, toleranceMs: number): { onlyA: string[]; onlyB: string[] } {
+function lineDiff(a: Map<string, number>, b: Map<string, number>, later: Elapsed): { onlyA: string[]; onlyB: string[] } {
   const onlyA = onlyIn(a, b);
   const onlyB = onlyIn(b, a);
   if (!onlyA.length || !onlyB.length) return { onlyA, onlyB };
@@ -397,10 +433,10 @@ function lineDiff(a: Map<string, number>, b: Map<string, number>, toleranceMs: n
     let i = 0;
     let j = 0;
     while (i < xs.length && j < ys.length) {
-      if (sameAges(xs[i].ages, ys[j].ages, toleranceMs)) {
+      if (sameAges(xs[i].ages, ys[j].ages, later)) {
         dropA.add(xs[i++].i);
         dropB.add(ys[j++].i);
-      } else if (xs[i].ages[0].lo < ys[j].ages[0].lo) i++;
+      } else if (xs[i].ages[0].lo + later.min < ys[j].ages[0].lo) i++;
       else j++;
     }
   }
@@ -417,6 +453,8 @@ interface LineNoise {
   stable: Set<string>;
   /** One value in place of another between two baselines (no digit to pair them by); a third anywhere else is not news. */
   swapped: [string, string][];
+  /** Lines paired by shape whose tokens are far apart or not numbers ("$12.00", "$45.00"): the rest are counters. */
+  apart: [string, string][];
 }
 
 const isNoiseLine = (n: LineNoise, l: string): boolean => {
@@ -427,12 +465,12 @@ const isNoiseLine = (n: LineNoise, l: string): boolean => {
 };
 
 /** What differs between the baselines' lines. */
-function lineNoise(base: Map<string, number>[], toleranceMs: number): LineNoise {
-  const n: LineNoise = { exact: new Set(), slots: new Map(), labels: new Set(), stable: new Set(), swapped: [] };
-  const b0 = base[0];
-  for (const l of b0.keys()) if (base.every((b) => b.has(l))) n.stable.add(l);
-  for (const b of base.slice(1)) {
-    const { onlyA: fromFirst, onlyB } = lineDiff(b0, b, toleranceMs);
+function lineNoise(base: Run[], texts: Map<string, number>[]): LineNoise {
+  const n: LineNoise = { exact: new Set(), slots: new Map(), labels: new Set(), stable: new Set(), swapped: [], apart: [] };
+  const b0 = texts[0];
+  for (const l of b0.keys()) if (texts.every((b) => b.has(l))) n.stable.add(l);
+  for (let k = 1; k < texts.length; k++) {
+    const { onlyA: fromFirst, onlyB } = lineDiff(b0, texts[k], elapsed(base[0], base[k]));
     const unpaired = new Set<number>(fromFirst.keys());
     const left: string[] = [];
     for (const y of onlyB) {
@@ -450,6 +488,7 @@ function lineNoise(base: Map<string, number>[], toleranceMs: number): LineNoise 
       list.push(slots);
       n.slots.set(shape, list);
       n.labels.add(slotsText(x, slots));
+      if (!drifted(x, y)) n.apart.push([x, y]);
     }
     const rest = [...unpaired].map((k) => fromFirst[k]);
     for (const l of [...rest, ...left]) n.exact.add(l);
@@ -502,7 +541,7 @@ function underNoisy(path: string, noisy: Set<string>): string | null {
  * A snapshot as comparable entries: `state <path>`, `field <label>`, `requests <sig>` → its values. Under a noisy
  * parent the records are compared as a multiset of values per blanked path (`state todos.entities.*.title`).
  */
-function keyed(s: Snapshot | undefined, noisy: Set<string>, leftOut?: Set<string>, generated?: Set<string>): Map<string, string[]> {
+function keyed(s: Snapshot | undefined, noisy: Set<string>, leftOut?: Set<string>, generated?: GeneratedNames): Map<string, string[]> {
   const m = new Map<string, string[]>();
   if (!s) return m;
   for (const [k, v] of Object.entries(s.state)) {
@@ -515,7 +554,7 @@ function keyed(s: Snapshot | undefined, noisy: Set<string>, leftOut?: Set<string
   // a name made for the load ("el-id-2476-32") compares with itself in the next one; fields of one such shape pool values
   for (const [k, v] of Object.entries(s.fields ?? {})) {
     const shape = fieldShape(k);
-    const name = `field ${generated?.has(shape) ? shape : k}`;
+    const name = `field ${generated?.shapes.has(shape) && !generated.kept.has(k) ? shape : k}`;
     const list = m.get(name);
     if (list) list.push(v);
     else m.set(name, [v]);
@@ -524,21 +563,29 @@ function keyed(s: Snapshot | undefined, noisy: Set<string>, leftOut?: Set<string
   return m;
 }
 
+/** Field names made for each page load: their shapes, and the names of those shapes every baseline has, which stay names. */
+interface GeneratedNames {
+  shapes: Set<string>;
+  kept: Set<string>;
+}
+
 /**
- * The shapes of field names made for each page load: a name one baseline has and another has not, with a partner of its
- * shape there. By shape alone "qty-100" and "qty-200" would pool, and two products swapping values would read as nothing.
+ * A name one baseline has and another has not, with a partner of its shape there, was made for its page load. Only such
+ * names pool: by shape alone "qty-100" and "qty-200" would, and a new row beside them, "qty-9001" in one baseline and
+ * "qty-9002" in the other, must not take the rows every baseline has along with it.
  */
-function generatedNames(base: Run[]): Set<string> {
-  const out = new Set<string>();
+function generatedNames(base: Run[]): GeneratedNames {
+  const shapes = new Set<string>();
   const names = base.map((b) => Object.keys(b.snapshot?.fields ?? {}));
   for (const here of names)
     for (const there of names) {
       if (here === there) continue;
       const other = new Set(there);
-      const shapes = new Set(there.filter((k) => !here.includes(k)).map(fieldShape));
-      for (const k of here) if (!other.has(k) && fieldShape(k) !== k && shapes.has(fieldShape(k))) out.add(fieldShape(k));
+      const theirs = new Set(there.filter((k) => !here.includes(k)).map(fieldShape));
+      for (const k of here) if (!other.has(k) && fieldShape(k) !== k && theirs.has(fieldShape(k))) shapes.add(fieldShape(k));
     }
-  return out;
+  const kept = new Set((names[0] ?? []).filter((k) => names.every((n) => n.includes(k))));
+  return { shapes, kept };
 }
 
 /** An entry's values as one string (a pooled multiset sorted and joined, as stateValue() reads it back). */
@@ -650,7 +697,8 @@ const hostOf = (sig: string): string | null => /^[A-Z]+ ([^/\s]+)(?:\/|$)/.exec(
 
 /** The last two labels of a host: the page's own API on a sibling host is not a third party ("api.acme.com", "app.acme.com"). */
 const siteOf = (host: string): string => host.split(".").slice(-2).join(".");
-const LOCAL = /^(?:localhost|127\.0\.0\.1|\[::1\])$/;
+/** The page's own machine and network: a backend on another port, a container's name, a private address. */
+const LOCAL = /^(?:localhost|\[::1\]|0\.0\.0\.0|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|host\.docker\.internal|[^.]+|.*\.(?:local|localhost|internal))$/;
 
 /**
  * Safe requests to other sites in a group of runs that nothing else depends on: none was led to by a user action, and no
@@ -695,29 +743,51 @@ interface Side {
 interface Context {
   noisy: Set<string>;
   leftOut: Set<string>;
-  generated: Set<string>;
+  generated: GeneratedNames;
   noiseName: Set<string>;
   lines: LineNoise;
-  /** How far two ages may differ and be one line: how long the session ran, and the minute an age can roll over in. */
-  toleranceMs: number;
   /** Errors and witnesses of the baselines: a run's own are the others. */
   errors: Set<string>;
   witnesses: Set<string>;
   cut: boolean;
   /** What the session already reports as what a slow response alone does, and that baseline's entries: a run like it on those is not listed for them. */
-  delay?: { gone: string[]; come: string[]; fields: Map<string, string[] | null> };
+  delay?: { plain: Run; gone: string[]; come: string[]; fields: Map<string, string[] | null> };
 }
 
 const linesOf = (lines: string[] | undefined): Map<string, number> => multiset(lines ?? []);
 
-/** Does `line` stand in `list`, as it is or as an age within the tolerance? */
-function standsIn(list: string[], line: string, toleranceMs: number): boolean {
+/** Does `line`, read `later` after `list`, stand in it, as it is or as an age that moved by that? */
+function standsIn(list: string[], line: string, later: Elapsed): boolean {
   if (list.includes(line)) return true;
   const x = agesIn(line);
   return !!x && list.some((l) => {
     const y = agesIn(l);
-    return !!y && y.form === x.form && sameAges(x.ages, y.ages, toleranceMs);
+    return !!y && y.form === x.form && sameAges(y.ages, x.ages, later);
   });
+}
+
+/** A count as a page shows it alone: "41", "1,024", "156k". Not a price, not a percentage: those are values. */
+const BARE_COUNT = /^\d[\d.,]*[kKmMbB]?\+?$/;
+
+/**
+ * A count on the page that only says what another site answered (a star count, a rate limit's null): it stands for a store
+ * field that site's one response wrote, the only request that wrote it in either run, with no overwrite recorded on it.
+ * Two requests writing one field can land in either order, whoever they went to: that is the question being asked.
+ */
+function fromOtherSite(ref: Run, r: Run, leftOut: Set<string>, fields: FieldDiff[], onlyRef: string[], onlyRun: string[]): boolean {
+  const lines = [...onlyRef, ...onlyRun];
+  if (!lines.length || !lines.every((l) => BARE_COUNT.test(l))) return false;
+  const writers = (x: Run, path: string) => new Set(x.steps.flatMap((s) => (s.k === "write" && s.by && s.paths.includes(path) ? [s.by] : [])));
+  const alone = fields.filter((f) => {
+    if (f.where !== "state" || r.witnesses.some((w) => w.kind === "overwrote-newer" && w.subject === f.name)) return false;
+    const by = [...writers(r, f.name), ...writers(ref, f.name)];
+    if (!by.length || new Set(by).size !== 1) return false;
+    const sig = sigOf(by[0]);
+    return leftOut.has(sig) && [ref, r].every((x) => (x.snapshot?.requests[sig] ?? 0) <= 1);
+  });
+  const digits = (l: string) => l.replace(/[^\d]/g, "");
+  const stands = (l: string, value: (f: FieldDiff) => string) => alone.some((f) => value(f).replace(/[^\d]/g, "").startsWith(digits(l)));
+  return onlyRef.every((l) => stands(l, (f) => f.baseline)) && onlyRun.every((l) => stands(l, (f) => f.run));
 }
 
 /** A run's difference from one side, beyond noise; null when it has none. */
@@ -742,16 +812,20 @@ function diffRun(ref: Side, r: Run, c: Context): RunDiff | null {
       const evidence = onOneSide(f) ? (f.run === "(absent)" ? "the baseline sends it and this run never does" : "only this run sends it") : writeEvidence(f.name, ref.run, r);
       if (evidence) f.evidence = evidence;
     }
+    if (where === "field" && c.generated.shapes.has(f.name)) {
+      const except = [...c.generated.kept].filter((k) => fieldShape(k) === f.name);
+      if (except.length) f.except = except;
+    }
     fields.push(f);
   }
   const rank = (f: FieldDiff) => (f.where === "field" ? 0 : shownField(f) ? 1 : 2);
   fields.sort((x, y) => rank(x) - rank(y));
   const rt = linesOf(r.snapshot?.text);
   const liveR = new Set(r.snapshot?.live ?? []);
-  const { onlyA, onlyB: came } = lineDiff(ref.text, rt, c.toleranceMs);
+  const { onlyA, onlyB: came } = lineDiff(ref.text, rt, elapsed(ref.run, r));
   // a line this run lacks or adds as the baseline with no added delay does, when the session says so already
-  const onlyB = onlyA.filter((l) => !isNoiseLine(c.lines, l) && !(c.delay && standsIn(c.delay.gone, l, c.toleranceMs)));
-  const onlyR = came.filter((l) => !isNoiseLine(c.lines, l) && !(c.delay && standsIn(c.delay.come, l, c.toleranceMs)));
+  const onlyB = onlyA.filter((l) => !isNoiseLine(c.lines, l) && !c.delay?.gone.includes(l));
+  const onlyR = came.filter((l) => !isNoiseLine(c.lines, l) && !(c.delay && standsIn(c.delay.come, l, elapsed(c.delay.plain, r))));
   // a line inside a live region of the run that showed it is an announcement (a toast that a slower run let expire)
   const announced = [...onlyB.filter((l) => ref.live.has(l)), ...onlyR.filter((l) => liveR.has(l))];
   const textOnlyBaseline = byWeight(onlyB.filter((l) => !ref.live.has(l)));
@@ -761,15 +835,8 @@ function diffRun(ref: Side, r: Run, c: Context): RunDiff | null {
   if (!(fields.length || textOnlyBaseline.length || textOnlyRun.length || announced.length || errors.length || witnesses.length)) return null;
   const parts = { fields, textOnlyBaseline, textOnlyRun, errors };
   let tier: Tier = visibleDiff(parts) ? "visible" : fields.length || announced.length ? "internal" : "transient";
-  // a bare count on the page and the store field another site's one response wrote (a star count, a rate limit's null):
-  // that site answered differently, which is no question of order. Two requests can answer out of order: those stay
-  let otherSite = false;
-  if (tier === "visible" && c.leftOut.size && !errors.length && !fields.some(shownField) && [...textOnlyBaseline, ...textOnlyRun].every((l) => lineWeight(l) === 0)) {
-    const once = new Set([...c.leftOut].filter((sig) => ref.run.snapshot?.requests[sig] === 1 && r.snapshot?.requests[sig] === 1));
-    const wrote = new Set([...writtenBy(ref.run, once), ...writtenBy(r, once)]);
-    otherSite = fields.some((f) => f.where === "state" && wrote.has(f.name));
-    if (otherSite) tier = "internal";
-  }
+  const otherSite = tier === "visible" && c.leftOut.size > 0 && !errors.length && !fields.some(shownField) && fromOtherSite(ref.run, r, c.leftOut, fields, textOnlyBaseline, textOnlyRun);
+  if (otherSite) tier = "internal";
   const textCounts: Record<string, { baseline: number; run: number }> = {};
   for (const l of [...textOnlyBaseline.slice(0, 15), ...textOnlyRun.slice(0, 15)]) textCounts[l] = { baseline: ref.text.get(l) ?? 0, run: rt.get(l) ?? 0 };
   return { run: r.id, label: r.assignment?.label ?? r.schedule?.label ?? r.id, tier, fields: fields.slice(0, 30), textOnlyBaseline: textOnlyBaseline.slice(0, 15), textOnlyRun: textOnlyRun.slice(0, 15), ...(Object.keys(textCounts).length ? { textCounts } : {}), ...(announced.length ? { announced: announced.slice(0, 10) } : {}), errors: errors.slice(0, 10), witnesses: witnesses.slice(0, 10), forced: r.forced, ...(otherSite ? { otherSite } : {}) };
@@ -779,7 +846,7 @@ function diffRun(ref: Side, r: Run, c: Context): RunDiff | null {
 function drifted(x: string, y: string): boolean {
   if (kindOf(x) !== kindOf(y)) return false;
   const [a, b] = [tokensOf(x), tokensOf(y)];
-  return a.every((t, i) => t === b[i] || (NUMBER.test(t) && nearBy(Number(t), b[i])));
+  return a.every((t, i) => t === b[i] || (NUMBER.test(t) && nearBy(numberOf(t), b[i])));
 }
 
 /** A different count of a write, both sides having sent some: a queue saves less often when answers are slow. */
@@ -789,7 +856,7 @@ const countOnly = (f: FieldDiff): boolean => f.where === "requests" && !SAFE.tes
  * Against the baseline with no added delay: what every slow baseline shows the same (what a slow response alone does),
  * and what is worth a look. Noise took out what the slow baselines disagree on, so each one's list is the others'.
  */
-function delayOf(plain: Side, base: Run[], rest: Run[], c: Context): { delay?: RunDiff & { of: number; differing: number }; look?: GroupReport["look"]; told?: Context["delay"] } {
+function delayOf(plain: Side, base: Run[], rest: Run[], c: Context): { delay?: NonNullable<GroupReport["delay"]>; look?: GroupReport["look"]; told?: Context["delay"] } {
   const noPlain: Context = { ...c, errors: new Set(plain.run.errors.map((e) => e.message)), witnesses: new Set(witnessesOf(plain.run)) };
   const each = base.map((b) => diffRun(plain, b, noPlain));
   const common = <T>(of: (d: RunDiff) => T[], key: (x: T) => string = (x) => String(x)): T[] => (each.every((d) => !!d) ? of(each[0] as RunDiff).filter((x) => each.every((d) => of(d as RunDiff).some((y) => key(y) === key(x)))) : []);
@@ -811,16 +878,22 @@ function delayOf(plain: Side, base: Run[], rest: Run[], c: Context): { delay?: R
   const fields = common((d) => d.fields, (f) => `${f.where} ${f.name} ${f.baseline} ${f.run}`);
   // a count of writes reads as a slow response's only with evidence the slow side sent more: the reverse is a queue at work
   const more = (f: FieldDiff): boolean => inFlightTwice(base[0], f.name) || sentDirectly(base[0], f.name) > sentDirectly(plain.run, f.name);
-  const says = fields.filter((f) => f.where === "field" || (f.where === "requests" && !SAFE.test(f.name) && (!countOnly(f) || more(f))));
-  const reached = textOnlyBaseline.length > 0 || textOnlyRun.length > 0 || errors.length > 0 || says.length > 0;
+  const says = fields.filter((f) => (f.where === "field" && f.run !== "(absent)") || (f.where === "requests" && !SAFE.test(f.name) && (!countOnly(f) || more(f))));
+  // it has to come from the slow side, as the report says: a line only the one load with no added delay shows (an error
+  // page it landed on) is that load's
+  const reached = textOnlyRun.length > 0 || errors.length > 0 || says.length > 0;
   const first = each[0];
   const otherSite = each.every((d) => d?.otherSite);
   const writes = new Map<string, FieldDiff>();
-  for (const d of each) for (const f of d?.fields ?? []) if (countOnly(f) && !says.includes(f)) writes.set(f.name, f);
+  const said = new Set(says.map((f) => f.name));
+  for (const d of each) for (const f of d?.fields ?? []) if (countOnly(f) && !said.has(f.name)) writes.set(f.name, f);
   // what only one slow baseline did: lines it alone shows or alone lacks (a third value elsewhere: no two loads agree on anything)
   const plainHas = (l: string) => plain.text.has(l);
   const skip = new Set(c.lines.swapped.filter(([x, y]) => !plainHas(x) && !plainHas(y)).flat());
-  const lines = byWeight([...c.lines.exact].filter((l) => !skip.has(l) && lineWeight(l) > 0)).slice(0, 6).map((text) => ({ text, only: plainHas(text) ? ("plain" as const) : ("slow" as const), runs: rest.filter((r) => linesOf(r.snapshot?.text).has(text)).length }));
+  const atRuns = (text: string) => rest.filter((r) => linesOf(r.snapshot?.text).has(text)).length;
+  const apart = c.lines.apart.filter(([x, y]) => plainHas(x) !== plainHas(y)).map(([x, y]) => (plainHas(x) ? y : x));
+  const lines: NonNullable<GroupReport["look"]>["lines"] = byWeight([...[...c.lines.exact].filter((l) => !skip.has(l) && /[\p{L}\d]/u.test(l)), ...apart]).slice(0, 6).map((text) => ({ text, only: plainHas(text) ? ("plain" as const) : ("slow" as const), runs: atRuns(text) }));
+  if (!reached) for (const text of byWeight(textOnlyBaseline).slice(0, 4)) lines.push({ text, only: "plain-alone", runs: atRuns(text) });
   const errs = [...new Set(base.flatMap((b) => b.errors.map((e) => e.message)))].filter((m) => !errors.includes(m) && !noPlain.errors.has(m));
   const fieldLook: FieldDiff[] = [];
   for (const name of c.noiseName) {
@@ -832,8 +905,17 @@ function delayOf(plain: Side, base: Run[], rest: Run[], c: Context): { delay?: R
   }
   const look = lines.length || drift.length || errs.length || fieldLook.length || writes.size ? { lines, drift: drift.slice(0, 4), errors: errs.slice(0, 3), fields: fieldLook.slice(0, 4), writes: [...writes.values()].slice(0, 4) } : undefined;
   if (!reached || !first || otherSite) return look ? { look } : {};
-  const delay: RunDiff & { of: number; differing: number } = { ...first, tier: "visible", textOnlyBaseline, textOnlyRun, errors, fields: [...says, ...first.fields.filter((f) => !says.includes(f) && !writes.has(f.name))], witnesses: [], of: base.length, differing: base.length };
-  return { delay, ...(look ? { look } : {}), told: { gone: textOnlyRun, come: textOnlyBaseline, fields: new Map(says.map((f) => [`${f.where} ${f.name}`, plain.keys.get(`${f.where} ${f.name}`) ?? null])) } };
+  // does any other load side with the one that had no added delay?
+  const sides = rest.some((r) => {
+    const t = linesOf(r.snapshot?.text);
+    const k = keyed(r.snapshot, c.noisy, c.leftOut, c.generated);
+    return textOnlyRun.some((l) => !t.has(l)) || textOnlyBaseline.some((l) => t.has(l)) || errors.some((m) => !r.errors.some((e) => e.message === m)) || says.some((f) => {
+      const [p, v] = [plain.keys.get(`${f.where} ${f.name}`), k.get(`${f.where} ${f.name}`)];
+      return (!p && !v) || (!!p && !!v && sameValues(p, v));
+    });
+  });
+  const delay: NonNullable<GroupReport["delay"]> = { ...first, tier: "visible", textOnlyBaseline, textOnlyRun, errors, fields: [...says, ...first.fields.filter((f) => !says.includes(f) && !writes.has(f.name))], witnesses: [], of: base.length, differing: base.length, ...(sides ? {} : { oneLoad: true }) };
+  return { delay, ...(look ? { look } : {}), told: { plain: plain.run, gone: textOnlyRun, come: textOnlyBaseline, fields: new Map(says.map((f) => [`${f.where} ${f.name}`, plain.keys.get(`${f.where} ${f.name}`) ?? null])) } };
 }
 
 /**
@@ -862,12 +944,9 @@ export function compareRuns(runs: Run[]): GroupReport[] {
     // record ids that differ between the baselines (and, with one baseline, between it and nothing: none)
     const noisy = new Set<string>();
     for (const b of base.slice(1)) for (const p of noisyParents(Object.keys(b0.snapshot?.state ?? {}), Object.keys(b.snapshot?.state ?? {}))) noisy.add(p);
-    // an age may move by how long the session ran, and roll over a minute on top of that
-    const started = Math.min(...g.map((r) => r.started));
-    const toleranceMs = Math.max(0, Math.max(...g.map((r) => r.lastSeen)) - started) + 60_000;
     const generated = generatedNames(base);
     const texts = base.map((b) => linesOf(b.snapshot?.text));
-    const lines = lineNoise(texts, toleranceMs);
+    const lines = lineNoise(base, texts);
     const bk = keyed(b0.snapshot, noisy, leftOut, generated);
     const noise = new Set<string>([...noisy].map((p) => `state ${p}.* (record ids)`));
     const noiseName = new Set<string>();
@@ -884,7 +963,7 @@ export function compareRuns(runs: Run[]): GroupReport[] {
     for (const l of lines.labels) noise.add(`text ${JSON.stringify(l)}`);
     rep.noise = [...noise].slice(0, 40);
     const sideOf = (run: Run, keys: Map<string, string[]>, text: Map<string, number>): Side => ({ run, keys, text, live: new Set(run.snapshot?.live ?? []) });
-    const ctx: Context = { noisy, leftOut, generated, noiseName, lines, toleranceMs, errors: new Set(base.flatMap((b) => b.errors.map((e) => e.message))), witnesses: new Set(base.flatMap(witnessesOf)), cut: (b0.snapshot?.stateLeft ?? 0) > 0 };
+    const ctx: Context = { noisy, leftOut, generated, noiseName, lines, errors: new Set(base.flatMap((b) => b.errors.map((e) => e.message))), witnesses: new Set(base.flatMap(witnessesOf)), cut: (b0.snapshot?.stateLeft ?? 0) > 0 };
     // what a slow response alone does comes first: a seeded run is listed for what the session does not say already
     if (plain && base.length >= 2) {
       const { delay, look, told } = delayOf(sideOf(plain, keyed(plain.snapshot, noisy, leftOut, generated), linesOf(plain.snapshot?.text)), base, rest, ctx);

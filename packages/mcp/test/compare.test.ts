@@ -82,6 +82,15 @@ describe("compare: a redaction is never a difference (AGENT.md §5.1)", () => {
     expect(flip.diffs[0].fields.map((f) => f.name)).toEqual(["AuthProvider.external2.status"]);
   });
 
+  it("many redactions in a row cost next to nothing, whatever the page sends (second review of PR 168)", () => {
+    const t0 = Date.now();
+    expect(sameValue("[redacted][redacted][redacted][redacted][redacted]!", "a".repeat(199))).toBe(false);
+    expect(sameValue(`{${"[redacted]".repeat(20)}}`, `{${"a".repeat(198)}!`)).toBe(false);
+    expect(sameValue("[redacted], [redacted], [redacted]", '"a", b, c')).toBe(true);
+    expect(sameValue("[redacted][redacted]", "ab")).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(500);
+  });
+
   it("records pooled under fresh ids match with a redacted value among them", () => {
     const a = snap({ "subs.aK3x.token": "[redacted]", "subs.aK3x.n": "1", "x.y": "1" });
     const b = snap({ "subs.Q9pz.token": '"plain"', "subs.Q9pz.n": "1", "x.y": "1" });
@@ -195,8 +204,9 @@ describe("compare: an age is one line within how long the session ran; nothing e
     expect(timed("Edited 3 minutes ago", "Edited 6 minutes ago").diffs[0]).toMatchObject({ tier: "visible" });
     expect(timed("Edited 3 minutes ago", "Edited 6 minutes ago", 150_000).diffs).toEqual([]);
     expect(timed("Edited 3 minutes ago", "Edited 6 minutes ago", 90_000).diffs[0]).toMatchObject({ tier: "visible" });
-    expect(sameAges(agesIn("26 minutes ago")!.ages, agesIn("27 minutes ago")!.ages, 60_000)).toBe(true);
-    expect(sameAges(agesIn("just now")!.ages, agesIn("3 days ago")!.ages, 3_600_000)).toBe(false);
+    const now = { min: 0, max: 0 };
+    expect(sameAges(agesIn("26 minutes ago")!.ages, agesIn("27 minutes ago")!.ages, now)).toBe(true);
+    expect(sameAges(agesIn("just now")!.ages, agesIn("3 days ago")!.ages, { min: 3_600_000, max: 3_600_000 })).toBe(false);
   });
 
   // what reads like a time and is a value a page can get wrong: main reports each, and so does this (review of PR 168)
@@ -239,6 +249,45 @@ describe("compare: an age is one line within how long the session ran; nothing e
   it("one row more is a difference, and the report quotes the page's own words", () => {
     const g = compareRuns(session(snap({}, ["Edited 3 minutes ago"]), [snap({}, ["Edited 4 minutes ago", "Edited 5 minutes ago"])]))[0];
     expect(g.diffs[0]).toMatchObject({ tier: "visible", textOnlyBaseline: [], textOnlyRun: ["Edited 5 minutes ago"] });
+  });
+
+  it("an age only moves forward, by about the time between two loads (second review of PR 168)", () => {
+    // ten minutes on, an age can be ten minutes older, and not ten minutes younger
+    expect(timed("Edited 2 minutes ago", "Edited 12 minutes ago", 600_000).diffs).toEqual([]);
+    expect(timed("Edited 12 minutes ago", "Edited 2 minutes ago", 600_000).diffs[0]).toMatchObject({ tier: "visible", textOnlyBaseline: ["Edited 12 minutes ago"], textOnlyRun: ["Edited 2 minutes ago"] });
+    // and ten minutes on, one that stayed where it was has not moved: the page was not read then either
+    const rendered = timed("Edited 2 minutes ago", "Edited 2 minutes ago", 600_000);
+    expect(rendered.diffs).toEqual([]);
+  });
+
+  it("how long the runs' own loads took decides, not when the bridge last heard from them (second review of PR 168)", () => {
+    const at = (started: number, lastSeen: number, t = 1000) => ({ started, lastSeen, snapshot: { t, state: {}, text: [] as string[], requests: {}, witnesses: 0, errors: 0, forced: 0 } });
+    const page = (text: string, o: ReturnType<typeof at>) => ({ ...o, snapshot: { ...o.snapshot, text: [text] } });
+    const session = (lastSeen: number) => [run("fifo", [click], snap({}, []), page("Edited 3 minutes ago", at(0, lastSeen))), run("fifo", [click], snap({}, []), page("Edited 3 minutes ago", at(5_000, lastSeen))), run("seeded", [click], snap({}, []), page("Edited 40 minutes ago", at(10_000, lastSeen)))];
+    // reported an hour later, or a tab that keeps talking: the same race
+    expect(compareRuns(session(11_000))[0].diffs[0].tier).toBe("visible");
+    expect(compareRuns(session(3_600_000))[0].diffs[0].tier).toBe("visible");
+  });
+
+  it.each([
+    ["Deleted 2 hours and 5 minutes ago", "Deleted 17 hours and 5 minutes ago"],
+    ["Deleted 2 hours, 5 minutes ago", "Deleted 17 hours, 5 minutes ago"],
+    ["1,000 days ago", "5 days ago"],
+    ["2 days ago", "1,002 days ago"],
+    ["a few years ago", "9 years ago"],
+    ["a month ago", "40 days ago"],
+    ["a few minutes ago", "30 minutes ago"],
+    ["Updated minutes ago", "Updated hours ago"],
+  ])("%s against %s are two ages (second review of PR 168)", (a, b) => {
+    expect(agesIn(a)).not.toBeNull();
+    expect(timed(a, b, 10_000).diffs[0]).toMatchObject({ tier: "visible", textOnlyBaseline: [a], textOnlyRun: [b] });
+  });
+
+  it("the parts of an age are read as written", () => {
+    expect(agesIn("2 hours and 5 minutes ago")!.ages).toEqual([{ lo: 7_500_000, hi: 7_500_000 }]);
+    expect(agesIn("1,000 days ago")!.ages).toEqual([{ lo: 86_400_000_000, hi: 86_400_000_000 }]);
+    expect(agesIn("1.5 hours ago")!.ages).toEqual([{ lo: 5_400_000, hi: 5_400_000 }]);
+    expect(agesIn("Sand and water ago")).toBeNull();
   });
 
   it("a list whose rows all moved a minute pairs row by row, and a wrong row stands out", () => {
@@ -336,6 +385,25 @@ describe("compare: generated field names compare with themselves (AGENT.md §5.1
   ])("fields %j against %j are a race", (a, b) => {
     const page = (fields: Record<string, string>) => snap({}, ["Page"], { fields });
     expect(compareRuns(session(page(a), [page(b)]))[0].diffs[0].tier).toBe("visible");
+  });
+
+  it("a name both baselines have stays a name when a new row beside it differs (second review of PR 168)", () => {
+    const page = (fields: Record<string, string>) => snap({}, ["Page"], { fields });
+    const a = page({ "qty-100": "1", "qty-200": "2", "qty-9001": "3" });
+    const b = page({ "qty-100": "1", "qty-200": "2", "qty-9002": "3" });
+    const swap = compareRuns([run("fifo", [click], a), run("fifo", [click], b), run("seeded", [click], page({ "qty-100": "2", "qty-200": "1", "qty-9003": "3" }))])[0];
+    expect(swap.diffs[0].tier).toBe("visible");
+    expect(swap.diffs[0].fields.map((f) => f.name)).toEqual(["qty-100", "qty-200"]);
+    // the new row's value noisy too: its own shape is noise, and a wrong qty-100 is not
+    const noisy = compareRuns([run("fifo", [click], a), run("fifo", [click], page({ "qty-100": "1", "qty-200": "2", "qty-9002": "9" })), run("seeded", [click], page({ "qty-100": "7", "qty-200": "2", "qty-9003": "3" }))])[0];
+    expect(noisy.noise).toEqual(["field qty-*"]);
+    expect(noisy.diffs[0].fields).toEqual([{ where: "field", name: "qty-100", baseline: "1", run: "7" }]);
+    // and the new rows still compare with each other, by value, without the rows that stayed
+    const same = compareRuns([run("fifo", [click], a), run("fifo", [click], b), run("seeded", [click], page({ "qty-100": "1", "qty-200": "2", "qty-9003": "3" }))])[0];
+    expect(same.diffs).toEqual([]);
+    const wrong = compareRuns([run("fifo", [click], a), run("fifo", [click], b), run("seeded", [click], page({ "qty-100": "1", "qty-200": "2", "qty-9003": "8" }))])[0].diffs[0].fields[0];
+    expect(wrong).toEqual({ where: "field", name: "qty-*", baseline: "3", run: "8", except: ["qty-100", "qty-200"] });
+    expect(fieldValue({ "qty-100": "1", "qty-200": "2", "qty-9004": "8" }, "qty-*", wrong.except)).toBe("8");
   });
 
   it("a replay reads a field by its name first, then by its shape", () => {
@@ -510,6 +578,57 @@ describe("compare: a baseline with no added delay (AGENT.md §5.1)", () => {
     expect(g.delay).toMatchObject({ differing: 2, fields: [{ name: "POST /api/save", baseline: "1", run: "2" }] });
   });
 
+  it("the plain load alone on an error page is that load's: no race, no finding, named apart (second review of PR 168)", () => {
+    const ok = page("Home", "Saved");
+    const g = compareRuns([slowRun(ok), slowRun(ok), plainRun(page("Home", "Saved", "Something went wrong")), seed(ok), seed(ok)])[0];
+    expect(g.delay).toBeUndefined();
+    expect(g.diffs).toEqual([]);
+    expect(g.look?.lines).toEqual([{ text: "Something went wrong", only: "plain-alone", runs: 0 }]);
+    // a form field only it has, and an error only it threw, the same
+    const f = compareRuns([slowRun(ok), slowRun(ok), plainRun(snap({}, ["Home", "Saved"], { fields: { Retry: "1" } })), seed(ok)])[0];
+    expect(f.delay).toBeUndefined();
+    const threw = plainRun(ok);
+    threw.errors.push({ t: 1, name: "Error", message: "Network down", chain: [] });
+    expect(compareRuns([slowRun(ok), slowRun(ok), threw, seed(ok)])[0].delay).toBeUndefined();
+    // a seeded run that shows that line is listed: the headline did not say it
+    const same = compareRuns([slowRun(ok), slowRun(ok), plainRun(page("Home", "Saved", "Something went wrong")), seed(page("Home", "Saved", "Something went wrong"))])[0];
+    expect(same.diffs[0]).toMatchObject({ tier: "visible", textOnlyRun: ["Something went wrong"] });
+    // with a line from the slow side, it stands beside it as what the plain load shows
+    const both = compareRuns([slowRun(page("Mango note", "Maple note")), slowRun(page("Mango note", "Maple note")), plainRun(page("Mango note", "All notes")), seed(page("Mango note", "All notes"))])[0];
+    expect(both.delay).toMatchObject({ textOnlyRun: ["Maple note"], textOnlyBaseline: ["All notes"] });
+    expect(both.diffs).toEqual([]);
+  });
+
+  it("the plain load unlike every other load: reported, and it says only that load differs (second review of PR 168)", () => {
+    const ok = page("Home", "Saved");
+    const alone = compareRuns([slowRun(ok), slowRun(ok), plainRun(page("Home", "Something went wrong")), seed(ok), seed(ok)])[0];
+    expect(alone.delay).toMatchObject({ oneLoad: true, textOnlyRun: ["Saved"], textOnlyBaseline: ["Something went wrong"] });
+    // a reordered run on its side: two loads say so
+    const sided = compareRuns([slowRun(page("Lost")), slowRun(page("Lost")), plainRun(page("Saved")), seed(page("Saved")), seed(page("Lost"))])[0];
+    expect(sided.delay?.oneLoad).toBeUndefined();
+    // every slow load wrong and only the plain one right looks the same, which is why it stays reported
+    const every = compareRuns([slowRun(page("Lost")), slowRun(page("Lost")), plainRun(page("Saved")), seed(page("Lost"))])[0];
+    expect(every.delay).toMatchObject({ oneLoad: true, textOnlyRun: ["Lost"] });
+  });
+
+  it("a direct double submit is a race, and not also worth a look (second review of PR 168)", () => {
+    const steps = (k: number): Step[] => [click, ...Array.from({ length: k }, (_, i): Step => ({ k: "send", t: i + 1, key: `POST /api/pay#${i + 1}`, act: i }))];
+    const n = (c: number) => snap({}, ["Page"], { requests: { "POST /api/pay": c } });
+    const mk = (c: number, delayed: boolean) => run("fifo", steps(c), n(c), delayed ? { schedule: { order: "fifo", delay } } : { schedule: { order: "fifo" } });
+    const g = compareRuns([mk(2, true), mk(2, true), mk(1, false), run("seeded", steps(2), n(2), { schedule: { order: "seeded", seed: 1, delay } })])[0];
+    expect(g.delay?.fields[0]).toMatchObject({ name: "POST /api/pay" });
+    expect(g.look?.writes ?? []).toEqual([]);
+  });
+
+  it("a price one slow baseline alone shows is named, unpaired or against another price; a counter that moved a little and a symbol are not", () => {
+    const price = compareRuns([slowRun(page("Home", "$12.00")), slowRun(page("Home")), plainRun(page("Home")), seed(page("Home"))])[0];
+    expect(price.look?.lines).toEqual([{ text: "$12.00", only: "slow", runs: 0 }]);
+    const two = compareRuns([slowRun(page("Home", "$12.00")), slowRun(page("Home", "$45.00")), plainRun(page("Home", "$45.00")), seed(page("Home", "$12.00"))])[0];
+    expect(two.look?.lines).toEqual([{ text: "$12.00", only: "slow", runs: 1 }]);
+    expect(compareRuns([slowRun(page("Home", "41")), slowRun(page("Home", "42")), plainRun(page("Home", "42")), seed(page("Home", "42"))])[0].look).toBeUndefined();
+    expect(compareRuns([slowRun(page("Home", "·")), slowRun(page("Home")), plainRun(page("Home")), seed(page("Home"))])[0].look).toBeUndefined();
+  });
+
   it("a number a little off from the plain one, in both slow baselines, is a counter between loads: worth a look", () => {
     for (const [slow, plain] of [["Uptime 41", "Uptime 42"], ["4,102 users online", "4,105 users online"]]) {
       const g = compareRuns([slowRun(page(slow)), slowRun(page(slow)), plainRun(page(plain)), seed(page(slow))])[0];
@@ -578,6 +697,13 @@ describe("compare: only the tokens that varied are blanked (AGENT.md §5.1)", ()
     const g = compareRuns([run("fifo", [click], base("Order a1b2c3 placed")), run("fifo", [click], base("Order 9f3 placed")), run("seeded", [click], base("Order z7 placed"))])[0];
     expect(g.diffs).toEqual([]);
     expect(g.noise).toEqual(['text "Order * placed"']);
+  });
+
+  it("a number with a comma is one number (second review of PR 168)", () => {
+    const noiseCase = (a: string, b: string, c: string) => compareRuns([run("fifo", [click], base(a)), run("fifo", [click], base(b)), run("seeded", [click], base(c))])[0];
+    expect(noiseCase("Total $1,000 items 3", "Total $1,000 items 4", "Total $3,000 items 4").diffs[0].textOnlyRun).toEqual(["Total $3,000 items 4"]);
+    expect(noiseCase("Total $1,000 items 3", "Total $1,000 items 4", "Total $1,005 items 4").diffs).toEqual([]);
+    expect(noiseCase("1,2,3 items 3", "1,2,3 items 4", "1,2,9 items 4").diffs[0].tier).toBe("visible");
   });
 
   it("the report writes a noisy line from the line itself, capitals and all", () => {
@@ -682,6 +808,51 @@ describe("compare: requests to other sites (AGENT.md §5.1)", () => {
     expect(b.thirdParty).toBeUndefined();
   });
 
+  describe("a stale write from a hosted API (second review of PR 168)", () => {
+    const API = "api.acme.test";
+    const page = { page: { url: "http://localhost:5173/shop", route: "/shop" } };
+    const shown = (line: string, value: string, sigs: string[]) => snap({ "cart.count": value }, ["Shop", line], { requests: Object.fromEntries(sigs.map((x) => [x, 1])) });
+    const writes = (keys: string[]): Step[] => [click, ...keys.flatMap((key, i): Step[] => [{ k: "send", t: i + 1, key: `${key}#1`, ...(key.startsWith("POST") ? { act: 0 } : {}) }, { k: "write", t: 10 + i, store: "s", paths: ["cart.count"], by: `${key}#1` }])];
+    const over = (by: string): Run["witnesses"] => [{ kind: "overwrote-newer", t: 1, subject: "cart.count", by: `${by}#1`, over: `POST ${API}/cart/add#1`, overKind: "request" }];
+
+    it.each([
+      ["4", "3", "4", "3"],
+      ["$4.00", "$3.00", "4", "3"],
+      ["$45.00", "$12.00", "45", "12"],
+    ])("the load's GET lands over the POST's answer: bare %s against %s is a race", (right, wrong, a, b) => {
+      const GET = `GET ${API}/cart`;
+      const POST = `POST ${API}/cart/add`;
+      const sigs = [GET, POST];
+      const g = compareRuns([run("fifo", writes([GET, POST]), shown(right, a, sigs), page), run("fifo", writes([GET, POST]), shown(right, a, sigs), page), run("seeded", writes([POST, GET]), shown(wrong, b, sigs), { ...page, witnesses: over(GET) })])[0];
+      expect(g.diffs[0]).toMatchObject({ tier: "visible", textOnlyRun: [wrong] });
+      expect(g.diffs[0].otherSite).toBeUndefined();
+    });
+
+    it("two different GETs writing one field, and a witness on it with one writer, are a race too", () => {
+      const A = `GET ${API}/stats/fast`;
+      const B = `GET ${API}/stats/slow`;
+      const sigs = [A, B];
+      const g = compareRuns([run("fifo", writes([A, B]), shown("41", "41", sigs), page), run("fifo", writes([A, B]), shown("41", "41", sigs), page), run("seeded", writes([B, A]), shown("40", "40", sigs), page)])[0];
+      expect(g.diffs[0].tier).toBe("visible");
+      const one = writes([A]);
+      const withWitness = compareRuns([run("fifo", one, shown("41", "41", [A]), page), run("fifo", one, shown("41", "41", [A]), page), run("seeded", one, shown("40", "40", [A]), { ...page, witnesses: over(A) })])[0];
+      expect(withWitness.diffs[0].tier).toBe("visible");
+    });
+
+    it("a count on the page that is not the field's digits stays a race, whichever field another site wrote", () => {
+      const A = `GET ${API}/stars`;
+      const steps = writes([A]);
+      const g = compareRuns([run("fifo", steps, shown("41", "156328", [A]), page), run("fifo", steps, shown("41", "156328", [A]), page), run("seeded", steps, shown("40", "null", [A]), page)])[0];
+      expect(g.diffs[0].tier).toBe("visible");
+    });
+
+    it.each(["host.docker.internal:8000", "192.168.1.10:8000", "10.0.0.5:8000", "172.20.0.2:8000", "0.0.0.0:8000", "backend:8000", "api.local:8000", "svc.internal"])("%s is the page's own network, never another site", (host) => {
+      const sig = `GET ${host}/x`;
+      const count = (n: number) => snap({}, ["Page"], { requests: { [sig]: n } });
+      expect(compareRuns(session(count(1), [count(2)]))[0].thirdParty).toBeUndefined();
+    });
+  });
+
   it("the page's own machine, a sibling host and a write are never another site's count", () => {
     const local = "GET localhost:3000/api/x";
     expect(compareRuns(session(count({ [local]: 1 }), [count({ [local]: 2 })]))[0].thirdParty).toBeUndefined();
@@ -702,7 +873,7 @@ describe("compare: requests to other sites (AGENT.md §5.1)", () => {
     expect(more.tier).toBe("visible");
     const own = compareRuns([run("fifo", [click], shown(["Home", "156k"], "156328")), run("fifo", [click], shown(["Home", "156k"], "156328")), run("seeded", [click], shown(["Home"], "null"))])[0].diffs[0];
     expect(own.tier).toBe("visible");
-    // two requests to that site can answer out of order: a stale cart count from a hosted API is a race (review of PR 168)
+    // two requests of one signature can answer out of order: a stale cart count from a hosted API is a race (review of PR 168)
     const CART = "GET api.example.com/cart";
     const twice: Step[] = [{ k: "send", t: 1, key: `${CART}#1` }, { k: "send", t: 2, key: `${CART}#2` }, { k: "write", t: 3, store: "cart", paths: ["cart.count"], by: `${CART}#2` }];
     const cart = (n: number) => snap({ "cart.count": String(n) }, ["Home", String(n)], { requests: { [CART]: 2 } });

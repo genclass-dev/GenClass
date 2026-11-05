@@ -143,14 +143,17 @@ const UNITS: [RegExp, number][] = [
   [/^(?:y|yrs?|years?)$/i, 365 * 86_400_000],
 ];
 const UNIT = "s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?|w|wks?|weeks?|mo|mos|months?|y|yrs?|years?";
-const SPAN = String.raw`(?:\d+|an?|a few|few|several)\s*(?:${UNIT})\b\.?`;
+/** A number as a page writes it: "1,000", "1.5". */
+const AMOUNT = String.raw`\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?`;
+const WORDS = "an?|a few|few|several";
+const SPAN = String.raw`(?:(?:${AMOUNT})\s*|(?:${WORDS})\s+)(?:${UNIT})\b\.?`;
 /** "13 minutes ago", "an hour ago", "a few seconds ago", "10m ago", "2h 5m ago", "less than a minute ago", "just now". */
-const AGE = new RegExp(String.raw`(?<![\w.])(?:(?:less than|about|over|almost|nearly)\s+)?${SPAN}(?:(?:\s+and)?[\s,]+${SPAN})*\s+ago\b|\bjust now\b|\bmoments? ago\b|\b(?:seconds|minutes|hours) ago\b`, "gi");
+const AGE = new RegExp(String.raw`(?<![\w.,])(?:(?:less than|about|over|almost|nearly)\s+)?${SPAN}(?:(?:\s+and)?[\s,]+${SPAN})*\s+ago\b|\bjust now\b|\bmoments? ago\b|\b(?:seconds|minutes|hours) ago\b`, "gi");
 
-/** What ageForm() puts in place of an age. */
+/** What ageless() puts in place of an age. */
 const AGO = "<ago>";
 
-/** How old a phrase says something is: from `lo` to `hi` ms ("an hour ago" is rounded: 45 to 90 minutes). */
+/** How old a phrase says something is: from `lo` to `hi` ms ("an hour ago" is rounded: 45 to 60 minutes). */
 export interface Age {
   lo: number;
   hi: number;
@@ -159,22 +162,25 @@ export interface Age {
 function ageOf(phrase: string): Age {
   const p = phrase.toLowerCase();
   if (/^(?:just now|moments? ago|seconds ago)$/.test(p)) return { lo: 0, hi: 60_000 };
-  if (p === "minutes ago") return { lo: 60_000, hi: 3_600_000 };
-  if (p === "hours ago") return { lo: 3_600_000, hi: 86_400_000 };
+  if (p === "minutes ago") return { lo: 60_000, hi: 50 * 60_000 };
+  if (p === "hours ago") return { lo: 2 * 3_600_000, hi: 86_400_000 };
   let lo = 0;
   let hi = 0;
-  for (const m of p.matchAll(new RegExp(String.raw`(\d+|an?|a few|few|several)\s*(${UNIT})\b`, "gi"))) {
-    const unit = UNITS.find(([re]) => re.test(m[2]))?.[1] ?? 60_000;
-    // a number is what it says; "an hour" and "a few minutes" are how a library rounds
-    if (/^\d/.test(m[1])) {
-      lo += Number(m[1]) * unit;
-      hi += Number(m[1]) * unit;
-    } else if (/^an?$/.test(m[1])) {
+  for (const m of p.matchAll(new RegExp(String.raw`(?:(${AMOUNT})\s*|(${WORDS})\s+)(${UNIT})\b`, "gi"))) {
+    const unit = UNITS.find(([re]) => re.test(m[3]))?.[1] ?? 60_000;
+    if (m[1]) {
+      // a number is what it says
+      const n = Number(m[1].replace(/,/g, ""));
+      lo += n * unit;
+      hi += n * unit;
+    } else if (/^an?$/.test(m[2])) {
+      // what a library shows from three quarters of a unit: "44 minutes ago" then "an hour ago", not "40 days" for "a month"
       lo += 0.75 * unit;
-      hi += 1.5 * unit;
+      hi += unit;
     } else {
+      // "a few": a small number of them ("a few years" is not 9)
       lo += unit === 1000 ? 0 : 2 * unit;
-      hi += unit === 1000 ? 60_000 : 10 * unit;
+      hi += unit === 1000 ? 60_000 : 4 * unit;
     }
   }
   return p.startsWith("less than") ? { lo: 0, hi } : { lo, hi };
@@ -190,14 +196,24 @@ export function agesIn(line: string): { form: string; ages: Age[] } | null {
 /** A line with its ages as one token: for element names, where a label's age says nothing about what was pressed. */
 export const ageless = (line: string): string => line.replace(AGE, AGO);
 
+/** How much later one page load's lines were than another's, at least and at most, on the bridge's clock. */
+export interface Elapsed {
+  min: number;
+  max: number;
+}
+
+/** The minute a shown age can roll over in, however little time passed. */
+const ROLLOVER_MS = 60_000;
+
 /**
- * Ages two lines of one form are the same line within `toleranceMs`: an age that moves with the clock says so in one
- * direction and by no more than the time that passed, so "26 minutes ago" and "27 minutes ago" are one line and "just
- * now" and "3 days ago" are not. Nothing else is taken as moving: a clock ("3:30 PM"), "today", "in 2 days" and a bare
- * "3d" are values a page can get wrong, compared as they are unless the baselines themselves show them varying.
+ * The ages of two lines of one form, the second read `later` after the first, are the same age: an age only moves with the
+ * clock, in one direction and by the time that passed, so "26 minutes ago" then "27 minutes ago" is one line, and neither
+ * "just now" against "3 days ago" nor "12 minutes ago" then "2 minutes ago" ten minutes on. Nothing else is taken as moving:
+ * a clock ("3:30 PM"), "today", "in 2 days" and a bare "3d" are values a page can get wrong, compared as they are unless
+ * the baselines themselves show them varying.
  */
-export function sameAges(a: Age[], b: Age[], toleranceMs: number): boolean {
-  return a.length === b.length && a.every((x, i) => Math.max(x.lo - b[i].hi, b[i].lo - x.hi) <= toleranceMs);
+export function sameAges(a: Age[], b: Age[], later: Elapsed): boolean {
+  return a.length === b.length && a.every((x, i) => b[i].hi - x.lo >= later.min - ROLLOVER_MS && b[i].lo - x.hi <= later.max + ROLLOVER_MS);
 }
 
 /**

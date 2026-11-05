@@ -125,7 +125,7 @@ describe("testgen (AGENT.md §5.3)", () => {
     expect(t).not.toContain("minutes ago");
     expect(t).not.toContain("an hour ago");
     // the helper in the generated file compiles and finds the field whatever its generated part is
-    const src = /const fieldValue = [\s\S]*?\n {2}\};/.exec(t)![0].replace(/: Record<string, string> = \{\}/, " = {}").replace(/: string/g, "");
+    const src = /const fieldValue = [\s\S]*?\n {2}\};/.exec(t)![0].replace(/: Record<string, string> = \{\}/, " = {}").replace(/: string\[\]/g, "").replace(/: string/g, "");
     const fieldValue = new Function(`${src}; return fieldValue;`)() as (f: Record<string, string>, n: string) => string | undefined;
     expect(fieldValue({ "el-id-6882-33": "x", other: "y" }, "el-id-*-33")).toBe("x");
     expect(fieldValue({ other: "y" }, "el-id-*-33")).toBeUndefined();
