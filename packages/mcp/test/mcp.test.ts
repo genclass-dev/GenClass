@@ -1,9 +1,10 @@
 // The MCP server (AGENT.md §4.2): the protocol over stdio, the tools end to end against a live bridge, channel pushes.
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
+import { RUNTIME_VERSION } from "../src/clients.js";
 import { McpServer, PROTOCOL_VERSIONS } from "../src/mcp.js";
 import { serve, channelEvent, type Served } from "../src/server.js";
 import { VERSION } from "../src/http.js";
@@ -70,6 +71,8 @@ describe("mcp: genclass_setup and the client named at initialize (README Install
     const r = await call(c, "genclass_setup");
     expect(r.isError).toBe(false);
     expect(r.text).toContain("connectAgent(rt)");
+    // the tool's answer opens with the step: show the lines, wait (buildwithclaude closed #636 for skipping it)
+    expect(r.text.startsWith("This changed nothing. Show the user the lines below and wait for a yes before you run or add any of them.")).toBe(true);
     expect(r.text).toContain("in Claude Code (");
     expect(r.text).toContain("/plugin install genclass@genclass");
     expect(r.text).toContain(`npx -y @genclass/mcp@${VERSION}`);
@@ -83,7 +86,7 @@ describe("mcp: genclass_setup and the client named at initialize (README Install
   });
 });
 
-describe("mcp: genclass_setup installs the newest runtime line (README Install)", () => {
+describe("mcp: genclass_setup installs the newest runtime line at the exact version this release pins (README Install)", () => {
   const app = (deps: Record<string, string>, installed?: string) => {
     const dir = mkdtempSync(join(tmpdir(), "gc-setup-"));
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "app", dependencies: { vite: "^7", ...deps } }));
@@ -93,14 +96,16 @@ describe("mcp: genclass_setup installs the newest runtime line (README Install)"
     }
     return dir;
   };
-  const INSTALL = "npm install @genclass/runtime@beta";
+  const INSTALL = `npm install @genclass/runtime@${RUNTIME_VERSION}`;
 
-  it("no runtime, 0.2.x, a range without a version, or an older installed copy: install @beta", () => {
+  it("no runtime, 0.2.x, a range without a version, or an older installed copy: install the pinned version, named as the newest line", () => {
     expect(setupText(app({}))).toContain(INSTALL);
-    expect(setupText(app({ "@genclass/runtime": "^0.2.0" }))).toContain(`this project has "^0.2.0"): ${INSTALL}`);
+    expect(setupText(app({}))).toContain("newest runtime line (npm tag beta) at the exact version this server was tested with");
+    expect(setupText(app({}))).not.toContain("@genclass/runtime@beta");
+    expect(setupText(app({ "@genclass/runtime": "^0.2.0" }))).toContain(`this project has "^0.2.0": ${INSTALL}`);
     for (const r of ["*", "latest", ""]) expect(setupText(app({ "@genclass/runtime": r }))).toContain(INSTALL);
     expect(setupText(app({ "@genclass/runtime": "^0.3.0-beta.0" }))).toContain(INSTALL);
-    expect(setupText(app({ "@genclass/runtime": "^0.3.0-beta.1" }, "0.2.2"))).toContain(`this project has "^0.3.0-beta.1", installed 0.2.2): ${INSTALL}`);
+    expect(setupText(app({ "@genclass/runtime": "^0.3.0-beta.1" }, "0.2.2"))).toContain(`this project has "^0.3.0-beta.1", installed 0.2.2: ${INSTALL}`);
   });
 
   it("0.3.0-beta.1 or later (or the beta tag) counts as installed", () => {
@@ -110,6 +115,41 @@ describe("mcp: genclass_setup installs the newest runtime line (README Install)"
       expect(t).not.toContain(INSTALL);
     }
     expect(setupText(app({ "@genclass/runtime": "*" }, "0.3.0-beta.1"))).toContain("@genclass/runtime is installed.");
+  });
+
+  /** The fenced lines genclass_setup prints for a project. */
+  const printed = (deps: Record<string, string>) => /```ts\n([\s\S]*?)```/.exec(setupText(app(deps)))![1];
+
+  const GUARDS: [string, Record<string, string>, string, Record<string, string>][] = [
+    ["Vite", {}, "import.meta.env.DEV", { "import.meta.env.DEV": "false" }],
+    ["Next.js", { next: "^15" }, 'process.env.NODE_ENV === "development"', { "process.env.NODE_ENV": '"production"' }],
+  ];
+
+  it("GenClass.init() and connectAgent are both behind the development check; the note says what production would mean", () => {
+    for (const [, deps, guard] of GUARDS) expect(printed(deps)).toContain(`if (${guard}) {\n  const rt = GenClass.init();\n  connectAgent(rt);\n}\n`);
+    const dir = mkdtempSync(join(tmpdir(), "gc-setup-"));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "app", dependencies: {} }));
+    expect(setupText(dir)).toContain(`if (process.env.NODE_ENV !== "production") {\n  const rt = GenClass.init();\n  connectAgent(rt);\n}\n`);
+    const t = setupText(app({}));
+    expect(t).toContain("runs for every visitor and sends anonymous diagnostics from public hosts by default");
+    expect(t).toContain("GenClass.init({ telemetry: false })");
+    expect(t).toContain("do not move it there without asking");
+  });
+
+  // a real production bundle of the printed lines: nothing from the runtime stays. Needs the runtime built (CI builds
+  // it before the tests); esbuild comes with tsup.
+  const built = existsSync(join(__dirname, "..", "..", "runtime", "dist", "index.js"));
+  it.skipIf(!built).each(GUARDS)("%s: a production build of the printed lines keeps nothing from the runtime; a development build keeps it", async (_name, deps, _guard, prod) => {
+    const { build } = await import("esbuild");
+    const bundle = async (define: Record<string, string>) => {
+      const r = await build({ stdin: { contents: `${printed(deps)}\ndocument.title = "app";`, resolveDir: __dirname, loader: "ts" }, bundle: true, minify: true, format: "esm", write: false, define, external: ["onnxruntime-web"], logLevel: "silent" });
+      return r.outputFiles[0].text;
+    };
+    expect((await bundle(prod)).trim()).toBe('document.title="app";');
+    const dev = Object.fromEntries(Object.keys(prod).map((k) => [k, k === "import.meta.env.DEV" ? "true" : '"development"']));
+    const out = await bundle(dev);
+    expect(out).toContain("__GENCLASS_AGENT__");
+    expect(out.length).toBeGreaterThan(50_000);
   });
 });
 
