@@ -1419,3 +1419,74 @@ work), GenClass's defaults on a deployed host, and phones. The `0.1.0-beta.3` nu
 2026-10-09) used the same build loaded with `?genclass=off` as the control, which still loads GenClass's code, and
 renderer RSS for memory; they are not comparable with these.
 
+## 28. Explore's verdict on real apps: false reports and recall before and after (development Mac, Chromium through Playwright 1.63.0, 2026-11-05, branch `fix/explore-verdict-noise`)
+
+[AGENT.md](AGENT.md) section 5.1. On 2026-11-04 four hunts ran `genclass_explore` next to their own check of the page, on released apps and on fixed builds. This measures the comparison of `origin/main` (`91139b92`, "before") against this branch ("after") on those reports and on small pages made of what they met.
+
+**Headline.** Reordered runs reported as a race on fixed builds, where the hunts' own check said the page was right: **85 of 120 before, 0 of 120 after** (rescored from the stored reports). On every session of the four apps whose check was right in all its loads: **211 of 466 before, 19 of 466 after**. Recall on the bugs the reports could show: sessions with a wrong run and a race verdict go from 35 of 37 to 25 of 37; the 10 are 9 OpenCode sessions whose "RACE" was a read-only POST count (the same verdict on the fixed build, so never evidence) and Notes at 600 ms, whose evidence needs the new load. On planted pages in Chromium: false reports on correct variants **39 of 198 runs (8 of 39 sessions) before, 0 of 234 (0 of 39) after**, sessions with a planted bug given a race verdict **20 of 36 before, 30 of 36 after**. **The new baseline with no added delay has not been run on a real app** (below).
+
+**Stored reports.** `bench/explore/stored.mjs` parses the 136 explore reports kept as text back into runs (what each listed, over one synthetic baseline) and gives them to `compareRuns`; the page check is each file's `load N:` lines. It can only move what a report listed: 4 page lines a side, 6 fields a run. "Listed cap" counts cleared runs whose list hit the 4-line cap; a line behind the cap is unknown, but their check said the page was right. A report has no send steps, so no POST there has "sent directly" as evidence, and this rescoring has no baseline with no added delay. A field with a generated name listed as absent on one side is taken to be there with the same value, checked against the only raw session kept (`--raw`, n8n's autosave: the fields compare equal).
+
+| reports | sessions | reordered runs compared | reported before (all false by the page check) | reported after | listed cap |
+|---|---|---|---|---|---|
+| OpenCode, fixed file refresh | 3 | 12 | 9 | **0** | 0 |
+| OpenCode, fixed file reopen | 3 | 12 | 9 | **0** | 0 |
+| n8n, fixed Execute Sub-workflow picker | 3 | 18 | 18 | **0** | 0 |
+| Open WebUI, fixed searches | 9 | 54 | 43 | **0** | 43 |
+| Langflow, fixed New Flow and paging | 4 | 24 | 6 | **0** | 6 |
+| **fixed builds** | 22 | **120** | **85** | **0** | 49 |
+| OpenCode, every session whose check was right in all loads | 16 | 68 | 52 | 8 | 0 |
+| n8n, the same | 28 | 98 | 48 | 0 | 5 |
+| Open WebUI, the same | 27 | 162 | 60 | 8 | 47 |
+| Langflow, the same (the 51 of 138 of the hunt) | 23 | 138 | 51 | 3 | 32 |
+| **all sessions whose check was right in all loads** | 94 | **466** | **211** | **19** | 84 |
+
+The 19 left, by what they list: OpenCode `new-session` (4) and `double-enter` (4), a stub's reply caught mid-stream at the quiet point and session labels that came with it; Open WebUI `rename-two` (5: "Rename two" against "Renamed second", which may be a real bug its check does not read) and `settings-toggle` (3: "Title Auto-Generation"); Langflow "New Project (1)" (2), "Delta" (1). Causes that fell away: relative times, read-only POST counts (113 lines, none a double submit), generated names, the star count (below).
+
+| sessions with a run the page check called wrong | sessions | wrong runs | race verdict before, after | wrong runs reported before, after |
+|---|---|---|---|---|
+| OpenCode | 15 | 55 | 15, 6 | 39, 12 |
+| n8n | 10 | 27 | 10, 10 | 27, 27 |
+| Open WebUI | 4 | 9 | 4, 3 | 9, 6 |
+| Langflow | 8 | 35 | 6, 6 | 20, 15 |
+| **all** | **37** | **126** | **35, 25** | **95, 60** |
+
+What the drop is. OpenCode, 27 runs in 10 sessions (9 lost their verdict): each rested on a count such as `POST /api/worktree/refresh`, and the fixed builds got the same verdict from the same line, so these were coincidence, not recall. Four of the sessions are wrong the same way in all their loads (file reopen, file open), which depends on no timing and no order comparison can see; the other six are the dropped refresh, the new load's case. Open WebUI, 3 runs: Notes at 600 ms (both baselines wrong: the new load's case) and two at 900 ms whose list held only times and was capped, where the real rows were cut (the ordering fixes this from now on, and the text cannot show it). Langflow, 5 runs: their only listed difference was the star count `156k`; those runs' real difference was a second flow or variable on the server, not in the list. On the same reports the real lines stay reported: n8n's "helper task 29", "row-040", "Total 41"; Langflow's "New Flow (1)"; OpenCode's "MARKER running-2 question".
+
+**The baseline with no added delay, on real apps: indirect.** It was not run: the four apps' installs were gone from this Mac, which is short of room, so nothing was reinstalled. What the hunts' own plain runs (no GenClass schedule) show is that it would read right on the two bugs it is for: OpenCode's dropped refresh stale in **0 of 8** with no hold against **8 of 8** at 600 ms, on the fixed build 0 of 8 at 600 ms (`race-released-hold0`, `race-released-hold600`, `race-fixed-hold600`); Open WebUI's Notes wrong in **0 of 3** with no hold against **10 of 10** held. Its false-report rate on real apps is not known: run the four hunts again with this plan before trusting a "slow response alone" line there. The mechanism and its cost on planted pages are next.
+
+**Planted pages.** `bench/explore/planted.mjs`: small pages in headless Chromium with the real runtime and MCP server, each scenario with a correct variant and, where it has one, a planted bug; `slow_ms` 300, 600 and 900, 2 slow baselines, 1 with no added delay, 6 seeded orders (9 loads a session, 75 sessions, 2 browsers, about 13 minutes). Each load has its own check of the page or of what the server received. Before and after are scored on the same recorded runs (before without the third baseline, which its plan did not have). "Reported" counts seeded runs: a run that ends like the slow baselines is not reported after, because the session's headline is that difference, so read the sessions column first. Written by the author of the rules they measure: they show the mechanism and what each rule costs, not an independent recall figure.
+
+| scenario | sessions with a race verdict, before | after | runs reported of compared, before (true, false) | after (true, false) | after: names a slow response alone |
+|---|---|---|---|---|---|
+| `times`, correct (relative times crossing a "minute" every 4 s) | 2 of 3 | **0 of 3** | 12 of 18 (0, 12) | 0 of 18 (0, 0) | 0 |
+| `times`, stale search beside them | 3 of 3 | 3 of 3 | 17 of 18 (16, 1) | 16 of 18 (16, 0) | 0 |
+| `counts`, correct (read-only POSTs whose number depends on order) | 3 of 3 | **0 of 3** | 9 of 18 (0, 9) | 0 of 18 (0, 0) | 0 |
+| `fields`, correct (generated names) | 3 of 3 | **0 of 3** | 18 of 18 (0, 18) | 0 of 18 (0, 0) | 0 |
+| `fields`, a field filled by the older answer | 3 of 3 | 3 of 3 | 18 of 18 (9, 9) | 9 of 18 (9, 0) | 0 |
+| `slowonly`, correct | 0 of 3 | 0 of 3 | 0 of 18 | 0 of 18 | 0 |
+| `slowonly`, needs only a slow response (Notes) | 3 of 3 | 3 of 3, now named | 18 of 18 (18, 0) | 17 of 18 (17, 0) | **3** |
+| `fileslow`, correct | 0 of 3 | 0 of 3 | 0 of 18 | 0 of 18 | 0 |
+| `fileslow`, a refresh dropped during a slow read, a bare counter beside it (OpenCode) | 0 of 3 | **3 of 3** | 0 of 18 (8 missed) | 4 of 18 (4, 0; 4 missed) | 1 |
+| `counter`, correct | 0 of 3 | 0 of 3 | 0 of 18 | 0 of 18 | 0 |
+| `counter`, "version-1" against "version-2" beside a bare counter | 0 of 3 | **3 of 3** | 0 of 18 (3 missed) | 3 of 18 (3, 0) | 0 |
+| `route`, correct (a new path on every load) | no verdict | 0 of 3 | 0 of 0 | 0 of 18 | 0 |
+| `route`, stale search | 0 of 3 (0 compared) | **3 of 3** | 0 of 0 (16 missed) | 16 of 18 (16, 0) | 0 |
+| `optional`, correct (a click only some loads did) | no verdict | 0 of 3 | 0 of 0 | 0 of 18 | 0 |
+| `optional`, stale search | 0 of 3 (0 compared) | **3 of 3** | 0 of 0 (16 missed) | 16 of 18 (16, 0) | 0 |
+| `dbl-shown`, `dbl-silent`, `dbl-body`, `dbl-chain`, `dbl-timer`, correct | 0 of 15 | 0 of 15 | 0 of 90 | 0 of 90 | 0 |
+| `dbl-shown`, a double submit the page lists | 3 of 3 | 3 of 3 | 11 of 18 (6, 5) | 0 of 18 | 3 |
+| `dbl-silent`, the page does not show it | 3 of 3 | 3 of 3 | 5 of 18 (0, 5) | 0 of 18 | 3 |
+| `dbl-body`, the same with a body that differs | 3 of 3 | 3 of 3 | 5 of 18 (0, 5) | 0 of 18 | 3 |
+| `dbl-chain`, sent behind another request | 0 of 3 | 0 of 3, named apart in 3 | 0 of 18 | 0 of 18 | 0 |
+| `dbl-timer`, sent behind a 30 ms timer | 2 of 3 | **0 of 3**, named apart in 3 | 4 of 18 (0, 4) | 0 of 18 | 0 |
+| **correct variants** | **8 of 39** | **0 of 39** | **39 of 198 (0, 39)** | **0 of 234 (0, 0)** | 0 |
+| **planted bugs** | **20 of 36** | **30 of 36** | **78 of 180 (49, 29)** | **81 of 216 (81, 0)** | 13 |
+
+**What the POST rule costs, measured.** A difference in a POST count alone is a race only with two identical requests in flight or a user action sending it directly a different number of times. On the planted pages the direct rule keeps the double submits sent from a click handler (`dbl-shown`, `dbl-silent`, `dbl-body`: 9 of 9 sessions, through the difference from the new baseline; before, the same sessions got their verdict with 15 of 21 reported runs false, correct runs listed against wrong baselines). It loses the double submit behind another request or a timer that never overlaps with the page unchanged: `dbl-timer` **2 of 3 sessions before, 0 of 3 after** (the 2 before rested on 4 correct runs reported as racing; `dbl-chain` was 0 of 3 both ways), all 6 now named apart under the verdict ("worth a look"), none a finding. `identical-in-flight` rarely helped on these pages (3 of 101 runs that sent two POSTs): the witness counts a request's own start and end, the answers came back in 40 ms, and two clicks were 120 ms apart; only the schedule held them longer. On the hunts: of the recorded sends in the stored explanations, every read-only POST that made a false report was sent `via` another request (`/api/worktree/refresh` 60 of 60, `opencode.goal/get` 29, `workflow-dependencies/counts` 38, `authz/me/permissions` 40), and Langflow's real `POST /api/v1/variables/` double submit directly from two actions (4 of 4). Langflow's other one, `POST /api/v1/flows/`, was seen both ways (3 direct, 5 via `GET /api/v1/variables/` from one action): when the page shows no second flow it is internal now; no stored run had a POST count as its only evidence for it.
+
+**Small apps and the end-to-end checks, for regressions.** `bench/explore/apps.mjs` (Redux Toolkit Query, TanStack Query; section 22's bench, 12 sessions, now 9 loads each): recall on the planted stale race **32 of 32** runs before and after, with **0 false** both; false reports on the correct variants **0 of 36** both; every replay reproduced. `packages/mcp/test/e2e/race.e2e.mjs`: race in **5 of 6** reordered runs on the buggy page, 0 of 6 on the fixed one, replay reproduced and not reproduced, the generated test failed and passed. `bench/hunt` e2e pages: race on the buggy page (5 of 6 ended differently), no race on the fixed one (0 of 6), and the form that sends one POST per click a `duplicate-request` finding with no race, as before.
+
+**Report text.** On the hunts' Notes at 900 ms the sample before named "2m", "8", "3m", "Loading..." and never the differing "Maple note" row; the lists are now in reading order and the headline names the row. On planted pages the headline names the planted line in **30 of 30** sessions with a verdict ("it shows \"version-1\", which the baseline does not", "form field \"el-id-*-33\" is \"default one\"", "requests sent to \"POST /api/save\""). The Notes report itself cannot be shown again without its app.
+
+Caveats: one machine, seeds 1 to 6 only, other agents running on it (load 4 to 10). The stored rescoring reads text, not the runs: the caps above apply, and it says nothing about the new baseline. A page check is the hunt's own and narrow: a run it calls right can differ for a real reason (`rename-two`), and "false" means by that check. Not run: the four apps themselves (no installs, no room), the demos (each has its own runtime and shell on the page, so the harness's injected one would make two), the model suite, `realapps/`.
