@@ -14,7 +14,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compareRuns, endedDifferently, fieldValue, nameDifference, sameScenario, sameValue, settledAfterActs, shownField, stateValue, strongestFirst, type FieldDiff, type GroupReport, type RunDiff, multiset } from "./compare.js";
-import { clean, pathShape, q, routeShape, shape, sigOf, timeless } from "./text.js";
+import { agesIn, clean, pathShape, q, routeShape, sameAges, shape, sigOf } from "./text.js";
 import type { ExploreSession, Finding, FindingKind, ReplayArm, Run, ScheduleSpec, Step } from "./types.js";
 import * as V from "./validate.js";
 
@@ -538,7 +538,8 @@ export class Store {
         reproduced = hit;
         note = hit ? "the same error was thrown again" : "the error did not recur";
       } else if (f.kind === "race") {
-        const v = raceVerdict(ev, r);
+        // an age in a line of the finding has moved on by as long as has passed since, and a minute it can roll over in
+        const v = raceVerdict(ev, r, Math.abs(r.started - orig!.started) + 60_000);
         reproduced = scenarioMatches ? v.reproduced : null;
         note = v.note;
       } else note = "replays verify stale-write, duplicate-request, error and race findings";
@@ -726,7 +727,7 @@ function delayTitle(d: RunDiff): string {
 }
 
 /** Does a replay run show the race finding's difference again? From the evidence of the failing run. */
-function raceVerdict(ev: Record<string, unknown>, r: Run): { reproduced: boolean | null; note: string } {
+function raceVerdict(ev: Record<string, unknown>, r: Run, toleranceMs: number): { reproduced: boolean | null; note: string } {
   const snap = r.snapshot!;
   const all = (ev.fields as { where: string; name: string; baseline: string; run: string }[] | undefined) ?? [];
   const val = (d: { where: string; name: string }) => (d.where === "state" ? stateValue(snap.state, d.name) : d.where === "field" ? fieldValue(snap.fields, d.name) : snap.requests[d.name] !== undefined ? String(snap.requests[d.name]) : undefined) ?? "(absent)";
@@ -746,9 +747,16 @@ function raceVerdict(ev: Record<string, unknown>, r: Run): { reproduced: boolean
   // lines count: a line the page always shows once (a product card) and the failing run showed twice (a stale result
   // too) reproduces only when the replay shows it as many times as the failing run did
   // compared as the comparison did: a line that says "5 minutes ago" is the same line a minute later
-  const shownN = multiset((snap.text ?? []).map(timeless));
+  const lines = snap.text ?? [];
   const counts = (ev.textCounts as Record<string, { baseline: number; run: number }> | undefined) ?? {};
-  const seen = (l: string) => shownN.get(timeless(l)) ?? 0;
+  const seen = (l: string) => {
+    const x = agesIn(l);
+    return lines.filter((o) => {
+      if (o === l) return true;
+      const y = x && agesIn(o);
+      return !!x && !!y && y.form === x.form && sameAges(x.ages, y.ages, toleranceMs);
+    }).length;
+  };
   const onlyRun = (ev.textOnlyRun as string[] | undefined) ?? [];
   const onlyBase = (ev.textOnlyBaseline as string[] | undefined) ?? [];
   if (onlyRun.length || onlyBase.length) {

@@ -11,7 +11,7 @@
 // time with new RegExp from such a literal. Values the page redacted ("[redacted]") become a placeholder.
 
 import type { ActStep, Finding, Run, ScheduleSpec } from "./types.js";
-import { clean, pathShape, shape, timeless } from "./text.js";
+import { agesIn, clean, pathShape, shape } from "./text.js";
 import { shownField, type FieldDiff } from "./compare.js";
 
 const lit = (s: unknown): string => JSON.stringify(clean(s, 200));
@@ -201,7 +201,7 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
     const visible = shown.length > 0 || onlyBase.length > 0 || onlyRun.length > 0 || errs.length > 0;
     const fields = visible ? shown : all;
     const pooledUsed = fields.slice(0, 5).some((d) => d.where === "state" && d.name.split(".").includes("*"));
-    const pooledField = fields.slice(0, 5).some((d) => d.where === "field" && d.name.includes("*"));
+    const pooledField = fields.slice(0, 5).some((d) => d.where === "field" && d.name.includes("*") && !!d.name.replace(/\*/g, "").trim());
     if (pooledUsed) {
       // records under an object whose keys are new each run: compared by their values (as the bridge did)
       lines.push(`  const stateValue = (state: Record<string, string>, name: string) => {`);
@@ -219,6 +219,11 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
       lines.push(`  };`);
     }
     for (const d of fields.slice(0, 5)) {
+      // a name that is nothing but its generated part (":r1a:"): nothing in the page to find the field by
+      if (d.where === "field" && !d.name.replace(/\*/g, "").trim()) {
+        lines.push(`  // the failing run's field ${lit(d.name)} has only a generated name, so no line can find it: assert it by its label or role`);
+        continue;
+      }
       const want = d.baseline === "(absent)" ? ".toBeUndefined()" : `.toBe(${lit(d.baseline)})`;
       const name = lit(d.name);
       if (d.where === "state") lines.push(`  expect(${d.name.split(".").includes("*") ? `stateValue(snap.state, ${name})` : `snap.state[${name}]`}, "as with responses in request order")${want};`);
@@ -227,12 +232,12 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
       asserts++;
     }
     // page lines are compared with the agent's own snapshot (the same line splitting as the recording)
-    // a line with a relative time in it reads differently a minute later: it can be no line a test asserts
-    for (const l of onlyBase.filter((x) => timeless(x) === x).slice(0, 3)) {
+    // a line with an age in it reads differently a minute later: it can be no line a test asserts
+    for (const l of onlyBase.filter((x) => !agesIn(x)).slice(0, 3)) {
       lines.push(`  expect(snap.text, "the page shows what it shows with responses in request order").toContain(${lit(l)});`);
       asserts++;
     }
-    for (const l of onlyRun.filter((x) => timeless(x) === x).slice(0, 3)) {
+    for (const l of onlyRun.filter((x) => !agesIn(x)).slice(0, 3)) {
       lines.push(`  expect(snap.text, "the page does not show what only the failing order showed").not.toContain(${lit(l)});`);
       asserts++;
     }

@@ -133,31 +133,71 @@ export function fieldShape(name: string): string {
     .join("");
 }
 
-const SPAN = String.raw`(?:\d+|an?|a few|few|several)\s*(?:s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?|w|wks?|weeks?|mo|mos|months?|y|yrs?|years?)\b\.?`;
-/** "13 minutes ago", "an hour ago", "a few seconds ago", "10m ago", "2h 5m ago", "less than a minute ago". */
-const AGO = new RegExp(String.raw`(?<![\w.])(?:(?:less than|about|over|almost|nearly)\s+)?${SPAN}(?:(?:\s+and)?[\s,]+${SPAN})*\s+ago\b`, "gi");
-/** "in 5 minutes", "in an hour". */
-const AHEAD = new RegExp(String.raw`\bin\s+(?:(?:less than|about|over|almost|nearly)\s+)?${SPAN}`, "gi");
-/** "just now", "moments ago", "yesterday", "today", "last week". */
-const WORDS = /\b(?:just now|right now|moments? ago|seconds ago|minutes ago|hours ago|yesterday|today|tomorrow|last (?:week|month|year))\b/gi;
-/** "3:27 PM", "15:27", "15:27:04": what a clock shows moves on the same way ("Today at 3:27 PM"). */
-const CLOCK = /(?<![\w:.+-])(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[ap]\.?m\b\.?)?(?![\w:])/gi;
-/** A whole line that is only "now" or a short age ("7m", "2h"; not "2M", a count): one token beside a row, as lists show it. */
-const SHORT_AGE = /^(?:[Nn]ow|\d+(?:s|m|h|d|w|mo|y))$/;
+const UNITS: [RegExp, number][] = [
+  [/^(?:s|secs?|seconds?)$/i, 1000],
+  [/^(?:m|mins?|minutes?)$/i, 60_000],
+  [/^(?:h|hrs?|hours?)$/i, 3_600_000],
+  [/^(?:d|days?)$/i, 86_400_000],
+  [/^(?:w|wks?|weeks?)$/i, 7 * 86_400_000],
+  [/^(?:mo|mos|months?)$/i, 30 * 86_400_000],
+  [/^(?:y|yrs?|years?)$/i, 365 * 86_400_000],
+];
+const UNIT = "s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?|w|wks?|weeks?|mo|mos|months?|y|yrs?|years?";
+const SPAN = String.raw`(?:\d+|an?|a few|few|several)\s*(?:${UNIT})\b\.?`;
+/** "13 minutes ago", "an hour ago", "a few seconds ago", "10m ago", "2h 5m ago", "less than a minute ago", "just now". */
+const AGE = new RegExp(String.raw`(?<![\w.])(?:(?:less than|about|over|almost|nearly)\s+)?${SPAN}(?:(?:\s+and)?[\s,]+${SPAN})*\s+ago\b|\bjust now\b|\bmoments? ago\b|\b(?:seconds|minutes|hours) ago\b`, "gi");
 
-/** What timeless() puts in place of a relative time. */
-export const WHEN = "<when>";
+/** What ageForm() puts in place of an age. */
+const AGO = "<ago>";
+
+/** How old a phrase says something is: from `lo` to `hi` ms ("an hour ago" is rounded: 45 to 90 minutes). */
+export interface Age {
+  lo: number;
+  hi: number;
+}
+
+function ageOf(phrase: string): Age {
+  const p = phrase.toLowerCase();
+  if (/^(?:just now|moments? ago|seconds ago)$/.test(p)) return { lo: 0, hi: 60_000 };
+  if (p === "minutes ago") return { lo: 60_000, hi: 3_600_000 };
+  if (p === "hours ago") return { lo: 3_600_000, hi: 86_400_000 };
+  let lo = 0;
+  let hi = 0;
+  for (const m of p.matchAll(new RegExp(String.raw`(\d+|an?|a few|few|several)\s*(${UNIT})\b`, "gi"))) {
+    const unit = UNITS.find(([re]) => re.test(m[2]))?.[1] ?? 60_000;
+    // a number is what it says; "an hour" and "a few minutes" are how a library rounds
+    if (/^\d/.test(m[1])) {
+      lo += Number(m[1]) * unit;
+      hi += Number(m[1]) * unit;
+    } else if (/^an?$/.test(m[1])) {
+      lo += 0.75 * unit;
+      hi += 1.5 * unit;
+    } else {
+      lo += unit === 1000 ? 0 : 2 * unit;
+      hi += unit === 1000 ? 60_000 : 10 * unit;
+    }
+  }
+  return p.startsWith("less than") ? { lo: 0, hi } : { lo, hi };
+}
+
+/** A line with its ages as one token, and those ages ("Edited 13 minutes ago" → "Edited <ago>", [13 minutes]); null without one. */
+export function agesIn(line: string): { form: string; ages: Age[] } | null {
+  const phrases = line.match(AGE);
+  if (!phrases) return null;
+  return { form: line.replace(AGE, AGO), ages: phrases.map(ageOf) };
+}
+
+/** A line with its ages as one token: for element names, where a label's age says nothing about what was pressed. */
+export const ageless = (line: string): string => line.replace(AGE, AGO);
 
 /**
- * A page line with its relative times replaced by one token: "Edited 13 minutes ago" and "Edited 14 minutes ago" are the
- * same line, whatever the baselines did. These words move with the clock, not with the order of responses: two baselines
- * inside one minute agree, and a run one minute later would differ. A rule about the shape of text, in English (other
- * languages are compared as they are, and fall to the baselines' own noise); it says nothing about any bug.
+ * Ages two lines of one form are the same line within `toleranceMs`: an age that moves with the clock says so in one
+ * direction and by no more than the time that passed, so "26 minutes ago" and "27 minutes ago" are one line and "just
+ * now" and "3 days ago" are not. Nothing else is taken as moving: a clock ("3:30 PM"), "today", "in 2 days" and a bare
+ * "3d" are values a page can get wrong, compared as they are unless the baselines themselves show them varying.
  */
-export function timeless(line: string): string {
-  const t = line.trim();
-  if (SHORT_AGE.test(t)) return WHEN;
-  return line.replace(AGO, WHEN).replace(AHEAD, WHEN).replace(WORDS, WHEN).replace(CLOCK, WHEN);
+export function sameAges(a: Age[], b: Age[], toleranceMs: number): boolean {
+  return a.length === b.length && a.every((x, i) => Math.max(x.lo - b[i].hi, b[i].lo - x.hi) <= toleranceMs);
 }
 
 /**
