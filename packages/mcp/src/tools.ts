@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Api } from "./api.js";
 import { CLIENTS, clientFor, pinned } from "./clients.js";
+import { nameDifference, shownField, strongestFirst, type GroupReport, type RunDiff } from "./compare.js";
 import { VERSION } from "./http.js";
 import { dashboardTarget, fetchProduction, type ProdStats } from "./production.js";
 import { runScan, type Runner, type ScanReport } from "./scan.js";
@@ -299,6 +300,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
             `Explore ${x.id} armed: the next ${x.plan.length} page loads ${x.route ? `of ${q(x.route, 80)}` : "of the page the first one loads (later loads of other pages and tabs are left alone)"} get these delivery schedules, in order:`,
             ...x.plan.map((s, i) => `  ${i + 1}. ${clean(s.label, 80)}`),
             "",
+            ...(x.plan.some((s) => s.delay) ? ["A difference between the slow baselines and the one without added delay is what a slow response alone does: the report names it."] : []),
             `Now run the same scenario ${x.plan.length} times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for \`await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))\`.`,
             `With Playwright: \`npx playwright test <spec> --repeat-each ${x.plan.length} --workers 1\`. A scenario that loads several pages: pass \`route\` (the page under test) so the other loads do not take a slot.`,
             `Then: genclass_explore {action:"report", id:"${x.id}"}.`,
@@ -310,11 +312,11 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
         return { text: x ? `Explore ${x.id} stopped; later page loads are not scheduled.` : "No explore session was armed." };
       }
       if (action === "report") {
-        type Diff = { run: string; label: string; tier?: string; announced?: string[]; fields: { where: string; name: string; baseline: string; run: string }[]; textOnlyBaseline: string[]; textOnlyRun: string[]; errors: string[]; witnesses: string[]; forced: number };
+        type Diff = RunDiff;
         const r = (await ctx.api("explore.report", { id: args.id })) as null | {
           session: { id: string; plan: ScheduleSpec[]; runs: string[]; state: string };
           runs: { id: string; route: string; schedule: ScheduleSpec | null; settled: boolean; forced: number; scenario: string }[];
-          groups: { route: string; scenario: string; grouping?: string; baselines: string[]; runs: number; compared?: number; noise: string[]; missingBaseline: boolean; insufficientBaselines: boolean; diffs: Diff[]; unfiltered: unknown[]; truncated?: { runs: number; left: number; total: number } }[];
+          groups: GroupReport[];
           findings: { id: string }[];
         };
         if (!r) return { text: "No explore session yet: genclass_explore {action:\"start\"} first.", isError: true };
@@ -324,17 +326,27 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
         if (s.runs.length < s.plan.length) out.push(`Missing ${s.plan.length - s.runs.length} load(s): run the scenario again for the rest, or report now with what there is.`);
         if (!r.groups.length) out.push("No run reached a quiet point yet: wait for whenSettled() after the steps.");
         const seededRuns = r.runs.filter((x) => x.settled && x.schedule?.order !== "fifo").length;
-        const compared = r.groups.reduce((n, g) => n + (g.compared ?? 0), 0);
+        const compared = r.groups.reduce((n, g) => n + g.compared, 0);
         if (r.groups.length) {
-          const how = r.groups[0].grouping === "kinds" ? " (grouped by action kinds only: the recorded element names and roles differed between loads)" : r.groups[0].grouping === "roles" ? " (grouped by action kinds and element roles: the recorded element names differed between loads)" : "";
+          const level = r.groups[0].grouping;
+          const how = level === "optional" ? " (grouped by action kinds, leaving out up to two actions only some loads did: the recorded steps differed between loads)" : level === "kinds" ? " (grouped by action kinds only: the recorded element names and roles differed between loads)" : level === "roles" ? " (grouped by action kinds and element roles: the recorded element names differed between loads)" : "";
           out.push(`Compared: ${compared} of ${seededRuns} reordered run(s) against two baselines${how}.`);
+          if (!compared) out.push("NO VERDICT: nothing was compared, so this report says nothing about races on this page, either way. It is not a clean result. The per-scenario notes below say why; run the missing loads, or the same steps in every load.");
         }
-        const diffLines = (d: Diff) => {
-          out.push(`- run ${d.run} (${clean(d.label, 60)})${d.forced ? ` (${d.forced} hold(s) ran out)` : ""}:`);
-          if (d.textOnlyBaseline.length) out.push(`    page text only in the baseline: ${d.textOnlyBaseline.slice(0, 4).map((l) => q(l, 80)).join(", ")}`);
-          if (d.textOnlyRun.length) out.push(`    page text only in this run: ${d.textOnlyRun.slice(0, 4).map((l) => q(l, 80)).join(", ")}`);
-          for (const x of d.fields.slice(0, 6)) out.push(`    ${x.where === "requests" ? "requests sent to" : x.where} ${q(x.name, 80)}: baseline ${q(x.baseline, 80)}, this run ${q(x.run, 80)}`);
+        // the page's own lines first, then what it sent; store values and refetch counts only as far as there is room
+        const diffLines = (d: Diff, label = `run ${d.run} (${clean(d.label, 60)})`, base = "the baseline", self = "this run", baseValue = "baseline") => {
+          out.push(`- ${label}${d.forced ? ` (${d.forced} hold(s) ran out)` : ""}:`);
+          if (d.textOnlyBaseline.length) out.push(`    page text only in ${base}: ${d.textOnlyBaseline.slice(0, 4).map((l) => q(l, 80)).join(", ")}${d.textOnlyBaseline.length > 4 ? `, and ${d.textOnlyBaseline.length - 4} more` : ""}`);
+          if (d.textOnlyRun.length) out.push(`    page text only in ${self}: ${d.textOnlyRun.slice(0, 4).map((l) => q(l, 80)).join(", ")}${d.textOnlyRun.length > 4 ? `, and ${d.textOnlyRun.length - 4} more` : ""}`);
+          const fieldLine = (x: Diff["fields"][number]) => out.push(`    ${x.where === "requests" ? "requests sent to" : x.where} ${q(x.name, 80)}: ${baseValue} ${q(x.baseline, 80)}, ${self} ${q(x.run, 80)}${x.evidence ? ` (${clean(x.evidence, 80)})` : ""}`);
+          const shownFields = d.fields.filter(shownField);
+          const rest = d.fields.filter((x) => !shownField(x));
+          const room = shownFields.length || d.textOnlyBaseline.length || d.textOnlyRun.length ? 2 : 6;
+          for (const x of shownFields.slice(0, 6)) fieldLine(x);
+          for (const x of rest.slice(0, room)) fieldLine(x);
+          if (rest.length > room) out.push(`    and ${rest.length - room} more store value(s) or request count(s) that differ (internal: genclass_explain lists them on a finding)`);
           if (d.announced?.length) out.push(`    announcements (status, alert regions) only in one of them: ${d.announced.slice(0, 3).map((l) => q(l, 80)).join(", ")}`);
+          if (d.otherSite) out.push("    (the page differs only in a bare count, and a store field another site's response wrote differs with it: that site answered differently)");
           for (const e of d.errors.slice(0, 3)) out.push(`    error only here: ${q(e, 120)}`);
           for (const w of d.witnesses.slice(0, 3)) out.push(`    witness only here: ${clean(w, 160)}`);
         };
@@ -342,29 +354,36 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
           out.push("", `## ${clean(g.route, 80)} · ${g.runs} run(s) · scenario ${PAGE_DATA}:`, ...(g.scenario ? g.scenario.split("\n").map((l) => `  ${clean(l, 160)}`) : ["  (no user actions: a page load)"]));
           if (g.truncated) out.push(`Snapshots of ${g.truncated.runs} run(s) left store fields out (up to ${g.truncated.left} of ${g.truncated.total}; registered and component state first, then discovered stores, shallowest first): a field missing there was not compared.`);
           if (g.missingBaseline) {
-            out.push("No baseline run in this group (the first two armed loads are the baselines): nothing to compare with.");
+            out.push(g.plainBaseline && g.runs === 1 ? "This is the load with no added delay, and it recorded other user actions than the slow baselines, so it was not compared with them." : "No baseline run in this group (the first two armed loads are the baselines): nothing to compare with.");
             continue;
           }
           if (g.insufficientBaselines) {
-            out.push(`Only one baseline in this group (another page load took the other baseline slot), so noise (clocks, ids) cannot be told from a race: no verdict. ${g.unfiltered.length} run(s) differed unfiltered. Run genclass_explore again with \`route\` set to this page.`);
+            out.push(`Only one baseline in this group (another page load took the other baseline slot, or the other baseline recorded other user actions), so noise (clocks, ids) cannot be told from a race: no verdict. ${g.unfiltered.length} run(s) differed unfiltered. Run genclass_explore again with \`route\` set to this page, doing the same steps in every load.`);
             continue;
           }
-          if (g.noise.length) out.push(`Ignored as noise (differs between the two baselines): ${g.noise.slice(0, 8).map((n) => clean(n, 60)).join(", ")}`);
-          const seeded = g.compared ?? g.runs - g.baselines.length;
+          if (g.noise.length) out.push(`Ignored as noise (differs between the two baselines): ${g.noise.slice(0, 8).map((n) => clean(n, 60)).join(", ")}${g.noise.length > 8 ? `, and ${g.noise.length - 8} more` : ""}`);
+          if (g.thirdParty?.length) out.push(`Left out of the request counts (other sites, and nothing the user did or this page's own origin asked for led to them): ${g.thirdParty.slice(0, 4).map((n) => q(n, 60)).join(", ")}`);
+          const seeded = g.compared;
           if (!seeded) {
             out.push(seededRuns ? "No verdict: 0 reordered runs were compared in this group (the reordered loads recorded other user actions: see the other groups)." : "No verdict: 0 reordered runs were compared (none has reached a quiet point after its steps yet: run the scenario for the remaining armed loads).");
             continue;
           }
           // tier: what the page showed or sent (a race), store values only, or an overwrite repaired along the way
-          const tierOf = (d: Diff) => d.tier ?? (d.fields.length || d.textOnlyBaseline.length || d.textOnlyRun.length || d.errors.length ? "visible" : "transient");
-          const races = g.diffs.filter((d) => tierOf(d) === "visible");
-          const internal = g.diffs.filter((d) => tierOf(d) === "internal");
-          const along = g.diffs.filter((d) => tierOf(d) === "transient");
-          if (races.length) out.push(`RACE: ${races.length} of ${seeded} reordered run(s) ended in a different state than the baseline (responses in request order): what the page shows, its form values, the writes it sent or its errors differ.`);
-          else out.push(`No race found: none of the ${seeded} compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.`);
+          const races = strongestFirst(g.diffs.filter((d) => d.tier === "visible"));
+          const internal = g.diffs.filter((d) => d.tier === "internal");
+          const along = g.diffs.filter((d) => d.tier === "transient");
+          const noDelay = "the run with no added delay";
+          if (g.delay) {
+            out.push(`RACE: a slow response alone changes the page, no reordering needed: ${g.delay.differing} of ${g.delay.of} slow baselines ended differently from the baseline with no added delay: ${nameDifference(g.delay).replace(/the baseline/g, noDelay)}.`);
+            diffLines(g.delay, `${clean(g.delay.label, 60)}, run ${g.delay.run}, against the baseline with no added delay`, noDelay, "the slow baseline", "no added delay");
+            if (!races.length) out.push(`No more than that: none of the ${seeded} reordered run(s) ended differently from both the slow baselines and ${noDelay}.`);
+          }
+          if (races.length) out.push(`RACE: ${races.length} of ${seeded} reordered run(s) ended in a different state than the baseline (responses in request order): under ${clean(races[0].label, 60)} ${nameDifference(races[0])}.`);
+          else if (!g.delay) out.push(`No race found: none of the ${seeded} compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.`);
           for (const d of races.slice(0, 6)) diffLines(d);
+          if (g.delayCounts?.length) out.push(`Not a race by this check, but worth a look: with added latency the page sent ${g.delayCounts.map((f) => `${q(f.name, 60)} ${clean(f.run, 10)} time(s), ${clean(f.baseline, 10)} with no added delay`).join("; ")}. Nothing recorded makes that a write (no two identical requests in flight, no user action sending it directly): if it is one, a second write can hide here.`);
           if (internal.length) {
-            out.push(`Internal state only (not a race by this check): ${internal.length} of ${seeded} ended with store values, counts of GET requests (a cache refetching once more) or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.`);
+            out.push(`Internal state only (not a race by this check): ${internal.length} of ${seeded} ended with store values, counts of GET requests (a cache refetching once more), counts of POST requests with nothing recorded that makes them a write, or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.`);
             for (const d of internal.slice(0, 3)) diffLines(d);
           }
           if (along.length) {
@@ -372,7 +391,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
             for (const d of along.slice(0, 3)) diffLines(d);
           }
         }
-        if (r.findings.length) out.push("", `Race finding(s): ${r.findings.map((f) => f.id).join(", ")}. Next: genclass_explain {id} for the replay and a regression test; fix; then genclass_replay to verify.`);
+        if (r.findings.length) out.push("", `Race finding(s): ${r.findings.map((f) => f.id).join(", ")}. Next: genclass_explain {id} for the replay and a regression test. If the user asked for a fix: fix it, then genclass_replay to verify.`);
         return { text: out.join("\n") };
       }
       return { text: "action must be start, report or stop", isError: true };
@@ -457,7 +476,8 @@ function evidenceLines(f: Finding, ev: Record<string, unknown>): string[] {
       if (typeof ev.stack === "string") out.push("- Stack:", ...cleanBlock(ev.stack, 12, 200).map((l) => `    ${l}`));
       break;
     case "race": {
-      out.push(`- Explore ${s("session", 10)}: ${(ev.failingRuns as unknown[] | undefined)?.length ?? 1} of ${s("of", 6)} reordered run(s) ended differently from the baseline (responses in request order).`);
+      if (ev.delayOnly) out.push(`- Explore ${s("session", 10)}: ${s("differing", 6)} of ${s("of", 6)} slow baselines ended differently from the baseline with no added delay (a slow response alone, no reordering; below, "baseline" is the run with no added delay).`);
+      else out.push(`- Explore ${s("session", 10)}: ${(ev.failingRuns as unknown[] | undefined)?.length ?? 1} of ${s("of", 6)} reordered run(s) ended differently from the baseline (responses in request order).`);
       for (const x of ((ev.fields as { where: string; name: string; baseline: string; run: string }[]) ?? []).slice(0, 8)) out.push(`- ${x.where === "requests" ? "requests sent to" : x.where} ${q(x.name, 80)}: baseline ${q(x.baseline, 80)}, failing run ${q(x.run, 80)}`);
       for (const l of ((ev.textOnlyBaseline as string[]) ?? []).slice(0, 4)) out.push(`- page text in the baseline only: ${q(l, 100)}`);
       for (const l of ((ev.textOnlyRun as string[]) ?? []).slice(0, 4)) out.push(`- page text in the failing run only: ${q(l, 100)}`);

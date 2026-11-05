@@ -7,7 +7,8 @@
 // It starts the MCP server in-process (its bridge on a free port), a tiny app server (the search page in ./app with
 // the built runtime from packages/runtime/dist), and drives Chromium through the same steps an agent would take with
 // the MCP tools:
-//   1. explore on the buggy page: two baselines + 6 seeded orders with up to 600 ms of extra latency → a race finding;
+//   1. explore on the buggy page: two baselines, one with no added delay, + 6 seeded orders with up to 600 ms of extra
+//      latency → a race finding;
 //   2. replay the finding → reproduced;
 //   3. write the generated regression test and run it with Playwright → fails on the buggy page;
 //   4. switch the server to the fixed page; replay → not reproduced; the regression test → passes; explore → no race.
@@ -116,9 +117,12 @@ const fail = (msg) => {
 };
 
 // 1. explore the buggy page
-console.log(await tool("genclass_explore", { action: "start", runs: 6, slow_ms: 600 }));
+let armed = await tool("genclass_explore", { action: "start", runs: 6, slow_ms: 600 });
+console.log(armed);
 summary.buggyRuns = [];
-for (let i = 0; i < 8; i++) summary.buggyRuns.push(await scenario());
+// the plan says how many loads: 2 baselines, one with no added delay, 6 seeded
+const loadsIn = (text) => Number(/next (\d+) page loads/.exec(text)[1]);
+for (let i = 0; i < loadsIn(armed); i++) summary.buggyRuns.push(await scenario());
 const report = await tool("genclass_explore", { action: "report" });
 console.log(report);
 summary.exploreBuggy = /RACE: (\d+) of (\d+)/.exec(report)?.slice(1).join("/") ?? "no race";
@@ -170,9 +174,10 @@ const t2 = await runTest();
 summary.testOnFixed = t2.status === 0 ? "passed" : "failed";
 console.log(t2.stdout.slice(-1500));
 if (t2.status !== 0) fail("the regression test failed on the fixed page");
-console.log(await tool("genclass_explore", { action: "start", runs: 6, slow_ms: 600 }));
+armed = await tool("genclass_explore", { action: "start", runs: 6, slow_ms: 600 });
+console.log(armed);
 summary.fixedRuns = [];
-for (let i = 0; i < 8; i++) summary.fixedRuns.push(await scenario());
+for (let i = 0; i < loadsIn(armed); i++) summary.fixedRuns.push(await scenario());
 const report2 = await tool("genclass_explore", { action: "report" });
 console.log(report2);
 summary.exploreFixed = /RACE:/.test(report2) ? "race" : "no race";
