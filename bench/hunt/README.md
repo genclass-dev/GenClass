@@ -10,7 +10,7 @@ What one run does:
 1. starts the GenClass MCP server in-process (`@genclass/mcp`, its bridge on a free loopback port) and headless
    Chromium;
 2. arms `genclass_explore` (two baselines with responses in request order, then N seeded orders, optionally slower,
-   like a bad network) and, for each planned load, opens a fresh browser context, puts `@genclass/runtime` on the page
+   like a bad network, which adds a third baseline with no added delay) and, for each planned load, opens a fresh browser context, puts `@genclass/runtime` on the page
    (see "How the injection works"), connects the agent link to the bridge, waits for the page's first quiet point (as
    the generated regression test does), runs the scenario's `steps(page)`, waits for the next quiet point
    (`whenSettled`), and records the scenario's `oracle(page)`;

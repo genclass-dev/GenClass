@@ -369,7 +369,7 @@ function verdictOf(rep, loads, session) {
   let ended = 0;
   let along = 0;
   for (const g of judged) {
-    compared += g.runs - g.baselines.length;
+    compared += g.compared ?? g.runs - g.baselines.length; // the baseline with no added delay is neither
     for (const d of g.diffs) endedDifferently(d) ? ended++ : along++;
   }
   const explored = loads.filter((l) => l.phase === "explore");
