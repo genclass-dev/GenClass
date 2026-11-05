@@ -318,7 +318,7 @@ ${optional()}
 export function signupPage(nonce: string, o: AuthPageOptions): string {
   const inner = `
 <h1>Create your GenClass account</h1>
-<p class="lead">Your account keeps your apps' dashboards in one place, and lets <code>npx ${RUNTIME_PKG} login</code> connect an app for you.</p>
+<p class="lead">Keep every app's dashboard in one place. Free, no card.</p>
 <div class="ways">
 ${signInWays({ ...o, signup: true })}
 <p class="hint">Want extra security? Add a passkey on your account page once you are in. Use a passkey signs in to an account that already has one.</p>
@@ -557,8 +557,8 @@ export interface AccountView {
   notice?: { kind: "ok" | "bad"; text: string };
   /** Dashboards: open (every plan today), or locked, with the plans to see (a plan file without the dashboard). */
   dashboards?: "open" | "plans";
-  /** From the query: the locked dashboard's sign-in (?claim=1). */
-  pick?: { claim: boolean };
+  /** From the query: the locked dashboard's sign-in (?claim=1), and Save it to a free account on /start/<secret> (?save=1). */
+  pick?: { claim: boolean; save?: boolean };
   /** Where to write when every passkey is lost. */
   recovery?: string;
   /** The plan's name (the organization's badge in the header); default Free. */
@@ -818,7 +818,7 @@ ${planBlock}
 hash of your password if you set one (never the password), your passkeys' public keys, your Google account id and your GitHub id and login if
 you link them, your sign-in sessions and the browsers where your password was right, and the projects you own. Nothing else. <a href="/account/billing">Plan and billing</a> · <a href="https://genclass.dev/privacy">Privacy</a> · <a href="https://genclass.dev/terms">Terms</a></footer>
 </div>
-<script type="application/json" id="acfg">${embed({ claim: !!v.pick?.claim })}</script>`;
+<script type="application/json" id="acfg">${embed({ claim: !!v.pick?.claim, save: !!v.pick?.save })}</script>`;
 
   const script = `
 (function(){
@@ -912,6 +912,15 @@ you link them, your sign-in sessions and the browsers where your password was ri
   var cfg = JSON.parse(document.getElementById("acfg").textContent);
   // back from signing in on a locked dashboard link: return to it (its link was kept in this tab only), where the app
   // can be added to this account; otherwise the link field below is ready for it
+  // back from "Save it to a free account" on /start/<secret>: add that app (its link was kept in this tab only) and open it
+  if (cfg.save) {
+    var sv = null;
+    try { sv = sessionStorage.getItem("gc.save"); sessionStorage.removeItem("gc.save"); } catch (e) {}
+    if (sv && /^[A-Za-z0-9]{32}$/.test(sv)) {
+      gcPost("/api/account/projects/claim", { dashboard_url: sv }).then(function(j){ location.replace("/account/apps/" + j.project.id + "#connect"); }).catch(function(){ var l = document.getElementById("link"); if (l) { l.value = location.origin + "/dashboard/" + sv; l.focus(); } });
+      return;
+    }
+  }
   if (cfg.claim) {
     var s = null;
     try { s = sessionStorage.getItem("gc.claim"); sessionStorage.removeItem("gc.claim"); } catch (e) {}

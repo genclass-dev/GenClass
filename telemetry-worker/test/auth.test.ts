@@ -2593,3 +2593,33 @@ describe("accounts: migration 0007 on a database that already has accounts", () 
     expect((await me(env, { cookie: sessionOf((await pwLogin(env, "old@gmail.com")).res) })).json.account.id).toBe("OldAccount0123456789ab");
   });
 });
+
+describe("POST /start signed in: the one click puts the app in the account", () => {
+  it("makes the app there and opens it; JSON has the command; a refused origin goes to the form instead; signed out stays a private link", async () => {
+    const { env, sql } = setup();
+    const up = await pwSignUp(env, "oneclick@example.com");
+    const cookie = sessionOf(up.res);
+    const form = await call(env, "POST", "/start", { cookie });
+    expect(form.status).toBe(303);
+    expect(form.headers.get("location")).toMatch(/^\/account\/apps\/[^/]+#connect$/);
+    const owned = sql.rows("SELECT token, account_id, private_link FROM projects");
+    expect(owned).toHaveLength(1);
+    expect(owned[0]).toMatchObject({ account_id: up.json.account.id, private_link: 0 });
+    const headers = { accept: "application/json", cookie, origin: ORIGIN };
+    const j = await handle(new Request(`${ORIGIN}/start`, { method: "POST", headers }), env, { now: () => clock });
+    expect(j.status).toBe(201);
+    const body = (await j.json()) as Record<string, string>;
+    expect(body.command).toBe(`npx @genclass/runtime@beta init --token ${body.token}`);
+    expect(body.copiedUrl).toMatch(/^\/account\/apps\/[^/]+#connect$/);
+    // no trustworthy Origin (CSRF check): nothing is made, the signed-in form asks
+    const before = sql.rows("SELECT COUNT(*) AS n FROM projects")[0]!.n;
+    const refused = await call(env, "POST", "/start", { cookie, origin: "https://evil.example" });
+    expect(refused.status).toBe(303);
+    expect(refused.headers.get("location")).toBe("/account/new");
+    expect(sql.rows("SELECT COUNT(*) AS n FROM projects")[0]!.n).toBe(before);
+    // signed out: a private link, as on /start
+    const anon = await call(env, "POST", "/start", {});
+    expect(anon.status).toBe(303);
+    expect(anon.headers.get("location")).toMatch(/^\/start\/[A-Za-z0-9]{32}$/);
+  });
+});
