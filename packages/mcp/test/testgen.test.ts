@@ -114,4 +114,20 @@ describe("testgen (AGENT.md §5.3)", () => {
     expect(pathShape("search.results")).toBe("search.results");
     expect(pathShape("user.address2.city")).toBe("user.address2.city");
   });
+
+  it("a field with a generated name is found by the rest of its name; a line with a relative time is no assertion", () => {
+    const r = run([act(0, "click", 'button "Go"')]);
+    const t = regressionTest(finding("race", { fields: [{ where: "field", name: "el-id-*-33", baseline: "default two", run: "default one" }], textOnlyBaseline: ["Edited 3 minutes ago", "Stable line"], textOnlyRun: ["an hour ago", "Stale line"] }), r, { order: "seeded", seed: 2 })!;
+    expect(t).toContain('expect(fieldValue(snap.fields, "el-id-*-33"), "as with responses in request order").toBe("default two");');
+    expect(t).toContain("const fieldValue = ");
+    expect(t).toContain('toContain("Stable line")');
+    expect(t).toContain('not.toContain("Stale line")');
+    expect(t).not.toContain("minutes ago");
+    expect(t).not.toContain("an hour ago");
+    // the helper in the generated file compiles and finds the field whatever its generated part is
+    const src = /const fieldValue = [\s\S]*?\n {2}\};/.exec(t)![0].replace(/: Record<string, string> = \{\}/, " = {}").replace(/: string/g, "");
+    const fieldValue = new Function(`${src}; return fieldValue;`)() as (f: Record<string, string>, n: string) => string | undefined;
+    expect(fieldValue({ "el-id-6882-33": "x", other: "y" }, "el-id-*-33")).toBe("x");
+    expect(fieldValue({ other: "y" }, "el-id-*-33")).toBeUndefined();
+  });
 });
