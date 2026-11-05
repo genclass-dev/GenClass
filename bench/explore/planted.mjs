@@ -87,16 +87,45 @@ const serverSaved = (n) => async (p) => {
   return (await p.evaluate(async (l) => (await fetch("/api/saved?load=" + l)).json(), load)).n !== n;
 };
 
+// two picks in a row, the last answer to arrive shown (the correct variant keeps the latest pick's): a wrong value that
+// reads like a time, which the comparison must not take for one that moved on its own
+const slotBody = (a, b) => () => `<h1>Book a slot</h1><button id="a">First</button><button id="b">Second</button><p id="out">Pick a slot</p><script>
+const BUG = location.search.includes("bug");
+let token = 0;
+const pick = async (v) => {
+  const t = ++token;
+  const d = await fetch("/api/slot?v=" + encodeURIComponent(v)).then((r) => r.json());
+  if (BUG || t === token) document.getElementById("out").textContent = d.line;
+};
+document.getElementById("a").onclick = () => pick(${JSON.stringify(a)});
+document.getElementById("b").onclick = () => pick(${JSON.stringify(b)});
+window.__wrong = () => document.getElementById("out").textContent !== ${JSON.stringify(b)};
+</script>`;
+const twoPicks = async (p) => {
+  await p.click("#a");
+  await p.click("#b");
+};
+
 /** Each scenario: the page's body, the user's steps (`i`: which load), its check, what a report should name when it has a bug. */
 const SCENARIOS = {
-  // a page full of relative times, on a clock that crosses a "minute" every 4 s: it never depends on the order
+  // a page full of ages on a clock twice as fast as a real one (a "minute" every 30 s, so one crosses in most sessions and
+  // moves no further than a session could): it never depends on the order, and a stale search can sit beside it
   times: {
     body: () => `<ul id="ages"></ul>${SEARCH()}<script>
-const n = Math.floor(Date.now() / 4000) % 50 + 2;
-document.getElementById("ages").innerHTML = ["Edited " + n + " minutes ago", "Updated " + n + "m ago", n % 2 ? "an hour ago" : "59 minutes ago", n % 3 ? "just now" : "a minute ago", n % 5 ? "yesterday" : "today", "Today at 3:" + (10 + n) + " PM", n + "m"].map((x) => "<li>" + x + "</li>").join("");
+const n = Math.floor(Date.now() / 30000) % 50 + 2;
+document.getElementById("ages").innerHTML = ["Edited " + n + " minutes ago", "Updated " + n + "m ago", n % 2 ? "an hour ago" : "59 minutes ago", n % 3 ? "just now" : "a minute ago"].map((x) => "<li>" + x + "</li>").join("");
 </script>`,
     steps: typeReact,
     names: /Results for|react/,
+  },
+  // what reads like a time and is taken for a value, moving on the same clock on a correct page: what that decision costs
+  clocks: {
+    bugless: true,
+    body: () => `<ul id="ages"></ul>${SEARCH()}<script>
+const n = Math.floor(Date.now() / 30000) % 50 + 2;
+document.getElementById("ages").innerHTML = ["Today at 3:" + (10 + n) + " PM", n + "m", n % 5 ? "Synced today" : "Synced yesterday"].map((x) => "<li>" + x + "</li>").join("");
+</script>`,
+    steps: typeReact,
   },
   // read-only POSTs whose number depends on arrival order; the page shows the same
   counts: {
@@ -196,6 +225,53 @@ window.__wrong = () => document.getElementById("file").textContent !== "version-
   },
   // a new path on every load (a fresh session, a new document)
   route: { body: () => SEARCH(), steps: typeReact, names: /Results for|react/, freshPath: true },
+  "slot-clock": { body: slotBody("Your appointment: 3:30 PM", "Your appointment: 4:00 PM"), steps: twoPicks, names: /appointment/ },
+  "slot-day": { body: slotBody("Arrives today", "Arrives tomorrow"), steps: twoPicks, names: /Arrives/ },
+  "slot-in": { body: slotBody("Ships in 2 days", "Ships in 5 days"), steps: twoPicks, names: /Ships/ },
+  "slot-ago": { body: slotBody("Last synced 3 days ago", "Last synced just now"), steps: twoPicks, names: /synced/ },
+  "slot-bare": { body: slotBody("3d", "5d"), steps: twoPicks, names: /3d|5d/ },
+  // a save sent behind two answers: the planted page sends it only when one answer beat the other, so it can be lost, and
+  // the page shows the same either way
+  "lost-post": {
+    body: () => `<h1>Notes</h1><button id="s">Save</button><p>Autosaved notes stay on this page</p><script>
+const BUG = location.search.includes("bug");
+const load = new URLSearchParams(location.search).get("load");
+const save = () => fetch("/api/save?load=" + load, { method: "POST", body: "{}" });
+document.getElementById("s").onclick = () => {
+  let lock = false;
+  const l = fetch("/api/a").then((r) => r.json()).then(() => { lock = true; });
+  const c = fetch("/api/b").then((r) => r.json());
+  if (BUG) c.then(() => { if (lock) save(); });
+  else Promise.all([l, c]).then(save);
+};
+</script>`,
+    steps: async (p) => p.locator("#s").click(),
+    wrong: serverSaved(1),
+    names: /POST \/api\/save/,
+    load: true,
+  },
+  // correct pages that vary by themselves: a tip picked at random, a save queue that sends less often when answers are slow
+  tip: {
+    bugless: true,
+    body: () => `<h1>Home</h1><button id="s">Refresh</button><p>${Math.random() < 0.5 ? "Press save often to keep your work" : "Drag and drop files onto the page"}</p><p id="v">none</p><script>
+document.getElementById("s").onclick = () => fetch("/api/a").then((r) => r.json()).then(() => { document.getElementById("v").textContent = "done"; });
+</script>`,
+    steps: async (p) => p.locator("#s").click(),
+  },
+  queue: {
+    bugless: true,
+    body: () => `<h1>Doc</h1><textarea id="t" placeholder="Body"></textarea><p>All changes are kept on the server</p><script>
+let inflight = false, dirty = false;
+const save = () => { if (inflight) { dirty = true; return; } inflight = true; const v = document.getElementById("t").value; fetch("/api/doc", { method: "PUT", body: v }).then((r) => r.json()).then(() => { inflight = false; if (dirty) { dirty = false; save(); } }); };
+document.getElementById("t").addEventListener("input", save);
+</script>`,
+    steps: async (p) => {
+      for (const c of "abcd") {
+        await p.locator("#t").type(c);
+        await p.waitForTimeout(120);
+      }
+    },
+  },
   // a dialog to dismiss in only some loads
   optional: {
     body: () => `<button id="dismiss">Dismiss</button>${SEARCH()}`,
@@ -230,7 +306,10 @@ const app = createServer((req, res) => {
     case "/api/a":
     case "/api/b":
     case "/api/token":
+    case "/api/doc":
       return json(res, { ok: true });
+    case "/api/slot":
+      return json(res, { line: url.searchParams.get("v") }, 20);
     case "/api/counts":
       return json(res, { n: 3 });
     case "/api/save":
@@ -343,7 +422,7 @@ async function score() {
       const raced = new Set(reports.flatMap((g) => g.diffs.filter((y) => (y.tier ?? "visible") === "visible" && g.baselines.length >= 2).map((y) => y.run)));
       const delay = withDelay ? reports.find((g) => g.delay)?.delay : undefined;
       const compared = reports.reduce((n, g) => n + (g.compared ?? (g.baselines.length >= 2 ? g.runs - g.baselines.length : 0)), 0);
-      return { apart: reports.some((g) => g.delayCounts?.length), compared, seeds: seeds.length, races: raced.size, tp: seeds.filter((r) => raced.has(r.id) && wrong.get(r.id)).length, fp: seeds.filter((r) => raced.has(r.id) && !wrong.get(r.id)).length, fn: seeds.filter((r) => !raced.has(r.id) && wrong.get(r.id)).length, delay: !!delay, verdict: raced.size > 0 || !!delay };
+      return { apart: reports.some((g) => g.look), compared, seeds: seeds.length, races: raced.size, tp: seeds.filter((r) => raced.has(r.id) && wrong.get(r.id)).length, fp: seeds.filter((r) => raced.has(r.id) && !wrong.get(r.id)).length, fn: seeds.filter((r) => !raced.has(r.id) && wrong.get(r.id)).length, delay: !!delay, verdict: raced.size > 0 || !!delay };
     };
     const after = tally(cur.compareRuns(runs), true);
     const before = old ? tally(old.compareRuns(runs.filter((r) => !plain(r))), false) : null;
@@ -361,7 +440,7 @@ async function score() {
   }
   const sum = (list, side, key) => list.reduce((n, r) => n + (r[side]?.[key] ?? 0), 0);
   const cell = (list, side) => `${list.filter((r) => r[side]?.verdict).length}/${list.length}; ${sum(list, side, "races")} of ${sum(list, side, "compared")} (true ${sum(list, side, "tp")}, false ${sum(list, side, "fp")}, missed ${sum(list, side, "fn")})`;
-  console.log("| scenario | a load's own check wrong | before: sessions with a RACE; runs reported of compared | after: the same | after: sessions naming a slow response alone | after: headline names the line | after: POST count named apart |");
+  console.log("| scenario | a load's own check wrong | before: sessions with a RACE; runs reported of compared | after: the same | after: sessions naming a slow response alone | after: headline names the line | after: worth a look |");
   console.log("|---|---|---|---|---|---|---|");
   for (const [k, list] of groups) console.log(`| ${k} | ${list.filter((r) => r.anyWrong).length}/${list.length} | ${old ? cell(list, "before") : ""} | ${cell(list, "after")} | ${list.filter((r) => r.after.delay).length} | ${list.filter((r) => r.named).length} | ${list.filter((r) => r.after.apart).length} |`);
   for (const bug of [false, true]) {
