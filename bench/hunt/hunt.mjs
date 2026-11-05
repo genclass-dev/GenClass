@@ -368,9 +368,12 @@ function verdictOf(rep, loads, session) {
   let compared = 0;
   let ended = 0;
   let along = 0;
+  let slow = 0;
   for (const g of judged) {
     compared += g.compared ?? g.runs - g.baselines.length; // the baseline with no added delay is neither
-    for (const d of g.diffs) endedDifferently(d) ? ended++ : along++;
+    // what reached the page or the writes; store values alone (internal) are no race, whatever they ended on
+    for (const d of g.diffs) d.tier ? (d.tier === "visible" ? ended++ : d.tier === "transient" ? along++ : 0) : endedDifferently(d) ? ended++ : along++;
+    if (g.delay) slow++;
   }
   const explored = loads.filter((l) => l.phase === "explore");
   const armed = explored.filter((l) => l.schedule?.id === session);
@@ -385,7 +388,7 @@ function verdictOf(rep, loads, session) {
   }
   for (const l of armed) if (!l.reorder && l.run) l.reorder = reorderOf(mcp.store.runs.get(l.run));
   const out = { compared, notCompared: Math.max(0, seededLoads.length - compared), seeded: seededLoads.length, armed: armed.length, reordered, groups: groups.length, findingIds };
-  if (ended || along) return { kind: "race", ended, along, of: compared, ...out };
+  if (ended || along || slow) return { kind: "race", ended, along, slow, of: compared, ...out };
   let reason;
   const baseFailed = armed.filter((l) => l.schedule?.order === "fifo" && (l.stepsError || l.error));
   if (explored.length && explored.every((l) => l.error)) reason = `every page load failed (first: ${explored[0].error})`;

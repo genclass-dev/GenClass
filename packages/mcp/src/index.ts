@@ -15,5 +15,5 @@ export { serve, channelEvent } from "./server.js";
 export { compareRuns, groupRuns, nameDifference, sameScenario, sameValue, scenarioOf, shownField, strongestFirst } from "./compare.js";
 export type { GroupReport, RunDiff, FieldDiff, Grouping, Tier } from "./compare.js";
 export { regressionTest, locator, actionLines, parseTarget } from "./testgen.js";
-export { clean, fieldShape, q, routeShape, timeless } from "./text.js";
+export { ageless, agesIn, clean, fieldShape, q, routeShape, sameAges } from "./text.js";
 export * from "./types.js";

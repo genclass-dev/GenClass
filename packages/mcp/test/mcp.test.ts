@@ -286,8 +286,8 @@ describe("mcp: tools against a live bridge", () => {
       await p.send([{ t: "steps", steps: [act(0, "type", 'input "Search Notes"', "Mango")], order: [] }, { t: "snapshot", snapshot: snap({}, text) }]);
     }
     const r = await call(c, "genclass_explore", { action: "report" });
-    expect(r.text).toContain('RACE: a slow response alone changes the page, no reordering needed: 2 of 2 slow baselines ended differently from the baseline with no added delay: it shows "Maple note", which the run with no added delay does not.');
-    expect(r.text).toContain('page text only in the slow baseline: "Maple note"');
+    expect(r.text).toContain('RACE: a slow response alone changes the page, no reordering needed: 2 of 2 slow baselines ended the same way, differently from the baseline with no added delay: it shows "Maple note", which the run with no added delay does not.');
+    expect(r.text).toContain('page text only in the slow baselines: "Maple note"');
     expect(r.text).toContain("none of the 2 reordered run(s) ended differently from both");
     expect(r.text).not.toContain("No race found");
     expect(r.text).toContain("Race finding(s): f1");
@@ -322,7 +322,37 @@ describe("mcp: tools against a live bridge", () => {
     }
     const r = await call(c, "genclass_explore", { action: "report" });
     expect(r.text).toContain("No race found");
-    expect(r.text).toContain('worth a look: with added latency the page sent "POST /api/save" 2 time(s), 1 with no added delay.');
+    expect(r.text).toContain('worth a look');
+    expect(r.text).toContain('"POST /api/save" 2 time(s) with added latency, 1 with no added delay');
+    expect(r.text).not.toContain("Race finding(s)");
+  });
+
+  it("explore report: a race finding and NO VERDICT never stand together; with only the baselines it says what they show", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 2, route: "/notes", slow_ms: 600 });
+    for (const text of [["Mango note", "Maple note"], ["Mango note", "Maple note"], ["Mango note"]]) {
+      const p = await page(port, "/notes");
+      await p.send([{ t: "steps", steps: [act(0, "type", 'input "Search Notes"', "Mango")], order: [] }, { t: "snapshot", snapshot: snap({}, text) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("Compared: 0 of 0 reordered run(s)");
+    expect(r.text).toContain("RACE: a slow response alone changes the page");
+    expect(r.text).toContain("Race finding(s): f1");
+    expect(r.text).not.toContain("NO VERDICT");
+    expect(r.text).toContain("No verdict on reordering");
+  });
+
+  it("explore report: what one slow baseline did is worth a look, named, with no race and no finding", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 2, route: "/home", slow_ms: 300 });
+    for (const text of [["Home", "Tip: press save often"], ["Home", "Tip: drag and drop files"], ["Home", "Tip: press save often"], ["Home", "Tip: drag and drop files"], ["Home", "Tip: press save often"]]) {
+      const p = await page(port, "/home");
+      await p.send([{ t: "steps", steps: [act(0, "click", 'button "Refresh"')], order: [] }, { t: "snapshot", snapshot: snap({}, text) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("No race found");
+    expect(r.text).toContain("worth a look");
+    expect(r.text).toContain('"Tip: drag and drop files" only in one slow baseline, and in 1 of 2 reordered run(s)');
     expect(r.text).not.toContain("Race finding(s)");
   });
 
@@ -330,7 +360,8 @@ describe("mcp: tools against a live bridge", () => {
     const { c, port } = await start();
     await call(c, "genclass_explore", { action: "start", runs: 1 });
     const none = await call(c, "genclass_explore", { action: "report" });
-    expect(none.text).not.toContain("NO VERDICT");
+    expect(none.text).toContain("NO VERDICT");
+    expect(none.text).not.toContain("No race found");
     const first = await page(port, "/session/ses_e58736abdffeddC6WIDC8dXc3z");
     await first.send([{ t: "steps", steps: [act(0, "click", 'button "Send"')], order: [] }, { t: "snapshot", snapshot: snap({}, ["Same"]) }]);
     const one = await call(c, "genclass_explore", { action: "report" });

@@ -325,14 +325,16 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
         const s = r.session;
         out.push(`Explore ${s.id}: ${s.runs.length} of ${s.plan.length} planned loads recorded (${r.runs.filter((x) => x.settled).length} reached a quiet point).`);
         if (s.runs.length < s.plan.length) out.push(`Missing ${s.plan.length - s.runs.length} load(s): run the scenario again for the rest, or report now with what there is.`);
-        if (!r.groups.length) out.push("No run reached a quiet point yet: wait for whenSettled() after the steps.");
+        if (!r.groups.length) out.push("NO VERDICT: no run reached a quiet point yet, so nothing was compared and this report says nothing about races on this page, either way. Wait for whenSettled() after the steps.");
         const seededRuns = r.runs.filter((x) => x.settled && x.schedule?.order !== "fifo").length;
         const compared = r.groups.reduce((n, g) => n + g.compared, 0);
         if (r.groups.length) {
           const level = r.groups[0].grouping;
           const how = level === "optional" ? " (grouped by action kinds, leaving out up to two actions only some loads did: the recorded steps differed between loads)" : level === "kinds" ? " (grouped by action kinds only: the recorded element names and roles differed between loads)" : level === "roles" ? " (grouped by action kinds and element roles: the recorded element names differed between loads)" : "";
           out.push(`Compared: ${compared} of ${seededRuns} reordered run(s) against two baselines${how}.`);
-          if (!compared) out.push("NO VERDICT: nothing was compared, so this report says nothing about races on this page, either way. It is not a clean result. The per-scenario notes below say why; run the missing loads, or the same steps in every load.");
+          // the baselines can still have something to say: a verdict on them is one, on reordering there is none
+          if (!compared && r.groups.some((g) => g.delay)) out.push("No verdict on reordering: no reordered run was compared. What the baselines alone show is below.");
+          else if (!compared) out.push("NO VERDICT: nothing was compared, so this report says nothing about races on this page, either way. It is not a clean result. The per-scenario notes below say why; run the missing loads, or the same steps in every load.");
         }
         // the page's own lines first, then what it sent; store values and refetch counts only as far as there is room
         const diffLines = (d: Diff, label = `run ${d.run} (${clean(d.label, 60)})`, base = "the baseline", self = "this run", baseValue = "baseline") => {
@@ -365,6 +367,11 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
           if (g.noise.length) out.push(`Ignored as noise (differs between the two baselines): ${g.noise.slice(0, 8).map((n) => clean(n, 60)).join(", ")}${g.noise.length > 8 ? `, and ${g.noise.length - 8} more` : ""}`);
           if (g.thirdParty?.length) out.push(`Left out of the request counts (other sites, and nothing the user did or this page's own origin asked for led to them): ${g.thirdParty.slice(0, 4).map((n) => q(n, 60)).join(", ")}`);
           const seeded = g.compared;
+          const noDelay = "the run with no added delay";
+          if (g.delay) {
+            out.push(`RACE: a slow response alone changes the page, no reordering needed: ${g.delay.differing} of ${g.delay.of} slow baselines ended the same way, differently from the baseline with no added delay: ${nameDifference(g.delay).replace(/the baseline/g, noDelay)}.`);
+            diffLines(g.delay, `${clean(g.delay.label, 60)}, run ${g.delay.run}, against the baseline with no added delay`, noDelay, "the slow baselines", "no added delay");
+          }
           if (!seeded) {
             out.push(seededRuns ? "No verdict: 0 reordered runs were compared in this group (the reordered loads recorded other user actions: see the other groups)." : "No verdict: 0 reordered runs were compared (none has reached a quiet point after its steps yet: run the scenario for the remaining armed loads).");
             continue;
@@ -373,18 +380,22 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
           const races = strongestFirst(g.diffs.filter((d) => d.tier === "visible"));
           const internal = g.diffs.filter((d) => d.tier === "internal");
           const along = g.diffs.filter((d) => d.tier === "transient");
-          const noDelay = "the run with no added delay";
-          if (g.delay) {
-            out.push(`RACE: a slow response alone changes the page, no reordering needed: ${g.delay.differing} of ${g.delay.of} slow baselines ended differently from the baseline with no added delay: ${nameDifference(g.delay).replace(/the baseline/g, noDelay)}.`);
-            diffLines(g.delay, `${clean(g.delay.label, 60)}, run ${g.delay.run}, against the baseline with no added delay`, noDelay, "the slow baseline", "no added delay");
-            if (!races.length) out.push(`No more than that: none of the ${seeded} reordered run(s) ended differently from both the slow baselines and ${noDelay}.`);
-          }
+          if (g.delay && !races.length) out.push(`No more than that: none of the ${seeded} reordered run(s) ended differently from both the slow baselines and ${noDelay}.`);
           if (races.length) out.push(`RACE: ${races.length} of ${seeded} reordered run(s) ended in a different state than the baseline (responses in request order): under ${clean(races[0].label, 60)} ${nameDifference(races[0])}.`);
           else if (!g.delay) out.push(`No race found: none of the ${seeded} compared reordered run(s) ended with a different page, form values, writes or errors than the baseline.`);
           for (const d of races.slice(0, 6)) diffLines(d);
-          if (g.delayCounts?.length) out.push(`Not a race by this check, but worth a look: with added latency the page sent ${g.delayCounts.map((f) => `${q(f.name, 60)} ${clean(f.run, 10)} time(s), ${clean(f.baseline, 10)} with no added delay`).join("; ")}. Nothing recorded makes that a write (no two identical requests in flight, no user action sending it directly): if it is one, a second write can hide here.`);
+          if (g.look) {
+            const says = [
+              ...g.look.lines.map((l) => `${q(l.text, 80)} ${l.only === "slow" ? "only in one slow baseline" : "in the run with no added delay and only one slow baseline"}${l.runs ? `, and in ${l.runs} of ${seeded} reordered run(s)` : ""}`),
+              ...g.look.drift.map(([slow, plain]) => `${q(slow, 80)} with added latency, ${q(plain, 80)} with no added delay`),
+              ...g.look.errors.map((e) => `the error ${q(e, 100)} in only one slow baseline`),
+              ...g.look.fields.map((f) => `${f.where === "requests" ? "requests sent to" : "form field"} ${q(f.name, 60)}: ${q(f.run, 40)} in one slow baseline, ${q(f.baseline, 40)} in the run with no added delay`),
+              ...g.look.writes.map((f) => `${q(f.name, 60)} ${clean(f.run, 10)} time(s) with added latency, ${clean(f.baseline, 10)} with no added delay`),
+            ];
+            out.push(`Not a race by this check, but worth a look (it rests on one load against one load, a number a little off, or a count of writes alone, and chance, a counter or a save queue can do that): ${says.join("; ")}. If it is a bug it hides here: check the page.`);
+          }
           if (internal.length) {
-            out.push(`Internal state only (not a race by this check): ${internal.length} of ${seeded} ended with store values, counts of GET requests (a cache refetching once more), counts of POST requests with nothing recorded that makes them a write, or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.`);
+            out.push(`Internal state only (not a race by this check): ${internal.length} of ${seeded} ended with store values, counts of GET requests (a cache refetching once more), a different non-zero count of a POST with nothing recorded that makes it a write, or announcements (a toast a slower run let expire) that differ from the baseline while the page showed the same. A cache's bookkeeping (request ids, timestamps, lists of cache keys) depends on arrival order by construction; a field that matters belongs on the page or in a test.`);
             for (const d of internal.slice(0, 3)) diffLines(d);
           }
           if (along.length) {

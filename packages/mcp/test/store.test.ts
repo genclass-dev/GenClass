@@ -164,15 +164,50 @@ describe("store: explore (AGENT.md §5.1)", () => {
     expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false });
   });
 
-  it("a replay reads a line with a relative time by its shape, a minute later", () => {
-    const s = new Store();
+  it("a replay reads a line with an age by its form and the time since, not by its digits", () => {
+    let clock = 1_000_000;
+    const s = new Store({ now: () => clock });
     const x = s.armExplore({ runs: 1, route: "/flows" });
-    runExplore(s, [["1", ["Edited 3 minutes ago"]], ["1", ["Edited 3 minutes ago"]], ["1", ["Edited 3 minutes ago", "Edited 4 minutes ago"]]], "/flows");
+    runExplore(s, [["1", ["Edited 3 minutes ago"]], ["1", ["Edited 3 minutes ago"]], ["1", ["Edited 3 minutes ago", "Edited 40 minutes ago"]]], "/flows");
     const f = s.reportExplore(x.id)!.findings[0];
+    // six minutes later both rows have moved on by that
+    clock += 360_000;
     s.armReplay(f.id);
     const r = load(s, "/flows");
-    r.send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "1", "search.input": "react" }, ["Edited 9 minutes ago", "Edited 9 minutes ago"]) }]);
+    r.send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "1", "search.input": "react" }, ["Edited 9 minutes ago", "Edited 46 minutes ago"]) }]);
     expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true });
+    s.armReplay(f.id);
+    const fixed = load(s, "/flows");
+    fixed.send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "1", "search.input": "react" }, ["Edited 9 minutes ago"]) }]);
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false });
+  });
+
+  it("a stored finding on a field with a plain name replays (qty-100 read by its name, not by its shape)", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 1, route: "/cart" });
+    const go = (qty: string) => {
+      const r = load(s, "/cart");
+      r.send([{ t: "steps", steps: [act(0, "click", 'button "Go"')], order: [] }, { t: "snapshot", snapshot: snap({}, ["Cart"], { fields: { "qty-100": qty } }) }]);
+    };
+    go("1");
+    go("1");
+    go("2");
+    const f = s.reportExplore(x.id)!.findings[0];
+    s.armReplay(f.id);
+    go("2");
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true });
+    s.armReplay(f.id);
+    go("1");
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false });
+  });
+
+  it("no finding from what one slow baseline did: the report names it, a race needs both", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 2, route: "/home", delay: { minMs: 0, maxMs: 600 } });
+    runExplore(s, [["1", ["Home", "Tip: press save often"]], ["1", ["Home", "Tip: drag and drop files"]], ["1", ["Home", "Tip: press save often"]], ["1", ["Home", "Tip: press save often"]], ["1", ["Home", "Tip: drag and drop files"]]], "/home");
+    const rep = s.reportExplore(x.id)!;
+    expect(rep.findings).toEqual([]);
+    expect(rep.groups[0].look?.lines).toHaveLength(2);
   });
 
   it("a page with a new path on every load gets every armed schedule, and one finding", () => {

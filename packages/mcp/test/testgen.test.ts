@@ -130,4 +130,20 @@ describe("testgen (AGENT.md §5.3)", () => {
     expect(fieldValue({ "el-id-6882-33": "x", other: "y" }, "el-id-*-33")).toBe("x");
     expect(fieldValue({ other: "y" }, "el-id-*-33")).toBeUndefined();
   });
+
+  it("a field with nothing but a generated name gets a note, not a regex that matches every field (review of PR 168)", () => {
+    const r = run([act(0, "click", 'button "Go"')]);
+    const t = regressionTest(finding("race", { fields: [{ where: "field", name: "*", baseline: "billing@x", run: "other@x" }] }), r, { order: "seeded", seed: 2 })!;
+    expect(t).not.toContain("fieldValue");
+    expect(t).toContain("has only a generated name");
+    expect(t).toContain("could not derive a generic assertion");
+  });
+
+  it("a line with a clock or a day in it is a value and is asserted; only an age is left out", () => {
+    const r = run([act(0, "click", 'button "Go"')]);
+    const t = regressionTest(finding("race", { textOnlyBaseline: ["Your appointment: 4:00 PM", "Edited 3 minutes ago"], textOnlyRun: ["Arrives today"] }), r, { order: "seeded", seed: 2 })!;
+    expect(t).toContain('toContain("Your appointment: 4:00 PM")');
+    expect(t).toContain('not.toContain("Arrives today")');
+    expect(t).not.toContain("minutes ago");
+  });
 });
