@@ -31,19 +31,21 @@
   field names, Open WebUI's relative times and counts), and it missed real bugs. Rescored from those reports: 0 of 120
   ([RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md), "explore's verdict on real
   apps", with what the rescoring cannot see and the recall next to it). What changed:
-  - An age ("13 minutes ago", "an hour ago", "just now", "10m ago") is one line within how long the session ran plus a
-    minute, whatever the baselines did. Nothing else moves on its own: "3:30 PM", "today", "in 2 days" and a bare "3d" are
+  - An age ("13 minutes ago", "an hour ago", "just now", "10m ago") is one line when the later load is older by about the
+    time between the two, plus a minute, whatever the baselines did. Nothing else moves on its own: "3:30 PM", "today", "in 2 days" and a bare "3d" are
     values a page can get wrong, compared as they are unless the baselines show them varying.
   - A different non-zero count of a POST, with the page the same, is no race without two identical requests in flight or
     a user action sending it directly a different number of times. A POST one side never sent stays a race, however it was
     sent. PUT, PATCH and DELETE counts are as before. **Cost:** a duplicate POST behind another request or a timer, not
-    overlapping, with the page unchanged, is internal now (measured there).
-  - A field name that differs between the baselines compares with itself by its shape (`el-id-*-32`, `*-input`); a name
-    both baselines have is a name (`qty-100`).
+    overlapping, with the page unchanged, is internal now (measured there), and "No race found" says a duplicate write may
+    have happened and to check what the server holds.
+  - A field name some baseline lacks compares with itself by its shape (`el-id-*-32`, `*-input`); a name every baseline
+    has is a name (`qty-100`), whatever row beside it is new.
   - **With `slow_ms` the plan has one more load**: a baseline with no added delay after the two slow ones (`runs + 3`
     loads; `--repeat-each 9` for `runs: 6`). What both slow baselines show the same and it does not is reported first
-    (`RACE: a slow response alone changes the page`, a race finding replaying the slow schedule). What one slow baseline
-    alone does stays noise and is named under "worth a look".
+    (`RACE: a slow response alone changes the page`, a race finding replaying the slow schedule; `RACE, on one load's word`
+    when no other load sides with it). What one slow baseline alone does, and a line only it shows, is named under "worth
+    a look", and is no race.
   - Noise blanks only the tokens that varied, at their position: "version-1" against "version-2" stays a difference when
     a number elsewhere varied, and another number on that line may drift a little and no further.
   - Report text: page content before labels before counts, in each run's list and in which runs come first; the
@@ -52,8 +54,9 @@
     action only some loads did no longer splits a session, and a report that compared nothing says `NO VERDICT`, never
     beside a race finding.
   - Safe requests to other sites leave the counts unless a user action or the page's own origin led to them, and a bare
-    count on the page beside a store field such a site's one response wrote is internal. They still join the schedule
-    (that needs the runtime's agent entry).
+    count on the page is internal only when it stands for a store field one such response alone wrote, with no overwrite
+    recorded on it. They still join the schedule (that needs the runtime's agent entry).
+  - `sameValue` no longer backtracks on many redactions in a row: a page could hang the bridge for seconds with one value.
   - A race finding's report says to fix only if the user asked for a fix.
 
 - **The plugin's repository vendors the server, and the lockfile is gone.** In

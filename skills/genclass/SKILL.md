@@ -54,7 +54,7 @@ shows which pages and endpoints the GenClass dashboard flagged.
    - "Internal state only" and "Along the way only" are not races: store values the page did not show (a cache's
      own bookkeeping depends on arrival order by construction), and overwrites a later response repaired.
    - "Worth a look" is no race either: one slow baseline against the load with no added delay, which chance can do.
-     Check the page it names before you call the page clear.
+     Check the page it names, and the server for a write it names, before you call the page clear.
 
 ## 3. Scan a page
 
