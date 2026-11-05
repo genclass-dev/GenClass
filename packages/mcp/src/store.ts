@@ -13,8 +13,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { compareRuns, endedDifferently, sameScenario, sameValue, settledAfterActs, shownField, stateValue, type FieldDiff, type GroupReport, type RunDiff, multiset } from "./compare.js";
-import { clean, pathShape, q, shape, sigOf } from "./text.js";
+import { compareRuns, endedDifferently, fieldValue, nameDifference, sameScenario, sameValue, settledAfterActs, shownField, stateValue, strongestFirst, type FieldDiff, type GroupReport, type RunDiff, multiset } from "./compare.js";
+import { agesIn, clean, pathShape, q, routeShape, sameAges, shape, sigOf, type Elapsed } from "./text.js";
 import type { ExploreSession, Finding, FindingKind, ReplayArm, Run, ScheduleSpec, Step } from "./types.js";
 import * as V from "./validate.js";
 
@@ -104,14 +104,16 @@ export class Store {
     if (h.mode || h.model) run.runtime = { ...(h.mode ? { mode: h.mode } : {}), ...(h.model ? { model: h.model } : {}) };
     // a schedule the page set itself (a regression test, a URL, hold: false) wins; otherwise what the agent armed
     if (!h.schedule) {
-      const arm = this.replays.find((r) => r.remaining > 0 && now - r.created < ARM_TTL_MS && (!r.route || r.route === h.route));
+      // one page to a schedule, even when it has a new path on every load (/session/<id>)
+      const here = routeShape(h.route);
+      const arm = this.replays.find((r) => r.remaining > 0 && now - r.created < ARM_TTL_MS && (!r.route || routeShape(r.route) === here));
       if (arm) {
         arm.remaining--;
         arm.runs.push(id);
         run.schedule = { ...arm.spec, id: arm.finding, label: `replay of ${arm.finding}` };
         run.assignment = { kind: "replay", ref: arm.finding, index: arm.runs.length - 1, label: `replay of ${arm.finding}` };
       } else {
-        const x = [...this.explores.values()].find((s) => s.state === "armed" && now - s.created < ARM_TTL_MS && (!s.route || s.route === h.route));
+        const x = [...this.explores.values()].find((s) => s.state === "armed" && now - s.created < ARM_TTL_MS && (!s.route || routeShape(s.route) === here));
         if (x) {
           // an explore armed without a route belongs to the page of its first load: other pages and tabs keep out
           if (!x.route) x.route = h.route;
@@ -403,7 +405,8 @@ export class Store {
 
   /**
    * Arm an explore session: two fifo baselines, then `runs` seeded orders, all with the same extra latency when asked
-   * (so timing alone never separates the baselines from the seeded runs).
+   * (so timing alone never separates the baselines from the seeded runs). With extra latency, a third baseline without it
+   * comes after the two: a bug that needs only a slow response has something to differ from (AGENT.md section 5.1).
    */
   armExplore(o: { runs?: number; route?: string; focus?: string[]; delay?: { minMs: number; maxMs: number }; seed?: number }): ExploreSession {
     for (const x of this.explores.values()) if (x.state === "armed") x.state = "stopped";
@@ -414,6 +417,7 @@ export class Store {
     // never cut short (1500 is the page's default maxHoldMs; 30 s its cap)
     const slow = (spec: ScheduleSpec): ScheduleSpec => (o.delay ? { ...spec, delay: o.delay, maxHoldMs: Math.min(30_000, 1500 + o.delay.maxMs) } : spec);
     const plan: ScheduleSpec[] = [slow({ order: "fifo", label: "baseline 1 (responses in request order)" }), slow({ order: "fifo", label: "baseline 2 (responses in request order)" })];
+    if (o.delay) plan.push({ order: "fifo", label: "baseline without added delay" });
     for (let i = 0; i < n; i++) {
       const spec: ScheduleSpec = slow({ order: "seeded", seed: seed0 + i, label: `seed ${seed0 + i}` });
       if (o.focus?.length) spec.focus = o.focus.slice(0, 20);
@@ -433,9 +437,10 @@ export class Store {
 
   /**
    * Compare an explore session's runs; a group with two baselines and a run whose difference reached the page (its
-   * text, form values, requests or errors) becomes (or refreshes) a race finding. Differences in store values only, and
-   * overwrites a later response repaired, are reported in the groups but make no finding. A run already counted for a
-   * finding is not counted again when the same session is reported twice.
+   * text, form values, writes or errors) becomes (or refreshes) a race finding, and so does a slow baseline that ended
+   * differently from the baseline with no added delay (what a slow response alone does; replays its slow schedule).
+   * Differences in store values only, and overwrites a later response repaired, are reported in the groups but make no
+   * finding. A run already counted for a finding is not counted again when the same session is reported twice.
    */
   reportExplore(id?: string): { session: ExploreSession; groups: GroupReport[]; findings: Finding[] } | null {
     const x = id ? this.explores.get(id) : this.latestExplore();
@@ -446,28 +451,30 @@ export class Store {
     const counted = new Set(x.counted ?? []);
     for (const g of groups) {
       if (g.insufficientBaselines) continue;
-      const races = g.diffs.filter((y) => y.tier === "visible");
+      const races = strongestFirst(g.diffs.filter((y) => y.tier === "visible"));
+      const finding = (d: RunDiff, tag: string, title: string, extra: Record<string, unknown>): void => {
+        const run = this.runs.get(d.run);
+        if (!run) return;
+        // keyed by what the page showed or sent (store values that differ along with it are evidence, not identity)
+        const shown = d.fields.filter(shownField);
+        const kindOfDiff = shown.length ? `fields:${shown.map((f) => f.name).sort().join(",")}` : d.errors.length ? `error:${shape(d.errors[0])}` : "text";
+        const key = `race|${routeShape(g.route)}|${g.scenarioKey.slice(0, 600)}|${tag}${kindOfDiff}`;
+        const replay: ScheduleSpec = run.schedule ? { ...run.schedule } : { order: "given", given: run.order.slice() };
+        delete replay.id;
+        delete replay.label;
+        const evidence = { session: x.id, scenario: g.scenario, baselines: g.baselines, noise: g.noise, ...d, endedDifferently: endedDifferently(d), ...extra };
+        const existing = this.byKey.get(key);
+        if (existing && counted.has(`${run.id}|${key}`)) {
+          const f = this.findings.get(existing);
+          if (f) findings.push(f);
+          return;
+        }
+        findings.push(this.upsert(key, "race", g.route, run, { title, evidence, replay, replace: true }));
+        counted.add(`${run.id}|${key}`);
+      };
+      if (g.delay) finding(g.delay, "slow|", delayTitle(g.delay, g.delay.oneLoad), { delayOnly: true, plainBaseline: g.plainBaseline, failingRuns: [{ run: g.delay.run, label: g.delay.label, endedDifferently: true }], of: g.delay.of, differing: g.delay.differing });
       const d = races[0];
-      if (!d) continue;
-      const run = this.runs.get(d.run);
-      if (!run) continue;
-      // keyed by what the page showed or sent (store values that differ along with it are evidence, not identity)
-      const shown = d.fields.filter(shownField);
-      const kindOfDiff = shown.length ? `fields:${shown.map((f) => f.name).sort().join(",")}` : d.errors.length ? `error:${shape(d.errors[0])}` : "text";
-      const key = `race|${g.route}|${g.scenarioKey.slice(0, 600)}|${kindOfDiff}`;
-      const replay: ScheduleSpec = run.schedule ? { ...run.schedule } : { order: "given", given: run.order.slice() };
-      delete replay.id;
-      delete replay.label;
-      const evidence = { session: x.id, scenario: g.scenario, baselines: g.baselines, noise: g.noise, ...d, endedDifferently: endedDifferently(d), failingRuns: races.map((y) => ({ run: y.run, label: y.label, endedDifferently: endedDifferently(y) })), of: g.compared };
-      const existing = this.byKey.get(key);
-      if (existing && counted.has(`${run.id}|${key}`)) {
-        const f = this.findings.get(existing);
-        if (f) findings.push(f);
-        continue;
-      }
-      const f = this.upsert(key, "race", g.route, run, { title: raceTitle(d), evidence, replay, replace: true });
-      counted.add(`${run.id}|${key}`);
-      findings.push(f);
+      if (d) finding(d, "", raceTitle(d), { failingRuns: races.map((y) => ({ run: y.run, label: y.label, endedDifferently: endedDifferently(y) })), of: g.compared });
     }
     x.counted = [...counted].slice(-500);
     if (x.state === "collecting" && x.runs.length >= x.plan.length) x.state = "stopped";
@@ -531,7 +538,8 @@ export class Store {
         reproduced = hit;
         note = hit ? "the same error was thrown again" : "the error did not recur";
       } else if (f.kind === "race") {
-        const v = raceVerdict(ev, r);
+        // an age in a line of the finding has moved on by as long as has passed since
+        const v = raceVerdict(ev, r, { min: r.started - orig!.started - (orig!.snapshot?.t ?? 0), max: r.started + (r.snapshot?.t ?? 0) - orig!.started });
         reproduced = scenarioMatches ? v.reproduced : null;
         note = v.note;
       } else note = "replays verify stale-write, duplicate-request, error and race findings";
@@ -704,24 +712,26 @@ function loadFinding(v: unknown): Finding | null {
   return out;
 }
 
-/** A race finding's title, by what differed (page strings quoted). */
+/** A race finding's title, by what differed, the most telling evidence first (page strings quoted). */
 function raceTitle(d: RunDiff): string {
-  const shown = d.fields.filter(shownField);
-  if (shown.length) return `The final state depends on response order: ${shown.slice(0, 2).map((f) => `${f.where === "requests" ? "requests to" : f.where} ${q(f.name, 60)} (${q(f.baseline, 40)} in request order, ${q(f.run, 40)} under ${q(d.label, 30)})`).join("; ")}`;
-  if (d.errors.length) return `An error depends on response order: ${q(d.errors[0], 120)} under ${q(d.label, 30)}, not in request order`;
-  if (d.textOnlyRun.length) return `The page depends on response order: it shows ${q(d.textOnlyRun[0], 80)} under ${q(d.label, 30)}, not in request order`;
-  if (d.textOnlyBaseline.length) return `The page depends on response order: it no longer shows ${q(d.textOnlyBaseline[0], 80)} under ${q(d.label, 30)}`;
+  if (d.fields.some(shownField) || d.errors.length || d.textOnlyRun.length || d.textOnlyBaseline.length) return `The page depends on response order: under ${q(d.label, 30)} ${nameDifference(d)}`;
   if (d.fields.length) return `The final state depends on response order: ${d.fields.slice(0, 2).map((f) => `${f.where} ${q(f.name, 60)} (${q(f.baseline, 40)} in request order, ${q(f.run, 40)} under ${q(d.label, 30)})`).join("; ")}`;
   const w = d.witnesses[0] ?? "";
   if (w.startsWith("identical-in-flight")) return `The same request was sent twice under ${q(d.label, 30)}, not in request order (the final state matched the baseline): ${q(w, 160)}`;
   return `An older response overwrote newer data under ${q(d.label, 30)} (the final state matched the baseline; users would see it flicker): ${q(w, 160)}`;
 }
 
+/** The title of what a slow response alone does: the "baseline" in nameDifference() is the run with no added delay. */
+function delayTitle(d: RunDiff, oneLoad?: boolean): string {
+  const said = nameDifference(d).replace(/the baseline/g, "the run with no added delay");
+  return oneLoad ? `With added latency the page ends differently from the one load with no added delay, the only load that differs (it may be the odd one out): ${said}` : `The page depends on a slow response, no reordering needed: with added latency ${said}`;
+}
+
 /** Does a replay run show the race finding's difference again? From the evidence of the failing run. */
-function raceVerdict(ev: Record<string, unknown>, r: Run): { reproduced: boolean | null; note: string } {
+function raceVerdict(ev: Record<string, unknown>, r: Run, later: Elapsed): { reproduced: boolean | null; note: string } {
   const snap = r.snapshot!;
-  const all = (ev.fields as { where: string; name: string; baseline: string; run: string }[] | undefined) ?? [];
-  const val = (d: { where: string; name: string }) => (d.where === "state" ? stateValue(snap.state, d.name) : d.where === "field" ? snap.fields?.[d.name] : snap.requests[d.name] !== undefined ? String(snap.requests[d.name]) : undefined) ?? "(absent)";
+  const all = (ev.fields as { where: string; name: string; baseline: string; run: string; except?: string[] }[] | undefined) ?? [];
+  const val = (d: { where: string; name: string; except?: string[] }) => (d.where === "state" ? stateValue(snap.state, d.name) : d.where === "field" ? fieldValue(snap.fields, d.name, d.except) : snap.requests[d.name] !== undefined ? String(snap.requests[d.name]) : undefined) ?? "(absent)";
   const byValues = (fields: typeof all): { reproduced: boolean | null; note: string } => {
     const same = fields.every((d) => sameValue(val(d), d.run));
     const fixed = fields.every((d) => sameValue(val(d), d.baseline));
@@ -737,9 +747,17 @@ function raceVerdict(ev: Record<string, unknown>, r: Run): { reproduced: boolean
   }
   // lines count: a line the page always shows once (a product card) and the failing run showed twice (a stale result
   // too) reproduces only when the replay shows it as many times as the failing run did
-  const shownN = multiset(snap.text ?? []);
+  // compared as the comparison did: a line that says "5 minutes ago" is the same line a minute later
+  const lines = snap.text ?? [];
   const counts = (ev.textCounts as Record<string, { baseline: number; run: number }> | undefined) ?? {};
-  const seen = (l: string) => shownN.get(l) ?? 0;
+  const seen = (l: string) => {
+    const x = agesIn(l);
+    return lines.filter((o) => {
+      if (o === l) return true;
+      const y = x && agesIn(o);
+      return !!x && !!y && y.form === x.form && sameAges(x.ages, y.ages, later);
+    }).length;
+  };
   const onlyRun = (ev.textOnlyRun as string[] | undefined) ?? [];
   const onlyBase = (ev.textOnlyBaseline as string[] | undefined) ?? [];
   if (onlyRun.length || onlyBase.length) {

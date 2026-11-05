@@ -133,6 +133,96 @@ describe("store: explore (AGENT.md §5.1)", () => {
     expect(s.findings.get(f.id)!.count).toBe(1);
   });
 
+  it("with added latency a third baseline without it follows the two; the other schedules keep theirs", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 2, route: "/search", delay: { minMs: 0, maxMs: 600 } });
+    expect(x.plan.map((p) => [p.order, !!p.delay])).toEqual([["fifo", true], ["fifo", true], ["fifo", false], ["seeded", true], ["seeded", true]]);
+    expect(x.plan[2].label).toBe("baseline without added delay");
+    expect(s.armExplore({ runs: 2, route: "/search" }).plan.map((p) => p.order)).toEqual(["fifo", "fifo", "seeded", "seeded"]);
+  });
+
+  it("what a slow response alone does is a race finding that replays the slow schedule", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 2, route: "/notes", delay: { minMs: 0, maxMs: 600 } });
+    const ids = runExplore(s, [["[]", ["Mango note", "Maple note"]], ["[]", ["Mango note", "Maple note"]], ["[]", ["Mango note"]], ["[]", ["Mango note"]], ["[]", ["Mango note"]]], "/notes");
+    const rep = s.reportExplore(x.id)!;
+    expect(rep.groups[0].diffs).toEqual([]);
+    expect(rep.groups[0].delay).toMatchObject({ differing: 2, of: 2, textOnlyRun: ["Maple note"] });
+    expect(rep.findings).toHaveLength(1);
+    const f = rep.findings[0];
+    expect(f.run).toBe(ids[0]);
+    expect(f.title).toBe('The page depends on a slow response, no reordering needed: with added latency it shows "Maple note", which the run with no added delay does not');
+    expect(f.replay).toMatchObject({ order: "fifo", delay: { minMs: 0, maxMs: 600 } });
+    // its replay: the slow line again is reproduced, the plain baseline's page is not
+    s.armReplay(f.id);
+    const again = load(s, "/notes");
+    again.send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "[]", "search.input": "react" }, ["Mango note", "Maple note"]) }]);
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true });
+    s.armReplay(f.id);
+    const fixed = load(s, "/notes");
+    fixed.send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "[]", "search.input": "react" }, ["Mango note"]) }]);
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false });
+  });
+
+  it("a replay reads a line with an age by its form and the time since, not by its digits", () => {
+    let clock = 1_000_000;
+    const s = new Store({ now: () => clock });
+    const x = s.armExplore({ runs: 1, route: "/flows" });
+    runExplore(s, [["1", ["Edited 3 minutes ago"]], ["1", ["Edited 3 minutes ago"]], ["1", ["Edited 3 minutes ago", "Edited 40 minutes ago"]]], "/flows");
+    const f = s.reportExplore(x.id)!.findings[0];
+    // six minutes later both rows have moved on by that
+    clock += 360_000;
+    s.armReplay(f.id);
+    const r = load(s, "/flows");
+    r.send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "1", "search.input": "react" }, ["Edited 9 minutes ago", "Edited 46 minutes ago"]) }]);
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true });
+    s.armReplay(f.id);
+    const fixed = load(s, "/flows");
+    fixed.send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "1", "search.input": "react" }, ["Edited 9 minutes ago"]) }]);
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false });
+  });
+
+  it("a stored finding on a field with a plain name replays (qty-100 read by its name, not by its shape)", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 1, route: "/cart" });
+    const go = (qty: string) => {
+      const r = load(s, "/cart");
+      r.send([{ t: "steps", steps: [act(0, "click", 'button "Go"')], order: [] }, { t: "snapshot", snapshot: snap({}, ["Cart"], { fields: { "qty-100": qty } }) }]);
+    };
+    go("1");
+    go("1");
+    go("2");
+    const f = s.reportExplore(x.id)!.findings[0];
+    s.armReplay(f.id);
+    go("2");
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true });
+    s.armReplay(f.id);
+    go("1");
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false });
+  });
+
+  it("no finding from what one slow baseline did: the report names it, a race needs both", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 2, route: "/home", delay: { minMs: 0, maxMs: 600 } });
+    runExplore(s, [["1", ["Home", "Tip: press save often"]], ["1", ["Home", "Tip: drag and drop files"]], ["1", ["Home", "Tip: press save often"]], ["1", ["Home", "Tip: press save often"]], ["1", ["Home", "Tip: drag and drop files"]]], "/home");
+    const rep = s.reportExplore(x.id)!;
+    expect(rep.findings).toEqual([]);
+    expect(rep.groups[0].look?.lines).toHaveLength(2);
+  });
+
+  it("a page with a new path on every load gets every armed schedule, and one finding", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 2 });
+    const path = (id: string) => `/session/ses_${id}7abdffeddC6WIDC8dXc3z`;
+    expect(load(s, path("a1")).schedule?.order).toBe("fifo");
+    expect(load(s, path("b2")).schedule?.order).toBe("fifo");
+    expect(load(s, path("c3")).schedule?.order).toBe("seeded");
+    // a place of its own stays out
+    expect(load(s, "/settings").schedule).toBeNull();
+    expect(load(s, path("d4")).schedule?.order).toBe("seeded");
+    expect(x.state).toBe("collecting");
+  });
+
   it("no difference, no race", () => {
     const s = new Store();
     const x = s.armExplore({ runs: 2 });
@@ -183,7 +273,7 @@ describe("store: explore (AGENT.md §5.1)", () => {
   it("slow_ms slows the baselines too, and widens the hold by the largest delay", () => {
     const s = new Store();
     const x = s.armExplore({ runs: 1, delay: { minMs: 0, maxMs: 800 } });
-    expect(x.plan.every((p) => p.delay?.maxMs === 800 && p.maxHoldMs === 2300)).toBe(true);
+    expect(x.plan.filter((p) => p.label !== "baseline without added delay").every((p) => p.delay?.maxMs === 800 && p.maxHoldMs === 2300)).toBe(true);
   });
 
   it("a run is compared only from a snapshot taken after its steps", () => {

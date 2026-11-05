@@ -340,12 +340,19 @@ agent:  genclass_findings → f1 [stale-write] /search: the response to GET /api
         genclass_replay arm f1 → (loads the page, types) → result: REPRODUCED
         (fixes the handler to keep only the latest answer, adds the test)
         genclass_replay arm f1 → result: not reproduced
-        genclass_explore start {slow_ms: 600} → 8 runs → report: no race
+        genclass_explore start {slow_ms: 600} → 9 runs → report: no race
 ```
 
 On a real page in headless Chromium (the package's end-to-end check), explore found that race in 5 of 6 reordered runs
 of a page that never showed it on the developer's fast backend, the generated test failed on the buggy page and passed
 on the fixed one, and explore on the fixed page reported nothing. Details: [docs/runtime/AGENT.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md).
+
+What it calls a race is what the page shows or writes, not the noise of a running page: an age that moved by the time
+the session took ("13 minutes ago", "14 minutes ago"), a field name made for each load and a different count of a POST
+that only reads are not differences by themselves; "3:30 PM" against "4:00 PM" and a save that never went out are. With
+`slow_ms` one load runs with no added delay (`runs + 3` loads: 2 slow baselines, that one, and the reordered runs): what
+both slow baselines show and it does not is named as what a slow response alone does, and what only one of them does is
+"worth a look". A report that compared nothing says `NO VERDICT`, not "no race".
 
 ## Tools
 
