@@ -13,9 +13,10 @@
 //   - a report has no send steps, so a POST count here never has "sent directly by a user action" as evidence;
 //   - a run's list was cut at 6 fields and 4 lines a side, and a partner filed as noise by the old rule is not listed: so a
 //     field with a generated name listed as absent on one side (its partner was noise, or cut) is taken to be there with
-//     the same value, and a line that holds a relative time is dropped from a list that hit its cap or a report whose
-//     noise holds a relative time. Both are this script's reading of the text, not the comparison: the raw runs a hunt
-//     kept check the first (`--raw <state.json>` compares a bridge's recorded runs directly).
+//     the same value, and a line that holds an age is dropped from a list that hit its cap or a report whose noise holds
+//     an age. Both are this script's reading of the text, not the comparison: the raw runs a hunt kept check the first
+//     (`--raw <state.json>` compares a bridge's recorded runs directly);
+//   - the runs here have no times, so two ages are one line within one minute, the least a real session gets.
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -25,7 +26,7 @@ const args = process.argv.slice(2);
 const dir = resolve(args[0] ?? ".");
 const opt = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const here = new URL(".", import.meta.url);
-const { compareRuns, shownField, fieldShape, timeless } = await import(pathToFileURL(resolve(opt("--dist") ?? new URL("../../packages/mcp/dist", here).pathname, "index.js")).href);
+const { compareRuns, shownField, fieldShape, agesIn } = await import(pathToFileURL(resolve(opt("--dist") ?? new URL("../../packages/mcp/dist", here).pathname, "index.js")).href);
 
 const walk = (d) => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
 const strings = (s) => [...s.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => JSON.parse(`"${m[1]}"`));
@@ -98,8 +99,7 @@ function runsOf(g, plan) {
   for (const r of g.listed) {
     r.capped = r.onlyBase.length >= 4 || r.onlyRun.length >= 4;
     if (r.capped || g.timeNoise) {
-      // "Today" has no partner a digit rule could have hidden: a count of those is what the run showed
-      const partnerHidden = (l) => timeless(l) !== l && /\d|\bago\b/.test(l);
+      const partnerHidden = (l) => !!agesIn(l);
       r.onlyBase = r.onlyBase.filter((l) => !partnerHidden(l));
       r.onlyRun = r.onlyRun.filter((l) => !partnerHidden(l));
     }
