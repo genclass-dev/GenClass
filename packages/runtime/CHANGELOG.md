@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `init` prints much less after it applies: the telemetry note is two lines (still what is sent, how to turn it off and
+  the link), the next steps name the overlay first, and the optional upgrades are one line pointing at `init --dry-run`,
+  which still lists them.
+
 ## 0.3.0-beta.5 (2026-11-02)
 
 Security fixes from the adversarial review of the mode-raise fix (`0.3.0-beta.2`); the same four fixes are in `0.2.3`
