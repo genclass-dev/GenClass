@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { CLIENTS } from "../src/clients.js";
+import { CLIENTS, RUNTIME_VERSION } from "../src/clients.js";
 import { SKILL_MARK, SKILL_PATH, configCmd, hookCmd, init, runCli, skillText } from "../src/cli.js";
 import { VERSION } from "../src/http.js";
 import { startBridge, type Bridge } from "../src/http.js";
@@ -87,6 +87,22 @@ describe("cli (AGENT.md §4.4)", () => {
     expect(x.o.join("")).toContain(`Wrote the genclass skill (the procedure Claude Code loads for timing bugs) to ${file}`);
     expect(existsSync(join(dir, ".claude", "settings.json"))).toBe(false); // no hook without --hook
     expect(JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8")).mcpServers.genclass.args).toEqual(["-y", `@genclass/mcp@${VERSION}`]);
+  });
+
+  it("the skill init writes waits for a yes and names the exact runtime; the lines it prints are behind the development check", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gc-init-"));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ devDependencies: { vite: "7" } }));
+    const x = io(dir);
+    expect(init(x, false)).toBe(0);
+    const flat = readFileSync(join(dir, SKILL_PATH), "utf8").replace(/\s+/g, " ");
+    expect(flat).toContain("Show the user those lines and wait for a yes before you run or add any of them.");
+    expect(flat).toContain("wait for a yes before you write a fix or a test");
+    expect(flat).toContain("ask which they want and wait for a yes: `npx playwright install chromium`");
+    expect(flat).toContain(`npx @genclass/runtime@${RUNTIME_VERSION} scan <url> --json --local`);
+    expect(flat).not.toContain("@genclass/runtime@beta");
+    const said = x.o.join("");
+    expect(said).toContain(`npm install @genclass/runtime@${RUNTIME_VERSION}`);
+    expect(said).toContain("if (import.meta.env.DEV) {\n  const rt = GenClass.init();\n  connectAgent(rt);\n}");
   });
 
   it("init again replaces a skill file that carries the marker and leaves one that does not, saying which", () => {

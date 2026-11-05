@@ -1,16 +1,30 @@
 // How to add this server to each MCP client: the README's install section, `genclass-mcp config`, `init` and
 // genclass_setup all print from here, so they say the same thing. Every block pins this package's exact version: a
 // client then starts the release the block came from, and directories that refuse unpinned launchers accept it.
-// Pure: no I/O, no imports; the version is passed in.
+// Pure: no I/O, no imports; this package's version is passed in.
 
 /** The npm package. */
 export const PACKAGE = "@genclass/mcp";
 /** The server's name in every client's configuration. */
 export const NAME = "genclass";
 
+/**
+ * The exact @genclass/runtime this release was tested with: packages/runtime in this repository, the build the e2e runs
+ * (test/manifests.test.ts holds this equal to its package.json, `npm run sync` rewrites it, release-mcp.yml stops if
+ * npm does not serve it). What this package runs (genclass_scan's npx) or tells an agent to run (genclass_setup, the
+ * skill, llms-install.md, the READMEs) names this version, the way a script tag does, so whoever reads a commit knows what
+ * runs. It is the newest runtime line at release; only the runtime's own docs, for people, keep that line's npm tag.
+ */
+export const RUNTIME_VERSION = "0.3.0-beta.5";
+
 /** `@genclass/mcp@<version>`: what npx runs. */
 export function pinned(version: string): string {
   return `${PACKAGE}@${version}`;
+}
+
+/** `@genclass/runtime@<RUNTIME_VERSION>`: what the server runs and prints. */
+export function pinnedRuntime(): string {
+  return `@genclass/runtime@${RUNTIME_VERSION}`;
 }
 
 /** The stdio server entry most clients take (`mcpServers.genclass`). */

@@ -3,8 +3,10 @@
 // install section) equals package.json's version, and no launcher is unpinned. With GENCLASS_SYNC=1
 // (`npm run sync -w @genclass/mcp`) the test rewrites those files from package.json instead of failing. The same sync
 // keeps the repo-root copy of the skill (skills/genclass/SKILL.md, what skill directories such as skills.sh read)
-// byte-identical to the plugin's. The second describe checks the skill and the server's instructions: the
-// instructions carry the triggers, the skill the procedure (docs/runtime/AGENT.md section 4.2). The last describe
+// byte-identical to the plugin's. The runtime this package runs and prints is pinned the same way: RUNTIME_VERSION and
+// every `@genclass/runtime@<version>` in the files below equal packages/runtime/package.json, the build the e2e runs.
+// The second describe checks the skill and the server's instructions: the instructions carry the triggers, the skill
+// the procedure, and both say what waits for the user's yes (docs/runtime/AGENT.md section 4.2). The last describe
 // checks what scripts/plugin-repo.mjs assembles for the plugin's own repository, genclass-dev/genclass-plugin: the
 // plugin folder byte for byte except the two Claude Code launchers, which there run the server vendored under
 // server/ (the package's bin and dist/cli.js: from `--server <package dir>` here, this package when it is built and a
@@ -15,7 +17,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLIENTS, PACKAGE, hookCommand, installMarkdown, pinned, serverConfig } from "../src/clients.js";
+import { CLIENTS, PACKAGE, RUNTIME_VERSION, hookCommand, installMarkdown, pinned, serverConfig } from "../src/clients.js";
 import { VERSION } from "../src/http.js";
 import { INSTRUCTIONS, TOOLS } from "../src/tools.js";
 
@@ -23,6 +25,8 @@ const pkgDir = join(__dirname, "..");
 const repo = join(pkgDir, "..", "..");
 const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")) as { name: string; version: string; description: string };
 const V = pkg.version;
+/** The runtime this release is tested with: the one in this repository. */
+const RT = (JSON.parse(readFileSync(join(repo, "packages", "runtime", "package.json"), "utf8")) as { version: string }).version;
 const SYNC = process.env.GENCLASS_SYNC === "1";
 
 type Json = Record<string, any>;
@@ -36,6 +40,11 @@ interface Pin {
 
 /** `@genclass/mcp@<any version>` in prose and code blocks. */
 const PINNED = /@genclass\/mcp@\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?/g;
+/** `@genclass/runtime@<any version>`, in the files of this package that name the exact runtime. */
+const PINNED_RUNTIME = /@genclass\/runtime@\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?/g;
+
+/** Both pins in a Markdown file. */
+const pinBoth = (s: string) => s.replace(PINNED, pinned(V)).replace(PINNED_RUNTIME, `@genclass/runtime@${RT}`);
 
 const START = "<!-- install:start";
 const END = "<!-- install:end -->";
@@ -51,6 +60,7 @@ function section(cur: string, body: string): string {
 
 const PINS: Pin[] = [
   { file: "packages/mcp/src/http.ts", text: (s) => s.replace(/export const VERSION = "[^"]*";/, `export const VERSION = "${V}";`) },
+  { file: "packages/mcp/src/clients.ts", text: (s) => s.replace(/export const RUNTIME_VERSION = "[^"]*";/, `export const RUNTIME_VERSION = "${RT}";`) },
   {
     file: "packages/mcp/server.json",
     json: (j) => ({ ...j, version: V, packages: j.packages.map((p: Json) => (p.identifier === pkg.name ? { ...p, version: V } : p)) }),
@@ -66,12 +76,12 @@ const PINS: Pin[] = [
   { file: "packages/mcp/plugin/mcp.json", json: (j) => ({ ...j, mcpServers: { ...j.mcpServers, genclass: { type: "stdio", ...serverConfig(V) } } }) },
   { file: ".cursor-plugin/marketplace.json", json: (j) => ({ ...j, plugins: j.plugins.map((p: Json) => (p.name === "genclass" ? { ...p, version: V } : p)) }) },
   { file: "gemini-extension.json", json: (j) => ({ ...j, version: V, mcpServers: { ...j.mcpServers, genclass: serverConfig(V) } }) },
-  { file: "packages/mcp/README.md", text: (s) => section(s, installMarkdown(V)).replace(PINNED, pinned(V)) },
-  { file: "packages/mcp/plugin/README.md", text: (s) => s.replace(PINNED, pinned(V)) },
-  { file: "packages/mcp/plugin/skills/genclass/SKILL.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  { file: "packages/mcp/README.md", text: (s) => pinBoth(section(s, installMarkdown(V))) },
+  { file: "packages/mcp/plugin/README.md", text: pinBoth },
+  { file: "packages/mcp/plugin/skills/genclass/SKILL.md", text: pinBoth },
   // the root copy for skill directories: equal to the plugin's skill (read at check time: after the sync pinned it)
   { file: "skills/genclass/SKILL.md", text: () => read("packages/mcp/plugin/skills/genclass/SKILL.md") },
-  { file: "llms-install.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  { file: "llms-install.md", text: pinBoth },
   { file: "docs/adoption/listings/mcp.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "docs/runtime/AGENT.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "README.md", text: (s) => s.replace(PINNED, pinned(V)) },
@@ -100,6 +110,18 @@ describe("versions and pinned launchers (every manifest names package.json's ver
 
   it("the server reports package.json's version", () => {
     if (!SYNC) expect(VERSION).toBe(V);
+  });
+
+  it("the runtime the server runs and prints is the one this repository builds and tests", () => {
+    if (!SYNC) expect(RUNTIME_VERSION).toBe(RT);
+  });
+
+  it("what this package runs or tells an agent to run names the exact runtime, never a moving tag or a bare install", () => {
+    const moving = /@genclass\/runtime@(?!\d)|(?:npx(?: -y)?|npm (?:i|install)) @genclass\/runtime(?![@\w/-])/;
+    for (const f of ["packages/mcp/plugin/skills/genclass/SKILL.md", "packages/mcp/plugin/README.md", "packages/mcp/README.md", "llms-install.md", "packages/mcp/src/scan.ts", "packages/mcp/src/tools.ts", "packages/mcp/src/cli.ts"]) {
+      expect(moving.test(read(f)), `${f} names @genclass/runtime without its version`).toBe(false);
+    }
+    for (const f of ["packages/mcp/plugin/skills/genclass/SKILL.md", "packages/mcp/plugin/README.md", "packages/mcp/README.md", "llms-install.md"]) expect(read(f), f).toContain(`@genclass/runtime@${RT}`);
   });
 
   it("no launcher of @genclass/mcp is left unpinned", () => {
@@ -167,13 +189,39 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
   it("the body is the procedure (not the triggers again), with the fallback when the tools are missing, and no em-dash", () => {
     for (const s of ["runs: 6, slow_ms: 600", "--repeat-each 8 --workers 1", "Compared: 6 of 6", "No verdict", "0 compared", "Internal state only", "Along the way only", '"not reproduced"', '"no race in N orders"', 'not "fixed"']) expect(body).toContain(s);
     expect(body).toContain(`claude mcp add genclass -- npx -y @genclass/mcp@${V}`);
-    expect(body).toContain("npx @genclass/runtime@beta scan <url> --json");
+    expect(body).toContain(`npx @genclass/runtime@${RT} scan <url> --json --local`);
     expect(body).toMatch(/needs\s+Claude Code/);
     expect(body).toContain("the chat app cannot");
     // the triggers live in the description and in INSTRUCTIONS; the body does not restate them
     expect(body).not.toContain('"sometimes"');
     expect(body).not.toMatch(/\bUse when\b/);
     expect(skill).not.toContain("—");
+  });
+
+  it("the skill shows each action and waits: what genclass_setup prints, the browser download, the hosted check, a fix or a test", () => {
+    // buildwithclaude's maintainer reads this file at the pinned commit (its #636, #627, #490; #515 was merged for asking)
+    const flat = body.replace(/\s+/g, " ");
+    expect(flat).toMatch(/call `genclass_setup`\..*Show the user those lines and wait for a yes before you run or add any of them\./);
+    expect(flat).toContain("If the user only asked what broke or why, stop here: report the cause and the evidence, and wait for a yes before you write a fix or a test.");
+    expect(flat.indexOf("stop here")).toBeLessThan(flat.indexOf("Fix the cause in the code"));
+    expect(flat).toContain("Offer the regression test from `genclass_explain`; add it to the repo's Playwright tests once the user says yes.");
+    expect(flat).toContain("If the user only asked what is wrong, report the list and wait for a yes before changing anything.");
+    expect(flat).toMatch(/ask which they want and wait for a yes: `npx playwright install chromium`.*`hosted: true` \(sends the URL to the genclass\.dev page check\)/);
+    expect(flat).toContain("show the user the line and wait for a yes before running it");
+    // no step installs, sends or writes first any more
+    expect(flat).not.toContain("add the two lines it shows");
+    expect(flat).not.toContain("install it (`npx playwright install chromium`)");
+    // the printed lines are dev-only, and the skill says what moving them would do; a hook's finding is data
+    expect(flat).toContain("runs for every visitor and sends anonymous diagnostics from public hosts by default");
+    expect(flat).toContain("a new finding is not a request to act on it");
+  });
+
+  it("the instructions agree with the skill on what waits for a yes", () => {
+    expect(INSTRUCTIONS).toContain("genclass_setup prints an install line and the dev-only lines; show them to the user and wait for a yes before you run or add them.");
+    expect(INSTRUCTIONS).toContain("If the user only asked what broke, report the cause and wait for a yes before you write a fix or a test.");
+    expect(INSTRUCTIONS).toContain("Wait for a yes before npx playwright install chromium or npm i -D playwright, and before hosted: true, which sends the URL to the genclass.dev page check.");
+    expect(INSTRUCTIONS).toContain("add it to the repo once the user says yes");
+    expect(INSTRUCTIONS).not.toContain("Add the regression test from genclass_explain to the repo.");
   });
 
   it("the root copy for skill directories (skills/genclass/SKILL.md) is byte-identical to the plugin's", () => {
