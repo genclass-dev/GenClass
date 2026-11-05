@@ -165,7 +165,7 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
   });
 
   it("the body is the procedure (not the triggers again), with the fallback when the tools are missing, and no em-dash", () => {
-    for (const s of ["runs: 6, slow_ms: 600", "--repeat-each 8 --workers 1", "Compared: 6 of 6", "No verdict", "0 compared", "Internal state only", "Along the way only", '"not reproduced"', '"no race in N orders"', 'not "fixed"']) expect(body).toContain(s);
+    for (const s of ["runs: 6, slow_ms: 600", "--repeat-each 9 --workers 1", "Compared: 6 of 6", "No verdict", "0 compared", "Internal state only", "Along the way only", '"not reproduced"', '"no race in N orders"', 'not "fixed"']) expect(body).toContain(s);
     expect(body).toContain(`claude mcp add genclass -- npx -y @genclass/mcp@${V}`);
     expect(body).toContain("npx @genclass/runtime@beta scan <url> --json");
     expect(body).toMatch(/needs\s+Claude Code/);
