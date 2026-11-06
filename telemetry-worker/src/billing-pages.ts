@@ -74,7 +74,7 @@ export interface BillingView {
 const BILLING_CSS = `
 .plans{display:grid;grid-template-columns:repeat(${PLANS.length},minmax(0,1fr));gap:16px}
 .plan{background:var(--s75);border:1px solid var(--rule);border-radius:6px;padding:20px;display:flex;flex-direction:column;gap:10px;min-width:0}
-.plan.cur,.plan.pick{border-color:#0f5a37;background:var(--accent-t)}
+.plan.cur,.plan.pick{border-color:var(--accent-b);background:var(--accent-t)}
 .plan h3{font-size:18px;margin:0}
 .plan .price{font:400 14px var(--mono);color:var(--ink)}
 .plan .sum{font-size:13px;color:var(--ink2);line-height:1.5}
@@ -84,22 +84,18 @@ const BILLING_CSS = `
 .plan li.soon{color:var(--ink3)}
 .plan li.soon::before{border-color:var(--ink3)}
 .plan .act{margin-top:auto;padding-top:10px}
-.plan .tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;font:500 10.5px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--accent);background:var(--accent-t);border:1px solid #0f5a37}
+.plan .tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;font:500 10.5px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--accent);background:var(--accent-t);border:1px solid var(--accent-b)}
 .status{margin-top:6px;font-size:14px;line-height:1.55;max-width:80ch;color:var(--ink2)}
 .status b{color:var(--ink);font-weight:500}
 .status a{color:var(--ink)}
 @media (max-width:860px){.plans{grid-template-columns:1fr}}
 `;
 
-function statusLine(v: BillingView, plan: Plan, apps: number): string {
+function statusLine(v: BillingView, plan: Plan): string {
   const b = v.billing;
   const name = `<b>${esc(plan.name)}</b>`;
   if (plan.id === "free") {
     if (v.access.source === "comp") return `You have <b>${esc(v.access.plan.name)}</b>, set up by GenClass. Questions: <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.`;
-    const has = entitled(plan, "dashboard")
-      ? `the runtime, its on-device model and the dashboard, with ${plan.limits.history_days} days of history`
-      : "the runtime and its on-device model, without the dashboard";
-    const limits = `${has} (you have ${apps} app${apps === 1 ? "" : "s"}).`;
     const overdue = !!b.subscription_id && (b.subscription_status === "past_due" || b.subscription_status === "unpaid");
     // a subscription not ended while the account reads as Free, with nothing sold on the site (or a stored plan GenClass
     // no longer sells): one to a retired plan (plans.json retired_plans; the webhook stores its plan as free). Paying it
@@ -117,7 +113,7 @@ function statusLine(v: BillingView, plan: Plan, apps: number): string {
       : b.subscription_id && b.current_period_end && b.subscription_status === "canceled" && Date.parse(b.current_period_end) > v.now.getTime() - GRACE_DAYS * 86_400_000
         ? ` Your paid plan ended on ${day(b.current_period_end)}. Data older than 90 days stays for ${GRACE_DAYS} days after that, in case you come back.`
         : "";
-    return `You are on the ${name} plan: ${limits}${ended}${v.live || !PAID_PLANS.length ? "" : " Paid plans are not on sale yet."}`;
+    return `You are on the ${name} plan.${ended}${v.live || !PAID_PLANS.length ? "" : " Paid plans are not on sale yet."}`;
   }
   if (!b.subscription_id) return `You are on the ${name} plan, set up by GenClass. Questions: <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.`;
   if (b.subscription_status === "past_due") {
@@ -181,8 +177,9 @@ export function billingPage(nonce: string, v: BillingView): string {
     subscribed && v.live && !want && between
       ? `<p class="intro">Switching between ${esc(between)} opens Stripe's checkout for the new plan. Your current plan stays until that payment goes through, then ends at once, and its unused days are refunded to the card or account that paid for it.</p>`
       : "";
+  // Stripe Managed Payments: Link is the merchant of record, so the page names it next to the plans
   const managed = v.live && v.managedPlans?.length
-    ? ` ${esc(v.managedPlans.join(" and "))} ${v.managedPlans.length > 1 ? "are" : "is"} sold through Link, Stripe's merchant of record service: Link's name is on the receipt and on your card statement, it adds sales tax or VAT where it applies, and it answers questions about the payment.`
+    ? `<p class="intro">${esc(v.managedPlans.join(" and "))} ${v.managedPlans.length > 1 ? "are" : "is"} sold through Link, Stripe's merchant of record service.</p>`
     : "";
   const custom =
     PAID_PLANS.includes(plan) && entitled(plan, "custom_model") && !!v.billing.subscription_id
@@ -196,7 +193,7 @@ export function billingPage(nonce: string, v: BillingView): string {
 <div class="sb-page" id="mc" tabindex="-1">
 <header class="sb-ph" id="top"><div>
   <h1>Plan and billing</h1>
-  <p class="status" id="status">${statusLine(v, plan, v.apps.length)}</p>
+  <p class="status" id="status">${statusLine(v, plan)}</p>
   ${custom}
 </div></header>
 ${notice}${test}
@@ -204,25 +201,19 @@ ${notice}${test}
   <div class="blk-h"><h2>Plans</h2>${PAID_PLANS.length ? '<span class="aside">US dollars, billed monthly</span>' : ""}</div>
   <div class="plans">${PLANS.map((p) => planColumn(v, p, plan)).join("")}</div>
   <p class="err" id="planerr" role="alert"></p>
-  ${switchNote}
+  ${switchNote}${managed}
   <p class="intro">${esc(PLANS_FILE.footer).replace(esc(CONTACT), `<a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>`)}</p>
 </section>
 ${
   manage
     ? `<section class="blk" id="manage">
   <div class="blk-h"><h2>Manage billing</h2><span class="aside">On Stripe</span></div>
-  <p class="intro">Change your card, see and download invoices, or cancel. A cancelled plan stays until the end of the period you paid for.${between ? ` To switch between ${esc(between)}, use the buttons under Plans.` : ""}</p>
+  <p class="intro">Card, invoices and cancellation.</p>
   <div class="acct-form"><button class="btn ghost" type="button" id="portal"><span>Manage billing</span></button></div>
   <p class="err" id="portalerr" role="alert"></p>
 </section>`
     : ""
 }
-<footer class="dfoot">${
-    PAID_PLANS.length || manage
-      ? `Payments are handled by Stripe.${managed} GenClass stores your Stripe customer and subscription ids, the subscription's
-status and renewal date, and your plan; never card details. `
-      : ""
-  }<a href="https://genclass.dev/privacy">Privacy</a> · <a href="https://genclass.dev/terms">Terms</a></footer>
 </div>
 <script type="application/json" id="cfg">${embed({ want })}</script>`;
 
@@ -370,16 +361,13 @@ function destinationForm(kind: Kind, set: boolean, disabled: boolean): string {
       fields = f("fw-webhook-url", "URL", `<input id="fw-webhook-url" name="url" type="url" autocomplete="off" spellcheck="false" placeholder="https://example.com/hooks/genclass"${dis}>`);
       break;
   }
-  const help: Record<Kind, string> = {
-    sentry: "Sentry gets one event per record, level warning, grouped by problem type and page.",
-    posthog: "PostHog gets a <code>genclass detection</code> event per record, without person profiles.",
-    datadog: "Datadog gets one log per record, source <code>genclass</code>, tagged with the problem type and page.",
-    slack: "Slack gets one short message per record with a link to this dashboard.",
-    webhook:
-      "Your endpoint gets a JSON POST per record. It is signed: the <code>x-genclass-signature</code> header is <code>t=&lt;unix time&gt;,v1=&lt;hex&gt;</code>, the HMAC-SHA256 of <code>t</code>, a dot and the body, under the secret shown once after you save.",
-  };
+  // only the webhook needs a word: how to check its signature
+  const help =
+    kind === "webhook"
+      ? '<p class="intro">Signed: <code>x-genclass-signature</code> is <code>t=&lt;unix time&gt;,v1=&lt;hex&gt;</code>, the HMAC-SHA256 of <code>t</code>, a dot and the body, with the secret shown once after you save.</p>'
+      : "";
   return `<details class="more" id="fw-${kind}"><summary>${set ? "Change" : "Set up"} ${KIND_NAMES[kind]}</summary>
-  <p class="intro">${help[kind]}</p>
+  ${help}
   <form class="xf" data-kind="${kind}" novalidate>${fields}<button class="btn" type="submit"${dis}><span>Save</span></button></form>
   <p class="err" data-err="${kind}" role="alert"></p><p class="ok" data-ok="${kind}" role="status"></p>
 </details>`;
@@ -391,7 +379,7 @@ export function appExtrasHtml(nonce: string, d: AppExtras): { html: string; scri
   const ex = entitled(d.plan, "export");
   let forwarding: string;
   if (!fw) {
-    forwarding = `<p class="intro">On ${esc(plansWith("forwarding"))}, GenClass sends each new detection from this app to Sentry, PostHog, Datadog, Slack or your own webhook. It is sent from our server, so nothing changes in your app. ${SEE_PLANS}</p>`;
+    forwarding = `<p class="intro">Included in ${esc(plansWith("forwarding"))}. ${SEE_PLANS}</p>`;
   } else {
     const byKind = new Map(d.destinations.map((x) => [x.kind, x]));
     const rows = KINDS.map((k) => {
@@ -404,8 +392,7 @@ export function appExtrasHtml(nonce: string, d: AppExtras): { html: string; scri
         : `<a href="#fw-${k}" data-open="${k}">Set up</a>`;
       return `<tr><td>${KIND_NAMES[k]}${x ? `<div class="muted">${esc(x.summary)}</div>` : ""}</td><td data-l="Status">${status}</td><td data-l="Last sent">${x ? time(x.lastSent, "ago", "never") : ""}</td><td class="e" data-l="Last error">${x?.lastError ? esc(x.lastError) : ""}</td><td class="act">${acts}</td></tr>`;
     }).join("\n");
-    forwarding = `<p class="intro">Each new detection is sent from our server to the destinations you turn on: the problem type, confidence, trigger, page route, runtime and model versions, the time and a link to this dashboard. Never text from your pages. The same problem on the same page is sent at most once an hour, and at most 60 records an hour for this app.</p>
-  ${d.canSave ? "" : '<p class="caution"><b>Not available on this server yet.</b> Forwarding settings are stored encrypted, and this server has no encryption key set, so they cannot be saved.</p>'}
+    forwarding = `${d.canSave ? "" : '<p class="caution"><b>Not available on this server yet.</b> No encryption key is set.</p>'}
   <div class="tablewrap"><table class="dt rows"><thead><tr><th>Destination</th><th>Status</th><th>Last sent</th><th>Last error</th><th></th></tr></thead><tbody>
 ${rows}
   </tbody></table></div>
@@ -415,7 +402,7 @@ ${rows}
 
   let exportHtml: string;
   if (!ex) {
-    exportHtml = `<p class="intro">On ${esc(plansWith("export"))} you can download every event GenClass receives for this app from the day you upgrade, kept a year, as JSON Lines or CSV, or read it with an API key. ${SEE_PLANS}</p>`;
+    exportHtml = `<p class="intro">Included in ${esc(plansWith("export"))}. ${SEE_PLANS}</p>`;
   } else {
     const keys = d.exportKeys.length
       ? `<div class="tablewrap"><table class="dt rows"><thead><tr><th>Export key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>${d.exportKeys
@@ -423,7 +410,7 @@ ${rows}
           .join("")}</tbody></table></div>`
       : '<p class="intro">No export keys yet.</p>';
     const curl = `curl -H "Authorization: Bearer gce_..." \\\n  "https://genclass.dev/api/account/projects/${d.projectId}/events?from=2026-10-01&to=2026-10-14&format=jsonl"`;
-    exportHtml = `<p class="intro">Every event GenClass received for this app${everyPlan("export") ? "" : ` while this account was on ${esc(plansWith("export", "or"))}`}, kept ${d.keep >= 365 ? "1 year" : `${d.keep} days`}: one JSON object per line as the collector stored it (the batch's session id, versions, time received, country and the event), or one CSV row per event.</p>
+    exportHtml = `${everyPlan("export") ? "" : `<p class="intro">Covers the time this account was on ${esc(plansWith("export", "or"))}.</p>`}
   <form class="xf" id="exf" novalidate>
     <div class="f sm"><label for="exfrom">From</label><input id="exfrom" type="date"></div>
     <div class="f sm"><label for="exto">To (inclusive)</label><input id="exto" type="date"></div>
@@ -432,7 +419,7 @@ ${rows}
   </form>
   <p class="ok" id="exstat" role="status"></p><p class="err" id="exerr" role="alert"></p>
   <details class="more" id="exapi"><summary>Read it with the API</summary>
-  <p class="intro">Send an export key as a bearer token. <code>from</code> and <code>to</code> take a date or an ISO time (<code>to</code> is exclusive); <code>format</code> is <code>jsonl</code> or <code>csv</code>. An answer holds up to 200 batches; when there are more, the <code>x-genclass-next-cursor</code> header holds a cursor to send as <code>cursor</code> for the next page. An export key reads the export of every app in this account and nothing else.</p>
+  <p class="intro"><code>to</code> is exclusive. More pages: send <code>x-genclass-next-cursor</code> back as <code>cursor</code>. A key reads every app in this account.</p>
   <pre class="code">${esc(curl)}</pre>
   ${keys}
   <form class="xf" id="keyf" novalidate><div class="f"><label for="keylabel">New export key</label><input id="keylabel" type="text" maxlength="60" autocomplete="off" placeholder="Name, e.g. warehouse sync"></div><button class="btn ghost" type="submit"><span>Create export key</span></button></form>
@@ -442,11 +429,11 @@ ${rows}
 
   const html = `<style nonce="${nonce}">${EXTRA_CSS}</style>
 <section class="blk paid" id="forwarding" data-v="forwarding">
-  <div class="blk-h"><h2>Forwarding</h2><span class="aside">${fw ? "New detections, sent where you already look" : esc(plansWith("forwarding"))}</span></div>
+  <div class="blk-h"><h2>Forwarding</h2><span class="aside">${fw ? "New detections" : esc(plansWith("forwarding"))}</span></div>
   ${forwarding}
 </section>
 <section class="blk paid" id="export" data-v="export">
-  <div class="blk-h"><h2>Export</h2><span class="aside">${ex ? "Every event, as a file or by API" : esc(plansWith("export"))}</span></div>
+  <div class="blk-h"><h2>Export</h2><span class="aside">${ex ? "File or API" : esc(plansWith("export"))}</span></div>
   ${exportHtml}
 </section>
 <script type="application/json" id="paidcfg">${embed({

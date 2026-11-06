@@ -82,7 +82,7 @@ describe("Individual on Stripe Checkout, Enterprise by email", () => {
     const on = setup(LIVE);
     const b = await signedIn(on.env);
     const page = await text(call(on.env, "GET", "/account/billing", { cookie: b.cookie }));
-    expect(page).toContain("the runtime, its on-device model and the dashboard, with 90 days of history (you have 0 apps).");
+    expect(page).toContain("You are on the <b>Free</b> plan.");
     expect(page).toContain('<button class="btn" type="button" data-plan="individual"><span>Upgrade to Individual</span></button>');
     expect(page).not.toContain('data-plan="enterprise"');
     expect(page).toContain("$29 / month");

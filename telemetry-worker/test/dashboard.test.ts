@@ -762,15 +762,16 @@ describe("dashboard counts (display fixes)", () => {
     expect(s.recent).toMatchObject([{ kind: "acted", diagnosis: "duplicate", confidence: 0.91 }]);
   });
 
-  it("/start and the empty dashboard say local hosts do not send by default and the token needs 0.3.0-beta.0", async () => {
+  it("/start and the empty dashboard say local hosts do not send by default and the key needs 0.3.0-beta.0", async () => {
     const { env, sql } = setup();
     const { json } = await create(env);
     unlock(sql, json.token);
     const start = await (await handle(new Request(`https://genclass.dev/start/${json.dashboardUrl.split("/").pop()}`), env, opts)).text();
     const dash = await (await handle(new Request(json.dashboardUrl), env, opts)).text();
-    expect(dash).toContain("needs @genclass/runtime 0.3.0-beta.0 or later");
+    expect(dash).toContain("Project keys need @genclass/runtime 0.3.0-beta.0, which is not published yet.");
+    expect(dash).toContain("Local hosts do not send by default.");
+    expect(start).toContain("do not send by default, token or not; telemetry: true or a telemetry options object opts them in");
     for (const html of [start, dash]) {
-      expect(html).toContain("do not send by default, token or not; telemetry: true or a telemetry options object opts them in");
       expect(html).not.toContain("only send data with an explicit token");
       // RUNTIME_ON_NPM unset: the runtime that reads keys is not on npm yet, and the pages say so first
       expect(html).toContain("Not on npm yet.");
