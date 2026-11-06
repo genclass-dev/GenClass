@@ -40,17 +40,17 @@ describe("private mode: a self-hosted collector's snippets name its own endpoint
     const s = snippets("gc_TestToken0123456789abc", EP);
     expect(s.map((x) => x[0])).toEqual(["Easy: one script tag", "Easy: with a bundler", "Function-specific"]);
     expect(s[0]![2]).toBe(
-      `<script>window.GENCLASS_CONFIG = { telemetry: { endpoint: "${EP}" } };</script>\n<script src="${CDN_SCRIPT}" data-token="gc_TestToken0123456789abc"></script>`,
+      `<script>window.GENCLASS_CONFIG = { telemetry: { endpoint: "${EP}" } };</script>\n<script src="${CDN_SCRIPT}" data-token="gc_TestToken0123456789abc" data-mode="heal"></script>`,
     );
     expect(s[1]![2]).toContain(`<script>window.GENCLASS_CONFIG = { token: "gc_TestToken0123456789abc", telemetry: { endpoint: "${EP}" } };</script>`);
-    expect(s[1]![2]).toContain('import "@genclass/runtime/auto";');
+    expect(s[1]![2]).toContain('import "@genclass/runtime/auto/heal";');
     expect(s[1]![2]).not.toContain('<meta name="genclass"');
-    expect(s[2]![2]).toContain(`GenClass.init({ token: "gc_TestToken0123456789abc", scope: "functions", telemetry: { endpoint: "${EP}" } });`);
+    expect(s[2]![2]).toContain(`GenClass.init({ token: "gc_TestToken0123456789abc", scope: "functions", mode: "heal", telemetry: { endpoint: "${EP}" } });`);
     expect(JSON.stringify(s)).not.toContain(`npx ${RUNTIME_PKG} init`);
     // on genclass.dev (no endpoint): the snippets as before, init included
     const d = clientSnippets(startPage("n"))("gc_TestToken0123456789abc", "");
     expect(d.map((x) => x[0])).toEqual(["Easy: one script tag", "Easy: with a bundler", "Function-specific", "Automatic setup"]);
-    expect(d[0]![2]).toBe(`<script src="${CDN_SCRIPT}" data-token="gc_TestToken0123456789abc"></script>`);
+    expect(d[0]![2]).toBe(`<script src="${CDN_SCRIPT}" data-token="gc_TestToken0123456789abc" data-mode="heal"></script>`);
     expect(JSON.stringify(d)).not.toContain("GENCLASS_CONFIG");
     expect(setupOf(null)).toContain('"endpoint":""');
   });
@@ -61,7 +61,7 @@ describe("private mode: a self-hosted collector's snippets name its own endpoint
     // the Connect panel itself (every page also carries the client-side snippet code, which names GENCLASS_CONFIG)
     const panel = (h: string) => /<section class="connect[\s\S]*?<\/section>/.exec(h)![0];
     const own = panel(dashboardPage("n", project, { account, id: "0123456789abcdef", endpoint: EP }));
-    expect(own).toContain(esc(`GenClass.init({ token: "gc_TestToken0123456789abc", telemetry: { endpoint: "${EP}" } });`));
+    expect(own).toContain(esc(`GenClass.init({ token: "gc_TestToken0123456789abc", mode: "heal", telemetry: { endpoint: "${EP}" } });`));
     expect(own).toContain(esc(`<script>window.GENCLASS_CONFIG = { telemetry: { endpoint: "${EP}" } };</script>`));
     expect(own).toContain("Add the key and this collector's endpoint");
     expect(own).not.toContain(`npx ${RUNTIME_PKG} login`);
