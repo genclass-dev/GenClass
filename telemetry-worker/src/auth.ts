@@ -70,6 +70,7 @@ import {
   type Project,
 } from "./dashboard.js";
 import { appExtrasData, appExtrasHtml } from "./billing-pages.js";
+import { linkUnlocked } from "./link-lock.js";
 import { forgetExports } from "./export.js";
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
@@ -1526,6 +1527,8 @@ async function claimProject(c: C): Promise<Response> {
   const p = await projectBySecret(c.db, secret);
   if (!p) return fail(404, "no dashboard matches this link");
   if (p.account_id && p.account_id !== a.account.id) return fail(409, "this app already belongs to another account");
+  // a protected link (link-lock.ts) is saved only from a browser that unlocked it: the link alone is not enough
+  if (!(await linkUnlocked(c.req, c.env, c.db, p.token, c.now))) return fail(403, "unlock this dashboard first, then save it");
   if (!p.account_id || !p.id) {
     if (!p.account_id) {
       const over = await overAppLimit(c, a.account.id);
@@ -1553,7 +1556,15 @@ async function makeLink(c: C, id: string): Promise<Response> {
   const p = await ownedProject(c, a.account.id, id);
   if (!p) return fail(404, "not found");
   const secret = newSecret();
-  await c.db.prepare("UPDATE projects SET secret_hash = ?, private_link = 1 WHERE id = ? AND account_id = ?").bind(await sha256Hex(secret), id, a.account.id).run();
+  // an agent link is a credential the owner makes for a machine (@genclass/mcp reads with it), so it opens without the
+  // browser lock a link from /start had (link-lock.ts); the old link stops working, and its unlocks and passkeys go
+  await c.db.batch([
+    c.db
+      .prepare("UPDATE projects SET secret_hash = ?, private_link = 1, lock_kind = NULL, lock_hash = NULL, lock_failures = 0, lock_failed_at = NULL WHERE id = ? AND account_id = ?")
+      .bind(await sha256Hex(secret), id, a.account.id),
+    c.db.prepare("DELETE FROM link_sessions WHERE token = ?").bind(p.token),
+    c.db.prepare("DELETE FROM link_credentials WHERE token = ?").bind(p.token),
+  ]);
   return json(201, { dashboardUrl: `${c.cfg.origin}/dashboard/${secret}` });
 }
 
