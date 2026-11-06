@@ -259,18 +259,35 @@ describe("accounts: passkeys (WebAuthn, attestation none), added to an account a
     expect(sql.rows("SELECT COUNT(*) AS n FROM credentials")[0]!.n).toBe(0);
   });
 
-  it("refuses a rawId that is not the attested credential id; there is no passkey sign-up any more", async () => {
-    const { env, sql } = setup();
+  it("refuses a rawId that is not the attested credential id", async () => {
+    const { env } = setup();
     const cookie = sessionOf((await pwSignUp(env)).res);
     expect((await addPasskey(env, cookie, await makeAuthenticator(-7), { rawId: new Uint8Array(32).fill(7) })).res.status).toBe(400);
-    // signed out, registration options are refused (an account starts with a password, Google or GitHub)
-    const before = sql.rows("SELECT COUNT(*) AS n FROM challenges")[0]!.n;
-    for (const body of [{ email: "new@example.com" }, {}]) {
-      const r = await call(env, "POST", "/api/auth/passkey/register/options", { body });
-      expect(r.status).toBe(403);
-      expect(((await r.json()) as any).error).toMatch(/email and a password, Google or GitHub/);
-    }
-    expect(sql.rows("SELECT COUNT(*) AS n FROM challenges")[0]!.n).toBe(before);
+  });
+
+  it("a passkey sign-up (owner, 2026-11-05): signed out, the passkey makes an account with no email and signs it in", async () => {
+    const { env, sql } = setup();
+    const auth = await makeAuthenticator(-7);
+    const o = (await (await call(env, "POST", "/api/auth/passkey/register/options", { body: {} })).json()) as any;
+    expect(o.publicKey.user.displayName).toBe("GenClass");
+    expect(o.publicKey.user.name).toMatch(/^GenClass account [A-Za-z0-9]{6}$/);
+    expect(o.publicKey.authenticatorSelection).toMatchObject({ residentKey: "required", userVerification: "required" });
+    // nothing is stored but the challenge until the passkey comes back
+    expect(sql.rows("SELECT COUNT(*) AS n FROM accounts")[0]!.n).toBe(0);
+    const credential = await auth.register(o.publicKey);
+    const r = await call(env, "POST", "/api/auth/passkey/register/verify", { body: { id: o.id, credential } });
+    expect(r.status).toBe(200);
+    const j = (await r.json()) as any;
+    expect(j.next).toBe("/account?welcome=1");
+    expect(j.account.email).toBeNull();
+    const cookie = cookieValue(r, "__Host-gc_session");
+    expect(cookie).toBeTruthy();
+    expect(sql.rows("SELECT id, email FROM accounts")).toEqual([{ id: j.account.id, email: null }]);
+    expect(sql.rows("SELECT account_id FROM credentials")).toEqual([{ account_id: j.account.id }]);
+    // the same passkey signs in again later, and the challenge cannot make a second account
+    expect((await signIn(env, auth)).res.status).toBe(200);
+    expect((await call(env, "POST", "/api/auth/passkey/register/verify", { body: { id: o.id, credential } })).status).toBe(400);
+    expect(sql.rows("SELECT COUNT(*) AS n FROM accounts")[0]!.n).toBe(1);
   });
 
   it("challenges are single-use: a replayed registration or sign-in is refused", async () => {
@@ -303,7 +320,7 @@ describe("accounts: passkeys (WebAuthn, attestation none), added to an account a
     expect((await call(env, "POST", "/api/auth/passkey/register/verify", { body: { id: lo.id, credential }, cookie })).status).toBe(400);
   });
 
-  it("a passkey sign-up started before passkey sign-up was removed cannot finish", async () => {
+  it("a passkey sign-up started before passkey sign-up was first removed (2026-10-15) cannot finish", async () => {
     const { env, sql } = setup();
     // a `register` challenge as the old sign-up stored it: a new account id and the typed email, no session
     const challenge = b64url(new Uint8Array(32).fill(3));
@@ -313,7 +330,7 @@ describe("accounts: passkeys (WebAuthn, attestation none), added to an account a
       .run(id, challenge, "NewAccount0123456789ab", JSON.stringify({ email: "late@example.com" }), new Date(clock.getTime() + 60_000).toISOString());
     const publicKey = { rp: { id: "genclass.dev", name: "GenClass" }, user: { id: b64url(new TextEncoder().encode("NewAccount0123456789ab")), name: "late@example.com" }, challenge };
     const r = await call(env, "POST", "/api/auth/passkey/register/verify", { body: { id, credential: await (await makeAuthenticator(-7)).register(publicKey) } });
-    expect(r.status).toBe(403);
+    expect(r.status).toBe(400);
     expect(cookieValue(r, "__Host-gc_session")).toBeNull();
     expect(sql.rows("SELECT COUNT(*) AS n FROM accounts")[0]!.n).toBe(0);
     expect(sql.rows("SELECT COUNT(*) AS n FROM credentials")[0]!.n).toBe(0);
@@ -460,7 +477,7 @@ describe("accounts: sessions, logout and CSRF", () => {
     expect(html).toContain('<meta name="referrer" content="same-origin">');
     expect(html).not.toContain("evil.example");
     expect(html).toContain('<form class="pwf" id="pwf"');
-    expect(html).toContain("<span>Use a passkey</span>");
+    expect(html).toContain("Sign in with a passkey</span>");
     expect(html).not.toMatch(/ style="/);
 
     const { cookie } = await signedIn(env);
@@ -987,7 +1004,7 @@ describe("accounts: Google sign-in (OIDC code flow, PKCE, confidential client)",
     const both = await (await call(setup({ ...GOOGLE, GITHUB_CLIENT_ID: "Iv1.x", GITHUB_CLIENT_SECRET: "y" }).env, "GET", "/login", {})).text();
     // the owner's order (2026-10-18): GitHub above Google
     expect(both.indexOf("Continue with GitHub")).toBeLessThan(both.indexOf("Continue with Google"));
-    expect(both.indexOf("Continue with Google")).toBeLessThan(both.indexOf("Use a passkey"));
+    expect(both.indexOf("Continue with Google")).toBeLessThan(both.indexOf("Sign in with a passkey"));
   });
 
   it("claim checks (unit)", () => {
@@ -1099,40 +1116,38 @@ describe("accounts: GitHub sign-in (OAuth web flow)", () => {
 // ------------------------------------------------------------------------------------------------- Google first
 
 describe("accounts: GitHub and Google first, an email and a password always; creating an account never needs a passkey", () => {
-  it("/signup and /login: Continue with GitHub, then Continue with Google, then the email and password form, then a small Use a passkey", async () => {
+  it("/signup and /login are one page (owner, 2026-11-05): Sign in or Create account at the top, GitHub, Google, a passkey, then the email and password form", async () => {
     for (const over of [{}, GOOGLE, GITHUB, { ...GOOGLE, ...GITHUB }]) {
-      const { env, sql } = setup(over);
+      const { env } = setup(over);
       const google = "GOOGLE_CLIENT_ID" in over;
       const github = "GITHUB_CLIENT_ID" in over;
       for (const path of ["/signup", "/login"]) {
         const html = await (await call(env, "GET", path, {})).text();
         const tag = `${path} ${JSON.stringify(Object.keys(over))}`;
+        const mode = path === "/signup" ? "up" : "in";
+        // the same page; the path picks the tab
+        expect(html, tag).toContain("<h1>Welcome to GenClass</h1>");
+        expect(html, tag).toContain(`<div class="entry" id="entry" data-mode="${mode}">`);
+        expect(html, tag).toContain(`<a role="tab" href="/login" data-m="in" aria-selected="${mode === "in"}">Sign in</a>`);
+        expect(html, tag).toContain(`<a role="tab" href="/signup" data-m="up" aria-selected="${mode === "up"}">Create account</a>`);
         expect(html.includes("Continue with Google"), tag).toBe(google);
         expect(html.includes("Continue with GitHub"), tag).toBe(github);
         expect(html, tag).toContain('<form class="pwf" id="pwf"');
         expect(html, tag).toContain(path === "/signup" ? 'autocomplete="new-password"' : 'autocomplete="current-password"');
         expect(html, tag).toContain('autocomplete="username"');
-        expect(html, tag).toContain('<button class="lnk" id="pk" type="button"><span>Use a passkey</span></button>');
-        // the owner's order (2026-10-18): GitHub, Google, the form, the passkey link
-        const at = [github ? html.indexOf("Continue with GitHub") : -1, google ? html.indexOf("Continue with Google") : -1, html.indexOf('id="pwf"'), html.indexOf('id="pk"')].filter((i) => i >= 0);
+        // one passkey button: it signs in, or creates the account, by the tab
+        expect(html, tag).toMatch(/<button class="btn prov paper" id="pk" type="button"><svg[^]*?<span class="m-in">Sign in with a passkey<\/span><span class="m-up">Create account with a passkey<\/span><\/button>/);
+        // the owner's order (2026-10-18): GitHub, Google; then the passkey and the form
+        const at = [github ? html.indexOf("Continue with GitHub") : -1, google ? html.indexOf("Continue with Google") : -1, html.indexOf('id="pk"'), html.indexOf('id="pwf"')].filter((i) => i >= 0);
         expect(at, tag).toEqual([...at].sort((a, b) => a - b));
-        // GitHub is a full-width button like Google's; the small links are only Use a passkey
         if (github) expect(html, tag).toMatch(/<a class="btn prov paper" href="\/auth\/github"><svg[^]*?<span>Continue with GitHub<\/span><\/a>/);
-        expect(html, tag).toContain('<p class="alt"><button class="lnk" id="pk" type="button"><span>Use a passkey</span></button></p>');
-        expect(html, tag).not.toContain("Create account with a passkey");
-        expect(html, tag).not.toContain("Sign in with a passkey");
-        // the fixture's Free has no dashboard (the real plans' line is checked in test/plans.test.ts)
-        expect(html, tag).toContain("The runtime needs no account: <a href=\"/start/open-source\">set it up without one</a>. Dashboards come with a paid plan.");
+        // no account needed: a dashboard of its own (/start)
+        expect(html, tag).toContain('<p class="opt">Just trying it? <a href="/start">Create a dashboard without an account</a>.</p>');
         expect(html, tag).not.toMatch(/trial/i);
       }
-      expect(await (await call(env, "GET", "/login", {})).text()).toContain('<a href="/login/forgot">Forgot your password?</a>');
-      // there is no passkey sign-up: options without a session are refused and store nothing
-      const r = await call(env, "POST", "/api/auth/passkey/register/options", { body: { email: "ada@example.com" } });
-      expect(r.status).toBe(403);
-      expect(sql.rows("SELECT COUNT(*) AS n FROM challenges")[0]!.n).toBe(0);
-      // a passkey still signs in directly
+      expect(await (await call(env, "GET", "/login", {})).text()).toContain('<a class="m-in" href="/login/forgot">Forgot?</a>');
+      // a passkey signs in directly, and an email and a password make an account whatever is configured
       expect((await call(env, "POST", "/api/auth/passkey/login/options", { body: {} })).status).toBe(200);
-      // and an email and a password make an account whatever is configured
       expect((await pwSignUp(env, "x@example.com")).res.status).toBe(200);
     }
   });
