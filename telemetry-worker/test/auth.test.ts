@@ -1967,7 +1967,7 @@ describe("accounts: the Connect dialog and the Studio header", () => {
       token ||= project.token;
     }
     const waiting = await (await call(env, "GET", `/account/apps/${ids[0]}`, { cookie })).text();
-    expect(waiting).toContain('<div id="period" class="hidden">');
+    expect(waiting).toContain('<div id="period" class="hidden" data-tour=');
     // Studio makes Connect the primary button while a project is new
     expect(waiting).toMatch(/<button class="btn sm" type="button" data-open="m-connect" id="hconnect"[ >]/);
     expect(waiting).toContain('<span class="bdg warning" id="hstatus"><i></i><span>Waiting</span></span>');
@@ -1977,7 +1977,7 @@ describe("accounts: the Connect dialog and the Studio header", () => {
     expect(waiting).not.toContain(">Elsewhere<");
     await sendBatch(env, token);
     const live = await (await call(env, "GET", `/account/apps/${ids[0]}`, { cookie })).text();
-    expect(live).toContain('<div id="period">');
+    expect(live).toContain('<div id="period" data-tour=');
     expect(live).toMatch(/<button class="btn sm ghost" type="button" data-open="m-connect" id="hconnect"[ >]/);
     expect(live).toContain('<span class="bdg brand" id="hstatus"><i></i><span>Live</span></span>');
   });

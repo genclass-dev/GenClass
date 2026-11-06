@@ -315,15 +315,17 @@ export function agentPrompt(token: string): string {
 }
 
 /**
- * Links that open a coding agent with the prompt filled in. None of them runs anything: the person reads the prompt
- * and presses Enter (cursor.com/docs/integrations/deeplinks, code.claude.com/docs/en/deep-links).
+ * Links that open a coding agent's app with the prompt filled in (owner, 2026-11-05: Codex and Claude, no Cursor). None
+ * of them runs anything: the person reads the prompt and presses Enter. Codex: its app's codex://new
+ * (developers.openai.com/codex/app/commands). Claude Code: the desktop app's claude://code/new
+ * (support.claude.com/en/articles/14729294), and when that app is not there, the terminal's claude-cli://open
+ * (code.claude.com/docs/en/deep-links), tried by the page's script after it.
  */
-export function agentLinks(prompt: string): { label: string; href: string }[] {
+export function agentLinks(prompt: string): { label: string; href: string; fallback?: string }[] {
   const q = encodeURIComponent(prompt);
   return [
-    { label: "Cursor", href: `https://cursor.com/link/prompt?text=${q}` },
-    { label: "Claude Code", href: `claude-cli://open?q=${q}` },
-    { label: "Claude in VS Code", href: `vscode://anthropic.claude-code/open?prompt=${q}` },
+    { label: "Codex", href: `codex://new?prompt=${q}` },
+    { label: "Claude Code", href: `claude://code/new?q=${q}`, fallback: `claude-cli://open?q=${q}` },
   ];
 }
 
@@ -357,6 +359,7 @@ export const START_CSS = `
 .setup{max-width:640px;margin:clamp(40px,8vh,80px) auto 64px}
 .setup h1{font-size:clamp(28px,4vw,36px)}
 .setup-agents{align-items:center}
+#appst:empty{display:none}
 .setup-steps{margin:0;padding-left:20px;display:grid;gap:8px}
 .setup-status{display:inline-flex;align-items:center;gap:8px}
 .setup-status i{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
@@ -425,13 +428,14 @@ export function setupPage(nonce: string, v: SetupView): string {
   const prompt = agentPrompt(v.token);
   const notYet = v.runtimeReady === true ? "" : `<p class="note small" id="notyet">${NOT_ON_NPM}</p>`;
   const agents = agentLinks(prompt)
-    .map((a) => `<a class="btn ghost sm" href="${esc(a.href)}">${esc(a.label)}</a>`)
+    .map((a) => `<a class="btn ghost sm" data-app href="${esc(a.href)}"${a.fallback ? ` data-fallback="${esc(a.fallback)}"` : ""}>${esc(a.label)}</a>`)
     .join("");
   const connect = v.endpoint
     ? ""
     : `<section class="stack mt-l">
   <div class="cmdbox"><code id="cmd">${esc(cmd)}</code><span id="cmdc"></span></div>
   <div class="row setup-agents"><span class="small muted">Or let your agent do it:</span>${agents}<span id="promptc"></span></div>
+  <p class="small muted" id="appst" aria-live="polite"></p>
 </section>`;
   const body = `
 <div class="setup">
@@ -464,6 +468,32 @@ ${connect}
     document.getElementById("promptc").appendChild(pc);
   }
   renderSnippets(document.getElementById("snips"), C.token, C.endpoint);
+  // an agent's app: the prompt goes on the clipboard first, then each link in turn until the page loses focus (the
+  // browser asked to open the app, or the app came to the front); Claude Code tries the desktop app, then the terminal
+  var appst = document.getElementById("appst");
+  function tryOpen(urls, done){
+    var i = 0;
+    (function next(){
+      if (i >= urls.length) { done(false); return; }
+      var u = urls[i++], hit = false;
+      function on(){ hit = true; }
+      window.addEventListener("blur", on); document.addEventListener("visibilitychange", on);
+      try { location.href = u; } catch (e) {}
+      setTimeout(function(){ window.removeEventListener("blur", on); document.removeEventListener("visibilitychange", on); if (hit) done(true); else next(); }, 1500);
+    })();
+  }
+  [].slice.call(document.querySelectorAll("a[data-app]")).forEach(function(a){
+    a.addEventListener("click", function(e){
+      e.preventDefault();
+      var name = a.textContent, copied = gcLegacyCopy(C.prompt), urls = [a.getAttribute("href")];
+      if (a.getAttribute("data-fallback")) urls.push(a.getAttribute("data-fallback"));
+      if (appst) appst.textContent = "Opening " + name + "...";
+      tryOpen(urls, function(ok){
+        if (!appst) return;
+        appst.textContent = ok ? "The prompt is in " + name + ". Press Enter to run it." : name + " didn't open." + (copied ? " The prompt is copied: paste it into your agent." : " Use Copy prompt instead.");
+      });
+    });
+  });
   // after signing up, /account?save=1 adds this app to the account (the link is kept in this tab only, never on a server)
   document.getElementById("save").addEventListener("click", function(){ try { sessionStorage.setItem("gc.save", C.secret); } catch (e) {} });
   if (C.live) return;
@@ -745,6 +775,8 @@ export function notFoundPage(nonce: string): string {
 // Every dynamic string goes through textContent.
 
 export const DASH_CSS = `
+/* the tour's sample data (no data yet): a badge says so while it is shown */
+body.sampling::after{content:"Sample data";position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:97;padding:4px 12px;border-radius:999px;background:var(--accent-f);color:var(--on-green);font:500 12px var(--sans);letter-spacing:.02em;box-shadow:var(--shadow-m);pointer-events:none}
 :root{--t1:#3987E5;--t2:#E8552F;--t3:#2AA3C7;--t4:#C98500;--t5:#B964C9;--t0:#88897F;--grid:#262626}
 /* colours with no base token: the critical status, the status dot's halo, control and overlay borders, the tooltip's
    shadow, the row hover, badge and notice borders, the project card's hover */
@@ -1016,7 +1048,7 @@ const DASH_JS = `
   var statsUrl = P.statsUrl || ("/api/projects/" + encodeURIComponent(secret));
   var range = "7d";
   try { var saved = localStorage.getItem("gc.dash.range"); if (/^(24h|7d|30d|90d|1y)$/.test(saved || "") && document.querySelector('.seg button[data-r="' + saved + '"]')) range = saved; } catch (e) {}
-  var nf = new Intl.NumberFormat(), MCP = "${MCP_PKG}", shownS = null;
+  var nf = new Intl.NumberFormat(), MCP = "${MCP_PKG}", shownS = null, sampling = false, gcShow = null, realS = null, loading = null;
   function fmt(n){ return nf.format(Math.round(n || 0)); }
   function plural(n, one, many){ return fmt(n) + " " + (Math.round(n) === 1 ? one : many); }
   var RANGE = { "24h": "In the last 24 hours", "7d": "In the last 7 days", "30d": "In the last 30 days", "90d": "In the last 90 days", "1y": "In the last year" };
@@ -2318,6 +2350,7 @@ const DASH_JS = `
     });
     window.addEventListener("hashchange", function(){ show(location.hash.slice(1), true); });
     if (!show(location.hash.slice(1), false)) show("top", false);
+    gcShow = function(id){ return show(id, true); };
   })();
   mcpAll(); alinkShow();
   var mdb = document.getElementById("mdcopy");
@@ -2325,14 +2358,14 @@ const DASH_JS = `
   var btn = document.getElementById("refresh");
   function load(){
     btn.disabled = true;
-    fetch(statsUrl + "?range=" + range, { headers: { accept: "application/json" }, cache: "no-store", credentials: "same-origin" })
+    return (loading = fetch(statsUrl + "?range=" + range, { headers: { accept: "application/json" }, cache: "no-store", credentials: "same-origin" })
       .then(function(r){
         if (r.status === 401 && P.account) location.href = "/login?next=" + encodeURIComponent(location.pathname);
         if (!r.ok) throw new Error("HTTP " + r.status); return r.json();
       })
-      .then(render)
+      .then(function(S){ realS = S; if (!sampling) render(S); })
       .catch(function(e){ document.getElementById("updated").textContent = "Could not load stats (" + e.message + "). Retrying in a minute."; })
-      .then(function(){ btn.disabled = false; });
+      .then(function(){ btn.disabled = false; }));
   }
   document.querySelectorAll(".seg button").forEach(function(b){
     b.setAttribute("aria-pressed", String(b.getAttribute("data-r") === range));
@@ -2345,6 +2378,25 @@ const DASH_JS = `
   });
   btn.addEventListener("click", load);
   setInterval(function(){ if (document.visibilityState === "visible") load(); }, 60000);
+  // the tour (studio.ts) walks every view: with no data yet it fills the page with the sample's stats on the way, and
+  // puts back what was there at the end
+  window.gcDash = {
+    view: function(id){ return gcShow ? gcShow(id) : false; },
+    tourStart: function(){
+      // decided on this app's own stats (the last load, waited for), never on the sample a tour left on the page
+      return Promise.resolve(loading).then(function(){
+        if (realS && realS.lastEvent) return false;
+        return fetch("/api/projects/sample?range=7d", { headers: { accept: "application/json" }, credentials: "same-origin" })
+          .then(function(r){ return r.ok ? r.json() : null; })
+          .then(function(S){ if (!S) return false; sampling = true; document.body.classList.add("sampling"); render(S); return true; });
+      }).catch(function(){ return false; });
+    },
+    tourEnd: function(){
+      if (gcShow) gcShow("top");
+      if (!sampling) return;
+      sampling = false; document.body.classList.remove("sampling"); load();
+    }
+  };
   load();
 })();`;
 
@@ -2691,7 +2743,7 @@ const MCP_TOOLS: [string, string][] = [
 
 /** The MCP view: connect a coding agent (client, options, configuration, prompt), the agent link, the tools, the data. */
 function mcpView(acct: boolean, privateLink: boolean): string {
-  return `<div id="mcp" data-v="mcp">
+  return `<div id="mcp" data-v="mcp" data-tour="74|Your coding agent|Connect Claude Code or Codex so it can read these problems and fix them." data-tour-view="mcp">
 <section class="blk">
   <div class="blk-h"><h2>Connect your agent</h2><span class="aside">${MCP_PKG}</span></div>
   <div class="mcpc" data-mcp></div>
@@ -2744,7 +2796,7 @@ export function dashboardPage(
     analytics: promptBlock(project.token, where, opts.endpoint ?? null, "Paste it into your coding agent."),
     choices: { agent: acct ? (opts.privateLink ? "replace" : "new") : "this" },
   });
-  const settings = `<div id="settings" data-v="settings">
+  const settings = `<div id="settings" data-v="settings" data-tour="78|Settings|Your project key, links, and the rest." data-tour-view="settings">
 <section class="blk">
   <div class="blk-h"><h2>General</h2></div>
   <div class="keyrow"><div class="k">Project name</div><div class="kval"><span>${esc(project.name)}</span></div></div>
@@ -2834,12 +2886,12 @@ ${
 <header class="phead" id="top">
   <div class="minw0">
     <h1 id="pname" data-v="overview"></h1>
-    <div class="verdict hidden" id="verdict" data-v="overview" role="status"><i></i><b id="verdictt"></b><span id="verdicts"></span></div>
+    <div class="verdict hidden" id="verdict" data-v="overview" role="status" data-tour="50|At a glance|Your app's health in one line." data-tour-view="top"><i></i><b id="verdictt"></b><span id="verdicts"></span></div>
     <h1 id="vtitle" class="hidden"></h1>
     <p id="vdesc" class="hidden"></p>
     <div class="ov-meta" data-v="overview"><span class="live" id="status"><i></i><span id="statust">Loading</span></span><span>Project key <code>${t}</code></span></div>
   </div>
-  <div class="tools" data-v="overview problems pages activity visitors health loop"><span id="updated"></span><div id="period"${waiting ? ' class="hidden"' : ""}><div class="seg" role="group" aria-label="Time range">${rangeButtons(opts.ranges ?? ["24h", "7d", "30d"])}</div></div><button class="btn sm ghost" id="refresh" type="button">Refresh</button><button class="btn sm ghost hidden" id="mdcopy" type="button" aria-label="Copy this period as Markdown">Copy as Markdown</button></div>
+  <div class="tools" data-v="overview problems pages activity visitors health loop"><span id="updated"></span><div id="period"${waiting ? ' class="hidden"' : ""} data-tour="56|Time range|Look at the last day, week or month." data-tour-view="top"><div class="seg" role="group" aria-label="Time range">${rangeButtons(opts.ranges ?? ["24h", "7d", "30d"])}</div></div><button class="btn sm ghost" id="refresh" type="button">Refresh</button><button class="btn sm ghost hidden" id="mdcopy" type="button" aria-label="Copy this period as Markdown" data-tour="58|Share a report|Copy this period as a short report for your team or your agent." data-tour-view="top">Copy as Markdown</button></div>
 </header>
 ${connect}
 <section id="nodata" class="blk first hidden" data-v="overview problems pages activity visitors health loop">
@@ -2854,9 +2906,9 @@ ${connect}
 <div id="content" class="hidden">
 <div class="ovtop" data-v="overview">
   <div class="minw0">
-    <div class="statrow" id="tiles"></div>
+    <div class="statrow" id="tiles" data-tour="52|Key numbers|Problems found, pages affected, and what GenClass stopped." data-tour-view="top"></div>
   </div>
-  <section class="blk" id="trend">
+  <section class="blk" id="trend" data-tour="54|Problems over time|One bar per day, split by type. Hover a bar for details." data-tour-view="top">
     <div class="blk-h"><h2>Problems found</h2><span class="aside" id="trendn"></span></div>
     <figure>
       <div class="legend" id="legend"></div>
@@ -2878,8 +2930,8 @@ ${connect}
   <button type="button" data-open="m-connect" data-tab="ana">${icon("pointer", 18)}<div><b>Turn on analytics</b></div></button>
 </div>
 <div class="uh" data-v="overview"><h2 id="advn">Needs attention</h2><div class="acts"><button class="btn sm hidden" type="button" id="fixall2" data-copy="" aria-label="Copy one prompt for your coding agent to fix every problem">Fix all</button><a class="btn sm ghost" href="#found" data-goto="found">All problems</a></div></div>
-<div class="adv" id="advisor" data-v="overview"></div>
-<section class="blk" id="found" data-v="problems">
+<div class="adv" id="advisor" data-v="overview" data-tour="60|Needs attention|The problems to fix first, each with a prompt for your coding agent." data-tour-view="advisor"></div>
+<section class="blk" id="found" data-v="problems" data-tour="62|Problems|Every kind of problem, where it happened, and how to fix it." data-tour-view="found">
   <div class="blk-h"><h2>Problems found</h2><button class="btn sm hidden" type="button" id="fixall" data-copy="" aria-label="Copy one prompt for your coding agent to fix every problem">Fix all</button></div>
   <div class="finds" id="issues"></div>
   <p class="quiet hidden" id="issuesempty">No problems in this period.</p>
@@ -2888,11 +2940,11 @@ ${connect}
   <div class="blk-h"><h2>Possible issues</h2><span class="aside">Lower confidence</span></div>
   <div class="finds" id="possible"></div>
 </section>
-<div class="two" id="where" data-v="pages">
+<div class="two" id="where" data-v="pages" data-tour="64|Pages|Which pages have problems, worst first." data-tour-view="where">
   <section class="blk"><div class="blk-h"><h2>Pages</h2></div><div id="pages"></div></section>
-  <section class="blk" id="did"><div class="blk-h"><h2>Actions</h2></div><div id="acted"></div></section>
+  <section class="blk" id="did" data-tour="66|Actions|Where GenClass stepped in, and what it did." data-tour-view="did"><div class="blk-h"><h2>Actions</h2></div><div id="acted"></div></section>
 </div>
-<section class="blk" id="health-s" data-v="health">
+<section class="blk" id="health-s" data-v="health" data-tour="72|Health|Is GenClass running well on your visitors' devices." data-tour-view="health-s">
   <div class="blk-h"><h2>Health</h2></div>
   <div id="health"></div>
 </section>
@@ -2900,13 +2952,13 @@ ${connect}
   <div class="blk-h"><h2>All breakdowns</h2><span class="aside">Top 10 each</span></div>
   <div class="kv" id="adv"></div>
 </section>
-<section class="blk" id="recent-s" data-v="activity">
+<section class="blk" id="recent-s" data-v="activity" data-tour="68|Activity|The latest detections, newest first." data-tour-view="recent-s">
   <div class="blk-h"><h2>Recent activity</h2><span class="aside">Latest 50</span></div>
   <div class="tablewrap"><table class="dt"><thead><tr><th>Time</th><th>Page / function</th><th>What</th><th class="num">Confidence</th><th>GenClass</th><th>Mode</th></tr></thead>
   <tbody id="recent"></tbody></table></div>
   <p class="quiet hidden" id="recent0">Nothing detected in this period.</p>
 </section>
-<section class="blk" id="visits" data-v="visitors">
+<section class="blk" id="visits" data-v="visitors" data-tour="70|Visitors|Visits, sources, devices and funnels." data-tour-view="visits">
   <div class="blk-h"><h2>Overview</h2></div>
   <div id="ixsetup" class="hidden">${promptBlock(project.token, where, opts.endpoint ?? null, "Analytics are off. Paste the prompt into your coding agent.")}<p class="fine" id="ixver">Needs @genclass/runtime ${ANALYTICS_RUNTIME} or later.<span id="ixold"></span></p></div>
   <div id="ixsum"></div>
@@ -2944,7 +2996,7 @@ ${connect}
   <div id="ixsteps" class="mt-l"></div>
   <div id="ixexits" class="mt-l"></div>
 </section>
-<section class="blk" id="loop" data-v="loop" aria-labelledby="loop-h">
+<section class="blk" id="loop" data-v="loop" aria-labelledby="loop-h" data-tour="76|Closed loop|How your agent finds, fixes and proves each problem." data-tour-view="loop">
   <div class="blk-h"><h2 id="loop-h">Closed-loop development</h2></div>
   <div class="flowwrap"><svg class="flow" id="loopstages" role="img" aria-labelledby="loop-h"></svg></div>
   <div class="blk-h sub"><h3 id="agentlog-h">Agent log</h3><span class="aside">Latest 50</span></div>

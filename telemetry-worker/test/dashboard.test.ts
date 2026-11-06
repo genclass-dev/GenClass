@@ -1036,26 +1036,29 @@ describe("/start: a name and a lock make the app; its setup page has the one com
     expect(page.headers.get("referrer-policy")).toBe("same-origin");
     expect(page.headers.get("x-robots-tag")).toContain("noindex");
     const links = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]!);
-    for (const l of links) if (/^(https?:|claude-cli:|vscode:)/.test(l)) expect(l, l).not.toContain(secret);
+    for (const l of links) if (/^(https?:|claude-cli:|claude:|codex:|vscode:)/.test(l)) expect(l, l).not.toContain(secret);
+    expect(html).toContain('data-app href="codex://new?prompt=');
+    expect(html).toContain('data-fallback="claude-cli://open?q=');
+    expect(html).not.toContain("cursor.com");
     expect(html).not.toContain("Not on npm yet.");
     // ?copied=1 comes from the button's script, which already put the command on the clipboard
     expect(await (await handle(get(`https://genclass.dev${to}?copied=1`, res), env, opts)).text()).toContain("The command is on your clipboard.");
   });
 
-  it("the agent links hold a short prompt with --yes, inside the limits Cursor and Claude Code set, and run nothing", () => {
+  it("the agent links (owner, 2026-11-05): Codex's app, and Claude Code's desktop app then its terminal; a short prompt with --yes that they fill in and never run", () => {
     const token = "gc_TestToken0123456789abc";
     expect(setupCommand(token)).toBe(`npx @genclass/runtime@beta init --token ${token}`);
     const prompt = agentPrompt(token);
     expect(prompt).toContain(`${setupCommand(token)} --yes`);
     expect(prompt.length).toBeLessThan(400);
     const links = agentLinks(prompt);
-    expect(links.map((l) => l.label)).toEqual(["Cursor", "Claude Code", "Claude in VS Code"]);
-    expect(links[0]!.href.startsWith("https://cursor.com/link/prompt?text=")).toBe(true);
-    expect(links[1]!.href.startsWith("claude-cli://open?q=")).toBe(true);
-    expect(links[2]!.href.startsWith("vscode://anthropic.claude-code/open?prompt=")).toBe(true);
-    for (const l of links) {
-      expect(decodeURIComponent(l.href.split("=").slice(1).join("="))).toBe(prompt);
-      expect(l.href.length).toBeLessThan(5000);
+    expect(links.map((l) => l.label)).toEqual(["Codex", "Claude Code"]);
+    expect(links[0]!.href.startsWith("codex://new?prompt=")).toBe(true);
+    expect(links[1]!.href.startsWith("claude://code/new?q=")).toBe(true);
+    expect(links[1]!.fallback!.startsWith("claude-cli://open?q=")).toBe(true);
+    for (const u of [links[0]!.href, links[1]!.href, links[1]!.fallback!]) {
+      expect(decodeURIComponent(u.split("=").slice(1).join("="))).toBe(prompt);
+      expect(u.length).toBeLessThan(5000);
     }
   });
 

@@ -204,7 +204,7 @@ export const STUDIO_CSS = `
   --mono:"Source Code Pro",ui-monospace,SFMono-Regular,Menlo,monospace;
   --cb:#393939;--cb-h:#4d4d4d;--sel:#3ecf8e40;--brand-bh:#3ecf8e99;--ph:#6b6b6b;--ok-b:#0f5a37;--amber-b:#5c3d06;--warn-b:#5c2018;
   --dng-bg:#3c1712;--dng-b:#7f2c20;--dng-bg-h:#52201a;--dng-b-h:#b23b28;--av-bg:#2b4a3c;--av-b:#3a5a4b;--ovl-b:#333333;
-  --shadow-m:0 12px 32px rgba(0,0,0,.5);--shadow-l:0 24px 64px rgba(0,0,0,.6);--shadow-r:12px 0 24px rgba(0,0,0,.35);--scrim:rgba(0,0,0,.66);
+  --shadow-m:0 12px 32px rgba(0,0,0,.5);--shadow-l:0 24px 64px rgba(0,0,0,.6);--shadow-r:12px 0 24px rgba(0,0,0,.35);--scrim:rgba(0,0,0,.66);--tour-scrim:rgba(0,0,0,.6);
   color-scheme:dark;
 }
 :root[data-theme="light"]{
@@ -215,7 +215,7 @@ export const STUDIO_CSS = `
   --s75:#f7f7f7;--s200:#f0f0f0;--s300:#e8e8e8;--ctl:#ffffff;--rule3:#c7c7c7;--brand-b:rgba(10,124,74,.35);--amber:#8a5a00;--amber-t:#fdf6e7;--ovl:#ffffff;
   --cb:#d4d4d4;--cb-h:#a3a3a3;--sel:rgba(10,124,74,.18);--brand-bh:rgba(10,124,74,.6);--ph:#8f8f8f;--ok-b:#a7dcc0;--amber-b:#f0d29a;--warn-b:#f5c2b8;
   --dng-bg:#fdeeea;--dng-b:#f2b8ab;--dng-bg-h:#fadbd5;--dng-b-h:#e5484d;--av-bg:#d9f2e5;--av-b:#a7dcc0;--ovl-b:#e0e0e0;
-  --shadow-m:0 12px 32px rgba(0,0,0,.12);--shadow-l:0 24px 64px rgba(0,0,0,.18);--shadow-r:12px 0 24px rgba(0,0,0,.08);--scrim:rgba(20,20,20,.35);
+  --shadow-m:0 12px 32px rgba(0,0,0,.12);--shadow-l:0 24px 64px rgba(0,0,0,.18);--shadow-r:12px 0 24px rgba(0,0,0,.08);--scrim:rgba(20,20,20,.35);--tour-scrim:rgba(20,20,20,.5);
   color-scheme:light;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -308,15 +308,13 @@ body.sb{min-height:100vh}
 .sb-lk{display:inline-flex;align-items:center;color:var(--accent)}
 .sb-lk .ic{width:13px;height:13px}
 /* the tour: a spotlight on one part of the page and a card next to it */
-.tour-spot{position:fixed;z-index:95;border-radius:8px;box-shadow:0 0 0 2px var(--accent),0 0 0 200vmax var(--scrim);pointer-events:none;transition:top .25s ease,left .25s ease,width .25s ease,height .25s ease}
-.tour-spot.mid{top:50%;left:50%;width:0;height:0;box-shadow:0 0 0 200vmax var(--scrim)}
+.tour-spot{position:fixed;z-index:95;border-radius:8px;box-shadow:0 0 0 2px var(--accent),0 0 0 200vmax var(--tour-scrim);pointer-events:none;transition:top .25s ease,left .25s ease,width .25s ease,height .25s ease}
+.tour-spot.mid{top:50%;left:50%;width:0;height:0;box-shadow:0 0 0 200vmax var(--tour-scrim)}
 .tour-pop{position:fixed;z-index:96;width:min(320px,calc(100vw - 32px));background:var(--ovl);border:1px solid var(--ovl-b);border-radius:10px;box-shadow:var(--shadow-l);padding:18px 18px 14px;transition:top .25s ease,left .25s ease}
 .tour-pop h2{font-size:15px;font-weight:500;margin-bottom:4px}
 .tour-pop p{font-size:13.5px;color:var(--ink2)}
 .tour-f{display:flex;align-items:center;gap:8px;margin-top:16px}
-.tour-dots{display:flex;gap:5px;margin-right:auto}
-.tour-dots i{width:6px;height:6px;border-radius:50%;background:var(--rule3)}
-.tour-dots i.on{background:var(--accent)}
+.tour-n{margin-right:auto;font:12px var(--mono);color:var(--ink3)}
 .tour-pop [hidden]{display:none}
 @media (prefers-reduced-motion:reduce){.tour-spot,.tour-pop{transition:none}}
 /* a lock form: passkey or password */
@@ -600,74 +598,105 @@ document.addEventListener("keydown", function(e){
   try { if (!/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) [].slice.call(document.querySelectorAll(".sb-search kbd")).forEach(function(k){ k.textContent = "Ctrl K"; }); } catch (e) {}
 })();
 (function(){
-  // the tour: a short walk through the parts marked data-tour="<order>|<title>|<text>", shown once per page kind
-  // (body data-tour-auto) on a visitor's first visit, and again from the Help menu (data-tour-start)
+  // the tour: a walk through the parts marked data-tour="<order>|<title>|<text>" (data-tour-view: the dashboard view
+  // to open first, through window.gcDash), shown once per page kind (body data-tour-auto) on a visitor's first visit,
+  // and again from Help (data-tour-start). A dashboard with no data yet fills in the sample's stats for the walk
+  // (gcDash.tourStart) and puts its own back at the end (gcDash.tourEnd). A part that is not on screen is skipped.
   var kind = document.body ? document.body.getAttribute("data-tour-auto") : null;
   var KEY = "gc-tour" + (kind ? "-" + kind : "");
-  var spot = null, pop = null, list = [], at = 0, back = null, rail = null;
+  var spot = null, pop = null, list = [], at = 0, back = null, rail = null, sampled = false, dir = 1;
+  var D = function(){ return window.gcDash || null; };
   function steps(){
     var s = [].slice.call(document.querySelectorAll("[data-tour]")).map(function(n){
-      var p = n.getAttribute("data-tour").split("|"); return { i: Number(p[0]) || 0, t: p[1] || "", d: p[2] || "", n: n };
-    }).filter(function(x){ var r = x.n.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+      var p = n.getAttribute("data-tour").split("|"); return { i: Number(p[0]) || 0, t: p[1] || "", d: p[2] || "", n: n, v: n.getAttribute("data-tour-view") };
+    });
     s.sort(function(a, b){ return a.i - b.i; });
-    return [{ i: -1, t: "Welcome to GenClass", d: "Here's a quick look around. It takes 20 seconds.", n: null }].concat(s);
+    var hi = { t: "Welcome to GenClass", d: sampled ? "Your app hasn't sent data yet, so this tour fills in sample data to show where everything goes." : "Here's a quick look around. It takes a minute.", n: null };
+    var connect = sampled && document.getElementById("hconnect");
+    var bye = { t: "You're all set", d: connect ? "Connect your app and your own data takes the sample's place." : "Take the tour again any time from Help.", n: null, connect: !!connect };
+    return [hi].concat(s, [bye]);
   }
+  function seen(n){ var r = n.getBoundingClientRect(); return r.width > 0 && r.height > 0; }
   function done(){
     try { localStorage.setItem(KEY, "done"); } catch (e) {}
     if (spot) spot.remove(); if (pop) pop.remove(); spot = pop = null;
     if (rail) rail.classList.remove("tour");
     document.removeEventListener("keydown", key, true); window.removeEventListener("resize", place);
-    if (back && back.focus) try { back.focus(); } catch (e) {}
+    var d = D(); if (d && d.tourEnd) try { d.tourEnd(); } catch (e) {}
+    try { window.scrollTo(0, 0); } catch (e) {}
+    if (back && back.focus) try { back.focus({ preventScroll: true }); } catch (e) {}
   }
   function key(e){
     if (!pop) return;
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(); }
-    else if (e.key === "ArrowRight") { e.preventDefault(); go(at + 1); }
-    else if (e.key === "ArrowLeft") { e.preventDefault(); go(at - 1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); go(at + 1, 1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); go(at - 1, -1); }
   }
   function place(){
     if (!pop || !list[at]) return;
     var s = list[at], vw = window.innerWidth, vh = window.innerHeight, pw = pop.offsetWidth, ph = pop.offsetHeight, x, y;
     if (!s.n) { spot.className = "tour-spot mid"; spot.style.top = spot.style.left = "50%"; spot.style.width = spot.style.height = "0px"; pop.style.left = Math.max(16, (vw - pw) / 2) + "px"; pop.style.top = Math.max(16, (vh - ph) / 2) + "px"; return; }
     var r = s.n.getBoundingClientRect(), pad = 6;
+    // the part of it on screen (a tall section is cut at the viewport)
+    var top = Math.max(r.top, 52), bottom = Math.min(r.bottom, vh - 8), left = Math.max(r.left, 0), right = Math.min(r.right, vw);
     spot.className = "tour-spot";
-    spot.style.top = (r.top - pad) + "px"; spot.style.left = (r.left - pad) + "px"; spot.style.width = (r.width + pad * 2) + "px"; spot.style.height = (r.height + pad * 2) + "px";
-    if (r.height > vh * 0.5) { x = r.right + 16; y = Math.min(Math.max(16, r.top + 40), vh - ph - 16); }
-    else if (r.bottom + 14 + ph < vh) { y = r.bottom + 14; x = r.left + r.width / 2 - pw / 2; }
-    else { y = r.top - 14 - ph; x = r.left + r.width / 2 - pw / 2; }
-    pop.style.left = Math.min(Math.max(16, x), vw - pw - 16) + "px"; pop.style.top = Math.max(16, y) + "px";
+    spot.style.top = (top - pad) + "px"; spot.style.left = (left - pad) + "px"; spot.style.width = (right - left + pad * 2) + "px"; spot.style.height = Math.max(0, bottom - top + pad * 2) + "px";
+    if (bottom - top > vh * 0.5) {
+      // tall: beside it when there is room, else in its lower right corner
+      if (vw - right > pw + 32) { x = right + 16; y = Math.min(Math.max(16, top + 24), vh - ph - 16); }
+      else { x = right - pw - 24; y = bottom - ph - 24; }
+    } else if (bottom + 14 + ph < vh) { y = bottom + 14; x = left + (right - left) / 2 - pw / 2; }
+    else { y = top - 14 - ph; x = left + (right - left) / 2 - pw / 2; }
+    pop.style.left = Math.min(Math.max(16, x), vw - pw - 16) + "px"; pop.style.top = Math.min(Math.max(16, y), vh - ph - 16) + "px";
   }
-  function go(i){
+  function go(i, d){
+    dir = d || 1;
     if (i < 0) return; if (i >= list.length) { done(); return; }
-    at = i; var s = list[i], last = i === list.length - 1;
+    var s = list[i], dash = D();
+    if (s.n) {
+      if (s.v && dash && dash.view) try { dash.view(s.v); } catch (e) {}
+      if (!seen(s.n)) { go(i + dir, dir); return; }
+    }
+    at = i; var last = i === list.length - 1;
     if (rail) rail.classList.toggle("tour", !!(s.n && rail.contains(s.n)));
     pop.querySelector("h2").textContent = s.t; pop.querySelector("p").textContent = s.d;
-    var dots = pop.querySelector(".tour-dots"); dots.textContent = "";
-    list.forEach(function(_, k){ var d = document.createElement("i"); if (k === i) d.className = "on"; dots.appendChild(d); });
+    pop.querySelector(".tour-n").textContent = i === 0 || last ? "" : i + " / " + (list.length - 2);
     var prev = pop.querySelector("[data-prev]"), next = pop.querySelector("[data-next]"), skip = pop.querySelector("[data-skip]");
     prev.hidden = i === 0; skip.hidden = last;
-    next.textContent = i === 0 ? "Show me" : last ? "Done" : "Next";
-    if (s.n && s.n.scrollIntoView) try { s.n.scrollIntoView({ block: "nearest" }); } catch (e) {}
-    place(); setTimeout(place, 180);
+    next.textContent = i === 0 ? "Show me" : last ? (s.connect ? "Connect my app" : "Done") : "Next";
+    if (s.n && s.n.scrollIntoView) {
+      var r = s.n.getBoundingClientRect();
+      try { s.n.scrollIntoView({ block: r.height > window.innerHeight * 0.5 ? "start" : "center" }); } catch (e) { try { s.n.scrollIntoView(); } catch (x) {} }
+    }
+    place(); setTimeout(place, 200);
     try { next.focus({ preventScroll: true }); } catch (e) {}
+  }
+  function build(){
+    list = steps(); at = 0;
+    spot = document.createElement("div"); spot.className = "tour-spot mid"; spot.setAttribute("aria-hidden", "true");
+    pop = document.createElement("div"); pop.className = "tour-pop"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-labelledby", "tour-h");
+    pop.innerHTML = '<h2 id="tour-h"></h2><p></p><div class="tour-f"><span class="tour-n" aria-live="polite"></span><button class="btn sm text" type="button" data-skip>Skip</button><button class="btn sm ghost" type="button" data-prev>Back</button><button class="btn sm" type="button" data-next>Next</button></div>';
+    pop.querySelector("[data-skip]").addEventListener("click", done);
+    pop.querySelector("[data-prev]").addEventListener("click", function(){ go(at - 1, -1); });
+    pop.querySelector("[data-next]").addEventListener("click", function(){
+      var s = list[at];
+      if (at === list.length - 1 && s && s.connect) { done(); if (typeof gcModal === "function") gcModal("m-connect"); return; }
+      go(at + 1, 1);
+    });
+    document.body.appendChild(spot); document.body.appendChild(pop);
+    document.addEventListener("keydown", key, true); window.addEventListener("resize", place);
+    go(0, 1);
   }
   function start(){
     if (pop) done();
-    gcClose(); gcUnmodal(); list = steps(); at = 0; back = document.activeElement; rail = document.querySelector(".sb-rail");
-    spot = document.createElement("div"); spot.className = "tour-spot mid"; spot.setAttribute("aria-hidden", "true");
-    pop = document.createElement("div"); pop.className = "tour-pop"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-labelledby", "tour-h");
-    pop.innerHTML = '<h2 id="tour-h"></h2><p></p><div class="tour-f"><span class="tour-dots" aria-hidden="true"></span><button class="btn sm text" type="button" data-skip>Skip</button><button class="btn sm ghost" type="button" data-prev>Back</button><button class="btn sm" type="button" data-next>Next</button></div>';
-    pop.querySelector("[data-skip]").addEventListener("click", done);
-    pop.querySelector("[data-prev]").addEventListener("click", function(){ go(at - 1); });
-    pop.querySelector("[data-next]").addEventListener("click", function(){ go(at + 1); });
-    document.body.appendChild(spot); document.body.appendChild(pop);
-    document.addEventListener("keydown", key, true); window.addEventListener("resize", place);
-    go(0);
+    gcClose(); gcUnmodal(); back = document.activeElement; rail = document.querySelector(".sb-rail");
+    var d = D(), prep = d && d.tourStart ? d.tourStart() : null;
+    Promise.resolve(prep).then(function(x){ sampled = !!x; build(); }, function(){ sampled = false; build(); });
   }
   window.gcTour = start;
   document.addEventListener("click", function(e){ var t = e.target && e.target.closest ? e.target.closest("[data-tour-start]") : null; if (t) { e.preventDefault(); start(); } });
-  var seen = "done"; try { seen = localStorage.getItem(KEY); } catch (e) {}
-  if (kind && !seen && window.innerWidth >= 768) setTimeout(function(){ if (!document.querySelector(".sb-modal.open")) start(); }, 700);
+  var seenTour = "done"; try { seenTour = localStorage.getItem(KEY); } catch (e) {}
+  if (kind && !seenTour && window.innerWidth >= 768) setTimeout(function(){ if (!document.querySelector(".sb-modal.open")) start(); }, 700);
 })();
 (function(){
   // the Protect dialog of an open private link: a passkey or a password, then the page again (now protected)
@@ -794,7 +823,7 @@ function header(o: StudioOptions): string {
     ? `<button class="btn sm${o.connect === "primary" ? "" : " ghost"}" type="button" data-open="m-connect" id="hconnect" data-tour="30|Connect|Add GenClass to your app in one step.">${icon("plug", 14)}<span>Connect</span></button>`
     : "";
   const acts = connect || o.status || protect ? `<div class="sb-acts">${o.status ?? ""}${protect}${connect}</div>` : "";
-  const help = `<div class="dd" data-tour="70|Help|Docs, feedback, and this tour again."><button class="sb-ib" type="button" data-dd aria-haspopup="menu" aria-expanded="false" aria-label="Help">${icon("help", 15)}</button><div class="dd-m end" role="menu" hidden><button type="button" data-tour-start>${icon(
+  const help = `<div class="dd" data-tour="90|Help|Docs, feedback, and this tour again."><button class="sb-ib" type="button" data-dd aria-haspopup="menu" aria-expanded="false" aria-label="Help">${icon("help", 15)}</button><div class="dd-m end" role="menu" hidden><button type="button" data-tour-start>${icon(
     "compass",
     14,
   )}Take the tour</button><a href="https://genclass.dev/docs">${icon("book", 14)}Docs</a><a href="https://discord.gg/kN9kRnFtZm">${icon("message", 14)}Discord</a><a href="https://github.com/genclass-dev/GenClass/issues/new">${icon(
@@ -818,7 +847,7 @@ function header(o: StudioOptions): string {
 ${acts}
 <div class="sb-mid"><button class="sb-search" type="button" data-open="m-cmd" aria-label="Search" data-tour="20|Search|Find any page, problem or setting.">${icon("search", 15)}<span>Search pages, problems, settings…</span><kbd>⌘K</kbd></button></div>
 <div class="sb-right">
-<span data-tour="60|Light or dark|Pick the look you like.">${themeButton("sb-ib")}</span>
+<span data-tour="80|Light or dark|Pick the look you like.">${themeButton("sb-ib")}</span>
 ${help}
 ${me}
 </div>
@@ -880,7 +909,7 @@ ${THEME_COLOR_METAS("#121212", "#fcfcfc")}
 <a class="skip" href="#mc">Skip to content</a>
 ${header(o)}
 <div class="sb-body">
-<div class="sb-rail"><nav class="snav" id="snav" aria-label="${esc(o.railLabel)}" data-tour="40|Menu|Problems, pages, visitors and settings live here.">${rail}${end}</nav></div>
+<div class="sb-rail"><nav class="snav" id="snav" aria-label="${esc(o.railLabel)}" data-tour="40|Menu|Every part of your dashboard. Let's open each one.">${rail}${end}</nav></div>
 ${menus}
 <main class="wrap" id="main">${o.body}</main>
 </div>

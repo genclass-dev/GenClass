@@ -204,20 +204,24 @@ on either side that breaks the other fails CI.
 
 ### Ways to sign in
 
-`/signup` and `/login` offer, in this order: "Continue with GitHub" and "Continue with Google" (each when its secrets
-are set), an email and a password (always, so the site always has a way in), then a small "Use a passkey". Creating an account never needs a passkey, and there is no passkey sign-up: a passkey is extra security,
-added on `/account` (Security); once the account has one, every password, Google or GitHub sign-in also asks for it
-([The passkey step](#the-passkey-step)).
+`/signup` and `/login` are one page (owner, 2026-11-05) with Sign in or Create account picked at the top, switched in
+place. In this order: "Continue with GitHub" and "Continue with Google" (each when its secrets are set), one passkey
+button (Sign in with a passkey, or Create account with a passkey), then an email and a password (always, so the site
+always has a way in). Under it, "Create a dashboard without an account" goes to `/start`. A passkey sign-up makes an
+account with no email (`POST /api/auth/passkey/register/options` without a session, then `.../verify`); a passkey can
+also be added on `/account` (Security); once the account has one, every password, Google or GitHub sign-in also asks
+for it ([The passkey step](#the-passkey-step)).
 
 - **Email and password** ([Passwords](#passwords)), no owner setup. Sign-up: `POST /api/auth/password/signup`; the
   email, trimmed and lowercased, is the username (unique among passwords, never verified: GenClass has no email sender
   yet) and the account's email. Sign-in: `POST /api/auth/password/login`, a session at once or the passkey step.
   `/login` links to `/login/forgot`, which says to write to mehar@daybot.ca from the address the account signs in
   with ([Owner steps: a forgotten password](#owner-steps-a-forgotten-password)).
-- **Passkeys (WebAuthn)**, no owner setup. Added by a signed-in account on `/account`; `POST
-  /api/auth/passkey/register/options` without a session answers 403, and the verify step refuses a sign-up challenge
-  stored before passkey sign-up was removed (accounts made by it keep signing in with their passkey). Sign in with a
-  passkey ("Use a passkey" on `/login`, `/signup` and the device page): a discoverable-credential prompt, no email.
+- **Passkeys (WebAuthn)**, no owner setup. Signed out, `POST /api/auth/passkey/register/options` starts a passkey
+  sign-up (a new account id as the user handle; the account and its passkey are stored together at verify, with a
+  session that has just used a passkey); signed in, it adds a passkey. The verify step refuses a sign-up challenge
+  stored before 2026-10-15, when passkey sign-up was first removed. Sign in with a passkey (the passkey button on
+  `/login`, Use a passkey on the device page): a discoverable-credential prompt, no email.
   Verification is done here with WebCrypto: attestation `none` (any `fmt`
   is accepted and its statement is not verified), ES256 (-7) and RS256 (-257, at least 2048 bits), and checks on
   the clientDataJSON type, a single-use challenge stored for 5 minutes, the exact origin, `crossOrigin`, the RP ID
@@ -360,7 +364,7 @@ minutes in a single-use row named by the `gc_pending` cookie).
 | `GET /login/device?code=ABCD-EFGH` | cookie optional | signed in: the code and the request, Approve and Deny; signed out: the code and the ways to sign in, whether or not the code is live |
 | `GET /auth/google`, `GET /auth/google/callback` | - | Google sign-in (404 page when not configured); `?link=1` needs a session |
 | `GET /auth/github`, `GET /auth/github/callback` | - | GitHub sign-in, same rules |
-| `POST /api/auth/passkey/register/options` | cookie + Origin | `{}`: a signed-in account adds a passkey (403 `{ confirm: true }` when the account has one and this session has not proved a passkey in 5 minutes; 403 without a session: there is no passkey sign-up) → `{ id, publicKey }` (WebAuthn creation options, binary fields base64url) |
+| `POST /api/auth/passkey/register/options` | Origin (+ cookie to add) | `{}`: signed in, the account adds a passkey (403 `{ confirm: true }` when the account has one and this session has not proved a passkey in 5 minutes); signed out, a passkey sign-up (rate-limited like the password sign-up) → `{ id, publicKey }` (WebAuthn creation options, binary fields base64url). Its verify answers a sign-up with the session cookie and `next: "/account?welcome=1"` |
 | `POST /api/auth/passkey/register/verify` | cookie + Origin | `{ id, credential: { id, rawId, type, response: { clientDataJSON, attestationObject, transports } } }` → `{ ok, account }` (the passkey is added; no new session) |
 | `POST /api/auth/passkey/login/options` | Origin | `{}` → `{ id, publicKey }` (empty `allowCredentials`) |
 | `POST /api/auth/passkey/login/verify` | Origin | `{ id, credential: { ..., response: { clientDataJSON, authenticatorData, signature, userHandle } } }` → `{ ok, account }` + session |
