@@ -413,11 +413,13 @@ describe("dashboard pages", () => {
     const start = await handle(new Request("https://genclass.dev/start"), env, opts);
     expect(start.status).toBe(200);
     const html = await start.text();
-    expect(html).toContain("Add to my app");
-    expect(html).toContain("No sign-up, no card.");
+    // a name and a lock (link-lock.ts): a passkey or a password, then Create
+    expect(html).toContain("Create your dashboard");
+    expect(html).toContain("Free. No sign-up.");
     expect(html).not.toMatch(/trial/i);
-    expect(html).not.toContain("<input");
-    expect(html).toContain('fetch("/start"');
+    expect(html).toContain('<input type="text" id="nm" name="name"');
+    expect(html).toContain('<input type="password" id="pw" name="password"');
+    expect(html).toContain('gcLkPost("/start"');
     expect(start.headers.get("content-security-policy")).toContain("form-action 'self'");
     expect((await handle(new Request("https://genclass.dev/dashboard"), env, opts)).headers.get("location")).toBe("/start");
     // the open-source parts with no account: a static page under the same nonce CSP, nothing written
@@ -769,8 +771,8 @@ describe("dashboard counts (display fixes)", () => {
     const start = await (await handle(new Request(`https://genclass.dev/start/${json.dashboardUrl.split("/").pop()}`), env, opts)).text();
     const dash = await (await handle(new Request(json.dashboardUrl), env, opts)).text();
     expect(dash).toContain("needs @genclass/runtime 0.3.0-beta.0 or later");
+    expect(dash).toContain("do not send by default, token or not; telemetry: true or a telemetry options object opts them in");
     for (const html of [start, dash]) {
-      expect(html).toContain("do not send by default, token or not; telemetry: true or a telemetry options object opts them in");
       expect(html).not.toContain("only send data with an explicit token");
       // RUNTIME_ON_NPM unset: the runtime that reads keys is not on npm yet, and the pages say so first
       expect(html).toContain("Not on npm yet.");
@@ -997,8 +999,17 @@ describe("measured visual checks: counts from page-load summaries (docs/runtime/
   });
 });
 
-describe("/start: one click to an app and the one command that connects it", () => {
-  const post = (accept?: string) => new Request("https://genclass.dev/start", { method: "POST", headers: accept ? { accept } : {} });
+describe("/start: a name and a lock make the app; its setup page has the one command that connects it", () => {
+  // every link /start makes is protected (link-lock.ts): the form posts a password, and the setup page opens in the
+  // browser that made it (its cookie)
+  const post = (accept?: string) =>
+    new Request("https://genclass.dev/start", {
+      method: "POST",
+      headers: { origin: "https://genclass.dev", "content-type": "application/x-www-form-urlencoded", ...(accept ? { accept } : {}) },
+      body: new URLSearchParams({ name: "Shop", password: "a long test password" }).toString(),
+    });
+  const cookieOf = (r: Response): string => r.headers.getSetCookie().find((c) => c.includes("gc_link_"))!.split(";")[0]!;
+  const get = (url: string, from: Response): Request => new Request(url, { headers: { cookie: cookieOf(from) } });
   const tokens = (sql: ReturnType<typeof d1>) => sql.rows("SELECT token, name, private_link, account_id FROM projects");
 
   it("a form post makes the app and goes to its setup page, which has the command, the agent links and the dashboard", async () => {
@@ -1012,7 +1023,7 @@ describe("/start: one click to an app and the one command that connects it", () 
     expect(row).toMatchObject({ private_link: 1, account_id: null });
     const token = row!.token as string;
     const secret = to.split("/").pop()!;
-    const page = await handle(new Request(`https://genclass.dev${to}`), env, opts);
+    const page = await handle(get(`https://genclass.dev${to}`, res), env, opts);
     expect(page.status).toBe(200);
     const html = await page.text();
     expect(html).toContain(`npx @genclass/runtime@beta init --token ${token}`);
@@ -1020,8 +1031,7 @@ describe("/start: one click to an app and the one command that connects it", () 
     expect(html).toContain("Run this in your project's folder.");
     expect(html).toContain(`href="/dashboard/${secret}"`);
     expect(html).toContain("Waiting for your first visitor.");
-    expect(html).toContain("no page text");
-    expect(html).toContain("--no-telemetry");
+    expect(html).toContain("Bookmark this page to get back here.");
     // the private link goes to no other site, as the dashboard's does
     expect(page.headers.get("referrer-policy")).toBe("same-origin");
     expect(page.headers.get("x-robots-tag")).toContain("noindex");
@@ -1029,7 +1039,7 @@ describe("/start: one click to an app and the one command that connects it", () 
     for (const l of links) if (/^(https?:|claude-cli:|vscode:)/.test(l)) expect(l, l).not.toContain(secret);
     expect(html).not.toContain("Not on npm yet.");
     // ?copied=1 comes from the button's script, which already put the command on the clipboard
-    expect(await (await handle(new Request(`https://genclass.dev${to}?copied=1`), env, opts)).text()).toContain("The command is on your clipboard.");
+    expect(await (await handle(get(`https://genclass.dev${to}?copied=1`, res), env, opts)).text()).toContain("The command is on your clipboard.");
   });
 
   it("the agent links hold a short prompt with --yes, inside the limits Cursor and Claude Code set, and run nothing", () => {
@@ -1049,7 +1059,7 @@ describe("/start: one click to an app and the one command that connects it", () 
     }
   });
 
-  it("the page's script asks for JSON, so it can copy the command in the click", async () => {
+  it("the page's script asks for JSON and goes on to the url it is given", async () => {
     const { env, sql } = setup();
     const res = await handle(post("application/json"), env, opts);
     expect(res.status).toBe(201);
@@ -1086,7 +1096,7 @@ describe("/start: one click to an app and the one command that connects it", () 
     const made = await handle(post("application/json"), env, opts);
     const j = (await made.json()) as Record<string, string>;
     const secret = j.url!.split("/").pop()!;
-    const status = async (s: string) => handle(new Request(`https://genclass.dev/api/projects/${s}/status`), env, opts);
+    const status = async (s: string) => handle(get(`https://genclass.dev/api/projects/${s}/status`, made), env, opts);
     expect(await (await status(secret)).json()).toEqual({ lastEvent: null, firstEvent: null });
     expect((await status("Z".repeat(32))).status).toBe(404);
     expect((await status("sample")).status).toBe(404);
@@ -1095,14 +1105,14 @@ describe("/start: one click to an app and the one command that connects it", () 
     const after = (await (await status(secret)).json()) as { lastEvent: string; firstEvent: string };
     expect(after.lastEvent).toBeTruthy();
     expect(after.firstEvent).toBeTruthy();
-    expect(await (await handle(new Request(`https://genclass.dev${j.url}`), env, opts)).text()).toContain("Connected.");
+    expect(await (await handle(get(`https://genclass.dev${j.url}`, made), env, opts)).text()).toContain("Connected.");
   });
 
   it("a self-hosted collector's page leaves out the command, which uses genclass.dev, and opens the snippets", async () => {
     const { env } = setup();
     env.DASHBOARD_ORIGIN = "https://telemetry.acme.example";
     const made = await handle(post(), env, opts);
-    const html = await (await handle(new Request(`https://telemetry.acme.example${made.headers.get("location")}`), env, opts)).text();
+    const html = await (await handle(get(`https://telemetry.acme.example${made.headers.get("location")}`, made), env, opts)).text();
     expect(html).not.toContain('id="cmd"');
     expect(html).not.toContain("cursor.com/link/prompt");
     expect(html).toContain("<details class=\"mt-l\" open>");

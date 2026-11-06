@@ -51,7 +51,7 @@ describe("page scripts survive Wrangler's bundling (keepNames)", () => {
     }
     // run /start/open-source's script from the bundle: ticking guard puts it in the copied prompt
     const html = pages[0]![1];
-    const script = /<script nonce="NONCE">([\s\S]*?)<\/script>/.exec(html)![1]!;
+    const script = /<script nonce="NONCE">([\s\S]*?)<\/script>/.exec(/<body[^>]*>([\s\S]*)<\/body>/.exec(html)![1]!)![1]!;
     const win = new Window({ url: "https://genclass.dev/start/open-source" });
     win.document.body.innerHTML = /<body[^>]*>([\s\S]*)<\/body>/.exec(html)![1]!.replace(/<script[\s\S]*?<\/script>/g, "");
     new Function("window", "document", "location", "navigator", script)(win, win.document, win.location, win.navigator);

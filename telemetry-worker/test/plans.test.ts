@@ -170,7 +170,7 @@ describe("no trial", () => {
       // no Pro plan anywhere (the Studio pages' code font, Source Code Pro, is not one)
       expect(html.replace(/Source(\+| )Code(\+| )Pro/g, ""), p).not.toMatch(/\bPro\b/);
     }
-    expect(pages[0]![1]).toContain("The dashboard is free.");
+    expect(pages[0]![1]).toContain("Free. No sign-up.");
     expect(pages[1]![1]).toContain('<p class="opt">The runtime needs no account: <a href="/start/open-source">set it up without one</a>. The dashboard is free for every app.</p>');
     expect(pages[2]![1]).toContain('<p class="opt">The runtime needs no account: <a href="/start/open-source">set it up without one</a>. The dashboard is free for every app.</p>');
   });
