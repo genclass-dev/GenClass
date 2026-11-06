@@ -5,7 +5,7 @@ import { Window } from "happy-dom";
 import { ANALYTICS_RUNTIME, analyticsPrompt, CDN_SCRIPT, DASH_CSS, dashboardPage, esc, installPrompt, KEY_RUNTIME, MCP_PKG, MESH_SCRIPT, openSourcePage, openSourcePrompt, orgName, RUNTIME_PKG, securityHeaders, SNIPPET_RUNTIME, setupPage, startPage, type DashboardOptions } from "../src/pages.js";
 
 const setupOf = (o: Record<string, unknown> = {}) => setupPage("n", { token: "gc_TestToken0123456789abc", secret: "a".repeat(32), lastEvent: null, ...o });
-import { accountPage, devicePage, forgotPage, lockedLinkPage, loginPage, messagePage, newProjectPage, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
+import { accountPage, devicePage, forgotPage, lockedLinkPage, loginPage, messagePage, newProjectPage, ORG_CSS, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
 import { sampleStats } from "../src/sample.js";
 import type { Stats } from "../src/dashboard.js";
 
@@ -65,50 +65,47 @@ async function render(stats: Stats, opts: DashboardOptions = {}, o: { url?: stri
 }
 
 describe("dashboard page: possible issues tier", () => {
-  it("the sample shows possible issues apart from problems (summary, Fig. 2, cards, tables) and says it is simulated", async () => {
+  it("the sample shows possible issues apart from problems (tiles, Fig. 2, cards, tables) and says it is simulated", async () => {
     const st = sampleStats("7d", NOW);
     expect(st.totals.possible).toBeGreaterThan(0);
     const { doc, text, hidden, heads, close } = await render(st);
     expect(text("#pname")).toContain("simulated data");
-    expect(text("#summary")).toContain(`found ${nf.format(problems(st))} problems (${nf.format(st.totals.checks!)} measured checks)`);
-    expect(text("#summary")).toContain(`It also flagged ${nf.format(st.totals.possible!)} possible issues at lower confidence, listed separately and not counted as problems.`);
+    // the overview has no summary paragraph: the tiles say it
+    expect(doc.getElementById("summary")).toBeNull();
+    expect(text("#tiles > div:nth-child(1) .v")).toBe(nf.format(problems(st)));
     // Fig. 1 and its count stay confirmed-only (the model's detections and the measured checks); Fig. 2 draws the possible tier as hollow bars
     expect(text("#trendn")).toBe(`${nf.format(problems(st))} problems`);
     expect(hidden("possfig")).toBe(false);
     expect(text("#possn")).toBe(`${nf.format(st.totals.possible!)} possible issues`);
     expect(doc.querySelectorAll('#possplot rect[stroke="var(--ink3)"]').length).toBe(st.series.filter((b) => b.possible).length);
-    expect(text("#possfig figcaption")).toContain("Not counted in Fig. 1");
-    expect(heads("#trendtable")).toContain("Possible (not in total)");
+    expect(doc.querySelector("#possfig figcaption")).toBeNull();
+    expect(heads("#trendtable")).toContain("Possible");
     // cards: their own block, ring keys; the confirmed cards keep solid keys
     expect(hidden("possible-s")).toBe(false);
     expect(doc.querySelectorAll("#possible .find.poss").length).toBe(st.breakdowns.possible_diagnosis!.length);
     expect(doc.querySelectorAll("#possible .key.ring").length).toBe(st.breakdowns.possible_diagnosis!.length);
     expect(doc.querySelectorAll("#issues .key.ring").length).toBe(0);
-    expect(text("#possible-s")).toContain("Not counted as problems");
-    // the tier's floor is the runtime's (the eager setting's threshold from the model), not a fixed number on the page
-    expect(text("#possible-s")).toContain("from the eager setting's threshold up");
-    expect(text("#possfig figcaption")).toContain("from the eager setting's threshold up");
-    expect(text("#possible-s .poss-note") + text("#possfig figcaption")).not.toMatch(/\d+%/);
+    expect(text("#possible-s .aside")).toBe("Lower confidence");
+    // the tier's floor is the runtime's (the eager setting's threshold from the model), never a fixed number on the page
+    expect(text("#possible-s") + text("#possfig")).not.toMatch(/\d+%/);
     // pages table: a separate Possible column, and pages that only have possible issues
     expect(heads("#pages")).toEqual(["Page", "Problems", "By type", "Possible"]);
     expect(text("#pages")).toContain("/account");
-    expect(text("#pages figcaption")).toContain("not counted in Problems");
     await close();
   });
 
-  it("with possible issues and no problems, the summary says so and Fig. 1 stays empty", async () => {
+  it("with possible issues and no problems, the tiles say so and Fig. 1 stays empty", async () => {
     const st = noChecks(sampleStats("7d", NOW));
     st.totals.detections = 0;
     st.typeSeries = st.typeSeries.map((b) => ({ ...b, counts: {} }));
     st.breakdowns = { ...st.breakdowns, detect_diagnosis: [], detect_issue: [], detect_route: [] };
     st.distinct = { ...st.distinct, detect_route: 0 };
     const { text, hidden, heads, close } = await render(st);
-    // "found", not "confirmed": GenClass only judges the situations that stand out
-    expect(text("#summary")).toContain(`found no problems. It flagged ${nf.format(st.totals.possible!)} possible issues at lower confidence`);
-    expect(text("#summary")).not.toContain("confirmed");
+    expect(text("#tiles > div:nth-child(1) .v")).toBe("0");
+    expect(text("#possn")).toBe(`${nf.format(st.totals.possible!)} possible issues`);
     expect(text("#trendplot")).toBe("No problems found in this period.");
     expect(hidden("possfig")).toBe(false);
-    expect(heads("#trendtable")).toContain("Possible (not in total)");
+    expect(heads("#trendtable")).toContain("Possible");
     expect(hidden("issuesempty")).toBe(false);
     expect(hidden("possible-s")).toBe(false);
     await close();
@@ -119,25 +116,24 @@ describe("dashboard page: possible issues tier", () => {
     st.totals.possible = 0;
     st.series = st.series.map((b) => ({ ...b, possible: 0 }));
     st.breakdowns = { ...st.breakdowns, possible_diagnosis: [], possible_issue: [], possible_route: [] };
-    const { text, hidden, heads, close } = await render(st);
-    expect(text("#summary")).not.toContain("possible");
+    const { doc, hidden, heads, close } = await render(st);
+    expect(doc.querySelectorAll("#possible .find")).toHaveLength(0);
     expect(hidden("possfig")).toBe(true);
     expect(hidden("possible-s")).toBe(true);
-    expect(heads("#trendtable")).not.toContain("Possible (not in total)");
+    expect(heads("#trendtable")).not.toContain("Possible");
     expect(heads("#pages")).toEqual(["Page", "Problems", "By type"]);
     await close();
   });
 });
 
 describe("dashboard page: display fixes", () => {
-  it("Pages affected, the summary and the sidebar count every page with a problem, not only the top 25", async () => {
+  it("Pages affected and the sidebar count every page with a problem, not only the top 25", async () => {
     const st = noChecks(sampleStats("7d", NOW));
     st.breakdowns = { ...st.breakdowns, detect_route: Array.from({ length: 25 }, (_, i) => ({ key: `/p/${i}`, count: 1 })) };
     st.distinct = { ...st.distinct, detect_route: 30 };
     const { doc, text, close } = await render(st);
     expect(doc.querySelector("#tiles > div:nth-child(2) .k")!.textContent).toBe("Pages affected");
     expect(doc.querySelector("#tiles > div:nth-child(2) .v")!.textContent).toBe("30");
-    expect(text("#summary")).toContain("on 30 pages");
     expect(text("#c-pages")).toBe("30");
     await close();
   });
@@ -160,20 +156,20 @@ describe("dashboard page: display fixes", () => {
     await close();
   });
 
-  it("decision time says it is an average of the records received, and leans when routine records were sampled", async () => {
+  it("decision time says it is an average of the records received, and that routine records were sampled", async () => {
     const st = sampleStats("7d", NOW);
     Object.assign(st.totals, { latency_ms_n: 35, latencyAvgMs: 120, records_sampled_out: 0, records_capped: 0 });
     let r = await render(st);
-    expect(r.text("#health")).toContain("average of 35 decision records received");
-    expect(r.text("#health")).not.toContain("leans");
+    expect(r.text("#health")).toContain("average of 35 records");
+    expect(r.text("#health")).not.toContain("sampled");
     await r.close();
     Object.assign(st.totals, { records_sampled_out: 75 });
     r = await render(st);
-    expect(r.text("#health")).toContain("average of 35 decision records received; routine decisions are sampled, so it leans towards the others");
+    expect(r.text("#health")).toContain("average of 35 records, sampled");
     await r.close();
   });
 
-  it("health lists what was not checked or not sent; the empty state explains local hosts and the 0.3.0 token", async () => {
+  it("health lists what was not checked or not sent; the empty state says local hosts do not send", async () => {
     const st = sampleStats("7d", NOW);
     Object.assign(st.totals, { hidden_skipped: 6, model_dropped: 2, records_sampled_out: 40, records_capped: 3, telemetry_dropped: 1, actionLimits: 2 });
     let r = await render(st);
@@ -185,9 +181,8 @@ describe("dashboard page: display fixes", () => {
 
     r = await render({ ...sampleStats("7d", NOW), lastEvent: null });
     expect(r.hidden("nodata")).toBe(false);
-    expect(r.text("#nodata")).toContain("The token needs @genclass/runtime 0.3.0-beta.0 or later");
-    // as the runtime behaves (src/telemetry/config.ts) and PRIVACY.md says: any telemetry options object opts in too
-    expect(r.text("#nodata")).toContain("do not send by default, token or not; telemetry: true or a telemetry options object opts them in");
+    // as the runtime behaves (src/telemetry/config.ts): a key does not make a local host send
+    expect(r.text("#nodata")).toContain("Local hosts do not send by default.");
     expect(r.text("#nodata")).not.toContain("never send anything");
     await r.close();
     expect(setupOf()).toContain("telemetry: true or a telemetry options object opts them in");
@@ -240,15 +235,15 @@ describe("dashboard page: account mode (/account/apps/<id>) with live stats", ()
     expect([...r.doc.querySelectorAll("#nodata [data-open]")].map((b) => b.getAttribute("data-tab"))).toEqual(["fw", "ana"]);
     expect(r.doc.querySelector('#nodata a[data-goto="mcp"]')).not.toBeNull();
     expect(r.text("#hstatus")).toBe("Waiting");
-    expect(r.text("#cstatust")).toBe("Waiting for the first event from this app");
+    expect(r.text("#cstatust")).toBe("Waiting for the first event");
     expect(r.text("#updated")).not.toContain("Could not load");
     // not on npm yet (runtimeReady unset): said first, with the @beta command
-    expect(r.text("#cnote")).toContain(`Project keys ship in @genclass/runtime ${KEY_RUNTIME} (npm dist-tag beta), which is not published yet`);
+    expect(r.text("#cnote")).toBe(`Not on npm yet. Project keys need @genclass/runtime ${KEY_RUNTIME}, which is not published yet.`);
     expect(r.text("#connect")).toContain(`npx ${RUNTIME_PKG} login`);
     // analytics: the version they need and the exact install line
-    expect(r.text("#canalytics")).toBe(
-      `Interaction analytics (the Visitors view) need @genclass/runtime ${ANALYTICS_RUNTIME} or later and analytics: true: npm install ${RUNTIME_PKG}. Earlier versions ignore the option without a word.`,
-    );
+    expect(r.text("#canalytics")).toBe(`Needs @genclass/runtime ${ANALYTICS_RUNTIME} or later.`);
+    // the copied prompt carries the install line
+    expect(r.doc.querySelector("#tp-ana [data-copy]")!.getAttribute("data-copy")).toContain(`npm install ${RUNTIME_PKG}`);
     await r.close();
   });
 });
@@ -264,7 +259,7 @@ describe("snippets: the runtime that reads the token", () => {
       expect(html).not.toMatch(/cdn\.jsdelivr\.net\/npm\/@genclass\/runtime["' ]/);
       // npm and npx name the beta dist-tag while the runtime that reads keys is a prerelease
       expect(html).toContain(`npx ${RUNTIME_PKG} init`);
-      expect(html).toContain(`npm i ${RUNTIME_PKG}`);
+      expect(html.includes(`npm i ${RUNTIME_PKG}`) || html.includes(`npm install ${RUNTIME_PKG}`)).toBe(true);
       expect(html).not.toMatch(/npx @genclass\/runtime (init|login)/);
     }
     // until RUNTIME_ON_NPM reaches it, /start and private dashboards say first that it is not on npm yet
@@ -322,6 +317,15 @@ function everyPage(): [string, string][] {
 /** The pages in the Supabase Studio frame (src/studio.ts); the rest keep genclass.dev's own look. */
 const STUDIO = ["/dashboard", "/account/apps (locked)", "/account/apps", "/account", "/account/new"];
 
+/** CSS without its :root[data-theme="light"] blocks (the light theme's values, set only by the page's data-theme). */
+const withoutLight = (css: string) => css.replace(/:root\[data-theme="light"\]\{[^}]*\}/g, "");
+/** The tokens of every :root[data-theme="light"] block in some CSS, as name to value. */
+function lightTokens(css: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of css.matchAll(/:root\[data-theme="light"\]\{([^}]*)\}/g)) for (const d of m[1]!.split(";")) { const i = d.indexOf(":"); if (i > 0) out[d.slice(0, i).trim().replace(/^--/, "")] = d.slice(i + 1).trim(); }
+  return out;
+}
+
 /** A token's #RRGGBB value in a page's CSS. */
 const tokenOf = (html: string) => (name: string) => {
   const m = new RegExp(`--${name}:(#[0-9A-Fa-f]{6})`).exec(html);
@@ -335,8 +339,8 @@ describe("pages: one dark theme everywhere, genclass.dev's for /start and sign-i
       expect(html, name).not.toContain("prefers-color-scheme");
       expect(html, name).toContain("color-scheme:dark;");
       expect(html, name).not.toMatch(/color-scheme:\s*light/);
-      // one set of tokens (no second set that could override them)
-      expect(html.match(/--paper:/g), name).toHaveLength(1);
+      // one set of dark tokens (no second set that could override them); light values only under data-theme="light"
+      expect(withoutLight(html).match(/--paper:/g), name).toHaveLength(1);
       expect(html, name).not.toMatch(/Outfit|Figtree|Geist/);
       // the mark and the name in type; the navy-on-white lockup images are gone
       expect(html, name).not.toContain("lockup-");
@@ -384,6 +388,26 @@ describe("pages: one dark theme everywhere, genclass.dev's for /start and sign-i
     expect(contrast(site("paper"), site("ink"))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(studio("ink"), studio("s300"))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(studio("amber"), studio("amber-t"))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("light theme: every colour the pages set is a token with a light value; text at least 4.5:1, marks and borders at least 3:1", () => {
+    // DASH_CSS and the organization pages' CSS set no colour outside their token blocks (the Google mark keeps its own)
+    const css = (DASH_CSS + ORG_CSS).replace(/:root(\[data-theme="light"\])?\{[^}]*\}/g, "");
+    expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
+    // each of DASH_CSS's own tokens has a light value; the critical status reads on Studio's light surfaces
+    const dark = withoutLight(DASH_CSS), L = lightTokens(DASH_CSS);
+    for (const m of dark.matchAll(/:root\{([^}]*)\}/g)) for (const d of m[1]!.split(";")) { const k = d.slice(0, d.indexOf(":")).trim().replace(/^--/, ""); if (k && k !== "chk") expect(L[k], k).toBeDefined(); }
+    for (const bg of ["#ffffff", "#f7f7f7"]) expect(contrast(L.bad!, bg)).toBeGreaterThanOrEqual(4.5);
+    // the sign-in look's palette in the light theme (ACCOUNT_CSS), measured as the dark one is
+    const site = lightTokens(loginPage("n", { google: false, github: false, next: null }));
+    for (const t of ["ink", "ink2", "ink3", "accent", "warn"]) for (const bg of ["paper", "panel", "code"]) expect(contrast(site[t]!, site[bg]!), `${t} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(site.accent!, site["accent-t"]!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(site.warn!, site["warn-t"]!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(site.ink3!, site["accent-t"]!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(site["on-green"]!, site["accent-f"]!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(site["on-green"]!, site["green-h"]!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(site.line!, site.paper!)).toBeGreaterThanOrEqual(3);
+    expect(contrast(site.codeink!, site.code!)).toBeGreaterThanOrEqual(4.5);
   });
 });
 
@@ -459,14 +483,19 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
     expect(msg).toContain('<a class="btn ghost" href="/b">Two</a>');
   });
 
-  it("chart series: the validated slots, dark only, none of them green (green is the frame's brand and what GenClass did)", () => {
+  it("chart series: the validated slots, dark and light, none of them green (green is the frame's brand and what GenClass did)", () => {
     const dark = /:root\{--t1:(#\w{6});--t2:(#\w{6});--t3:(#\w{6});--t4:(#\w{6});--t5:(#\w{6});/.exec(DASH_CSS)!.slice(1);
     // validate_palette.js --mode dark passes on these, in this order (pages.ts, the chart colours comment)
     expect(dark).toEqual(["#3987E5", "#E8552F", "#2AA3C7", "#C98500", "#B964C9"]);
-    expect(DASH_CSS.match(/--t1:/g)).toHaveLength(1);
-    for (const c of dark) expect(hue(c) < 75 || hue(c) > 170, c).toBe(true);
-    // every slot is a visible mark on the site's black and on Studio's canvas and surface
+    // one dark set; the light theme's steps of the same hues only under data-theme="light"
+    expect(withoutLight(DASH_CSS).match(/--t1:/g)).toHaveLength(1);
+    const L = lightTokens(DASH_CSS), light = ["t1", "t2", "t3", "t4", "t5"].map((k) => L[k]!);
+    // validate_palette.js --mode light passes on these on #ffffff and #f7f7f7 (pages.ts, the chart colours comment)
+    expect(light).toEqual(["#2470D6", "#D4502B", "#1388AD", "#A86C00", "#A04FB5"]);
+    for (const c of [...dark, ...light]) expect(hue(c) < 75 || hue(c) > 170, c).toBe(true);
+    // every slot is a visible mark on the site's black and on Studio's canvas and surface; the light ones on white
     for (const c of dark) for (const bg of ["#000000", "#0B0B0A", "#121212", "#1f1f1f"]) expect(contrast(c, bg), `${c} on ${bg}`).toBeGreaterThanOrEqual(3);
+    for (const c of [...light, L.t0!]) for (const bg of ["#ffffff", "#f7f7f7", "#fcfcfc"]) expect(contrast(c, bg), `${c} on ${bg}`).toBeGreaterThanOrEqual(3);
     expect(hue("#2FD07F")).toBeGreaterThan(75); // the check itself would catch the brand greens
     expect(hue("#3ecf8e")).toBeGreaterThan(75);
   });
@@ -508,7 +537,7 @@ describe("dashboard page: interaction analytics (docs/runtime/ANALYTICS.md secti
     expect(hidden("nav-visits")).toBe(false);
     expect(text("#c-visits")).toBe(nf.format(st.totals.ix_views!));
     expect(text("#ixsum")).toContain("Page views");
-    expect(text("#ixsum")).toContain("Unique visitors are not counted");
+    expect(text("#ixsum")).toContain("Rage clicks");
     expect(heads("#ixpages")).toEqual(["Page", "Views", "Time on page", "Read half", "Read to the end"]);
     expect(doc.querySelectorAll("#ixpages tbody tr").length).toBe(Math.min(12, st.breakdowns.ix_views!.length));
     expect(text("#ixclicks")).toContain("button#pay");
@@ -521,14 +550,15 @@ describe("dashboard page: interaction analytics (docs/runtime/ANALYTICS.md secti
     const st = sampleStats("7d", NOW);
     const { doc, text, hidden, heads, close } = await render(st);
     expect(hidden("moves")).toBe(false);
-    for (const t of ["Page loads", "Steps between pages", "Back and forward", "Page load ends", "within one page load"]) expect(text("#ixmoves")).toContain(t);
+    for (const t of ["Page loads", "Steps between pages", "Back and forward", "Page load ends"]) expect(text("#ixmoves")).toContain(t);
     expect(heads("#ixpaths")).toEqual(["Path (first 5 pages)", "Page loads", ""]);
     expect(text("#ixpaths")).toContain("/ > /products > /products/:id");
     expect(heads("#ixsteps")).toEqual(["From", "To", "Steps", "Time before the step"]);
     expect(doc.querySelectorAll("#ixsteps tbody tr").length).toBe(Math.min(12, st.breakdowns.ix_nav!.length));
     expect(heads("#ixexits")).toEqual(["Page", "Page loads started", "Page loads ended", "End rate", "Back/forward", "First interaction", "Time to it"]);
     expect(text("#ixexits")).toContain('[data-genclass-name="add-to-cart"]');
-    expect(doc.querySelector(".dfoot")!.textContent).toContain("the path between pages");
+    // no captions under the tables: the headers say it
+    expect(doc.querySelectorAll("#moves figcaption")).toHaveLength(0);
     await close();
   });
 
@@ -560,15 +590,17 @@ describe("dashboard page: interaction analytics (docs/runtime/ANALYTICS.md secti
     const btn = box.firstElementChild as HTMLButtonElement;
     expect(btn.tagName).toBe("BUTTON");
     expect(btn.className).toBe("btn green xl");
-    expect(btn.textContent).toBe("Copy the prompt for your coding agent");
+    expect(btn.textContent).toBe("Copy prompt");
+    expect(btn.getAttribute("aria-label")).toBe("Copy the prompt for your coding agent");
     expect(box.children).toHaveLength(3);
     expect(box.querySelectorAll("p.cp-sub br")).toHaveLength(0);
     expect(text("#ixsetup .cp-sub").length).toBeLessThanOrEqual(160);
-    // under the button: the runtime analytics need and the install line (0.2.x ignores the option)
-    expect(text("#ixver")).toBe(`They need @genclass/runtime ${ANALYTICS_RUNTIME} or later (npm install ${RUNTIME_PKG}); earlier versions ignore analytics: true without a word.`);
+    // under the button: the runtime analytics need (0.2.x ignores the option); the prompt has the install line
+    expect(text("#ixver")).toBe(`Needs @genclass/runtime ${ANALYTICS_RUNTIME} or later.`);
     expect(ANALYTICS_RUNTIME).toBe("0.3.0-beta.1");
-    expect(doc.querySelector(".dfoot")!.textContent).toContain("never its text");
-    expect(doc.querySelector(".dfoot")!.textContent).toContain("No text from your pages, no IP addresses and no user agents are stored.");
+    expect(btn.getAttribute("data-copy")).toContain(`npm install ${RUNTIME_PKG}`);
+    // no footer of what is stored: that is in the privacy policy
+    expect(doc.querySelector(".dfoot")).toBeNull();
     // the third child is the fallback: the prompt in a hidden textarea, shown selected when the clipboard refuses
     const ta = box.children[2] as HTMLTextAreaElement;
     expect(ta.tagName).toBe("TEXTAREA");
@@ -616,7 +648,7 @@ describe("dashboard page: interaction analytics (docs/runtime/ANALYTICS.md secti
     expect(btn.textContent).toBe("Copied");
     const t = timers.find(([, ms]) => ms === 2000)!;
     t[0]();
-    expect(btn.textContent).toBe("Copy the prompt for your coding agent");
+    expect(btn.textContent).toBe("Copy prompt");
     await win.happyDOM.close();
   });
 });
@@ -648,7 +680,6 @@ describe("dashboard page: visitors, sources, devices, sessions, entry and exit p
     expect(doc.querySelectorAll("#ixfun .fun:first-child tbody tr")).toHaveLength(3);
     expect(text("#ixfun")).toContain("Most visits are lost between step 1 and step 2");
     expect(text("#ixfunedit")).toBe("Edit funnels");
-    expect(text("#ixsum")).toContain("Unique visitors are not counted");
     await close();
   });
 
@@ -685,7 +716,7 @@ describe("dashboard page: visitors, sources, devices, sessions, entry and exit p
     const panel = /<section class="connect[\s\S]*?<\/section>/.exec(html)![0];
     const block = /<div class="cana">([\s\S]*?)<\/div><\/div>/.exec(panel)![1]!;
     expect(block).toMatch(/^<div class="eb">Visitor analytics<\/div><div class="cprompt"><button class="btn green xl" type="button" data-copy="/);
-    expect(block).toContain("Copy the prompt for your coding agent</button>");
+    expect(block).toContain('aria-label="Copy the prompt for your coding agent">Copy prompt</button>');
     expect(block).toContain(esc("https://genclass.dev/account/apps/0123456789abcdef#visits"));
     expect(html).toContain('"funnelsUrl":"/api/account/projects/0123456789abcdef/funnels"');
   });
@@ -698,7 +729,7 @@ describe("dashboard page: the Visitors empty state names the app's older runtime
     for (const k of Object.keys(st.totals)) if (k.startsWith("ix_")) delete st.totals[k];
     st.breakdowns.runtime = [{ key: "0.2.2", count: 5 }, { key: "0.3.0-beta.0", count: 3 }, { key: "0.3.0-beta.1", count: 2 }, { key: "0.3.0", count: 1 }, { key: "(unknown)", count: 1 }];
     const { text, close } = await render(st);
-    expect(text("#ixold")).toBe("This app sends from @genclass/runtime 0.2.2, 0.3.0-beta.0, which has no analytics.");
+    expect(text("#ixold")).toBe("This app runs 0.2.2, 0.3.0-beta.0.");
     await close();
   });
 });
@@ -722,7 +753,6 @@ describe("dashboard page: the closed loop (Fig. 3)", () => {
     expect(svgText).toContain(`${nf.format(st.totals.sessions!)} page loads watched`);
     expect(svgText).toMatch(/Problems (down|up|unchanged)/);
     expect(svgText).toContain("a person decides");
-    expect(text("#loop-foot")).toContain("@genclass/mcp");
     // the sample's agent reports: the stale-response row names f3 as proven, the double-submit row f7 as reproduced and tested
     expect(doc.querySelector('#loopsvg rect[data-s="problem"][data-k="stale"]')!.getAttribute("data-agent")).toBe("f3");
     expect(svgText).toContain("Agent: f3 on /search reproduced, test");
@@ -777,7 +807,7 @@ describe("dashboard page: the closed loop (Fig. 3)", () => {
     expect(nodes.map((r) => Number(r.getAttribute("data-n")))).toEqual([st.agent.stages.found, st.agent.stages.reproduced, st.agent.stages.fixed, st.agent.stages.closed]);
     expect(doc.querySelector('#loopstages rect[data-stage="closed"]')!.classList.contains("closed")).toBe(true);
     const t = text("#loopstages");
-    for (const s of ["Issue found", "Reproduced", "Fix proven", "Closed", "replay", "fix, replay", "write test", "genclass_replay", "handed to the agent.", "A person ships."]) expect(t).toContain(s);
+    for (const s of ["Issue found", "Reproduced", "Fix proven", "Closed", "replay", "fix, replay", "write test", "genclass_replay", "Handed to the agent.", "A test guards it."]) expect(t).toContain(s);
     expect(t).toContain(`still reproduces: round again (${st.agent.stages.continued})`);
     expect(t).toContain(`production is watched again · ${st.agent.stages.open} issues open now`);
     // three forward edges, the round-again edge and the loop edge, the two back edges dashed
@@ -945,7 +975,8 @@ describe("dashboard page: the Supabase Studio frame (src/studio.ts): header, rai
     // the model's kinds and the measured checks' kinds
     const kinds = [...st.breakdowns.detect_diagnosis!.filter((x) => x.key !== "expected"), ...st.breakdowns.check_kind!];
     expect(r.doc.querySelectorAll("#advisor article")).toHaveLength(3);
-    expect(r.text("#advn")).toBe(`${kinds.length} kinds of problems need attention`);
+    expect(r.text("#advn")).toBe("Needs attention");
+    expect(r.text("#c-found")).toBe(String(kinds.length));
     expect(r.doc.querySelectorAll("#advisor [data-copy]")).toHaveLength(3);
     // every problem card copies a prompt: what, where, the usual fix, and the MCP steps that prove the fix
     const prompts = [...r.doc.querySelectorAll("#issues .find [data-copy]")].map((b) => b.getAttribute("data-copy")!);
@@ -1006,7 +1037,7 @@ describe("dashboard page: the Supabase Studio frame (src/studio.ts): header, rai
     expect(r.text("#mcp .alink-st")).toContain("Copy it now");
     // a link already exists: making a new one asks first (the old one stops working)
     const b = r.doc.querySelector("#settings [data-mklink]") as unknown as HTMLElement;
-    expect(b.textContent).toBe("Make a new agent link");
+    expect(b.textContent).toBe("New agent link");
     b.click();
     expect(b.textContent).toBe("Confirm: the old link stops working");
     expect(r.writes).toHaveLength(1);
@@ -1100,12 +1131,14 @@ describe("dashboard page: the Supabase Studio frame (src/studio.ts): header, rai
     expect(r.text("#delproj .err")).toBe("");
     await r.close();
     const a = await render(sampleStats("7d", NOW), { account, id: "0123456789abcdef", firstEvent: "2026-10-12T09:00:00.000Z", runtimeReady: true }, { url: "https://genclass.dev/account/apps/0123456789abcdef#settings" });
-    expect(a.text("#vdesc")).toBe("This project's name, key and agent access, and deleting it.");
+    // the view's title and no description under it
+    expect(a.text("#vtitle")).toBe("Project Settings");
+    expect(a.hidden("vdesc")).toBe(true);
     await a.close();
     const s = await render(sampleStats("7d", NOW), {}, { url: "https://genclass.dev/dashboard/sample#settings" });
     expect(s.doc.querySelector("[data-delproj]")).toBeNull();
     expect(s.doc.querySelector('a[href="#delproj"]')).toBeNull();
-    expect(s.text("#vdesc")).toBe("This project's name, key and agent access.");
+    expect(s.hidden("vdesc")).toBe(true);
     await s.close();
   });
 
@@ -1162,10 +1195,13 @@ describe("dashboard page: measured visual checks (docs/runtime/VISUAL.md section
     expect(r.doc.querySelectorAll("#issues .find:not(.chk) .bdg")).toHaveLength(0);
     const lock = cards.find((c) => c.querySelector("h3")!.textContent!.startsWith("Scroll locked"))!;
     expect(lock.querySelector(".n")!.textContent).toBe(nf.format(st.breakdowns.check_kind!.find((x) => x.key === "scroll-lock-stuck")!.count));
-    expect(lock.textContent).toContain("overflow: hidden");
+    // the card: no explanation of what was measured, the fix's first sentence only; the prompt has both in full
+    expect(lock.textContent).not.toContain("overflow: hidden");
     expect(lock.querySelector(".where")!.textContent).toContain("/products/:id");
-    expect(lock.querySelector("p.fix")!.textContent).toContain("GenClass removes the leaked lock");
+    expect(lock.querySelector("p.fix")!.textContent).toBe("Fix: Remove the lock in the same code path that closes the dialog, menu or notice, error and cancel paths included.");
     const prompt = lock.querySelector("[data-copy]")!.getAttribute("data-copy")!;
+    expect(prompt).toContain("overflow: hidden");
+    expect(prompt).toContain("GenClass removes the leaked lock");
     expect(prompt).toContain("Fix a problem GenClass measured in production in this web app (Sample storefront (simulated data)): scroll locked (the measured check scroll-lock-stuck)");
     expect(prompt).toContain("not a model finding");
     expect(prompt).toContain("1. genclass_scan on /products/:id");
@@ -1176,7 +1212,7 @@ describe("dashboard page: measured visual checks (docs/runtime/VISUAL.md section
     await r.close();
   });
 
-  it("Fig. 1 gives the checks their own hatched slot; the summary, the tiles and the rail count them as problems, never as detections", async () => {
+  it("Fig. 1 gives the checks their own hatched slot; the tiles and the rail count them as problems, never as detections", async () => {
     const st = sampleStats("7d", NOW);
     const r = await render(st);
     const checks = st.totals.checks!;
@@ -1187,14 +1223,12 @@ describe("dashboard page: measured visual checks (docs/runtime/VISUAL.md section
     expect(r.doc.querySelector("#trendplot pattern#chkp")).not.toBeNull();
     expect(r.heads("#trendtable")).toContain("Measured checks");
     expect(r.text("#trendn")).toBe(`${nf.format(problems(st))} problems`);
-    expect(r.text("#summary")).toContain(`(${nf.format(checks)} measured checks)`);
     expect(r.text("#tiles > div:nth-child(1) .v")).toBe(nf.format(problems(st)));
-    expect(r.text("#tiles > div:nth-child(1) .s")).toContain(`${nf.format(checks)} measured checks`);
+    expect(problems(st) - st.totals.detections!).toBe(checks);
     expect(r.text("#c-trend")).toBe(nf.format(problems(st)));
     expect(r.text("#c-found")).toBe(String(st.breakdowns.detect_diagnosis!.length + st.breakdowns.check_kind!.length));
     // the Pages table draws them hatched and says what the hatching is
     expect([...r.doc.querySelectorAll("#pages .mix i")].some((i) => (i.getAttribute("title") ?? "").startsWith("Measured checks: "))).toBe(true);
-    expect(r.text("#pages figcaption")).toContain("Hatched: measured checks, not model findings.");
     // the possible tier and the detections' own counts are untouched
     expect(r.text("#possn")).toBe(`${nf.format(st.totals.possible!)} possible issues`);
     await r.close();
@@ -1218,12 +1252,14 @@ describe("dashboard page: measured visual checks (docs/runtime/VISUAL.md section
     let r = await render(checksOnly(10));
     expect(r.text("#verdictt")).toBe("Critical");
     expect(r.text("#verdicts")).toBe("10 problems not fixed live");
-    expect(r.text("#summary")).toContain("found 10 problems (all measured checks) on 1 page");
+    expect(r.text("#tiles > div:nth-child(1) .v")).toBe("10");
+    expect(r.text("#tiles > div:nth-child(2) .v")).toBe("1");
     await r.close();
     r = await render(checksOnly(10, 10));
     expect(r.text("#verdictt")).toBe("Needs attention");
-    expect(r.text("#verdicts")).toBe("every problem was fixed live; the code still needs the fix");
-    expect(r.text("#summary")).toContain("It fixed 10 measured checks on visitors' screens");
+    expect(r.text("#verdicts")).toBe("All fixed live, not yet in the code");
+    expect(r.text("#tiles > div:nth-child(3) .k")).toBe("Stopped by GenClass");
+    expect(r.text("#tiles > div:nth-child(3) .v")).toBe("10");
     await r.close();
     r = await render(checksOnly(0));
     expect(r.text("#verdictt")).toBe("Healthy");
@@ -1250,7 +1286,7 @@ describe("dashboard page: measured visual checks (docs/runtime/VISUAL.md section
     st.totals.check_loads = 0;
     st.breakdowns.visual_setting = [{ key: "local", count: 100 }];
     const r = await render(st);
-    expect(r.text("#health")).toContain("They are off on public hosts unless the app turns them on: visual: true");
+    expect(r.text("#health")).toContain("Off on public hosts. Turn on with visual: true");
     expect(r.text("#health")).toContain("not running");
     await r.close();
   });

@@ -160,7 +160,7 @@ describe("export: GET /api/account/projects/<id>/events", () => {
     expect(t.sql.rows("SELECT token FROM event_batches")).toEqual([{ token: t.app.token }]);
     expect(String(t.sql.rows("SELECT key FROM event_batches")[0]!.key)).toMatch(new RegExp(`^export/${t.app.token}/`));
     const html = await (await call(t.env, "GET", `/account/apps/${t.app.id}`, { cookie: t.cookie })).text();
-    expect(html).toContain("Every event GenClass received for this app while this account was on Pro or Custom");
+    expect(html).toContain("Covers the time this account was on Pro or Custom.");
   });
 
   it("a plan bought in Stripe's test mode does not export once the key is live", async () => {

@@ -16,6 +16,8 @@ import { entitled, FREE } from "./plans.js";
 // --------------------------------------------------------------------------------------------- styles, icons
 
 export const ACCOUNT_CSS = `
+/* the sign-in look's palette (the shell's tokens, pages.ts CSS) in the light theme; dark stays the default */
+:root[data-theme="light"]{--paper:#fcfcfc;--panel:#f7f7f7;--ink:#171717;--ink2:#525252;--ink3:#6b6b6b;--rule:#e6e6e6;--rule2:#dcdcdc;--line:#8a8a8a;--accent:#0a7c4a;--accent-x:#0a7c4a;--accent-f:#0a7c4a;--accent-t:#e8f5ee;--warn:#c2410c;--warn-f:#d9480f;--warn-t:#fdeee9;--bar:#6b6b6b;--bar2:#0a7c4a;--bar3:#d9480f;--ink-h:#000000;--green-h:#086a3f;--on-green:#ffffff;--head:rgba(252,252,252,.8);--code:#f3f3f3;--codeink:#171717}
 code{font-family:var(--mono);font-size:.9em}
 .eb{font:500 12.5px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
 .auth{max-width:440px;margin:0 auto;padding:44px 0 64px}
@@ -585,7 +587,7 @@ export const ORG_CSS = `
 .psearch input{min-height:32px;padding-left:32px;font-size:13px}
 .pgrid{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:16px}
 .pcard{position:relative;display:flex;flex-direction:column;gap:14px;min-height:176px;padding:20px 20px 16px;background:var(--panel);border:1px solid var(--rule);border-radius:6px;transition:border-color .15s,background .15s;min-width:0}
-.pcard:hover{border-color:var(--rule3);background:#232323}
+.pcard:hover{border-color:var(--rule3);background:var(--card-h)}
 .pcard h2{font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:16px}
 .pcard h2 a{text-decoration:none;color:inherit}
 .pcard h2 a::after{content:"";position:absolute;inset:0;border-radius:6px}
@@ -604,8 +606,8 @@ export const ORG_CSS = `
 .err:empty{display:none}
 .notice{margin:0 0 20px;padding:10px 14px;border:1px solid var(--rule);border-radius:6px;background:var(--s75);font-size:13.5px;color:var(--ink2)}
 .notice b{font-weight:500;color:var(--ink)}
-.notice.n-ok{border-color:#0f5a37;background:var(--accent-t)}.notice.n-ok b{color:var(--accent)}
-.notice.n-bad{border-color:#5c2018;background:var(--warn-t)}.notice.n-bad b{color:var(--warn)}
+.notice.n-ok{border-color:var(--accent-b);background:var(--accent-t)}.notice.n-ok b{color:var(--accent)}
+.notice.n-bad{border-color:var(--warn-b);background:var(--warn-t)}.notice.n-bad b{color:var(--warn)}
 .blk p.intro,p.intro{font-size:13px;color:var(--ink3);margin-top:12px;max-width:80ch;line-height:1.55}
 p.intro a{color:var(--ink2)}
 .blk-h .sub{display:block;margin-top:2px}
@@ -613,22 +615,17 @@ table.dt td.name{white-space:normal;max-width:28ch;overflow-wrap:anywhere}
 table.dt td.pkey{font:12.5px var(--mono)}
 table.dt td.act{text-align:right}
 table.dt td a{color:var(--ink)}
-table.dt td .tag{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;font:500 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.05em;margin-left:8px;color:var(--accent);background:var(--accent-t);border:1px solid #0f5a37}
+table.dt td .tag{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;font:500 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.05em;margin-left:8px;color:var(--accent);background:var(--accent-t);border:1px solid var(--accent-b)}
 table.dt td form{display:inline}
 .who{font-size:13px;color:var(--ink3);margin-top:4px;overflow-wrap:anywhere}
 .sect{margin-top:28px}
 .sect>h2{font-size:14px;margin-bottom:4px}
-/* the new-project form: Studio's horizontal form rows, a label on the left, the field and its hint on the right */
+/* the new-project form: Studio's horizontal form rows, a label on the left, the field on the right */
 .newp{max-width:760px;margin:0 auto}
 .newp .pnl-h{display:block;padding:20px 24px}
 .newp .pnl-h h1{font-size:18px}
-.newp .pnl-h p{font-size:13px;color:var(--ink3);margin-top:4px;max-width:70ch;line-height:1.5}
 .frow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:8px 24px;padding:20px 24px;border-bottom:1px solid var(--rule)}
 .frow>label,.frow>.l{font-size:14px;color:var(--ink2);padding-top:7px}
-.frow .hint{font-size:12.5px;color:var(--ink3);margin-top:6px;line-height:1.5}
-.frow ul.gets{list-style:none;display:grid;gap:8px;font-size:13.5px;color:var(--ink2)}
-.frow ul.gets li{display:flex;gap:10px;align-items:flex-start}
-.frow ul.gets .ic{color:var(--accent);margin-top:2px}
 .newp .pnl-f{justify-content:space-between}
 .newp .pnl-f .row{margin-left:auto}
 .newp .pnl-f .err{margin:0}
@@ -682,7 +679,7 @@ export function accountPage(nonce: string, v: AccountView): string {
       const live = !!p.last_event;
       return `<li class="pcard" data-name="${esc(p.name.toLowerCase())}">
   <div><h2><a href="/account/apps/${esc(p.id)}">${esc(p.name)}</a></h2><p class="pk">${esc(p.token)}</p></div>
-  <div class="meta"><span class="bdg ${live ? "brand" : "warning"}"><i></i>${live ? "Live" : "Waiting"}</span><span>${live ? `Last event ${time(p.last_event, "ago")}` : "Waiting for the first event"}</span></div>
+  <div class="meta"><span class="bdg ${live ? "brand" : "warning"}"><i></i>${live ? "Live" : "Waiting"}</span>${live ? `<span>Last event ${time(p.last_event, "ago")}</span>` : ""}</div>
   <div class="acts"><button class="btn sm ghost" type="button" data-copy="${esc(p.token)}" aria-label="Copy the project API key of ${esc(p.name)}">Copy key</button>${
     p.privateLink
       ? `<span>Private link on</span><button class="btn sm ghost" type="button" data-linkoff="${esc(p.id)}" aria-label="Turn off the private dashboard link of ${esc(p.name)}">Turn off</button>`
@@ -695,7 +692,7 @@ export function accountPage(nonce: string, v: AccountView): string {
     ? `<ul class="pgrid" id="pgrid">${cards}
 <li><a class="pnew" href="/account/new">${icon("plus", 18)}New project</a></li></ul>
 <p class="quiet hidden" id="pnone">No project matches your search.</p>`
-    : `<div class="pgrid"><div class="empty-p"><h2>Create your first project</h2><p>A project is one web app: its key, its dashboard, and access for your coding agent. The dashboard is free.</p><a class="btn" href="/account/new">${icon("plus", 14)}<span>New project</span></a></div></div>`;
+    : `<div class="pgrid"><div class="empty-p"><h2>Create your first project</h2><a class="btn" href="/account/new">${icon("plus", 14)}<span>New project</span></a></div></div>`;
 
   const keyRows = v.passkeys
     .map((k, i) => {
@@ -708,9 +705,7 @@ export function accountPage(nonce: string, v: AccountView): string {
     : "";
   const recovery = esc(v.recovery ?? "mehar@daybot.ca");
   const required = v.passkeys.length > 0;
-  const passkeyRule = required
-    ? "<b>Require a passkey at sign-in: on.</b> After your password, Google or GitHub, GenClass asks for one of your passkeys. Removing the last one turns this off."
-    : "<b>Require a passkey at sign-in: off.</b> Add a passkey and GenClass asks for it after your password, Google or GitHub.";
+  const passkeyRule = required ? "<b>Passkey at sign-in: on.</b>" : "<b>Passkey at sign-in: off.</b> Adding one turns it on.";
   const planBlock =
     (v.dashboards ?? "open") === "open"
       ? ""
@@ -729,14 +724,14 @@ export function accountPage(nonce: string, v: AccountView): string {
     <button class="btn ghost" type="submit" id="pwgo"><span>Change password</span></button>
   </form>
   <p class="err" id="pwerr" role="alert"></p>
-  <p class="intro">At least 10 characters. Changing it signs out every other browser and terminal.${required ? " Forgot the current one? Leave it empty: GenClass asks for one of your passkeys instead." : ' Forgot the current one? See <a href="/login/forgot">what to do</a>.'}</p>`
+  <p class="intro">At least 10 characters.${required ? " Forgot it? Leave Current empty to use a passkey." : ' <a href="/login/forgot">Forgot it?</a>'}</p>`
     : `<form class="acct-form" id="pwform" novalidate>
     <div class="f"><label for="pwemail">Email to sign in with</label><input id="pwemail" type="email" autocomplete="username" maxlength="254" value="${esc(a.email ?? "")}" placeholder="you@example.com"></div>
     <div class="f"><label for="pwnew">Password</label><input id="pwnew" type="password" autocomplete="new-password" minlength="10" maxlength="256"></div>
     <button class="btn ghost" type="submit" id="pwgo"><span>Add a password</span></button>
   </form>
   <p class="err" id="pwerr" role="alert"></p>
-  <p class="intro">Sign in with this email and a password as well as ${a.google || a.githubLogin ? "Google or GitHub" : "your passkey"}. At least 10 characters.${required ? " GenClass asks for one of your passkeys first." : ""}</p>`;
+  <p class="intro">At least 10 characters.</p>`;
   const github = v.providers.github || a.githubLogin
     ? `<tr><td>GitHub</td><td>${a.githubLogin ? `Linked as @${esc(a.githubLogin)}` : '<span class="muted">Not linked</span>'}</td><td></td><td></td><td class="act">${a.githubLogin ? "" : '<a class="btn sm ghost" href="/auth/github?link=1">Link GitHub</a>'}</td></tr>`
     : "";
@@ -754,14 +749,14 @@ ${rows.map((s, i) => sessionRow(s, kind, i)).join("\n")}
 </tbody></table></div>`;
   const cli = v.cli.length
     ? sessions(v.cli, "cli")
-    : `<p class="quiet">No terminal is signed in. Run <code>npx ${RUNTIME_PKG} login</code> in a project folder to sign one in.</p>`;
+    : `<p class="quiet">No terminals signed in.</p>`;
   const others = v.web.filter((s) => !s.current).length + v.cli.length;
 
   const body = `
 <div class="sb-page" id="mc" tabindex="-1">
 ${v.notice ? `<p class="notice n-${v.notice.kind}" role="status"><b>${v.notice.kind === "ok" ? "Done." : "Not changed."}</b> ${esc(v.notice.text)}</p>` : ""}
 <div id="projects" data-v="projects">
-<header class="sb-ph"><div><h1>Projects</h1><p class="who">${who} · account since ${time(a.created)} · id ${esc(a.id)}</p></div></header>
+<header class="sb-ph"><div><h1>Projects</h1></div></header>
 ${planBlock}
 <section id="apps">
   <div class="ptool"><div class="psearch">${icon("search", 14)}<input type="search" id="psearch" placeholder="Search for a project" aria-label="Search for a project" autocomplete="off"></div><a class="btn sm" href="/account/new" id="newproj">${icon("plus", 14)}<span>New project</span></a></div>
@@ -769,8 +764,7 @@ ${planBlock}
   <p class="err" id="linkerr" role="alert"></p>
 </section>
 <section class="blk mt-xl" id="claim">
-  <div class="blk-h"><h2>Import a dashboard you already have</h2><span class="aside">From genclass.dev/start or <code>npx ${RUNTIME_PKG} init</code></span></div>
-  <p class="intro">Paste the app's private dashboard link. The app joins this account as a project and keeps its key, so nothing changes in its code. The link keeps working for anyone who already has it until you turn it off on its card.</p>
+  <div class="blk-h"><h2>Import a dashboard</h2><span class="aside">From a private link</span></div>
   <form class="acct-form" id="claimf" novalidate>
     <div class="f"><label for="link">Dashboard link</label><input id="link" type="text" autocomplete="off" spellcheck="false" placeholder="https://genclass.dev/dashboard/..."></div>
     <button class="btn ghost" type="submit" id="claimgo"><span>Add to account</span></button>
@@ -779,9 +773,9 @@ ${planBlock}
 </section>
 </div>
 <div id="settings" data-v="settings">
-<header class="sb-ph"><div><h1>Account settings</h1><p class="who">Signed in as ${who} · account since ${time(a.created)} · id ${esc(a.id)}</p></div></header>
+<header class="sb-ph"><div><h1>Account settings</h1><p class="who">${who} · since ${time(a.created)}</p></div></header>
 <section class="blk" id="security">
-  <div class="blk-h"><h2>Security</h2><span class="aside">Table 2. Ways into this account</span></div>
+  <div class="blk-h"><h2>Security</h2></div>
   <div class="tablewrap"><table class="dt rows"><thead><tr><th>Method</th><th>Details</th><th>Added</th><th>Last used</th><th></th></tr></thead><tbody>
   ${pwRow}
   ${google}
@@ -795,13 +789,13 @@ ${planBlock}
   <p class="intro" id="pkrule">${passkeyRule}</p>
   <div class="acct-form"><button class="btn ghost" type="button" id="addpk"><span>Add a passkey</span></button></div>
   <p class="err" id="pkerr" role="alert"></p>
-  <p class="intro">Adding another passkey, or removing one, asks for one of your passkeys first; removing one also signs out every other browser and terminal. Lost all your passkeys? Email <a href="mailto:${recovery}?subject=GenClass%20passkeys">${recovery}</a>.</p>
+  <p class="intro">Lost all your passkeys? Email <a href="mailto:${recovery}?subject=GenClass%20passkeys">${recovery}</a>.</p>
   </div>
 </section>
 <section class="blk" id="sessions">
-  <div class="blk-h"><h2>Sessions</h2><span class="aside">Table 3. Browsers signed in to this account</span></div>
+  <div class="blk-h"><h2>Sessions</h2></div>
   ${sessions(v.web, "web")}
-  <div class="sect" id="cli"><h2>Terminals</h2><p class="intro">Table 4. Signed in with <code>npx ${RUNTIME_PKG} login</code></p>
+  <div class="sect" id="cli"><h2>Terminals</h2>
   ${cli}
   </div>
   ${others ? '<div class="acct-form"><button class="btn ghost" type="button" id="others"><span>Sign out everywhere else</span></button></div>' : ""}
@@ -809,14 +803,11 @@ ${planBlock}
 </section>
 <section class="blk" id="delete">
   <div class="blk-h"><h2>Delete account</h2><span class="aside">Cannot be undone</span></div>
-  <p class="intro">Deletes this account, its passkeys and its sessions. Projects created in the account are deleted with their stats. Projects that still have a private dashboard link leave the account and keep working through that link. A paid plan is cancelled at once; for a refund of the unused time, email mehar@daybot.ca.</p>
+  <p class="intro">Deletes this account. A paid plan is cancelled at once.</p>
   <div class="acct-form"><button class="btn danger" type="button" id="del"><span>Delete account</span></button></div>
   <p class="err" id="delerr" role="alert"></p>
 </section>
 </div>
-<footer class="dfoot">Your account stores your email (as you typed it, or as Google returned it) and whether it is verified, a salted
-hash of your password if you set one (never the password), your passkeys' public keys, your Google account id and your GitHub id and login if
-you link them, your sign-in sessions and the browsers where your password was right, and the projects you own. Nothing else. <a href="/account/billing">Plan and billing</a> · <a href="https://genclass.dev/privacy">Privacy</a> · <a href="https://genclass.dev/terms">Terms</a></footer>
 </div>
 <script type="application/json" id="acfg">${embed({ claim: !!v.pick?.claim, save: !!v.pick?.save })}</script>`;
 
@@ -940,7 +931,7 @@ you link them, your sign-in sessions and the browsers where your password was ri
     menus: [SETTINGS_MENU],
     commands: [
       { group: "Actions", label: "New project", href: "/account/new", icon: "plus" },
-      { group: "Actions", label: "Import a dashboard from a private link", href: "/account#claim", icon: "link" },
+      { group: "Actions", label: "Import a dashboard", href: "/account#claim", icon: "link" },
     ],
     css: DASH_CSS + ORG_CSS,
     body,
@@ -958,25 +949,20 @@ export interface NewProjectView {
 }
 
 /**
- * /account/new: Studio's "Create a new project", one panel of form rows (the organization, the project's name, what
- * it comes with), Cancel and Create new project. Creating goes to the new project with its Connect dialog open.
+ * /account/new: Studio's "Create a new project", one panel of form rows (the organization, the project's name), Cancel
+ * and Create new project, and no paragraphs. Creating goes to the new project with its Connect dialog open.
  */
 export function newProjectPage(nonce: string, v: NewProjectView): string {
   const org = orgName(labelOf(v.account));
   const body = `
 <div class="sb-page" id="mc" tabindex="-1">
 <form class="pnl newp" id="new-app" novalidate>
-  <div class="pnl-h"><h1>Create a new project</h1><p>A project is one web app. It gets its own key, its own dashboard of what breaks for its users, and access for your coding agent through the MCP server. The dashboard is free.</p></div>
-  <div class="frow"><label for="org">Organization</label><div><select id="org" disabled><option>${esc(org)}</option></select><p class="hint">Your account. Every project in it is on the ${esc(v.plan ?? "Free")} plan.</p></div></div>
-  <div class="frow"><label for="appname">Project name</label><div><input id="appname" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Acme checkout" required autofocus${v.suggested ? ` value="${esc(v.suggested)}"` : ""}><p class="hint">Shown on the dashboard and in the project switcher. Up to 80 characters.</p></div></div>
-  <div class="frow"><span class="l">Comes with</span><ul class="gets">
-    <li>${icon("key", 15)}<span>A public project key for the app's code (the runtime's <code>token</code>)</span></li>
-    <li>${icon("chart", 15)}<span>Project overview, problems, pages, activity, visitors and health</span></li>
-    <li>${icon("bot", 15)}<span>An MCP setup and an agent link, so your coding agent can read it</span></li>
-  </ul></div>
+  <div class="pnl-h"><h1>Create a new project</h1></div>
+  <div class="frow"><label for="org">Organization</label><div><select id="org" disabled><option>${esc(org)}</option></select></div></div>
+  <div class="frow"><label for="appname">Project name</label><div><input id="appname" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Acme checkout" required autofocus${v.suggested ? ` value="${esc(v.suggested)}"` : ""}></div></div>
   <div class="pnl-f"><p class="err" id="newerr" role="alert"></p><div class="row"><a class="btn ghost" href="/account">Cancel</a><button class="btn" type="submit" id="newgo"><span>Create new project</span></button></div></div>
 </form>
-<p class="intro newp">Already have a dashboard from genclass.dev/start or <code>npx ${RUNTIME_PKG} init</code>? <a href="/account#claim">Import it from its private link</a>.</p>
+<p class="intro newp"><a href="/account#claim">Import an existing dashboard</a></p>
 </div>`;
   const script = `
 (function(){
@@ -1047,7 +1033,7 @@ ${s.open ? '<p class="opt">The app keeps its key and its data.</p>' : '<p class=
 <h1>This app's plan has no dashboard.</h1>
 <p class="lead">See the plans to open it.</p>
 ${acts}
-<p class="swap">Keep this link private: it is the only way back to this app without an account.</p>
+<p class="swap">Keep this link private.</p>
 <script type="application/json" id="cfg">${embed({ signedIn: !!s })}</script>`;
   const script = `
 (function(){
