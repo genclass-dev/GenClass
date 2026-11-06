@@ -5,7 +5,7 @@
 //
 // Invariants:
 // - Creating an account never needs a passkey: an email and a password (always offered, so the site always has a way
-//   in), Google or GitHub. There is no passkey sign-up: a passkey is added to an account that exists.
+//   in), Google, GitHub or a passkey (a passkey sign-up makes an account with no email; owner, 2026-11-05).
 // - An account with a passkey requires one at sign-in: after its password, Google or GitHub vouched for it, no session is
 //   granted until a passkey assertion of that account succeeds (a pending step of MFA_MS, a single-use row named by the
 //   __Host-gc_mfa cookie; Origin checked; the WebAuthn challenge single-use). A passkey alone also signs in. Adding a
@@ -432,7 +432,6 @@ function allowCredentials(creds: { id: string; transports: string | null }[]): {
 /** This session proved a passkey within FRESH_MS. */
 const fresh = (c: C, a: Auth): boolean => !!a.passkeyAt && Date.parse(a.passkeyAt) > c.now.getTime() - FRESH_MS;
 const confirmFirst = (): Response => json(403, { ok: false, error: "confirm with one of your passkeys first", confirm: true });
-const noPasskeySignup = (): Response => fail(403, "create an account with your email and a password, Google or GitHub; you can add a passkey for extra security afterwards");
 
 const sessionCookie = (c: C, secret: string): string => setCookie(c, c.cfg.session, secret, WEB_SESSION_MS / 1000);
 
@@ -530,11 +529,33 @@ async function passkeyRegisterOptions(c: C): Promise<Response> {
   if (!originOk(c)) return csrfFail();
   const body = await readJson(c);
   if (body instanceof Response) return body;
-  // a signed-in account adds a passkey (there is no passkey sign-up: an account starts with a password, Google or
-  // GitHub); to one that already has a passkey, only after one of them was just used (a stolen session must not be able
-  // to add its own passkey and then remove the owner's)
+  // signed out: a new account made with this passkey (owner, 2026-11-05: "let me just create a passkey" on the sign-up
+  // page); its user handle is the new account's id, which exists only once the verify step stores both
   const session = await webSession(c);
-  if (!session) return noPasskeySignup();
+  if (!session) {
+    if (await overLimit(c, "signup")) return tooMany();
+    const newId = randomBase62(22);
+    const label = `GenClass account ${newId.slice(0, 6)}`;
+    const ch = await putChallenge(c, "register", newId, { signup: true }, CHALLENGE_MS);
+    return json(200, {
+      id: ch.id,
+      publicKey: {
+        rp: { id: c.cfg.rpId, name: "GenClass" },
+        user: { id: b64url(new TextEncoder().encode(newId)), name: label, displayName: "GenClass" },
+        challenge: ch.challenge,
+        pubKeyCredParams: [
+          { type: "public-key", alg: ES256 },
+          { type: "public-key", alg: RS256 },
+        ],
+        timeout: CHALLENGE_MS,
+        attestation: "none",
+        authenticatorSelection: { residentKey: "required", requireResidentKey: true, userVerification: "required" },
+        excludeCredentials: [],
+      },
+    });
+  }
+  // a signed-in account adds a passkey; to one that already has a passkey, only after one of them was just used (a
+  // stolen session must not be able to add its own passkey and then remove the owner's)
   const accountId = session.account.id;
   const name = userName(session.account);
   const exclude = (await passkeysOf(c, accountId)).map((x) => x.id);
@@ -589,8 +610,16 @@ async function passkeyRegisterVerify(c: C): Promise<Response> {
   if (await c.db.prepare("SELECT 1 AS x FROM credentials WHERE id = ?").bind(v.credentialId).first()) {
     return fail(409, "this passkey is already registered; sign in with it instead");
   }
-  // only an add (a sign-up challenge from before passkey sign-up was removed cannot finish)
-  if (ch.data.add !== true) return noPasskeySignup();
+  // a sign-up: the account and its first passkey together, then a session that has just used a passkey
+  if (ch.data.signup === true) {
+    await c.db.batch([c.db.prepare("INSERT INTO accounts (id, email, email_verified, created) VALUES (?, NULL, 0, ?)").bind(ch.account_id, iso), insertCred]);
+    const account = await accountById(c, ch.account_id);
+    if (!account) return fail(500, "the account could not be created; try again");
+    const s = await createSession(c, account.id, "web", null, true);
+    return withCookies(json(200, { ok: true, account: accountJson(account), next: "/account?welcome=1" }), [sessionCookie(c, s.secret)]);
+  }
+  // otherwise only an add (a sign-up challenge from before 2026-10-15, when passkey sign-up was first removed, cannot finish)
+  if (ch.data.add !== true) return fail(400, "this passkey request expired; start again");
   const session = await webSession(c);
   if (!session || session.account.id !== ch.account_id) return fail(403, "sign in again to add a passkey");
   await insertCred.run();

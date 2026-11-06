@@ -481,19 +481,16 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
     // /start's own header has no button to itself; the other pages end in Get started
     expect(startPage("n")).not.toContain('<a class="btn" href="/start">');
     expect(notFoundPage("n")).toContain('<a class="btn" href="/start">Get started</a>');
-    // sign-in: the email and password form's button is the green one, whatever is configured; a passkey is a small link
+    // sign-in: the email and password form's button is the green one (its label by the tab); the passkey is a paper
+    // button above "or", with Google and GitHub
     const none = loginPage("n", { google: false, github: false, next: null });
-    expect(none).toContain('<button class="btn prov green" type="submit"><span>Sign in</span></button>');
-    expect(none).toContain('<p class="alt"><button class="lnk" id="pk" type="button"><span>Use a passkey</span></button></p>');
+    expect(none).toContain('<button class="btn prov green" type="submit"><span class="m-in">Sign in</span><span class="m-up">Create account</span></button>');
     expect(none).not.toContain('class="btn prov green" id="pk"');
-    expect(none).not.toContain('<div class="or">');
-    // with Google offered it leads (the paper button), then "or", the form, and the small links
     const g = loginPage("n", { google: true, github: false, next: null });
-    expect(g.indexOf("Continue with Google")).toBeLessThan(g.indexOf('<div class="or">or</div>'));
+    expect(g.indexOf("Continue with Google")).toBeLessThan(g.indexOf('id="pk"'));
+    expect(g.indexOf('id="pk"')).toBeLessThan(g.indexOf('<div class="or">or</div>'));
     expect(g.indexOf('<div class="or">or</div>')).toBeLessThan(g.indexOf('id="pwf"'));
-    expect(g.indexOf('id="pwf"')).toBeLessThan(g.indexOf("Use a passkey"));
-    expect(g).not.toContain("Sign in with a passkey");
-    expect(signupPage("n", { google: false, github: false, next: null })).toContain('<button class="btn prov green" type="submit"><span>Create account</span></button>');
+    expect(signupPage("n", { google: false, github: false, next: null })).toContain('<div class="entry" id="entry" data-mode="up">');
     const msg = messagePage("n", { title: "T", text: "x", links: [["One", "/a"], ["Two", "/b"]] });
     expect(msg).toContain('<a class="btn green" href="/a">One</a>');
     expect(msg).toContain('<a class="btn ghost" href="/b">Two</a>');
@@ -1520,9 +1517,9 @@ describe("/start/open-source: the open-source parts with no account, no token an
     await r.close();
   });
 
-  it("is linked from the sign-in and sign-up pages (/start keeps to one form)", () => {
+  it("the sign-in page points to /start for no account; /start keeps to one form", () => {
     expect(startPage("n")).not.toContain("/start/open-source");
     for (const html of [loginPage("n", { google: false, github: false, next: null }), signupPage("n", { google: false, github: false, next: "/account/new?name=shop" })])
-      expect(html).toContain('<a href="/start/open-source">set it up without one</a>');
+      expect(html).toContain('<a href="/start">Create a dashboard without an account</a>');
   });
 });

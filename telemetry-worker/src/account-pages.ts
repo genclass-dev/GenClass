@@ -41,6 +41,13 @@ body.mesh .auth>:nth-child(2){animation-delay:.05s}body.mesh .auth>:nth-child(3)
 .auth .lead{font-size:16px;line-height:1.55;color:var(--ink2);margin-top:12px}
 .auth .ways{margin-top:30px;padding-top:24px;border-top:1px solid var(--rule2);display:grid;gap:10px}
 .btn.prov{width:100%;min-height:46px;gap:10px}
+.entry .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--rule2);margin-top:28px}
+.entry .seg a{display:flex;align-items:center;justify-content:center;min-height:42px;font-size:14.5px;color:var(--ink2);text-decoration:none}
+.entry .seg a[aria-selected=true]{background:var(--ink);color:var(--paper)}
+.entry .seg a:not([aria-selected=true]):hover{color:var(--ink)}
+.entry[data-mode=in] .m-up,.entry[data-mode=up] .m-in{display:none}
+.auth .entry .ways{margin-top:20px;padding-top:0;border-top:0}
+.btn.busy{opacity:.6;cursor:progress}
 .btn.prov svg{width:18px;height:18px;flex:none}
 .btn.paper{background:transparent;color:var(--ink);border-color:var(--rule2)}
 .btn.paper:hover{opacity:1;background:var(--panel);border-color:var(--ink3)}
@@ -128,7 +135,7 @@ function gcPost(url, body, method){
 function b2u(buf){ var b = new Uint8Array(buf), s = ""; for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); }
 function u2b(s){ s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var bin = atob(s), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out.buffer; }
 function gcPasskeys(){ return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create); }
-/** Add a passkey to the signed-in account (there is no passkey sign-up). */
+/** Add a passkey to the signed-in account, or, signed out, create an account with it (the sign-up page). */
 function gcRegister(){
   return gcPost("/api/auth/passkey/register/options", {}).then(function(o){
     var pk = o.publicKey; pk.challenge = u2b(pk.challenge); pk.user.id = u2b(pk.user.id);
@@ -274,12 +281,8 @@ export interface AuthPageOptions {
   notice?: string | null;
 }
 
-/**
- * Under the sign-in ways: the runtime needs no account (the way in without one: /start/open-source, pages.ts
- * openSourcePage), and what an account's Free plan gives (billing/plans.json).
- */
-const optional = (): string =>
-  `<p class="opt">The runtime needs no account: <a href="/start/open-source">set it up without one</a>. ${entitled(FREE, "dashboard") ? "The dashboard is free for every app." : "Dashboards come with a paid plan."}</p>`;
+/** The way in without an account, under the sign-in page: a dashboard of its own, protected (/start, link-lock.ts). */
+const optional = (): string => `<p class="opt">Just trying it? <a href="/start">Create a dashboard without an account</a>.</p>`;
 
 /** The passkey sign-in button's script: sign in, then go to `next` (or reload, on the device page). */
 const PASSKEY_LOGIN_JS = `
@@ -294,41 +297,84 @@ function gcPasskeyButton(b, err, then){
 
 // --------------------------------------------------------------------------------------------- /login, /signup
 
-/** The scripts of a page with signInWays: the password form, and Use a passkey (signs in, then goes to `next`). */
-const waysJs = (url: string, min: number): string => `${PASSKEY_LOGIN_JS}
+/**
+ * The one way in (owner, 2026-11-05: "it feels weird to have two sign-in pages"): /login and /signup are one page, with
+ * Sign in or Create account picked at the top, in place. GitHub, Google, a passkey (sign in with one, or create the
+ * account with one), then an email and a password; under it, the way without an account (/start).
+ */
+function entryPage(nonce: string, o: AuthPageOptions, mode: "in" | "up"): string {
+  const providers = providerButtons(o, o.next);
+  const tab = (m: "in" | "up", href: string, label: string): string =>
+    `<a role="tab" href="${href}${q(o.next)}" data-m="${m}" aria-selected="${mode === m}">${label}</a>`;
+  const inner = `
+<h1>Welcome to GenClass</h1>
+${o.notice ? `<p class="notice" role="status">${esc(o.notice)}</p>` : ""}
+<div class="entry" id="entry" data-mode="${mode}">
+<div class="seg" role="tablist" aria-label="Sign in or create an account">${tab("in", "/login", "Sign in")}${tab("up", "/signup", "Create account")}</div>
+<div class="ways">
+${providers}
+<button class="btn prov paper" id="pk" type="button">${KEY_ICON}<span class="m-in">Sign in with a passkey</span><span class="m-up">Create account with a passkey</span></button>
+<div class="or">or</div>
+<form class="pwf" id="pwf" novalidate>
+  <div><label for="email">Email</label>
+  <input id="email" name="email" type="email" autocomplete="username" maxlength="254" placeholder="you@example.com" required></div>
+  <div><div class="row"><label for="password">Password</label><a class="m-in" href="/login/forgot">Forgot?</a></div>
+  <input id="password" name="password" type="password" autocomplete="${mode === "in" ? "current-password" : "new-password"}" maxlength="256"${mode === "up" ? ' placeholder="At least 10 characters"' : ""} required></div>
+  <button class="btn prov green" type="submit"><span class="m-in">Sign in</span><span class="m-up">Create account</span></button>
+</form>
+<p class="err" id="err" role="alert"></p>
+</div>
+</div>
+${optional()}
+<script type="application/json" id="cfg">${embed({ next: o.next })}</script>`;
+  return authPage(nonce, mode === "in" ? "Sign in | GenClass" : "Create an account | GenClass", inner, ENTRY_JS);
+}
+
+/** The entry page's script: switch Sign in and Create account in place; the password form and the passkey for each. */
+const ENTRY_JS = `
 (function(){
   var cfg = JSON.parse(document.getElementById("cfg").textContent);
   gcDropQuery(["next"]);
-  gcPassword(document.getElementById("pwf"), "${url}", cfg.next, ${min});
-  gcPasskeyButton(document.getElementById("pk"), document.getElementById("err"), function(){ location.href = cfg.next || "/account"; });
+  var box = document.getElementById("entry"), err = document.getElementById("err"), f = document.getElementById("pwf"), pk = document.getElementById("pk"), pw = document.getElementById("password");
+  if (!box || !f) return;
+  function mode(){ return box.getAttribute("data-mode"); }
+  function setMode(m, swap){
+    box.setAttribute("data-mode", m); err.textContent = "";
+    pw.setAttribute("autocomplete", m === "in" ? "current-password" : "new-password");
+    pw.placeholder = m === "up" ? "At least 10 characters" : "";
+    [].slice.call(box.querySelectorAll("[role=tab]")).forEach(function(t){ t.setAttribute("aria-selected", String(t.getAttribute("data-m") === m)); });
+    document.title = (m === "in" ? "Sign in" : "Create an account") + " | GenClass";
+    if (swap) try { history.replaceState(null, "", (m === "in" ? "/login" : "/signup") + location.search); } catch (e) {}
+  }
+  box.querySelector("[role=tablist]").addEventListener("click", function(e){
+    var t = e.target && e.target.closest ? e.target.closest("[role=tab]") : null; if (!t) return;
+    e.preventDefault(); setMode(t.getAttribute("data-m"), true);
+  });
+  function busy(b, on){ b.disabled = on; b.classList.toggle("busy", on); }
+  f.addEventListener("submit", function(ev){
+    ev.preventDefault(); err.textContent = "";
+    var up = mode() === "up", email = f.querySelector("[name=email]").value.trim(), p = pw.value, b = f.querySelector("button[type=submit]");
+    if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s.]+$/.test(email)) { err.textContent = "Enter a valid email address."; return; }
+    if (!p) { err.textContent = "Enter a password."; return; }
+    if (up && Array.from(p.normalize ? p.normalize("NFC") : p).length < 10) { err.textContent = "Use at least 10 characters."; return; }
+    busy(b, true);
+    gcPost(up ? "/api/auth/password/signup" : "/api/auth/password/login", { email: email, password: p, next: cfg.next || null })
+      .then(function(j){ location.href = j.next || "/account"; }, function(e){ err.textContent = gcWhy(e); busy(b, false); });
+  });
+  if (!gcPasskeys()) { pk.disabled = true; pk.title = "This browser does not support passkeys."; }
+  pk.addEventListener("click", function(){
+    err.textContent = ""; busy(pk, true);
+    (mode() === "up" ? gcRegister() : gcLogin())
+      .then(function(j){ location.href = cfg.next || (j && j.next) || "/account"; }, function(e){ err.textContent = gcWhy(e); busy(pk, false); });
+  });
 })();`;
 
 export function loginPage(nonce: string, o: AuthPageOptions): string {
-  const inner = `
-<h1>Sign in to GenClass</h1>
-<p class="lead">Your account keeps your apps' dashboards in one place: what GenClass detected, on which pages, and what it did.</p>
-${o.notice ? `<p class="notice" role="status">${esc(o.notice)}</p>` : ""}
-<div class="ways">
-${signInWays(o)}
-</div>
-<p class="swap"><a href="/signup${q(o.next)}">Create an account instead</a></p>
-${optional()}
-<script type="application/json" id="cfg">${embed({ next: o.next })}</script>`;
-  return authPage(nonce, "Sign in | GenClass", inner, waysJs("/api/auth/password/login", 0));
+  return entryPage(nonce, o, "in");
 }
 
 export function signupPage(nonce: string, o: AuthPageOptions): string {
-  const inner = `
-<h1>Create your GenClass account</h1>
-<p class="lead">Keep every app's dashboard in one place. Free, no card.</p>
-<div class="ways">
-${signInWays({ ...o, signup: true })}
-<p class="hint">Want extra security? Add a passkey on your account page once you are in. Use a passkey signs in to an account that already has one.</p>
-</div>
-<p class="swap"><a href="/login${q(o.next)}">Sign in instead</a></p>
-${optional()}
-<script type="application/json" id="cfg">${embed({ next: o.next })}</script>`;
-  return authPage(nonce, "Create an account | GenClass", inner, waysJs("/api/auth/password/signup", 10));
+  return entryPage(nonce, o, "up");
 }
 
 /** /login/forgot: no email reset exists yet (auth.ts resetSender), so the page says whom to write to. */

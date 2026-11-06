@@ -171,8 +171,8 @@ describe("no trial", () => {
       expect(html.replace(/Source(\+| )Code(\+| )Pro/g, ""), p).not.toMatch(/\bPro\b/);
     }
     expect(pages[0]![1]).toContain("Free. No sign-up.");
-    expect(pages[1]![1]).toContain('<p class="opt">The runtime needs no account: <a href="/start/open-source">set it up without one</a>. The dashboard is free for every app.</p>');
-    expect(pages[2]![1]).toContain('<p class="opt">The runtime needs no account: <a href="/start/open-source">set it up without one</a>. The dashboard is free for every app.</p>');
+    expect(pages[1]![1]).toContain('<p class="opt">Just trying it? <a href="/start">Create a dashboard without an account</a>.</p>');
+    expect(pages[2]![1]).toContain('<p class="opt">Just trying it? <a href="/start">Create a dashboard without an account</a>.</p>');
   });
 
   it("nothing in src/ asks Stripe for a trial or writes the trial's columns", () => {
