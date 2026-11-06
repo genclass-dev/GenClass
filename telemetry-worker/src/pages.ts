@@ -719,30 +719,40 @@ export function notFoundPage(nonce: string): string {
 // The per-app dashboard, in the Supabase Studio frame (src/studio.ts): a project's views in the rail (Project
 // overview, Problems, Pages, Actions, Activity, Visitors, Health, MCP, Loop, Integrations, Project Settings), the
 // Visitors and Settings product menus, and the Connect dialog. Project overview follows Studio's project home: the
-// name, its status and a one-sentence summary, four stats, the problems chart on the right; then usage cards (page
-// loads, problems, interventions, visits, one bar per hour or day), Get connected, and the problems that need
-// attention, each with a Copy prompt button for a coding agent. Every view can be copied as Markdown for an agent.
+// name, its status, four stats, the problems chart on the right; then usage cards (page loads, problems,
+// interventions, visits, one bar per hour or day), Get connected, and the problems that need attention, each with a
+// Copy prompt button for a coding agent. Every view can be copied as Markdown for an agent.
+// The copy is labels, not sentences (owner, 2026-11-05): no captions or numbering under charts and tables (their
+// titles and hover tooltips say it), no explanations of what a button does, no disclosure text (the privacy policy
+// and the header's Help menu hold it). The copied prompts and the Markdown keep their detail: an agent reads them.
 // Chart colours come from genclass.dev's own hues, stepped into the dark chart lightness band (OKLCH L .48-.67): blue,
-// the red-orange the site uses for bugs, a sky blue, amber (the site's warning colour) and violet, in that order (dark
-// only, like the rest of the page). No green: green is the frame's brand colour (buttons, usage bars, what GenClass
-// did), so a problem type never reads as it. Validated with the dataviz skill's validate_palette.js (adjacent pairs,
-// as the stacks draw them) on 2026-10-17: on #000000 and #0B0B0A all checks pass, worst CVD ΔE 20.7 (deutan; tritan
-// 7.3), normal-vision 24.8; every slot is also at least 3:1 on Studio's canvas #121212 and surface #1f1f1f
-// (test/pages.test.ts measures them).
+// the red-orange the site uses for bugs, a sky blue, amber (the site's warning colour) and violet, in that order. No
+// green: green is the frame's brand colour (buttons, usage bars, what GenClass did), so a problem type never reads as
+// it. Validated with the dataviz skill's validate_palette.js (adjacent pairs, as the stacks draw them) on 2026-10-17:
+// on #000000 and #0B0B0A all checks pass, worst CVD ΔE 20.7 (deutan; tritan 7.3), normal-vision 24.8; every slot is
+// also at least 3:1 on Studio's canvas #121212 and surface #1f1f1f (test/pages.test.ts measures them). The light
+// steps of the same hues (:root[data-theme="light"], OKLCH L .43-.77) passed validate_palette.js --mode light on
+// #ffffff and #f7f7f7 on 2026-11-05: worst CVD ΔE 18.4 (protan; tritan 6.2), normal-vision 22.8, every slot 3:1.
+// Every colour this page sets is a token: the frame's (studio.ts STUDIO_CSS) or one of DASH_CSS's own, which are
+// defined twice, dark first and then for :root[data-theme="light"].
 // A bar draws only the types it has, so slots that are not palette neighbours can touch; the 2px canvas gap between
 // segments, the legend, the hover breakdown and the table view carry identity there.
 // Five problem types get a slot, the rest share "Other". The measured visual checks (never model findings) get one more
 // slot of their own, hatched in the muted ink rather than a hue, so they never read as a model type. Possible issues
 // (the lower-confidence tier) are drawn hollow:
-// outlined bars in the muted ink (Fig. 2, one series, so no legend) and ring keys in the type's colour; never in the
+// outlined bars in the muted ink (one series, so no legend) and ring keys in the type's colour; never in the
 // confirmed counts.
 // Every dynamic string goes through textContent.
 
 export const DASH_CSS = `
-.cmdbox{display:flex;align-items:center;gap:10px;background:var(--code,#111);padding:10px 12px;min-width:0;margin:8px 0}
+:root{--t1:#3987E5;--t2:#E8552F;--t3:#2AA3C7;--t4:#C98500;--t5:#B964C9;--t0:#88897F;--grid:#262626}
+/* colours with no base token: the critical status, the status dot's halo, control and overlay borders, the tooltip's
+   shadow, the row hover, badge and notice borders, the project card's hover */
+:root{--bad:#f2555a;--halo:rgba(255,255,255,.06);--ctl-b:#393939;--ctl-bh:#4d4d4d;--ovl-b:#333333;--shadow:0 8px 24px rgba(0,0,0,.5);--row-h:#ffffff06;--accent-b:#0f5a37;--amber-b:#5c3d06;--warn-b:#5c2018;--card-h:#232323}
+:root[data-theme="light"]{--t1:#2470D6;--t2:#D4502B;--t3:#1388AD;--t4:#A86C00;--t5:#A04FB5;--t0:#7C7D74;--grid:#ececec;--bad:#c8242b;--halo:rgba(0,0,0,.06);--ctl-b:#d4d4d4;--ctl-bh:#b5b5b5;--ovl-b:#e0e0e0;--shadow:0 8px 24px rgba(0,0,0,.12);--row-h:#00000005;--accent-b:#a7dcc1;--amber-b:#f0d08a;--warn-b:#f3b9ab;--card-h:#f7f7f7}
+.cmdbox{display:flex;align-items:center;gap:10px;background:var(--code);padding:10px 12px;min-width:0;margin:8px 0}
 .cmdbox code{flex:1;min-width:0;font:13.5px/1.5 var(--mono);overflow-wrap:anywhere}
 .cmdbox .btn{flex:none}
-:root{--t1:#3987E5;--t2:#E8552F;--t3:#2AA3C7;--t4:#C98500;--t5:#B964C9;--t0:#88897F;--grid:#262626}
 /* the measured checks' key: hatched in the muted ink, never a problem type's hue */
 :root{--chk:repeating-linear-gradient(135deg,var(--ink2) 0 2px,transparent 2px 4px)}
 .find h3 .bdg,.adv h3 .bdg{margin-left:2px}
@@ -757,27 +767,25 @@ table.dt td .bdg{margin-left:8px;vertical-align:middle}
 .ov-meta{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-top:10px;font-size:13px;color:var(--ink3)}
 /* the app's status under its name: Critical, Needs attention or Healthy, large, in red, amber or green */
 .verdict{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:14px}
-.verdict i{width:16px;height:16px;border-radius:50%;background:currentColor;box-shadow:0 0 0 5px rgba(255,255,255,.06);flex:none}
+.verdict i{width:16px;height:16px;border-radius:50%;background:currentColor;box-shadow:0 0 0 5px var(--halo);flex:none}
 .verdict b{font:600 40px/1.1 var(--display);letter-spacing:-.02em}
 .verdict span{font-size:15px;color:var(--ink2)}
 .verdict.ok{color:var(--accent)}
 .verdict.warn{color:var(--amber)}
-.verdict.bad{color:#f2555a}
+.verdict.bad{color:var(--bad)}
 @media (max-width:560px){.verdict b{font-size:30px}}
 .live{display:inline-flex;align-items:center;gap:7px;color:var(--ink2)}
 .live i{width:7px;height:7px;border-radius:50%;background:var(--ink3);display:inline-block}
 .live.on i{background:var(--accent)}
-.seg{display:inline-flex;border:1px solid #393939;border-radius:6px;overflow:hidden;background:var(--s75)}
+.seg{display:inline-flex;border:1px solid var(--ctl-b);border-radius:6px;overflow:hidden;background:var(--s75)}
 .seg button{border:0;background:transparent;color:var(--ink2);height:26px;padding:0 10px;font:12px var(--sans);cursor:pointer}
-.seg button+button{border-left:1px solid #393939}
+.seg button+button{border-left:1px solid var(--ctl-b)}
 .seg button:hover{color:var(--ink)}
 .seg button[aria-pressed=true]{background:var(--s300);color:var(--ink)}
 @media (pointer:coarse){.seg button{height:40px}}
 /* Project overview: Studio's top section (name, stats; the chart on the right), usage cards, Get connected, issues */
 .ovtop{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;align-items:start}
-.summary{font-size:15px;line-height:1.6;color:var(--ink2);max-width:62ch}
-.summary b{font-weight:500;color:var(--ink)}
-.statrow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin-top:28px;border:1px solid var(--rule);border-radius:6px;background:var(--panel);overflow:hidden}
+.statrow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin-top:0;border:1px solid var(--rule);border-radius:6px;background:var(--panel);overflow:hidden}
 .statrow>div{padding:16px 18px;min-width:0;border-bottom:1px solid var(--rule)}
 .statrow>div:nth-child(odd){border-right:1px solid var(--rule)}
 .statrow>div:nth-last-child(-n+2){border-bottom:0}
@@ -794,14 +802,13 @@ table.dt td .bdg{margin-left:8px;vertical-align:middle}
 .uh{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:48px 0 16px}
 .uh h2{font-size:18px;color:var(--ink2)}
 .uh h2 b{color:var(--ink);font-weight:400}
-.getc{border:1px dashed var(--rule2);border-radius:6px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--s75)}
+.getc{border:1px dashed var(--rule2);border-radius:6px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--s75)}
 .getc>*{display:flex;gap:12px;align-items:flex-start;padding:18px 20px;text-align:left;background:none;border:0;color:inherit;font:inherit;cursor:pointer;text-decoration:none;min-width:0}
 .getc>*+*{border-left:1px solid var(--rule)}
 .getc>*:hover{background:var(--s200)}
 .getc .ic{color:var(--ink3);margin-top:2px}
 .getc>*:hover .ic{color:var(--ink)}
 .getc b{display:block;font-weight:400;font-size:14px;color:var(--ink)}
-.getc span{display:block;font-size:13px;color:var(--ink3);margin-top:2px}
 .adv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .adv article{display:flex;flex-direction:column;gap:10px;background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:16px 18px;min-width:0}
 .adv article .top{display:flex;justify-content:space-between;gap:12px;align-items:center}
@@ -809,7 +816,7 @@ table.dt td .bdg{margin-left:8px;vertical-align:middle}
 .adv article p{font-size:13px;color:var(--ink3);line-height:1.5}
 .adv article .acts{display:flex;gap:8px;margin-top:auto;padding-top:4px}
 .adv .none{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:48px 16px;border:1px solid var(--rule);border-radius:6px;color:var(--ink3);font-size:13px}
-@media (max-width:1100px){.usage{grid-template-columns:repeat(2,minmax(0,1fr))}.getc{grid-template-columns:repeat(2,minmax(0,1fr))}.getc>*:nth-child(3){border-left:0}.getc>*:nth-child(n+3){border-top:1px solid var(--rule)}.adv{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:1100px){.usage{grid-template-columns:repeat(2,minmax(0,1fr))}.adv{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:900px){.ovtop{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:620px){.usage,.adv,.getc{grid-template-columns:minmax(0,1fr)}.getc>*+*{border-left:0;border-top:1px solid var(--rule)}.statrow{grid-template-columns:minmax(0,1fr)}.statrow>div{border-right:0!important;border-bottom:1px solid var(--rule)!important}.statrow>div:last-child{border-bottom:0!important}}
 /* sections are Studio panels: a header row and the content under it */
@@ -828,7 +835,7 @@ table.dt td .bdg{margin-left:8px;vertical-align:middle}
 .poss-h{display:flex;flex-wrap:wrap;gap:6px 20px;align-items:baseline;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--rule)}
 .poss-h h3{font-size:14px}
 .poss-h .aside{font-size:12px;color:var(--ink3)}
-.poss-note{font-size:13px;color:var(--ink3);margin-top:12px;max-width:80ch}
+.poss-note{font-size:13px;color:var(--ink3);max-width:80ch}
 .find.poss .n{color:var(--ink2)}
 table.dt td.poss-n{color:var(--ink3)}
 figure{margin:0}
@@ -836,7 +843,7 @@ figcaption{font-size:12px;color:var(--ink3);margin-top:12px;line-height:1.5}
 .plot{position:relative;margin-top:12px}
 .plot svg{display:block;width:100%;height:auto;overflow:visible}
 .plot text{font:11px var(--mono);fill:var(--ink3)}
-.tip{position:absolute;pointer-events:none;background:var(--ovl);border:1px solid #333;border-radius:6px;padding:8px 10px;font-size:12px;min-width:160px;z-index:2;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.tip{position:absolute;pointer-events:none;background:var(--ovl);border:1px solid var(--ovl-b);border-radius:6px;padding:8px 10px;font-size:12px;min-width:160px;z-index:2;box-shadow:var(--shadow)}
 .tip .t{font-size:12px;color:var(--ink);margin-bottom:5px}
 .tip .r{display:flex;align-items:center;gap:8px;justify-content:space-between}
 .tip .r span:first-child{display:inline-flex;align-items:center;gap:6px;color:var(--ink2)}
@@ -848,7 +855,6 @@ figcaption{font-size:12px;color:var(--ink3);margin-top:12px;line-height:1.5}
 .find h3{font-size:14px;display:flex;align-items:center;gap:8px}
 .find .nw{text-align:right;white-space:nowrap}
 .find .n{font:400 22px/1 var(--display);font-variant-numeric:tabular-nums}
-.find .share{display:block;font:11px var(--mono);color:var(--ink3);margin-top:4px}
 .find p{font-size:13px;color:var(--ink2);line-height:1.55}
 .find p.fix b{color:var(--ink);font-weight:500}
 .find .acts{display:flex;gap:8px;flex-wrap:wrap}
@@ -861,7 +867,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 table.dt th{font:400 12px var(--sans);color:var(--ink3);background:var(--s75);text-align:left;padding:8px 12px;border-bottom:1px solid var(--rule);white-space:nowrap}
 table.dt td{padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:middle;white-space:nowrap}
 table.dt tr:last-child td{border-bottom:0}
-table.dt tbody tr:hover td{background:#ffffff06}
+table.dt tbody tr:hover td{background:var(--row-h)}
 table.dt .num{text-align:right;font-variant-numeric:tabular-nums}
 table.dt td.route{font:12.5px var(--mono);max-width:260px;overflow:hidden;text-overflow:ellipsis;color:var(--ink2)}
 table.dt td.wide{width:40%}
@@ -881,8 +887,8 @@ dl.health .v{font:400 16px var(--display)}
 dl.health .s{font-size:12.5px;color:var(--ink3);margin-top:3px}
 dl.health ul{list-style:none;margin-top:6px;display:grid;gap:2px;font:12px var(--mono);color:var(--ink2)}
 .ok-t,.bad-t{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;font:500 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.05em;margin-left:10px;vertical-align:middle}
-.ok-t{color:var(--accent);background:var(--accent-t);border:1px solid #0f5a37}
-.bad-t{color:var(--amber);background:var(--amber-t);border:1px solid #5c3d06}
+.ok-t{color:var(--accent);background:var(--accent-t);border:1px solid var(--accent-b)}
+.bad-t{color:var(--amber);background:var(--amber-t);border:1px solid var(--amber-b)}
 @media (max-width:560px){dl.health{grid-template-columns:1fr}dl.health dt{border-bottom:0;padding-bottom:0}}
 .quiet{padding:28px 0;color:var(--ink3);font-size:13px;text-align:center}
 details.more{border-top:1px solid var(--rule);padding:14px 0 0;margin-top:16px}
@@ -900,7 +906,6 @@ details.more summary:hover{color:var(--ink)}
 /* Getting started (no data yet): Studio's onboarding panel */
 .first{padding:24px}
 .first h2{font-size:18px}
-.first>p{font-size:13.5px;color:var(--ink3);margin-top:6px;max-width:80ch;line-height:1.55}
 .steps{list-style:none;margin-top:20px;display:grid;gap:0;border:1px solid var(--rule);border-radius:6px;overflow:hidden}
 .steps li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 16px;background:var(--s75)}
 .steps li+li{border-top:1px solid var(--rule)}
@@ -908,16 +913,14 @@ details.more summary:hover{color:var(--ink)}
 .steps b{font-weight:400;color:var(--ink);font-size:14px}
 .steps li>div>span{display:block;font-size:13px;color:var(--ink3);margin-top:2px}
 @media (max-width:620px){.steps li{grid-template-columns:28px minmax(0,1fr)}.steps li .btn{grid-column:2;justify-self:start}}
-.dfoot{margin:48px 0 0;padding-top:16px;border-top:1px solid var(--rule);font-size:12px;color:var(--ink3);max-width:110ch;line-height:1.6}
-.dfoot a{color:var(--ink2)}
 /* the Connect dialog: its status line, tabs, the key, the ways in, the copy-prompt blocks */
 .cstat{display:flex;align-items:center;gap:9px;padding:10px 12px;margin-bottom:4px;font-size:13px;color:var(--ink2);border:1px solid var(--rule);border-radius:6px;background:var(--s75)}
 .cstat i{width:8px;height:8px;border-radius:50%;background:var(--amber);flex:none;animation:gcpulse 1.6s ease-in-out infinite}
-.cstat.on{color:var(--accent);border-color:#0f5a37;background:var(--accent-t)}
+.cstat.on{color:var(--accent);border-color:var(--accent-b);background:var(--accent-t)}
 .cstat.on i{background:var(--accent);animation:none}
 @keyframes gcpulse{50%{opacity:.3}}
 @media (prefers-reduced-motion:reduce){.cstat i{animation:none}}
-.connect .cnote,.cnote{margin:0 0 12px;padding:10px 14px;border:1px solid #5c3d06;border-radius:6px;background:var(--amber-t);font-size:13px;line-height:1.5;color:var(--ink2)}
+.connect .cnote,.cnote{margin:0 0 12px;padding:10px 14px;border:1px solid var(--amber-b);border-radius:6px;background:var(--amber-t);font-size:13px;line-height:1.5;color:var(--ink2)}
 .cnote b{color:var(--amber);font-weight:500}
 .connect .keyrow,.keyrow{display:grid;grid-template-columns:minmax(140px,200px) minmax(0,1fr);gap:8px 16px;padding:14px 0;border-bottom:1px solid var(--rule)}
 .keyrow:last-child{border-bottom:0}
@@ -929,8 +932,6 @@ details.more summary:hover{color:var(--ink)}
 .connect .way{border:1px solid var(--rule);border-radius:6px;padding:16px;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-content:start;background:var(--s75)}
 .connect .way>*{min-width:0}
 .eb{font:12px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
-.connect h3{font-size:14px}
-.connect .way p{font-size:13px;color:var(--ink3);max-width:62ch}
 .sh{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:var(--ink3);margin-top:4px}
 .connect pre.code,.mcpc pre.code{white-space:pre-wrap;overflow-wrap:anywhere}
 .fine{font-size:12px;color:var(--ink3);margin-top:12px;max-width:100ch;line-height:1.55}
@@ -950,22 +951,14 @@ details.more summary:hover{color:var(--ink)}
 .cprompt textarea.cp-text{width:100%;max-width:72ch;min-height:150px;padding:10px 12px;font:12.5px/1.5 var(--mono);color:var(--ink);background:var(--ctl);border:1px solid var(--rule2);border-radius:6px;resize:vertical}
 .connect .cana{padding:0}
 @media (max-width:560px){.cprompt .btn.xl{width:100%;white-space:normal;text-align:center;padding:10px 16px}.keyrow{grid-template-columns:1fr}.keyrow .kn{grid-column:1}}
-/* the private link's snippets (renderSnippets, as on /start): one card each */
-.snip{border:1px solid var(--rule);border-radius:6px;padding:14px 16px;background:var(--s75);min-width:0}
-.snip>*+*{margin-top:8px}
-.snip .row.between{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.snip h2{font-size:14px}
-.snip p{font-size:12.5px;color:var(--ink3)}
-.snip pre.code{white-space:pre-wrap;overflow-wrap:anywhere}
-#snips.stack>*+*{margin-top:12px}
 /* MCP: the client picker, the options, the configuration, the tools */
 .mcpc .clients{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
-.mcpc .clients button{height:28px;padding:0 10px;border-radius:6px;border:1px solid #393939;background:var(--s75);color:var(--ink2);font:13px var(--sans);cursor:pointer}
-.mcpc .clients button:hover{color:var(--ink);border-color:#4d4d4d}
-.mcpc .clients button[aria-pressed=true]{background:var(--s300);color:var(--ink);border-color:#4d4d4d}
+.mcpc .clients button{height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--ctl-b);background:var(--s75);color:var(--ink2);font:13px var(--sans);cursor:pointer}
+.mcpc .clients button:hover{color:var(--ink);border-color:var(--ctl-bh)}
+.mcpc .clients button[aria-pressed=true]{background:var(--s300);color:var(--ink);border-color:var(--ctl-bh)}
 .mcpc .opts{display:flex;flex-wrap:wrap;gap:8px 20px;margin:4px 0 14px;font-size:13px;color:var(--ink2)}
 .mcpc .opts label{display:inline-flex;gap:8px;align-items:center;cursor:pointer;color:var(--ink2)}
-.mcpc .opts input{accent-color:#3ecf8e;width:14px;height:14px}
+.mcpc .opts input{accent-color:var(--accent);width:14px;height:14px}
 .mcpc .where{margin:0 0 6px;border:0;font:12.5px var(--sans);color:var(--ink3);display:block}
 .mcpc .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
 .mcpc .warn{font-size:12.5px;color:var(--amber);margin-top:10px}
@@ -974,7 +967,7 @@ details.more summary:hover{color:var(--ink)}
 .alink .err:empty{display:none}
 .tools-t td:first-child{font:12.5px var(--mono);color:var(--ink)}
 table.dt.tools-t td{white-space:normal}
-/* funnels (Fig. 4): one row per step, the bar's length the share of the first step */
+/* funnels: one row per step, the bar's length the share of the first step */
 .fun{padding:14px 0;border-bottom:1px solid var(--rule)}
 .fun h3{font-size:14px;margin-bottom:10px}
 .fun table td.route{max-width:340px}
@@ -991,9 +984,8 @@ table.dt.tools-t td{white-space:normal}
 .lock .acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
 .lock .err{font-size:13px;color:var(--warn);margin-top:10px}
 .lock .err:empty{display:none}
-/* the closed loop (Fig. 3): an SVG the script builds from the stats; one row per problem kind, the shared chain on the right */
-.loop-lead,.loop-foot{font-size:13px;color:var(--ink3);max-width:90ch;margin-top:4px;line-height:1.55}
-.loop-foot{margin-top:14px}
+/* the closed loop: an SVG the script builds from the stats; one row per problem kind, the shared chain on the right */
+.loop-foot{font-size:13px;color:var(--ink3);max-width:90ch;margin-top:14px;line-height:1.55}
 .flowwrap{overflow-x:auto;margin-top:16px}
 .flow{display:block;width:100%;min-width:760px;height:auto;font-family:var(--sans)}
 .flow rect.node{fill:var(--s75);stroke:var(--rule2)}
@@ -1006,7 +998,7 @@ table.dt.tools-t td{white-space:normal}
 .flow .edge{fill:none;stroke:var(--ink3);stroke-width:1.2}
 .flow .edge.dim{stroke-dasharray:5 4}
 .flow marker path{fill:var(--ink3)}
-/* Fig. 3, the stages of the loop: the count of the period's findings that reached each, the back edges dashed */
+/* the stages of the loop: the count of the period's findings that reached each, the back edges dashed */
 .flow .nn{font:500 28px var(--sans);fill:var(--ink);font-variant-numeric:tabular-nums}
 .flow .nn.off{fill:var(--ink3)}
 .flow .el{font:11.5px var(--mono);fill:var(--ink3)}
@@ -1061,7 +1053,9 @@ const DASH_JS = `
   var SLOTS = ["duplicate", "stale", "failing", "slow", "conflict"], BASE_SLOTS = SLOTS;
   var ACTIONS = { coalesce: "Merged a repeated request", discard: "Dropped a stale write", defer: "Waited for related requests", delay: "Delayed a request",
     retry: "Retried a failed request", serve_cached: "Answered from cache", block: "Blocked a request", hedge: "Sent a backup request", rollback: "Rolled back a write", resync: "Re-synced state",
-    check_fix: "Fixed a measured check on the visitor's screen (a reversible CSS change)" };
+    check_fix: "Fixed a measured check" };
+  // a card shows the usual fix's first sentence; the copied prompts and the Markdown keep all of it
+  function first(s){ var i = (s || "").search(/\\. [A-Z]/); return i < 0 ? s || "" : s.slice(0, i + 1); }
   function T(k){ return TYPES[k] || { name: k && k !== "(unknown)" ? k.charAt(0).toUpperCase() + k.slice(1) : "Other", c: "--t0", what: "", fix: "" }; }
   function slotOf(k){ return SLOTS.indexOf(k) >= 0 ? k : "other"; }
   function colorOf(slot){ return slot === "checks" ? CHK : "var(" + (slot === "other" ? "--t0" : TYPES[slot].c) + ")"; }
@@ -1095,28 +1089,7 @@ const DASH_JS = `
   function svg(tag, attrs){ var e = document.createElementNS(SVGNS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
   function niceMax(v){ if (v <= 4) return 4; var p = Math.pow(10, Math.floor(Math.log(v) / Math.LN10)), m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; }
 
-  // ---------- summary and tiles
-  function summary(S){
-    var T0 = S.totals, B = S.breakdowns, host = document.getElementById("summary"); host.textContent = "";
-    var pages = problemPages(S), modes = map(B.mode), acting = (modes.guard || 0) + (modes.heal || 0) > 0, poss = T0.possible || 0;
-    var checks = T0.checks || 0, found = problemsOf(S), fixed = checkFixed(S);
-    function put(t, bold){ host.appendChild(bold ? el("b", null, t) : document.createTextNode(t)); }
-    if (!T0.sessions) { put("No page loads in this period yet."); return; }
-    put(RANGE[S.range] + " GenClass watched "); put(plural(T0.sessions, "page load", "page loads"), true);
-    if (S.demo && T0.ix_sessions) { put(" from "); put(plural(T0.ix_sessions, "visitor", "visitors"), true); }
-    if (!found && poss) { put(" and found no problems. It flagged "); put(plural(poss, "possible issue", "possible issues"), true); put(" at lower confidence, listed separately below."); return; }
-    if (!found) { put(" and found nothing wrong. It only reports situations that stand out, so a quiet stretch is normal."); return; }
-    put(" and found "); put(plural(found, "problem", "problems"), true);
-    // the measured checks are their own kind: said apart from the model's findings
-    if (checks) put(checks === found ? " (all measured checks)" : " (" + plural(checks, "measured check", "measured checks") + ")");
-    if (pages) { put(" on "); put(plural(pages, "page", "pages"), true); }
-    put(". ");
-    if (acting && T0.interventions) { put("It stepped in "); put(plural(T0.interventions, "time", "times"), true); var u = map(B.action_outcome).undone || 0; put(u ? ", and " + plural(u, "change was", "changes were") + " undone." : ", and nothing it changed was undone."); }
-    else if (acting && !fixed) put("It is allowed to step in and did not need to.");
-    else if (!acting) put("It is in observe mode, so it reported them and changed nothing.");
-    if (fixed) { put((acting && !T0.interventions ? "" : " ") + "It fixed "); put(plural(fixed, "measured check", "measured checks"), true); put(" on visitors' screens with a reversible CSS change."); }
-    if (poss) { put(" It also flagged "); put(plural(poss, "possible issue", "possible issues"), true); put(" at lower confidence, listed separately and not counted as problems."); }
-  }
+  // ---------- the tiles
   function delta(now, before){
     if (!before && !now) return "";
     if (!before) return "none in " + PREV[range];
@@ -1132,9 +1105,9 @@ const DASH_JS = `
     // the measured checks count as problems too; a check fix still in place counts as fixed live
     var T0 = S.totals, n = problemsOf(S), open = Math.max(0, n - (T0.interventions || 0) - checkFixed(S)), loads = T0.sessions || 0;
     var host = document.getElementById("verdict"); if (!host) return;
-    var v = !n ? ["ok", "Healthy", "No problems found " + RANGE[S.range].charAt(0).toLowerCase() + RANGE[S.range].slice(1)]
+    var v = !n ? ["ok", "Healthy", "No problems " + lower(RANGE[S.range])]
       : open >= 100 || (loads && open / loads >= 0.05) ? ["bad", "Critical", plural(open, "problem", "problems") + " not fixed live"]
-      : ["warn", "Needs attention", open ? plural(open, "problem", "problems") + " not fixed live" : "every problem was fixed live; the code still needs the fix"];
+      : ["warn", "Needs attention", open ? plural(open, "problem", "problems") + " not fixed live" : "All fixed live, not yet in the code"];
     host.classList.remove("ok", "warn", "bad"); host.classList.add(v[0]);
     document.getElementById("verdictt").textContent = v[1];
     document.getElementById("verdicts").textContent = v[2];
@@ -1144,19 +1117,18 @@ const DASH_JS = `
     var ready = T0.model_ready || 0, failed = T0.model_load_failed || 0, modes = map(B.mode), acting = (modes.guard || 0) + (modes.heal || 0) > 0;
     var outcomes = map(B.action_outcome), applied = outcomes.applied || T0.interventions || 0, undone = outcomes.undone || 0, prev = S.previous || {}, checks = T0.checks || 0, fixed = checkFixed(S);
     var d = delta(problemsOf(S), (prev.detections || 0) + (prev.checks || 0));
-    host.appendChild(stat("Problems found", fmt(problemsOf(S)) + (S.demo ? "+" : ""), S.demo ? "detected in production" : checks ? [d, plural(checks, "measured check", "measured checks")].filter(Boolean).join(" \\u00b7 ") : d));
+    host.appendChild(stat("Problems found", fmt(problemsOf(S)) + (S.demo ? "+" : ""), S.demo ? "detected in production" : d));
     var seenPages = count(S, "page_route");
-    host.appendChild(stat("Pages affected", fmt(problemPages(S)), seenPages ? "of " + plural(seenPages, "page", "pages") + " that sent data" : ""));
-    if (S.demo) host.appendChild(stat("Fixed live", fmt(T0.interventions), "hotfixed on users' screens, no redeploy"));
-    else host.appendChild(stat("Stopped by GenClass", fmt((T0.interventions || 0) + fixed), acting ? (applied ? Math.round(100 * undone / applied) + "% undone by users" + (fixed ? ", " + plural(fixed, "check fix", "check fixes") : "") : fixed ? plural(fixed, "measured check", "measured checks") + " fixed live" : "nothing needed stopping") : "observe mode reports only"));
-    host.appendChild(stat("Model loaded", share(ready, ready + failed), ready ? "average " + (T0.modelLoadAvgMs >= 1000 ? (T0.modelLoadAvgMs / 1000).toFixed(1) + " s" : fmt(T0.modelLoadAvgMs) + " ms") + ", " + plural(failed, "failure", "failures") : "no model loads yet"));
+    host.appendChild(stat("Pages affected", fmt(problemPages(S)), seenPages ? "of " + plural(seenPages, "page", "pages") : ""));
+    if (S.demo) host.appendChild(stat("Fixed live", fmt(T0.interventions), ""));
+    else host.appendChild(stat("Stopped by GenClass", fmt((T0.interventions || 0) + fixed), acting ? (applied ? Math.round(100 * undone / applied) + "% undone" : "") : "Observe mode"));
+    host.appendChild(stat("Model loaded", share(ready, ready + failed), ready ? "average " + (T0.modelLoadAvgMs >= 1000 ? (T0.modelLoadAvgMs / 1000).toFixed(1) + " s" : fmt(T0.modelLoadAvgMs) + " ms") : ""));
   }
   // ---------- problems over time
   function trend(S){
     var host = document.getElementById("trendplot"), leg = document.getElementById("legend"), tbl = document.getElementById("trendtable");
     host.textContent = ""; leg.textContent = ""; tbl.textContent = "";
     var hourly = S.range === "24h";
-    document.getElementById("unit").textContent = hourly ? "hour" : "day";
     // the measured checks are one more slot, from the series (never folded into a model type or Other)
     var chk = {}; (S.series || []).forEach(function(b){ chk[b.bucket] = b.checks || 0; });
     var rows = (S.typeSeries || []).map(function(b){
@@ -1211,17 +1183,16 @@ const DASH_JS = `
   }
   function trendTable(tbl, rows, order, hourly, poss, ptotal){
     var tb = el("table", "dt"), hr = el("tr"); hr.appendChild(el("th", null, hourly ? "Hour" : "Day")); order.forEach(function(s){ hr.appendChild(el("th", null, slotName(s))); }); hr.appendChild(el("th", null, "Total"));
-    if (ptotal) hr.appendChild(el("th", null, "Possible (not in total)"));
+    if (ptotal) hr.appendChild(el("th", null, "Possible"));
     var th = el("thead"); th.appendChild(hr); tb.appendChild(th); var body = el("tbody");
     rows.forEach(function(r){ var tr = el("tr"); tr.appendChild(el("td", null, label(r.bucket, hourly))); order.forEach(function(s){ tr.appendChild(el("td", null, fmt(r.parts[s] || 0))); }); tr.appendChild(el("td", null, fmt(r.total))); if (ptotal) tr.appendChild(el("td", "poss-n", fmt(poss[r.bucket] || 0))); body.appendChild(tr); });
     tb.appendChild(body); var wrap = el("div", "tablewrap"); wrap.appendChild(tb); tbl.appendChild(wrap);
   }
-  // ---------- possible issues over time (Fig. 2): one series, hollow bars in the muted ink, its own axis
+  // ---------- possible issues over time: one series, hollow bars in the muted ink, its own axis
   function possibleTrend(S){
     var host = document.getElementById("possplot"), fig = document.getElementById("possfig"); host.textContent = "";
     var hourly = S.range === "24h", rows = (S.series || []).map(function(b){ return { bucket: b.bucket, n: b.possible || 0 }; });
     var total = rows.reduce(function(s, r){ return s + r.n; }, 0);
-    document.getElementById("unit2").textContent = hourly ? "hour" : "day";
     document.getElementById("possn").textContent = plural(total, "possible issue", "possible issues");
     fig.classList.toggle("hidden", !total);
     if (!total) return;
@@ -1316,7 +1287,7 @@ const DASH_JS = `
   }
   // ---------- measured visual checks (runtime 0.3.0-beta.5, docs/runtime/VISUAL.md): deterministic measurements with
   // fixed thresholds, never a model finding. Their own kind on every view: a "Measured check" badge, a hatched key and
-  // their own slot in Fig. 1, their own prompt (genclass_scan measures the page again). Counts only reach the
+  // their own slot in the problems chart, their own prompt (genclass_scan measures the page again). Counts only reach the
   // dashboard: never a selector, element text, colour or URL.
   var CHECKS = {
     "image-broken": { name: "Broken images", what: "An image failed to load or decode, so visitors saw an empty box or the browser's broken-image icon.", fix: "Fix the image's URL or the file it points to, and give images that matter a fallback." },
@@ -1408,21 +1379,20 @@ const DASH_JS = `
   function problemBtn(x, where, cls){ return x.check ? checkBtn(x.key, x.count, where, cls) : promptBtn(x.key, x.count, where, cls); }
   function cards(S){
     var host = document.getElementById("issues"); host.textContent = "";
-    var list = problemList(S), total = sum(list);
+    var list = problemList(S);
     document.getElementById("issuesempty").classList.toggle("hidden", list.length > 0);
     list.forEach(function(x){
       var t = infoOf(x), c = el("article", "find" + (x.check ? " chk" : ""));
       var top = el("div", "top"), h = el("h3"); h.appendChild(keyOf(x)); h.appendChild(document.createTextNode(t.name)); if (x.check) h.appendChild(badge()); top.appendChild(h);
-      var nw = el("div", "nw"); nw.appendChild(el("span", "n", fmt(x.count))); nw.appendChild(el("span", "share", total ? Math.round(100 * x.count / total) + "% of problems" : "")); top.appendChild(nw); c.appendChild(top);
+      var nw = el("div", "nw"); nw.appendChild(el("span", "n", fmt(x.count))); top.appendChild(nw); c.appendChild(top);
       c.appendChild(spark(S, x.key, x.check));
-      if (t.what) c.appendChild(el("p", null, t.what));
       var where = whereFor(S, x);
       if (where.length) {
         var ul = el("ul", "where");
         where.slice(0, 4).forEach(function(w){ var li = el("li"); li.appendChild(el("code", null, w.route)); li.appendChild(el("span", null, fmt(w.count))); ul.appendChild(li); });
         c.appendChild(ul);
       }
-      if (t.fix) { var f = el("p", "fix"); f.appendChild(el("b", null, "Fix: ")); f.appendChild(document.createTextNode(t.fix)); c.appendChild(f); }
+      if (t.fix) { var f = el("p", "fix"); f.appendChild(el("b", null, "Fix: ")); f.appendChild(document.createTextNode(first(t.fix))); c.appendChild(f); }
       var acts = el("div", "acts"); acts.appendChild(problemBtn(x, where)); c.appendChild(acts);
       host.appendChild(c);
     });
@@ -1432,14 +1402,14 @@ const DASH_JS = `
     var host = document.getElementById("advisor"); if (!host) return; host.textContent = "";
     var list = problemList(S);
     var lead = document.getElementById("advn");
-    if (lead) lead.textContent = list.length ? plural(list.length, "kind of problem needs", "kinds of problems need") + " attention" : "GenClass found no problems";
-    if (!list.length) { var none = el("div", "none"); none.appendChild(el("p", null, "Nothing broke " + lower(RANGE[range]) + ". GenClass only reports situations that stand out, so a quiet stretch is normal.")); host.appendChild(none); return; }
+    if (lead) lead.textContent = list.length ? "Needs attention" : "No problems";
+    if (!list.length) { var none = el("div", "none"); none.appendChild(el("p", null, "Nothing broke " + lower(RANGE[range]) + ".")); host.appendChild(none); return; }
     list.slice(0, 3).forEach(function(x){
       var t = infoOf(x), a = el("article"), top = el("div", "top"), h = el("h3");
       h.appendChild(keyOf(x)); h.appendChild(document.createTextNode(t.name)); if (x.check) h.appendChild(badge()); top.appendChild(h);
       top.appendChild(el("span", "bdg" + (x.count >= 10 ? " destructive" : " warning"), plural(x.count, "time", "times"))); a.appendChild(top);
       var where = whereFor(S, x);
-      a.appendChild(el("p", null, (where.length ? "On " + where.slice(0, 2).map(function(w){ return w.route; }).join(", ") + ". " : "") + (t.what || "")));
+      if (where.length) a.appendChild(el("p", "mono", where.slice(0, 2).map(function(w){ return w.route; }).join(", ")));
       var acts = el("div", "acts"), v = el("a", "btn sm ghost", "View"); v.href = "#found"; v.setAttribute("data-goto", "found");
       acts.appendChild(problemBtn(x, where)); acts.appendChild(v); a.appendChild(acts);
       host.appendChild(a);
@@ -1475,13 +1445,12 @@ const DASH_JS = `
   // the lower-confidence tier: its own cards (ring keys), never merged into the ones above
   function possibleCards(S){
     var B = S.breakdowns, host = document.getElementById("possible"), byIssue = issues(B, "possible_issue"); host.textContent = "";
-    var list = (B.possible_diagnosis || []).filter(function(x){ return x.key !== "expected"; }), total = sum(list);
+    var list = (B.possible_diagnosis || []).filter(function(x){ return x.key !== "expected"; });
     document.getElementById("possible-s").classList.toggle("hidden", !list.length);
     list.forEach(function(x){
       var t = T(x.key), c = el("article", "find poss");
       var top = el("div", "top"), h = el("h3"); h.appendChild(ring(colorOf(slotOf(x.key)))); h.appendChild(document.createTextNode(t.name)); top.appendChild(h);
-      var nw = el("div", "nw"); nw.appendChild(el("span", "n", fmt(x.count))); nw.appendChild(el("span", "share", total ? Math.round(100 * x.count / total) + "% of possible issues" : "")); top.appendChild(nw); c.appendChild(top);
-      if (t.what) c.appendChild(el("p", null, t.what));
+      var nw = el("div", "nw"); nw.appendChild(el("span", "n", fmt(x.count))); top.appendChild(nw); c.appendChild(top);
       var where = (byIssue[x.key] || []).slice().sort(function(a, b){ return b.count - a.count; });
       if (where.length) {
         var ul = el("ul", "where");
@@ -1522,12 +1491,10 @@ const DASH_JS = `
     });
     tb.appendChild(body); host.appendChild(tb);
     var notes = [], withPage = T0.detectionsWithPage;
-    if (anyPoss) notes.push("Possible: lower-confidence issues on that page, not counted in Problems.");
-    if (typeof withPage === "number" && T0.detections > withPage) notes.push(plural(T0.detections - withPage, "problem", "problems") + " arrived without a page (the page comes with the decision record, which was in another batch or not sent); the totals count them.");
+    if (typeof withPage === "number" && T0.detections > withPage) notes.push(plural(T0.detections - withPage, "problem", "problems") + " arrived without a page.");
     var possWithPage = T0.possibleWithPage;
     if (anyPoss && typeof possWithPage === "number" && (T0.possible || 0) > possWithPage) notes.push(plural(T0.possible - possWithPage, "possible issue", "possible issues") + " arrived without a page.");
-    if (list.some(function(r){ return r.parts.checks; })) notes.push("Hatched: measured checks, not model findings.");
-    if (typeof T0.checksWithPage === "number" && (T0.checks || 0) > T0.checksWithPage) notes.push(plural(T0.checks - T0.checksWithPage, "measured check", "measured checks") + " arrived without a page (a page load sends the counts of its first 20 pages).");
+    if (typeof T0.checksWithPage === "number" && (T0.checks || 0) > T0.checksWithPage) notes.push(plural(T0.checks - T0.checksWithPage, "measured check", "measured checks") + " arrived without a page.");
     if (notes.length) host.appendChild(el("figcaption", null, notes.join(" ")));
   }
   function acted(S){
@@ -1536,7 +1503,7 @@ const DASH_JS = `
     // the measured checks' runtime fixes (one reversible CSS change each), counted apart from the model's actions
     if (cf.applied) { list.push({ key: "check_fix", count: cf.applied }); list.sort(function(a, b){ return b.count - a.count; }); }
     if (!list.length) {
-      host.appendChild(el("p", "quiet", acting ? "GenClass did not need to step in during this period." : "This app runs in observe mode, so GenClass only reports. Switch to guard mode when you trust what it reports, and what it stops will show here."));
+      host.appendChild(el("p", "quiet", acting ? "Nothing to stop in this period." : "Observe mode: GenClass only reports."));
       return;
     }
     var max = list[0].count || 1, tb = el("table", "dt"), hd = el("thead"), hr = el("tr");
@@ -1549,8 +1516,8 @@ const DASH_JS = `
     });
     tb.appendChild(body); host.appendChild(tb);
     var o = map(B.action_outcome), applied = o.applied || T0.interventions || 0, notes = [];
-    if (applied || !cf.applied) notes.push(plural(o.undone || 0, "change", "changes") + " undone by users" + (applied ? " (" + Math.round(100 * (o.undone || 0) / applied) + "%)" : "") + (o.failed ? ", " + plural(o.failed, "action", "actions") + " failed" : "") + ".");
-    if (cf.applied) notes.push(plural(cf.undone || 0, "check fix", "check fixes") + " undone: by the developer, by the page changing the element, or because the fix no longer fitted it.");
+    if (applied || !cf.applied) notes.push(plural(o.undone || 0, "change", "changes") + " undone" + (applied ? " (" + Math.round(100 * (o.undone || 0) / applied) + "%)" : "") + (o.failed ? ", " + plural(o.failed, "action", "actions") + " failed" : "") + ".");
+    if (cf.applied) notes.push(plural(cf.undone || 0, "check fix", "check fixes") + " undone.");
     host.appendChild(el("figcaption", null, notes.join(" ")));
   }
   function row(dl, label0, value, sub, flag){
@@ -1567,23 +1534,23 @@ const DASH_JS = `
     row(dl, "Where it ran", be.length ? be.map(function(x){ return (x.key === "webgpu" ? "WebGPU" : x.key === "wasm" ? "WASM" : x.key) + " " + Math.round(100 * x.count / beTot) + "%"; }).join(", ") : "-", T0.modelLoadAvgMs ? "average load " + (T0.modelLoadAvgMs >= 1000 ? (T0.modelLoadAvgMs / 1000).toFixed(1) + " s" : fmt(T0.modelLoadAvgMs) + " ms") : "");
     // from the decision records that arrived: routine ones are sampled (0.3.0), so the average leans towards the rest
     var sampled = (T0.records_sampled_out || 0) + (T0.records_capped || 0) > 0;
-    row(dl, "Decision time", T0.latency_ms_n ? fmt(T0.latencyAvgMs) + " ms" : "-", T0.latency_ms_n ? "average of " + plural(T0.latency_ms_n, "decision record", "decision records") + " received" + (sampled ? "; routine decisions are sampled, so it leans towards the others" : "") : "no decisions yet");
-    row(dl, "Ran without a decision", fmt(T0.failOpens), "times the app went ahead without a decision (model not ready, budget, hidden tab)", T0.failOpens ? null : ["ok", "none"]);
+    row(dl, "Decision time", T0.latency_ms_n ? fmt(T0.latencyAvgMs) + " ms" : "-", T0.latency_ms_n ? "average of " + plural(T0.latency_ms_n, "record", "records") + (sampled ? ", sampled" : "") : "");
+    row(dl, "Ran without a decision", fmt(T0.failOpens), "", T0.failOpens ? null : ["ok", "none"]);
     var hs = T0.hidden_skipped || 0, md = T0.model_dropped || 0;
-    row(dl, "Not checked", fmt(hs + md), hs + md ? [hs ? fmt(hs) + " in hidden tabs" : "", md ? fmt(md) + " over the decision rate limit" : ""].filter(Boolean).join(", ") : "situations skipped in hidden tabs or over the decision rate limit", hs + md ? null : ["ok", "none"]);
-    if (T0.actionLimits) row(dl, "Action limits reached", fmt(T0.actionLimits), "times GenClass ran the passive action because an action limit was reached");
+    row(dl, "Not checked", fmt(hs + md), hs + md ? [hs ? fmt(hs) + " in hidden tabs" : "", md ? fmt(md) + " over the decision rate limit" : ""].filter(Boolean).join(", ") : "", hs + md ? null : ["ok", "none"]);
+    if (T0.actionLimits) row(dl, "Action limits reached", fmt(T0.actionLimits), "");
     var so = T0.records_sampled_out || 0, rc = T0.records_capped || 0, td = T0.telemetry_dropped || 0;
-    if (so + rc + td) row(dl, "Records not sent", fmt(so + rc + td), [so ? fmt(so) + " routine decisions sampled out" : "", rc ? fmt(rc) + " over the per-page cap" : "", td ? fmt(td) + " dropped in the browser" : ""].filter(Boolean).join(", ") + ". The totals above still count every decision and detection; pages and functions come from the records that arrived.");
+    if (so + rc + td) row(dl, "Records not sent", fmt(so + rc + td), [so ? fmt(so) + " routine decisions sampled out" : "", rc ? fmt(rc) + " over the per-page cap" : "", td ? fmt(td) + " dropped in the browser" : ""].filter(Boolean).join(", "));
     if (errs.length) {
-      var dd = row(dl, "Load errors", plural(sum(errs), "error", "errors"), "the model did not load on these page loads; the page still worked, without GenClass decisions", null), ul = el("ul");
+      var dd = row(dl, "Load errors", plural(sum(errs), "error", "errors"), "", null), ul = el("ul");
       errs.slice(0, 4).forEach(function(x){ var li = el("li", null, fmt(x.count) + " \\u00D7 " + x.key); li.title = x.key; ul.appendChild(li); });
       dd.appendChild(ul);
     }
     // the measured checks' coverage (runtime 0.3.0-beta.5): the counts above are read against it
     var vs = map(B.visual_setting), cl = T0.check_loads || 0, tiers = map(B.check_tier);
     if (cl || vs.on || vs.local) {
-      var cs = cl ? [plural(cl, "page load", "page loads") + " ran them", tiers.light ? fmt(tiers.light) + " on the light tier (low-end devices: the near-free checks only)" : "", T0.visual_fix ? fmt(T0.visual_fix) + " with runtime fixes on" : "", T0.check_ms ? "about " + fmt(T0.check_ms / cl) + " ms of check time each" : ""].filter(Boolean).join(", ") + "."
-        : "They are off on public hosts unless the app turns them on: visual: true (on the script tag, data-visual=on), and visual: { on: true, fix: true } in guard mode (data-visual=fix) for the runtime fixes.";
+      var cs = cl ? [plural(cl, "page load", "page loads") + " ran them", tiers.light ? fmt(tiers.light) + " on the light tier" : "", T0.visual_fix ? fmt(T0.visual_fix) + " with fixes on" : "", T0.check_ms ? "about " + fmt(T0.check_ms / cl) + " ms each" : ""].filter(Boolean).join(", ")
+        : "Off on public hosts. Turn on with visual: true (data-visual=on).";
       row(dl, "Measured checks", T0.sessions ? share(cl, T0.sessions) + " of page loads" : fmt(cl), cs, cl ? null : ["bad", "not running"]);
     }
     var rv = B.runtime || [];
@@ -1607,10 +1574,10 @@ const DASH_JS = `
   }
   function advanced(S){
     var B = S.breakdowns, host = document.getElementById("adv"); host.textContent = "";
-    [["Triggers", B.trigger], ["Diagnoses (all decisions)", B.diagnosis], ["Top routes (decision records)", B.route], ["Top pages (page loads)", B.page_route], ["Protected functions", B.fn],
-     ["Model load states", B.model_state], ["Decision latency (records)", B.latency_bucket], ["Fail-opens (reason:trigger)", B.fail_open], ["Modes", B.mode], ["Model versions", B.model_version],
-     ["Hosts seen", B.host], ["Possible issues (lower confidence)", B.possible_diagnosis], ["Action limits", B.action_limits],
-     ["Measured checks (by check)", B.check_kind], ["Measured checks setting (page loads)", B.visual_setting]].forEach(function(p){
+    [["Triggers", B.trigger], ["Diagnoses", B.diagnosis], ["Routes", B.route], ["Pages", B.page_route], ["Functions", B.fn],
+     ["Model load states", B.model_state], ["Decision latency", B.latency_bucket], ["Fail-opens", B.fail_open], ["Modes", B.mode], ["Model versions", B.model_version],
+     ["Hosts", B.host], ["Possible issues", B.possible_diagnosis], ["Action limits", B.action_limits],
+     ["Measured checks", B.check_kind], ["Checks setting", B.visual_setting]].forEach(function(p){
       var c = el("div"); c.appendChild(el("h2", null, p[0]));
       if (!p[1] || !p[1].length) { c.appendChild(el("p", "empty", "None in this period.")); host.appendChild(c); return; }
       var max = Math.max.apply(null, p[1].map(function(x){ return x.count; })) || 1, ul = el("ul", "bars");
@@ -1653,7 +1620,7 @@ const DASH_JS = `
   // under the setup button: the app's runtime versions that predate analytics (they ignore analytics: true)
   function ixOld(B){
     var old = (B.runtime || []).map(function(x){ return x.key; }).filter(function(v){ return vOlder(v, "${ANALYTICS_RUNTIME}"); });
-    document.getElementById("ixold").textContent = old.length ? " This app sends from @genclass/runtime " + old.slice(0, 3).join(", ") + ", which has no analytics." : "";
+    document.getElementById("ixold").textContent = old.length ? " This app runs " + old.slice(0, 3).join(", ") + "." : "";
   }
   // a key as people read it: direct, other sites, unknown; a country code as its name
   var REGION = null; try { REGION = new Intl.DisplayNames([], { type: "region" }); } catch (e) {}
@@ -1701,7 +1668,6 @@ const DASH_JS = `
       }
     });
     var fig = el("figure", "mt-l"), plot = el("div", "plot"); plot.appendChild(g); fig.appendChild(plot);
-    fig.appendChild(el("figcaption", null, "Fig. 5. Visits that started per " + (hourly ? "hour" : "day") + "."));
     host.appendChild(fig);
   }
   var IX_SECTIONS = ["clicks", "ix-sources", "ix-devices", "ix-sessions", "ix-entry", "ix-funnels"];
@@ -1715,13 +1681,12 @@ const DASH_JS = `
     var cv = document.getElementById("c-visits"); if (cv) cv.textContent = on ? fmt(views) : "";
     if (!on) return ixOld(B);
     var dl = el("dl", "health"), prev = (S.previous || {}).ix_views;
-    row(dl, "Page views", fmt(views), typeof prev === "number" && prev ? (views >= prev ? "+" : "") + share(views - prev, prev) + " on the previous period" : "page loads and in-app route changes");
-    row(dl, "Time on page", views ? dur((T0.ix_engaged_ms || 0) / views) : "-", "average engaged time per view: the tab visible, at most 30 s after the last input");
+    row(dl, "Page views", fmt(views), typeof prev === "number" && prev ? (views >= prev ? "+" : "") + share(views - prev, prev) + " on the previous period" : "");
+    row(dl, "Time on page", views ? dur((T0.ix_engaged_ms || 0) / views) : "-", "average per view");
     row(dl, "Clicks", fmt(T0.ix_click || 0), views ? (Math.round(10 * (T0.ix_click || 0) / views) / 10) + " per view" : "");
-    row(dl, "Rage clicks", fmt(T0.ix_rage || 0), "3 or more clicks on one element within a second", T0.ix_rage ? ["bad", "worth a look"] : ["ok", "none"]);
-    row(dl, "Dead clicks", fmt(T0.ix_dead || 0), "a link or button that changed nothing within a second", T0.ix_dead ? ["bad", "worth a look"] : ["ok", "none"]);
+    row(dl, "Rage clicks", fmt(T0.ix_rage || 0), "", T0.ix_rage ? ["bad", "worth a look"] : ["ok", "none"]);
+    row(dl, "Dead clicks", fmt(T0.ix_dead || 0), "", T0.ix_dead ? ["bad", "worth a look"] : ["ok", "none"]);
     var sumh = document.getElementById("ixsum"); sumh.textContent = ""; sumh.appendChild(dl);
-    sumh.appendChild(el("figcaption", null, "Unique visitors are not counted: a visit is page views with no gap over 30 minutes, named by a random id the browser keeps that long. There is no visitor id."));
     var eng = map(B.ix_engaged_ms), reach = {};
     pairs(B.ix_scroll).forEach(function(x){ (reach[x.route] = reach[x.route] || {})[x.key] = x.count; });
     var host = document.getElementById("ixpages"); host.textContent = "";
@@ -1740,7 +1705,6 @@ const DASH_JS = `
         body.appendChild(tr);
       });
       tb.appendChild(body); host.appendChild(tb);
-      host.appendChild(el("figcaption", null, "Table 4. Pages by views. Read half / to the end: the share of views whose viewport reached 50 % / 100 % of the page height."));
     }
     ixTable(document.getElementById("ixclicks"), pairs(B.ix_click), "Clicks", "No clicks recorded in this period.");
     var flags = pairs(B.ix_rage).map(function(x){ return { route: x.route, key: x.key + "  (rage)", count: x.count }; })
@@ -1752,7 +1716,7 @@ const DASH_JS = `
     listTable(document.getElementById("ixref"), B.ix_ref, "Source", "Visits", ns, "No visits recorded in this period.", 10);
     var utm = [];
     [["source", "Source"], ["medium", "Medium"], ["campaign", "Campaign"]].forEach(function(f){ (B["ix_utm_" + f[0]] || []).slice(0, 5).forEach(function(x){ utm.push({ key: f[1] + ": " + x.key, count: x.count }); }); });
-    listTable(document.getElementById("ixutm"), utm, "utm value", "Visits", ns, "No campaign links (utm_source, utm_medium, utm_campaign) in this period.", 15);
+    listTable(document.getElementById("ixutm"), utm, "utm value", "Visits", ns, "No campaign visits in this period.", 15);
     // devices
     var dev = document.getElementById("ixdev"); dev.textContent = "";
     [["ix_device", "Device"], ["ix_browser", "Browser"], ["ix_os", "Operating system"], ["ix_country", "Country"], ["ix_returning", "New or returning"]].forEach(function(d){
@@ -1763,14 +1727,14 @@ const DASH_JS = `
     // sessions
     var se = document.getElementById("ixsess"); se.textContent = "";
     if (!nv) {
-      se.appendChild(el("p", "quiet", "No visits yet: this app sends page views from a runtime without visits. Visits, sources, devices, entry and exit pages and funnels need the newest ${RUNTIME_PKG} (copy the prompt again from Connect or update the package)."));
+      se.appendChild(el("p", "quiet", "Visits need the newest ${RUNTIME_PKG}."));
     } else {
       var sd = el("dl", "health"), pv = (S.previous || {}).ix_sessions, ret = map(B.ix_returning);
-      row(sd, "Visits", fmt(nv), typeof pv === "number" && pv ? delta(T0.ix_sessions || nv, pv) : "page views with no gap over 30 minutes");
-      row(sd, "Visits per day", S.range === "24h" ? fmt(nv) + " in 24 h" : fmt(nv / Math.max(1, (S.series || []).length)), "on average over the period");
-      row(sd, "Pages per visit", V.sessions ? (Math.round(10 * V.pages / V.sessions) / 10).toString() : "-", "page views of the visits that started in the period");
-      row(sd, "One-page visits", V.sessions ? share(V.bounces, V.sessions) : "-", "visits that ended on the page they started on (bounce rate)");
-      if ((ret.new || 0) + (ret.returning || 0)) row(sd, "Returning", share(ret.returning || 0, (ret.new || 0) + (ret.returning || 0)), "visits from a browser that had visited before (a flag it keeps, no id)");
+      row(sd, "Visits", fmt(nv), typeof pv === "number" && pv ? delta(T0.ix_sessions || nv, pv) : "");
+      row(sd, "Visits per day", S.range === "24h" ? fmt(nv) + " in 24 h" : fmt(nv / Math.max(1, (S.series || []).length)), "");
+      row(sd, "Pages per visit", V.sessions ? (Math.round(10 * V.pages / V.sessions) / 10).toString() : "-", "");
+      row(sd, "One-page visits", V.sessions ? share(V.bounces, V.sessions) : "-", "bounce rate");
+      if ((ret.new || 0) + (ret.returning || 0)) row(sd, "Returning", share(ret.returning || 0, (ret.new || 0) + (ret.returning || 0)), "");
       se.appendChild(sd);
       visitChart(se, S);
     }
@@ -1789,12 +1753,11 @@ const DASH_JS = `
     if (!on) return;
     var am = map(arrive), hist = (am.back || 0) + (am.forward || 0) + (am.pop || 0) + (am.back_forward || 0);
     var dl = el("dl", "health");
-    row(dl, "Page loads", fmt(entries), "page views that started a page load (a visit can hold several)");
+    row(dl, "Page loads", fmt(entries), "");
     row(dl, "Steps between pages", fmt(sum(B.ix_nav || [])), entries ? (Math.round(10 * sum(B.ix_nav || []) / entries) / 10) + " per page load" : "");
     row(dl, "Back and forward", views ? share(hist, views) + " of views" : "-", arrive.length ? arrive.slice().sort(function(a, b){ return b.count - a.count; }).slice(0, 4).map(function(x){ return (NAVS[x.key] || x.key) + " " + share(x.count, views); }).join(", ") : "");
-    row(dl, "Page load ends", fmt(exits), entries ? share(Math.min(exits, entries), entries) + " of page loads sent their end (a closed or discarded background tab may not)" : "");
+    row(dl, "Page load ends", fmt(exits), entries ? share(Math.min(exits, entries), entries) + " of page loads" : "");
     var mh = document.getElementById("ixmoves"); mh.textContent = ""; mh.appendChild(dl);
-    mh.appendChild(el("figcaption", null, "These paths and steps are within one page load: a full page load to another page of this app starts a new one, so on a site without client-side routing each is one page long. Visits (Tables 10 and 11, Fig. 4) follow the pages across page loads."));
     var ph = document.getElementById("ixpaths"); ph.textContent = "";
     var paths = (B.ix_path || []).slice().sort(function(a, b){ return b.count - a.count; });
     if (paths.length) {
@@ -1808,7 +1771,6 @@ const DASH_JS = `
         body.appendChild(tr);
       });
       tb.appendChild(body); ph.appendChild(tb);
-      ph.appendChild(el("figcaption", null, "Table 12. The most taken paths: the routes of one page load in order, counted when the page load ended."));
     }
     var sh = document.getElementById("ixsteps"); sh.textContent = "";
     var gaps = map(B.ix_nav_ms), steps = pairs(B.ix_nav).sort(function(a, b){ return b.count - a.count; });
@@ -1823,7 +1785,6 @@ const DASH_JS = `
         body2.appendChild(tr);
       });
       tb2.appendChild(body2); sh.appendChild(tb2);
-      sh.appendChild(el("figcaption", null, "Table 13. Page to page: in-app steps between routes, with the average time from the first page's start to the step."));
     }
     var xh = document.getElementById("ixexits"); xh.textContent = "";
     var vm = map(B.ix_views), em = map(B.ix_entry), xm = map(B.ix_exit), fn = map(B.ix_first_n), fms = map(B.ix_first_ms), back = {}, firsts = {};
@@ -1845,14 +1806,13 @@ const DASH_JS = `
       body3.appendChild(tr);
     });
     tb3.appendChild(body3); xh.appendChild(tb3);
-    xh.appendChild(el("figcaption", null, "Table 14. Per page: where page loads started and ended (end rate: ends over views), arrivals by back or forward, and the element most often interacted with first (a click, or a focus on a form field after a key press) with the average time to the first interaction."));
   }
-  // ---------- funnels (Fig. 4): the app's funnels, the visits that reached each step in order, and their editor
+  // ---------- funnels: the app's funnels, the visits that reached each step in order, and their editor
   var funnelsUrl = P.funnelsUrl || ("/api/projects/" + encodeURIComponent(secret) + "/funnels"), editing = false, lastS = null;
   function funnels(S, pagesByViews){
     lastS = S;
     var host = document.getElementById("ixfun"), F = S.funnels || []; host.textContent = "";
-    if (!F.length && !editing) host.appendChild(el("p", "quiet", "No funnels yet. A funnel is 2 to 6 pages in order, like a product page, the cart and checkout: it shows how many visits reached each step."));
+    if (!F.length && !editing) host.appendChild(el("p", "quiet", "No funnels yet."));
     F.forEach(function(f, fi){
       var box = el("div", "fun"); box.appendChild(el("h3", null, f.name));
       var first = f.counts[0] || 0, tb = el("table", "dt"), hd = el("thead"), hr = el("tr");
@@ -1874,7 +1834,6 @@ const DASH_JS = `
       if (at > 0) box.appendChild(el("p", "drop mt-s", "Most visits are lost between step " + at + " and step " + (at + 1) + ": " + plural(drop, "visit", "visits") + "."));
       host.appendChild(box);
     });
-    if (F.length) host.appendChild(el("figcaption", null, "Fig. 4. Visits that started in the period (at most the last 90 days) and reached each step after the ones before it, in order; other pages may come between. A step ending in * counts every page under it."));
     var ed = document.getElementById("ixfunedit"); ed.textContent = "";
     if (!editing) {
       var b = el("button", "btn ghost sm", F.length ? "Edit funnels" : "Add a funnel"); b.type = "button";
@@ -1892,7 +1851,7 @@ const DASH_JS = `
       rm.type = "button"; rm.addEventListener("click", function(){ fe.remove(); });
       fe.appendChild(nm); fe.appendChild(ta); fe.appendChild(rm); list.appendChild(fe);
     }
-    var list = el("div", "stack"); form.appendChild(el("p", "muted small", "One page per line, in order: 2 to 6 pages, up to 5 funnels. Use the routes as Table 4 shows them (/products/:id); end one with * for every page under it (/docs/*)."));
+    var list = el("div", "stack"); form.appendChild(el("p", "muted small", "One page per line, 2 to 6 pages. End with * to match every page under it."));
     form.appendChild(list); rows.forEach(addRow);
     var acts2 = el("div", "acts"), save = el("button", "btn green sm", "Save funnels"), add = el("button", "btn ghost sm", "Add another"), cancel = el("button", "btn ghost sm", "Cancel"), err = el("p", "err");
     save.type = "submit"; add.type = "button"; cancel.type = "button"; err.setAttribute("role", "alert");
@@ -1914,7 +1873,7 @@ const DASH_JS = `
     ed.appendChild(form);
   }
 
-  // ---------- the closed loop (Fig. 3): this app's problems, what the agent does with each, the shared fix, prove, ship
+  // ---------- the closed loop, by problem: this app's problems, what the agent does with each, the shared fix, prove, ship
   var STEPS = {
     stale: function(r){ return "genclass_explore with focus on the request behind " + r + ": the same steps, its responses delivered later; genclass_replay of the stale order: reproduced. The generated test asserts the newest query's results stay."; },
     duplicate: function(r){ return "genclass_replay of the double click on " + r + "; the identical-in-flight witness names both requests. The generated test asserts one request per click."; },
@@ -1970,10 +1929,10 @@ const DASH_JS = `
     var defs = svg("defs"), m = svg("marker", { id: "fa", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
     m.appendChild(svg("path", { d: "M0 0L10 5L0 10z" })); defs.appendChild(m); host.appendChild(defs);
     var g = svg("g"); host.appendChild(g);
-    ["What broke", "What your agent does with it", "Then, for every fix"].forEach(function(t, i){ var c = svg("text", { x: [0, 370, 740][i], y: 12, "class": "col" }); c.textContent = t.toUpperCase(); g.appendChild(c); });
+    ["Problem", "Agent", "Every fix"].forEach(function(t, i){ var c = svg("text", { x: [0, 370, 740][i], y: 12, "class": "col" }); c.textContent = t.toUpperCase(); g.appendChild(c); });
     if (!list.length) {
-      node(g, 0, 24, 300, NH, "quiet", "Nothing broke in this period", ["GenClass watched " + plural(T0.sessions || 0, "page load", "page loads") + " and found no problem."], null, { s: "problem", k: "none" });
-      node(g, 370, 24, 300, NH, "quiet", "Nothing to hand to an agent", ["Keep watching; a new problem shows here first."], null, { s: "agent", k: "none" });
+      node(g, 0, 24, 300, NH, "quiet", "Nothing broke in this period", [], null, { s: "problem", k: "none" });
+      node(g, 370, 24, 300, NH, "quiet", "Nothing to hand to an agent", [], null, { s: "agent", k: "none" });
       edge(g, "M300 75 H370");
     }
     list.forEach(function(x, i){
@@ -1981,42 +1940,41 @@ const DASH_JS = `
       var where = (byIssue[x.key] || []).slice().sort(function(a, b2){ return b2.count - a.count; });
       if (!where.length && recentBy[x.key]) where = Object.keys(recentBy[x.key]).map(function(r){ return { route: r, count: recentBy[x.key][r] }; }).sort(function(a, b2){ return b2.count - a.count; });
       var pages = where.slice(0, 2).map(function(w2){ return w2.route + " (" + fmt(w2.count) + ")"; }).join(", ");
-      var lines = wrapText(t.what || "", 46).slice(0, 2); if (pages) lines.push("on " + pages);
+      var lines = []; if (pages) lines.push("on " + pages);
       var af = agentFor(A, x.key, where);
       if (af) wrapText(agentLine(af), 46).slice(0, 2).forEach(function(l){ lines.push(l); });
       node(g, 0, y, 300, NH, af ? "agent" : null, t.name + ": " + fmt(x.count), lines, color, { s: "problem", k: x.key, agent: af ? af.id : "" });
       var top = where.length ? where[0].route : "the page";
-      node(g, 370, y, 300, NH, null, "Reproduce, then write the test", wrapText(stepFor(x.key, top), 46).slice(0, 5), null, { s: "agent", k: x.key });
+      node(g, 370, y, 300, NH, null, "Reproduce, then write the test", wrapText(stepFor(x.key, top), 46).slice(0, 4), null, { s: "agent", k: x.key });
       edge(g, "M300 " + (y + 51) + " H370");
       edge(g, "M670 " + (y + 51) + " C 705 " + (y + 51) + ", 705 75, 740 75");
     });
     var C = (A && A.counts) || {}, proven = ((A && A.findings) || []).filter(function(f){ return f.proven; }).sort(function(a, b2){ return b2.proven < a.proven ? -1 : 1; })[0];
-    var fixLines = wrapText("The agent edits the code with the evidence in causal order from genclass_explain.", 40);
+    var fixLines = wrapText("Edit the code from genclass_explain's evidence.", 40);
     if (C.tested) fixLines = fixLines.concat(wrapText("Your agent wrote " + plural(C.tested, "regression test", "regression tests") + " in this period.", 40));
     node(g, 740, 24, 260, NH, null, "Fix", fixLines, null, { s: "fix" });
-    var proveLines = wrapText("Replay after the fix: not reproduced. @genclass/playwright posts the report on the pull request.", 40);
+    var proveLines = wrapText("Replay after the fix: not reproduced.", 40);
     if (proven) proveLines = proveLines.concat(wrapText("Last fix proven: " + proven.id + " on " + proven.route + ", " + ago(proven.proven) + ".", 40));
     node(g, 740, 24 + R, 260, NH, null, "Prove", proveLines, null, { s: "prove" });
-    node(g, 740, 24 + 2 * R, 260, NH, "gate", "Ship: a person decides", wrapText("Reads the test and the report, merges, deploys. Nothing merges itself.", 40), "var(--warn)", { s: "ship" });
+    node(g, 740, 24 + 2 * R, 260, NH, "gate", "Ship: a person decides", wrapText("Review, merge, deploy.", 40), "var(--warn)", { s: "ship" });
     edge(g, "M870 " + (24 + NH) + " V " + (24 + R)); edge(g, "M870 " + (24 + R + NH) + " V " + (24 + 2 * R));
     var d = (T0.detections || 0) - (prev.detections || 0);
-    var trend = prev.detections || T0.detections ? "Problems " + (d < 0 ? "down " + fmt(-d) : d > 0 ? "up " + fmt(d) : "unchanged") + " vs " + PREV[range] + (d < 0 ? ": a fix is holding, or traffic fell." : ".") : "Nothing to compare with yet.";
-    node(g, 0, obsY, 300, 64, "quiet", "Observe: " + plural(T0.sessions || 0, "page load", "page loads") + " watched", [fmt(T0.decisions || 0) + " decisions, all made on the device.", trend], null, { s: "observe" });
+    var trend = prev.detections || T0.detections ? "Problems " + (d < 0 ? "down " + fmt(-d) : d > 0 ? "up " + fmt(d) : "unchanged") + " vs " + PREV[range] + "." : "Nothing to compare with yet.";
+    node(g, 0, obsY, 300, 64, "quiet", "Observe: " + plural(T0.sessions || 0, "page load", "page loads") + " watched", [plural(T0.decisions || 0, "decision", "decisions") + ".", trend], null, { s: "observe" });
     edge(g, "M870 " + (24 + 2 * R + NH) + " V " + (obsY + 32) + " H 300", true);
     var lbl = svg("text", { x: 320, y: obsY + 28, "class": "nb" }); lbl.textContent = "then this list shrinks"; g.appendChild(lbl);
     edge(g, "M150 " + obsY + " V " + (24 + (n - 1) * R + NH + 8));
     var foot = document.getElementById("loop-foot");
-    if (foot) foot.textContent = (A && A.last
-      ? "Your agent reported " + plural(C.found || (A.findings || []).length, "finding", "findings") + " in this period, the last " + ago(A.last) + ": ids, kinds, pages, verdicts and times only, never page text. "
-      : "No agent has reported on this app in this period: reporting is off unless the developer sets GENCLASS_REPORT to this dashboard's link. ")
-      + "Connect an agent on this project's MCP page (" + MCP + ") and connectAgent(rt) in the dev build. As a service, GenClass runs the loop for your developers, hosted or inside your network.";
+    if (foot) foot.textContent = A && A.last
+      ? "Your agent reported " + plural(C.found || (A.findings || []).length, "finding", "findings") + " in this period, the last " + ago(A.last) + "."
+      : "No agent has reported on this app in this period. Set GENCLASS_REPORT in " + MCP + " to turn reporting on.";
   }
-  // ---------- Fig. 3, the stages of the loop: how many of the period's findings reached each, and the two ways back
+  // ---------- the stages of the loop: how many of the period's findings reached each, and the two ways back
   var STAGES = [
-    ["found", "Issue found", "Recorded in the dev build and handed to the agent."],
-    ["reproduced", "Reproduced", "genclass_replay delivered the same order again: the bug showed."],
-    ["fixed", "Fix proven", "After the fix, the same order no longer reproduces it."],
-    ["closed", "Closed", "A regression test guards the fix. A person ships."]
+    ["found", "Issue found", "Handed to the agent."],
+    ["reproduced", "Reproduced", "genclass_replay shows the bug."],
+    ["fixed", "Fix proven", "The replay no longer shows it."],
+    ["closed", "Closed", "A test guards it."]
   ];
   function stages(S){
     var A = S.agent || {}, G = A.stages || {}, host = document.getElementById("loopstages"); if (!host) return;
@@ -2054,7 +2012,7 @@ const DASH_JS = `
     ll.textContent = on ? "production is watched again \u00b7 " + plural(G.open || 0, "issue open now", "issues open now") : "production is watched again \u00b7 reporting is off (GENCLASS_REPORT)";
     g.appendChild(ll);
   }
-  // ---------- Table 15, the agent's log mirrored from the MCP server
+  // ---------- the agent's log, mirrored from the MCP server
   var STEP = { found: "Found", explain: "Evidence read", armed: "Replay armed", replay: "Replay", test: "Test written", explore: "Explore", cleared: "Cleared" };
   var KINDN = { "stale-write": "stale response", race: "race", "duplicate-request": "duplicate request", error: "error", detection: "detection", check: "check", expectation: "expectation", intervention: "intervention" };
   function outcome(e){
@@ -2087,8 +2045,8 @@ const DASH_JS = `
 
   // ---------- Copy as Markdown: the period's numbers as a short report a person or a coding agent can read
   function markdown(S){
-    var T0 = S.totals, B = S.breakdowns, out = [], sumEl = document.getElementById("summary");
-    out.push("# " + P.name + " (GenClass dashboard)", "", RANGE[S.range] + ", to " + String(S.generated).slice(0, 16).replace("T", " ") + " UTC. " + (sumEl ? sumEl.textContent : ""), "");
+    var T0 = S.totals, B = S.breakdowns, out = [];
+    out.push("# " + P.name + " (GenClass dashboard)", "", RANGE[S.range] + ", to " + String(S.generated).slice(0, 16).replace("T", " ") + " UTC.", "");
     out.push("| Metric | Value |", "| --- | ---: |");
     var cf = map(B.check_fix);
     [["Page loads", T0.sessions], ["Decisions", T0.decisions], ["Problems found", problemsOf(S)], ["Of them measured checks (not model findings)", T0.checks], ["Possible issues (lower confidence, not problems)", T0.possible],
@@ -2152,16 +2110,17 @@ const DASH_JS = `
     var env = mcpEnv(), keys = Object.keys(env), srv = { command: "npx", args: ["-y", MCP] }, priv = !!env.GENCLASS_DASHBOARD && agentLink !== "sample";
     if (keys.length) srv.env = env;
     function j(v){ return JSON.stringify(v, null, 2); }
+    // where: the prompt's full instruction; at: the short label the page shows over the block
     var mine = " (your own file, so the link stays out of the repository)";
     switch (id) {
       case "claude-code": return { where: priv ? "Run it in the project folder. Without --scope the server and its link stay in your own Claude Code settings, out of .mcp.json." : "Run it in the project folder. --scope project writes .mcp.json, so everyone on the project gets the server.",
-        code: "claude mcp add " + (priv ? "" : "--scope project ") + "genclass " + keys.map(function(k){ return "-e " + k + "=" + env[k] + " "; }).join("") + "-- npx -y " + MCP };
-      case "cursor": return { where: priv ? "~/.cursor/mcp.json" + mine + ":" : ".cursor/mcp.json in the project, or ~/.cursor/mcp.json for every project:", code: j({ mcpServers: { genclass: srv } }) };
-      case "vscode": return { where: priv ? "Command palette, MCP: Open User Configuration" + mine + ":" : ".vscode/mcp.json in the project:", code: j({ servers: { genclass: srv } }) };
-      case "codex": return { where: "~/.codex/config.toml. The first start downloads the package, so allow 30 seconds:", code: "[mcp_servers.genclass]\\ncommand = \\"npx\\"\\nargs = [\\"-y\\", \\"" + MCP + "\\"]\\nstartup_timeout_sec = 30" + (keys.length ? "\\n\\n[mcp_servers.genclass.env]\\n" + keys.map(function(k){ return k + " = \\"" + env[k] + "\\""; }).join("\\n") : "") };
-      case "claude-desktop": return { where: "Settings, Developer, Edit Config (claude_desktop_config.json):", code: j({ mcpServers: { genclass: srv } }) };
-      case "windsurf": return { where: "~/.codeium/windsurf/mcp_config.json:", code: j({ mcpServers: { genclass: srv } }) };
-      default: return { where: priv ? "~/.gemini/settings.json" + mine + ":" : ".gemini/settings.json in the project, or ~/.gemini/settings.json for every project:", code: j({ mcpServers: { genclass: srv } }) };
+        at: priv ? "In the project folder (stays out of .mcp.json):" : "In the project folder:", code: "claude mcp add " + (priv ? "" : "--scope project ") + "genclass " + keys.map(function(k){ return "-e " + k + "=" + env[k] + " "; }).join("") + "-- npx -y " + MCP };
+      case "cursor": return { where: priv ? "~/.cursor/mcp.json" + mine + ":" : ".cursor/mcp.json in the project, or ~/.cursor/mcp.json for every project:", at: priv ? "~/.cursor/mcp.json:" : ".cursor/mcp.json:", code: j({ mcpServers: { genclass: srv } }) };
+      case "vscode": return { where: priv ? "Command palette, MCP: Open User Configuration" + mine + ":" : ".vscode/mcp.json in the project:", at: priv ? "MCP: Open User Configuration:" : ".vscode/mcp.json:", code: j({ servers: { genclass: srv } }) };
+      case "codex": return { where: "~/.codex/config.toml. The first start downloads the package, so allow 30 seconds:", at: "~/.codex/config.toml:", code: "[mcp_servers.genclass]\\ncommand = \\"npx\\"\\nargs = [\\"-y\\", \\"" + MCP + "\\"]\\nstartup_timeout_sec = 30" + (keys.length ? "\\n\\n[mcp_servers.genclass.env]\\n" + keys.map(function(k){ return k + " = \\"" + env[k] + "\\""; }).join("\\n") : "") };
+      case "claude-desktop": return { where: "Settings, Developer, Edit Config (claude_desktop_config.json):", at: "claude_desktop_config.json:", code: j({ mcpServers: { genclass: srv } }) };
+      case "windsurf": return { where: "~/.codeium/windsurf/mcp_config.json:", at: "~/.codeium/windsurf/mcp_config.json:", code: j({ mcpServers: { genclass: srv } }) };
+      default: return { where: priv ? "~/.gemini/settings.json" + mine + ":" : ".gemini/settings.json in the project, or ~/.gemini/settings.json for every project:", at: priv ? "~/.gemini/settings.json:" : ".gemini/settings.json:", code: j({ mcpServers: { genclass: srv } }) };
     }
   }
   function mcpPrompt(){
@@ -2185,21 +2144,21 @@ const DASH_JS = `
     });
     host.appendChild(bar);
     var opts = el("div", "opts");
-    function opt(k, text, off){
-      var l = el("label"), i = el("input"); i.type = "checkbox"; i.checked = !off && !!mcpOpt[k]; i.disabled = !!off;
+    function opt(k, text, env, off){
+      var l = el("label"), i = el("input"); i.type = "checkbox"; i.checked = !off && !!mcpOpt[k]; i.disabled = !!off; l.title = env;
       i.addEventListener("change", function(){ mcpOpt[k] = i.checked; mcpAll(); });
       l.appendChild(i); l.appendChild(document.createTextNode(text)); opts.appendChild(l);
     }
-    opt("link", "Production numbers (GENCLASS_DASHBOARD)", !agentLink);
-    opt("report", "Report findings to the Loop view (GENCLASS_REPORT)", !agentLink || agentLink === "sample");
+    opt("link", "Production numbers", "GENCLASS_DASHBOARD", !agentLink);
+    opt("report", "Report findings", "GENCLASS_REPORT", !agentLink || agentLink === "sample");
     host.appendChild(opts);
     var c = mcpConfig(mcpOpt.client);
-    host.appendChild(el("p", "where", c.where)); host.appendChild(el("pre", "code", c.code));
-    if (!agentLink) host.appendChild(el("p", "warn", "No agent link yet: this setup reads the pages on your machine only. Create one under Agent access for production numbers."));
-    var acts = el("div", "acts"), cp = el("button", "btn sm", "Copy prompt"), cc = el("button", "btn sm ghost", "Copy configuration");
+    host.appendChild(el("p", "where", c.at)); host.appendChild(el("pre", "code", c.code));
+    if (!agentLink) host.appendChild(el("p", "warn", "No agent link yet: local pages only."));
+    var acts = el("div", "acts"), cp = el("button", "btn sm", "Copy prompt"), cc = el("button", "btn sm ghost", "Copy config");
     cp.type = "button"; cc.type = "button";
     cp.setAttribute("data-copy", mcpPrompt()); cp.setAttribute("aria-label", "Copy the prompt that sets up the MCP server in " + mcpName(mcpOpt.client));
-    cc.setAttribute("data-copy", c.code);
+    cc.setAttribute("data-copy", c.code); cc.setAttribute("aria-label", "Copy the configuration");
     acts.appendChild(cp); acts.appendChild(cc); host.appendChild(acts);
   }
   function mcpAll(){ [].slice.call(document.querySelectorAll("[data-mcp]")).forEach(mcpRender); }
@@ -2214,8 +2173,8 @@ const DASH_JS = `
       if (code) code.textContent = agentLink;
       if (cb) cb.setAttribute("data-copy", agentLink);
       if (out) out.classList.remove("hidden");
-      if (st && P.account) st.textContent = "On. Copy it now: GenClass keeps only its hash, so this page cannot show it again.";
-      if (b) { b.disabled = false; b.textContent = "Make a new agent link"; b.setAttribute("data-on", "1"); b.removeAttribute("data-armed"); }
+      if (st && P.account) st.textContent = "On. Copy it now: it is shown once.";
+      if (b) { b.disabled = false; b.textContent = "New agent link"; b.setAttribute("data-on", "1"); b.removeAttribute("data-armed"); }
     });
   }
   document.addEventListener("click", function(e){
@@ -2288,7 +2247,7 @@ const DASH_JS = `
     if (!P.account) {
       var cs = document.getElementById("cstatus"), cst = document.getElementById("cstatust"), cp = document.getElementById("cpoll");
       if (cs) cs.classList.toggle("on", live);
-      if (cst) cst.textContent = live ? "Connected. Last event " + ago(S.lastEvent) : "Waiting for the first event from this app";
+      if (cst) cst.textContent = live ? "Connected. Last event " + ago(S.lastEvent) : "Waiting for the first event";
       if (cp) cp.classList.add("hidden");
     }
     document.getElementById("updated").textContent = "Updated " + new Date(S.generated).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -2296,7 +2255,7 @@ const DASH_JS = `
     document.getElementById("content").classList.toggle("hidden", !live);
     ["period", "mdcopy", "verdict"].forEach(function(id){ var n = document.getElementById(id); if (n) n.classList.toggle("hidden", !live); });
     if (!live) return;
-    verdict(S); summary(S); tiles(S); usage(S); advisor(S); fixAll(S); trend(S); possibleTrend(S); cards(S); possibleCards(S); pages(S); acted(S); health(S); stages(S); agentLog(S); loop(S); recent(S); visits(S); advanced(S);
+    verdict(S); tiles(S); usage(S); advisor(S); fixAll(S); trend(S); possibleTrend(S); cards(S); possibleCards(S); pages(S); acted(S); health(S); stages(S); agentLog(S); loop(S); recent(S); visits(S); advanced(S);
     var B2 = S.breakdowns, T2 = S.totals;
     function put(id, t){ var n = document.getElementById(id); if (n) n.textContent = t; }
     put("c-trend", fmt(problemsOf(S)));
@@ -2317,17 +2276,10 @@ const DASH_JS = `
     var VIEW = { top: "overview", trend: "overview", usage: "overview", advisor: "overview", getc: "overview", found: "problems", "possible-s": "problems", where: "pages", did: "pages",
       "recent-s": "activity", visits: "visitors", "ix-sources": "visitors", "ix-devices": "visitors", "ix-sessions": "visitors", "ix-entry": "visitors", "ix-funnels": "visitors", clicks: "visitors", moves: "visitors",
       "health-s": "health", adv: "health", loop: "loop", mcp: "mcp", "mcp-tools": "mcp", "mcp-json": "mcp", settings: "settings", keys: "settings", delproj: "settings", forwarding: "forwarding", "export": "export" };
+    // each view's title; a second entry would be a one-line description under it (none today)
     var TITLE = {
-      problems: ["Problems", "Each kind of problem GenClass found in this period: where it happened, how to fix it, and a prompt for your coding agent."],
-      pages: ["Pages and actions", "The pages with the most problems, and what GenClass did about them."],
-      activity: ["Activity", "The latest detections and interventions, newest first."],
-      visitors: ["Visitors", "How visitors use this app: interaction analytics, for apps that turn them on."],
-      health: ["Health", "Whether GenClass could watch your pages at all: model loads, decision time, what was not checked."],
-      loop: ["Loop", "What broke on this app, and what your coding agent does with each problem."],
-      mcp: ["MCP", "Let your coding agent read this project: production problems through @genclass/mcp, and what happens inside your pages while you develop."],
-      settings: ["Project Settings", P.account ? "This project's name, key and agent access, and deleting it." : "This project's name, key and agent access."],
-      forwarding: ["Integrations", "Send each new detection where you already look."],
-      "export": ["Export", "Every event GenClass received for this app, as a file or through the API."]
+      problems: ["Problems"], pages: ["Pages and actions"], activity: ["Activity"], visitors: ["Visitors"], health: ["Health"],
+      loop: ["Closed loop"], mcp: ["MCP"], settings: ["Project Settings"], forwarding: ["Integrations"], "export": ["Export"]
     };
     var PARENT = { "export": "settings" }, SCROLL = { did: 1, "possible-s": 1, "ix-sources": 1, "ix-devices": 1, "ix-sessions": 1, "ix-entry": 1, "ix-funnels": 1, clicks: 1, moves: 1, keys: 1, usage: 1, advisor: 1, getc: 1, adv: 1, "mcp-tools": 1, "mcp-json": 1, delproj: 1 };
     var links = [].slice.call(document.querySelectorAll(".snav a, .sb-pm a"));
@@ -2348,7 +2300,7 @@ const DASH_JS = `
       links.forEach(function(a){ a.setAttribute("aria-current", String(a === r || a === m)); });
       var t = TITLE[v], vt = document.getElementById("vtitle"), vd = document.getElementById("vdesc");
       if (vt) { vt.textContent = t ? t[0] : ""; vt.classList.toggle("hidden", !t); }
-      if (vd) { vd.textContent = t ? t[1] : ""; vd.classList.toggle("hidden", !t); }
+      if (vd) { vd.textContent = t && t[1] ? t[1] : ""; vd.classList.toggle("hidden", !(t && t[1])); }
       document.title = (t ? t[0] + " | " : "") + P.name + " | GenClass dashboard";
       if (document.body) document.body.classList.remove("sb-open");
       if (jump) { var tg = document.getElementById(id); if (SCROLL[id] && tg && tg.scrollIntoView) tg.scrollIntoView(); else if (window.scrollTo) window.scrollTo(0, 0); }
@@ -2367,11 +2319,6 @@ const DASH_JS = `
     window.addEventListener("hashchange", function(){ show(location.hash.slice(1), true); });
     if (!show(location.hash.slice(1), false)) show("top", false);
   })();
-  if (document.getElementById("ptok")) {
-    document.getElementById("ptok").textContent = P.token;
-    document.getElementById("ptokc").appendChild(copyBtn(function(){ return P.token; }, "token", function(){ return document.getElementById("ptok"); }));
-    renderSnippets(document.getElementById("snips"), P.token, P.endpoint || "");
-  }
   mcpAll(); alinkShow();
   var mdb = document.getElementById("mdcopy");
   if (mdb) mdb.addEventListener("click", function(){ if (shownS) gcCopy(mdb, markdown(shownS), null); });
@@ -2415,7 +2362,7 @@ const CONNECT_JS = `
     return d.toDateString() === new Date().toDateString() ? "at " + t : d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + t;
   }
   function show(p){
-    if (!p || !p.last_event) { stt.textContent = "Waiting for the first event from this app"; return false; }
+    if (!p || !p.last_event) { stt.textContent = "Waiting for the first event"; return false; }
     st.classList.add("on"); if (poll) poll.classList.add("hidden");
     stt.textContent = p.first_event ? "Connected. First event " + when(p.first_event) : "Connected. Last event " + when(p.last_event);
     return true;
@@ -2587,15 +2534,15 @@ export function installPrompt(token: string, endpoint: string | null = null, c: 
   return out.join("\n");
 }
 
-/** One big primary button that copies analyticsPrompt, and at most two lines under it. */
+/** One big primary button that copies analyticsPrompt, and one short line under it. */
 function promptBlock(token: string, where: string, endpoint: string | null, sub: string): string {
   const prompt = analyticsPrompt(token, where, endpoint);
-  return `<div class="cprompt"><button class="btn green xl" type="button" data-copy="${esc(prompt)}">Copy the prompt for your coding agent</button><p class="cp-sub">${sub}</p><textarea class="cp-text" readonly hidden aria-label="The prompt, to copy by hand" rows="8">${esc(prompt)}</textarea></div>`;
+  return `<div class="cprompt"><button class="btn green xl" type="button" data-copy="${esc(prompt)}" aria-label="Copy the prompt for your coding agent">Copy prompt</button><p class="cp-sub">${sub}</p><textarea class="cp-text" readonly hidden aria-label="The prompt, to copy by hand" rows="8">${esc(prompt)}</textarea></div>`;
 }
 
 interface ConnectOptions {
   token: string;
-  /** Account mode: the CLI's login, the key server-rendered, the status line that polls. */
+  /** Account mode: the CLI's login and the status line that polls. */
   account: boolean;
   runtimeReady: boolean;
   endpoint: string | null;
@@ -2613,9 +2560,9 @@ interface ConnectOptions {
 
 /**
  * The Connect section (Studio's Connect dialog): a status line, then tabs. Framework: a prompt for a coding agent and
- * the ways in (the CLI's login, or the key pasted into code, a script tag or a meta tag). API Keys: the project key.
- * MCP: the agent's MCP server (rendered by the page script). Analytics: the analytics prompt. On a private link the
- * snippets and the key are filled in by the page script (#snips, #ptok), as /start does.
+ * the ways in (the CLI: login in an account, init with the key on a private link; or the key pasted into code, a script
+ * tag or a meta tag). API Keys: the project key. MCP: the agent's MCP server (rendered by the page script). Analytics:
+ * the analytics prompt. Every snippet is server-rendered, in both modes.
  */
 function connectSection(c: ConnectOptions): string {
   const { token, endpoint } = c;
@@ -2634,69 +2581,58 @@ function connectSection(c: ConnectOptions): string {
     const id = `csnip${++n}`;
     return `<div><div class="sh"><span>${label}</span><button class="btn sm ghost" type="button" data-copy="${esc(code)}" data-target="${id}" aria-label="Copy ${name}">Copy</button></div><pre class="code" id="${id}" tabindex="0" aria-label="${esc(label)}">${esc(code)}</pre></div>`;
   };
-  const notYet = c.runtimeReady ? "" : `<p class="cnote" id="cnote">${NOT_ON_NPM} So this line keeps waiting.</p>`;
+  const notYet = c.runtimeReady
+    ? ""
+    : `<p class="cnote" id="cnote"><b>Not on npm yet.</b> Project keys need @genclass/runtime ${KEY_RUNTIME}, which is not published yet.</p>`;
   const install = installPrompt(token, endpoint);
   const ch = c.choices;
   const opt = choiceOpt;
-  const agentNote = !ch?.agent
-    ? ""
-    : ch.agent === "this"
-      ? "The prompt names this private link, which opens these stats to anyone who has it."
-      : ch.agent === "replace"
-        ? "Makes a new agent link; the one the app has stops working."
-        : "Makes an agent link, a read-only link to these stats that stays in your agent's own settings.";
+  const agentNote = !ch?.agent ? "" : ch.agent === "this" ? "uses this private link" : ch.agent === "replace" ? "replaces the agent link" : "makes an agent link";
   const choices = ch
     ? `<div class="copts" id="cchoices" role="group" aria-label="What the prompt sets up">
-  ${opt("guard", "Guard", "GenClass fixes what it is sure of, reversibly: it drops a stale response, fixes a CSS bug on the page.")}
-  ${opt("eager", "Eager", "It acts on smaller signals too.", true)}
-  ${opt("badge", "Badge on the live site", "The GenClass overlay shows on every host, not only locally: for demos and staging.")}
-  ${ch.agent ? opt("agent", "Connect my coding agent to production", `Its MCP server reads these numbers and reports to the Loop view. ${agentNote}`) : ""}
-  ${opt("deploy", "Deploy when done", "The agent deploys with the project's own deploy command.")}
+  ${opt("guard", "Guard", "fixes what it is sure of")}
+  ${opt("eager", "Eager", "acts on smaller signals", true)}
+  ${opt("badge", "Badge on the live site", "overlay on every host")}
+  ${ch.agent ? opt("agent", "Connect my agent to production", agentNote) : ""}
+  ${opt("deploy", "Deploy when done", "")}
   <p class="err" role="alert"></p>
 </div>`
     : "";
-  const ask = `${choices}<div class="cprompt"><button class="btn green xl" type="button" id="cpinstall" data-copy="${esc(install)}">Copy the prompt for your coding agent</button><p class="cp-sub">Paste it into Claude Code, Cursor or Codex: it installs GenClass in this app with this project's key.</p><textarea class="cp-text" id="cpinstallt" readonly hidden aria-label="The prompt, to copy by hand" rows="8">${esc(install)}</textarea></div>`;
-  const ways = c.account
-    ? `<div class="ways">
-    ${
-      endpoint
-        ? ""
-        : `<div class="way">
-      <div class="eb">1 · Run in your project</div>
-      <h3>Sign in from the terminal</h3>
-      ${snip("In the app's folder", "the login command", `npx ${RUNTIME_PKG} login`)}
-      <p>Signs you in and connects the app in that folder: you pick this project, it shows the change to your files, and writes the key after you agree.</p>
-    </div>`
-    }
+  const ask = `${choices}<div class="cprompt"><button class="btn green xl" type="button" id="cpinstall" data-copy="${esc(install)}" aria-label="Copy the prompt for your coding agent">Copy prompt</button><p class="cp-sub">Paste it into your coding agent.</p><textarea class="cp-text" id="cpinstallt" readonly hidden aria-label="The prompt, to copy by hand" rows="8">${esc(install)}</textarea></div>`;
+  // the terminal: login in an account (it picks this project), init with the key on a private link; neither for a
+  // self-hosted collector (the CLI makes its tokens at genclass.dev)
+  const cli = endpoint
+    ? ""
+    : `<div class="way">
+      <div class="eb">Terminal</div>
+      ${c.account ? snip("In the app's folder", "the login command", `npx ${RUNTIME_PKG} login`) : snip("In the app's folder", "the setup command", setupCommand(token))}
+    </div>`;
+  const ways = `<div class="ways">
+    ${cli}
     <div class="way">
-      <div class="eb">${endpoint ? "Add the key and this collector's endpoint" : "2 · Or add the key yourself"}</div>
-      <h3>Paste one of these</h3>
+      <div class="eb">${endpoint ? "Add the key and this collector's endpoint" : "Or add the key"}</div>
       ${snip("In code", "the init code", init)}
       ${snip("Script tag", "the script tag", tag)}
       ${snip(endpoint ? "With a bundler" : "Meta tag, with a bundler", endpoint ? "the bundler setup" : "the meta tag", meta)}
     </div>
-  </div>`
-    : `<div id="snips" class="stack"></div>`;
-  const key = c.account
-    ? `<div class="kval"><code id="ckey">${t}</code><button class="btn sm ghost" type="button" data-copy="${t}" data-target="ckey" aria-label="Copy the project API key">Copy</button></div>`
-    : `<div class="kval"><code id="ptok" class="mono brk">${t}</code><span id="ptokc"></span></div>`;
+  </div>`;
+  const key = `<div class="kval"><code id="ckey">${t}</code><button class="btn sm ghost" type="button" data-copy="${t}" data-target="ckey" aria-label="Copy the project API key">Copy</button></div>`;
   const tab = (id: string, label: string, on: boolean) =>
     `<button type="button" role="tab" id="tab-${id}" aria-controls="tp-${id}" aria-selected="${on}"${on ? "" : ' tabindex="-1"'}>${label}</button>`;
   return `<section class="connect" id="connect" aria-labelledby="connect-h">
   ${notYet}
-  <p class="cstat" id="cstatus" aria-live="polite"><i></i><span id="cstatust">Waiting for the first event from this app</span></p>
+  <p class="cstat" id="cstatus" aria-live="polite"><i></i><span id="cstatust">Waiting for the first event</span></p>
   <div class="sb-tabs" role="tablist" aria-label="Ways to connect">${tab("fw", "Framework", true)}${tab("keys", "API Keys", false)}${c.mcp === false ? "" : tab("mcp", "MCP", false)}${c.analytics ? tab("ana", "Analytics", false) : ""}</div>
   <div class="tabp on" role="tabpanel" id="tp-fw" aria-labelledby="tab-fw">
   ${ask}
   ${ways}
-  <p class="fine">The key needs @genclass/runtime ${KEY_RUNTIME} or later: 0.2.x does not send it. Events arrive in batches every 10 seconds.
-  Local hosts (localhost, *.local, *.test, private networks) do not send by default, even with a key (telemetry: true or a telemetry options object opts them in), so the first event usually comes from your deployed site.<span id="cpoll"> The status line above checks every 5 seconds.</span></p>
+  <p class="fine">Local hosts do not send by default.<span id="cpoll"> Checking every 5 seconds.</span></p>
   </div>
   <div class="tabp" role="tabpanel" id="tp-keys" aria-labelledby="tab-keys">
   <div class="keyrow">
     <div class="k">Project API key</div>
     ${key}
-    <p class="kn">Public, and safe in front-end code: it can only add telemetry to this app. It cannot open this dashboard or change anything.</p>
+    <p class="kn">Safe to use in front-end code.</p>
   </div>
   </div>
   ${
@@ -2704,14 +2640,14 @@ function connectSection(c: ConnectOptions): string {
       ? ""
       : `<div class="tabp" role="tabpanel" id="tp-mcp" aria-labelledby="tab-mcp">
   <div class="mcpc" data-mcp></div>
-  <p class="fine">The agent link, the tools your agent gets and this project's JSON are on the <a href="#mcp" data-goto="mcp" data-close>MCP page</a>.</p>
+  <p class="fine"><a class="lnk" href="#mcp" data-goto="mcp" data-close>Open the MCP page</a></p>
   </div>`
   }
   ${
     c.analytics
       ? `<div class="tabp" role="tabpanel" id="tp-ana" aria-labelledby="tab-ana">
   <div class="cana"><div class="eb">Visitor analytics</div>${c.analytics}</div>
-  <p class="fine" id="canalytics">Interaction analytics (the Visitors view) need @genclass/runtime ${ANALYTICS_RUNTIME} or later and <code>analytics: true</code>: <code>npm install ${RUNTIME_PKG}</code>. Earlier versions ignore the option without a word.</p>
+  <p class="fine" id="canalytics">Needs @genclass/runtime ${ANALYTICS_RUNTIME} or later.</p>
   </div>`
       : ""
   }
@@ -2721,7 +2657,7 @@ function connectSection(c: ConnectOptions): string {
 /** The Connect section in Studio's dialog (opened by the header's Connect button, #connect, Getting started). */
 function connectDialog(c: ConnectOptions): string {
   return `<div class="sb-modal" id="m-connect" role="dialog" aria-modal="true" aria-labelledby="connect-h"><div class="sb-mbox">
-<div class="sb-mh"><div><h2 id="connect-h">Connect to your project</h2><p>Add the key to your app, connect your coding agent, or turn on visitor analytics.</p></div><button class="sb-x" type="button" data-close aria-label="Close">${icon("x", 16)}</button></div>
+<div class="sb-mh"><div><h2 id="connect-h">Connect to your project</h2></div><button class="sb-x" type="button" data-close aria-label="Close">${icon("x", 16)}</button></div>
 <div class="sb-mb">${connectSection(c)}</div></div></div>`;
 }
 
@@ -2734,49 +2670,45 @@ function agentAccess(acct: boolean, privateLink: boolean): string {
   const out =
     '<div class="alink-out hidden"><div class="kval"><code></code><button class="btn sm ghost" type="button" data-copy="" aria-label="Copy the agent link">Copy</button></div></div>';
   if (!acct)
-    return `<div class="alink"><div class="keyrow"><div class="k">Agent link</div><div class="kval"><span class="alink-st">This page's own address</span></div>
-<p class="kn">On a private link, the link itself is what the MCP server reads (GENCLASS_DASHBOARD). Anyone with it can see these stats: keep it out of files you commit.</p></div>${out}</div>`;
-  return `<div class="alink"><div class="keyrow"><div class="k">Agent link</div><div class="kval"><span class="alink-st">${
-    privateLink ? "On: made earlier. GenClass keeps only its hash, so it cannot be shown again." : "None yet."
-  }</span></div>
-<p class="kn">The link your agent's MCP server reads this project's production numbers from (GENCLASS_DASHBOARD). It opens these stats, read only, to anyone who has it: keep it out of files you commit. Making a new one turns the old one off; you can also turn it off on the Projects page.</p></div>
-${out}<div class="row"><button class="btn sm" type="button" data-mklink${privateLink ? ' data-on="1"' : ""}>${privateLink ? "Make a new agent link" : "Create agent link"}</button></div><p class="err" role="alert"></p></div>`;
+    return `<div class="alink"><div class="keyrow"><div class="k">Agent link</div><div class="kval"><span class="alink-st">This page's address</span></div>
+<p class="kn">Keep it private.</p></div>${out}</div>`;
+  return `<div class="alink"><div class="keyrow"><div class="k">Agent link</div><div class="kval"><span class="alink-st">${privateLink ? "On" : "None yet."}</span></div>
+<p class="kn">Read only. Keep it private.</p></div>
+${out}<div class="row"><button class="btn sm" type="button" data-mklink${privateLink ? ' data-on="1"' : ""}>${privateLink ? "New agent link" : "Create agent link"}</button></div><p class="err" role="alert"></p></div>`;
 }
 
 /** What the MCP server gives a coding agent (packages/mcp/src/tools.ts), for the MCP view's table. */
 const MCP_TOOLS: [string, string][] = [
-  ["genclass_analytics", 'This project\'s production numbers with source "production": page loads, problems by type and page, the latest decisions (needs the agent link). Local timings and error rates with "local".'],
-  ["genclass_findings", "What broke on the pages running on your machine: stale responses, double submits, write races and errors, newest first."],
-  ["genclass_explain", "One finding in causal order (the click, the requests, the order they arrived, the state they wrote) and a regression test for it."],
-  ["genclass_explore", "Runs the same steps again with the network answering in different orders, to find races a fast machine hides."],
-  ["genclass_replay", "Replays one exact order: before a fix it reproduces the problem, after it the verdict is not reproduced."],
-  ["genclass_status", "Which pages are connected to the server right now."],
-  ["genclass_setup", "The development-only lines that connect the app's dev build (connectAgent)."],
-  ["genclass_clear", "Forgets what was recorded."],
+  ["genclass_analytics", "Production and local numbers"],
+  ["genclass_findings", "What broke on local pages"],
+  ["genclass_explain", "One finding in causal order, with a test"],
+  ["genclass_explore", "Re-runs with the network reordered"],
+  ["genclass_replay", "Replays one exact order"],
+  ["genclass_status", "Connected pages"],
+  ["genclass_setup", "The dev-build setup lines"],
+  ["genclass_clear", "Forgets what was recorded"],
 ];
 
 /** The MCP view: connect a coding agent (client, options, configuration, prompt), the agent link, the tools, the data. */
 function mcpView(acct: boolean, privateLink: boolean): string {
   return `<div id="mcp" data-v="mcp">
 <section class="blk">
-  <div class="blk-h"><h2>Connect your coding agent</h2><span class="aside">${MCP_PKG}: runs on your machine, no dependencies</span></div>
-  <p class="poss-note">The server shows your agent what happens inside this app's pages while you develop, re-runs them with the network answering in different orders to find races, and reads this project's production numbers through the agent link. Pick your agent, then paste the prompt into it or add the configuration yourself.</p>
-  <div class="mcpc mt-l" data-mcp></div>
+  <div class="blk-h"><h2>Connect your agent</h2><span class="aside">${MCP_PKG}</span></div>
+  <div class="mcpc" data-mcp></div>
 </section>
 <section class="blk" id="mcp-access">
   <div class="blk-h"><h2>Agent access</h2><span class="aside">GENCLASS_DASHBOARD</span></div>
   ${agentAccess(acct, privateLink)}
 </section>
 <section class="blk" id="mcp-tools">
-  <div class="blk-h"><h2>What your agent can do</h2><span class="aside">${MCP_TOOLS.length} tools</span></div>
-  <div class="tablewrap"><table class="dt tools-t"><thead><tr><th>Tool</th><th>What it gives your agent</th></tr></thead><tbody>
+  <div class="blk-h"><h2>Tools</h2><span class="aside">${MCP_TOOLS.length}</span></div>
+  <div class="tablewrap"><table class="dt tools-t"><thead><tr><th>Tool</th><th>Does</th></tr></thead><tbody>
   ${MCP_TOOLS.map(([n, d]) => `<tr><td>${n}</td><td>${esc(d)}</td></tr>`).join("\n  ")}
   </tbody></table></div>
 </section>
 <section class="blk" id="mcp-json">
-  <div class="blk-h"><h2>Read this project as data</h2><span class="aside">For agents and scripts</span></div>
-  <p class="poss-note">Copy as Markdown (top right, on every view) copies the period's numbers as a short report to paste into a chat. The same stats are JSON at the agent link's API address, read only:</p>
-  <pre class="code mt-s" id="jsonurl">Create an agent link above: its stats are at /api/projects/&lt;the link's secret&gt;?range=7d.</pre>
+  <div class="blk-h"><h2>JSON</h2><span class="aside">Read only</span></div>
+  <pre class="code" id="jsonurl">Create an agent link first.</pre>
 </section>
 </div>`;
 }
@@ -2799,25 +2731,17 @@ export function dashboardPage(
   const data = demo ? { ...base, demo: { types: demo.types, actions: demo.actions, slots: demo.slots } } : base;
   const t = esc(project.token);
   const keep = opts.keepDays ?? 90;
-  const report = '<a href="https://github.com/genclass-dev/GenClass/issues/new?title=False%20detection%3A%20">Report a false detection</a>';
-  const privacy = acct
-    ? `${
-        opts.privateLink
-          ? "This app also has the private dashboard link it had before it joined your account, and anyone with that link can see these stats. You can turn the link off on your <a href=\"/account#apps\">Projects page</a>."
-          : "Only you can open this page, while signed in."
-      } <a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · ${report} · <a href="/account">All projects</a> · <a href="/account/billing">Plan and billing</a>`
-    : `Keep this link private: anyone with it can see these stats. <a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · <a href="/start">Add another app</a>`;
   const where = acct && opts.id ? `this app's GenClass dashboard, under Visitors (${ORIGIN_OF(opts)}/account/apps/${opts.id}#visits)` : "this app's GenClass dashboard (the private link I opened it from), under Visitors";
   // what a new app's dashboard says first: the same one command as /start/<secret> (a self-hosted collector has no CLI)
   const firstStep = opts.endpoint
-    ? `<div><b>Add GenClass with this project's key</b><span>One line of code or a script tag.</span></div><button class="btn sm" type="button" data-open="m-connect" data-tab="fw">Connect</button>`
-    : `<div class="minw0"><b>Run this in your project's folder</b><div class="cmdbox"><code id="ncmd">${esc(setupCommand(project.token))}</code><button class="btn sm" type="button" data-copy="${esc(setupCommand(project.token))}" data-target="ncmd" aria-label="Copy the command">Copy</button></div><span>Or let your coding agent do it, or use a script tag.</span></div><button class="btn sm ghost" type="button" data-open="m-connect" data-tab="fw">Other ways</button>`;
+    ? `<div><b>Add the key</b></div><button class="btn sm" type="button" data-open="m-connect" data-tab="fw">Connect</button>`
+    : `<div class="minw0"><b>Install</b><div class="cmdbox"><code id="ncmd">${esc(setupCommand(project.token))}</code><button class="btn sm" type="button" data-copy="${esc(setupCommand(project.token))}" data-target="ncmd" aria-label="Copy the command">Copy</button></div></div><button class="btn sm ghost" type="button" data-open="m-connect" data-tab="fw">Other ways</button>`;
   const connect = connectDialog({
     token: project.token,
     account: !!acct,
     runtimeReady: opts.runtimeReady === true,
     endpoint: opts.endpoint ?? null,
-    analytics: promptBlock(project.token, where, opts.endpoint ?? null, "Page views, visits, sources, devices and funnels on this dashboard. Paste the prompt into your coding agent and it turns them on."),
+    analytics: promptBlock(project.token, where, opts.endpoint ?? null, "Paste it into your coding agent."),
     choices: { agent: acct ? (opts.privateLink ? "replace" : "new") : "this" },
   });
   const settings = `<div id="settings" data-v="settings">
@@ -2826,13 +2750,13 @@ export function dashboardPage(
   <div class="keyrow"><div class="k">Project name</div><div class="kval"><span>${esc(project.name)}</span></div></div>
   ${acct && opts.id ? `<div class="keyrow"><div class="k">Project ID</div><div class="kval"><code id="sid">${esc(opts.id)}</code><button class="btn sm ghost" type="button" data-copy="${esc(opts.id)}" data-target="sid" aria-label="Copy the project ID">Copy</button></div></div>` : ""}
   <div class="keyrow"><div class="k">Created</div><div class="kval"><span>${project.created ? esc(project.created.slice(0, 10)) : "-"}</span></div></div>
-  <div class="keyrow"><div class="k">Data kept</div><div class="kval"><span>${keep >= 365 ? "1 year" : `${keep} days`} (hourly detail 48 hours)</span></div></div>
-  <div class="keyrow"><div class="k">Owner</div><div class="kval"><span>${acct ? esc(orgName(acct.email)) : "Anyone with this private link"}</span></div>${acct ? "" : '<p class="kn">To keep it with your other projects, <a href="/login?next=%2Faccount%3Fclaim%3D1">sign in</a> and add this dashboard to your account.</p>'}</div>
+  <div class="keyrow"><div class="k">Data kept</div><div class="kval"><span id="keep">${keep >= 365 ? "1 year" : `${keep} days`}</span></div></div>
+  <div class="keyrow"><div class="k">Owner</div><div class="kval"><span>${acct ? esc(orgName(acct.email)) : "Private link"}</span>${acct ? "" : '<a class="btn sm ghost" href="/login?next=%2Faccount%3Fclaim%3D1">Add to an account</a>'}</div></div>
 </section>
 <section class="blk" id="keys">
-  <div class="blk-h"><h2>API keys</h2><span class="aside">Needs @genclass/runtime ${KEY_RUNTIME} or later</span></div>
+  <div class="blk-h"><h2>API keys</h2></div>
   <div class="keyrow"><div class="k">Project key</div><div class="kval"><code id="skey">${t}</code><button class="btn sm ghost" type="button" data-copy="${t}" data-target="skey" aria-label="Copy the project key">Copy</button></div>
-  <p class="kn">Public: it goes in the app's code and only lets data be sent. It cannot open this dashboard or change anything. <button class="lnk" type="button" data-open="m-connect" data-tab="fw">How to add it</button></p></div>
+  <p class="kn">Safe to use in front-end code. <button class="lnk" type="button" data-open="m-connect" data-tab="fw">How to add it</button></p></div>
 </section>
 <section class="blk">
   <div class="blk-h"><h2>Agent access</h2><span class="aside">For @genclass/mcp</span></div>
@@ -2842,7 +2766,7 @@ ${
   acct && opts.id
     ? `<section class="blk" id="delproj">
   <div class="blk-h"><h2>Delete project</h2><span class="aside">Cannot be undone</span></div>
-  <p class="poss-note">Deletes ${esc(project.name)} with its stats, visitors, the agent's log and its export. Its key stops counting at once: batches the app still sends reach no dashboard, so take the GenClass lines out of its code too. Its agent link and any private dashboard link stop working.</p>
+  <p class="poss-note">Deletes ${esc(project.name)} and all its data.</p>
   <div class="row mt-s"><button class="btn danger" type="button" data-delproj>Delete project</button></div><p class="err" role="alert"></p>
 </section>`
     : ""
@@ -2873,7 +2797,7 @@ ${
       view: "problems pages",
       groups: [
         { label: "Found", items: [{ href: "#found", label: "Problems found" }, { href: "#possible-s", label: "Possible issues" }] },
-        { label: "Where", items: [{ href: "#where", label: "Pages" }, { href: "#did", label: "What GenClass did" }] },
+        { label: "Where", items: [{ href: "#where", label: "Pages" }, { href: "#did", label: "Actions" }] },
       ],
     },
     {
@@ -2915,23 +2839,21 @@ ${
     <p id="vdesc" class="hidden"></p>
     <div class="ov-meta" data-v="overview"><span class="live" id="status"><i></i><span id="statust">Loading</span></span><span>Project key <code>${t}</code></span></div>
   </div>
-  <div class="tools" data-v="overview problems pages activity visitors health loop"><span id="updated"></span><div id="period"${waiting ? ' class="hidden"' : ""}><div class="seg" role="group" aria-label="Time range">${rangeButtons(opts.ranges ?? ["24h", "7d", "30d"])}</div></div><button class="btn sm ghost" id="refresh" type="button">Refresh</button><button class="btn sm ghost hidden" id="mdcopy" type="button">Copy as Markdown</button></div>
+  <div class="tools" data-v="overview problems pages activity visitors health loop"><span id="updated"></span><div id="period"${waiting ? ' class="hidden"' : ""}><div class="seg" role="group" aria-label="Time range">${rangeButtons(opts.ranges ?? ["24h", "7d", "30d"])}</div></div><button class="btn sm ghost" id="refresh" type="button">Refresh</button><button class="btn sm ghost hidden" id="mdcopy" type="button" aria-label="Copy this period as Markdown">Copy as Markdown</button></div>
 </header>
 ${connect}
 <section id="nodata" class="blk first hidden" data-v="overview problems pages activity visitors health loop">
   <h2>Connect your app</h2>
   <ol class="steps">
     <li><span class="no">1</span>${firstStep}</li>
-    <li><span class="no">2</span><div><b>Deploy, then load a page</b><span>The first event arrives within about 10 seconds; this page updates by itself.</span></div><span class="bdg warning"><i></i>Waiting</span></li>
-    <li><span class="no">3</span><div><b>Connect your coding agent</b><span>With the MCP server your agent reads these numbers and replays what broke.</span></div><a class="btn sm ghost" href="#mcp" data-goto="mcp">Set up MCP</a></li>
-    <li><span class="no">4</span><div><b>Turn on visitor analytics</b><span>Page views, sources, devices and funnels, from one prompt.</span></div><button class="btn sm ghost" type="button" data-open="m-connect" data-tab="ana">Copy prompt</button></li>
+    <li><span class="no">2</span><div><b>Deploy and load a page</b><span>Local hosts do not send by default.</span></div><span class="bdg warning"><i></i>Waiting</span></li>
+    <li><span class="no">3</span><div><b>Connect your agent</b></div><a class="btn sm ghost" href="#mcp" data-goto="mcp">Set up MCP</a></li>
+    <li><span class="no">4</span><div><b>Turn on analytics</b></div><button class="btn sm ghost" type="button" data-open="m-connect" data-tab="ana">Copy prompt</button></li>
   </ol>
-  <details class="more"><summary>Why nothing shows yet</summary><p class="small">Events arrive in batches every 10 seconds and when a tab is hidden. The token needs @genclass/runtime ${KEY_RUNTIME} or later; earlier versions ignore it. ${LOCAL_HOSTS} Your deployed site sends by default.</p></details>
 </section>
 <div id="content" class="hidden">
 <div class="ovtop" data-v="overview">
   <div class="minw0">
-    <p class="summary" id="summary"></p>
     <div class="statrow" id="tiles"></div>
   </div>
   <section class="blk" id="trend">
@@ -2939,103 +2861,97 @@ ${connect}
     <figure>
       <div class="legend" id="legend"></div>
       <div class="plot" id="trendplot"></div>
-      <figcaption>Fig. 1. Problems GenClass found, per <span id="unit">day</span>, by type; hatched: measured checks (fixed thresholds, not the model). Hover a bar for its breakdown.</figcaption>
     </figure>
     <figure class="poss-fig hidden" id="possfig">
       <div class="poss-h"><h3>Possible issues</h3><span class="aside" id="possn"></span></div>
       <div class="plot" id="possplot"></div>
-      <figcaption>Fig. 2. Possible issues per <span id="unit2">day</span>: problems the model leaned towards with less confidence than it reports at (observe mode, from the eager setting's threshold up). Not counted in Fig. 1.</figcaption>
     </figure>
     <details class="more"><summary>Table view</summary><div id="trendtable" class="mt-s"></div></details>
   </section>
 </div>
-<div class="uh" data-v="overview"><h2><b id="ulead"></b> page loads</h2><span class="muted small">One bar per hour or day of the period</span></div>
+<div class="uh" data-v="overview"><h2><b id="ulead"></b> page loads</h2></div>
 <div class="usage" id="usage" data-v="overview"></div>
 <div class="uh" data-v="overview"><h2>Get connected</h2></div>
 <div class="getc" id="getc" data-v="overview">
-  <button type="button" data-open="m-connect" data-tab="fw">${icon("plug", 18)}<div><b>Install GenClass</b><span>The key, the snippets and a prompt for your agent</span></div></button>
-  <a href="#mcp" data-goto="mcp">${icon("bot", 18)}<div><b>Connect your coding agent</b><span>MCP for Claude Code, Cursor, Codex and more</span></div></a>
-  <button type="button" data-open="m-connect" data-tab="ana">${icon("pointer", 18)}<div><b>Turn on visitor analytics</b><span>One prompt for your coding agent</span></div></button>
-  <a href="https://genclass.dev/docs/dashboard">${icon("book", 18)}<div><b>Read the dashboard guide</b><span>What each view means and how to act on it</span></div></a>
+  <button type="button" data-open="m-connect" data-tab="fw">${icon("plug", 18)}<div><b>Install GenClass</b></div></button>
+  <a href="#mcp" data-goto="mcp">${icon("bot", 18)}<div><b>Connect your agent</b></div></a>
+  <button type="button" data-open="m-connect" data-tab="ana">${icon("pointer", 18)}<div><b>Turn on analytics</b></div></button>
 </div>
-<div class="uh" data-v="overview"><h2 id="advn">Problems that need attention</h2><div class="acts"><button class="btn sm hidden" type="button" id="fixall2" data-copy="" aria-label="Copy one prompt for your coding agent to fix every problem">Fix them all: copy one prompt</button><a class="btn sm ghost" href="#found" data-goto="found">All problems</a></div></div>
+<div class="uh" data-v="overview"><h2 id="advn">Needs attention</h2><div class="acts"><button class="btn sm hidden" type="button" id="fixall2" data-copy="" aria-label="Copy one prompt for your coding agent to fix every problem">Fix all</button><a class="btn sm ghost" href="#found" data-goto="found">All problems</a></div></div>
 <div class="adv" id="advisor" data-v="overview"></div>
 <section class="blk" id="found" data-v="problems">
-  <div class="blk-h"><h2>What GenClass found</h2><span class="aside">Each kind of problem, where it happened and how to fix it</span></div>
-  <div class="acts mt-s"><button class="btn sm hidden" type="button" id="fixall" data-copy="" aria-label="Copy one prompt for your coding agent to fix every problem">Fix them all: copy one prompt</button></div>
+  <div class="blk-h"><h2>Problems found</h2><button class="btn sm hidden" type="button" id="fixall" data-copy="" aria-label="Copy one prompt for your coding agent to fix every problem">Fix all</button></div>
   <div class="finds" id="issues"></div>
-  <p class="quiet hidden" id="issuesempty">No problems found in this period.</p>
+  <p class="quiet hidden" id="issuesempty">No problems in this period.</p>
 </section>
 <section class="blk hidden" id="possible-s" data-v="problems">
-  <div class="blk-h"><h2>Possible issues, lower confidence</h2><span class="aside">Not counted as problems</span></div>
-  <p class="poss-note">By default in observe mode GenClass also reports problems the model leaned towards with less confidence than it reports at, from the eager setting's threshold up; the console marks them (possible). Worth a look when one keeps coming back on the same page.</p>
-  <div class="finds mt-l" id="possible"></div>
+  <div class="blk-h"><h2>Possible issues</h2><span class="aside">Lower confidence</span></div>
+  <div class="finds" id="possible"></div>
 </section>
 <div class="two" id="where" data-v="pages">
-  <section class="blk"><div class="blk-h"><h2>Pages</h2><span class="aside">Table 1. Pages with the most problems</span></div><div id="pages"></div></section>
-  <section class="blk" id="did"><div class="blk-h"><h2>What GenClass did</h2><span class="aside">Table 2. Actions it took</span></div><div id="acted"></div></section>
+  <section class="blk"><div class="blk-h"><h2>Pages</h2></div><div id="pages"></div></section>
+  <section class="blk" id="did"><div class="blk-h"><h2>Actions</h2></div><div id="acted"></div></section>
 </div>
 <section class="blk" id="health-s" data-v="health">
-  <div class="blk-h"><h2>Health</h2><span class="aside">Whether GenClass could watch your pages at all</span></div>
+  <div class="blk-h"><h2>Health</h2></div>
   <div id="health"></div>
 </section>
 <section class="blk" id="adv-s" data-v="health">
-  <div class="blk-h"><h2>All breakdowns</h2><span class="aside">Every counter in the period, top 10 each</span></div>
+  <div class="blk-h"><h2>All breakdowns</h2><span class="aside">Top 10 each</span></div>
   <div class="kv" id="adv"></div>
 </section>
 <section class="blk" id="recent-s" data-v="activity">
-  <div class="blk-h"><h2>Recent activity</h2><span class="aside">Table 3. The latest 50 detections and interventions</span></div>
+  <div class="blk-h"><h2>Recent activity</h2><span class="aside">Latest 50</span></div>
   <div class="tablewrap"><table class="dt"><thead><tr><th>Time</th><th>Page / function</th><th>What</th><th class="num">Confidence</th><th>GenClass</th><th>Mode</th></tr></thead>
   <tbody id="recent"></tbody></table></div>
   <p class="quiet hidden" id="recent0">Nothing detected in this period.</p>
 </section>
 <section class="blk" id="visits" data-v="visitors">
-  <div class="blk-h"><h2>How visitors use this app</h2><span class="aside">Interaction analytics, for apps that turn them on</span></div>
-  <div id="ixsetup" class="hidden">${promptBlock(project.token, where, opts.endpoint ?? null, "This app has not turned visitor analytics on. Paste the prompt into your coding agent (Claude Code, Cursor, Codex) and it sets them up.")}<p class="fine" id="ixver">They need @genclass/runtime ${ANALYTICS_RUNTIME} or later (<code>npm install ${RUNTIME_PKG}</code>); earlier versions ignore <code>analytics: true</code> without a word.<span id="ixold"></span></p></div>
+  <div class="blk-h"><h2>Overview</h2></div>
+  <div id="ixsetup" class="hidden">${promptBlock(project.token, where, opts.endpoint ?? null, "Analytics are off. Paste the prompt into your coding agent.")}<p class="fine" id="ixver">Needs @genclass/runtime ${ANALYTICS_RUNTIME} or later.<span id="ixold"></span></p></div>
   <div id="ixsum"></div>
   <div id="ixpages" class="mt-l"></div>
 </section>
 <section class="blk hidden" id="ix-sessions" data-v="visitors">
-  <div class="blk-h"><h2>Sessions</h2><span class="aside">A visit: page views with no gap over 30 minutes</span></div>
+  <div class="blk-h"><h2>Sessions</h2></div>
   <div id="ixsess"></div>
 </section>
 <div class="two hidden" id="ix-sources" data-v="visitors">
-  <section class="blk"><div class="blk-h"><h2>Sources</h2><span class="aside">Table 7. The site each visit came from</span></div><div id="ixref"></div></section>
-  <section class="blk"><div class="blk-h"><h2>Campaigns</h2><span class="aside">Table 8. Visits from links with utm values</span></div><div id="ixutm"></div></section>
+  <section class="blk"><div class="blk-h"><h2>Sources</h2></div><div id="ixref"></div></section>
+  <section class="blk"><div class="blk-h"><h2>Campaigns</h2></div><div id="ixutm"></div></section>
 </div>
 <section class="blk hidden" id="ix-devices" data-v="visitors">
-  <div class="blk-h"><h2>Devices</h2><span class="aside">Table 9. Device, browser, system, country and new or returning, per visit</span></div>
+  <div class="blk-h"><h2>Devices</h2></div>
   <div class="kv" id="ixdev"></div>
 </section>
 <div class="two hidden" id="ix-entry" data-v="visitors">
-  <section class="blk"><div class="blk-h"><h2>Entry pages</h2><span class="aside">Table 10. Where visits started</span></div><div id="ixentry"></div></section>
-  <section class="blk"><div class="blk-h"><h2>Exit pages</h2><span class="aside">Table 11. Where visits ended</span></div><div id="ixexit"></div></section>
+  <section class="blk"><div class="blk-h"><h2>Entry pages</h2></div><div id="ixentry"></div></section>
+  <section class="blk"><div class="blk-h"><h2>Exit pages</h2></div><div id="ixexit"></div></section>
 </div>
 <section class="blk hidden" id="ix-funnels" data-v="visitors">
-  <div class="blk-h"><h2>Funnels</h2><span class="aside">Fig. 4. Visits that reached each step, in order</span></div>
+  <div class="blk-h"><h2>Funnels</h2></div>
   <div id="ixfun"></div>
   <div id="ixfunedit"></div>
 </section>
 <div class="two hidden" id="clicks" data-v="visitors">
-  <section class="blk"><div class="blk-h"><h2>Most clicked</h2><span class="aside">Table 5. Elements by clicks</span></div><div id="ixclicks"></div></section>
-  <section class="blk"><div class="blk-h"><h2>Rage and dead clicks</h2><span class="aside">Table 6. Where clicks went nowhere</span></div><div id="ixflags"></div></section>
+  <section class="blk"><div class="blk-h"><h2>Most clicked</h2></div><div id="ixclicks"></div></section>
+  <section class="blk"><div class="blk-h"><h2>Rage and dead clicks</h2></div><div id="ixflags"></div></section>
 </div>
 <section class="blk hidden" id="moves" data-v="visitors">
-  <div class="blk-h"><h2>How visitors move through this app</h2><span class="aside">Navigation paths, for apps that turn on interaction analytics</span></div>
+  <div class="blk-h"><h2>Navigation</h2></div>
   <div id="ixmoves"></div>
   <div id="ixpaths" class="mt-l"></div>
   <div id="ixsteps" class="mt-l"></div>
   <div id="ixexits" class="mt-l"></div>
 </section>
 <section class="blk" id="loop" data-v="loop" aria-labelledby="loop-h">
-  <div class="blk-h"><h2 id="loop-h">Closed-loop development</h2><span class="aside">Fig. 3. Every issue's path: found, reproduced, fix proven, closed, or round again</span></div>
-  <p class="loop-lead">What your coding agent did about this app's problems through <a href="https://genclass.dev/docs/mcp">@genclass/mcp</a>, mirrored from that server's own log: each finding it made, each replay and its verdict, each regression test it wrote. An issue is closed when the replay no longer reproduces it and a test guards the fix; a person ships. A replay that still reproduces it sends the loop round again.</p>
+  <div class="blk-h"><h2 id="loop-h">Closed-loop development</h2></div>
   <div class="flowwrap"><svg class="flow" id="loopstages" role="img" aria-labelledby="loop-h"></svg></div>
-  <div class="blk-h sub"><h3 id="agentlog-h">What your agent did</h3><span class="aside">Table 15. The agent's log in this period, newest first (at most 50 steps)</span></div>
+  <div class="blk-h sub"><h3 id="agentlog-h">Agent log</h3><span class="aside">Latest 50</span></div>
   <div class="tablewrap"><table class="dt" aria-labelledby="agentlog-h"><thead><tr><th>Time</th><th>Step</th><th>Finding</th><th>Page</th><th>Outcome</th></tr></thead>
   <tbody id="agentlog"></tbody></table></div>
-  <p class="quiet hidden" id="agentlog0">No agent steps in this period. With <code>GENCLASS_REPORT</code> set to this dashboard's link in the MCP server's environment, each step your agent takes shows here.</p>
-  <div class="blk-h sub"><h3 id="loopkinds-h">What broke, and what your agent does with each</h3><span class="aside">Fig. 6. One row per kind of problem; the steps every fix shares on the right</span></div>
+  <p class="quiet hidden" id="agentlog0">No agent steps in this period. Set <code>GENCLASS_REPORT</code> to see them here.</p>
+  <div class="blk-h sub"><h3 id="loopkinds-h">By problem</h3></div>
   <div class="flowwrap"><svg class="flow" id="loopsvg" role="img" aria-labelledby="loopkinds-h"></svg></div>
   <p class="loop-foot" id="loop-foot"></p>
 </section>
@@ -3043,10 +2959,6 @@ ${connect}
 ${mcpView(!!acct, !!opts.privateLink)}
 ${settings}
 ${opts.extra?.html ?? ""}
-<footer class="dfoot">This page shows counts only: the kind of problem, the page route, confidence, what GenClass did and how fast it
-decided, and, for apps that turn on interaction analytics, page views, time on page, scroll depth and clicks per element (named by a
-selector or a name the app gave it, never its text), the path between pages within a page load, and per visit the pages in order,
-the referring site, campaign, device type, browser, system, country and whether the browser visited before. No text from your pages, no IP addresses and no user agents are stored. Data is kept ${keep >= 365 ? "1 year" : `${keep} days`} (hourly detail 48 hours). ${privacy}</footer>
 </div>`;
   return studioPage(nonce, {
     title: `${project.name} | GenClass dashboard`,
@@ -3069,7 +2981,7 @@ the referring site, campaign, device type, browser, system, country and whether 
     ],
     css: DASH_CSS,
     body,
-    script: SNIPPETS_JS + (acct ? DASH_JS + CONNECT_JS + (opts.extra?.script ?? "") : DASH_JS),
+    script: acct ? DASH_JS + CONNECT_JS + (opts.extra?.script ?? "") : DASH_JS,
     tour: "dashboard",
     link: acct ? null : (opts.link ?? null),
   });
@@ -3086,23 +2998,18 @@ function lockedDashboardPage(
   opts: DashboardOptions & { account: NonNullable<DashboardOptions["account"]> },
 ): string {
   const data = { ...project, id: opts.id, firstEvent: opts.firstEvent ?? null, account: true, locked: true };
-  const privacy = opts.privateLink
-    ? "This app also has the private dashboard link it had before it joined your account; once its plan has the dashboard, anyone with that link can see its stats. You can turn the link off on your <a href=\"/account#apps\">Projects page</a>."
-    : "Only you can open this page, while signed in.";
   const body = `
 <script type="application/json" id="project">${embed(data)}</script>
 <div class="sb-page" id="mc" tabindex="-1">
 <header class="phead" id="top"><div class="minw0"><h1 id="pname">${esc(project.name)}</h1></div></header>
 <section class="blk lock" id="lock" aria-labelledby="lock-h">
   <h2 id="lock-h">This app's plan has no dashboard.</h2>
-  <p>Pick a plan to open it.</p>
   <div class="acts"><a class="btn green" href="/account/billing">See plans</a></div>
 </section>
 <section class="blk">
   <div class="blk-h"><h2 id="connect-h">Connect to your project</h2></div>
   ${connectSection({ token: project.token, account: true, runtimeReady: opts.runtimeReady === true, endpoint: opts.endpoint ?? null, analytics: "", mcp: false })}
 </section>
-<footer class="dfoot">${privacy} <a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is collected</a> · <a href="/account">All projects</a></footer>
 </div>`;
   return studioPage(nonce, {
     title: `${project.name} | GenClass dashboard`,

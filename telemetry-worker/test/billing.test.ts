@@ -1136,7 +1136,7 @@ describe("Managed Payments for Pro, flexible billing mode, switching between Pro
     expect(page).toContain("Switching between Pro and Custom opens Stripe's checkout for the new plan.");
     expect(page).toContain("its unused days are refunded to the card or account that paid for it");
     expect(page).not.toContain("switch between Pro and Custom, or cancel");
-    expect(page).toContain("To switch between Pro and Custom, use the buttons under Plans.");
+    expect(page).toContain("<p class=\"intro\">Card, invoices and cancellation.</p>");
     const r = await call(t.env, "POST", "/api/billing/checkout", { body: { plan: "custom" }, cookie: t.cookie, fetch: t.s.fetch });
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000001", switch: true });
@@ -1540,7 +1540,7 @@ describe("plans: the Free plan's limits (apps, dashboard ranges)", () => {
     expect(year.series).toHaveLength(365);
     const proPage = await (await call(env, "GET", `/account/apps/${app.id}`, { cookie })).text();
     expect(proPage).toContain('<button type="button" data-r="1y" aria-pressed="false" aria-label="1 year" title="1 year">1y</button>');
-    expect(proPage).toContain("Data is kept 1 year");
+    expect(proPage).toContain('<span id="keep">1 year</span>');
     expect(proPage).not.toContain("The Free plan shows");
   });
 });
@@ -1558,7 +1558,8 @@ describe("GET /account/billing", () => {
     expect(html).toContain("$599 / month");
     expect(html).toContain("Interaction analytics (coming next)");
     expect(html).toContain('Need self-hosting, SSO or invoices? Email <a href="mailto:mehar@daybot.ca">mehar@daybot.ca</a>.');
-    expect(html).toContain("never card details");
+    // no footer of what is stored: that is in the privacy policy
+    expect(html).not.toContain('class="dfoot"');
     expect(html).not.toContain("data-plan=");
     expect(html).not.toContain('id="portal"');
 
@@ -1567,7 +1568,7 @@ describe("GET /account/billing", () => {
     const page = await (await call(on.env, "GET", "/account/billing", { cookie: b.cookie })).text();
     expect(page).toContain('data-plan="pro"><span>Upgrade to Pro</span>');
     expect(page).toContain('data-plan="custom"><span>Upgrade to Custom</span>');
-    expect(page).toContain("the runtime and its on-device model, without the dashboard (you have 0 apps).");
+    expect(page).toContain("You are on the <b>Free</b> plan.</p>");
     // no trial: GenClass has none
     expect(page).not.toMatch(/id="trial"|free trial/);
     const visible = page.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!doctype html>/gi, "");
@@ -1583,9 +1584,9 @@ describe("GET /account/billing", () => {
 
     expect((await call(on.env, "GET", "/account/billing", {})).headers.get("location")).toBe("/login?next=%2Faccount%2Fbilling");
     // the sidebars link to it
-    expect(await (await call(on.env, "GET", "/account", { cookie: b.cookie })).text()).toContain('<a href="/account/billing">Plan and billing</a>');
+    expect(await (await call(on.env, "GET", "/account", { cookie: b.cookie })).text()).toContain('<a href="/account/billing">');
     const app = await createApp(on.env, b.cookie);
-    expect(await (await call(on.env, "GET", `/account/apps/${app.id}`, { cookie: b.cookie })).text()).toContain('<a href="/account/billing">Plan and billing</a>');
+    expect(await (await call(on.env, "GET", `/account/apps/${app.id}`, { cookie: b.cookie })).text()).toContain('<a href="/account/billing">');
   });
 
   it("?plan from the pricing page survives sign-in and picks that plan's button; back from Checkout there are no buttons", async () => {

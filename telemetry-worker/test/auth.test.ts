@@ -655,10 +655,11 @@ describe("accounts: apps owned by an account", () => {
     expect(html).toContain("npx @genclass/runtime@beta login"); // latest on npm is 0.2.x until 0.3.0
     expect(html).toContain(`GenClass.init({ token: &#34;${project.token}&#34; })`);
     expect(html).toContain(`data-token=&#34;${project.token}&#34;`);
-    expect(html).toContain("0.3.0-beta.0 or later");
+    // RUNTIME_ON_NPM unset: the runtime that reads keys is named first
+    expect(html).toContain("Project keys need @genclass/runtime 0.3.0-beta.0, which is not published yet.");
     // as the runtime behaves (src/telemetry/config.ts isLocalHost; its console says so): a key does not make a
     // local host send, so the first event comes from a deployed page
-    expect(html).toContain("Local hosts (localhost, *.local, *.test, private networks) do not send by default, even with a key");
+    expect(html).toContain("Local hosts do not send by default.");
     expect(html).not.toContain("send only when a key is set");
     expect(html).not.toContain("only send data with an explicit token");
     expect(html).toContain(`/api/account/projects/${project.id}/stats`);
@@ -1144,7 +1145,7 @@ describe("accounts: GitHub and Google first, an email and a password always; cre
     expect(sql.rows("SELECT COUNT(*) AS n FROM credentials")[0]!.n).toBe(0);
     const page = await (await call(env, "GET", "/account", { cookie })).text();
     expect(page).toContain('<section class="blk" id="security">');
-    expect(page).toContain("<b>Require a passkey at sign-in: off.</b>");
+    expect(page).toContain("<b>Passkey at sign-in: off.</b>");
     expect(page).toContain('id="addpk"');
     expect(page).toContain('Lost all your passkeys? Email <a href="mailto:mehar@daybot.ca?subject=GenClass%20passkeys">mehar@daybot.ca</a>.');
     expect(page.indexOf("<td>Google</td>")).toBeLessThan(page.indexOf('id="addpk"'));
@@ -1157,7 +1158,7 @@ describe("accounts: GitHub and Google first, an email and a password always; cre
     const add = await addPasskey(env, cookie, auth);
     expect(add.opts.publicKey.user.name).toBe("ada@gmail.com");
     expect(add.res.status).toBe(200);
-    expect(await (await call(env, "GET", "/account", { cookie })).text()).toContain("<b>Require a passkey at sign-in: on.</b> After your password, Google or GitHub");
+    expect(await (await call(env, "GET", "/account", { cookie })).text()).toContain("<b>Passkey at sign-in: on.</b>");
   });
 });
 
@@ -1296,7 +1297,7 @@ describe("accounts: a passkey as extra security (the passkey step after Google o
     expect(sql.rows("SELECT COUNT(*) AS n FROM credentials")[0]!.n).toBe(0);
     const { res } = await google(env);
     expect(res.headers.get("location")).toBe("/account");
-    expect(await (await call(env, "GET", "/account", { cookie: sessionOf(res) })).text()).toContain("<b>Require a passkey at sign-in: off.</b>");
+    expect(await (await call(env, "GET", "/account", { cookie: sessionOf(res) })).text()).toContain("<b>Passkey at sign-in: off.</b>");
   });
 
   it("the email-collision choice signs in to an account that appeared meanwhile only through its passkey step", async () => {
@@ -1818,8 +1819,11 @@ describe("accounts: private links of owned apps", () => {
     const anon = (await (await call(env, "POST", "/api/projects", { body: { name: "Old app" }, origin: null })).json()) as any;
     const { project } = (await (await call(env, "POST", "/api/account/projects/claim", { body: { dashboard_url: anon.dashboardUrl }, cookie: ada.cookie })).json()) as any;
     const appPage = async () => (await call(env, "GET", `/account/apps/${project.id}`, { cookie: ada.cookie })).text();
-    expect(await appPage()).toContain("private dashboard link it had before it joined your account");
-    expect(await (await call(env, "GET", "/account", { cookie: ada.cookie })).text()).toContain(`data-linkoff="${project.id}"`);
+    // the project card says the private link is on, and turns it off
+    expect(await appPage()).toContain("Old app");
+    const projects = await (await call(env, "GET", "/account", { cookie: ada.cookie })).text();
+    expect(projects).toContain(`data-linkoff="${project.id}"`);
+    expect(projects).toContain("<span>Private link on</span>");
 
     expect((await call(env, "DELETE", `/api/account/projects/${project.id}/link`, { cookie: ada.cookie, origin: null })).status).toBe(403);
     const bob = await signedIn(env, "bob@example.com");
@@ -1829,11 +1833,12 @@ describe("accounts: private links of owned apps", () => {
     expect(sql.rows("SELECT secret_hash, private_link FROM projects WHERE id = ?", project.id)[0]).toEqual({ secret_hash: expect.not.stringMatching(String(hash)), private_link: 0 });
     expect((await handle(new Request(anon.dashboardUrl), env, { now: () => clock })).status).toBe(404);
     expect((await call(env, "POST", "/api/account/projects/claim", { body: { dashboard_url: anon.dashboardUrl }, cookie: bob.cookie })).status).toBe(404);
-    expect(await appPage()).toContain("Only you can open this page, while signed in.");
+    expect(await (await call(env, "GET", "/account", { cookie: ada.cookie })).text()).not.toContain("Private link on");
     // an app created in the account never had a link
     const made = ((await (await call(env, "POST", "/api/account/projects", { body: { name: "New" }, cookie: ada.cookie })).json()) as any).project;
     expect(sql.rows("SELECT private_link FROM projects WHERE id = ?", made.id)[0]!.private_link).toBe(0);
-    expect(await (await call(env, "GET", `/account/apps/${made.id}`, { cookie: ada.cookie })).text()).toContain("Only you can open this page, while signed in.");
+    expect(await (await call(env, "GET", `/account/apps/${made.id}`, { cookie: ada.cookie })).text()).toContain("New");
+    expect(await (await call(env, "GET", "/account", { cookie: ada.cookie })).text()).not.toContain(`data-linkoff="${made.id}"`);
   });
 });
 
@@ -1922,7 +1927,7 @@ describe("accounts: the Connect dialog and the Studio header", () => {
       const html = await (await call(env, "GET", `/account/apps/${project.id}`, { cookie })).text();
       expect(html.includes("Not on npm yet"), String(v)).toBe(notYet);
       if (notYet) expect(html.indexOf("Not on npm yet")).toBeLessThan(html.indexOf("Project API key"));
-      expect(html.indexOf('id="cstatus"')).toBeLessThan(html.indexOf("1 · Run in your project"));
+      expect(html.indexOf('id="cstatus"')).toBeLessThan(html.indexOf('<div class="eb">Terminal</div>'));
       expect(html).toContain('aria-label="Copy the project API key"');
       expect(html).toContain('aria-label="Copy the script tag"');
       expect(html).toContain('<a class="skip" href="#mc">Skip to content</a>');
@@ -2498,7 +2503,7 @@ describe("accounts: changing and adding a password on /account", () => {
     expect(page).toContain('<input id="pwcur" type="password" autocomplete="current-password" maxlength="256">');
     expect(page).toContain('<button class="btn ghost" type="submit" id="pwgo"><span>Change password</span></button>');
     expect(page).toContain('gcPost("/api/auth/password", body)');
-    expect(page).toContain("<b>Require a passkey at sign-in: off.</b> Add a passkey and GenClass asks for it after your password, Google or GitHub.");
+    expect(page).toContain("<b>Passkey at sign-in: off.</b> Adding one turns it on.");
     const r = await call(env, "POST", "/api/auth/password", { body: { password: "a brand new passphrase" }, cookie });
     expect(r.status).toBe(400);
     expect(((await r.json()) as any).error).toBe("enter your current password");
