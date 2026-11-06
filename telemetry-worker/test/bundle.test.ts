@@ -49,15 +49,21 @@ describe("page scripts survive Wrangler's bundling (keepNames)", () => {
       expect(scripts.length, name).toBeGreaterThan(0);
       for (const s of scripts) expect(s, name).not.toContain("__name(");
     }
-    // run /start/open-source's script from the bundle: ticking guard puts it in the copied prompt
+    // run /start/open-source's script from the bundle: guard and heal start ticked, so the copied prompt sets heal;
+    // ticking logs, then unticking guard, put each change in the copied prompt
     const html = pages[0]![1];
     const script = /<script nonce="NONCE">([\s\S]*?)<\/script>/.exec(/<body[^>]*>([\s\S]*)<\/body>/.exec(html)![1]!)![1]!;
     const win = new Window({ url: "https://genclass.dev/start/open-source" });
     win.document.body.innerHTML = /<body[^>]*>([\s\S]*)<\/body>/.exec(html)![1]!.replace(/<script[\s\S]*?<\/script>/g, "");
     new Function("window", "document", "location", "navigator", script)(win, win.document, win.location, win.navigator);
+    const copy = () => win.document.getElementById("cp")!.getAttribute("data-copy");
+    expect(copy()).toBe(mod.openSourcePrompt(mod.DEFAULT_CHOICES));
+    expect(copy()).toContain('mode: "heal"');
+    (win.document.querySelector('#choices [data-choice="logs"]') as unknown as HTMLInputElement).click();
+    expect(copy()).toBe(mod.openSourcePrompt({ ...mod.DEFAULT_CHOICES, logs: true }));
     (win.document.querySelector('#choices [data-choice="guard"]') as unknown as HTMLInputElement).click();
-    expect(win.document.getElementById("cp")!.getAttribute("data-copy")).toBe(mod.openSourcePrompt({ guard: true }));
-    expect(win.document.getElementById("cp")!.getAttribute("data-copy")).toContain('mode: "guard"');
+    expect(copy()).toBe(mod.openSourcePrompt({ logs: true }));
+    expect(copy()).toContain("Mode observe, as chosen");
     await win.happyDOM.close();
   });
 });

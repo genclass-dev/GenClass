@@ -11,7 +11,7 @@
 // OPTIONS /v1/events (CORS preflight), GET /v1/health.
 //
 // Per-app tokens and dashboards (src/dashboard.ts, src/pages.ts; also routed on genclass.dev/{api/*,start*,dashboard*}):
-// POST /api/projects, GET /api/projects/<secret>, POST and GET /start, GET /start/<secret>, GET /start/open-source (no account, no token), GET
+// POST /api/projects, GET /api/projects/<secret>, POST and GET /start, GET /start/<secret>, GET /start/open-source (no account; no token to paste, init makes one unless the quiet choice is ticked), GET
 // /dashboard/<secret>. A batch with a known top-level `token` is also aggregated into D1 for that app's dashboard;
 // without one it is stored in R2 only, exactly as before.
 // Every plan includes the dashboard (billing/plans.json), so a private link opens it, also for an app with no account
