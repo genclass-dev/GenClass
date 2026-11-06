@@ -169,6 +169,28 @@ describe("protected private links: /start asks for a password or a passkey (link
     expect((await call(env, "GET", `/api/link/${secret}/unlock`)).status).toBe(405);
   });
 
+  it("saving to an account needs the unlocked browser; an agent link the owner makes opens without the lock", async () => {
+    const { env, sql } = setup();
+    const { secret, cookie } = await startWithPassword(env);
+    const { signedIn } = await import("./account-helpers.js");
+    const acct = await signedIn(env);
+    // the link alone cannot pull a protected dashboard into someone's account
+    const stranger = await call(env, "POST", "/api/account/projects/claim", { body: { dashboard_url: `${ORIGIN}/dashboard/${secret}` }, cookie: acct.cookie });
+    expect(stranger.status).toBe(403);
+    expect(sql.rows("SELECT account_id FROM projects")[0]).toEqual({ account_id: null });
+    // the browser that unlocked it can (both cookies, as one browser sends them)
+    const owner = await call(env, "POST", "/api/account/projects/claim", { body: { dashboard_url: `${ORIGIN}/dashboard/${secret}` }, cookie: `${acct.cookie}; ${cookie}` });
+    expect(owner.status).toBe(200);
+    const id = ((await owner.json()) as { project: { id: string } }).project.id;
+    // the owner's agent link (for @genclass/mcp) reads the stats with the link alone
+    const made = await call(env, "POST", `/api/account/projects/${id}/link`, { body: {}, cookie: acct.cookie });
+    expect(made.status).toBe(201);
+    const agent = secretOf(((await made.json()) as { dashboardUrl: string }).dashboardUrl);
+    expect((await call(env, "GET", `/api/projects/${agent}`)).status).toBe(200);
+    expect(sql.rows("SELECT lock_kind FROM projects")[0]).toEqual({ lock_kind: null });
+    expect(sql.rows("SELECT COUNT(*) AS n FROM link_sessions")[0]).toEqual({ n: 0 });
+  });
+
   it("signed in, /start is the account's New project page", async () => {
     const { env } = setup();
     const { signedIn } = await import("./account-helpers.js");
