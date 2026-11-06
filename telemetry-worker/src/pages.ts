@@ -10,7 +10,7 @@
 
 import { demoData } from "./demo.js";
 import { embed, esc } from "./escape.js";
-import { COPY_JS, icon, ICON_LINKS, studioPage, type ProductMenu, type RailItem } from "./studio.js";
+import { COPY_JS, icon, ICON_LINKS, LOCK_JS, studioPage, THEME_COLOR_METAS, THEME_HEAD_JS, THEME_JS, themeButton, type ProductMenu, type RailItem } from "./studio.js";
 
 export { embed, esc };
 
@@ -108,6 +108,17 @@ const CSS = `
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   color-scheme:dark;
 }
+:root[data-theme="light"]{
+  --paper:#ffffff;--panel:#f7f7f5;--ink:#141412;--ink2:#55564f;--ink3:#6b6c64;--rule:#e4e4df;--rule2:#d4d4cd;--line:#8a8b82;
+  --accent:#0a7c4a;--accent-x:#0a7c4a;--accent-f:#0a7c4a;--accent-t:#eaf7f0;--warn:#c4320a;--warn-f:#e5484d;--warn-t:#fdeeea;
+  --bar:#a0a196;--bar2:#22a06b;--bar3:#e5484d;--ink-h:#000000;--green-h:#086a3f;--on-green:#ffffff;--head:rgba(255,255,255,.8);
+  --code:#f4f4f1;--codeink:#141412;
+  color-scheme:light;
+}
+.th-moon{display:none}.th-sun{display:contents}
+:root[data-theme="light"] .th-moon{display:contents}:root[data-theme="light"] .th-sun{display:none}
+.thm{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--rule2);background:transparent;color:var(--ink2);cursor:pointer}
+.thm:hover{color:var(--ink);border-color:var(--ink3)}
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--paper)}
 body{background:var(--paper);color:var(--ink);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
@@ -148,8 +159,8 @@ p.lead{color:var(--ink2);font-size:16px;max-width:62ch;margin-top:10px}
 .btn.ghost:hover{opacity:1;background:transparent;color:var(--ink);border-color:var(--ink3)}
 .btn.sm{min-height:34px;padding:0 12px;font-size:13.5px}
 @media (max-width:620px){.btn.sm{min-height:44px}}
-input[type=text]{min-height:46px;padding:0 12px;border-radius:0;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:16px var(--sans);width:100%}
-input[type=text]:focus-visible{outline:1px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+input[type=text],input[type=password]{min-height:46px;padding:0 12px;border-radius:0;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:16px var(--sans);width:100%}
+input[type=text]:focus-visible,input[type=password]:focus-visible{outline:1px solid var(--accent);outline-offset:0;border-color:var(--accent)}
 ::placeholder{color:var(--ink3);opacity:1}
 .card{background:var(--panel);border:1px solid var(--rule);border-radius:0;padding:clamp(16px,3vw,28px);min-width:0}
 .grid{display:grid;gap:12px}
@@ -242,15 +253,18 @@ export interface ShellOptions {
    * same backdrop as /admin's sign-in) on the right. The script is the site's, loaded under this page's nonce.
    */
   mesh?: boolean;
+  /** A page with a lock form (/start, the unlock page): the passkey and password helpers (studio.ts LOCK_JS). */
+  lock?: boolean;
 }
 
 /** genclass.dev's sign-in backdrop script; bump ?v= with site/public/signin-mesh.js (assets are cached immutably). */
 export const MESH_SCRIPT = "https://genclass.dev/signin-mesh.js?v=2";
 
-/** As on genclass.dev: plain links, then one compact green button. Narrow screens drop Home (the logo links there),
- * then Docs. */
-const DEFAULT_NAV =
-  '<a class="hm" href="https://genclass.dev/">Home</a><a class="dc" href="https://genclass.dev/docs">Docs</a><a href="/login">Sign in</a><a class="btn" href="/start">Add to my app</a>';
+/** As on genclass.dev: Docs, Sign in, the theme button and one compact green button. Narrow screens drop Docs. */
+const DEFAULT_NAV = `<a class="dc" href="https://genclass.dev/docs">Docs</a><a href="/login">Sign in</a>${themeButton("thm")}<a class="btn" href="/start">Get started</a>`;
+
+/** The nav of /start itself and the unlock page: no button to the page you are on. */
+export const QUIET_NAV = `<a class="dc" href="https://genclass.dev/docs">Docs</a><a href="/login">Sign in</a>${themeButton("thm")}`;
 
 /** The page frame shared by every page this worker serves. */
 export function shell(nonce: string, title: string, body: string, script: string, opts: ShellOptions = {}): string {
@@ -266,7 +280,8 @@ export function shell(nonce: string, title: string, body: string, script: string
 <meta name="referrer" content="${opts.account ? "same-origin" : "no-referrer"}">
 <title>${esc(title)}</title>
 ${ICON_LINKS}
-<meta name="theme-color" content="#000000">
+${THEME_COLOR_METAS("#000000", "#ffffff")}
+<script nonce="${nonce}">${THEME_HEAD_JS}</script>
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@1&display=swap">
@@ -276,7 +291,7 @@ ${ICON_LINKS}
 <body${opts.mesh ? ' class="mesh"' : ""}>
 <a class="skip" href="#${esc(opts.skip ?? "main")}">Skip to content</a>
 ${header}<main class="wrap" id="main">${body}</main>
-<script nonce="${nonce}">${COPY_JS}${SNIPPETS_JS}${script}</script>
+<script nonce="${nonce}">${COPY_JS}${THEME_JS}${opts.lock ? LOCK_JS : ""}${SNIPPETS_JS}${script}</script>
 ${opts.mesh ? `<canvas data-mesh aria-hidden="true"></canvas>\n<script nonce="${nonce}" src="${MESH_SCRIPT}" defer></script>\n` : ""}</body>
 </html>`;
 }
@@ -286,8 +301,8 @@ export const SIGNED_IN_NAV =
   '<a href="/account">Apps</a><a href="https://genclass.dev/docs">Docs</a><form method="post" action="/logout" class="so"><button type="submit">Sign out</button></form>';
 
 // ------------------------------------------------------------------------------------------------- /start
-// One click: POST /start makes the app and its private link (collector.ts), and /start/<secret> says the one command
-// that connects it. The page has no form to fill in; the app's name can be changed later on its dashboard.
+// POST /start makes the app and its private link, protected by a passkey or a password (collector.ts, link-lock.ts), and
+// /start/<secret> says the one command that connects it.
 
 /** The command that connects an app: it finds the framework, installs the runtime and adds the import, asking once. */
 export function setupCommand(token: string): string {
@@ -312,11 +327,35 @@ export function agentLinks(prompt: string): { label: string; href: string }[] {
   ];
 }
 
-const START_CSS = `
-.oneclick .btn.xl{min-height:52px;font-size:16px;padding:0 24px}
+/** /start, the setup page and the unlock page: one centred column, a card, generous space. */
+export const START_CSS = `
+.st{max-width:440px;margin:clamp(40px,10vh,96px) auto 64px;display:grid;gap:20px}
+.st h1{font-size:clamp(28px,4vw,36px);text-align:center}
+.st .lead{text-align:center;margin:-8px auto 0}
+.st-card{background:var(--panel);border:1px solid var(--rule);padding:clamp(20px,4vw,28px);display:grid;gap:18px}
+.st-alt{text-align:center;color:var(--ink3);font-size:14px}
+.fld{display:grid;gap:8px;border:0;min-width:0}
+.fld label,.fld legend{font-size:14px;font-weight:500;color:var(--ink);padding:0}
+.fld legend{margin-bottom:8px}
+.lk-choice{display:none;gap:8px}
+.js .lk-choice{display:grid;grid-template-columns:1fr 1fr}
+.lk-choice label{display:flex;align-items:center;gap:10px;min-height:46px;padding:0 14px;border:1px solid var(--rule2);cursor:pointer;font-weight:400}
+.lk-choice label:has(input:checked){border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.lk-choice label.off{opacity:.5;cursor:not-allowed}
+.lk-choice input{accent-color:var(--accent);margin:0}
+[data-pw]{display:grid;gap:8px}
+[data-pw][hidden]{display:none}
+.js .lk-choice+[data-pw]{margin-top:10px}
+.lk-err{font-size:14px;color:var(--warn)}
+.lk-err:empty{display:none}
+.st .btn.xl{min-height:50px;font-size:16px;width:100%}
+.lk-ic{display:flex;justify-content:center;color:var(--accent)}
+.lk-ic .ic{width:28px;height:28px}
 .cmdbox{display:flex;align-items:center;gap:10px;background:var(--code);color:var(--codeink);padding:12px 14px;min-width:0}
 .cmdbox code{flex:1;min-width:0;font:14px/1.5 var(--mono);overflow-wrap:anywhere}
 .cmdbox .btn{flex:none}
+.setup{max-width:640px;margin:clamp(40px,8vh,80px) auto 64px}
+.setup h1{font-size:clamp(28px,4vw,36px)}
 .setup-agents{align-items:center}
 .setup-steps{margin:0;padding-left:20px;display:grid;gap:8px}
 .setup-status{display:inline-flex;align-items:center;gap:8px}
@@ -324,40 +363,49 @@ const START_CSS = `
 .setup-status.live i{background:var(--accent-f)}
 `;
 
-/** The one button, with a <noscript> way that needs nothing from this page. The script copies the command in the click. */
-const ONE_CLICK_JS = `
+/**
+ * The form's script: a passkey (made here, the browser asks) or the password, then POST /start as JSON and on to the
+ * setup page. Without scripts the form posts the name and the password itself.
+ */
+const START_JS = `
 (function(){
   var f = document.getElementById("f"), go = document.getElementById("go"), err = document.getElementById("err");
   if (!f || !window.fetch) return;
+  gcLkWire(f);
   f.addEventListener("submit", function(ev){
-    ev.preventDefault(); err.textContent = ""; go.disabled = true; go.textContent = "Creating...";
-    var made = fetch("/start", { method: "POST", headers: { accept: "application/json" } })
-      .then(function(r){ return r.json().then(function(j){ if (!r.ok) throw new Error(j.error || "Something went wrong."); return j; }); });
-    // the copy has to start inside the click, so it is handed a promise of the text (Safari needs this form)
-    var copied = Promise.resolve(false);
-    try {
-      copied = navigator.clipboard.write([new ClipboardItem({ "text/plain": made.then(function(j){ return j.command ? new Blob([j.command], { type: "text/plain" }) : Promise.reject(new Error("no command")); }) })])
-        .then(function(){ return true; }, function(){ return false; });
-    } catch (e) {}
-    made.then(function(j){ return copied.then(function(c){ location.href = c ? j.copiedUrl : j.url; }); })
-      .catch(function(e){ err.textContent = e.message || String(e); go.disabled = false; go.textContent = "Add to my app"; });
+    ev.preventDefault(); err.textContent = ""; go.disabled = true; var label = go.textContent; go.textContent = "Creating...";
+    var name = (document.getElementById("nm").value || "").trim();
+    gcLkBody(f, "/api/start/passkey", { name: name })
+      .then(function(lock){ var b = { name: name }; for (var k in lock) b[k] = lock[k]; return gcLkPost("/start", b); })
+      .then(function(j){ location.href = j.url; })
+      .catch(function(e){ err.textContent = gcLkWhy(e); go.disabled = false; go.textContent = label; });
   });
 })();`;
 
-export function startPage(nonce: string, opts: { error?: string } = {}): string {
+/** The fields that protect a link: a passkey or a password (the choice shows once scripts run; without them, the password). */
+export function lockFields(o: { legend: string; autocomplete: "new-password" | "current-password" }): string {
+  return `<fieldset class="fld"><legend>${esc(o.legend)}</legend>
+<div class="lk-choice" role="radiogroup" aria-label="${esc(o.legend)}"><label><input type="radio" name="lock" value="passkey">Passkey</label><label><input type="radio" name="lock" value="password" checked>Password</label></div>
+<div data-pw><label for="pw">Password</label><input type="password" id="pw" name="password" autocomplete="${o.autocomplete}" minlength="10" maxlength="256" placeholder="At least 10 characters" required></div>
+</fieldset>`;
+}
+
+/** /start: name the app, protect its link with a passkey or a password, create. Signed in, /account/new answers instead. */
+export function startPage(nonce: string, opts: { error?: string; name?: string } = {}): string {
   const body = `
-<section class="stack mt-xl oneclick">
-  <h1>Add GenClass to your app</h1>
-  <p class="lead">One click makes your private dashboard and the one command that connects it. The dashboard is free. No sign-up, no card.</p>
-  <form id="f" method="post" action="/start"><button class="btn green xl" id="go" type="submit">Add to my app</button></form>
-  <p id="err" class="small" role="alert">${opts.error ? esc(opts.error) : ""}</p>
-  <p class="muted small"><a href="/login">Sign in</a> to put it in your account. <a href="/start/open-source">Use it with nothing sent to us</a>.</p>
-</section>
-<footer>On public sites GenClass sends anonymous counts and decisions, no page text.
-<a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is sent</a> ·
-<a href="https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md">Privacy</a></footer>
+<div class="st">
+  <h1>Create your dashboard</h1>
+  <p class="lead">Free. No sign-up.</p>
+  <form id="f" class="st-card" method="post" action="/start" data-lock>
+    <div class="fld"><label for="nm">App name</label><input type="text" id="nm" name="name" maxlength="80" placeholder="my-app" autocomplete="off" spellcheck="false" value="${esc(opts.name ?? "")}"></div>
+    ${lockFields({ legend: "Protect it with", autocomplete: "new-password" })}
+    <p id="err" class="lk-err" role="alert">${opts.error ? esc(opts.error) : ""}</p>
+    <button class="btn green xl" id="go" type="submit">Create dashboard</button>
+  </form>
+  <p class="st-alt">Have an account? <a href="/login">Sign in</a></p>
+</div>
 <style nonce="${nonce}">${START_CSS}</style>`;
-  return shell(nonce, "Add GenClass to your app | GenClass", body, ONE_CLICK_JS, { account: true });
+  return shell(nonce, "Create your dashboard | GenClass", body, START_JS, { account: true, nav: QUIET_NAV, lock: true });
 }
 
 export interface SetupView {
@@ -383,11 +431,11 @@ export function setupPage(nonce: string, v: SetupView): string {
     ? ""
     : `<section class="stack mt-l">
   <div class="cmdbox"><code id="cmd">${esc(cmd)}</code><span id="cmdc"></span></div>
-  <p class="muted small">It shows the change and asks once. <code>npx ${RUNTIME_PKG} remove</code> undoes it.</p>
-  <div class="row setup-agents"><span class="small">Or let your agent do it:</span>${agents}<span id="promptc"></span></div>
+  <div class="row setup-agents"><span class="small muted">Or let your agent do it:</span>${agents}<span id="promptc"></span></div>
 </section>`;
   const body = `
-<section class="stack mt-xl">
+<div class="setup">
+<section class="stack">
   <h1>Your app is ready</h1>
   ${v.endpoint ? "" : `<p class="lead" id="lead">${v.copied ? "The command is on your clipboard. Paste it in your project's folder." : "Run this in your project's folder."}</p>`}
   ${notYet}
@@ -395,15 +443,14 @@ export function setupPage(nonce: string, v: SetupView): string {
 ${connect}
 <section class="stack mt-l">
   <ol class="setup-steps">
-    <li><b>Run your app.</b> A GenClass overlay appears at the bottom right of your dev pages.</li>
+    <li><b>Run your app.</b></li>
     <li><b>Deploy it.</b> <span class="setup-status${v.lastEvent ? " live" : ""}" id="st" aria-live="polite"><i></i><span id="stt">${v.lastEvent ? "Connected." : "Waiting for your first visitor."}</span></span></li>
   </ol>
-  <div class="row"><a class="btn green" href="/dashboard/${esc(v.secret)}">Open my dashboard</a><a class="btn ghost" id="save" href="/signup?next=${encodeURIComponent("/account?save=1")}">Save it to a free account</a></div>
-  <p class="muted small">Without an account, this page is your only way back, and we can't recover it. Bookmark it.</p>
+  <div class="row"><a class="btn green" href="/dashboard/${esc(v.secret)}">Open my dashboard</a><a class="btn ghost" id="save" href="/signup?next=${encodeURIComponent("/account?save=1")}">Save to an account</a></div>
+  <p class="muted small">Bookmark this page to get back here.</p>
 </section>
-<details class="mt-l"${v.endpoint ? " open" : ""}><summary>Other ways: script tag, meta tag</summary><div class="stack mt-s"><p class="muted small">${LOCAL_HOSTS}</p><div id="snips" class="stack"></div></div></details>
-<footer>On public sites GenClass sends anonymous counts and decisions, no page text.
-<a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">What is sent</a>. Turn it off with <code>--no-telemetry</code>.</footer>
+<details class="mt-l"${v.endpoint ? " open" : ""}><summary>Other ways to add it</summary><div class="stack mt-s"><div id="snips" class="stack"></div></div></details>
+</div>
 <style nonce="${nonce}">${START_CSS}</style>
 <script type="application/json" id="cfg">${embed({ token: v.token, secret: v.secret, endpoint: v.endpoint ?? "", cmd, prompt, live: !!v.lastEvent })}</script>`;
   const script = `
@@ -432,7 +479,7 @@ ${connect}
   }
   setTimeout(poll, 3000);
 })();`;
-  return shell(nonce, "Your app is ready | GenClass", body, script, { account: true });
+  return shell(nonce, "Your app is ready | GenClass", body, script, { account: true, nav: QUIET_NAV });
 }
 
 // ------------------------------------------------------------------------------------- /start/open-source
@@ -2422,6 +2469,11 @@ export interface DashboardOptions {
    * the app's key and the Connect section and links the plans; no stats are loaded.
    */
   locked?: boolean;
+  /**
+   * A private link (no account): its lock endpoint and whether it is protected (src/link-lock.ts). Open, the header
+   * offers Protect; protected, the crumb shows a lock.
+   */
+  link?: { locked: boolean } | null;
 }
 
 const RANGE_LABELS: Record<string, string> = { "24h": "24 h", "7d": "7 days", "30d": "30 days", "90d": "90 days", "1y": "1 year" };
@@ -3018,6 +3070,8 @@ the referring site, campaign, device type, browser, system, country and whether 
     css: DASH_CSS,
     body,
     script: SNIPPETS_JS + (acct ? DASH_JS + CONNECT_JS + (opts.extra?.script ?? "") : DASH_JS),
+    tour: "dashboard",
+    link: acct ? null : (opts.link ?? null),
   });
 }
 

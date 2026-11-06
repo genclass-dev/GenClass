@@ -45,6 +45,7 @@ import { json, readCapped } from "./http.js";
 import { afterBatch } from "./paid.js";
 import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, setupCommand, setupPage, startPage } from "./pages.js";
 import { lockedLink } from "./locked.js";
+import { applyLock, linkSession, linkUnlocked, lockKind, lockedJson, readBody, readLock, routeLink, startPasskeyOptions, unlockPage } from "./link-lock.js";
 import { hasDashboard, projectAccess } from "./plans.js";
 import { SAMPLE_PROJECT, SAMPLE_SECRET, sampleStats } from "./sample.js";
 
@@ -355,12 +356,25 @@ async function startApp(request: Request, env: Env, now: Date): Promise<Response
     return new Response(startPage(nonce, { error }), { status, headers: { ...securityHeaders(nonce, {}, { account: true }), ...headers } });
   };
   if (!env.DB) return refuse(503, "dashboards unavailable");
+  const read = await readBody(request);
+  if (!read) return refuse(400, "Something went wrong. Try again.");
+  const name = sanitizeName(read.body.name);
+  const again = (status: number, error: string, headers: Record<string, string> = {}): Response => {
+    if (wantsJson) return json(status, { ok: false, error }, headers);
+    const nonce = randomBase62(22);
+    return new Response(startPage(nonce, { error, name: typeof read.body.name === "string" ? read.body.name : "" }), { status, headers: { ...securityHeaders(nonce, {}, { account: true }), ...headers } });
+  };
   const slow = await creationLimited(request, env.DB, env, now);
-  if (slow) return refuse(429, slow, { "retry-after": "60" });
-  const p = await createProject(env.DB, sanitizeName(""), now);
+  if (slow) return again(429, slow, { "retry-after": "60" });
+  // every link /start makes is protected: a passkey or a password (src/link-lock.ts)
+  const lock = await readLock(env, env.DB, read.body, "link-register", null, now);
+  if ("error" in lock) return again(400, lock.error);
+  const p = await createProject(env.DB, name, now);
+  await applyLock(env.DB, p.token, lock, now);
+  const cookie = await linkSession(env, env.DB, p.token, now);
   const to = `/start/${p.secret}`;
-  if (wantsJson) return json(201, { url: to, copiedUrl: `${to}?copied=1`, token: p.token, command: setupCommand(p.token) });
-  return new Response(null, { status: 303, headers: { location: to, "cache-control": "no-store" } });
+  if (wantsJson) return json(201, { url: to, copiedUrl: `${to}?copied=1`, token: p.token, command: setupCommand(p.token) }, { "set-cookie": cookie });
+  return new Response(null, { status: 303, headers: { location: to, "cache-control": "no-store", "set-cookie": cookie } });
 }
 
 async function routeSite(request: Request, url: URL, path: string, env: Env, opts: HandleOptions): Promise<Response | null> {
@@ -391,6 +405,24 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     return json(201, { token: p.token, dashboardUrl: `${origin}/dashboard/${p.secret}`, name: p.name, created: p.created }, PROJECT_CORS);
   }
 
+  // the passkey of a link /start is about to make (src/link-lock.ts)
+  if (path === "/api/start/passkey") {
+    if (m !== "POST") return json(405, { ok: false, error: "method not allowed" });
+    if (!env.DB) return json(503, { ok: false, error: "dashboards unavailable" });
+    const slow = await creationLimited(request, env.DB, env, now);
+    if (slow) return json(429, { ok: false, error: slow }, { "retry-after": "60" });
+    const read = await readBody(request, 4096);
+    return startPasskeyOptions(request, env, env.DB, sanitizeName(read?.body.name), now);
+  }
+
+  // unlock a protected link, or protect an open one (src/link-lock.ts)
+  const linkApi = /^\/api\/link\/([A-Za-z0-9]{32})\/(unlock|unlock\/passkey|lock|lock\/passkey)$/.exec(path);
+  if (linkApi) {
+    const p = env.DB ? await projectBySecret(env.DB, linkApi[1]!) : null;
+    if (!p || !env.DB || !p.private_link) return json(404, { ok: false, error: "not found" });
+    return (await routeLink(request, env, env.DB, linkApi[2]!, linkApi[1]!, p.token, p.name, now)) ?? json(404, { ok: false, error: "not found" });
+  }
+
   // What a developer's coding agent reports about this app's problems (docs/runtime/AGENT.md section 4.5): opt-in on
   // the developer's side, authenticated by the dashboard's private link, ids, kinds, routes, verdicts and times only.
   const agentApi = /^\/api\/projects\/([^/]+)\/agent$/.exec(path);
@@ -419,6 +451,7 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     if (funnelApi[1] === SAMPLE_SECRET) return json(403, { ok: false, error: "the sample dashboard's funnels cannot be changed" });
     const p = env.DB ? await projectBySecret(env.DB, funnelApi[1]!) : null;
     if (!p || !env.DB) return json(404, { ok: false, error: "not found" });
+    if (!(await linkUnlocked(request, env, env.DB, p.token, now))) return lockedJson();
     if (!hasDashboard(await projectAccess(env.DB, p, env, now))) return json(402, { ok: false, error: lockedError(env), locked: true });
     return putFunnels(request, env.DB, p.token);
   }
@@ -429,6 +462,7 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     if (m !== "GET" && m !== "HEAD") return json(405, { ok: false, error: "method not allowed" });
     const p = env.DB && statusApi[1] !== SAMPLE_SECRET ? await projectBySecret(env.DB, statusApi[1]!) : null;
     if (!p) return json(404, { ok: false, error: "not found" });
+    if (env.DB && !(await linkUnlocked(request, env, env.DB, p.token, now))) return lockedJson();
     return json(200, { lastEvent: p.last_event ?? null, firstEvent: p.first_event ?? null });
   }
 
@@ -438,6 +472,7 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     if (api[1] === SAMPLE_SECRET) return json(200, sampleStats(url.searchParams.get("range"), now));
     const p = env.DB ? await projectBySecret(env.DB, api[1]!) : null;
     if (!p || !env.DB) return json(404, { ok: false, error: "not found" });
+    if (!(await linkUnlocked(request, env, env.DB, p.token, now))) return lockedJson();
     if (!hasDashboard(await projectAccess(env.DB, p, env, now))) return json(402, { ok: false, error: lockedError(env), locked: true });
     const r = url.searchParams.get("range") as Range | null;
     const range: Range = r && RANGES.includes(r) ? r : "7d";
@@ -458,6 +493,9 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     const p = env.DB ? await projectBySecret(env.DB, setup[1]!) : null;
     const nonce = randomBase62(22);
     if (!p) return html(404, notFoundPage(nonce), nonce);
+    if (env.DB && !(await linkUnlocked(request, env, env.DB, p.token, now))) {
+      return accountHtml(200, unlockPage(nonce, { secret: setup[1]!, kind: (await lockKind(env.DB, p.token))!, next: `/start/${setup[1]!}` }), nonce);
+    }
     return accountHtml(
       200,
       setupPage(nonce, { token: p.token, secret: setup[1]!, lastEvent: p.last_event ?? null, runtimeReady: runtimeHasTokens(env), endpoint: ownEndpoint(env), copied: url.searchParams.get("copied") === "1" }),
@@ -485,9 +523,12 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     if (dash[1] === SAMPLE_SECRET) return html(200, dashboardPage(nonce, { ...SAMPLE_PROJECT, lastEvent: new Date(now.getTime() - 180_000).toISOString() }, { runtimeReady }), nonce);
     const p = env.DB ? await projectBySecret(env.DB, dash[1]!) : null;
     if (!p || !env.DB) return html(404, notFoundPage(nonce), nonce);
+    const lk = await lockKind(env.DB, p.token);
+    if (lk && !(await linkUnlocked(request, env, env.DB, p.token, now))) return accountHtml(200, unlockPage(nonce, { secret: dash[1]!, kind: lk, next: `/dashboard/${dash[1]!}` }), nonce);
     // locked only while the app's plan leaves the dashboard out (none does today): sign in, add it, see the plans
     if (!hasDashboard(await projectAccess(env.DB, p, env, now))) return lockedLink(request, url, env, opts, p);
-    return html(200, dashboardPage(nonce, { name: p.name, token: p.token, created: p.created, lastEvent: p.last_event }, { runtimeReady, endpoint: ownEndpoint(env) }), nonce);
+    const link = { locked: !!lk };
+    return html(200, dashboardPage(nonce, { name: p.name, token: p.token, created: p.created, lastEvent: p.last_event }, { runtimeReady, endpoint: ownEndpoint(env), link }), nonce);
   }
 
   if (path.startsWith("/api/")) return json(404, { ok: false, error: "not found" });

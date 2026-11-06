@@ -1949,7 +1949,7 @@ describe("accounts: the Connect dialog and the Studio header", () => {
     const waiting = await (await call(env, "GET", `/account/apps/${ids[0]}`, { cookie })).text();
     expect(waiting).toContain('<div id="period" class="hidden">');
     // Studio makes Connect the primary button while a project is new
-    expect(waiting).toMatch(/<button class="btn sm" type="button" data-open="m-connect" id="hconnect">/);
+    expect(waiting).toMatch(/<button class="btn sm" type="button" data-open="m-connect" id="hconnect"[ >]/);
     expect(waiting).toContain('<span class="bdg warning" id="hstatus"><i></i><span>Waiting</span></span>');
     // every project of the account is in the switcher, the current one marked
     for (const id of ids) expect(waiting).toContain(`href="/account/apps/${id}"`);
@@ -1958,7 +1958,7 @@ describe("accounts: the Connect dialog and the Studio header", () => {
     await sendBatch(env, token);
     const live = await (await call(env, "GET", `/account/apps/${ids[0]}`, { cookie })).text();
     expect(live).toContain('<div id="period">');
-    expect(live).toMatch(/<button class="btn sm ghost" type="button" data-open="m-connect" id="hconnect">/);
+    expect(live).toMatch(/<button class="btn sm ghost" type="button" data-open="m-connect" id="hconnect"[ >]/);
     expect(live).toContain('<span class="bdg brand" id="hstatus"><i></i><span>Live</span></span>');
   });
 });
@@ -2617,8 +2617,8 @@ describe("POST /start signed in: the one click puts the app in the account", () 
     expect(refused.status).toBe(303);
     expect(refused.headers.get("location")).toBe("/account/new");
     expect(sql.rows("SELECT COUNT(*) AS n FROM projects")[0]!.n).toBe(before);
-    // signed out: a private link, as on /start
-    const anon = await call(env, "POST", "/start", {});
+    // signed out: a private link, as on /start, protected (link-lock.ts)
+    const anon = await call(env, "POST", "/start", { body: new URLSearchParams({ password: "a long test password" }).toString(), contentType: "application/x-www-form-urlencoded" });
     expect(anon.status).toBe(303);
     expect(anon.headers.get("location")).toMatch(/^\/start\/[A-Za-z0-9]{32}$/);
   });

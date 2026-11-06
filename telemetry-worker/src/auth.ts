@@ -1773,7 +1773,9 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
 
   switch (path) {
     case "/start": {
-      // the one click, signed in: the new app goes in the account (not signed in, or any GET: routeSite answers)
+      // signed in, /start is the account's New project page; a POST (the form, or an old one-click page) puts the new
+      // app in the account. Not signed in: routeSite answers (a private link, protected).
+      if (get) return (await webSession(c)) ? redirect("/account/new") : null;
       if (!post) return null;
       const a = await webSession(c);
       if (!a) return null;
@@ -1785,7 +1787,12 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
         if (!success) return elsewhere();
       }
       if ((await projectsCreatedSince(c.db, new Date(c.now.getTime() - MINUTE), "account")) >= MAX_ACCOUNT_PROJECTS_PER_MINUTE) return elsewhere();
-      const p = await createProject(c.db, sanitizeName(""), c.now, a.account.id);
+      let name = sanitizeName("");
+      if ((request.headers.get("content-type") ?? "").startsWith("application/json")) {
+        const body = await readJson(c);
+        if (!(body instanceof Response)) name = sanitizeName(body.name);
+      }
+      const p = await createProject(c.db, name, c.now, a.account.id);
       const to = `/account/apps/${p.id}#connect`;
       return json201 ? json(201, { url: to, copiedUrl: to, token: p.token, command: setupCommand(p.token) }) : redirect(to, [], 303);
     }
@@ -2034,5 +2041,8 @@ export async function authRetention(db: D1Like, now: Date): Promise<void> {
     db.prepare("DELETE FROM device_codes WHERE expires < ?").bind(iso),
     db.prepare("DELETE FROM auth_sessions WHERE expires < ? OR revoked IS NOT NULL").bind(iso),
     db.prepare("DELETE FROM password_devices WHERE last_used < ?").bind(new Date(now.getTime() - DEVICE_MS).toISOString()),
+    // protected private links (src/link-lock.ts): expired unlocks, and what is left of deleted apps
+    db.prepare("DELETE FROM link_sessions WHERE expires < ? OR token NOT IN (SELECT token FROM projects)").bind(iso),
+    db.prepare("DELETE FROM link_credentials WHERE token NOT IN (SELECT token FROM projects)"),
   ]);
 }

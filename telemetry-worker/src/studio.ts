@@ -1,6 +1,7 @@
 // The Supabase Studio frame every signed-in page and every app dashboard uses (the owner asked for Supabase's layout
 // one to one, 2026-10-25): a 48px header (the organization and project switchers with their slash dividers, the
-// Connect button, Feedback, a search pill that opens the command menu, help and the account menu), a 48px icon rail
+// Connect button, the search in the middle (owner, 2026-11-05) that opens the command menu, the theme button, help and
+// the account menu), a 48px icon rail
 // that widens to 208px with its labels on hover or focus, an optional product menu for views with sub-pages, and the
 // page on the canvas. The organization is the account and a project is an app (one key each).
 // Tokens are Supabase Studio's dark theme (canvas #121212, surfaces #171717 / #1f1f1f, borders #2e2e2e, text #fafafa,
@@ -8,7 +9,8 @@
 // Pro for code, 6px corners), under the token names the dashboard's own CSS already uses (--paper is the canvas, --ink
 // the text). Two deviations, for contrast the tests measure: input borders are #636363 (3:1 on the canvas; Supabase's
 // #393939 is about 1.6:1) and the muted text #898989 stays at 4.5:1 or more on every surface.
-// Dark only, like every genclass.dev page: `color-scheme: dark`, no prefers-color-scheme rules. No external scripts;
+// Two themes: dark by default, light under :root[data-theme="light"], picked before paint by THEME_HEAD_JS (the saved
+// choice, else the system's) and switched by the header's theme button. No external scripts;
 // fonts from Google Fonts only; no style attributes (the CSP allows styles by nonce only). Server-rendered text goes
 // through esc(); the frame's script inserts text with textContent and never throws into the page (every lookup is
 // null-checked, so the page scripts run the same in tests that render only <main>).
@@ -59,6 +61,10 @@ const PATHS = {
   user: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
   chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  compass: '<circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;
@@ -81,6 +87,101 @@ export const ICON_LINKS =
   '<link rel="icon" href="https://genclass.dev/brand/mark-64.png?v=2" sizes="64x64" type="image/png">' +
   '<link rel="apple-touch-icon" href="https://genclass.dev/apple-touch-icon.png">';
 
+// --------------------------------------------------------------------------------------------- theme
+
+/** Where the visitor's choice of theme is kept, on every genclass.dev page (the site uses the same key). */
+export const THEME_KEY = "gc-theme";
+
+/**
+ * Runs first in <head>, before paint: `data-theme` on <html> is the saved choice ("light" or "dark"), else the system's,
+ * and the `js` class marks a page whose scripts run. Every page this worker serves includes it under its nonce.
+ */
+export const THEME_HEAD_JS = `(function(){var d=document.documentElement,t=null;d.classList.add("js");try{t=localStorage.getItem("${THEME_KEY}")}catch(e){}if(t!=="light"&&t!=="dark")t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";d.setAttribute("data-theme",t)})();`;
+
+/** The theme-color metas for both themes (the browser picks by the system's theme). */
+export const THEME_COLOR_METAS = (dark: string, light: string): string =>
+  `<meta name="theme-color" content="${dark}" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="${light}" media="(prefers-color-scheme: light)">`;
+
+/**
+ * The theme button's behaviour, for every page: a click on [data-theme-toggle] flips the theme and saves it; with no
+ * saved choice the page follows the system's theme as it changes.
+ */
+export const THEME_JS = `
+(function(){
+  var d = document.documentElement;
+  function label(){ var t = d.getAttribute("data-theme"); [].slice.call(document.querySelectorAll("[data-theme-toggle]")).forEach(function(b){ b.setAttribute("aria-label", t === "light" ? "Switch to dark mode" : "Switch to light mode"); b.title = t === "light" ? "Dark mode" : "Light mode"; }); }
+  document.addEventListener("click", function(e){
+    var b = e.target && e.target.closest ? e.target.closest("[data-theme-toggle]") : null; if (!b) return;
+    var t = d.getAttribute("data-theme") === "light" ? "dark" : "light";
+    d.setAttribute("data-theme", t); try { localStorage.setItem("${THEME_KEY}", t); } catch (x) {}
+    label();
+  });
+  try {
+    var mq = window.matchMedia("(prefers-color-scheme: light)");
+    var follow = function(){ var saved = null; try { saved = localStorage.getItem("${THEME_KEY}"); } catch (x) {} if (saved !== "light" && saved !== "dark") { d.setAttribute("data-theme", mq.matches ? "light" : "dark"); label(); } };
+    if (mq.addEventListener) mq.addEventListener("change", follow);
+  } catch (x) {}
+  label();
+})();
+`;
+
+/** The header's theme button: a sun in dark mode, a moon in light mode (the CSS shows one). */
+export function themeButton(cls: string): string {
+  return `<button class="${cls}" type="button" data-theme-toggle aria-label="Switch theme"><span class="th-sun">${icon("sun", 15)}</span><span class="th-moon">${icon("moon", 15)}</span></button>`;
+}
+
+// --------------------------------------------------------------------------------------------- a protected link (client)
+
+/**
+ * The browser side of a protected private link (src/link-lock.ts), shared by /start, the unlock page and the Protect
+ * dialog: base64url, a passkey made or used through an options URL, and a lock form's choice between a passkey and a
+ * password (`[data-lock]` holds radios named "lock" and a `[data-pw]` field). Names start with gcLk so they never meet
+ * the account pages' own helpers.
+ */
+export const LOCK_JS = `
+function gcLkB2u(buf){ var b = new Uint8Array(buf), s = ""; for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); }
+function gcLkU2b(s){ s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var bin = atob(s), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out.buffer; }
+function gcLkCan(){ return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create); }
+function gcLkPost(url, body){
+  return fetch(url, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body || {}) })
+    .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if (!r.ok) throw new Error(j.error || "Something went wrong. Try again."); return j; }); });
+}
+function gcLkWhy(e){ if (e && (e.name === "NotAllowedError" || e.name === "AbortError")) return "Passkey cancelled."; var m = (e && e.message) || "Something went wrong. Try again."; return m.charAt(0).toUpperCase() + m.slice(1); }
+function gcLkCreate(url, body){
+  return gcLkPost(url, body).then(function(o){
+    var pk = o.publicKey; pk.challenge = gcLkU2b(pk.challenge); pk.user.id = gcLkU2b(pk.user.id);
+    (pk.excludeCredentials || []).forEach(function(c){ c.id = gcLkU2b(c.id); });
+    return navigator.credentials.create({ publicKey: pk }).then(function(cr){
+      if (!cr) throw new Error("No passkey was made.");
+      return { id: o.id, credential: { type: cr.type, rawId: gcLkB2u(cr.rawId), response: { clientDataJSON: gcLkB2u(cr.response.clientDataJSON), attestationObject: gcLkB2u(cr.response.attestationObject) } } };
+    });
+  });
+}
+function gcLkGet(url){
+  return gcLkPost(url, {}).then(function(o){
+    var pk = o.publicKey; pk.challenge = gcLkU2b(pk.challenge);
+    (pk.allowCredentials || []).forEach(function(c){ c.id = gcLkU2b(c.id); });
+    return navigator.credentials.get({ publicKey: pk }).then(function(a){
+      if (!a) throw new Error("No passkey was used.");
+      return { id: o.id, credential: { type: a.type, rawId: gcLkB2u(a.rawId), response: { clientDataJSON: gcLkB2u(a.response.clientDataJSON), authenticatorData: gcLkB2u(a.response.authenticatorData), signature: gcLkB2u(a.response.signature), userHandle: a.response.userHandle ? gcLkB2u(a.response.userHandle) : null } } };
+    });
+  });
+}
+function gcLkKind(root){ var r = root.querySelector("input[name=lock]:checked"); return r ? r.value : "password"; }
+function gcLkWire(root){
+  var pw = root.querySelector("[data-pw]"), pk = root.querySelector("input[name=lock][value=passkey]"), pp = root.querySelector("input[name=lock][value=password]");
+  if (pk && gcLkCan()) pk.checked = true;
+  else if (pk) { pk.disabled = true; if (pp) pp.checked = true; var l = pk.closest("label"); if (l) l.classList.add("off"); }
+  function sync(){ var v = gcLkKind(root), i = pw && pw.querySelector("input"); if (pw) pw.hidden = v !== "password"; if (i) i.required = v === "password"; }
+  [].slice.call(root.querySelectorAll("input[name=lock]")).forEach(function(r){ r.addEventListener("change", sync); });
+  sync();
+}
+function gcLkBody(root, url, extra){
+  if (gcLkKind(root) === "passkey") return gcLkCreate(url, extra || {}).then(function(p){ return { passkey: p }; });
+  var i = root.querySelector("[data-pw] input"); return Promise.resolve({ password: i ? i.value : "" });
+}
+`;
+
 /** A Supabase badge (rounded, mono, upper case): default, brand (green), warning (amber) or destructive. */
 export function badge(text: string, kind: "default" | "brand" | "warning" | "destructive" = "default", id?: string): string {
   return `<span class="bdg${kind === "default" ? "" : ` ${kind}`}"${id ? ` id="${esc(id)}"` : ""}>${esc(text)}</span>`;
@@ -101,12 +202,29 @@ export const STUDIO_CSS = `
   --s75:#171717;--s200:#242424;--s300:#2e2e2e;--ctl:#1a1a1a;--rule3:#454545;--brand-b:rgba(62,207,142,.3);--amber:#f1a10d;--amber-t:#2b1d05;--ovl:#1c1c1c;
   --display:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"Source Code Pro",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --cb:#393939;--cb-h:#4d4d4d;--sel:#3ecf8e40;--brand-bh:#3ecf8e99;--ph:#6b6b6b;--ok-b:#0f5a37;--amber-b:#5c3d06;--warn-b:#5c2018;
+  --dng-bg:#3c1712;--dng-b:#7f2c20;--dng-bg-h:#52201a;--dng-b-h:#b23b28;--av-bg:#2b4a3c;--av-b:#3a5a4b;--ovl-b:#333333;
+  --shadow-m:0 12px 32px rgba(0,0,0,.5);--shadow-l:0 24px 64px rgba(0,0,0,.6);--shadow-r:12px 0 24px rgba(0,0,0,.35);--scrim:rgba(0,0,0,.66);
   color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --paper:#fcfcfc;--panel:#ffffff;--ink:#171717;--ink2:#525252;--ink3:#6b6b6b;--rule:#e6e6e6;--rule2:#dedede;--line:#8c8c8c;
+  --accent:#0a7c4a;--accent-x:#0a7c4a;--accent-f:#0a7c4a;--accent-t:#eaf7f0;--warn:#c4320a;--warn-f:#e5484d;--warn-t:#fdeeea;
+  --bar:#a3a3a3;--bar2:#22a06b;--bar3:#e5484d;--ink-h:#000000;--green-h:#086a3f;--on-green:#ffffff;--head:#ffffff;
+  --code:#f5f5f5;--codeink:#171717;
+  --s75:#f7f7f7;--s200:#f0f0f0;--s300:#e8e8e8;--ctl:#ffffff;--rule3:#c7c7c7;--brand-b:rgba(10,124,74,.35);--amber:#8a5a00;--amber-t:#fdf6e7;--ovl:#ffffff;
+  --cb:#d4d4d4;--cb-h:#a3a3a3;--sel:rgba(10,124,74,.18);--brand-bh:rgba(10,124,74,.6);--ph:#8f8f8f;--ok-b:#a7dcc0;--amber-b:#f0d29a;--warn-b:#f5c2b8;
+  --dng-bg:#fdeeea;--dng-b:#f2b8ab;--dng-bg-h:#fadbd5;--dng-b-h:#e5484d;--av-bg:#d9f2e5;--av-b:#a7dcc0;--ovl-b:#e0e0e0;
+  --shadow-m:0 12px 32px rgba(0,0,0,.12);--shadow-l:0 24px 64px rgba(0,0,0,.18);--shadow-r:12px 0 24px rgba(0,0,0,.08);--scrim:rgba(20,20,20,.35);
+  color-scheme:light;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--paper)}
 body{background:var(--paper);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-feature-settings:"cv11","ss01"}
-::selection{background:#3ecf8e40;color:var(--ink)}
+::selection{background:var(--sel);color:var(--ink)}
+.th-moon{display:none}
+:root[data-theme="light"] .th-moon{display:contents}:root[data-theme="light"] .th-sun{display:none}
+.th-sun{display:contents}
 a{color:inherit;text-underline-offset:3px}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 h1,h2,h3{font-family:var(--display);font-weight:400;letter-spacing:-.01em;text-wrap:balance}
@@ -128,16 +246,16 @@ code,pre,.mono{font-family:var(--mono)}
 .ic{display:block;flex:none}
 /* buttons: Studio's primary (dark green, green border), default (grey) and outline; tiny 26px, small 32px */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 12px;border-radius:6px;font:400 13px/1 var(--sans);cursor:pointer;border:1px solid var(--brand-b);background:var(--accent-f);color:var(--on-green);text-decoration:none;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
-.btn:hover{background:var(--green-h);border-color:#3ecf8e99}
+.btn:hover{background:var(--green-h);border-color:var(--brand-bh)}
 .btn:disabled{opacity:.55;cursor:progress}
 .btn.green{background:var(--accent-f);border-color:var(--brand-b);color:var(--on-green)}
-.btn.green:hover{background:var(--green-h);border-color:#3ecf8e99}
-.btn.ghost,.btn.paper{background:var(--s200);color:var(--ink);border-color:#393939}
-.btn.ghost:hover,.btn.paper:hover{background:var(--s300);border-color:#4d4d4d}
+.btn.green:hover{background:var(--green-h);border-color:var(--brand-bh)}
+.btn.ghost,.btn.paper{background:var(--s200);color:var(--ink);border-color:var(--cb)}
+.btn.ghost:hover,.btn.paper:hover{background:var(--s300);border-color:var(--cb-h)}
 .btn.text{background:transparent;border-color:transparent;color:var(--ink2)}
 .btn.text:hover{background:var(--s200);color:var(--ink)}
-.btn.danger{background:#3c1712;border-color:#7f2c20;color:var(--ink)}
-.btn.danger:hover{background:#52201a;border-color:#b23b28}
+.btn.danger{background:var(--dng-bg);border-color:var(--dng-b);color:var(--ink)}
+.btn.danger:hover{background:var(--dng-bg-h);border-color:var(--dng-b-h)}
 .btn.sm,.btn.tiny{min-height:26px;padding:0 10px;font-size:12px}
 .btn.xl{min-height:40px;padding:0 18px;font-size:14px}
 .btn .ic{width:14px;height:14px}
@@ -149,7 +267,7 @@ input[type=text],input[type=email],input[type=password],input[type=url],input[ty
 textarea{padding:8px 12px;min-height:80px;resize:vertical}
 input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
 input:disabled,select:disabled{opacity:.6}
-::placeholder{color:#6b6b6b;opacity:1}
+::placeholder{color:var(--ph);opacity:1}
 label{font-size:13px;color:var(--ink2)}
 /* tables: Studio's grid look, header row on the sidebar tone */
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -157,13 +275,13 @@ th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--rule);white
 th{color:var(--ink3);font:400 12px var(--sans);background:var(--s75)}
 .tablewrap{overflow-x:auto}
 pre.code{background:var(--code);color:var(--codeink);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;font:13px/1.6 var(--mono);overflow-x:auto;white-space:pre}
-.note{border:1px solid #5c3d06;background:var(--amber-t);padding:10px 14px;border-radius:6px;font-size:13px;color:var(--ink)}
-.note.ok,.ok{border-color:#0f5a37;background:var(--accent-t)}
+.note{border:1px solid var(--amber-b);background:var(--amber-t);padding:10px 14px;border-radius:6px;font-size:13px;color:var(--ink)}
+.note.ok,.ok{border-color:var(--ok-b);background:var(--accent-t)}
 /* badges */
 .bdg{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;border:1px solid var(--rule2);background:var(--s75);color:var(--ink2);font:500 10.5px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
-.bdg.brand{border-color:#0f5a37;background:var(--accent-t);color:var(--accent)}
-.bdg.warning{border-color:#5c3d06;background:var(--amber-t);color:var(--amber)}
-.bdg.destructive{border-color:#5c2018;background:var(--warn-t);color:var(--warn)}
+.bdg.brand{border-color:var(--ok-b);background:var(--accent-t);color:var(--accent)}
+.bdg.warning{border-color:var(--amber-b);background:var(--amber-t);color:var(--amber)}
+.bdg.destructive{border-color:var(--warn-b);background:var(--warn-t);color:var(--warn)}
 .bdg i{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
 
 /* ---------- the frame */
@@ -180,16 +298,45 @@ body.sb{min-height:100vh}
 .sb-cr .ic{color:var(--ink3)}
 .sb-cr.static{cursor:default}.sb-cr.static:hover{background:none}
 .sb-acts{display:flex;align-items:center;gap:8px;margin-left:12px;flex:none}
-.sb-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex:none}
-.sb-search{display:inline-flex;align-items:center;gap:8px;height:26px;padding:0 6px 0 10px;min-width:150px;border-radius:999px;border:1px solid #393939;background:var(--s75);color:var(--ink3);font:12px var(--sans);cursor:pointer}
-.sb-search:hover{border-color:#4d4d4d;color:var(--ink2)}
-.sb-search kbd{margin-left:auto;font:11px var(--mono);color:var(--ink3);padding:0 4px}
-.sb-ib{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;border:1px solid #393939;background:var(--s75);color:var(--ink2);cursor:pointer;text-decoration:none}
-.sb-ib:hover{color:var(--ink);border-color:#4d4d4d}
-.sb-av{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:#2b4a3c;color:var(--ink);font:500 12px var(--sans);border:1px solid #3a5a4b;cursor:pointer;text-transform:uppercase}
+.sb-right{display:flex;align-items:center;gap:8px;flex:none}
+/* the search, in the middle of the header right after the crumbs: wide, easy to see */
+.sb-mid{flex:1 1 auto;display:flex;justify-content:center;min-width:0;padding:0 20px}
+.sb-search{display:flex;align-items:center;gap:10px;width:100%;max-width:460px;height:34px;padding:0 8px 0 12px;border-radius:8px;border:1px solid var(--cb);background:var(--s75);color:var(--ink2);font:13.5px var(--sans);cursor:pointer;transition:border-color .15s,background .15s}
+.sb-search:hover{border-color:var(--cb-h);background:var(--s200);color:var(--ink)}
+.sb-search .ic{color:var(--ink3)}
+.sb-search kbd{margin-left:auto;font:11px var(--mono);color:var(--ink3);padding:2px 6px;border:1px solid var(--cb);border-radius:4px;background:var(--paper)}
+.sb-lk{display:inline-flex;align-items:center;color:var(--accent)}
+.sb-lk .ic{width:13px;height:13px}
+/* the tour: a spotlight on one part of the page and a card next to it */
+.tour-spot{position:fixed;z-index:95;border-radius:8px;box-shadow:0 0 0 2px var(--accent),0 0 0 200vmax var(--scrim);pointer-events:none;transition:top .25s ease,left .25s ease,width .25s ease,height .25s ease}
+.tour-spot.mid{top:50%;left:50%;width:0;height:0;box-shadow:0 0 0 200vmax var(--scrim)}
+.tour-pop{position:fixed;z-index:96;width:min(320px,calc(100vw - 32px));background:var(--ovl);border:1px solid var(--ovl-b);border-radius:10px;box-shadow:var(--shadow-l);padding:18px 18px 14px;transition:top .25s ease,left .25s ease}
+.tour-pop h2{font-size:15px;font-weight:500;margin-bottom:4px}
+.tour-pop p{font-size:13.5px;color:var(--ink2)}
+.tour-f{display:flex;align-items:center;gap:8px;margin-top:16px}
+.tour-dots{display:flex;gap:5px;margin-right:auto}
+.tour-dots i{width:6px;height:6px;border-radius:50%;background:var(--rule3)}
+.tour-dots i.on{background:var(--accent)}
+.tour-pop [hidden]{display:none}
+@media (prefers-reduced-motion:reduce){.tour-spot,.tour-pop{transition:none}}
+/* a lock form: passkey or password */
+.lk-choice{display:none;gap:8px}
+.js .lk-choice{display:grid;grid-template-columns:1fr 1fr}
+.lk-choice label{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--cb);border-radius:8px;cursor:pointer;color:var(--ink);font-size:13.5px;background:var(--ctl)}
+.lk-choice label:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.lk-choice label.off{opacity:.5;cursor:not-allowed}
+.lk-choice input{accent-color:var(--accent);margin:0}
+.lk-f{display:grid;gap:14px}
+.lk-f [data-pw]{display:grid;gap:6px}
+.lk-f [data-pw][hidden]{display:none}
+.lk-err{font-size:13px;color:var(--warn);min-height:1em}
+.lk-err:empty{display:none}
+.sb-ib{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;border:1px solid var(--cb);background:var(--s75);color:var(--ink2);cursor:pointer;text-decoration:none}
+.sb-ib:hover{color:var(--ink);border-color:var(--cb-h)}
+.sb-av{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:var(--av-bg);color:var(--ink);font:500 12px var(--sans);border:1px solid var(--av-b);cursor:pointer;text-transform:uppercase}
 /* dropdowns (organization, project, help, account) */
 .dd{position:relative;display:flex;align-items:center;min-width:0}
-.dd-m{position:absolute;top:calc(100% + 6px);left:0;z-index:70;min-width:240px;max-width:min(340px,90vw);max-height:70vh;overflow:auto;background:var(--ovl);border:1px solid #333;border-radius:6px;padding:4px;box-shadow:0 12px 32px rgba(0,0,0,.5)}
+.dd-m{position:absolute;top:calc(100% + 6px);left:0;z-index:70;min-width:240px;max-width:min(340px,90vw);max-height:70vh;overflow:auto;background:var(--ovl);border:1px solid var(--ovl-b);border-radius:6px;padding:4px;box-shadow:var(--shadow-m)}
 .dd-m.end{left:auto;right:0}
 .dd-m[hidden]{display:none}
 .dd-m .dd-l{display:block;padding:6px 8px 4px;font:12px var(--sans);color:var(--ink3)}
@@ -197,7 +344,7 @@ body.sb{min-height:100vh}
 .dd-m a:hover,.dd-m button:hover,.dd-m a:focus-visible,.dd-m button:focus-visible{background:var(--s300);color:var(--ink);outline:none}
 .dd-m a[aria-current] {color:var(--ink)}
 .dd-m a[aria-current]::after{content:"";margin-left:auto;width:14px;height:14px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/14px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/14px no-repeat}
-.dd-m hr{border:0;border-top:1px solid #333;margin:4px -4px}
+.dd-m hr{border:0;border-top:1px solid var(--ovl-b);margin:4px -4px}
 .dd-m .who{padding:8px 8px 6px;font-size:13px;color:var(--ink);overflow-wrap:anywhere}
 .dd-m .who small{display:block;color:var(--ink3);font-size:12px}
 .dd-m form{display:block}
@@ -205,14 +352,14 @@ body.sb{min-height:100vh}
 /* the rail: 48px of icons; its labels show while the pointer or the focus is on it (Studio's "expand on hover") */
 .sb-rail{position:sticky;top:48px;align-self:flex-start;height:calc(100vh - 48px);width:48px;flex:none;z-index:30}
 .sb-rail nav{position:absolute;inset:0 auto 0 0;width:48px;height:100%;display:flex;flex-direction:column;gap:2px;padding:8px;background:var(--head);border-right:1px solid var(--rule);overflow:hidden;transition:width .15s ease,box-shadow .15s ease}
-.sb-rail:hover nav,.sb-rail:has(:focus-visible) nav{width:208px;box-shadow:12px 0 24px rgba(0,0,0,.35)}
+.sb-rail:hover nav,.sb-rail:has(:focus-visible) nav,.sb-rail.tour nav{width:208px;box-shadow:var(--shadow-r)}
 .sb-rail a{display:flex;align-items:center;gap:10px;height:32px;min-height:32px;padding:0 6px;border-radius:6px;color:var(--ink3);text-decoration:none;font-size:14px;white-space:nowrap}
 .sb-rail a .ic{width:20px;height:20px}
 .sb-rail a:hover{background:var(--s200);color:var(--ink)}
 .sb-rail a[aria-current=true],.sb-rail a[aria-current=page]{background:var(--s300);color:var(--ink)}
 .sb-rail a .lbl{opacity:0;transition:opacity .1s}
 .sb-rail a .cnt{margin-left:auto;font:11px var(--mono);color:var(--ink3);opacity:0}
-.sb-rail:hover a .lbl,.sb-rail:has(:focus-visible) a .lbl,.sb-rail:hover a .cnt,.sb-rail:has(:focus-visible) a .cnt{opacity:1}
+.sb-rail:hover a .lbl,.sb-rail:has(:focus-visible) a .lbl,.sb-rail:hover a .cnt,.sb-rail:has(:focus-visible) a .cnt,.sb-rail.tour a .lbl,.sb-rail.tour a .cnt{opacity:1}
 .sb-rail hr{border:0;border-top:1px solid var(--rule);margin:6px 2px}
 .sb-rail .end{margin-top:auto}
 /* the product menu: Studio's second column, its title on top, groups under small labels */
@@ -244,8 +391,9 @@ main.wrap{flex:1;min-width:0}
 /* the modal (Connect, the command menu): an overlay once the script runs; without it, an ordinary section */
 .sb-modal{margin-top:24px}
 .js .sb-modal{display:none;margin:0}
-.js .sb-modal.open{display:flex;position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.66);align-items:flex-start;justify-content:center;padding:7vh 16px 16px;overflow:auto}
-.sb-mbox{width:100%;max-width:860px;background:var(--paper);border:1px solid #333;border-radius:8px;box-shadow:0 24px 64px rgba(0,0,0,.6);min-width:0}
+.js .sb-modal.open{display:flex;position:fixed;inset:0;z-index:80;background:var(--scrim);align-items:flex-start;justify-content:center;padding:7vh 16px 16px;overflow:auto}
+.sb-mbox{width:100%;max-width:860px;background:var(--paper);border:1px solid var(--ovl-b);border-radius:8px;box-shadow:var(--shadow-l);min-width:0}
+.sb-mbox.sm{max-width:440px}
 .sb-mh{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--rule)}
 .sb-mh h2{font-size:16px}
 .sb-mh p{font-size:13px;color:var(--ink3);margin-top:2px}
@@ -273,14 +421,19 @@ main.wrap{flex:1;min-width:0}
 @media (max-width:900px){
   .sb-page{padding:24px 20px 56px}
   .sb-menu{display:none}
-  .sb-search{min-width:0;width:28px;padding:0;justify-content:center}.sb-search span,.sb-search kbd{display:none}
+  .sb-mid{padding:0 12px}
+  .sb-search kbd{display:none}
+}
+@media (max-width:640px){
+  .sb-mid{flex:0 0 auto;margin-left:auto;padding:0 4px}
+  .sb-search{width:32px;height:32px;padding:0;justify-content:center;border-radius:999px}.sb-search span{display:none}
 }
 @media (max-width:767px){
   .sb-ib.sb-burger{display:inline-flex;margin-left:8px}
   .sb-home{width:40px}
   .sb-rail{position:fixed;left:0;top:48px;height:calc(100vh - 48px);width:0;z-index:60}
   .sb-rail nav{width:0;padding:8px 0;border-right:0}
-  body.sb-open .sb-rail nav{width:240px;padding:8px;border-right:1px solid var(--rule);box-shadow:12px 0 24px rgba(0,0,0,.5)}
+  body.sb-open .sb-rail nav{width:240px;padding:8px;border-right:1px solid var(--rule);box-shadow:var(--shadow-r)}
   body.sb-open .sb-rail a .lbl,body.sb-open .sb-rail a .cnt{opacity:1}
   .sb-cr .nm{max-width:120px}
   .sb-crumbs .bdg,.sb-fb{display:none}
@@ -442,6 +595,93 @@ document.addEventListener("keydown", function(e){
   items.forEach(function(a){ a.addEventListener("click", function(){ gcUnmodal(); if (q) { q.value = ""; filter(); } }); });
   filter();
 })();
+(function(){
+  // the search's shortcut as this keyboard writes it
+  try { if (!/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) [].slice.call(document.querySelectorAll(".sb-search kbd")).forEach(function(k){ k.textContent = "Ctrl K"; }); } catch (e) {}
+})();
+(function(){
+  // the tour: a short walk through the parts marked data-tour="<order>|<title>|<text>", shown once per page kind
+  // (body data-tour-auto) on a visitor's first visit, and again from the Help menu (data-tour-start)
+  var kind = document.body ? document.body.getAttribute("data-tour-auto") : null;
+  var KEY = "gc-tour" + (kind ? "-" + kind : "");
+  var spot = null, pop = null, list = [], at = 0, back = null, rail = null;
+  function steps(){
+    var s = [].slice.call(document.querySelectorAll("[data-tour]")).map(function(n){
+      var p = n.getAttribute("data-tour").split("|"); return { i: Number(p[0]) || 0, t: p[1] || "", d: p[2] || "", n: n };
+    }).filter(function(x){ var r = x.n.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+    s.sort(function(a, b){ return a.i - b.i; });
+    return [{ i: -1, t: "Welcome to GenClass", d: "Here's a quick look around. It takes 20 seconds.", n: null }].concat(s);
+  }
+  function done(){
+    try { localStorage.setItem(KEY, "done"); } catch (e) {}
+    if (spot) spot.remove(); if (pop) pop.remove(); spot = pop = null;
+    if (rail) rail.classList.remove("tour");
+    document.removeEventListener("keydown", key, true); window.removeEventListener("resize", place);
+    if (back && back.focus) try { back.focus(); } catch (e) {}
+  }
+  function key(e){
+    if (!pop) return;
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); go(at + 1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); go(at - 1); }
+  }
+  function place(){
+    if (!pop || !list[at]) return;
+    var s = list[at], vw = window.innerWidth, vh = window.innerHeight, pw = pop.offsetWidth, ph = pop.offsetHeight, x, y;
+    if (!s.n) { spot.className = "tour-spot mid"; spot.style.top = spot.style.left = "50%"; spot.style.width = spot.style.height = "0px"; pop.style.left = Math.max(16, (vw - pw) / 2) + "px"; pop.style.top = Math.max(16, (vh - ph) / 2) + "px"; return; }
+    var r = s.n.getBoundingClientRect(), pad = 6;
+    spot.className = "tour-spot";
+    spot.style.top = (r.top - pad) + "px"; spot.style.left = (r.left - pad) + "px"; spot.style.width = (r.width + pad * 2) + "px"; spot.style.height = (r.height + pad * 2) + "px";
+    if (r.height > vh * 0.5) { x = r.right + 16; y = Math.min(Math.max(16, r.top + 40), vh - ph - 16); }
+    else if (r.bottom + 14 + ph < vh) { y = r.bottom + 14; x = r.left + r.width / 2 - pw / 2; }
+    else { y = r.top - 14 - ph; x = r.left + r.width / 2 - pw / 2; }
+    pop.style.left = Math.min(Math.max(16, x), vw - pw - 16) + "px"; pop.style.top = Math.max(16, y) + "px";
+  }
+  function go(i){
+    if (i < 0) return; if (i >= list.length) { done(); return; }
+    at = i; var s = list[i], last = i === list.length - 1;
+    if (rail) rail.classList.toggle("tour", !!(s.n && rail.contains(s.n)));
+    pop.querySelector("h2").textContent = s.t; pop.querySelector("p").textContent = s.d;
+    var dots = pop.querySelector(".tour-dots"); dots.textContent = "";
+    list.forEach(function(_, k){ var d = document.createElement("i"); if (k === i) d.className = "on"; dots.appendChild(d); });
+    var prev = pop.querySelector("[data-prev]"), next = pop.querySelector("[data-next]"), skip = pop.querySelector("[data-skip]");
+    prev.hidden = i === 0; skip.hidden = last;
+    next.textContent = i === 0 ? "Show me" : last ? "Done" : "Next";
+    if (s.n && s.n.scrollIntoView) try { s.n.scrollIntoView({ block: "nearest" }); } catch (e) {}
+    place(); setTimeout(place, 180);
+    try { next.focus({ preventScroll: true }); } catch (e) {}
+  }
+  function start(){
+    if (pop) done();
+    gcClose(); gcUnmodal(); list = steps(); at = 0; back = document.activeElement; rail = document.querySelector(".sb-rail");
+    spot = document.createElement("div"); spot.className = "tour-spot mid"; spot.setAttribute("aria-hidden", "true");
+    pop = document.createElement("div"); pop.className = "tour-pop"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-labelledby", "tour-h");
+    pop.innerHTML = '<h2 id="tour-h"></h2><p></p><div class="tour-f"><span class="tour-dots" aria-hidden="true"></span><button class="btn sm text" type="button" data-skip>Skip</button><button class="btn sm ghost" type="button" data-prev>Back</button><button class="btn sm" type="button" data-next>Next</button></div>';
+    pop.querySelector("[data-skip]").addEventListener("click", done);
+    pop.querySelector("[data-prev]").addEventListener("click", function(){ go(at - 1); });
+    pop.querySelector("[data-next]").addEventListener("click", function(){ go(at + 1); });
+    document.body.appendChild(spot); document.body.appendChild(pop);
+    document.addEventListener("keydown", key, true); window.addEventListener("resize", place);
+    go(0);
+  }
+  window.gcTour = start;
+  document.addEventListener("click", function(e){ var t = e.target && e.target.closest ? e.target.closest("[data-tour-start]") : null; if (t) { e.preventDefault(); start(); } });
+  var seen = "done"; try { seen = localStorage.getItem(KEY); } catch (e) {}
+  if (kind && !seen && window.innerWidth >= 768) setTimeout(function(){ if (!document.querySelector(".sb-modal.open")) start(); }, 700);
+})();
+(function(){
+  // the Protect dialog of an open private link: a passkey or a password, then the page again (now protected)
+  var f = document.getElementById("lk-form"); if (!f || typeof gcLkWire !== "function") return;
+  var m = /^\\/dashboard\\/([A-Za-z0-9]{32})$/.exec(location.pathname); if (!m) return;
+  var base = "/api/link/" + m[1] + "/lock", err = f.querySelector(".lk-err"), b = f.querySelector("button[type=submit]");
+  gcLkWire(f);
+  f.addEventListener("submit", function(e){
+    e.preventDefault(); err.textContent = ""; b.disabled = true;
+    gcLkBody(f, base + "/passkey", {}).then(function(body){ return gcLkPost(base, body); })
+      .then(function(){ location.reload(); })
+      .catch(function(x){ err.textContent = gcLkWhy(x); b.disabled = false; });
+  });
+})();
 `;
 
 // --------------------------------------------------------------------------------------------- the document
@@ -496,6 +736,14 @@ export interface StudioOptions {
   script: string;
   /** The page's own CSS, after the frame's. */
   css?: string;
+  /** Show the tour on a visitor's first visit to this kind of page (e.g. "dashboard"); Help > Take the tour always can. */
+  tour?: string;
+  /**
+   * A private dashboard link (no organization). Protected, the crumb shows a lock; open, the header offers Protect (a
+   * passkey or a password), whose script finds the link's lock endpoint from the address (the secret is never written
+   * into the page).
+   */
+  link?: { locked: boolean } | null;
 }
 
 const railLink = (r: RailItem): string =>
@@ -526,7 +774,7 @@ function header(o: StudioOptions): string {
         "settings",
         14,
       )}Account settings</a></div></div>`
-    : `<span class="sb-cr static sb-org"><span class="nm">Private link</span>${badge("Free")}</span>`;
+    : `<span class="sb-cr static sb-org">${o.link?.locked ? `<span class="sb-lk" title="Protected">${icon("lock", 13)}</span>` : ""}<span class="nm">Private link</span>${badge("Free")}</span>`;
   const p = o.project;
   let projectMenu = "";
   if (p) {
@@ -541,18 +789,18 @@ function header(o: StudioOptions): string {
         )}New project</a></div></div>`
       : `${DIVIDER}<span class="sb-cr static"><span class="nm" id="hname">${esc(p.name)}</span></span>`;
   }
-  const acts = o.connect
-    ? `<div class="sb-acts">${o.status ?? ""}<button class="btn sm${o.connect === "primary" ? "" : " ghost"}" type="button" data-open="m-connect" id="hconnect">${icon("plug", 14)}<span>Connect</span></button></div>`
-    : o.status
-      ? `<div class="sb-acts">${o.status}</div>`
-      : "";
-  const help = `<div class="dd"><button class="sb-ib" type="button" data-dd aria-haspopup="menu" aria-expanded="false" aria-label="Help">${icon("help", 15)}</button><div class="dd-m end" role="menu" hidden><span class="dd-l">Help</span><a href="https://genclass.dev/docs/dashboard">${icon(
-    "book",
+  const protect = o.link && !o.link.locked ? `<button class="btn sm ghost" type="button" data-open="m-protect" id="hprotect">${icon("lock", 14)}<span>Protect</span></button>` : "";
+  const connect = o.connect
+    ? `<button class="btn sm${o.connect === "primary" ? "" : " ghost"}" type="button" data-open="m-connect" id="hconnect" data-tour="30|Connect|Add GenClass to your app in one step.">${icon("plug", 14)}<span>Connect</span></button>`
+    : "";
+  const acts = connect || o.status || protect ? `<div class="sb-acts">${o.status ?? ""}${protect}${connect}</div>` : "";
+  const help = `<div class="dd" data-tour="70|Help|Docs, feedback, and this tour again."><button class="sb-ib" type="button" data-dd aria-haspopup="menu" aria-expanded="false" aria-label="Help">${icon("help", 15)}</button><div class="dd-m end" role="menu" hidden><button type="button" data-tour-start>${icon(
+    "compass",
     14,
-  )}Dashboard guide</a><a href="https://genclass.dev/docs">${icon("book", 14)}Docs</a><a href="https://genclass.dev/docs/mcp">${icon("bot", 14)}MCP server</a><a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">${icon(
-    "file",
+  )}Take the tour</button><a href="https://genclass.dev/docs">${icon("book", 14)}Docs</a><a href="https://discord.gg/kN9kRnFtZm">${icon("message", 14)}Discord</a><a href="https://github.com/genclass-dev/GenClass/issues/new">${icon(
+    "sparkles",
     14,
-  )}What is collected</a><a href="https://discord.gg/kN9kRnFtZm">${icon("message", 14)}Discord</a></div></div>`;
+  )}Send feedback</a><hr><a href="https://genclass.dev/privacy">${icon("shield", 14)}Privacy</a></div></div>`;
   const me = o.user
     ? `<div class="dd"><button class="sb-av" type="button" data-dd aria-haspopup="menu" aria-expanded="false" aria-label="Account">${esc((o.user.label.replace(/^@/, "").charAt(0) || "?").toUpperCase())}</button><div class="dd-m end" role="menu" hidden><div class="who">${esc(
         o.user.label,
@@ -564,15 +812,27 @@ function header(o: StudioOptions): string {
   return `<header class="sb-top">
 <button class="sb-ib sb-burger" type="button" data-burger aria-label="Menu" aria-expanded="false">${icon("menu", 15)}</button>
 <a class="sb-home" href="${o.user ? "/account" : "https://genclass.dev/"}" aria-label="${o.user ? "All projects" : "GenClass"}">${MARK}</a>
-<nav class="sb-crumbs" aria-label="Breadcrumb">${DIVIDER}${orgMenu}${projectMenu}</nav>
+<nav class="sb-crumbs" aria-label="Breadcrumb" data-tour="${o.org ? "10|Your apps|Switch apps, or go to your organization." : "10|Your app|You're looking at this app's dashboard."}">${DIVIDER}${orgMenu}${projectMenu}</nav>
 ${acts}
+<div class="sb-mid"><button class="sb-search" type="button" data-open="m-cmd" aria-label="Search" data-tour="20|Search|Find any page, problem or setting.">${icon("search", 15)}<span>Search pages, problems, settings…</span><kbd>⌘K</kbd></button></div>
 <div class="sb-right">
-<a class="btn sm ghost sb-fb" href="https://github.com/genclass-dev/GenClass/issues/new">Feedback</a>
-<button class="sb-search" type="button" data-open="m-cmd" aria-label="Search">${icon("search", 13)}<span>Search...</span><kbd>⌘K</kbd></button>
+<span data-tour="60|Light or dark|Pick the look you like.">${themeButton("sb-ib")}</span>
 ${help}
 ${me}
 </div>
 </header>`;
+}
+
+/** The Protect dialog of an open private link: a passkey (when the browser has them) or a password. */
+function protectDialog(): string {
+  return `<div class="sb-modal" id="m-protect" role="dialog" aria-modal="true" aria-labelledby="m-protect-h"><div class="sb-mbox sm">
+<div class="sb-mh"><h2 id="m-protect-h">Protect this dashboard</h2><button class="sb-x" type="button" data-close aria-label="Close">${icon("x", 16)}</button></div>
+<form class="sb-mb lk-f" id="lk-form" data-lock>
+<div class="lk-choice" role="radiogroup" aria-label="Protect with"><label><input type="radio" name="lock" value="passkey">Passkey</label><label><input type="radio" name="lock" value="password" checked>Password</label></div>
+<div data-pw><label for="lk-pw">Password</label><input type="password" id="lk-pw" name="password" autocomplete="new-password" minlength="10" placeholder="At least 10 characters"></div>
+<p class="lk-err" role="alert"></p>
+<div class="row"><button class="btn" type="submit">${icon("lock", 14)}Protect</button><button class="btn ghost" type="button" data-close>Not now</button></div>
+</form></div></div>`;
 }
 
 /** The command menu: every rail link, the product menus, the projects and the page's own commands. */
@@ -587,7 +847,7 @@ function commandMenu(o: StudioOptions): string {
     .map(([g, items]) => `<li class="gl">${esc(g)}</li>${items.join("")}`)
     .join("");
   return `<div class="sb-modal sb-cmd" id="m-cmd" role="dialog" aria-modal="true" aria-label="Command menu"><div class="sb-mbox">
-<input type="search" placeholder="Type a command or search..." aria-label="Search" autocomplete="off" spellcheck="false">
+<input type="search" placeholder="Search pages, problems, settings…" aria-label="Search" autocomplete="off" spellcheck="false">
 <ul>${list}</ul><p class="none hidden">No results.</p></div></div>`;
 }
 
@@ -608,21 +868,23 @@ export function studioPage(nonce: string, o: StudioOptions): string {
 <meta name="referrer" content="${o.account ? "same-origin" : "no-referrer"}">
 <title>${esc(o.title)}</title>
 ${ICON_LINKS}
-<meta name="theme-color" content="#121212">
+${THEME_COLOR_METAS("#121212", "#fcfcfc")}
+<script nonce="${nonce}">${THEME_HEAD_JS}</script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Source+Code+Pro:wght@400;500&display=swap">
 <style nonce="${nonce}">${STUDIO_CSS}${o.css ?? ""}</style>
 </head>
-<body class="sb">
+<body class="sb"${o.tour ? ` data-tour-auto="${esc(o.tour)}"` : ""}>
 <a class="skip" href="#mc">Skip to content</a>
 ${header(o)}
 <div class="sb-body">
-<div class="sb-rail"><nav class="snav" id="snav" aria-label="${esc(o.railLabel)}">${rail}${end}</nav></div>
+<div class="sb-rail"><nav class="snav" id="snav" aria-label="${esc(o.railLabel)}" data-tour="40|Menu|Problems, pages, visitors and settings live here.">${rail}${end}</nav></div>
 ${menus}
 <main class="wrap" id="main">${o.body}</main>
 </div>
 ${commandMenu(o)}
-<script nonce="${nonce}">${COPY_JS}${STUDIO_JS}${o.script}</script>
+${o.link && !o.link.locked ? protectDialog() : ""}
+<script nonce="${nonce}">${COPY_JS}${THEME_JS}${o.link && !o.link.locked ? LOCK_JS : ""}${STUDIO_JS}${o.script}</script>
 </body>
 </html>`;
 }

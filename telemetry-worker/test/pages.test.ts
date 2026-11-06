@@ -2,7 +2,8 @@
 // through packages/runtime): what a developer reads on the page, the possible-issues tier and the display fixes.
 import { describe, expect, it } from "vitest";
 import { Window } from "happy-dom";
-import { ANALYTICS_RUNTIME, analyticsPrompt, CDN_SCRIPT, DASH_CSS, dashboardPage, esc, installPrompt, KEY_RUNTIME, MCP_PKG, MESH_SCRIPT, openSourcePage, openSourcePrompt, orgName, RUNTIME_PKG, securityHeaders, SNIPPET_RUNTIME, setupPage, startPage, type DashboardOptions } from "../src/pages.js";
+import { ANALYTICS_RUNTIME, analyticsPrompt, CDN_SCRIPT, DASH_CSS, dashboardPage, esc, installPrompt, KEY_RUNTIME, MCP_PKG, MESH_SCRIPT, notFoundPage, openSourcePage, openSourcePrompt, orgName, RUNTIME_PKG, securityHeaders, SNIPPET_RUNTIME, setupPage, startPage, type DashboardOptions } from "../src/pages.js";
+import { THEME_HEAD_JS } from "../src/studio.js";
 
 const setupOf = (o: Record<string, unknown> = {}) => setupPage("n", { token: "gc_TestToken0123456789abc", secret: "a".repeat(32), lastEvent: null, ...o });
 import { accountPage, devicePage, forgotPage, lockedLinkPage, loginPage, messagePage, newProjectPage, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
@@ -27,8 +28,10 @@ const problems = (st: Stats) => (st.totals.detections ?? 0) + (st.totals.checks 
 
 /** A page's <body> (the Studio frame: header, rail, product menus, <main>, dialogs) without its inline script, and the script. */
 function page(html: string): { body: string; script: string } {
-  const script = /<script nonce="NONCE">([\s\S]*?)<\/script>/.exec(html)![1]!;
-  const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(html)![1]!.replace(/<script nonce="NONCE">[\s\S]*?<\/script>/, "");
+  // the page's script is the one in <body> (the <head> holds only the theme's first lines, THEME_HEAD_JS)
+  const inBody = /<body[^>]*>([\s\S]*)<\/body>/.exec(html)![1]!;
+  const script = /<script nonce="NONCE">([\s\S]*?)<\/script>/.exec(inBody)![1]!;
+  const body = inBody.replace(/<script nonce="NONCE">[\s\S]*?<\/script>/, "");
   return { body, script };
 }
 
@@ -190,7 +193,6 @@ describe("dashboard page: display fixes", () => {
     expect(r.text("#nodata")).toContain("do not send by default, token or not; telemetry: true or a telemetry options object opts them in");
     expect(r.text("#nodata")).not.toContain("never send anything");
     await r.close();
-    expect(setupOf()).toContain("telemetry: true or a telemetry options object opts them in");
     expect(setupOf()).not.toContain("never send anything");
   });
 });
@@ -329,26 +331,32 @@ const tokenOf = (html: string) => (name: string) => {
   return m[1]!;
 };
 
-describe("pages: one dark theme everywhere, genclass.dev's for /start and sign-in, Supabase Studio's for the dashboards", () => {
-  it("no page switches palette with the visitor's system theme: no prefers-color-scheme, color-scheme dark, one set of tokens", () => {
+/** A token's value in the light palette (the block after :root[data-theme="light"]). */
+const lightTokenOf = (html: string) => tokenOf(html.slice(html.indexOf(':root[data-theme="light"]{')));
+
+describe("pages: two themes, dark by default and light by choice or by the system (owner, 2026-11-05)", () => {
+  it("every page picks its theme before paint, carries both palettes, and has a theme button", () => {
     for (const [name, html] of everyPage()) {
-      expect(html, name).not.toContain("prefers-color-scheme");
+      // the head's first script sets data-theme (the saved choice, else the system's) before any CSS applies
+      expect(html, name).toContain(THEME_HEAD_JS);
+      expect(html.indexOf(THEME_HEAD_JS), name).toBeLessThan(html.indexOf("<style"));
+      // dark first (the default), then the light palette under data-theme
       expect(html, name).toContain("color-scheme:dark;");
-      expect(html, name).not.toMatch(/color-scheme:\s*light/);
-      // one set of tokens (no second set that could override them)
-      expect(html.match(/--paper:/g), name).toHaveLength(1);
+      expect(html, name).toContain("color-scheme:light;");
+      expect(html.indexOf("color-scheme:dark;"), name).toBeLessThan(html.indexOf(':root[data-theme="light"]{'));
       expect(html, name).not.toMatch(/Outfit|Figtree|Geist/);
-      // the mark and the name in type; the navy-on-white lockup images are gone
       expect(html, name).not.toContain("lockup-");
       if (STUDIO.includes(name)) {
-        // Studio's dark canvas, surface and text; Inter and Source Code Pro
-        expect(html, name).toContain('<meta name="theme-color" content="#121212">');
+        expect(html, name).toContain('<meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#fcfcfc" media="(prefers-color-scheme: light)">');
         expect(html, name).toContain("--paper:#121212;--panel:#1f1f1f;--ink:#fafafa;");
+        expect(html, name).toContain("--paper:#fcfcfc;--panel:#ffffff;--ink:#171717;");
         expect(html, name).toContain("https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Source+Code+Pro:wght@400;500&display=swap");
-        expect(html, name).toContain('<body class="sb">');
+        expect(html, name).toMatch(/<body class="sb"[ >]/);
+        expect(html, name).toContain("data-theme-toggle");
       } else {
-        expect(html, name).toContain('<meta name="theme-color" content="#000000">');
+        expect(html, name).toContain('<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">');
         expect(html, name).toContain("--paper:#000000;--panel:#0B0B0A;--ink:#F0F1E9;");
+        expect(html, name).toContain("--paper:#ffffff;--panel:#f7f7f5;--ink:#141412;");
         expect(html, name).toContain("https://api.fontshare.com/v2/css?f[]=satoshi@1&display=swap");
       }
     }
@@ -357,8 +365,12 @@ describe("pages: one dark theme everywhere, genclass.dev's for /start and sign-i
 
   it("contrast on both palettes: text at least 4.5:1 on paper, panel and code, inputs' borders and the focus ring at least 3:1", () => {
     const project = { name: "a", token: "gc_TestToken0123456789abc", created: "", lastEvent: null };
-    for (const [name, html] of [["site", startPage("n")], ["studio", dashboardPage("n", project)]] as const) {
-      const token = tokenOf(html);
+    for (const [name, html, token] of [
+      ["site", startPage("n"), tokenOf(startPage("n"))],
+      ["studio", dashboardPage("n", project), tokenOf(dashboardPage("n", project))],
+      ["site light", startPage("n"), lightTokenOf(startPage("n"))],
+      ["studio light", dashboardPage("n", project), lightTokenOf(dashboardPage("n", project))],
+    ] as const) {
       const [paper, panel, code] = [token("paper"), token("panel"), token("code")];
       for (const t of ["ink", "ink2", "ink3", "accent", "warn"]) {
         expect(contrast(token(t), paper), `${name} ${t}`).toBeGreaterThanOrEqual(4.5);
@@ -403,7 +415,7 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
       // site/src/css/base.css: bone text, the green (text, fills), the red-orange (fills; text), the raised black, the rules
       for (const t of ["--ink:#F0F1E9", "--accent-f:#2FD07F", "--accent:#2FD07F", "--warn-f:#FF5A36", "--warn:#FF6B4A", "--panel:#0B0B0A", "--rule:#30312B", "--rule2:#46463E"]) expect(html).toContain(t);
       expect(html).toContain(":focus-visible{outline:1px solid var(--accent);outline-offset:3px}");
-      expect(html).not.toContain("prefers-color-scheme");
+      expect(html).toContain(':root[data-theme="light"]{');
       // square corners, as on the site (status dots stay round)
       expect(html).not.toMatch(/border-radius:[1-9]\d*px/);
     }
@@ -439,8 +451,10 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
   });
 
   it("the main action of a page is the site's green button; the header ends in its green button", () => {
-    expect(startPage("n")).toContain('<button class="btn green xl" id="go" type="submit">Add to my app</button>');
-    expect(startPage("n")).toContain('<a class="btn" href="/start">Add to my app</a>');
+    expect(startPage("n")).toContain('<button class="btn green xl" id="go" type="submit">Create dashboard</button>');
+    // /start's own header has no button to itself; the other pages end in Get started
+    expect(startPage("n")).not.toContain('<a class="btn" href="/start">');
+    expect(notFoundPage("n")).toContain('<a class="btn" href="/start">Get started</a>');
     // sign-in: the email and password form's button is the green one, whatever is configured; a passkey is a small link
     const none = loginPage("n", { google: false, github: false, next: null });
     expect(none).toContain('<button class="btn prov green" type="submit"><span>Sign in</span></button>');
@@ -1468,8 +1482,8 @@ describe("/start/open-source: the open-source parts with no account, no token an
     await r.close();
   });
 
-  it("is linked from /start and from the sign-in and sign-up pages", () => {
-    expect(startPage("n")).toContain('<a href="/start/open-source">Use it with nothing sent to us</a>');
+  it("is linked from the sign-in and sign-up pages (/start keeps to one form)", () => {
+    expect(startPage("n")).not.toContain("/start/open-source");
     for (const html of [loginPage("n", { google: false, github: false, next: null }), signupPage("n", { google: false, github: false, next: "/account/new?name=shop" })])
       expect(html).toContain('<a href="/start/open-source">set it up without one</a>');
   });
