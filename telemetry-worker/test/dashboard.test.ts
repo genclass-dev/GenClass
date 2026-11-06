@@ -1026,7 +1026,7 @@ describe("/start: a name and a lock make the app; its setup page has the one com
     const page = await handle(get(`https://genclass.dev${to}`, res), env, opts);
     expect(page.status).toBe(200);
     const html = await page.text();
-    expect(html).toContain(`npx @genclass/runtime@beta init --token ${token}`);
+    expect(html).toContain(`npx @genclass/runtime@beta init --token ${token} --mode heal`);
     expect(html).toContain("Your app is ready");
     expect(html).toContain("Run this in your project's folder.");
     expect(html).toContain(`href="/dashboard/${secret}"`);
@@ -1047,7 +1047,7 @@ describe("/start: a name and a lock make the app; its setup page has the one com
 
   it("the agent links (owner, 2026-11-05): Codex's app, and Claude Code's desktop app then its terminal; a short prompt with --yes that they fill in and never run", () => {
     const token = "gc_TestToken0123456789abc";
-    expect(setupCommand(token)).toBe(`npx @genclass/runtime@beta init --token ${token}`);
+    expect(setupCommand(token)).toBe(`npx @genclass/runtime@beta init --token ${token} --mode heal`);
     const prompt = agentPrompt(token);
     expect(prompt).toContain(`${setupCommand(token)} --yes`);
     expect(prompt.length).toBeLessThan(400);
@@ -1069,7 +1069,7 @@ describe("/start: a name and a lock make the app; its setup page has the one com
     const j = (await res.json()) as Record<string, string>;
     const token = tokens(sql)[0]!.token as string;
     expect(j.token).toBe(token);
-    expect(j.command).toBe(`npx @genclass/runtime@beta init --token ${token}`);
+    expect(j.command).toBe(`npx @genclass/runtime@beta init --token ${token} --mode heal`);
     expect(j.url).toMatch(/^\/start\/[A-Za-z0-9]{32}$/);
     expect(j.copiedUrl).toBe(`${j.url}?copied=1`);
   });

@@ -670,7 +670,7 @@ describe("accounts: apps owned by an account", () => {
     const html = await own.text();
     expect(html).toContain("Connect to your project");
     expect(html).toContain("npx @genclass/runtime@beta login"); // latest on npm is 0.2.x until 0.3.0
-    expect(html).toContain(`GenClass.init({ token: &#34;${project.token}&#34; })`);
+    expect(html).toContain(`GenClass.init({ token: &#34;${project.token}&#34;, mode: &#34;heal&#34; })`);
     expect(html).toContain(`data-token=&#34;${project.token}&#34;`);
     // RUNTIME_ON_NPM unset: the runtime that reads keys is named first
     expect(html).toContain("Project keys need @genclass/runtime 0.3.0-beta.0, which is not published yet.");
@@ -2629,7 +2629,7 @@ describe("POST /start signed in: the one click puts the app in the account", () 
     const j = await handle(new Request(`${ORIGIN}/start`, { method: "POST", headers }), env, { now: () => clock });
     expect(j.status).toBe(201);
     const body = (await j.json()) as Record<string, string>;
-    expect(body.command).toBe(`npx @genclass/runtime@beta init --token ${body.token}`);
+    expect(body.command).toBe(`npx @genclass/runtime@beta init --token ${body.token} --mode heal`);
     expect(body.copiedUrl).toMatch(/^\/account\/apps\/[^/]+#connect$/);
     // no trustworthy Origin (CSRF check): nothing is made, the signed-in form asks
     const before = sql.rows("SELECT COUNT(*) AS n FROM projects")[0]!.n;
