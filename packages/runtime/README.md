@@ -604,17 +604,20 @@ value, or none, builds without GenClass. Like every `NEXT_PUBLIC_*` value, it is
 
 ## For AI coding agents installing GenClass
 
-1. Run `npx @genclass/runtime@beta init --dry-run` (it shows the diff and sends nothing). Tell the user that
+1. Run `npx @genclass/runtime@beta init --dry-run --mode heal` (it shows the diff and sends nothing). Tell the user that
    anonymous diagnostics are on by default on public hosts, and that applying `init` creates the app's dashboard at
    genclass.dev from `package.json`'s `name` unless they pass `--no-token`.
 2. Apply it with `--yes` only once they agree. Telemetry is the user's decision: add `--no-telemetry` or
    `telemetry: false` only if they ask.
-3. Keep the default observe mode. Use `--mode guard` only on request, and then keep payment and sign-in endpoints
-   observe-only: `requests: { protect: ["preset:payments", "preset:auth"] }` in `window.GENCLASS_CONFIG` (the
-   `genclass.config.ts` that `init` writes), or `protect: protectPreset("payments", "auth")` with `GenClass.init()`.
+3. Use `--mode heal`, the mode genclass.dev's docs and setup prompts recommend (the Modes table above still labels it
+   experimental): it reports, and fixes what the model is sure of (discards and
+   rollbacks can be undone; a breaker steps the mode down after repeated undos). Drop the flag only if the user asks
+   for observe, which only reports. In guard or heal keep payment and sign-in endpoints observe-only:
+   `requests: { protect: ["preset:payments", "preset:auth"] }` in `window.GENCLASS_CONFIG` (the `genclass.config.ts` that
+   `init` writes), or `protect: protectPreset("payments", "auth")` with `GenClass.init()`.
 4. `.genclass.local` holds the private dashboard link and is gitignored: never paste it into code, docs, commits or
    pull requests. The token (`gc_...`) is public and belongs in the code.
-5. Check: the console shows `[GenClass] Model ready (...). Mode: observe.`; undo with
+5. Check: the console shows `[GenClass] Model ready (...). Mode: heal.`; undo with
    `npx @genclass/runtime@beta remove`.
 
 To change GenClass itself, read [AGENTS.md](https://github.com/genclass-dev/GenClass/blob/main/AGENTS.md).
