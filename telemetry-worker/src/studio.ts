@@ -800,7 +800,9 @@ function header(o: StudioOptions): string {
   )}Take the tour</button><a href="https://genclass.dev/docs">${icon("book", 14)}Docs</a><a href="https://discord.gg/kN9kRnFtZm">${icon("message", 14)}Discord</a><a href="https://github.com/genclass-dev/GenClass/issues/new">${icon(
     "sparkles",
     14,
-  )}Send feedback</a><hr><a href="https://genclass.dev/privacy">${icon("shield", 14)}Privacy</a></div></div>`;
+  )}Send feedback</a><a href="https://github.com/genclass-dev/GenClass/issues/new?title=False%20detection%3A%20">${icon("alert", 14)}Report a false detection</a>${
+    o.org ? "" : `<a href="/start">${icon("plus", 14)}New dashboard</a>`
+  }<hr><a href="https://genclass.dev/privacy">${icon("shield", 14)}Privacy</a><a href="https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md">${icon("file", 14)}What is collected</a></div></div>`;
   const me = o.user
     ? `<div class="dd"><button class="sb-av" type="button" data-dd aria-haspopup="menu" aria-expanded="false" aria-label="Account">${esc((o.user.label.replace(/^@/, "").charAt(0) || "?").toUpperCase())}</button><div class="dd-m end" role="menu" hidden><div class="who">${esc(
         o.user.label,

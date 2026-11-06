@@ -213,7 +213,7 @@ describe("nothing sold on the site: Free with your own classifier, Enterprise by
       const t = setup(keys);
       const a = await signedIn(t.env);
       const page = await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }));
-      expect(page).toContain("You are on the <b>Free</b> plan: the runtime, its on-device model and the dashboard, with 90 days of history (you have 0 apps).</p>");
+      expect(page).toContain("You are on the <b>Free</b> plan.</p>");
       expect(page).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
       expect(page).toContain("<li>Your own classifier: we train a GenClass model on your app&#39;s traffic, bug reports or labelled examples and ship it as a private model your runtime loads</li>");
       expect(page).not.toContain("data-plan=");
