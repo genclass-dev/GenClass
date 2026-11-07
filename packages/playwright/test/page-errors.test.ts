@@ -87,11 +87,45 @@ describe("page errors: what the file keeps", () => {
 
   it("the evidence line says what the file keeps", () => {
     expect(pageErrorLine(pageErrorFacts(err())!)).toBe("TypeError: Cannot read properties of undefined (reading …) (causal chain: GET /api/search)");
-    expect(pageErrorLine({ name: "AbortError", shape: "", op: NO_REQUEST, sameOrigin: "unknown" })).toBe("AbortError (no message) (no request in its causal chain; origin unknown: no script URL in its stack)");
+    expect(pageErrorLine({ name: "AbortError", shape: "", op: NO_REQUEST, sameOrigin: "unknown" })).toBe("AbortError (no message) (no request in its causal chain; origin unknown: no script URL in its top stack frame)");
+    // JSON.parse on an error page: the app's script is further down, the top frame is native
+    const parse = pageErrorFacts(err({ name: "SyntaxError", message: "SyntaxError: Unexpected token '<'", stack: v8("JSON.parse (<anonymous>)") }))!;
+    expect(parse.sameOrigin).toBe("unknown");
+    expect(pageErrorLine(parse)).toBe("SyntaxError: Unexpected token … (causal chain: GET /api/search; origin unknown: no script URL in its top stack frame)");
+  });
+
+  it("no quoted value survives the shape: a contraction's apostrophe is no quote, and an unclosed quote takes the rest", () => {
+    // "Couldn't" would pair its apostrophe with the quote that opens the value
+    const profile = pageErrorFacts(err({ name: "Error", message: "Error: Couldn't load profile for 'jane.doe@example.com'" }))!;
+    expect(profile.shape).toBe("Couldn\u2019t load profile for …");
+    // the runtime cuts a message at 120 characters (`${name}: ${truncate(message, 120)}`), here inside the last value
+    const body = '{"code":401,"error":"invalid_grant","detail":"refresh token rt_9f8e7d6c5b4a expired for jane.doe@example.com (session s3cr3t)"}';
+    const cut = pageErrorFacts(err({ name: "Error", message: `Error: ${body.slice(0, 119)}…` }))!;
+    expect(cut.shape).toBe("{…:N,…:…,…:…");
+    for (const f of [profile, cut]) for (const secret of ["jane", "rt_9f8e", "s3cr3t", "example.com"]) expect(f.shape).not.toContain(secret);
+    // and so the file and the report never carry them
+    const file = buildRacesFile({ test: "t", seed: 1, mode: "observe", model: null, chaos: undefined, records: [], witnesses: [], errors: [err({ name: "Error", message: "Error: Couldn't load profile for 'jane.doe@example.com'", chain: ["GET /api/profile#1"] })] });
+    const md = summarize([{ name: "a.json", content: JSON.stringify(file) }]);
+    for (const text of [JSON.stringify(file), md]) expect(text).not.toContain("jane");
+    // messages without either keep their shape, which stays @genclass/mcp's
+    expect(pageErrorFacts(err({ message: "it's 'quoted' and \"double\"" }))!.shape).toBe("it\u2019s … and …");
+    expect(pageErrorFacts(err({ message: "Request failed with status code 500" }))!.shape).toBe(messageShape("Request failed with status code 500"));
   });
 });
 
 describe("page errors: signatures and the file", () => {
+  it("the browser's muted \"Script error.\" (a cross-origin script loaded without CORS) is left out and counted as third-party", () => {
+    // what the agent entry records for it: the runtime's "Error: Script error.", no stack, no request
+    const muted = { name: "Error", message: "Error: Script error.", chain: [], pageOrigin: ORIGIN };
+    expect(pageErrorFacts(muted)).toMatchObject({ name: "Error", sameOrigin: false });
+    expect(signaturesOf([], [], 1, { errors: [muted] })).toEqual([]);
+    const file = buildRacesFile({ test: "t", seed: 1, mode: "observe", model: null, chaos: undefined, records: [], witnesses: [], errors: [muted, err()], fixture: { ...fx } });
+    expect(file.signatures.map((x) => x.sig)).toEqual(["page-error|TypeError|GET /api/search"]);
+    expect(file.fixture?.thirdPartyErrors).toBe(1);
+    // the same words from the app's own code, with a stack, are the app's
+    expect(pageErrorFacts({ ...muted, stack: v8(`render (${ORIGIN}/app.js:1:2)`) })!.sameOrigin).toBe(true);
+  });
+
   it("one page-error signature per name and request, confidence 1; third-party errors left out and counted", () => {
     const errors = [err(), err({ message: "Cannot read properties of null (reading 'id')" }), err({ stack: v8("x (https://cdn.analytics.example/t.js:1:1)") }), err({ name: "SyntaxError", message: "Unexpected token '<'", chain: ["load"] })];
     const sigs = signaturesOf([], [], 2, { errors });
@@ -167,19 +201,25 @@ describe("report: page errors", () => {
     expect(Object.keys(buildSummary([{ name: "a.json", content: file("t", 1, [pageError(1)]) }]).totals.byCategory)).toEqual(["duplicate", "stale", "failing", "other", "page-error", "witness"]);
   });
 
-  it("the model's note: a page error does not say the model checked the run, and the note says what was flagged", () => {
+  it("the model's note counts only the model's detections: a page error or a witness does not say the model checked the run", () => {
     const loading = { model: { state: "loading" }, fixture: { ...fx, model: "load" as const } };
     const md = summarize([
       { name: "a.json", content: file("t", 1, [pageError(1)], loading) },
       { name: "b.json", content: file("t", 2, [witness(2)], loading) },
+      { name: "c.json", content: file("t", 3, [stale(3)], loading) },
     ]);
-    // the witness file is not counted (as before page errors existed); the page-error file is
-    expect(md).toContain("Note: in 1 of 2 files for this test nothing but page errors or measured checks was flagged and the model was not ready when the fixture collected (loading), so those runs may not have been checked.\n");
+    // the page-error and the witness files are counted; the file with a model detection is not
+    expect(md).toContain("Note: in 2 of 3 files for this test nothing but witnesses, page errors or measured checks was flagged and the model was not ready when the fixture collected (loading), so those runs may not have been checked.\n");
     expect(buildSummary([{ name: "a.json", content: file("t", 1, [pageError(1)], loading) }]).tests[0].modelNotReady).toEqual({ files: 1, states: ["loading"], others: 1 });
+    expect(buildSummary([{ name: "b.json", content: file("t", 2, [witness(2)], loading) }]).tests[0].modelNotReady).toEqual({ files: 1, states: ["loading"], others: 1 });
   });
 
-  it("the fixture's note: a page error comes from the agent entry, so it counts as checked there", () => {
+  it("the fixture's note counts only witnesses and page errors: a model detection does not say the agent entry recorded anything", () => {
     const s = buildSummary([{ name: "a.json", content: file("t", 1, [pageError(1)], { fixture: { ...fx, serviceWorker: true } }) }]);
     expect(s.tests[0].unchecked).toEqual({ files: 0, reasons: [] });
+    const broken = { model: { state: "ready" }, fixture: { ...fx, model: "load" as const, agent: "the agent entry failed to load" } };
+    const md = summarize([{ name: "a.json", content: file("t", 1, [stale(1)], broken) }]);
+    expect(md).toContain("Note: in 1 of 1 file for this test nothing but the model's detections or measured checks was flagged and the fixture could not check the page (witnesses not recorded: the agent entry failed to load), so those runs may not have been checked.\n");
+    expect(buildSummary([{ name: "a.json", content: file("t", 1, [witness(1)], broken) }]).tests[0].unchecked).toEqual({ files: 0, reasons: [] });
   });
 });

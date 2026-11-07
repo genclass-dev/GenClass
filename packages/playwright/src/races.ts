@@ -15,10 +15,12 @@
 //     (never the runtime's trigger "error", which the model's detections use), diagnosis the error's name, op the
 //     signature of the request nearest to the error in its causal chain ("no request" without one), confidence 1 (a
 //     fact). Of each error the file keeps its name, its message's shape (quoted values and numbers replaced, as
-//     @genclass/mcp's shape() does), that request and whether it came from the page's own origin; nothing else of
-//     its message, its stack or its chain. An error whose top stack frame is on another origin (a third-party
-//     script, an extension) is left out and counted in `fixture.thirdPartyErrors`; one without a stack frame naming
-//     a script is kept (origin unknown).
+//     @genclass/mcp's shape() does, and more: a contraction's apostrophe is not taken for a quote, and what follows a
+//     quote that is never closed, as where the runtime cut a long message, goes too), that request and whether it came
+//     from the page's own origin; nothing else of its message, its stack or its chain. An error whose top stack frame
+//     is on another origin (a third-party script, an extension) is left out and counted in `fixture.thirdPartyErrors`,
+//     and so is the browser's muted "Script error." (what a cross-origin script loaded without CORS reports: no
+//     stack, no message); one whose top stack frame names no script is kept (origin unknown).
 //   - with the fixture's `visual: true`, the runtime's measured visual checks: trigger "check", diagnosis the check
 //     kind, op the normalised route, confidence 1 (a measurement against a fixed threshold, not a probability), and an
 //     evidence line from the kind, the element's selector and the measured numbers only (never the element's text or
@@ -70,11 +72,14 @@ export interface PageErrorRecord {
 export interface PageErrorFacts {
   /** The error's name ("TypeError"), at most 80 characters. */
   name: string;
-  /** Its message's shape (messageShape): quoted values as "…", numbers as "N". */
+  /** Its message's shape (messageShape, then pageErrorFacts' own masking): quoted values as "…", numbers as "N". */
   shape: string;
   /** The signature of the request nearest to the error in its causal chain ("GET /api/search"), or "no request". */
   op: string;
-  /** The top frame of its stack is on the page's origin; "unknown" when no frame names a script (or there is no stack). */
+  /**
+   * The top frame of its stack is on the page's origin; false for another origin and for the browser's muted "Script
+   * error."; "unknown" when there is no stack or its top frame names no script.
+   */
   sameOrigin: boolean | "unknown";
 }
 
@@ -201,9 +206,16 @@ export function sameOriginOf(stack: unknown, pageOrigin: unknown): boolean | "un
   return !origin || origin === "null" ? "unknown" : origin === pageOrigin;
 }
 
+/** What a browser reports for an error in a cross-origin script loaded without CORS: no stack, this message only. */
+const MUTED = "Script error.";
+
 /**
  * What the file keeps of a page error the page handed over (null when it is not one). The runtime records an error's
- * message as "<name>: <message>" (src/runtime.ts reportError): the name is taken off, so the line names it once.
+ * message as "<name>: <message>" (src/runtime.ts reportError): the name is taken off, so the line names it once. The
+ * shape is messageShape()'s (as @genclass/mcp's shape()), with two more maskings so no value is left in it: an
+ * apostrophe between two letters ("Couldn't") is no quote, so it cannot pair with the quote that opens a value, and
+ * from a quote that is never closed (the runtime cuts a message at 120 characters, inside a value as often as not) to
+ * the end everything goes.
  */
 export function pageErrorFacts(x: unknown): PageErrorFacts | null {
   if (!x || typeof x !== "object") return null;
@@ -212,14 +224,17 @@ export function pageErrorFacts(x: unknown): PageErrorFacts | null {
   let message = printable(typeof e.message === "string" ? e.message : String(e.message ?? ""));
   if (message === name || message === `${name}:`) message = "";
   else if (message.startsWith(`${name}: `)) message = message.slice(name.length + 2);
-  return { name, shape: messageShape(message), op: requestOf(e.chain), sameOrigin: sameOriginOf(e.stack, e.pageOrigin) };
+  const shape = messageShape(message.replace(/(?<=\p{L})'(?=\p{L})/gu, "\u2019")).replace(/["'].*$/, "…");
+  // the muted error of a cross-origin script loaded without CORS: another origin's, whatever the page
+  const muted = !e.stack && message === MUTED;
+  return { name, shape, op: requestOf(e.chain), sameOrigin: muted ? false : sameOriginOf(e.stack, e.pageOrigin) };
 }
 
 /** The evidence line of a page error, from what the file keeps of it. */
 export function pageErrorLine(f: PageErrorFacts): string {
   const what = f.shape ? `${f.name}: ${f.shape}` : `${f.name} (no message)`;
   const chain = f.op === NO_REQUEST ? "no request in its causal chain" : `causal chain: ${f.op}`;
-  const origin = f.sameOrigin === "unknown" ? "; origin unknown: no script URL in its stack" : "";
+  const origin = f.sameOrigin === "unknown" ? "; origin unknown: no script URL in its top stack frame" : "";
   return `${what} (${chain}${origin})`;
 }
 
@@ -253,10 +268,65 @@ export function checkSignature(x: unknown, seed: number): RaceSignature | null {
 export const MAX_FILE_BURSTS = 200;
 export const MAX_BURST_KEYS = 100;
 
-/** The reverse order's bursts as a file carries them: capped, with what was left out counted. */
+// the path segments @genclass/runtime takes for ids (packages/runtime/src/util.ts isIdSegment), copied so this package
+// imports nothing of it; test/systematic.test.ts checks that the two agree
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const LONG_HEX = /^(?=[0-9a-f]*\d)[0-9a-f]{8,}$/i;
+const LONG_TOKEN = /^(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{16,}$/;
+
+function slugId(seg: string): boolean {
+  if (seg.length < 4 || !/^[A-Za-z0-9_-]+$/.test(seg) || !/\d/.test(seg) || !/[A-Za-z]/.test(seg)) return false;
+  if (/^v\d+([a-z]+\d*)?$/i.test(seg)) return false;
+  for (const part of seg.split(/[-_]/)) {
+    if (!part || !/\d/.test(part) || !/[A-Za-z]/.test(part)) continue;
+    if (/^\d/.test(part)) return true;
+    if ((part.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g) ?? []).length >= 2) return true;
+  }
+  return seg.length >= 6 && /[a-z]/.test(seg) && /[A-Z]/.test(seg) && /\d/.test(seg);
+}
+
+/** A path whose segments that look like ids (numbers, uuids, long hex, tokens, slug ids) are ":id", as the runtime's. */
+export function idlessPath(path: string): string {
+  return path
+    .split("/")
+    .map((s) => {
+      let d = s;
+      try {
+        d = decodeURIComponent(s);
+      } catch {
+        /* keep it raw */
+      }
+      return d && (/^\d+$/.test(d) || UUID.test(d) || LONG_HEX.test(d) || LONG_TOKEN.test(d) || slugId(d)) ? ":id" : s;
+    })
+    .join("/");
+}
+
+/**
+ * The reverse order's bursts as a file carries them: capped, with what was left out counted. The fixture keys a
+ * request by its raw path ("GET /api/reset/9f8e7d6c5b4a#1"); the file names it as the runtime's operation names do,
+ * with ids as ":id", numbered by that signature in the order the requests were sent ("GET /api/reset/:id#1"), so no
+ * token, id or code in a path reaches the file.
+ */
 export function fileBursts(bursts: readonly { keys: readonly string[]; released: readonly string[] }[]): { bursts: RaceBurst[]; burstsLeftOut?: number } {
+  const named = new Map<string, string>();
+  const counts = new Map<string, number>();
+  const nameOf = (raw: string): string => {
+    const k = String(raw);
+    let out = named.get(k);
+    if (out === undefined) {
+      const m = /^(\S+) (.*)#\d+$/.exec(k);
+      const sig = m ? `${m[1]} ${idlessPath(m[2])}` : idlessPath(k.replace(/#\d+$/, ""));
+      const n = (counts.get(sig) ?? 0) + 1;
+      counts.set(sig, n);
+      out = `${sig}#${n}`.slice(0, 300);
+      named.set(k, out);
+    }
+    return out;
+  };
+  // numbered in the order the page sent them: a burst's keys are in that order, and bursts follow each other
+  for (const b of bursts) for (const k of b.keys) nameOf(k);
   const list = bursts.slice(0, MAX_FILE_BURSTS).map((b) => {
-    const out: RaceBurst = { keys: b.keys.slice(0, MAX_BURST_KEYS).map((k) => String(k).slice(0, 300)), released: b.released.slice(0, MAX_BURST_KEYS).map((k) => String(k).slice(0, 300)) };
+    const out: RaceBurst = { keys: b.keys.slice(0, MAX_BURST_KEYS).map(nameOf), released: b.released.slice(0, MAX_BURST_KEYS).map(nameOf) };
     const more = Math.max(b.keys.length, b.released.length) - MAX_BURST_KEYS;
     if (more > 0) out.more = more;
     return out;
