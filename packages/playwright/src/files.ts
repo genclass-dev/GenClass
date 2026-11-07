@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { summarize, type SummarizeOptions } from "./summarize.js";
+import { buildSummary, renderMarkdown, type RaceSummary, type SummarizeOptions } from "./summarize.js";
 import type { RacesFileInput } from "./types.js";
 
 /** Where the fixture writes, relative to the Playwright config's directory. */
@@ -67,15 +67,31 @@ export interface WriteReportOptions extends SummarizeOptions {
   outputFile: string | null;
 }
 
+/** What writeReport returns. */
+export interface WrittenReport {
+  /** The report. */
+  markdown: string;
+  /** Where it was written (null: not written). */
+  path: string | null;
+  /** Files read, valid or not. */
+  files: number;
+  /** The report as data (what `--comment` decides on). */
+  summary: RaceSummary;
+  /** The summariser's options it was rendered with (sources filled in). */
+  options: SummarizeOptions;
+}
+
 /** Reads the files, renders the markdown and writes it (creating the directory). Returns the markdown and where it went. */
-export function writeReport(o: WriteReportOptions): { markdown: string; path: string | null; files: number } {
+export function writeReport(o: WriteReportOptions): WrittenReport {
   const { files, searched } = readRacesDirs(o.dirs, o.base);
-  const markdown = summarize(files, { ...o, sources: o.sources ?? searched });
+  const options: SummarizeOptions = { ...o, sources: o.sources ?? searched };
+  const summary = buildSummary(files, options);
+  const markdown = renderMarkdown(summary, options);
   let path: string | null = null;
   if (o.outputFile !== null) {
     path = resolve(o.base, o.outputFile);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, markdown);
   }
-  return { markdown, path, files: files.length };
+  return { markdown, path, files: files.length, summary, options };
 }

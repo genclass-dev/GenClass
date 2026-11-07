@@ -29,7 +29,7 @@ describe("package: dependencies and imports", () => {
   it("imports only its own modules and Node built-ins (the pure entries not even those); only the fixture imports Playwright", () => {
     for (const f of ["index.ts", "summarize.ts", "schema.ts", "types.ts", "chaos.ts", "page.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^\.\/[a-z]+\.js$/);
     expect(imports(src("page.ts"))).toEqual([]);
-    for (const f of ["reporter.ts", "files.ts", "cli.ts", "install.ts", "races.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z]+)$/);
+    for (const f of ["reporter.ts", "files.ts", "cli.ts", "comment.ts", "install.ts", "races.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z]+)$/);
     for (const i of imports(src("fixture.ts"))) expect(i, `fixture.ts: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z]+|@playwright\/test)$/);
     // the runtime is never imported: the fixture reads its dist/ from disk and the page loads it from there
     for (const f of ["fixture.ts", "install.ts", "page.ts", "races.ts", "chaos.ts"]) expect(src(f)).not.toMatch(/from "@genclass\/runtime/);
@@ -139,6 +139,20 @@ describe("README", () => {
       ...readdirSync(join(pkgDir, "src")).map((f): [string, string] => [`src/${f}`, src(f)]),
     ];
     for (const [name, text] of texts) expect(text, name).not.toMatch(/npx\s+(?:-y\s+|--yes\s+)?genclass-playwright-report/);
-    expect(readme).toContain("npx -p @genclass/playwright genclass-playwright-report --max-chars 300000");
+    expect(readme).toContain("run: npx -p @genclass/playwright genclass-playwright-report --comment\n");
+  });
+
+  it("the pull-request step is --comment, and the README says the permission it needs and that forks are skipped", () => {
+    const section = readme.slice(readme.indexOf("## Post it on the pull request"), readme.indexOf("## What to expect from the model"));
+    const prose = section.replace(/\s+/g, " ");
+    expect(section).toContain("run: npx -p @genclass/playwright genclass-playwright-report --comment\n");
+    expect(prose).toContain("The job needs `pull-requests: write`");
+    expect(prose).toMatch(/On a pull request from a fork [^.]*read-only, so the comment is skipped there/);
+    expect(prose).toContain("A comment written by a person is never edited, even one that starts with the marker.");
+    // no third-party action and no hand-written API calls left to copy
+    expect(readme).not.toContain("sticky-pull-request-comment");
+    expect(readme).not.toContain("gh api");
+    // the agent prompt's install line names the runtime's beta line
+    expect(section).toContain("npm install -D @genclass/playwright @genclass/runtime@beta");
   });
 });
