@@ -12,7 +12,8 @@
 // The net log: each request's timing (sent, ready, delivered, held, forced, passed, the request whose chain sent it,
 // how it ended without a delivery), by key, kept outside the step window (at most MAX_NET per page load, the rest
 // counted in `netLost`) and sent as it changes, so the bridge's overlap, coverage and inversions never depend on
-// which steps the window still holds.
+// which steps the window still holds. Send and ready times keep their fractions (to the microsecond): they are what
+// the schedule compared, so the bridge's overlap is the page's exactly.
 
 import type { Clock } from "../types.js";
 import type { OpRec } from "../trace/ops.js";
@@ -138,17 +139,18 @@ export interface ErrorRec {
 }
 
 /**
- * One request's timing in this page load (the net log), in ms since the recording started, rounded like steps. The
- * overlap the bridge computes from it: a overlaps b (a started first, by `n`) iff b's `s` is before a's `r`.
+ * One request's timing in this page load (the net log), in ms since the recording started: `s` and `r` to the
+ * microsecond (the times the schedule compared), `d` and `held` rounded like steps. The overlap the bridge computes
+ * from it, the page's own: a overlaps b (a started first, by `n`) iff b's `s` is before a's `r`.
  */
 export interface NetEntry {
   /** The request's key ("GET /api/search#3"), at most 300 characters. */
   key: string;
   /** Start index: the request's position among this page load's requests, in start order (0-based). */
   n: number;
-  /** When it was sent (0 for a request sent before the recording started). */
+  /** When it was sent, to the microsecond (0 for a request sent before the recording started). */
   s: number;
-  /** When its response was ready: its arrival at the delivery gate plus its emulated delay. */
+  /** When its response was ready, to the microsecond: its arrival at the delivery gate plus its emulated delay. */
   r?: number;
   /** When the app received the response. */
   d?: number;
@@ -230,6 +232,11 @@ export class Recorder {
     return Math.round(t - this.t0);
   }
 
+  /** ms since the recording started, to the microsecond (the net log's send and ready times). */
+  private fine(t: number): number {
+    return Math.round((t - this.t0) * 1000) / 1000;
+  }
+
   private push(s: Step): void {
     this.pushed++;
     this.steps.push(s);
@@ -303,7 +310,7 @@ export class Recorder {
       return;
     }
     // a request sent before connectAgent ran: 0 (it was sent before any response the schedule could hold was ready)
-    const e: NetEntry = { key: key.slice(0, MAX_KEY), n: slot.n, s: Math.max(0, s.t) };
+    const e: NetEntry = { key: key.slice(0, MAX_KEY), n: slot.n, s: Math.max(0, this.fine(op.start)) };
     const via = this.slotOf(op.cause)?.key;
     if (via) e.via = via.slice(0, MAX_KEY);
     this.net.set(key, e);
@@ -322,7 +329,7 @@ export class Recorder {
     const e = this.net.get(d.key);
     if (!e) return;
     e.d = s.t;
-    if (s.ready !== undefined) e.r = s.ready;
+    if (d.ready !== undefined) e.r = this.fine(d.ready);
     if (s.held !== undefined) e.held = s.held;
     if (s.forced) e.forced = true;
     if (s.pass) e.pass = true;

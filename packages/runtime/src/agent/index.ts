@@ -21,12 +21,13 @@
 // Invariants: it runs only on the developer's own machine (localhost, *.localhost, 127.x, ::1) unless asked
 // (`anyHost`), talks only to a loopback URL, adds nothing to the first-load bundle (apps import it from a dev-only
 // branch), and holds responses only with a schedule; without one, only a page load's first responses wait for the
-// bridge's hello (at most `helloTimeoutMs`), and `hold: false` turns every hold off. Protected requests and routes in
-// mode "off" are never held (`holdProtected` opts in). Every response is delivered, unchanged. While connected it wraps
-// the runtime's delivery gate (RuntimeImpl.runDelivery), the request ignore list (its own requests are never
-// observed) and the page's setTimeout/clearTimeout (to see pending debounces); disconnect() restores all three and
-// delivers anything held. Nothing it records feeds the model, a situation, the gate or the event log. Time comes from
-// the runtime's injected clock. It never throws into the page.
+// bridge's hello (at most `helloTimeoutMs`), and `hold: false` turns every hold off. Protected requests are never held
+// (`holdProtected` opts in); a route in mode "off" never reaches the delivery gate, so nothing there is held either.
+// Every response is delivered, unchanged. While connected it wraps the runtime's delivery gate
+// (RuntimeImpl.runDelivery), the request ignore list (its own requests are never observed) and the page's
+// setTimeout/clearTimeout (to see pending debounces); disconnect() restores all three and delivers anything held.
+// Nothing it records feeds the model, a situation, the gate or the event log. Time comes from the runtime's injected
+// clock. It never throws into the page.
 
 import type { RtEvent, Runtime } from "../types.js";
 import type { RuntimeImpl } from "../runtime.js";
@@ -62,8 +63,10 @@ export interface AgentOptions {
   /** false: never hold a response, even with a schedule (record and stream only). Default true. */
   hold?: boolean;
   /**
-   * Also hold responses of protected requests (`requests.protect`, presets) and of routes whose mode is "off". Default
-   * false: those are recorded but always delivered at once, as the runtime itself never holds them.
+   * Also hold responses of protected requests (`requests.protect`, the presets: sign-in, payments). Default false:
+   * those are recorded but always delivered at once, as the runtime itself never holds them. A route whose mode is
+   * "off" is not gated at all, so nothing there can be held (its responses are recorded as passed): to explore it,
+   * give that route another mode in the development build.
    */
   holdProtected?: boolean;
 }
@@ -621,7 +624,8 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
         landed();
       });
     };
-    // protected requests and routes in mode "off" are never held by the runtime; the schedule leaves them alone too
+    // protected requests are never held by the runtime; the schedule leaves them alone too (a route in mode "off" is
+    // not gated, so its responses never get here: they are recorded as passed when they end)
     if (!holdProtected && (o.op.scope?.protected || o.op.scope?.mode === "off")) sched.pass(o.op, deliver);
     else sched.gate(o.op, deliver);
     unsettle();
@@ -707,7 +711,13 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
         // neither counts this load as that schedule nor gives the slot back to it
         if (!spec && r?.schedule !== undefined && r.schedule !== null) {
           const what = typeof r.schedule === "object" ? (r.schedule as { order?: unknown }).order : r.schedule;
-          link.send({ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: String(what).slice(0, 20) });
+          let rejected = "?";
+          try {
+            rejected = String(what).slice(0, 20);
+          } catch {
+            /* an exotic value: the bridge still hears that the page runs natural */
+          }
+          link.send({ t: "schedule", spec: { order: "natural" }, fallback: true, rejected });
         }
       }
       if (!r) return;

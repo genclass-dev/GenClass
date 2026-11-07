@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createRuntime } from "../src/index.js";
 import { MAX_BODY, MAX_ENTRIES } from "../src/observe/cache.js";
 import { rebuildRequest } from "../src/observe/fetch.js";
-import { FakeClock, ManualDecider, ScriptedDecider, defaultScript, setup } from "./helpers.js";
+import { FakeClock, ManualDecider, ScriptedDecider, defaultScript, setup, type Route, type Setup } from "./helpers.js";
 
 describe("fetch observer", () => {
   it("plain traffic makes no model call (triage neutrality)", async () => {
@@ -466,5 +466,76 @@ describe("fetch observer: a held delivery honours the app's abort (CONTRACT §6,
     ac.abort();
     await s.clock.flush();
     expect(got?.status).toBe(200);
+  });
+});
+
+describe("fetch observer: a failure held at the failure gate honours the app's abort (CONTRACT §6, §16)", () => {
+  /** Heal, every trigger asked: the first fetch of `n` answers 200 (it fills the cache), later ones `fail`. */
+  function healServer(fail: Route, warm = false) {
+    const manual = new ManualDecider();
+    const s = setup({ decider: manual, triage: "always", mode: "heal" });
+    s.server.on("GET", "/api/x", ({ n }) => (warm && n === 1 ? { status: 200, body: { v: 1 }, latency: 20 } : fail));
+    return { s, manual };
+  }
+  /** The app's fetch with its own signal; its request is sent and its failure waits for the decision. */
+  async function heldFailure(s: Setup, manual: ManualDecider) {
+    const ac = new AbortController();
+    const out: { got?: Response; err?: unknown } = {};
+    void s.fetch("/api/x", { signal: ac.signal }).then(
+      (r) => (out.got = r),
+      (e) => (out.err = e),
+    );
+    await s.clock.advance(10);
+    expect(manual.pending.map((p) => p.req.trigger)).toEqual(["request"]);
+    manual.answer(defaultScript()); // send
+    await s.clock.advance(100);
+    expect(manual.pending.map((p) => p.req.trigger)).toEqual(["failure"]); // the failure is held
+    return { ac, out };
+  }
+
+  for (const [what, fail] of [
+    ["a 503", { status: 503, body: { e: 1 }, latency: 50 }],
+    ["a network error", { error: "network" as const, latency: 50 }],
+  ] as const) {
+    it(`heal: ${what} held for the decision that the app aborted meanwhile rejects with the abort at the release`, async () => {
+      const { s, manual } = healServer(fail);
+      const { ac, out } = await heldFailure(s, manual);
+      ac.abort();
+      await s.clock.flush();
+      expect(out).toEqual({}); // at the release, not at the abort
+      manual.answer(defaultScript()); // deliver: the app aborted meanwhile
+      await s.clock.flush();
+      expect(out.got).toBeUndefined();
+      expect(out.err).toBe(ac.signal.reason);
+      expect((out.err as Error).name).toBe("AbortError");
+    });
+  }
+
+  it("heal: a held failure the app did not abort is delivered after the decision, as before", async () => {
+    const { s, manual } = healServer({ status: 503, body: { e: 1 }, latency: 50 });
+    const { out } = await heldFailure(s, manual);
+    manual.answer(defaultScript());
+    await s.clock.flush();
+    expect(out.got?.status).toBe(503);
+  });
+
+  it("heal: the cached response a decision puts in place of a held failure the app aborted is not delivered either", async () => {
+    const { s, manual } = healServer({ status: 503, body: { e: 1 }, latency: 50 }, true);
+    // a first GET answers 200 and fills the cache (its decisions: deliver)
+    let first: Response | undefined;
+    void s.fetch("/api/x").then((r) => (first = r));
+    for (let i = 0; i < 8 && !first; i++) {
+      await s.clock.advance(50);
+      while (manual.pending.length) manual.answer(defaultScript());
+    }
+    await s.clock.advance(3000);
+    while (manual.pending.length) manual.answer(defaultScript());
+    expect(first?.status).toBe(200);
+    const { ac, out } = await heldFailure(s, manual);
+    ac.abort();
+    manual.answer(defaultScript({ failure: { diagnosis: "transient", action: "serve_cached" } }));
+    await s.clock.flush();
+    expect(out.got).toBeUndefined();
+    expect(out.err).toBe(ac.signal.reason);
   });
 });
