@@ -33,6 +33,9 @@ import type { NetEntry, Run } from "./types.js";
 /** Keys permuted per group of overlapping responses: the rest keep their start-order places. */
 export const MAX_PERMUTED = 16;
 
+/** The most reordered loads one explore session arms (genclass_explore `runs`): a systematic one has runs - 1 cover slots. */
+export const MAX_EXPLORE_RUNS = 50;
+
 /** The search's steps for n elements, shared by all its tries: n^6 / 120, at most 40,000. */
 const searchSteps = (n: number): number => Math.min(Math.floor((n * n * n * n * n * n) / 120), 40_000);
 

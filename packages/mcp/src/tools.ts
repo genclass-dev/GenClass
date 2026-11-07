@@ -8,6 +8,7 @@ import { join } from "node:path";
 import type { Api } from "./api.js";
 import { CLIENTS, clientFor, pinned, pinnedRuntime } from "./clients.js";
 import { nameDifference, shownField, strongestFirst, type GroupReport, type RunDiff } from "./compare.js";
+import { MAX_EXPLORE_RUNS } from "./cover.js";
 import { VERSION } from "./http.js";
 import { dashboardTarget, fetchProduction, type ProdStats } from "./production.js";
 import { runScan, type Runner, type ScanReport } from "./scan.js";
@@ -221,8 +222,12 @@ function minimizeLines(m: MinimizeResult): string[] {
   return out;
 }
 
-/** The coverage line of a group, and the pairs it did not deliver both ways (with why, and what to run). */
-function coverageLines(g: GroupReport, systematic: boolean): string[] {
+/**
+ * The coverage line of a group, the pairs it did not deliver both ways (with why, and what to run), and, when orderings
+ * of overlapping triples are missing, the runs that deliver every one (from the baselines' cover) or why none does.
+ * `coverSlots`: the cover slots of the session when it ran plan "systematic".
+ */
+function coverageLines(g: GroupReport, systematic: boolean, coverSlots = 0): string[] {
   const c = g.coverage;
   if (c === undefined) return [];
   if (c === null) return ["Coverage: coverage needs @genclass/runtime with the net timing log (this page's runtime does not send it)."];
@@ -233,6 +238,14 @@ function coverageLines(g: GroupReport, systematic: boolean): string[] {
     const why = (p: (typeof c.neverInverted)[number]) => (p.why === "did-not-overlap" ? `did not overlap when reordered${p.via ? ` (sent by ${q(p.via, 80)}'s handler)` : ""}` : "not tried the other way");
     const tryMore = c.neverInverted.slice(0, 3).some((p) => p.why === "not-tried");
     out.push(`Never delivered the other way ${PAGE_DATA}: ${c.neverInverted.slice(0, 3).map((p) => `${q(p.a, 80)} and ${q(p.b, 80)} (${why(p)})`).join("; ")}${c.pairs - c.bothWays > 3 ? `, and ${c.pairs - c.bothWays - 3} more` : ""}.${tryMore ? (systematic ? " More runs try more of them: genclass_explore {action:\"start\", plan:\"systematic\"} with a larger `runs`." : " To try them: genclass_explore {action:\"start\", plan:\"systematic\"}, or more runs.") : ""}`);
+  }
+  const t = c.completeAt;
+  if (t && c.orderingsSeen < c.orderings) {
+    const kept = t.kept ? ` The ${t.kept} request(s) past the first 16 of a group of overlapping responses keep their request-order places in every cover row, so the triples with them never get every ordering.` : "";
+    const among = t.kept ? " among the first 16 of each group" : "";
+    if (t.runs === null) out.push(`Every ordering of the overlapping triples${among} takes more cover rows than one session arms (runs ${MAX_EXPLORE_RUNS}).${kept}`);
+    else if (systematic && coverSlots >= t.runs - 1) out.push(`This session armed the ${t.runs - 1} cover rows every ordering of the overlapping triples${among} takes, and the orderings still missing were not delivered: a pair stopped overlapping when reordered, a hold ran out, or a cover slot ran a seeded order in its place (it loaded before the baselines settled, or its page cannot run ranked).${kept}`);
+    else out.push(`Every ordering of the overlapping triples${among} takes plan "systematic" with runs ${t.runs} (${t.runs - 1} cover rows from these baselines): genclass_explore {action:"start", plan:"systematic", runs:${t.runs}}.${kept}`);
   }
   return out;
 }
@@ -370,7 +383,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
       if (action === "report") {
         type Diff = RunDiff;
         const r = (await ctx.api("explore.report", { id: args.id })) as null | {
-          session: { id: string; plan: ScheduleSpec[]; runs: string[]; state: string; strategy?: string };
+          session: { id: string; plan: ScheduleSpec[]; runs: string[]; state: string; strategy?: string; coverSlots?: number };
           runs: { id: string; route: string; schedule: ScheduleSpec | null; settled: boolean; forced: number; scenario: string }[];
           groups: GroupReport[];
           findings: { id: string }[];
@@ -432,7 +445,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
           }
           if (!seeded) {
             out.push(seededRuns ? "No verdict: 0 reordered runs were compared in this group (the reordered loads recorded other user actions: see the other groups)." : "No verdict: 0 reordered runs were compared (none has reached a quiet point after its steps yet: run the scenario for the remaining armed loads).");
-            out.push(...coverageLines(g, s.strategy === "systematic"));
+            out.push(...coverageLines(g, s.strategy === "systematic", s.coverSlots));
             continue;
           }
           // tier: what the page showed or sent (a race), store values only, or an overwrite repaired along the way
@@ -461,7 +474,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
             out.push(`Along the way only (not a race by this check): ${along.length} of ${seeded} ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).`);
             for (const d of along.slice(0, 3)) diffLines(d);
           }
-          out.push(...coverageLines(g, s.strategy === "systematic"));
+          out.push(...coverageLines(g, s.strategy === "systematic", s.coverSlots));
         }
         if (r.findings.length) out.push("", `Race finding(s): ${r.findings.map((f) => f.id).join(", ")}. Next: genclass_explain {id} for the replay and a regression test. If the user asked for a fix: fix it, then genclass_replay to verify.`);
         return { text: out.join("\n") };
