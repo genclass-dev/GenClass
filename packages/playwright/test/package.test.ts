@@ -1,9 +1,9 @@
 // Package invariants: no runtime dependencies (the fixture's needs, @playwright/test and @genclass/runtime, are
 // optional peer dependencies), nothing but the fixture imports Playwright, the pure entries use no Node APIs, the
 // page script imports nothing at all, the exports map names what tsup builds, the README shows the fixture's exact
-// report.
+// report, the report's footer links to a heading of the README, and no text prints the command without its package.
 
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -29,7 +29,7 @@ describe("package: dependencies and imports", () => {
   it("imports only its own modules and Node built-ins (the pure entries not even those); only the fixture imports Playwright", () => {
     for (const f of ["index.ts", "summarize.ts", "schema.ts", "types.ts", "chaos.ts", "page.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^\.\/[a-z]+\.js$/);
     expect(imports(src("page.ts"))).toEqual([]);
-    for (const f of ["reporter.ts", "files.ts", "cli.ts", "install.ts", "races.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z]+)$/);
+    for (const f of ["reporter.ts", "files.ts", "cli.ts", "comment.ts", "install.ts", "races.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z]+)$/);
     for (const i of imports(src("fixture.ts"))) expect(i, `fixture.ts: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z]+|@playwright\/test)$/);
     // the runtime is never imported: the fixture reads its dist/ from disk and the page loads it from there
     for (const f of ["fixture.ts", "install.ts", "page.ts", "races.ts", "chaos.ts"]) expect(src(f)).not.toMatch(/from "@genclass\/runtime/);
@@ -101,9 +101,58 @@ describe("package: how Playwright finds the reporter and the fixture", () => {
   });
 });
 
+/** The README's headings outside fenced code (the example reports hold headings of their own). */
+function headings(markdown: string): string[] {
+  const out: string[] = [];
+  let fenced = false;
+  for (const line of markdown.split("\n")) {
+    if (line.startsWith("```")) fenced = !fenced;
+    else if (!fenced && /^#{1,6} /.test(line)) out.push(line.replace(/^#{1,6} /, ""));
+  }
+  return out;
+}
+
+/** GitHub's anchor for a plain-text heading (github-slugger): lower case, punctuation left out, spaces to "-". */
+function anchor(heading: string): string {
+  return heading.trim().toLowerCase().replace(/[^\p{L}\p{M}\p{N} _-]/gu, "").replace(/ /g, "-");
+}
+
 describe("README", () => {
+  const readme = readFileSync(join(pkgDir, "README.md"), "utf8");
+
   it("shows the exact report of the unit-test fixture", () => {
-    const readme = readFileSync(join(pkgDir, "README.md"), "utf8");
     expect(readme).toContain("```markdown\n" + FIXTURE_REPORT + "```\n");
+  });
+
+  it("the report's footer links to one heading of this README, on the package's homepage", () => {
+    const link = /\]\((https:\/\/[^)\s]+)\)/.exec(summarizeEntry.REPORT_FOOTER)?.[1] ?? "";
+    const [page, hash] = link.split("#");
+    expect(page).toBe(String(pkg.homepage).replace(/#readme$/, ""));
+    expect(hash).toBe(anchor("What to expect from the model"));
+    expect(headings(readme).map(anchor).filter((a) => a === hash)).toHaveLength(1);
+  });
+
+  it("prints the command with its package (npx -p @genclass/playwright), never as a bare name npx would look up on npm", () => {
+    const texts: [string, string][] = [
+      ["README.md", readme],
+      ["CHANGELOG.md", readFileSync(join(pkgDir, "CHANGELOG.md"), "utf8")],
+      ...readdirSync(join(pkgDir, "src")).map((f): [string, string] => [`src/${f}`, src(f)]),
+    ];
+    for (const [name, text] of texts) expect(text, name).not.toMatch(/npx\s+(?:-y\s+|--yes\s+)?genclass-playwright-report/);
+    expect(readme).toContain("run: npx -p @genclass/playwright genclass-playwright-report --comment\n");
+  });
+
+  it("the pull-request step is --comment, and the README says the permission it needs and that forks are skipped", () => {
+    const section = readme.slice(readme.indexOf("## Post it on the pull request"), readme.indexOf("## What to expect from the model"));
+    const prose = section.replace(/\s+/g, " ");
+    expect(section).toContain("run: npx -p @genclass/playwright genclass-playwright-report --comment\n");
+    expect(prose).toContain("The job needs `pull-requests: write`");
+    expect(prose).toMatch(/On a pull request from a fork [^.]*read-only, so the comment is skipped there/);
+    expect(prose).toContain("A comment written by a person is never edited, even one that starts with the marker.");
+    // no third-party action and no hand-written API calls left to copy
+    expect(readme).not.toContain("sticky-pull-request-comment");
+    expect(readme).not.toContain("gh api");
+    // the agent prompt's install line names the runtime's beta line
+    expect(section).toContain("npm install -D @genclass/playwright @genclass/runtime@beta");
   });
 });
