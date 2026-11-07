@@ -25,7 +25,9 @@ everything below is unreleased.
   of 3 or more; refused with `reorder: false`. Each file records `chaos.order` and, for the reverse order, its bursts'
   keys and release order (`chaos.bursts`); the report shows the order next to each seed (`2 (reverse)`) and counts
   only the reordering seeds toward Reproducible. The reverse order is repeatable for the same request timing, not on
-  the wall clock. No false-report rate is measured for it yet; the default is unchanged.
+  the wall clock. No false-report rate is measured for it yet; the default is unchanged. Like all chaos it holds
+  requests, never responses (the fixture's agent link still runs with `hold: false`): it is not `@genclass/mcp`'s
+  explore plan `systematic`.
 - **Measured visual checks**: `visual: true` (default off) turns on the runtime's checks, report only, and runs one
   more pass at the end of the test (at most 2 s); each becomes a `check|<kind>|<route>` signature in a group titled
   as measured checks, with evidence from the kind, the selector and the measured numbers only (never the element's

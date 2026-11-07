@@ -24,14 +24,19 @@ you run or add any of them. Then load a page of the dev server.
    started which request, which response wrote over what).
 2. Confirm before fixing: `genclass_replay {action:"arm", id}`, load the page and do the steps listed in the
    explanation, wait for `window.__GENCLASS_AGENT__.whenSettled()`, then `genclass_replay {action:"result", id}`.
-   "REPRODUCED" means you are looking at the real bug.
+   "REPRODUCED" means you are looking at the real bug. For a race from explore, `genclass_replay {action:"minimize", id}`
+   finds the smallest reordering that reproduces it: run the steps once per page load it arms, then
+   `genclass_replay {action:"result", id}` names it ("the one inverted pair: A delivered after B"), and the finding
+   replays that order from then on. That pair of responses is the cause to explain.
 3. If the user only asked what broke or why, stop here: report the cause and the evidence, and wait for a yes before
    you write a fix or a test. A request to fix it is that yes for the fix.
 4. Fix the cause in the code (keep only the latest response, abort the superseded request, disable the button while
    a submit is in flight, send an idempotency key, apply a response only if the state did not change since...). Do
    not hide the symptom.
-5. Replay again: "not reproduced" (with the same steps) is the evidence. Offer the regression test from
-   `genclass_explain`; add it to the repo's Playwright tests once the user says yes.
+5. Replay again: "not reproduced" (with the same steps) is the evidence. A fix that cancels the older request or no
+   longer sends it makes the replay inconclusive ("the harmful order did not happen in this run"): prove that one with a
+   new explore (section 2). Offer the regression test from `genclass_explain`; add it to the repo's Playwright tests
+   once the user says yes.
 6. Run explore once more (section 2) to check other orders.
 
 If nothing was recorded, reproduce it with explore (section 2), using the page and endpoint the user named
@@ -55,6 +60,23 @@ shows which pages and endpoints the GenClass dashboard flagged.
      own bookkeeping depends on arrival order by construction), and overwrites a later response repaired.
    - "Worth a look" is no race either: one slow baseline against the load with no added delay, which chance can do.
      Check the page it names, and the server for a write it names, before you call the page clear.
+4. Read the coverage line under each scenario (a recent page runtime sends it): "Coverage: 10 of 10 overlapping
+   response pairs delivered both ways; 53 of 60 orderings of 10 overlapping triples." A verdict covers only the orders
+   tried: when pairs or orderings are missing, say "no race in the N orders tried", and run what the line names
+   (`plan:"systematic"`, or the `runs` it gives) before you call the page clear. A pair that "did not overlap when
+   reordered" stopped overlapping when the order changed ("sent by X's handler": the later request waits for that
+   response), so more orders do not deliver it the other way. "Coverage needs @genclass/runtime with the net timing log"
+   means the page runs an older runtime: the verdict stands, without coverage.
+
+`plan: "systematic"` is an option, not the default:
+`genclass_explore {action:"start", runs: 6, slow_ms: 600, plan:"systematic"}` (also 9 page loads) gives one load every
+overlapping pair the other way and the others orders chosen from the baselines' timing toward every ordering of
+overlapping triples. Its false-report rate in browsers is not measured yet: use it when the coverage line asks for it,
+and confirm a race it reports with `genclass_replay` before you call it a bug.
+
+Sign-in, permission and payment flows: requests the app protects (`requests.protect`, the `auth` and `payments`
+presets) and pages where GenClass is off are recorded but never reordered. Exploring them needs
+`connectAgent(rt, { holdProtected: true })` in the dev build: show the user that change and wait for a yes.
 
 ## 3. Scan a page
 
