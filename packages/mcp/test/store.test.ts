@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Store, mergeOrder } from "../src/store.js";
 import type { MinimizeArm, ScheduleSpec } from "../src/types.js";
-import { CAPS, SEARCHES as S, act, hello, searchLoad, snap } from "./helpers.js";
+import { CAPS, SEARCHES as S, act, hello, searchLoad, searchLog, snap } from "./helpers.js";
 
 function clock() {
   let t = 1_000_000;
@@ -823,6 +823,55 @@ describe("store: minimise (AGENT.md section 5.2)", () => {
     // the minimal run is kept with the finding
     s.clear("runs");
     expect(s.runs.has(m.minimal!.run)).toBe(true);
+  });
+
+  it("a probe whose page ends with another wrong value, none of the baseline's, reproduces it; its replay is judged the same way", () => {
+    const { s, f } = race();
+    s.armMinimize(f.id);
+    // probe 1 delivers #3 before #2 only: the page shows another older query's results, not the failing run's "reac"
+    // and not the baseline's "react" (search-as-you-type: whichever older response lands last wins)
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]));
+    const m = s.minimizeResult(f.id)!;
+    expect(m.probes[0]).toMatchObject({ state: "done", reproduced: true, conclusive: true, other: true, realised: [[S[1], S[2]]] });
+    expect(m.probes[0].note).toBe(`the page shows none of the baseline's text where the failing run differed (missing "Results for react"), and other text than the failing run's in its place`);
+    expect(m.minimal).toMatchObject({ a: S[1], b: S[2], between: 0, exact: true, other: true, inverted: [[S[1], S[2]]] });
+    expect(f.evidence.minimal).toMatchObject({ exact: true, other: true, inverted: [[S[1], S[2]]] });
+    expect(f.replay).toEqual({ order: "ranked", delaySeed: 1, ranks: [S[0], S[2], S[1]] });
+    // the replay runs that order: the same other value again reproduces it, the baseline's text after a fix does not
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true, note: expect.stringContaining("other text than the failing run's") });
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false, note: "the page shows the baseline's text" });
+  });
+
+  it("a replay of a finding without such a minimal reproduction stays strict: a third value is inconclusive", () => {
+    const { s, f } = race();
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[2], S[0], S[1]], "rea!", ["Results for rea"]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: null, note: `the page shows neither the failing run's text nor all of the baseline's (missing "Results for react")` });
+  });
+
+  it("form values: a probe with none of the baseline's values reproduces it with other values; one with some of them is inconclusive", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 1, route: "/search" });
+    const cart = (order: string[], qty: string, total: string) => [
+      { t: "steps", steps: [typeReact], order, net: searchLog(order) },
+      { t: "snapshot", snapshot: snap({ "cart.qty": qty }, ["Cart"], { fields: { Quantity: qty, Total: total } }) },
+    ];
+    loadCaps(s).send(cart(S, "1", "10"));
+    loadCaps(s).send(cart(S, "1", "10"));
+    loadCaps(s).send(cart([S[2], S[0], S[1]], "3", "30"));
+    const f = s.reportExplore(x.id)!.findings[0];
+    expect(f.evidence.fields).toEqual(expect.arrayContaining([expect.objectContaining({ where: "field", name: "Quantity", baseline: "1", run: "3" })]));
+    s.armMinimize(f.id);
+    loadCaps(s).send(cart([S[0], S[2], S[1]], "2", "20"));
+    loadCaps(s).send(cart([S[1], S[2], S[0]], "2", "10"));
+    const m = s.minimizeResult(f.id)!;
+    expect(m.probes[0]).toMatchObject({ state: "done", reproduced: true, other: true, note: `ended with none of the request-order baseline's values and others than the failing run's: Quantity = "2", Total = "20"` });
+    expect(m.probes[1]).toMatchObject({ state: "done", reproduced: null, conclusive: false, note: `ended with other values: Quantity = "2", Total = "10"` });
+    expect(m.minimal).toMatchObject({ a: S[1], b: S[2], exact: true, other: true });
   });
 
   it("a probe that delivered another inversion than it was built for is inconclusive and blocks the choice", () => {
