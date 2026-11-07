@@ -8,8 +8,9 @@
 //
 // What it does on the page:
 //   - records the run: user actions, requests (by key, "GET /api/search#3"), the order their responses were delivered,
-//     state writes, errors with their stack and causal chain, and two happens-before facts as witnesses (a response
-//     that overwrote newer data; identical requests in flight from separate clicks) (./record.ts);
+//     each request's timing (the net log the bridge computes overlaps from), state writes, errors with their stack and
+//     causal chain, and two happens-before facts as witnesses (a response that overwrote newer data; identical
+//     requests in flight from separate clicks) (./record.ts);
 //   - delivers responses on a schedule when one is set (the agent's genclass_explore / genclass_replay, a test's
 //     page global, or ?genclass-schedule=): the same requests and responses, only their delivery order and timing
 //     change, so a race shows up on a fast machine and replays exactly (./schedule.ts);
@@ -35,7 +36,7 @@ import { LONG_RUNNING_MS, Scheduler, parseSpec, type ScheduleSpec } from "./sche
 import { DEFAULT_AGENT_URL, Link, isDevHost, isLoopbackUrl } from "./link.js";
 
 export type { ScheduleSpec, ScheduleOrder } from "./schedule.js";
-export type { RecordedSchedule, Step, ActStep, Witness, ErrorRec } from "./record.js";
+export type { RecordedSchedule, Step, ActStep, Witness, ErrorRec, NetEntry } from "./record.js";
 export { parseSpec, hash32 } from "./schedule.js";
 export { AGENT_SCHEMA, DEFAULT_AGENT_URL, isLoopbackUrl, isDevHost } from "./link.js";
 export { SCHEDULE_SCHEMA } from "./record.js";
@@ -45,7 +46,9 @@ export interface AgentOptions {
   url?: string;
   /**
    * This page load's schedule. Default: `globalThis.__GENCLASS_SCHEDULE__` (a test's addInitScript), then the URL's
-   * `genclass-schedule` parameter ("fifo", "seeded:7", JSON), then what the bridge assigns at hello.
+   * `genclass-schedule` parameter ("fifo", "lifo", "seeded:7", JSON), then what the bridge assigns at hello. A page-set
+   * schedule this runtime cannot run (an order of a newer one) is warned about once on the console, and responses are
+   * then delivered as they arrive (the bridge assigns none).
    */
   schedule?: ScheduleSpec | string;
   /** Also run on a public host (a staging build you test from your own machine). Default false. */
@@ -136,11 +139,16 @@ const SECRET = /pass|pwd|secret|token|card|cc-?num|cvv|cvc|ssn|iban|\bpin\b|otp|
 type NetFetch = (u: string, i: Record<string, unknown>) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 const NET = new Set(["fetch", "xhr"]);
+/**
+ * What this page can do beyond genclass-agent/1's first version, told to the bridge at hello: the lifo and ranked
+ * orders, seeded `reverse`, `delaySeed`, and the net log in steps events.
+ */
+const CAPS = ["lifo", "ranked", "reverse", "delaySeed", "net"];
 const conns = new WeakMap<object, AgentConnection>();
 const G = globalThis as unknown as Record<string, unknown>;
 
 function inert(url: string, reason: string): AgentConnection {
-  const empty: RecordedSchedule = { schema: "genclass-schedule/1", route: "", spec: null, steps: [], order: [], forced: 0, truncated: false };
+  const empty: RecordedSchedule = { schema: "genclass-schedule/1", route: "", spec: null, steps: [], order: [], forced: 0, truncated: false, net: [], netLost: 0 };
   return {
     url,
     reason,
@@ -247,16 +255,33 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
   const waiters: ((ok: boolean) => void)[] = [];
 
   // the schedule: the caller's, a test's page global, the URL, else the bridge's (pending until hello)
-  const local = parseSpec(opts.schedule ?? G.__GENCLASS_SCHEDULE__ ?? urlParam(g, "genclass-schedule"));
-  const initial: ScheduleSpec | null = holding ? local : { order: "natural" };
-
-  const rec = new Recorder(ints, (op) => sched.started(op).key, (path, v) => {
+  const asked: unknown = opts.schedule ?? G.__GENCLASS_SCHEDULE__ ?? urlParam(g, "genclass-schedule");
+  const local = parseSpec(asked);
+  // a page-set schedule this runtime cannot run (an order from a newer one): say so once, and deliver responses as they
+  // arrive, never on a schedule the bridge assigns in its place
+  const unrunnable = asked !== undefined && asked !== null && !local;
+  if (unrunnable) {
     try {
-      return String(ints.hub.describeValue(path, v));
+      const what = asked && typeof asked === "object" ? (asked as { order?: unknown }).order : asked;
+      con?.warn?.(`[GenClass] agent: this @genclass/runtime cannot run the schedule "${String(what).slice(0, 40)}"; responses are delivered as they arrive`);
     } catch {
-      return "?";
+      /* an exotic value or console: the page still runs natural */
     }
-  });
+  }
+  const initial: ScheduleSpec | null = holding && !unrunnable ? local : { order: "natural" };
+
+  const rec = new Recorder(
+    ints,
+    (op) => sched.started(op).key,
+    (path, v) => {
+      try {
+        return String(ints.hub.describeValue(path, v));
+      } catch {
+        return "?";
+      }
+    },
+    (id) => sched.slot(id),
+  );
   const sched: Scheduler = new Scheduler(clock, initial, (d) => rec.delivered(d), initial ? 0 : helloMs);
 
   const nativeFetch = typeof g.fetch === "function" ? (g.fetch as NetFetch).bind(g) : undefined;
@@ -381,7 +406,10 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
     const freshSteps = fresh > 0 ? rec.steps.slice(rec.steps.length - fresh) : [];
     const changed = [...rec.updated].map((i) => rec.acts.get(i)).filter((a): a is NonNullable<typeof a> => !!a && !freshSteps.includes(a));
     rec.updated.clear();
-    if (freshSteps.length || changed.length) link.send({ t: "steps", steps: [...changed, ...freshSteps], order: rec.order.slice(-400), forced: sched.forced, lost: rec.pushed - sentSteps - fresh });
+    // request timings new or changed since the last send, whole (the bridge merges them by key), and how many requests
+    // this page load could not keep (a running total, like `forced`)
+    const net = rec.netDelta();
+    if (freshSteps.length || changed.length || net.length) link.send({ t: "steps", steps: [...changed, ...freshSteps], order: rec.order.slice(-400), forced: sched.forced, lost: rec.pushed - sentSteps - fresh, net, netLost: rec.netLost });
     sentSteps = rec.pushed;
   };
   const quiet = (): void => {
@@ -443,11 +471,12 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
         if (op && NET.has(op.kind) && !op.genclass) sent(op);
       } else if (e.kind === "state") rec.wrote(e, backfill);
       else if (e.kind === "custom" && e.name === "xhr.aborted-while-held") {
-        // the app aborted an XHR whose response the schedule held: it is dropped, never delivered
+        // the app aborted an XHR whose response the schedule held: it is dropped, never delivered (the op itself ended
+        // "ok" when the response arrived)
         const op = ops.get(e.op);
         if (op) {
           sched.ended(op.id);
-          rec.endedWithout(op);
+          rec.endedWithout(op, "aborted");
         }
       } else if (e.kind === "error") {
         if (backfill) rec.error(e);
@@ -492,10 +521,12 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
         rec.endedWithout(op);
       } else
         clock.afterTask(() => {
-          // a response that reached the app without the delivery gate (GenClass paused, an answered retry)
+          // a response that reached the app without the delivery gate (GenClass paused, a route in mode "off", an
+          // answered retry): never scheduled, so recorded as passed
           if (!s.go && s.released === undefined && !s.done) {
             sched.ended(op.id);
-            rec.delivered({ key: s.key, op: op.id, at: op.end ?? clock.now(), heldMs: 0, forced: false });
+            const at = op.end ?? clock.now();
+            rec.delivered({ key: s.key, op: op.id, at, heldMs: 0, forced: false, ready: at, pass: true });
           }
         });
       if (op.identity) {
@@ -661,13 +692,23 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
         runtime: { mode: runtime.mode, model: runtime.status.state },
         // the schedule in force when the page set its own (or natural, with hold: false): the bridge assigns none then
         ...(initial ? { schedule: initial } : {}),
+        caps: CAPS,
         ...(nav?.userAgent ? { ua: String(nav.userAgent).slice(0, 300) } : {}),
       },
       helloMs,
     )
     .then((r) => {
       if (!live) return;
-      if (!sched.current) sched.setSpec(parseSpec(r?.schedule) ?? { order: "natural" });
+      if (!sched.current) {
+        const spec = parseSpec(r?.schedule);
+        sched.setSpec(spec ?? { order: "natural" });
+        // the bridge assigned a schedule this runtime cannot run: the page runs natural and says so, so the bridge
+        // neither counts this load as that schedule nor gives the slot back to it
+        if (!spec && r?.schedule !== undefined && r.schedule !== null) {
+          const what = typeof r.schedule === "object" ? (r.schedule as { order?: unknown }).order : r.schedule;
+          link.send({ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: String(what).slice(0, 20) });
+        }
+      }
       if (!r) return;
       flushSteps();
       link.flush(false);

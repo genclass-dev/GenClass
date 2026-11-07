@@ -8,6 +8,11 @@
 // Witnesses are facts, never diagnoses: whether one is a bug is for the order comparison (explore), the model or the
 // developer to say. Nothing here feeds the model, a situation, the gate or the event log; it only reads the runtime's
 // internals (events, ops, store fields) and keeps bounded lists.
+//
+// The net log: each request's timing (sent, ready, delivered, held, forced, passed, the request whose chain sent it,
+// how it ended without a delivery), by key, kept outside the step window (at most MAX_NET per page load, the rest
+// counted in `netLost`) and sent as it changes, so the bridge's overlap, coverage and inversions never depend on
+// which steps the window still holds.
 
 import type { Clock } from "../types.js";
 import type { OpRec } from "../trace/ops.js";
@@ -16,6 +21,11 @@ import type { Delivered, ScheduleSpec } from "./schedule.js";
 
 export const SCHEDULE_SCHEMA = "genclass-schedule/1";
 const MAX_STEPS = 600;
+/** Requests whose timing a page load keeps (the net log); later ones are counted in `netLost`. */
+export const MAX_NET = 2000;
+/** Keys and statuses in the net log are capped like the bridge caps them (packages/mcp/src/validate.ts). */
+const MAX_KEY = 300;
+const MAX_STATUS = 20;
 const MAX_WITNESSES = 100;
 const MAX_VALUE = 500;
 const MAX_PATHS_CHECKED = 200;
@@ -90,7 +100,8 @@ export interface ActStep {
 export type Step =
   | ActStep
   | { k: "send"; t: number; key: string; detail?: string; act?: number; via?: string }
-  | { k: "recv"; t: number; key: string; held?: number; forced?: boolean }
+  /** `ready`: when the response was ready (its arrival plus its emulated delay); `pass`: released without scheduling. */
+  | { k: "recv"; t: number; key: string; held?: number; forced?: boolean; ready?: number; pass?: true }
   | { k: "end"; t: number; key: string; status: string; code?: number | string }
   | { k: "write"; t: number; store: string; paths: string[]; by?: string; act?: number; summary?: string[] }
   | { k: "error"; t: number; message: string; by?: string; act?: number };
@@ -126,6 +137,33 @@ export interface ErrorRec {
   act?: number;
 }
 
+/**
+ * One request's timing in this page load (the net log), in ms since the recording started, rounded like steps. The
+ * overlap the bridge computes from it: a overlaps b (a started first, by `n`) iff b's `s` is before a's `r`.
+ */
+export interface NetEntry {
+  /** The request's key ("GET /api/search#3"), at most 300 characters. */
+  key: string;
+  /** Start index: the request's position among this page load's requests, in start order (0-based). */
+  n: number;
+  /** When it was sent (0 for a request sent before the recording started). */
+  s: number;
+  /** When its response was ready: its arrival at the delivery gate plus its emulated delay. */
+  r?: number;
+  /** When the app received the response. */
+  d?: number;
+  /** How long the schedule held it, in ms (arrival to release). */
+  held?: number;
+  /** Released only because its hold ran out. */
+  forced?: true;
+  /** Released at once without scheduling: a protected request, a route in mode "off", or a response that reached the app without the delivery gate. */
+  pass?: true;
+  /** The key of the request whose response chain sent this one, when its cause is such a request. */
+  via?: string;
+  /** Ended without a delivery: how ("aborted", "error", ...). */
+  end?: string;
+}
+
 /** A recorded run: the steps and the delivery order, replayable with `{ order: "given", given: order }`. */
 export interface RecordedSchedule {
   schema: typeof SCHEDULE_SCHEMA;
@@ -137,10 +175,16 @@ export interface RecordedSchedule {
   /** Responses the schedule held to its limit (the run did not follow the schedule exactly). */
   forced: number;
   truncated: boolean;
+  /** Each request's timing, in start order (at most 2,000 per page load). */
+  net: NetEntry[];
+  /** Requests past that limit, whose timing was not kept. */
+  netLost: number;
 }
 
 /** Keys for requests come from the scheduler (one numbering per page load). */
 export type KeyOf = (op: OpRec) => string;
+/** A request's slot in the scheduler (its key and start index), or undefined when the op is not a scheduled request. */
+export type SlotOf = (id: number | null | undefined) => { key: string; n: number } | undefined;
 
 export class Recorder {
   readonly steps: Step[] = [];
@@ -158,6 +202,12 @@ export class Recorder {
   truncated = false;
   /** Steps recorded so far (the list keeps the newest MAX_STEPS). */
   pushed = 0;
+  /** Each request's timing by key, in start order (the first MAX_NET requests of the page load). */
+  readonly net = new Map<string, NetEntry>();
+  /** Requests whose timing was not kept (past MAX_NET). */
+  netLost = 0;
+  /** Keys whose entry is new or changed since the last netDelta(). */
+  private readonly netChanged = new Set<string>();
   /** Called for each new witness and error (the bridge link streams them). */
   onWitness: ((w: Witness) => void) | null = null;
   onError: ((e: ErrorRec) => void) | null = null;
@@ -167,6 +217,7 @@ export class Recorder {
     private readonly rt: Pick<RuntimeInternals, "hub" | "ops" | "clock">,
     private readonly keyOf: KeyOf,
     private readonly redact: (path: string, v: unknown) => string,
+    private readonly slotOf: SlotOf = () => undefined,
   ) {
     this.t0 = rt.clock.now();
   }
@@ -236,13 +287,27 @@ export class Recorder {
   }
 
   sent(op: OpRec): void {
-    const s: Step = { k: "send", t: this.rel(op.start), key: this.keyOf(op) };
+    const key = this.keyOf(op);
+    const s: Step = { k: "send", t: this.rel(op.start), key };
     if (op.detail) s.detail = op.detail.slice(0, 160);
     const act = this.actOf(op);
     if (act !== undefined) s.act = act;
     const cause = this.ops.get(op.cause);
     if (cause && cause.kind !== "user") s.via = cause.name.slice(0, 120);
     this.push(s);
+    // the net log: the first MAX_NET requests of the page load, by key
+    const slot = this.slotOf(op.id);
+    if (!slot || this.net.has(key)) return;
+    if (this.net.size >= MAX_NET) {
+      this.netLost++;
+      return;
+    }
+    // a request sent before connectAgent ran: 0 (it was sent before any response the schedule could hold was ready)
+    const e: NetEntry = { key: key.slice(0, MAX_KEY), n: slot.n, s: Math.max(0, s.t) };
+    const via = this.slotOf(op.cause)?.key;
+    if (via) e.via = via.slice(0, MAX_KEY);
+    this.net.set(key, e);
+    this.netChanged.add(key);
   }
 
   delivered(d: Delivered): void {
@@ -251,14 +316,40 @@ export class Recorder {
     const s: Step = { k: "recv", t: this.rel(d.at), key: d.key };
     if (d.heldMs >= 1) s.held = Math.round(d.heldMs);
     if (d.forced) s.forced = true;
+    if (d.ready !== undefined) s.ready = this.rel(d.ready);
+    if (d.pass) s.pass = true;
     this.push(s);
+    const e = this.net.get(d.key);
+    if (!e) return;
+    e.d = s.t;
+    if (s.ready !== undefined) e.r = s.ready;
+    if (s.held !== undefined) e.held = s.held;
+    if (s.forced) e.forced = true;
+    if (s.pass) e.pass = true;
+    this.netChanged.add(d.key);
   }
 
-  /** A request ended without a delivery (failed, aborted). */
-  endedWithout(op: OpRec): void {
-    const s: Step = { k: "end", t: this.rel(op.end ?? this.rt.clock.now()), key: this.keyOf(op), status: String(op.status ?? "error") };
+  /** A request ended without a delivery (failed, aborted). `status` when it differs from the op's own. */
+  endedWithout(op: OpRec, status = String(op.status ?? "error")): void {
+    const key = this.keyOf(op);
+    const s: Step = { k: "end", t: this.rel(op.end ?? this.rt.clock.now()), key, status };
     if (op.code !== undefined) s.code = op.code;
     this.push(s);
+    const e = this.net.get(key);
+    if (!e || e.d !== undefined) return;
+    e.end = status.slice(0, MAX_STATUS);
+    this.netChanged.add(key);
+  }
+
+  /** Net log entries new or changed since the last call (copies), for the next steps event. */
+  netDelta(): NetEntry[] {
+    const out: NetEntry[] = [];
+    for (const k of this.netChanged) {
+      const e = this.net.get(k);
+      if (e) out.push({ ...e });
+    }
+    this.netChanged.clear();
+    return out;
   }
 
   /**
@@ -420,6 +511,7 @@ export class Recorder {
   }
 
   schedule(route: string, spec: ScheduleSpec | null, forced: number): RecordedSchedule {
-    return { schema: SCHEDULE_SCHEMA, route, spec, steps: this.steps.slice(), order: this.order.slice(), forced, truncated: this.truncated };
+    const net = [...this.net.values()].map((e) => ({ ...e }));
+    return { schema: SCHEDULE_SCHEMA, route, spec, steps: this.steps.slice(), order: this.order.slice(), forced, truncated: this.truncated, net, netLost: this.netLost };
   }
 }
