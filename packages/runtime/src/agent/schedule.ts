@@ -41,6 +41,7 @@ export type ScheduleOrder = "natural" | "fifo" | "lifo" | "seeded" | "ranked" | 
 
 /** How responses are delivered on this page (docs/runtime/AGENT.md section 3). */
 export interface ScheduleSpec {
+  /** natural, fifo, lifo, seeded, ranked or given (docs/runtime/AGENT.md section 3). */
   order: ScheduleOrder;
   /** seeded: the seed (a non-negative integer). Also seeds `delay` when there is no `delaySeed`. */
   seed?: number;
@@ -52,11 +53,17 @@ export interface ScheduleSpec {
   reverse?: true;
   /** seeded: request signatures ("PUT /api/notes/:id") whose responses go after every other overlapping one. */
   focus?: string[];
-  /** Extra latency per response, uniform in [minMs, maxMs], hashed from the seed and the key (a slow network). */
+  /**
+   * Extra latency per response, uniform in [minMs, maxMs], hashed from `delaySeed` (else the seed) and the key (a slow
+   * network). It never counts against `maxHoldMs`.
+   */
   delay?: { minMs: number; maxMs: number };
   /** Seeds `delay` in place of `seed`, so runs of different orders get the same per-key latencies. */
   delaySeed?: number;
-  /** A response is never held longer than this; then it is delivered and the run is marked forced. Default 1500. */
+  /**
+   * A response is never held longer than this beyond its own `delay`: at that deadline it is delivered at once, and
+   * counted as forced (the run did not follow the schedule exactly) when the schedule still held it back. Default 1500.
+   */
   maxHoldMs?: number;
   /** Time between two releases, so one response's handlers run before the next arrives. Default 30. */
   gapMs?: number;
