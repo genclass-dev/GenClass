@@ -15,8 +15,7 @@ next to it.
 | `stored.mjs` | rescoring reports a hunt kept only as text: parses the listed differences back into runs and gives them to `compareRuns`; its header says what the text cannot show. `--raw <state.json>` compares a bridge's recorded runs directly |
 | `apps/` | a search page on Redux Toolkit Query and one on TanStack Query (`src/rtk.jsx`, `src/tanstack.jsx`), each with a planted stale race (`?bug`) and a correct variant; installed on its own (`npm install` in `apps/`, not a workspace) |
 
-The Strapi sessions come from the hunt harness on the `(an internal branch)` branch
-(`(internal notes)/strapi/hunt.mjs`, its setup in `(internal notes)/strapi.md` section 1), run once per
+The Strapi sessions come from a hunt harness kept outside this repository, run once per
 scenario and latency with its own bridge state directory (`HUNT_STATE=state-<scenario>-<slow_ms>`), so that every
 session's recorded runs stay available to `summarise.mjs`.
 

@@ -1,6 +1,6 @@
 // Scores explore's verdicts against a DOM oracle, per reordered run and per session (docs/runtime/RESULTS.md, the
-// agent section). Reads a directory of explore sessions written by a hunt harness ((internal notes)/strapi/hunt.mjs
-// on the (an internal branch) branch, or bench/explore/apps.mjs): per session `<scenario>-<slow_ms>.json` (the
+// agent section). Reads a directory of explore sessions written by a hunt harness (one kept outside
+// this repository, or bench/explore/apps.mjs): per session `<scenario>-<slow_ms>.json` (the
 // report as the agent read it, and each load's DOM oracle with its bridge run id) and `state-<scenario>-<slow_ms>/`
 // (the bridge's state: every recorded run). Each session's runs are compared again with this checkout's comparison
 // (packages/mcp/dist) and, with --old <dist>, with another one (the comparison before this change), so both are scored
