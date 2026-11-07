@@ -22,7 +22,6 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
     "./package.json": "./package.json"
@@ -37,7 +36,7 @@
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "npm run build"
+    "prepack": "npm run build"
   },
   "peerDependencies": {
     "sv": "^1.1.1"

@@ -71,6 +71,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
+    "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

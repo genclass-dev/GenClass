@@ -140,6 +140,20 @@ Say in the PR which of them you could not run.
    site's pages name, to this release, so `/docs/telemetry` and `/privacy` match the released `TELEMETRY.md` and
    `PRIVACY.md`. Deploying the site is a separate, owner-approved step.
 
+### The other packages
+
+`.github/workflows/release-mcp.yml` publishes `@genclass/mcp` from a tag `mcp-v<version>`.
+`.github/workflows/release-packages.yml` publishes `@genclass/playwright`, `@genclass/sv`, `@genclass/nuxt` and
+`@genclass/astro`, one per tag `<package>-v<version>` (for example `playwright-v0.1.0`) whose version equals that
+package's `package.json`, after the package's typecheck, build, unit tests and `npm pack`. On a pull request that
+changes the workflow or one of those four `package.json` files, it runs everything up to `npm publish --dry-run` for
+all four. Each workflow's header is the authority on its steps. Each package's first version is published once by the
+owner from the tarball the tag's run uploads, because npm sets up trusted publishing only for a package that exists;
+AGENTS.md rule 9 has to name `release-packages.yml` before its first publish. Before you push a tag, the package's
+CHANGELOG section is final and dated and its own workflow (`playwright-reporter.yml`, `sv-addon.yml` or
+`integrations.yml`) is green on that commit. Push one tag at a time: GitHub starts no workflow for tags pushed more
+than three at once.
+
 ## Reporting a false flag
 
 GenClass flagged or acted on code that was right? That is a bug we want: use the "False flag or false

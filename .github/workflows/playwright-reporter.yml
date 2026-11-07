@@ -19,6 +19,7 @@ on:
       - "packages/mcp/test/e2e/app/**"
       - "package-lock.json"
       - ".github/workflows/playwright-reporter.yml"
+      - ".github/workflows/release-packages.yml" # test/release.test.ts reads it
   pull_request:
     paths:
       - "packages/playwright/**"
@@ -28,6 +29,7 @@ on:
       - "packages/mcp/test/e2e/app/**"
       - "package-lock.json"
       - ".github/workflows/playwright-reporter.yml"
+      - ".github/workflows/release-packages.yml" # test/release.test.ts reads it
   workflow_dispatch:
 
 permissions:
