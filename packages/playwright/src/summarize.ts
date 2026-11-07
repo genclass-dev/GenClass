@@ -25,6 +25,8 @@
 // turn into markup, and "#123", "GH-123" and "@name" get a zero-width space so GitHub neither links the runtime's
 // request ids to the repository's issues nor mentions anyone. The whole report is kept under `maxChars` (default
 // 60000; GitHub rejects comment bodies over 65,536 characters) by leaving out the least important lines, with a note.
+// Its last line (`REPORT_FOOTER`, unless `footer: false`) links to the package README's section on what the lines
+// mean and what the fixture can miss; it counts toward `maxChars` and is kept however the report is shortened.
 
 import { parseRaces, validateRaces } from "./schema.js";
 import { CHECK_TRIGGER, PAGE_ERROR_TRIGGER, type GenClassRacesFile, type RaceChaosOrder, type RacesFileInput, type RacesParseResult } from "./types.js";
@@ -66,6 +68,13 @@ function newerKind(trigger: string): boolean {
 export const DEFAULT_MIN_SEEDS = 2;
 /** The marker the report starts with, so a CI step can find and update its own comment. */
 export const REPORT_MARKER = "<!-- genclass-report -->";
+/**
+ * The report's last line, after a blank line (left out with `footer: false`): a link to the "What to expect from the
+ * model" section of this package's README, which says what the lines mean and what the fixture can miss. It has no
+ * "@" and no "#" before a digit, so GitHub mentions and links nothing in it.
+ */
+export const REPORT_FOOTER =
+  "GenClass for Playwright: [what these lines mean and what the fixture can miss](https://github.com/genclass-dev/GenClass/tree/main/packages/playwright#what-to-expect-from-the-model).";
 /** The default report size limit, in characters (JavaScript string length): under GitHub's 65,536 per comment. */
 export const DEFAULT_MAX_CHARS = 60000;
 /** The smallest size limit: lower `maxChars` values count as this. */
@@ -98,9 +107,15 @@ export interface SummarizeOptions {
    * comment. Default 60000 (`DEFAULT_MAX_CHARS`); 0 or Infinity: no limit; other values below 1000 count as 1000.
    * Left out first: entries of the "nothing flagged" and "Files skipped" lists, then the least important signatures
    * of each test (fewer seeds and lower confidence first), then whole tests from the end of the report. The counts
-   * always include everything, and a note under the first line says what was left out.
+   * always include everything, a note under the first line says what was left out, and the footer line is kept.
    */
   maxChars?: number;
+  /**
+   * End the report with `REPORT_FOOTER`, one line that links to what the lines mean and what the fixture can miss.
+   * Default true; `false` leaves that line out (the paragraphs that explain the groups stay). The line counts toward
+   * `maxChars`.
+   */
+  footer?: boolean;
 }
 
 export interface SignatureSummary {
@@ -516,8 +531,14 @@ function cutNote(s: RaceSummary, lim: Limits, maxChars: number): string | null {
   if (!parts.length) return null;
   return (
     `_Shortened to fit ${maxChars} characters: ${andList(parts)} not shown. The counts include everything; ` +
-    "`npx genclass-playwright-report --max-chars 0` prints the whole report from the same files._"
+    "`npx -p @genclass/playwright genclass-playwright-report --max-chars 0` prints the whole report from the same files._"
   );
+}
+
+/** The report's text from its lines: joined, ending in a newline, with the footer line last unless `footer: false`. */
+function finish(L: string[], options: SummarizeOptions): string {
+  if (options.footer !== false) L.push("", REPORT_FOOTER);
+  return L.join("\n") + "\n";
 }
 
 function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars: number): string {
@@ -528,7 +549,7 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
 
   if (s.files === 0 && s.skipped.length === 0) {
     L.push(`No GenClass race files were found${where}. This report reads the files the GenClass Playwright fixture writes (one per test, format \`genclass-races/1\`): is the fixture installed, and did the tests run?`);
-    return L.join("\n") + "\n";
+    return finish(L, options);
   }
 
   const T = s.totals;
@@ -666,7 +687,7 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
     L.push(parts.join("\n\n"));
   }
   while (L.length && L[L.length - 1] === "") L.pop();
-  return L.join("\n") + "\n";
+  return finish(L, options);
 }
 
 /** The largest n in [lo, hi] with ok(n), assuming ok is true up to some n and false after; null when ok(lo) is false. */
@@ -683,7 +704,8 @@ function largest(lo: number, hi: number, ok: (n: number) => boolean): number | n
 /**
  * Renders a summary as markdown (what the reporter writes to genclass-report.md and a CI step posts on the PR),
  * kept within `maxChars`: it leaves out list entries first, then the least important signatures of each test, then
- * whole tests from the end, each step as little as fits; as a last resort it cuts at a line.
+ * whole tests from the end, each step as little as fits; as a last resort it cuts at a line. The footer line
+ * (unless `footer: false`) is part of every step and stays last.
  */
 export function renderMarkdown(s: RaceSummary, options: SummarizeOptions = {}): string {
   const max = resolveMaxChars(options.maxChars);
@@ -701,11 +723,13 @@ export function renderMarkdown(s: RaceSummary, options: SummarizeOptions = {}): 
   const tests = largest(0, flagged.length, (n) => fits({ items: 0, perTest: 1, tests: n }));
   if (tests !== null) return render(s, options, { items: 0, perTest: 1, tests }, max);
 
-  const text = render(s, options, { items: 0, perTest: 1, tests: 0 }, max);
+  // the cut is made in the lines above the footer, which keeps its place at the end (max is at least 1000 characters)
+  const end = options.footer === false ? "" : `\n${REPORT_FOOTER}\n`;
+  const text = render(s, { ...options, footer: false }, { items: 0, perTest: 1, tests: 0 }, max);
   const tail = `\n_…cut at ${max} characters._\n`;
-  const cut = text.slice(0, max - tail.length);
+  const cut = text.slice(0, max - tail.length - end.length);
   const nl = cut.lastIndexOf("\n");
-  return (nl > 0 ? cut.slice(0, nl) : cut) + tail;
+  return (nl > 0 ? cut.slice(0, nl) : cut) + tail + end;
 }
 
 /** Files -> markdown: buildSummary + renderMarkdown. Pure; never throws on bad input (bad files are listed as skipped). */

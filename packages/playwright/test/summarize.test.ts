@@ -1,10 +1,11 @@
 // The summariser: genclass-races/1 files -> markdown, asserted byte for byte on the fixture in test/fixtures/races
-// (two tests, two seeds each; one signature flagged in both seeds of its test, one in a single seed).
+// (two tests, two seeds each; one signature flagged in both seeds of its test, one in a single seed), and the footer
+// line every report ends with (unless footer: false), kept when the report is shortened.
 
 import { describe, expect, it } from "vitest";
-import { buildSummary, categoryOf, escapeMarkdown, summarize, DEFAULT_MAX_CHARS, REPORT_MARKER, ZERO_WIDTH_SPACE } from "../src/summarize.js";
+import { buildSummary, categoryOf, escapeMarkdown, summarize, DEFAULT_MAX_CHARS, REPORT_FOOTER, REPORT_MARKER, ZERO_WIDTH_SPACE } from "../src/summarize.js";
 import type { GenClassRacesFile, RaceSignature, RacesFileInput } from "../src/types.js";
-import { FIXTURE_REPORT, fixtureInputs, Z } from "./helpers.js";
+import { FIXTURE_REPORT, FOOTER, fixtureInputs, Z } from "./helpers.js";
 
 function sig(p: Partial<RaceSignature> & Pick<RaceSignature, "trigger" | "diagnosis" | "op">): RaceSignature {
   return { sig: `${p.trigger}|${p.diagnosis}|${p.op}`, confidence: 0.9, evidence: `evidence for ${p.op}`, seeds: [], ...p };
@@ -227,11 +228,19 @@ describe("summarize: maxChars keeps the report within one GitHub comment", () =>
     expect(shownTests.length).toBeLessThan(300);
     expect(shownTests[0]).toBe("### t000");
     const hiddenTests = 300 - shownTests.length;
-    expect(md).toContain(`_Shortened to fit 60000 characters: ${2 * shownTests.length} signatures of the tests below and ${hiddenTests} more tests with signatures not shown. The counts include everything; \`npx genclass-playwright-report --max-chars 0\` prints the whole report from the same files._\n`);
+    expect(md).toContain(`_Shortened to fit 60000 characters: ${2 * shownTests.length} signatures of the tests below and ${hiddenTests} more tests with signatures not shown. The counts include everything; \`npx -p @genclass/playwright genclass-playwright-report --max-chars 0\` prints the whole report from the same files._\n`);
     expect(md).toContain(`_…and ${hiddenTests} more tests with signatures, not shown._`);
     expect((md.match(/^- \*\*Reproducible\*\*: /gm) ?? []).length).toBe(shownTests.length);
     expect(md).not.toContain("`delivery:stale`");
     expect(md.match(/_…and 2 more signatures in this test, not shown\._/g)?.length).toBe(shownTests.length);
+    // the footer line is kept, last and once, within the limit
+    expect(md.endsWith(`\n\n${FOOTER}\n`)).toBe(true);
+    expect(md.split(FOOTER)).toHaveLength(2);
+    // without it, the same limit holds and the line is gone
+    const bare = summarize(inputs, { footer: false });
+    expect(bare.length).toBeLessThanOrEqual(60000);
+    expect(bare).not.toContain(FOOTER);
+    expect((bare.match(/^### t\d{3}$/gm) ?? []).length).toBeGreaterThanOrEqual(shownTests.length);
   });
 
   it("within a test it keeps the most important signatures (reproducible, more seeds, higher confidence), still in report order", () => {
@@ -274,16 +283,60 @@ describe("summarize: maxChars keeps the report within one GitHub comment", () =>
     expect(md).toContain(`- …and ${2000 - listed} more\n`);
     expect(md).toContain(`_Shortened to fit 60000 characters: ${2000 - listed} list entries not shown.`);
     expect(md).not.toContain("more signature");
+    expect(md.endsWith(`from that seed.\n\n${FOOTER}\n`)).toBe(true);
   });
 
-  it("as a last resort cuts at a line, and values below 1000 count as 1000", () => {
+  it("as a last resort cuts at a line, and values below 1000 count as 1000; the footer line stays last", () => {
     const md = summarize([{ name: "a.json", content: file("t", 1, []) }], { title: "x".repeat(3000), maxChars: 10 });
-    expect(md).toBe(`${REPORT_MARKER}\n_…cut at 1000 characters._\n`);
+    expect(md).toBe(`${REPORT_MARKER}\n_…cut at 1000 characters._\n\n${FOOTER}\n`);
+    expect(summarize([{ name: "a.json", content: file("t", 1, []) }], { title: "x".repeat(3000), maxChars: 10, footer: false })).toBe(`${REPORT_MARKER}\n_…cut at 1000 characters._\n`);
+    // a report whose shortest form is still too long (a paragraph for each group): cut at a line, the note, the footer
+    const kinds = [
+      sig({ trigger: "delivery", diagnosis: "stale", op: "GET /a", seeds: [1] }),
+      sig({ trigger: "witness", diagnosis: "overwrote-newer", op: "GET /a", confidence: 1, seeds: [1] }),
+      sig({ trigger: "page-error", diagnosis: "TypeError", op: "GET /a", confidence: 1, seeds: [1] }),
+      sig({ trigger: "check", diagnosis: "text-invisible", op: "/", confidence: 1, seeds: [1] }),
+    ];
+    const long = summarize([{ name: "a.json", content: file("t", 1, kinds) }], { maxChars: 1000 });
+    expect(long.length).toBeLessThanOrEqual(1000);
+    expect(long.startsWith(`${REPORT_MARKER}\n## GenClass race report\n`)).toBe(true);
+    expect(long.endsWith(`\n_…cut at 1000 characters._\n\n${FOOTER}\n`)).toBe(true);
+    expect(long.split(FOOTER)).toHaveLength(2);
   });
 
   it("a report that fits is not changed by the limit", () => {
     expect(summarize(fixtureInputs(), { sources: ["test-results/genclass"], maxChars: 1000 + FIXTURE_REPORT.length })).toBe(FIXTURE_REPORT);
     expect(summarize(fixtureInputs(), { sources: ["test-results/genclass"], maxChars: Infinity })).toBe(FIXTURE_REPORT);
+  });
+});
+
+describe("summarize: the footer line links to what the lines mean and what the fixture can miss", () => {
+  it("is REPORT_FOOTER, a link to the README's \"What to expect from the model\", with no mention or issue reference in it", () => {
+    expect(REPORT_FOOTER).toBe(FOOTER);
+    expect(FOOTER).toContain("](https://github.com/genclass-dev/GenClass/tree/main/packages/playwright#what-to-expect-from-the-model)");
+    expect(FOOTER).not.toMatch(/#\d|\bGH-\d|@[A-Za-z0-9]|\n/i);
+  });
+
+  it("ends the report, once, after a blank line; footer: false leaves out only that line", () => {
+    const md = summarize(fixtureInputs(), { sources: ["test-results/genclass"] });
+    expect(md.endsWith(`.\n\n${FOOTER}\n`)).toBe(true);
+    expect(md.split(FOOTER)).toHaveLength(2);
+    const bare = summarize(fixtureInputs(), { sources: ["test-results/genclass"], footer: false });
+    expect(`${bare}\n${FOOTER}\n`).toBe(FIXTURE_REPORT);
+    expect(summarize(fixtureInputs(), { sources: ["test-results/genclass"], footer: true })).toBe(FIXTURE_REPORT);
+  });
+
+  it("is in every kind of report: no files, nothing flagged, only files that could not be read", () => {
+    const reports = [
+      summarize([]),
+      summarize([{ name: "a.json", content: file("t", 1, []) }]),
+      summarize([{ name: "a.json", content: "{" }]),
+    ];
+    for (const md of reports) {
+      expect(md.endsWith(`\n\n${FOOTER}\n`)).toBe(true);
+      expect(md.split(FOOTER)).toHaveLength(2);
+    }
+    for (const md of [summarize([], { footer: false }), summarize([{ name: "a.json", content: "{" }], { footer: false })]) expect(md).not.toContain(FOOTER);
   });
 });
 
@@ -296,13 +349,15 @@ describe("summarize: nothing to report", () => {
         "",
         "No GenClass race files were found in `test-results/genclass`. This report reads the files the GenClass Playwright fixture writes (one per test, format `genclass-races/1`): is the fixture installed, and did the tests run?",
         "",
+        FOOTER,
+        "",
       ].join("\n"),
     );
   });
 
   it("files with nothing flagged", () => {
     expect(summarize([{ name: "a.json", content: file("t", 1, []) }, { name: "b.json", content: file("t", 2, []) }])).toBe(
-      [REPORT_MARKER, "## GenClass race report", "", "**Nothing flagged** in 1 test · 2 files read", "", "<details><summary>1 test with nothing flagged</summary>", "", "- t (2 seeds: 1, 2)", "", "</details>", ""].join("\n"),
+      [REPORT_MARKER, "## GenClass race report", "", "**Nothing flagged** in 1 test · 2 files read", "", "<details><summary>1 test with nothing flagged</summary>", "", "- t (2 seeds: 1, 2)", "", "</details>", "", FOOTER, ""].join("\n"),
     );
   });
 
@@ -328,6 +383,8 @@ describe("summarize: nothing to report", () => {
         "- `test-results/genclass/locked.json`: `could not be read (EACCES)`",
         '- `test-results/genclass/next.json`: `schema: expected "genclass-races/1", got "genclass-races/2"`',
         '- `test-results/genclass/old.json`: `schema: missing, expected "genclass-races/1" (the file has "format": "genclass-races/1"; the field is named "schema")`',
+        "",
+        FOOTER,
         "",
       ].join("\n"),
     );

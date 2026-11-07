@@ -1,6 +1,6 @@
 // Shared by the tests: the fixture files (test/fixtures/races: two tests, two seeds each; one signature flagged in
-// both seeds of its test, one in a single seed) and the exact report they produce. README.md shows the same report
-// (package.test.ts keeps it in sync).
+// both seeds of its test, one in a single seed), the exact report they produce and the report's last line (the
+// footer). README.md shows the same report (package.test.ts keeps it in sync).
 
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -20,6 +20,10 @@ export function fixtureInputs(): RacesFileInput[] {
 
 /** U+200B, which the report puts after "#" before a digit (and "@" before a name) so GitHub links nothing. */
 export const Z = "\u200B";
+
+/** The report's last line (REPORT_FOOTER), written out so that a change of its text or link shows up here. */
+export const FOOTER =
+  "GenClass for Playwright: [what these lines mean and what the fixture can miss](https://github.com/genclass-dev/GenClass/tree/main/packages/playwright#what-to-expect-from-the-model).";
 
 /** The exact report for the fixture, with sources ["test-results/genclass"]. */
 export const FIXTURE_REPORT = [
@@ -56,5 +60,7 @@ export const FIXTURE_REPORT = [
   "---",
   "",
   "Each line is a diagnosis by GenClass's on-device model in the page under test, one per signature (trigger, diagnosis, operation). Reproducible: flagged in 2 or more seeds of the same test. A signature seen in fewer seeds may depend on that seed's timing: re-run with more seeds before acting on it. Confidence is the model's probability for the diagnosis (the highest over the seeds), and the quoted evidence line is from that seed.",
+  "",
+  FOOTER,
   "",
 ].join("\n");

@@ -2,15 +2,21 @@
 // Playwright config or where shards ran on several machines and their `test-results/genclass/` folders were
 // collected into one place:
 //
-//   npx genclass-playwright-report [dir ...] [--out <file>|-] [--min-seeds <n>] [--max-chars <n>] [--title <text>] [--quiet]
+//   npx -p @genclass/playwright genclass-playwright-report [dir ...] [--out <file>|-] [--min-seeds <n>] [--max-chars <n>]
+//     [--title <text>] [--no-footer] [--quiet]
+//
+// `-p @genclass/playwright` names the package the command comes from. Without it, outside a project that has the
+// package installed, npx would look up a package named `genclass-playwright-report` on npm, a name GenClass does not
+// own.
 //
 // Default dir `test-results/genclass`, default out `genclass-report.md` (`-`: print only), default --max-chars 60000
-// (fits in a GitHub comment; 0: no limit). Exit code 0 whenever the report was written, even with nothing flagged or
-// files skipped (a report never fails a build); 1 when the report file could not be written; 2 on a usage error.
+// (fits in a GitHub comment; 0: no limit); --no-footer leaves out the report's last line, the link to what its lines
+// mean. Exit code 0 whenever the report was written, even with nothing flagged or files skipped (a report never fails
+// a build); 1 when the report file could not be written; 2 on a usage error.
 
 import { DEFAULT_RACES_DIR, DEFAULT_REPORT_FILE, writeReport } from "./files.js";
 
-export const USAGE = "usage: genclass-playwright-report [dir ...] [--out <file>|-] [--min-seeds <n>] [--max-chars <n>] [--title <text>] [--quiet]\n";
+export const USAGE = "usage: genclass-playwright-report [dir ...] [--out <file>|-] [--min-seeds <n>] [--max-chars <n>] [--title <text>] [--no-footer] [--quiet]\n";
 
 export interface CliIo {
   cwd: string;
@@ -25,6 +31,7 @@ export function runCli(argv: readonly string[], io: CliIo): number {
   let minSeeds: number | undefined;
   let maxChars: number | undefined;
   let title: string | undefined;
+  let footer = true;
   let quiet = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -50,6 +57,8 @@ export function runCli(argv: readonly string[], io: CliIo): number {
       const v = value();
       if (v === null) return usage(io, "--title needs a text");
       title = v;
+    } else if (a === "--no-footer") {
+      footer = false;
     } else if (a === "--quiet" || a === "-q") {
       quiet = true;
     } else if (a.startsWith("-") && a !== "-") {
@@ -59,7 +68,7 @@ export function runCli(argv: readonly string[], io: CliIo): number {
     }
   }
   try {
-    const r = writeReport({ dirs: dirs.length ? dirs : [DEFAULT_RACES_DIR], base: io.cwd, outputFile: out, minSeeds, maxChars, title });
+    const r = writeReport({ dirs: dirs.length ? dirs : [DEFAULT_RACES_DIR], base: io.cwd, outputFile: out, minSeeds, maxChars, title, footer });
     if (!quiet || r.path === null) io.out(r.markdown);
     if (r.path) io.err(`GenClass report written to ${r.path}\n`);
     return 0;

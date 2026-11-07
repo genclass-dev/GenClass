@@ -6,6 +6,12 @@ everything below is unreleased.
 
 ## Unreleased
 
+- **The report links back**: its last line, after a blank line, links to the README's "What to expect from the
+  model" (what the lines mean and what the fixture can miss); the line is exported as `REPORT_FOOTER`. It counts
+  toward `maxChars` and stays when the report is shortened, the last-resort cut included. `footer: false` (reporter
+  and summariser) or `--no-footer` (the command) leaves it out. The shortened report's note and the README print the
+  command as `npx -p @genclass/playwright genclass-playwright-report`: without `-p`, outside a project that has the
+  package, npx would look up a package named `genclass-playwright-report` on npm, a name GenClass does not own.
 - **Page errors**: the fixture also hands over the page's uncaught errors and unhandled rejections the agent entry
   records, as `page-error|<name>|<request>` signatures (trigger `page-error`, never the model's `error`), keeping only
   the error's name, its message shape (quoted values as `…`, numbers as `N`: `@genclass/mcp`'s `shape()`, copied,

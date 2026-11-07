@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli, USAGE } from "../src/cli.js";
 import { readRacesDirs } from "../src/files.js";
 import GenClassReporter, { GenClassReporter as NamedReporter } from "../src/reporter.js";
-import { FIXTURE_REPORT, here, racesDir } from "./helpers.js";
+import { FIXTURE_REPORT, FOOTER, here, racesDir } from "./helpers.js";
 
 let root = "";
 
@@ -81,6 +81,17 @@ describe("reporter: reads test-results/genclass at the end of the run", () => {
     expect(o.out).toEqual([`\n${FIXTURE_REPORT}\n`]);
   });
 
+  it("footer false: the report without its last line, the link", () => {
+    project();
+    const o = io();
+    const r = new GenClassReporter({ footer: false, quiet: true }, o.sink);
+    r.onBegin({ configFile: join(root, "playwright.config.ts") });
+    r.onEnd();
+    const md = readFileSync(join(root, "genclass-report.md"), "utf8");
+    expect(md).toBe(r.markdown);
+    expect(`${md}\n${FOOTER}\n`).toBe(FIXTURE_REPORT);
+  });
+
   it("dir, minSeeds and title options", () => {
     cpSync(racesDir, join(root, "races"), { recursive: true });
     const o = io();
@@ -123,6 +134,8 @@ describe("reporter: reads test-results/genclass at the end of the run", () => {
     expect(small.markdown!.length).toBeLessThanOrEqual(5000);
     expect(small.markdown).toContain("_Shortened to fit 5000 characters: ");
     expect(small.markdown).toContain("**200 signatures** in 1 test");
+    // shortened, it still ends with the footer line
+    expect(small.markdown!.endsWith(`\n\n${FOOTER}\n`)).toBe(true);
 
     const unlimited = new GenClassReporter({ quiet: true, outputFile: false, maxChars: 0 }, io().sink);
     unlimited.onBegin({ configFile: join(root, "playwright.config.ts") });
@@ -135,6 +148,7 @@ describe("reporter: reads test-results/genclass at the end of the run", () => {
     byDefault.onEnd();
     expect(byDefault.markdown!.length).toBeLessThanOrEqual(60000);
     expect(byDefault.markdown).toContain("_Shortened to fit 60000 characters: ");
+    expect(byDefault.markdown!.endsWith(`\n\n${FOOTER}\n`)).toBe(true);
   });
 });
 
@@ -203,6 +217,21 @@ describe("genclass-playwright-report (the command)", () => {
     expect(md).toContain("**0 reproducible**");
   });
 
+  it("--no-footer: the report without its last line; by default it ends with that line, once", () => {
+    project();
+    const o = io();
+    expect(runCli(["--out", "-"], { cwd: root, ...o.sink })).toBe(0);
+    expect(o.out).toEqual([FIXTURE_REPORT]);
+    const lines = o.out[0].split("\n");
+    expect(lines.slice(-3)).toEqual(["", FOOTER, ""]);
+    expect(lines.filter((l) => l === FOOTER)).toHaveLength(1);
+    const bare = io();
+    expect(runCli(["--no-footer", "--out", "-"], { cwd: root, ...bare.sink })).toBe(0);
+    expect(`${bare.out[0]}\n${FOOTER}\n`).toBe(FIXTURE_REPORT);
+    expect(runCli(["--no-footer", "-o", "r.md", "--quiet"], { cwd: root, ...io().sink })).toBe(0);
+    expect(readFileSync(join(root, "r.md"), "utf8")).toBe(bare.out[0]);
+  });
+
   it("--max-chars: 0 means no limit, a number caps the report", () => {
     bigRaceFile(join(root, "test-results", "genclass"));
     const all = io();
@@ -212,6 +241,7 @@ describe("genclass-playwright-report (the command)", () => {
     expect(runCli(["--max-chars", "3000", "--out", "-"], { cwd: root, ...capped.sink })).toBe(0);
     expect(capped.out[0].length).toBeLessThanOrEqual(3000);
     expect(capped.out[0]).toContain("_Shortened to fit 3000 characters: ");
+    expect(capped.out[0].endsWith(`\n\n${FOOTER}\n`)).toBe(true);
     const byDefault = io();
     expect(runCli(["--out", "-"], { cwd: root, ...byDefault.sink })).toBe(0);
     expect(byDefault.out[0].length).toBeLessThanOrEqual(60000);

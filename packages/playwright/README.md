@@ -309,6 +309,7 @@ Playwright run (no browser).
 | `minSeeds` | `2` | Seeds a signature must be flagged in, within one test, to be marked **Reproducible**. |
 | `title` | `"GenClass race report"` | The report's heading. |
 | `maxChars` | `60000` | Keep the report under this many characters, so it fits in one GitHub comment (GitHub rejects comment bodies over 65,536). `0`: no limit. |
+| `footer` | `true` | End the report with one line that links to [what the lines mean and what the fixture can miss](#what-to-expect-from-the-model). `false`: no such line. |
 
 The reporter never changes the run's status and never throws into Playwright: a report it cannot write is one line
 on stderr. It reads files; it does not inject anything (the fixture does that), and Playwright is not imported by
@@ -318,13 +319,17 @@ call from any script.
 ### Without the reporter, or with shards
 
 ```bash
-npx genclass-playwright-report [dir ...] [--out <file>|-] [--min-seeds <n>] [--max-chars <n>] [--title <text>] [--quiet]
+npx -p @genclass/playwright genclass-playwright-report [dir ...] [--out <file>|-] [--min-seeds <n>] [--max-chars <n>] [--title <text>] [--no-footer] [--quiet]
 ```
 
 Same report from the same files (default dir `test-results/genclass`, default out `genclass-report.md`, `-` prints
-only, default `--max-chars 60000`, `0` for no limit). For sharded runs, collect each shard's `test-results/genclass/`
-and pass the directories. Exit code 0 when the report was written, whatever it says; 1 when the file could not be
-written; 2 on a usage error.
+only, default `--max-chars 60000`, `0` for no limit; `--no-footer` leaves out the last line, the link). For sharded
+runs, collect each shard's `test-results/genclass/` and pass the directories. Exit code 0 when the report was
+written, whatever it says; 1 when the file could not be written; 2 on a usage error.
+
+`-p @genclass/playwright` names the package the command comes from: npx runs the installed copy, or fetches that
+package where there is none. Without `-p`, where the package is not installed, npx would look up a package named
+`genclass-playwright-report` on npm, a name GenClass does not own.
 
 From code (pure, no I/O):
 
@@ -425,8 +430,8 @@ What it does so the comment is safe to post:
   (operations, file names) are left as they are, since GitHub links nothing inside them;
 - the report is kept under `maxChars` (default 60000 characters). Left out first: entries of the "nothing flagged"
   and "Files skipped" lists, then the least important signatures of each test (fewer seeds and lower confidence
-  first), then whole tests from the end. The counts always include everything, and a note under the first line says
-  what was left out.
+  first), then whole tests from the end. The counts always include everything, a note under the first line says
+  what was left out, and the last line stays.
 
 ### What the comment looks like
 
@@ -470,6 +475,8 @@ followed by the invisible zero-width space described above.
 ---
 
 Each line is a diagnosis by GenClass's on-device model in the page under test, one per signature (trigger, diagnosis, operation). Reproducible: flagged in 2 or more seeds of the same test. A signature seen in fewer seeds may depend on that seed's timing: re-run with more seeds before acting on it. Confidence is the model's probability for the diagnosis (the highest over the seeds), and the quoted evidence line is from that seed.
+
+GenClass for Playwright: [what these lines mean and what the fixture can miss](https://github.com/genclass-dev/GenClass/tree/main/packages/playwright#what-to-expect-from-the-model).
 ```
 
 A run with the default `model: "skip"` looks like this instead (the e2e check above, shortened to the one flagged
@@ -495,7 +502,9 @@ test; the request ids carry the same invisible character):
 ```
 
 The first line of every report is an HTML comment, invisible on GitHub, that lets a CI step find and update its own
-comment.
+comment. The last line links to [What to expect from the model](#what-to-expect-from-the-model), for a reviewer who
+wants to know what the lines mean and what the fixture can miss; `footer: false` in the reporter, or `--no-footer` on
+the command, leaves it out.
 
 ## Post it on the pull request
 
@@ -528,7 +537,7 @@ jobs:
 
       - name: GenClass report in the job summary
         if: ${{ !cancelled() }}
-        run: npx genclass-playwright-report --max-chars 300000 --out - >> "$GITHUB_STEP_SUMMARY"
+        run: npx -p @genclass/playwright genclass-playwright-report --max-chars 300000 --out - >> "$GITHUB_STEP_SUMMARY"
 
       - name: GenClass report on the pull request (one comment, updated in place)
         if: ${{ !cancelled() && hashFiles('genclass-report.md') != '' && github.event.pull_request.head.repo.full_name == github.repository }}
