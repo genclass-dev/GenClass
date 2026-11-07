@@ -139,6 +139,21 @@ describe("testgen (AGENT.md §5.3)", () => {
     expect(t).toContain("could not derive a generic assertion");
   });
 
+  it("the test asserts the schedule the page put in force (an older runtime ignores what it cannot run); ranks are cleaned like given keys", () => {
+    const t = regressionTest(finding("race", { textOnlyRun: ["Stale"] }), run([act(0, "click", 'button "Go"')]), { order: "ranked", ranks: ["GET /a#1\n", "GET /b#1"], delaySeed: 1, delay: { minMs: 300, maxMs: 300 } })!;
+    expect(t).toContain('const SCHEDULE = {"order":"ranked","ranks":["GET /a#1","GET /b#1"],"delaySeed":1,"delay":{"minMs":300,"maxMs":300}};');
+    expect(t).toContain("  const applied = await page.evaluate(() => (window as any).__GENCLASS_AGENT__?.schedule);");
+    expect(t).toContain(`  expect(applied, "the app's @genclass/runtime must apply this schedule (lifo, ranked, reverse and delaySeed need a newer @genclass/runtime)").toMatchObject({"order":"ranked","delaySeed":1});`);
+    expect(t).toContain('  expect(applied?.ranks?.length, "every ranked key is in force").toBe(2);');
+    // right after the connection check, before the steps
+    expect(t.indexOf("const applied")).toBeGreaterThan(t.indexOf("calls connectAgent"));
+    expect(t.indexOf("const applied")).toBeLessThan(t.indexOf("whenSettled"));
+    const seeded = regressionTest(finding("race", { textOnlyRun: ["Stale"] }), run([]), { order: "seeded", seed: 3, reverse: true })!;
+    expect(seeded).toContain('.toMatchObject({"order":"seeded","reverse":true});');
+    expect(seeded).not.toContain("ranks?.length");
+    expect(regressionTest(finding("error", { name: "Error", message: "x" }), run([]), undefined)).toContain('.toMatchObject({"order":"given"});');
+  });
+
   it("a line with a clock or a day in it is a value and is asserted; only an age is left out", () => {
     const r = run([act(0, "click", 'button "Go"')]);
     const t = regressionTest(finding("race", { textOnlyBaseline: ["Your appointment: 4:00 PM", "Edited 3 minutes ago"], textOnlyRun: ["Arrives today"] }), r, { order: "seeded", seed: 2 })!;

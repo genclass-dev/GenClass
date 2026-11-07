@@ -42,8 +42,14 @@
 // clock), generated field names (fieldShape(), only for names some baseline lacks) and route segments (routeShape()),
 // tokens holding digits. Whether anything is a bug is only ever asked of the page itself: does what it shows depend on the timing of its
 // responses?
+//
+// Coverage (from the pages' net timing log, net.ts): which pairs of responses overlapping in a baseline the group's runs
+// delivered in both orders, and how many orderings of overlapping triples they delivered. A run's inversions (overlapping
+// pairs delivered newer first) come from its own timing; a run that differs without any is a difference of timing, not
+// of order. Coverage counts what was tried; it never makes or unmakes a race.
 
-import type { ActStep, Run, Snapshot } from "./types.js";
+import type { ActStep, NetEntry, Run, Snapshot } from "./types.js";
+import { MAX_PAIRS, deliveredBefore, deliveryRanks, inversionsOf, keyOrder, overlapOf, pairKey, schedulable, unorderedKey } from "./net.js";
 import { ageless, agesIn, fieldShape, lineWeight, pathShape, q, routeShape, sameAges, sigOf, type Elapsed } from "./text.js";
 
 /** The runtime's redaction placeholder (packages/runtime/src/util.ts REDACTED). */
@@ -211,7 +217,41 @@ export interface RunDiff {
   forced: number;
   /** Its page text differs only in a bare count, beside a store field another site's response wrote: internal, not a race. */
   otherSite?: boolean;
+  /**
+   * Did it deliver an overlapping pair newer first (its own timing)? null when it has no timing log (an older page
+   * runtime) or lost part of it, or lost steps.
+   */
+  reordered: boolean | null;
+  /** Its inversions: overlapping pairs whose newer response was delivered first. */
+  inversions: number;
 }
+
+/** How much of the response order a group's runs tried (from the pages' net timing log). */
+export interface Coverage {
+  /** Schedulable pairs of responses overlapping in at least one baseline. */
+  pairs: number;
+  /** Of them, delivered in both orders across the group's runs (the baselines included). */
+  bothWays: number;
+  /**
+   * The first 10 that were not, and why: no reordered run had them overlapping (`via`: the later one was sent by that
+   * request's handler, so moving one moves the other), or none of those that had delivered them the other way.
+   */
+  neverInverted: { a: string; b: string; why: "did-not-overlap" | "not-tried"; via?: string }[];
+  /** Triangles of the baselines' overlap graph (three responses that all overlap). */
+  triples: number;
+  /** Their orderings, 6 each. */
+  orderings: number;
+  /** Orderings of those triples some run of the group delivered. */
+  orderingsSeen: number;
+  /** Requests left out: passed at once (protected, mode "off"), retries and hedges, or never delivered. */
+  unschedulable: number;
+  /** triangles: counted up to 2,000; netLost: timing entries the runs lost; pairs: a run had more than 20,000. */
+  capped?: { triangles?: boolean; netLost?: number; pairs?: boolean };
+}
+
+/** Triangles counted per group. */
+const MAX_TRIANGLES = 2000;
+const NEVER_LISTED = 10;
 
 /**
  * The value keyed() gives a state name in a raw snapshot: a "*" segment (records under a noisy parent) pools the
@@ -347,6 +387,8 @@ export interface GroupReport {
   look?: { lines: { text: string; only: "slow" | "plain" | "plain-alone"; runs: number }[]; drift: [string, string][]; errors: string[]; fields: FieldDiff[]; writes: FieldDiff[] };
   /** Requests to other sites left out of the counts (nothing the user did or the page's own origin asked for led to them). */
   thirdParty?: string[];
+  /** What the runs tried of the response order; null when no baseline has a timing log (an older page runtime). */
+  coverage: Coverage | null;
 }
 
 export function multiset(lines: Iterable<string>): Map<string, number> {
@@ -839,7 +881,100 @@ function diffRun(ref: Side, r: Run, c: Context): RunDiff | null {
   if (otherSite) tier = "internal";
   const textCounts: Record<string, { baseline: number; run: number }> = {};
   for (const l of [...textOnlyBaseline.slice(0, 15), ...textOnlyRun.slice(0, 15)]) textCounts[l] = { baseline: ref.text.get(l) ?? 0, run: rt.get(l) ?? 0 };
-  return { run: r.id, label: r.assignment?.label ?? r.schedule?.label ?? r.id, tier, fields: fields.slice(0, 30), textOnlyBaseline: textOnlyBaseline.slice(0, 15), textOnlyRun: textOnlyRun.slice(0, 15), ...(Object.keys(textCounts).length ? { textCounts } : {}), ...(announced.length ? { announced: announced.slice(0, 10) } : {}), errors: errors.slice(0, 10), witnesses: witnesses.slice(0, 10), forced: r.forced, ...(otherSite ? { otherSite } : {}) };
+  const { reordered, inversions } = reorderedOf(r);
+  return { run: r.id, label: r.assignment?.label ?? r.schedule?.label ?? r.id, tier, fields: fields.slice(0, 30), textOnlyBaseline: textOnlyBaseline.slice(0, 15), textOnlyRun: textOnlyRun.slice(0, 15), ...(Object.keys(textCounts).length ? { textCounts } : {}), ...(announced.length ? { announced: announced.slice(0, 10) } : {}), errors: errors.slice(0, 10), witnesses: witnesses.slice(0, 10), forced: r.forced, ...(otherSite ? { otherSite } : {}), reordered, inversions };
+}
+
+/**
+ * A run's inversions from its own timing, and whether it was reordered at all: null without a timing log, or when the
+ * page lost part of it or some steps (an inversion may be missing).
+ */
+export function reorderedOf(r: Pick<Run, "net" | "netLost" | "lost" | "order">): { reordered: boolean | null; inversions: number } {
+  if (!r.net) return { reordered: null, inversions: 0 };
+  const inversions = inversionsOf(r.net, r.order).length;
+  return { reordered: (r.netLost ?? 0) > 0 || r.lost > 0 ? null : inversions > 0, inversions };
+}
+
+/**
+ * What a group's runs tried of the response order: the pairs overlapping in a baseline, delivered both ways or not (and
+ * why), the orderings of overlapping triples seen. From the baselines' timing logs; null when none has one.
+ */
+export function coverageOf(base: Run[], runs: Run[]): Coverage | null {
+  const timed = base.filter((b) => b.net);
+  if (!timed.length) return null;
+  const order = keyOrder(timed.map((b) => b.net as Record<string, NetEntry>));
+  const place = new Map(order.map((k, i) => [k, i]));
+  const pairs = new Map<string, [string, string]>();
+  let manyPairs = false;
+  for (const b of timed) {
+    const ov = overlapOf(b.net);
+    if (ov.length >= MAX_PAIRS) manyPairs = true;
+    for (const [x, y] of ov) {
+      const [a, c] = (place.get(x) ?? 0) <= (place.get(y) ?? 0) ? [x, y] : [y, x];
+      pairs.set(pairKey(a, c), [a, c]);
+    }
+  }
+  const sorted = [...pairs.values()].sort((x, y) => place.get(x[0])! - place.get(y[0])! || place.get(x[1])! - place.get(y[1])!);
+  const ranks = runs.map((r) => deliveryRanks(r));
+  const reordered = runs.filter((r) => !isFifo(r) && r.net).map((r) => new Set(overlapOf(r.net).map(([x, y]) => unorderedKey(x, y))));
+  const viaOf = (k: string): string | undefined => timed.map((b) => b.net?.[k]?.via).find((v) => !!v);
+  let bothWays = 0;
+  const neverInverted: Coverage["neverInverted"] = [];
+  for (const [a, b] of sorted) {
+    let ab = false;
+    let ba = false;
+    for (const rk of ranks) {
+      const o = deliveredBefore(rk, a, b);
+      if (o === true) ab = true;
+      else if (o === false) ba = true;
+      if (ab && ba) break;
+    }
+    if (ab && ba) {
+      bothWays++;
+      continue;
+    }
+    if (neverInverted.length >= NEVER_LISTED) continue;
+    // without a reordered run that has a timing log, nothing says they stopped overlapping
+    const overlapped = reordered.some((s) => s.has(unorderedKey(a, b)));
+    const via = viaOf(b);
+    neverInverted.push({ a, b, why: reordered.length && !overlapped ? "did-not-overlap" : "not-tried", ...(via ? { via } : {}) });
+  }
+  // triangles of the baselines' overlap graph, each pair in start order
+  const adj = new Map<string, Set<string>>();
+  for (const [a, b] of sorted) {
+    if (!adj.has(a)) adj.set(a, new Set());
+    adj.get(a)!.add(b);
+  }
+  const triangles: [string, string, string][] = [];
+  let manyTriangles = false;
+  outer: for (const [a, b] of sorted) {
+    for (const c of adj.get(b) ?? []) {
+      if (!adj.get(a)?.has(c)) continue;
+      if (triangles.length >= MAX_TRIANGLES) {
+        manyTriangles = true;
+        break outer;
+      }
+      triangles.push([a, b, c]);
+    }
+  }
+  let orderingsSeen = 0;
+  for (const t of triangles) {
+    const seen = new Set<string>();
+    for (const rk of ranks) {
+      const at = t.map((k) => rk.get(k));
+      if (at.some((x) => x === undefined)) continue;
+      seen.add([0, 1, 2].sort((i, j) => at[i]! - at[j]!).join(""));
+      if (seen.size === 6) break;
+    }
+    orderingsSeen += seen.size;
+  }
+  // requests the baselines saw that no baseline could schedule
+  const schedulableKeys = new Set(order);
+  const left = new Set<string>();
+  for (const b of timed) for (const e of Object.values(b.net ?? {})) if (!schedulable(e) && !schedulableKeys.has(e.key)) left.add(e.key);
+  const netLost = runs.reduce((n, r) => n + (r.netLost ?? 0), 0);
+  const capped = { ...(manyTriangles ? { triangles: true } : {}), ...(netLost > 0 ? { netLost } : {}), ...(manyPairs ? { pairs: true } : {}) };
+  return { pairs: pairs.size, bothWays, neverInverted, triples: triangles.length, orderings: 6 * triangles.length, orderingsSeen, unschedulable: left.size, ...(Object.keys(capped).length ? { capped } : {}) };
 }
 
 /** Two lines the same but for numbers a little apart. */
@@ -931,13 +1066,14 @@ export function compareRuns(runs: Run[]): GroupReport[] {
     const { base, plain } = baselinesOf(g, session);
     const rest = g.filter((r) => !isFifo(r));
     const scenario = scenarioOf(base[0] ?? g[0]);
-    const rep: GroupReport = { route, scenario, scenarioKey: scenarioOf(base[0] ?? g[0], grouping), grouping, baselines: base.map((r) => r.id), runs: g.length, compared: base.length >= 2 ? rest.length : 0, noise: [], diffs: [], missingBaseline: base.length === 0, insufficientBaselines: base.length === 1, unfiltered: [], ...(plain ? { plainBaseline: plain.id } : {}) };
+    const rep: GroupReport = { route, scenario, scenarioKey: scenarioOf(base[0] ?? g[0], grouping), grouping, baselines: base.map((r) => r.id), runs: g.length, compared: base.length >= 2 ? rest.length : 0, noise: [], diffs: [], missingBaseline: base.length === 0, insufficientBaselines: base.length === 1, unfiltered: [], ...(plain ? { plainBaseline: plain.id } : {}), coverage: null };
     const cut = g.filter((r) => (r.snapshot?.stateLeft ?? 0) > 0);
     if (cut.length) rep.truncated = { runs: cut.length, left: Math.max(...cut.map((r) => r.snapshot!.stateLeft!)), total: Math.max(...cut.map((r) => r.snapshot!.stateTotal ?? 0)) };
     if (!base.length) {
       out.push(rep);
       continue;
     }
+    rep.coverage = coverageOf(base, g);
     const b0 = base[0];
     const leftOut = thirdPartyOf(g);
     if (leftOut.size) rep.thirdParty = [...leftOut].slice(0, 10);

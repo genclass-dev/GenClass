@@ -1,10 +1,12 @@
 // Validation of what pages send to the bridge (genclass-agent/1). A page is untrusted: every field is type-checked,
 // every string and list capped, unknown fields dropped. Invalid parts are skipped, never half-stored.
 
-import type { ActStep, DecisionRec, ErrorRec, ExplainRec, ScheduleOrder, ScheduleSpec, Snapshot, Step, Witness } from "./types.js";
+import type { ActStep, DecisionRec, ErrorRec, ExplainRec, NetEntry, ScheduleOrder, ScheduleSpec, Snapshot, Step, Witness } from "./types.js";
 import { num, str } from "./text.js";
 
-const ORDERS: readonly ScheduleOrder[] = ["natural", "fifo", "seeded", "given"];
+const ORDERS: readonly ScheduleOrder[] = ["natural", "fifo", "seeded", "given", "lifo", "ranked"];
+/** Timing entries kept per page load (the page keeps at most 2,000 too). */
+export const MAX_NET = 2000;
 /** Store fields kept per snapshot (the page sends at most 1,000: packages/runtime/src/agent/index.ts SNAPSHOT_FIELDS). */
 const MAX_STATE = 1200;
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
@@ -20,13 +22,19 @@ export function spec(v: unknown): ScheduleSpec | null {
   const out: ScheduleSpec = { order: o.order as ScheduleOrder };
   const seed = int(o.seed, 2 ** 31);
   if (seed !== undefined) out.seed = seed;
+  // only true is a reverse; anything else is ignored, not rejected (as the page's parseSpec)
+  if (o.reverse === true) out.reverse = true;
   if (out.order === "given") out.given = strs(o.given, 2000, 300);
+  // ranked without ranks is ranked over nothing: request order, as fifo
+  if (out.order === "ranked") out.ranks = strs(o.ranks, 2000, 300);
   if (Array.isArray(o.focus)) out.focus = strs(o.focus, 20, 300);
   const d = obj(o.delay);
   if (d) {
     const lo = int(d.minMs, 10_000) ?? 0;
     out.delay = { minMs: lo, maxMs: Math.max(lo, int(d.maxMs, 10_000) ?? lo) };
   }
+  const ds = int(o.delaySeed, 2 ** 31);
+  if (ds !== undefined) out.delaySeed = ds;
   const mh = int(o.maxHoldMs, 30_000);
   if (mh !== undefined) out.maxHoldMs = mh;
   const gap = int(o.gapMs, 1000);
@@ -38,16 +46,34 @@ export function spec(v: unknown): ScheduleSpec | null {
   return out;
 }
 
-export function hello(v: unknown): { url: string; route: string; title?: string; ua?: string; mode?: string; model?: string; schedule: ScheduleSpec | null } | null {
+/** A page load's hello, validated. */
+export interface HelloInfo {
+  url: string;
+  route: string;
+  title?: string;
+  ua?: string;
+  mode?: string;
+  model?: string;
+  /** The schedule the page set itself (a test, a URL), when the bridge knows its order. */
+  schedule: ScheduleSpec | null;
+  /** The page set a schedule of an order this bridge does not know: it gets no assignment. */
+  scheduleUnknown?: boolean;
+  /** What its runtime can run beyond the first four orders; absent from an older runtime. */
+  caps?: string[];
+}
+
+export function hello(v: unknown): HelloInfo | null {
   const o = obj(v);
   const page = obj(o?.page);
   if (!o || !page) return null;
   const rt = obj(o.runtime);
-  const out: { url: string; route: string; title?: string; ua?: string; mode?: string; model?: string; schedule: ScheduleSpec | null } = {
+  const out: HelloInfo = {
     url: str(page.url, 2000) ?? "",
     route: str(page.route, 500) ?? "/",
     schedule: spec(o.schedule),
   };
+  if (o.schedule !== undefined && o.schedule !== null && !out.schedule) out.scheduleUnknown = true;
+  if (Array.isArray(o.caps)) out.caps = strs(o.caps, 20, 40);
   const title = str(page.title, 200);
   if (title) out.title = title;
   const ua = str(o.ua, 300);
@@ -98,6 +124,9 @@ export function step(v: unknown): Step | null {
       const held = int(o.held, 1e7);
       if (held !== undefined) s.held = held;
       if (o.forced === true) s.forced = true;
+      const ready = int(o.ready, 1e9);
+      if (ready !== undefined) s.ready = ready;
+      if (o.pass === true) s.pass = true;
       return s;
     }
     case "end": {
@@ -126,6 +155,51 @@ export function step(v: unknown): Step | null {
     default:
       return null;
   }
+}
+
+/** One timing entry (the steps event's `net`): key, start index and send time required, the rest as sent and valid. */
+export function netEntry(v: unknown): NetEntry | null {
+  const o = obj(v);
+  const key = str(o?.key, 300);
+  if (!o || !key) return null;
+  const n = int(o.n, 1e6);
+  const s = int(o.s, 1e9);
+  if (n === undefined || s === undefined) return null;
+  const e: NetEntry = { key, n, s };
+  for (const k of ["r", "d", "held"] as const) {
+    const x = int(o[k], 1e9);
+    if (x !== undefined) e[k] = x;
+  }
+  if (o.forced === true) e.forced = true;
+  if (o.pass === true) e.pass = true;
+  const via = str(o.via, 300);
+  if (via) e.via = via;
+  const end = str(o.end, 20);
+  if (end) e.end = end;
+  return e;
+}
+
+/**
+ * Merge timing entries into a run's log by key (full entries replace older ones). A log has at most MAX_NET keys;
+ * returns how many new keys did not fit. The log has no prototype: a key is only ever a key.
+ */
+export function mergeNet(into: Record<string, NetEntry>, entries: unknown): number {
+  if (!Array.isArray(entries)) return 0;
+  let size = Object.keys(into).length;
+  let dropped = 0;
+  for (const x of entries.slice(0, MAX_NET)) {
+    const e = netEntry(x);
+    if (!e) continue;
+    if (!Object.prototype.hasOwnProperty.call(into, e.key)) {
+      if (size >= MAX_NET) {
+        dropped++;
+        continue;
+      }
+      size++;
+    }
+    into[e.key] = e;
+  }
+  return dropped;
 }
 
 export function witness(v: unknown): Witness | null {
