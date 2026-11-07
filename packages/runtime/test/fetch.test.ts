@@ -368,3 +368,103 @@ describe("fetch observer: Request objects with bodies (one clone; replays come f
     expect(await r2.text()).toBe("abc");
   });
 });
+
+describe("fetch observer: a held delivery honours the app's abort (CONTRACT §6, §16)", () => {
+  it("guard: the app aborts while its response is held for a decision; its promise rejects with AbortError at the release", async () => {
+    const manual = new ManualDecider();
+    const s = setup({ decider: manual, triage: "always" });
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    const ac = new AbortController();
+    let got: unknown;
+    let err: unknown;
+    void s.fetch("/api/x", { signal: ac.signal }).then(
+      (r) => (got = r),
+      (e) => (err = e),
+    );
+    await s.clock.advance(10);
+    expect(manual.pending.map((p) => p.req.trigger)).toEqual(["request"]);
+    manual.answer(defaultScript()); // send
+    await s.clock.advance(100);
+    expect(manual.pending.map((p) => p.req.trigger)).toEqual(["delivery"]); // the response is held
+    ac.abort();
+    await s.clock.flush();
+    manual.answer(defaultScript()); // deliver: the app aborted meanwhile
+    await s.clock.flush();
+    expect(got).toBeUndefined();
+    expect((err as Error).name).toBe("AbortError");
+    expect(err).toBe(ac.signal.reason);
+    // no op or event change: the request ended when its response arrived
+    const op = [...s.rt.ops.byId.values()].find((o) => o.kind === "fetch")!;
+    expect(op.status).toBe("ok");
+  });
+
+  it("guard: the reason the app aborted with is what its promise rejects with", async () => {
+    const manual = new ManualDecider();
+    const s = setup({ decider: manual, triage: "always" });
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    const ac = new AbortController();
+    let err: unknown;
+    void s.fetch("/api/x", { signal: ac.signal }).catch((e) => (err = e));
+    await s.clock.advance(10);
+    manual.answer(defaultScript());
+    await s.clock.advance(100);
+    const why = new Error("the user left the page");
+    ac.abort(why);
+    manual.answer(defaultScript());
+    await s.clock.flush();
+    expect(err).toBe(why);
+  });
+
+  it("a held response the app did not abort is delivered after the decision, as before", async () => {
+    const manual = new ManualDecider();
+    const s = setup({ decider: manual, triage: "always" });
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    const ac = new AbortController();
+    let body: unknown;
+    void s.fetch("/api/x", { signal: ac.signal }).then(async (r) => (body = await r.json()));
+    await s.clock.advance(10);
+    manual.answer(defaultScript());
+    await s.clock.advance(100);
+    expect(body).toBeUndefined();
+    manual.answer(defaultScript());
+    await s.clock.flush();
+    expect(body).toEqual({ v: 1 });
+  });
+
+  it("no hold: a response released at once is delivered as today, even when the signal was aborted just before the gate", async () => {
+    const holder: { server?: { fetch: (u: unknown, i?: Record<string, unknown>) => Promise<Response> } } = {};
+    const ac = new AbortController();
+    // the native fetch resolves, then the app aborts before GenClass's delivery gate runs (a microtask later)
+    const native = (u: unknown, i?: Record<string, unknown>) =>
+      holder.server!.fetch(u, i).then((r) => {
+        ac.abort();
+        return r;
+      });
+    const s = setup({ mode: undefined, extraGlobal: { fetch: native } });
+    holder.server = s.server;
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    let got: Response | undefined;
+    let err: unknown;
+    void s.fetch("/api/x", { signal: ac.signal }).then(
+      (r) => (got = r),
+      (e) => (err = e),
+    );
+    await s.clock.advance(100);
+    expect(ac.signal.aborted).toBe(true);
+    expect(err).toBeUndefined();
+    expect(got?.status).toBe(200);
+  });
+
+  it("observe: an abort after the response was delivered changes nothing", async () => {
+    const s = setup({ mode: undefined });
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    const ac = new AbortController();
+    let got: Response | undefined;
+    void s.fetch("/api/x", { signal: ac.signal }).then((r) => (got = r));
+    await s.clock.advance(60);
+    expect(got?.status).toBe(200);
+    ac.abort();
+    await s.clock.flush();
+    expect(got?.status).toBe(200);
+  });
+});

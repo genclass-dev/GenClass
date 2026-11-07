@@ -8,6 +8,8 @@
 //     serve_cached), fail-open after the hold budget; keepalive requests are never held;
 //   - failure gate: network errors, timeouts, 5xx/429/408 wait for the model before the app sees them
 //     (deliver/retry/serve_cached);
+//   - delivery gate: a response held there (a decision, the agent link's schedule) that the app aborted meanwhile
+//     rejects with the abort, as on a slower network; a response released at once is delivered exactly as before;
 //   - stall watch: far past the learned latency, the model may hedge or serve a cached response;
 //   - the app always gets its own Response; GenClass buffers a clone for coalescing and the GET cache;
 //   - context: the op is ambient when the fetch promise and the Response body methods settle.
@@ -477,10 +479,12 @@ export function installFetch(host: NetHost): (() => void) | null {
       let answered = false;
       let sent = false;
       let cancelStall: () => void = () => undefined;
+      /** What an aborted fetch rejects with: the signal's reason, else the platform's default AbortError. */
+      const abortError = () => signal?.reason ?? new DOMException("The operation was aborted.", "AbortError");
       const onAbort = () => {
         if (!sent && !answered) {
           host.endOp(op, "aborted", { code: "aborted" });
-          answer(null, signal?.reason ?? new DOMException("The operation was aborted.", "AbortError"));
+          answer(null, abortError());
         }
       };
       const unlisten = () => signal?.removeEventListener?.("abort", onAbort);
@@ -495,7 +499,7 @@ export function installFetch(host: NetHost): (() => void) | null {
       };
       if (signal?.aborted) {
         host.endOp(op, "aborted", { code: "aborted" });
-        answer(null, signal.reason ?? new DOMException("The operation was aborted.", "AbortError"));
+        answer(null, abortError());
         return;
       }
       signal?.addEventListener?.("abort", onAbort, { once: true } as AddEventListenerOptions);
@@ -540,8 +544,12 @@ export function installFetch(host: NetHost): (() => void) | null {
               failureGate(sendOp, res, null, { kind: "http", status: res.status, statusText: res.statusText, durMs: (sendOp.end ?? host.clock.now()) - sendOp.start });
             } else if (!failed && host.gated(sendOp) && !answered) {
               if (json && req.method !== "GET" && req.method !== "HEAD" && res.ok) host.noteResponse?.({ op: sendOp, req, status: res.status, body: json });
-              // the delivery gate: delaying a response is only extra latency (any correct app tolerates it)
-              host.deliver({ op: sendOp, req, status: res.status, ...(json ? { body: json } : {}) }, () => answer(res));
+              // the delivery gate: delaying a response is only extra latency (any correct app tolerates it). A held
+              // response the app aborted meanwhile rejects as the abort, as on a slower network; a release inside
+              // deliver() (nothing held) answers as before
+              let held = false;
+              host.deliver({ op: sendOp, req, status: res.status, ...(json ? { body: json } : {}) }, () => (held && signal?.aborted ? answer(null, abortError()) : answer(res)));
+              held = true;
             } else answer(res);
           },
           (err: unknown) => {
