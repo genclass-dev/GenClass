@@ -104,7 +104,7 @@ export const TOOLS: ToolDef[] = [
           type: "string",
           enum: ["seeded", "systematic"],
           description:
-            "seeded (default, the plan with a measured false-report rate): the baselines, then `runs` seeded orders. systematic: the baselines, one load with every overlapping response pair the other way (lifo), `runs` - 1 orders chosen from the baselines' timing so every ordering of overlapping triples gets tried, and a third baseline last (`runs` + 3 loads; needs a recent @genclass/runtime, an older one gets seeded orders instead). Its false-report rate is not measured yet.",
+            "seeded (default, the plan with a measured false-report rate): the baselines, then `runs` seeded orders. systematic: the baselines, one load with every overlapping response pair the other way (lifo), `runs` - 1 orders chosen from the baselines' timing toward every ordering of overlapping triples, and a third baseline last (`runs` + 3 loads; needs a recent @genclass/runtime, an older one gets seeded orders instead). They try every ordering only when there are enough of them: 3 requests in flight together take runs 5; 4, runs 7; 5 or 6, runs 9; 7 or 8, runs 11; the report's coverage line says how many orderings were tried and the runs that try the rest. Its false-report rate is not measured yet.",
         },
         slow_mode: { type: "string", enum: ["uniform", "fixed"], description: "With slow_ms: uniform adds 0 to slow_ms per response (default for seeded), fixed adds slow_ms to every response (default for systematic)." },
         id: { type: "string", description: "report: the session id (default the latest)." },
