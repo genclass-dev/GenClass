@@ -14,8 +14,9 @@ your tests open, and turns what it flagged into one pull-request report. This pa
   the same way every run. At the end of each test it writes one JSON file (format `genclass-races/1`) with what the runtime saw, the
   seed and the chaos that produced it.
 - **The reporter** (`@genclass/playwright/reporter`) reads those files when the suite ends, marks what reproduced
-  across seeds, writes one markdown file, `genclass-report.md`, and prints it. A short GitHub Actions step posts that
-  file as one pull-request comment that updates in place.
+  across seeds, writes one markdown file, `genclass-report.md`, and prints it. In GitHub Actions one step,
+  `genclass-playwright-report --comment`, adds the report to the job summary and posts it on the pull request as one
+  comment that updates in place, only when something is flagged.
 
 What the fixture records without a model download: two happens-before facts the runtime computes on its own
 (`overwrote-newer`, a response that wrote a field over what a newer request or the user had written;
@@ -309,6 +310,7 @@ Playwright run (no browser).
 | `minSeeds` | `2` | Seeds a signature must be flagged in, within one test, to be marked **Reproducible**. |
 | `title` | `"GenClass race report"` | The report's heading. |
 | `maxChars` | `60000` | Keep the report under this many characters, so it fits in one GitHub comment (GitHub rejects comment bodies over 65,536). `0`: no limit. |
+| `footer` | `true` | End the report with one line that links to [what the lines mean and what the fixture can miss](#what-to-expect-from-the-model). `false`: no such line. |
 
 The reporter never changes the run's status and never throws into Playwright: a report it cannot write is one line
 on stderr. It reads files; it does not inject anything (the fixture does that), and Playwright is not imported by
@@ -318,13 +320,21 @@ call from any script.
 ### Without the reporter, or with shards
 
 ```bash
-npx genclass-playwright-report [dir ...] [--out <file>|-] [--min-seeds <n>] [--max-chars <n>] [--title <text>] [--quiet]
+npx -p @genclass/playwright genclass-playwright-report [dir ...] [--out <file>|-] [--min-seeds <n>] [--max-chars <n>] [--title <text>] [--no-footer] [--quiet] [--comment [--dry-run]]
 ```
 
 Same report from the same files (default dir `test-results/genclass`, default out `genclass-report.md`, `-` prints
-only, default `--max-chars 60000`, `0` for no limit). For sharded runs, collect each shard's `test-results/genclass/`
-and pass the directories. Exit code 0 when the report was written, whatever it says; 1 when the file could not be
-written; 2 on a usage error.
+only, default `--max-chars 60000`, `0` for no limit; `--no-footer` leaves out the last line, the link). For sharded
+runs, collect each shard's `test-results/genclass/` and pass the directories, and run `--comment` once, on all of
+them. `--comment` also adds the report to the job summary and posts it on the pull request
+([below](#post-it-on-the-pull-request)); `--dry-run` prints those requests instead of making them. Exit code 0 when
+the report was written, whatever it says and whatever became of the comment; 1 when the file could not be written;
+2 on a usage error. The command reads the files itself: when the reporter's options in your config set `dir`,
+`minSeeds`, `title`, `maxChars` or `footer`, give the command the same.
+
+`-p @genclass/playwright` names the package the command comes from: npx runs the installed copy, or fetches that
+package where there is none. Without `-p`, where the package is not installed, npx would look up a package named
+`genclass-playwright-report` on npm, a name GenClass does not own.
 
 From code (pure, no I/O):
 
@@ -334,7 +344,8 @@ const markdown = summarize([{ name: "checkout-1.json", content: jsonText }], { m
 ```
 
 `buildSummary` returns the same report as data (tests, signatures, seeds, totals, skipped files), and
-`validateRaces` / `parseRaces` check one file.
+`validateRaces` / `parseRaces` check one file. `renderNothingFlagged` gives the one line `--comment` edits an
+existing comment to when a run flags nothing (null when something is flagged).
 
 ### The file format
 
@@ -425,8 +436,8 @@ What it does so the comment is safe to post:
   (operations, file names) are left as they are, since GitHub links nothing inside them;
 - the report is kept under `maxChars` (default 60000 characters). Left out first: entries of the "nothing flagged"
   and "Files skipped" lists, then the least important signatures of each test (fewer seeds and lower confidence
-  first), then whole tests from the end. The counts always include everything, and a note under the first line says
-  what was left out.
+  first), then whole tests from the end. The counts always include everything, a note under the first line says
+  what was left out, and the last line stays.
 
 ### What the comment looks like
 
@@ -470,6 +481,8 @@ followed by the invisible zero-width space described above.
 ---
 
 Each line is a diagnosis by GenClass's on-device model in the page under test, one per signature (trigger, diagnosis, operation). Reproducible: flagged in 2 or more seeds of the same test. A signature seen in fewer seeds may depend on that seed's timing: re-run with more seeds before acting on it. Confidence is the model's probability for the diagnosis (the highest over the seeds), and the quoted evidence line is from that seed.
+
+GenClass for Playwright: [what these lines mean and what the fixture can miss](https://github.com/genclass-dev/GenClass/tree/main/packages/playwright#what-to-expect-from-the-model).
 ```
 
 A run with the default `model: "skip"` looks like this instead (the e2e check above, shortened to the one flagged
@@ -494,18 +507,56 @@ test; the request ids carry the same invisible character):
   > The response of GET /api/search#​1 wrote search.results over what newer GET /api/search#​4, started 0.26s after GET /api/search#​1, had written (2 items \["reac one", "reac two"\] → 2 items \["r one", "r two"\]).
 ```
 
-The first line of every report is an HTML comment, invisible on GitHub, that lets a CI step find and update its own
-comment.
+The first line of every report is an HTML comment, invisible on GitHub, that lets `--comment` find its own comment
+and update it. The last line links to [What to expect from the model](#what-to-expect-from-the-model), for a reviewer
+who wants to know what the lines mean and what the fixture can miss; `footer: false` in the reporter, or
+`--no-footer` on the command, leaves it out.
 
 ## Post it on the pull request
 
-No new secret: the workflow's own `GITHUB_TOKEN` with `pull-requests: write`. On pull requests from forks that token
-is read-only, so the step is skipped there (the job summary still works).
+One step after the tests, with the workflow's own token (no new secret):
 
-The reporter's `genclass-report.md` is kept under 60000 characters by default, which fits in one comment (GitHub
-rejects bodies over 65,536). The job summary takes up to 1 MiB per step, so the summary step below renders a longer
-report from the same files with the command (300000 characters stays under 1 MiB even if every character took three
-bytes).
+```yaml
+      - name: GenClass report
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npx -p @genclass/playwright genclass-playwright-report --comment
+```
+
+`--comment` writes the report as the command always does (`genclass-report.md`, from `test-results/genclass`), adds
+it to the job summary, and keeps one GenClass comment on the pull request:
+
+- it posts the report as a new comment only when the report flags something;
+- on later runs it edits that comment in place instead of adding another; when a run flags nothing, it shortens the
+  comment to one line saying so;
+- when nothing is flagged and there is no GenClass comment, it posts nothing. A pull request with nothing to look at
+  gets no comment.
+
+The GenClass comment is the first comment written by a bot account that starts with the report's marker,
+`<!-- genclass-report -->` (the workflow's token writes as `github-actions[bot]`). A comment written by a person is
+never edited, even one that starts with the marker. With a personal access token the comments are a person's, so
+each run would add one: give the step `github.token`, or a GitHub App's token.
+
+The job needs `pull-requests: write` (and `contents: read` for the checkout). On a pull request from a fork the
+workflow's token is read-only, so the comment is skipped there with a one-line notice, and the job summary still gets
+the report. It is skipped the same way without `GITHUB_TOKEN` and on other events (a push, a nightly schedule).
+
+What it sends, and where: the pull request's number and repository come from the event file GitHub writes
+(`GITHUB_EVENT_PATH`) and `GITHUB_REPOSITORY`; the requests go to `GITHUB_API_URL` (GitHub Enterprise Server sets its
+own), https only. Each write sends the summariser's text (the report, or the one line) and nothing else. The token
+goes only into those requests' `Authorization` header, never follows a redirect, and is never printed. An API or
+network error is a one-line warning, and the command still exits 0: neither what the report says nor what becomes of
+the comment fails the job. `--dry-run` prints the requests instead of making them and writes no job summary. The
+notices and warnings go to stderr, the report to stdout (`--quiet` leaves it out).
+
+GitHub rejects comments over 65,536 characters. The comment is the report as written when `--max-chars` (default
+60000) is 65,536 or less, and the report cut to 60000 when it is larger or 0 (no limit). The file and the job summary
+get `--max-chars`: the job summary takes up to 1 MiB per step, `--max-chars 300000` stays under that even if every
+character took three bytes, and a larger report goes there as the comment's.
+
+Two runs of one pull request at the same time could each find no comment and each post one; a `concurrency` group,
+as below, runs them one at a time.
 
 ```yaml
 # .github/workflows/e2e.yml
@@ -513,6 +564,9 @@ on: pull_request
 permissions:
   contents: read
   pull-requests: write
+concurrency:
+  group: e2e-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
   e2e:
     runs-on: ubuntu-latest
@@ -526,35 +580,81 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --repeat-each 2   # the fixture writes the race files, the reporter the report
 
-      - name: GenClass report in the job summary
+      - name: GenClass report (job summary; a pull-request comment only when something is flagged)
         if: ${{ !cancelled() }}
-        run: npx genclass-playwright-report --max-chars 300000 --out - >> "$GITHUB_STEP_SUMMARY"
-
-      - name: GenClass report on the pull request (one comment, updated in place)
-        if: ${{ !cancelled() && hashFiles('genclass-report.md') != '' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          header: genclass-report
-          path: genclass-report.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npx -p @genclass/playwright genclass-playwright-report --comment
 ```
 
-The same with the GitHub CLI only (it updates the bot's comment that starts with the report's marker, or adds one):
+### A GenClass job of its own
+
+`--repeat-each 2` runs every test twice. To keep that off the rest of the suite, tag the specs that load data or
+submit forms and run only those, in a job of their own: on pull requests that change the frontend, and nightly. A
+nightly run has no pull request, so its report goes to the job summary only. Put the `--comment` step in this job
+or in the e2e job above, not in both: each would edit the same comment with its own report.
+
+```ts
+test("shows the results of the last query", { tag: "@genclass" }, async ({ page }) => {
+  // ...
+});
+```
+
+The `tag` option needs Playwright 1.42 or later; with 1.40 or 1.41, put `@genclass` in the test's title.
 
 ```yaml
-      - name: GenClass report on the pull request
-        if: ${{ !cancelled() && hashFiles('genclass-report.md') != '' && github.event.pull_request.head.repo.full_name == github.repository }}
+# .github/workflows/genclass.yml
+on:
+  pull_request:
+    paths: ["src/**", "tests/**", "package.json", "package-lock.json"]   # your frontend and its tests
+  schedule:
+    - cron: "30 4 * * *"
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: genclass-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  genclass:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --grep @genclass --repeat-each 2
+
+      - name: GenClass report
+        if: ${{ !cancelled() }}
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- genclass-report -->"))) | .id' | head -n 1)
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@genclass-report.md > /dev/null
-          else
-            gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@genclass-report.md > /dev/null
-          fi
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npx -p @genclass/playwright genclass-playwright-report --comment
+```
+
+### Ask your coding agent
+
+Once `@genclass/playwright` is on npm, this prompt has a coding agent add the fixture and the job:
+
+```text
+Add GenClass to this project's Playwright tests with @genclass/playwright. Nothing it reports fails a test. Its
+seeded chaos delays the app's API requests during the tests and never changes what a request or response says; a
+test that depends on their timing can fail under it.
+1. npm install -D @genclass/playwright @genclass/runtime@beta
+2. In playwright.config.ts, import type { GenClassFixtures } from "@genclass/playwright/fixture", call
+   defineConfig<GenClassFixtures>, set use.genclass to { chaos: { seed: 1, delayMs: [0, 600] } } and add
+   ["@genclass/playwright/reporter"] to reporter, keeping the reporters already listed.
+3. In the specs that load data or submit forms, import test and expect from "@genclass/playwright/fixture" instead
+   of "@playwright/test", and give those tests the tag "@genclass". Change no assertion.
+4. Add .github/workflows/genclass.yml: on pull requests that change the frontend and nightly, with permissions
+   contents: read and pull-requests: write and a concurrency group per pull request; install, run
+   npx playwright test --grep @genclass --repeat-each 2, then a step with if: ${{ !cancelled() }},
+   env GITHUB_TOKEN: ${{ github.token }} and run: npx -p @genclass/playwright genclass-playwright-report --comment
+Nothing GenClass reports fails a test or a job. Treat each line of its report as something to check, not a
+confirmed bug.
 ```
 
 ## What to expect from the model
@@ -590,10 +690,12 @@ only on the one page above so far.
 
 ## Privacy
 
-This package reads and writes files on the machine that runs it, serves the runtime's files to the page it tests
-from disk, and sends nothing anywhere: with `model: "skip"` no network request leaves your test environment
-because of it; with `model: "load"` the page downloads the model (from jsDelivr, or `modelUrl`) and
-onnxruntime-web's wasm (from jsDelivr). The runtime on the page runs with `telemetry: false`.
+This package reads and writes files on the machine that runs it and serves the runtime's files to the page it tests
+from disk. It sends nothing anywhere, except the command with `--comment`, which sends the report to your pull
+request through GitHub's API (`GITHUB_API_URL`, with the token you give the step;
+[Post it on the pull request](#post-it-on-the-pull-request)). With `model: "skip"` no network request leaves your
+test environment because of the fixture; with `model: "load"` the page downloads the model (from jsDelivr, or
+`modelUrl`) and onnxruntime-web's wasm (from jsDelivr). The runtime on the page runs with `telemetry: false`.
 
 The files hold test titles, operation names and the runtime's evidence lines. For a witness that line includes the
 store field's name and the runtime's short summary of its value before and after (`2 items ["r one", "r two"]`;
@@ -604,8 +706,9 @@ Words a message carries outside quotes stay as they are (an app that throws `Use
 the error's stack, its causal chain and errors from other origins' scripts are never written. With
 `chaos.order: "systematic"` the reverse run's file names the requests of each burst as operation names are named (ids
 in a path as `:id`; other path segments, such as an email address in a path, stay as they are). With `visual: true`
-they hold the CSS selectors of the elements the checks measured and the measured numbers. The comment you post
-contains the same, so read a report before posting it from a repository whose test data is private.
+they hold the CSS selectors of the elements the checks measured and the measured numbers. The pull-request comment
+and the job summary contain the same, and whoever can read the pull request or the workflow run can read them: on a
+public repository, anyone.
 
 Without the fixture (the reporter alone, with `@genclass/runtime` installed in your app), the runtime under
 test sends **anonymous diagnostics by default** on public hosts: GenClass's decisions and counts,
@@ -625,7 +728,7 @@ From the repository root (CI runs these in `.github/workflows/playwright-reporte
 ```bash
 npm run typecheck -w @genclass/playwright
 npm run build -w @genclass/playwright
-cd packages/playwright && npx vitest run   # chaos (and its systematic orders), race files, page errors, measured checks, the quiet point, the page script and the installer on fakes, schema, summariser (exact output), reporter, command, package invariants
+cd packages/playwright && npx vitest run   # chaos (and its systematic orders), race files, page errors, measured checks, the quiet point, the page script and the installer on fakes, schema, summariser (exact output), reporter, command, --comment on a mocked fetch, package invariants
 ```
 
 The end-to-end check needs both builds and Chromium:

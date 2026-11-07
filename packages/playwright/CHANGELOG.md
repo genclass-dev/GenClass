@@ -6,6 +6,30 @@ everything below is unreleased.
 
 ## Unreleased
 
+- **`--comment`**: the pull-request step is one line of the command,
+  `run: npx -p @genclass/playwright genclass-playwright-report --comment` with `GITHUB_TOKEN: ${{ github.token }}`
+  and `pull-requests: write`, in place of the README's third-party sticky-comment action or `gh api` script. Once the
+  report is written it adds it to the job summary and keeps one GenClass comment on the pull request: posted only
+  when the report flags something, edited in place on later runs (left alone when it already says the same),
+  shortened to one line when a later run flags nothing (`renderNothingFlagged`, new in the summariser), and never
+  created for a run that flags nothing. The GenClass comment is the first one by a bot account (`user.type` "Bot")
+  that starts with the report's marker, over every page of comments; a person's comment is never edited, even one
+  that starts with the marker. It acts only in `pull_request` runs, on the pull request number in the event file
+  (`GITHUB_EVENT_PATH`) of the repository in `GITHUB_REPOSITORY`, through `GITHUB_API_URL` (GitHub Enterprise
+  Server; https only), and skips a fork's pull request, other events and a missing token with a one-line notice.
+  Each write sends the summariser's text and nothing else, at most 65,536 characters (the report as written up to
+  `--max-chars 65536`, else cut to 60000). The token goes only into the Authorization header, never follows a
+  redirect and is never printed; an API or network error is a one-line warning on stderr, and the exit code does not
+  depend on the comment. `--dry-run` prints the requests instead of making them, and `playwright-reporter.yml` runs it
+  on the fixture's report. The README documents the step, the permission, the fork rule, a GenClass job of its own
+  (specs tagged `@genclass`, `--repeat-each 2`, on frontend pull requests and nightly) and a prompt for a coding agent;
+  its Privacy section says what `--comment` sends. The command's `runCli` now resolves a promise. No dependency added.
+- **The report links back**: its last line, after a blank line, links to the README's "What to expect from the
+  model" (what the lines mean and what the fixture can miss); the line is exported as `REPORT_FOOTER`. It counts
+  toward `maxChars` and stays when the report is shortened, the last-resort cut included. `footer: false` (reporter
+  and summariser) or `--no-footer` (the command) leaves it out. The shortened report's note and the README print the
+  command as `npx -p @genclass/playwright genclass-playwright-report`: without `-p`, outside a project that has the
+  package, npx would look up a package named `genclass-playwright-report` on npm, a name GenClass does not own.
 - **Page errors**: the fixture also hands over the page's uncaught errors and unhandled rejections the agent entry
   records, as `page-error|<name>|<request>` signatures (trigger `page-error`, never the model's `error`), keeping only
   the error's name, its message shape (quoted values as `…`, numbers as `N`: `@genclass/mcp`'s `shape()`, copied,

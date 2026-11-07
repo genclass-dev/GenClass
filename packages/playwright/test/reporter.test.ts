@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli, USAGE } from "../src/cli.js";
 import { readRacesDirs } from "../src/files.js";
 import GenClassReporter, { GenClassReporter as NamedReporter } from "../src/reporter.js";
-import { FIXTURE_REPORT, here, racesDir } from "./helpers.js";
+import { FIXTURE_REPORT, FOOTER, here, racesDir } from "./helpers.js";
 
 let root = "";
 
@@ -81,6 +81,17 @@ describe("reporter: reads test-results/genclass at the end of the run", () => {
     expect(o.out).toEqual([`\n${FIXTURE_REPORT}\n`]);
   });
 
+  it("footer false: the report without its last line, the link", () => {
+    project();
+    const o = io();
+    const r = new GenClassReporter({ footer: false, quiet: true }, o.sink);
+    r.onBegin({ configFile: join(root, "playwright.config.ts") });
+    r.onEnd();
+    const md = readFileSync(join(root, "genclass-report.md"), "utf8");
+    expect(md).toBe(r.markdown);
+    expect(`${md}\n${FOOTER}\n`).toBe(FIXTURE_REPORT);
+  });
+
   it("dir, minSeeds and title options", () => {
     cpSync(racesDir, join(root, "races"), { recursive: true });
     const o = io();
@@ -123,6 +134,8 @@ describe("reporter: reads test-results/genclass at the end of the run", () => {
     expect(small.markdown!.length).toBeLessThanOrEqual(5000);
     expect(small.markdown).toContain("_Shortened to fit 5000 characters: ");
     expect(small.markdown).toContain("**200 signatures** in 1 test");
+    // shortened, it still ends with the footer line
+    expect(small.markdown!.endsWith(`\n\n${FOOTER}\n`)).toBe(true);
 
     const unlimited = new GenClassReporter({ quiet: true, outputFile: false, maxChars: 0 }, io().sink);
     unlimited.onBegin({ configFile: join(root, "playwright.config.ts") });
@@ -135,6 +148,7 @@ describe("reporter: reads test-results/genclass at the end of the run", () => {
     byDefault.onEnd();
     expect(byDefault.markdown!.length).toBeLessThanOrEqual(60000);
     expect(byDefault.markdown).toContain("_Shortened to fit 60000 characters: ");
+    expect(byDefault.markdown!.endsWith(`\n\n${FOOTER}\n`)).toBe(true);
   });
 });
 
@@ -176,62 +190,78 @@ describe("readRacesDirs", () => {
 });
 
 describe("genclass-playwright-report (the command)", () => {
-  it("defaults: reads test-results/genclass, writes genclass-report.md, prints it", () => {
+  it("defaults: reads test-results/genclass, writes genclass-report.md, prints it", async () => {
     project();
     const o = io();
-    expect(runCli([], { cwd: root, ...o.sink })).toBe(0);
+    expect(await runCli([], { cwd: root, ...o.sink })).toBe(0);
     expect(readFileSync(join(root, "genclass-report.md"), "utf8")).toBe(FIXTURE_REPORT);
     expect(o.out).toEqual([FIXTURE_REPORT]);
     expect(o.err).toEqual([`GenClass report written to ${join(root, "genclass-report.md")}\n`]);
   });
 
-  it("several directories (collected shards), --out -, --min-seeds, --title, --quiet", () => {
+  it("several directories (collected shards), --out -, --min-seeds, --title, --quiet", async () => {
     const names = readdirSync(racesDir).sort();
     mkdirSync(join(root, "shard-1"));
     mkdirSync(join(root, "shard-2"));
     names.forEach((n, i) => cpSync(join(racesDir, n), join(root, i % 2 ? "shard-2" : "shard-1", n)));
     const o = io();
-    expect(runCli(["shard-1", "shard-2", "--out", "-"], { cwd: root, ...o.sink })).toBe(0);
+    expect(await runCli(["shard-1", "shard-2", "--out", "-"], { cwd: root, ...o.sink })).toBe(0);
     expect(o.out[0]).toContain("**1 reproducible** (flagged in 2 or more seeds of the same test) · 4 files read in `shard-1`, `shard-2`");
     expect(existsSync(join(root, "genclass-report.md"))).toBe(false);
 
     const q = io();
-    expect(runCli(["shard-1", "shard-2", "--min-seeds", "3", "--title", "Shards", "-o", "r.md", "--quiet"], { cwd: root, ...q.sink })).toBe(0);
+    expect(await runCli(["shard-1", "shard-2", "--min-seeds", "3", "--title", "Shards", "-o", "r.md", "--quiet"], { cwd: root, ...q.sink })).toBe(0);
     expect(q.out).toEqual([]);
     const md = readFileSync(join(root, "r.md"), "utf8");
     expect(md).toContain("## Shards\n");
     expect(md).toContain("**0 reproducible**");
   });
 
-  it("--max-chars: 0 means no limit, a number caps the report", () => {
+  it("--no-footer: the report without its last line; by default it ends with that line, once", async () => {
+    project();
+    const o = io();
+    expect(await runCli(["--out", "-"], { cwd: root, ...o.sink })).toBe(0);
+    expect(o.out).toEqual([FIXTURE_REPORT]);
+    const lines = o.out[0].split("\n");
+    expect(lines.slice(-3)).toEqual(["", FOOTER, ""]);
+    expect(lines.filter((l) => l === FOOTER)).toHaveLength(1);
+    const bare = io();
+    expect(await runCli(["--no-footer", "--out", "-"], { cwd: root, ...bare.sink })).toBe(0);
+    expect(`${bare.out[0]}\n${FOOTER}\n`).toBe(FIXTURE_REPORT);
+    expect(await runCli(["--no-footer", "-o", "r.md", "--quiet"], { cwd: root, ...io().sink })).toBe(0);
+    expect(readFileSync(join(root, "r.md"), "utf8")).toBe(bare.out[0]);
+  });
+
+  it("--max-chars: 0 means no limit, a number caps the report", async () => {
     bigRaceFile(join(root, "test-results", "genclass"));
     const all = io();
-    expect(runCli(["--max-chars", "0", "--out", "-"], { cwd: root, ...all.sink })).toBe(0);
+    expect(await runCli(["--max-chars", "0", "--out", "-"], { cwd: root, ...all.sink })).toBe(0);
     expect(all.out[0].length).toBeGreaterThan(60000);
     const capped = io();
-    expect(runCli(["--max-chars", "3000", "--out", "-"], { cwd: root, ...capped.sink })).toBe(0);
+    expect(await runCli(["--max-chars", "3000", "--out", "-"], { cwd: root, ...capped.sink })).toBe(0);
     expect(capped.out[0].length).toBeLessThanOrEqual(3000);
     expect(capped.out[0]).toContain("_Shortened to fit 3000 characters: ");
+    expect(capped.out[0].endsWith(`\n\n${FOOTER}\n`)).toBe(true);
     const byDefault = io();
-    expect(runCli(["--out", "-"], { cwd: root, ...byDefault.sink })).toBe(0);
+    expect(await runCli(["--out", "-"], { cwd: root, ...byDefault.sink })).toBe(0);
     expect(byDefault.out[0].length).toBeLessThanOrEqual(60000);
   });
 
-  it("usage errors exit 2 and print the usage", () => {
-    for (const argv of [["--min-seeds", "0"], ["--min-seeds"], ["--max-chars", "-1"], ["--max-chars", "1.5"], ["--max-chars"], ["--out"], ["--title"], ["--nope"]]) {
+  it("usage errors exit 2 and print the usage", async () => {
+    for (const argv of [["--min-seeds", "0"], ["--min-seeds"], ["--max-chars", "-1"], ["--max-chars", "1.5"], ["--max-chars"], ["--out"], ["--title"], ["--nope"], ["--dry-run"]]) {
       const o = io();
-      expect(runCli(argv, { cwd: root, ...o.sink }), argv.join(" ")).toBe(2);
+      expect(await runCli(argv, { cwd: root, ...o.sink }), argv.join(" ")).toBe(2);
       expect(o.err.join("")).toContain(USAGE);
     }
     const h = io();
-    expect(runCli(["--help"], { cwd: root, ...h.sink })).toBe(0);
+    expect(await runCli(["--help"], { cwd: root, ...h.sink })).toBe(0);
     expect(h.out).toEqual([USAGE]);
   });
 
-  it("a report file it cannot write exits 1", () => {
+  it("a report file it cannot write exits 1", async () => {
     writeFileSync(join(root, "blocker"), "x");
     const o = io();
-    expect(runCli(["--out", "blocker/r.md"], { cwd: root, ...o.sink })).toBe(1);
+    expect(await runCli(["--out", "blocker/r.md"], { cwd: root, ...o.sink })).toBe(1);
     expect(o.err[0]).toMatch(/^genclass-playwright-report: could not write the report: /);
   });
 
