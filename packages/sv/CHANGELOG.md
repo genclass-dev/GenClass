@@ -15,4 +15,5 @@
 - Everything added carries the `genclass:init` marker, so `npx @genclass/runtime remove` takes it out byte for byte.
   Running the add-on again with the same answers changes nothing.
 - Next steps say what the model download costs, whether diagnostics are sent, and how to undo the setup.
-- Bundled with `@sveltejs/sv-utils` 1.0.2 (one file, `sv` external); no dependencies of its own.
+- Bundled with `@sveltejs/sv-utils` 1.0.2 (one JavaScript file, `sv` external, no type declarations); no
+  dependencies of its own.

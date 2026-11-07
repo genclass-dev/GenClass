@@ -6,6 +6,11 @@
 //   prod  the production server: the model loads, the search box works, no console errors, no overlay;
 //         with ?genclass=off nothing is installed
 //   dev   the dev server: the devtools overlay mounts, no console errors
+//   race  (react-vite, vue-vite) the README's "See the race on demand" on the dev server: with the README's
+//         ?genclass-schedule=seeded:N, typing "be" ends on the mock's "b" cities; with fifo, on its "be" cities; the
+//         witnesses the README names (react-vite: one overwrote-newer on App.state1; vue-vite: none). Recorded as
+//         `race` with its own `pass`, beside `dev.pass`; the one console error allowed there is the agent link's
+//         refused hello (no MCP server runs here)
 // Linux only (the VM). Telemetry is opted out through localStorage["genclass.telemetry"] = "off" (the template code
 // is not changed); every request to another host is blocked, the model is served from COMPAT_MODEL_DIR.
 //
@@ -94,7 +99,16 @@ async function serve(cmd, cwd) {
   throw new Error(`server did not start: ${cmd}\n${out.slice(-1500)}`);
 }
 
-async function visit(browser, url, { type = false, wantOverlay = null }) {
+// The bridge address the agent link says hello to (@genclass/runtime/agent's default URL).
+const BRIDGE = "http://127.0.0.1:47357/";
+
+/**
+ * One page load in a fresh context. `type`: wait for the model, click the search box and type `text`, `keyDelay` ms
+ * per key, then read the `select` elements' text. `agent`: also read the agent link's schedule and witnesses
+ * (`window.__GENCLASS_AGENT__`), and allow the console error of its refused hello, once per failed request to the
+ * bridge.
+ */
+async function visit(browser, url, { type = false, wantOverlay = null, text = "san", keyDelay = 60, select = "li", agent = false }) {
   const ctx = await browser.newContext();
   const blocked = [];
   await ctx.route((u) => u.hostname !== "127.0.0.1" && u.hostname !== "localhost", (r) => {
@@ -115,11 +129,13 @@ async function visit(browser, url, { type = false, wantOverlay = null }) {
   const page = await ctx.newPage();
   const consoleLines = [];
   const errors = [];
+  const failed = [];
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`.slice(0, 400)));
   page.on("console", (m) => {
     consoleLines.push(`${m.type()}: ${m.text()}`.slice(0, 400));
     if (m.type() === "error" && !/favicon|Failed to load resource: the server responded with a status of 404/.test(m.text())) errors.push(m.text().slice(0, 400));
   });
+  page.on("requestfailed", (q) => failed.push(`${q.url()} ${q.failure()?.errorText ?? ""}`.slice(0, 300)));
   const r = {};
   try {
     await page.goto(url, { waitUntil: "load", timeout: 90_000 });
@@ -129,16 +145,29 @@ async function visit(browser, url, { type = false, wantOverlay = null }) {
       while (Date.now() - t0 < 30_000 && !consoleLines.some((l) => /\[GenClass\] Model ready/.test(l))) await sleep(200);
       r.modelReady = consoleLines.some((l) => /\[GenClass\] Model ready/.test(l));
       await page.click("input");
-      await page.keyboard.type("san", { delay: 60 });
+      await page.keyboard.type(text, { delay: keyDelay });
       await sleep(2500);
-      r.results = await page.$$eval("li", (els) => els.map((e) => e.textContent));
+      r.results = await page.$$eval(select, (els) => els.map((e) => e.textContent));
     } else await sleep(3000);
+    if (agent) {
+      r.schedule = await page.evaluate(() => globalThis.__GENCLASS_AGENT__?.schedule ?? null);
+      r.witnesses = await page.evaluate(() => globalThis.__GENCLASS_AGENT__?.witnesses().map((w) => `${w.kind} ${w.subject}: ${w.by} over ${w.over}`) ?? null);
+    }
     if (wantOverlay !== null) r.overlay = !!(await page.waitForSelector("genclass-devtools", { state: "attached", timeout: wantOverlay ? 30_000 : 1_500 }).catch(() => null));
     r.disabled = consoleLines.some((l) => /\[GenClass\] Disabled by \?genclass=off/.test(l));
   } catch (e) {
     r.error = String(e?.message ?? e).slice(0, 800);
   }
-  r.errors = errors;
+  // the agent link's hello when no MCP server runs: one refused request to the bridge, which Chromium also logs
+  let hellos = agent ? failed.filter((f) => f.startsWith(BRIDGE)).length : 0;
+  r.errors = errors.filter((e) => {
+    if (hellos > 0 && /net::ERR_CONNECTION_REFUSED/.test(e)) {
+      hellos--;
+      return false;
+    }
+    return true;
+  });
+  r.failed = failed;
   r.blocked = blocked;
   r.genclass = consoleLines.filter((l) => /\[GenClass\]/.test(l)).slice(0, 8);
   await ctx.close();
@@ -160,6 +189,34 @@ function packIntegration(pkgName) {
   if (!p.ok) throw new Error(`npm pack of ${pkgName} failed\n${p.out.slice(-2000)}`);
   renameSync(join(PACK, p.out.trim().split("\n").pop()), out);
   return out;
+}
+
+// The templates whose README has "See the race on demand", and the witness lines it says the console lists.
+const RACE = {
+  "react-vite": { witnesses: ["overwrote-newer App.state1: GET /api/search#1 over GET /api/search#2"] },
+  "vue-vite": { witnesses: [] },
+};
+
+/** The cities the template's mock API (mock-api.ts) answers `q` with. */
+function mockCities(name, q) {
+  const m = /const CITIES = (\[[^\]]*\]);/.exec(readFileSync(join(REPO, "templates", name, "mock-api.ts"), "utf8"));
+  return m ? JSON.parse(m[1]).filter((c) => c.toLowerCase().startsWith(q)) : null;
+}
+
+/**
+ * The README's race on demand on the dev server at `base`: its `?genclass-schedule=seeded:N`, then `fifo`, typing
+ * "be" 20 ms per key (the mock answers in 50 ms or more, so the two requests are in flight together).
+ */
+async function raceVisits(browser, base, name) {
+  const seed = /\/\?genclass-schedule=(seeded:\d+)/.exec(readFileSync(join(REPO, "templates", name, "README.md"), "utf8"))?.[1] ?? null;
+  const opts = { type: true, text: "be", keyDelay: 20, select: "main li", agent: true };
+  const seeded = seed ? await visit(browser, `${base}/?genclass-schedule=${seed}`, opts) : null;
+  const fifo = await visit(browser, `${base}/?genclass-schedule=fifo`, opts);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const clean = (v) => !!v && !v.error && v.errors.length === 0 && v.blocked.length === 0;
+  const pass =
+    clean(seeded) && clean(fifo) && same(seeded.results, mockCities(name, "b")) && same(fifo.results, mockCities(name, "be")) && same(seeded.witnesses, RACE[name].witnesses) && same(fifo.witnesses, []);
+  return { seed, seeded, fifo, pass };
 }
 
 async function checkTemplate(name, browser) {
@@ -196,6 +253,15 @@ async function checkTemplate(name, browser) {
       rec[kind] = { main, off };
       rec[kind].pass =
         !main.error && main.modelReady && (main.results ?? []).length > 0 && main.errors.length === 0 && main.blocked.length === 0 && main.overlay === (kind === "dev") && (!off || (off.disabled && off.errors.length === 0));
+      // its own record: a race result never changes dev.pass
+      if (kind === "dev" && RACE[name]) {
+        try {
+          rec.race = await raceVisits(browser, s.url, name);
+        } catch (e) {
+          rec.race = { pass: false, error: String(e?.message ?? e).slice(0, 1500) };
+        }
+        log(`${name} race: ${rec.race.pass ? "ok" : "FAIL"}`);
+      }
     } catch (e) {
       rec[kind] = { pass: false, error: String(e?.message ?? e).slice(0, 1500) };
     } finally {
@@ -219,7 +285,7 @@ async function main() {
     writeFileSync(OUT, JSON.stringify(out, null, 2));
   }
   await browser.close();
-  for (const [n, r] of Object.entries(out.templates)) log(`${n}: install ${r.install === "ok" ? "ok" : "FAIL"}, build ${r.build === "ok" ? "ok" : r.build ? "FAIL" : "-"}, prod ${r.prod?.pass ? "ok" : "FAIL"}, dev ${r.dev?.pass ? "ok" : "FAIL"}`);
+  for (const [n, r] of Object.entries(out.templates)) log(`${n}: install ${r.install === "ok" ? "ok" : "FAIL"}, build ${r.build === "ok" ? "ok" : r.build ? "FAIL" : "-"}, prod ${r.prod?.pass ? "ok" : "FAIL"}, dev ${r.dev?.pass ? "ok" : "FAIL"}${RACE[n] ? `, race ${r.race?.pass ? "ok" : "FAIL"}` : ""}`);
   log(`written ${OUT}`);
 }
 

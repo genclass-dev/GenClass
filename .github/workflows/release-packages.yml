@@ -1,0 +1,376 @@
+name: Release packages
+
+# Publishes @genclass/playwright, @genclass/sv, @genclass/nuxt and @genclass/astro to npm with npm provenance, one
+# package per tag, the way release-mcp.yml publishes @genclass/mcp: a tag `<package>-v<version>` (e.g.
+# playwright-v0.1.0, sv-v0.1.0, nuxt-v0.1.0, astro-v0.1.0) whose version equals packages/<package>/package.json.
+# Authentication: npm trusted publishing (OIDC, `id-token: write` in the publish job only); no npm token is stored in
+# the repository.
+#
+# Jobs: `packages` picks the tag's package (all four on a pull request). `build` checks the version and that the
+# package's CHANGELOG.md has a section for it whose heading does not say unreleased (a tag push fails without one, a
+# pull request gets a notice), installs, builds the runtime, then typechecks, builds and unit-tests the package (Node 22
+# for playwright and sv, Node 24 for nuxt and astro, as in their own workflows; sv's unit project only), packs it,
+# uploads the tarball as the `<package>-tarball` artifact and runs `npm publish --dry-run` on it. On a tag push only,
+# `publish` publishes that tarball from the npm-publish environment (it checks out nothing and runs no repository
+# code), `verify` installs the published version and runs `npm audit signatures`, and `github-release` (the only job
+# that may write to the repository) creates the tag's GitHub release with that CHANGELOG section as its notes
+# (.github/scripts/changelog-section.mjs), marked as a prerelease for a prerelease version and never as the
+# repository's latest release: Gemini CLI and `gh skill` install from that one, which release.yml and release-mcp.yml
+# set. On a pull request that changes this file or one of the four package.json files, everything up to the dry run
+# runs, for all four; nothing on a pull request has the OIDC token, the npm-publish environment or a secret. The
+# end-to-end checks are in the packages' own workflows (playwright-reporter.yml, sv-addon.yml, integrations.yml): check
+# that they are green on the commit you tag.
+#
+# Owner setup:
+# - AGENTS.md rule 9 has to name this workflow before its first publish.
+# - First version of each package only: npm configures trusted publishing from a package's own settings page, so the
+#   package must exist before this workflow can publish it. Push the tag: the run builds, tests and uploads the tarball
+#   as the `<package>-tarball` artifact, and its publish job publishes nothing: it fails, saying the package is not on
+#   npm yet (or reject that job's deployment). Publish that exact tarball once from your own npm login
+#   (`npm publish genclass-<package>-<version>.tgz --access public`). The github-release job runs only after this
+#   workflow's own publish, so that version's GitHub release is yours too, from the repository root:
+#   `node .github/scripts/changelog-section.mjs packages/<package>/CHANGELOG.md <version> --url
+#   https://github.com/genclass-dev/GenClass/blob/<package>-v<version>/packages/<package>/CHANGELOG.md > notes.md`, then
+#   `gh release create <package>-v<version> --verify-tag --latest=false --title "@genclass/<package> <version>"
+#   --notes-file notes.md` (add `--prerelease` for a prerelease version).
+# - Later versions publish from here once the package has a trusted publisher: on npmjs.com, @genclass/<package> →
+#   Settings → Trusted publishing → GitHub Actions: organization genclass-dev, repository GenClass, workflow filename
+#   release-packages.yml, environment npm-publish. Two conditions from npm's docs
+#   (https://docs.npmjs.com/trusted-publishers, read 2026-11-07): under Allowed actions, tick npm publish
+#   (configurations created after 2026-09-03 allow only `npm stage publish` unless you do); and a new configuration
+#   expires unless its first successful publish happens within 2 days, so create it on the day that package's next
+#   version is ready and push that tag the same day.
+# - The npm-publish GitHub environment (shared with release.yml and release-mcp.yml) asks its reviewers to approve each
+#   publish job. Before the first tag, check Settings → Environments → npm-publish → Deployment branches and tags: if it
+#   is restricted, add playwright-v*, sv-v*, nuxt-v* and astro-v*.
+# - Push one tag at a time: GitHub creates no push event for tags when more than three are pushed at once.
+
+on:
+  push:
+    tags: ["playwright-v*", "sv-v*", "nuxt-v*", "astro-v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release-packages.yml"
+      - "packages/playwright/package.json"
+      - "packages/sv/package.json"
+      - "packages/nuxt/package.json"
+      - "packages/astro/package.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-packages-${{ github.ref }}
+  # a tag's run is never cancelled; a newer push to a pull request cancels its older run
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  packages:
+    name: "Packages: the tag's, or all four on a pull request"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+      package: ${{ steps.pick.outputs.package }}
+    env:
+      # each package and the Node version of its own workflow: playwright-reporter.yml and sv-addon.yml run 22,
+      # integrations.yml runs 24 (Nuxt 4.6 and Astro 7 want Node 22.23 / 24.15 or later)
+      PACKAGES: '[{"package":"playwright","node":"22"},{"package":"sv","node":"22"},{"package":"nuxt","node":"24"},{"package":"astro","node":"24"}]'
+    steps:
+      - name: Pick
+        id: pick
+        run: |
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF" in
+            push:refs/tags/*) PICK="${GITHUB_REF_NAME%%-v*}" ;;
+            pull_request:*) PICK=all ;;
+            *) echo "::error::no package for $GITHUB_EVENT_NAME $GITHUB_REF"; exit 1 ;;
+          esac
+          MATRIX=$(jq -c --arg p "$PICK" '{include: map(select($p == "all" or .package == $p))}' <<< "$PACKAGES")
+          echo "$MATRIX"
+          if [ "$(jq '.include | length' <<< "$MATRIX")" = 0 ]; then
+            echo "::error::no package for the tag $GITHUB_REF_NAME"
+            exit 1
+          fi
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          if [ "$PICK" != all ]; then echo "package=$PICK" >> "$GITHUB_OUTPUT"; fi
+
+  build:
+    name: "@genclass/${{ matrix.package }}: verify, build, test, pack, publish --dry-run"
+    needs: packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.packages.outputs.matrix) }}
+    # read by the publish job; on a tag push the matrix has one entry, the tag's package
+    outputs:
+      file: ${{ steps.pack.outputs.file }}
+      sha512: ${{ steps.pack.outputs.sha512 }}
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      NUXT_TELEMETRY_DISABLED: "1"
+      ASTRO_TELEMETRY_DISABLED: "1"
+      PKG: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: The tag names the package version
+        id: version
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "packages/$PKG/package.json: $NAME $VERSION"
+          test "$NAME" = "@genclass/$PKG"
+          if [ "$(node -p "require('./package.json').private === true")" = true ]; then
+            echo "::error::packages/$PKG/package.json is private"
+            exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            TAG="${GITHUB_REF_NAME#"$PKG"-v}"
+            echo "tag $TAG, package.json $VERSION"
+            test "$TAG" = "$VERSION"
+          fi
+          # the version's CHANGELOG section becomes the GitHub release's notes (the github-release job): a tag push
+          # without one fails here, before anything is installed or published; a pull request only says so
+          if ! (cd "$GITHUB_WORKSPACE" && node .github/scripts/changelog-section.mjs "packages/$PKG/CHANGELOG.md" "$VERSION" > /dev/null); then
+            if [ "$GITHUB_EVENT_NAME" = push ]; then
+              echo "::error::packages/$PKG/CHANGELOG.md has no released section for $VERSION: head it \"## $VERSION (<date>)\""
+              exit 1
+            fi
+            echo "::notice::packages/$PKG/CHANGELOG.md has no released section for $VERSION yet: a tag push fails here until its heading is \"## $VERSION (<date>)\""
+          fi
+          # prereleases go to the dist-tag named after them (0.2.0-beta.1 -> beta), other versions to latest
+          case "$VERSION" in
+            *-*) DIST_TAG=$(echo "${VERSION#*-}" | cut -d. -f1) ;;
+            *) DIST_TAG=latest ;;
+          esac
+          # what npm has: no such package yet (its first version is published by hand, from the tarball of its tag's
+          # run), the package without this version, or this version already
+          if npm view "$NAME" versions --json --prefer-online > "$RUNNER_TEMP/versions.json" 2> "$RUNNER_TEMP/view.err"; then
+            ON_NPM=$(node -e 'const v = [].concat(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"))); console.log(v.includes(process.argv[2]) ? "yes" : "no")' "$RUNNER_TEMP/versions.json" "$VERSION")
+          elif grep -q E404 "$RUNNER_TEMP/view.err"; then
+            ON_NPM=no
+            echo "::notice::$NAME is not on npm yet: its first version is published once by hand from the tarball of its tag's run (the header of release-packages.yml)"
+          else
+            cat "$RUNNER_TEMP/view.err"
+            exit 1
+          fi
+          if [ "$ON_NPM" = yes ]; then
+            if [ "$GITHUB_EVENT_NAME" = push ]; then
+              echo "::error::$NAME@$VERSION is already on npm"
+              exit 1
+            fi
+            echo "::notice::$NAME@$VERSION is already on npm, so the dry run is skipped; a release needs a new version in packages/$PKG/package.json"
+          fi
+          # the @genclass/runtime range the package names as a peer is one npm serves
+          RANGE=$(node -p "(require('./package.json').peerDependencies || {})['@genclass/runtime'] || ''")
+          if [ -n "$RANGE" ] && [ -z "$(npm view "@genclass/runtime@$RANGE" version 2> /dev/null)" ]; then
+            echo "::error::npm serves no @genclass/runtime in $NAME's peer range $RANGE"
+            exit 1
+          fi
+          {
+            echo "dist_tag=$DIST_TAG"
+            echo "on_npm=$ON_NPM"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the runtime (the packages' tests and fixtures import it or serve its dist/)
+        run: npm run build -w @genclass/runtime
+
+      - name: Typecheck
+        run: npm run typecheck -w "@genclass/$PKG"
+
+      - name: Build
+        run: npm run build -w "@genclass/$PKG"
+
+      - name: Unit tests
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          # sv's e2e project (scaffolded apps, pnpm, Chromium, the network) runs in sv-addon.yml
+          if [ "$PKG" = sv ]; then npx vitest run --project unit; else npx vitest run; fi
+
+      - name: Pack
+        id: pack
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          # the build the tests above ran against, packed as it is (prepack would build it again)
+          FILE=$(npm pack --ignore-scripts --silent | tail -1)
+          SHA512=$(sha512sum "$FILE" | cut -d' ' -f1)
+          echo "$SHA512  $FILE"
+          {
+            echo "file=$FILE"
+            echo "sha512=$SHA512"
+          } >> "$GITHUB_OUTPUT"
+          tar -tzf "$FILE" | sort > "$FILE.files.txt"
+          cat "$FILE.files.txt"
+          # every file package.json points at (main, types, exports, typesVersions, bin) is in the tarball
+          node -e '
+            const fs = require("node:fs");
+            const files = new Set(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean));
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const named = new Set();
+            const add = (v) => { if (typeof v === "string") named.add(v); else if (v && typeof v === "object") Object.values(v).forEach(add); };
+            for (const k of ["main", "module", "types", "typings", "exports", "typesVersions", "bin"]) add(pkg[k]);
+            const missing = [...named].filter((p) => !p.includes("*")).map((p) => "package/" + p.replace(/^\.\//, "")).filter((p) => !files.has(p));
+            if (missing.length > 0) { console.log("::error::package.json names files the tarball does not have: " + missing.join(", ")); process.exit(1); }
+            console.log("the tarball has all " + named.size + " files package.json names");
+          ' "$FILE.files.txt"
+          # no tests or sources
+          if grep -E "^package/(test|src)/" "$FILE.files.txt"; then
+            echo "::error::the tarball has tests or sources"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package }}-tarball
+          path: |
+            packages/${{ matrix.package }}/${{ steps.pack.outputs.file }}
+            packages/${{ matrix.package }}/${{ steps.pack.outputs.file }}.files.txt
+          if-no-files-found: error
+
+      - name: npm publish --dry-run
+        if: steps.version.outputs.on_npm == 'no'
+        working-directory: packages/${{ matrix.package }}
+        env:
+          FILE: ${{ steps.pack.outputs.file }}
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: npm publish "$FILE" --dry-run --access public --tag "$DIST_TAG"
+
+  publish:
+    name: "Publish with provenance (tag push only)"
+    needs: [packages, build]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing and the provenance attestation
+    env:
+      PKG: ${{ needs.packages.outputs.package }}
+      FILE: ${{ needs.build.outputs.file }}
+      SHA512: ${{ needs.build.outputs.sha512 }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # trusted publishing needs npm >= 11.5.1 (Node 22 ships npm 10)
+      - name: npm 11
+        run: npm install -g npm@11 && npm --version
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.packages.outputs.package }}-tarball
+
+      - name: The tarball is the build job's, for the tag's package and version
+        run: |
+          echo "$SHA512  $FILE" | sha512sum -c -
+          NAME=$(tar -xOzf "$FILE" package/package.json | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).name')
+          VERSION=$(tar -xOzf "$FILE" package/package.json | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).version')
+          echo "tag $GITHUB_REF_NAME, tarball $NAME $VERSION"
+          test "$NAME" = "@genclass/$PKG"
+          test "$GITHUB_REF_NAME" = "$PKG-v$VERSION"
+          {
+            echo "NAME=$NAME"
+            echo "VERSION=$VERSION"
+          } >> "$GITHUB_ENV"
+
+      # npm sets up trusted publishing only for a package it has, so each package's first version is the owner's
+      - name: npm has the package
+        run: |
+          if npm view "$NAME" name --prefer-online > /dev/null 2> "$RUNNER_TEMP/view.err"; then exit 0; fi
+          cat "$RUNNER_TEMP/view.err"
+          if grep -q E404 "$RUNNER_TEMP/view.err"; then
+            echo "::error::$NAME is not on npm yet: publish this run's $PKG-tarball artifact once from your own npm login (npm publish $FILE --access public), then add its trusted publisher (the header of release-packages.yml)"
+          fi
+          exit 1
+
+      - name: Publish with provenance
+        run: |
+          case "$VERSION" in
+            *-*) DIST_TAG=$(echo "${VERSION#*-}" | cut -d. -f1) ;;
+            *) DIST_TAG=latest ;;
+          esac
+          npm publish "$FILE" --provenance --access public --tag "$DIST_TAG"
+
+  verify:
+    name: "Verify the registry signature and provenance (tag push only)"
+    needs: [packages, publish]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PKG: ${{ needs.packages.outputs.package }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the published version and run npm audit signatures
+        run: |
+          NAME="@genclass/$PKG"
+          VERSION="${GITHUB_REF_NAME#"$PKG"-v}"
+          mkdir -p "$RUNNER_TEMP/verify"
+          cd "$RUNNER_TEMP/verify" || exit 1
+          npm init -y > /dev/null
+          # the peer dependencies (the runtime, Astro, the Svelte CLI) are the app's: install what the package brings
+          echo "legacy-peer-deps=true" > .npmrc
+          # a new version can take several minutes to appear in the registry after npm publish
+          for i in $(seq 1 40); do npm view "$NAME@$VERSION" version --prefer-online && break; sleep 20; done
+          for i in $(seq 1 10); do npm install --no-audit --no-fund --ignore-scripts "$NAME@$VERSION" && break; sleep 30; done
+          test "$(node -p "require('$NAME/package.json').version")" = "$VERSION"
+          # the published command runs
+          if [ "$PKG" = playwright ]; then npx --no-install genclass-playwright-report --help | grep -q "^usage: genclass-playwright-report"; fi
+          # the attestations endpoint can lag the version by minutes (release.yml)
+          for i in $(seq 1 20); do npm audit signatures && exit 0; echo "attestations not served yet, retry $i"; sleep 30; done
+          exit 1
+
+  github-release:
+    name: "GitHub release: notes from the package's CHANGELOG.md (tag push only)"
+    needs: [packages, publish]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # gh release create; the only job that may write to the repository
+    env:
+      PKG: ${{ needs.packages.outputs.package }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Notes, the version's CHANGELOG section
+        run: |
+          node .github/scripts/changelog-section.mjs "packages/$PKG/CHANGELOG.md" "${GITHUB_REF_NAME#"$PKG"-v}" \
+            --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/packages/$PKG/CHANGELOG.md" > "$RUNNER_TEMP/notes.md"
+
+      # never the repository's latest release (the header)
+      - name: Create the release
+        run: |
+          VERSION="${GITHUB_REF_NAME#"$PKG"-v}"
+          PRERELEASE=()
+          case "$VERSION" in
+            *-*) PRERELEASE=(--prerelease) ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag --latest=false "${PRERELEASE[@]}" --title "@genclass/$PKG $VERSION" --notes-file "$RUNNER_TEMP/notes.md"

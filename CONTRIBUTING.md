@@ -23,6 +23,11 @@ Thanks for looking. Issues and pull requests are welcome.
   with an unsupported runtime and no deprecation warning from npm. Marking it is a maintainer step:
   `npm deprecate genclass-runtime "Use @genclass/runtime: npx @genclass/runtime init"`. Use
   `npx @genclass/runtime@beta init` (or `npx @genclass/runtime init` for 0.2.x).
+- `packages/genclass/` is `genclass`, the short command: its `cli.mjs` runs the runtime's CLI, its version is the
+  runtime's, and its `@genclass/runtime` range links the workspace (its test checks both; `ci.yml`'s `runtime` job
+  runs it). It is not on npm: `release.yml` publishes it after the runtime only for stable versions, and only when the
+  repository variable `GENCLASS_CLI` is `on`, with exactly that runtime version as its dependency; its first version
+  is the owner's. Until it is published, no document here prints its command (its test checks that too).
 - `sim/`, `realapps/`, `training/` produce and train on the model's data; `demos/`, `compat/`, `bench/heal/`
   evaluate the result; `bench/visual/` measures the visual checks' false reports, recall and cost (GitHub Actions
   only). `docs/runtime/RESULTS.md` is where every measured number lives.
@@ -51,6 +56,7 @@ npm run typecheck -w @genclass/runtime
 npm run build -w @genclass/runtime
 cd packages/runtime
 NODE_OPTIONS=--expose-gc npx vitest run --exclude "test/browser/**" --exclude test/review-perf.test.ts
+(cd ../genclass && npx vitest run)   # genclass, the short command (packages/genclass)
 NODE_OPTIONS=--expose-gc npx vitest run test/review-perf.test.ts --retry=2   # timing budgets; reported, not blocking
 ```
 
@@ -113,7 +119,8 @@ Say in the PR which of them you could not run.
 `packages/runtime/package.json`; its header comment is the authority on the order. In this order:
 
 1. On the release branch (`release/<version>`): `packages/runtime/package.json` and `packages/runtime/src/version.ts`
-   (`RUNTIME_VERSION`) have the version (`release.yml` checks both), the CHANGELOG section is final and dated, CI is
+   (`RUNTIME_VERSION`) have the version (`release.yml` checks both), so does `packages/genclass/package.json` (its
+   test checks it, and `release.yml` too when it publishes genclass), the CHANGELOG section is final and dated, CI is
    green, and the first-load limits in `test/bundle.test.ts` match the README and `docs/runtime/RESULTS.md`. Every place
    a reader sees the version says the same: the version notes at the top of `docs/runtime/API.md`,
    `docs/runtime/OPTIONS-SPEC.md`, `packages/runtime/TELEMETRY.md` and `packages/runtime/INTERCEPTION.md` (and any other
@@ -139,6 +146,33 @@ Say in the PR which of them you could not run.
    its `lib/` submodule. After the merge, ask its maintainer to move that submodule, and the runtime version the
    site's pages name, to this release, so `/docs/telemetry` and `/privacy` match the released `TELEMETRY.md` and
    `PRIVACY.md`. Deploying the site is a separate, owner-approved step.
+
+### The other packages
+
+`.github/workflows/release-mcp.yml` publishes `@genclass/mcp` from a tag `mcp-v<version>`.
+`.github/workflows/release-packages.yml` publishes `@genclass/playwright`, `@genclass/sv`, `@genclass/nuxt` and
+`@genclass/astro`, one per tag `<package>-v<version>` (for example `playwright-v0.1.0`) whose version equals that
+package's `package.json`, after the package's typecheck, build, unit tests and `npm pack`. On a pull request that
+changes the workflow or one of those four `package.json` files, it runs everything up to `npm publish --dry-run` for
+all four. Each workflow's header is the authority on its steps. Each package's first version is published once by the
+owner from the tarball the tag's run uploads, because npm sets up trusted publishing only for a package that exists;
+AGENTS.md rule 9 has to name `release-packages.yml` before its first publish. Before you push a tag, the package's
+CHANGELOG section is final and dated and its own workflow (`playwright-reporter.yml`, `sv-addon.yml` or
+`integrations.yml`) is green on that commit. Push one tag at a time: GitHub starts no workflow for tags pushed more
+than three at once.
+
+### GitHub releases
+
+When the publish job succeeds, each release workflow's `github-release` job creates the tag's GitHub release, with that
+version's CHANGELOG section as its notes (`.github/scripts/changelog-section.mjs`; relative links point at the tag).
+`release.yml` and `release-packages.yml` stop before anything is published when the section is missing or its heading
+still says unreleased; `release-mcp.yml` warns and links to its CHANGELOG instead, because `@genclass/mcp` 0.1.0 has
+no section of its own. A prerelease is marked as one. Only a stable release from `release.yml` or `release-mcp.yml`
+whose tag is on `main` becomes the repository's latest release, which Gemini CLI and `gh skill` install from. A
+version published by hand, such as each package's first, gets its release by hand: the command is in
+`release-packages.yml`'s header. So does a version whose publish job failed after npm had it: in `release.yml` and
+`release-mcp.yml`, "Verify the registry signature and provenance" is a step of that job, and a re-run stops at
+`npm publish`.
 
 ## Reporting a false flag
 

@@ -4,6 +4,12 @@ name: Release MCP
 # mcp-v0.1.0), with npm provenance, the same way release.yml publishes @genclass/runtime.
 # Authentication: npm trusted publishing (OIDC, `id-token: write`); no npm token is stored in the repository.
 #
+# GitHub release: after the publish job, the github-release job (the only job that may write to the repository)
+# creates the tag's release with the version's section of packages/mcp/CHANGELOG.md as its notes, the way release.yml
+# does, and a stable release becomes the repository's latest release only when its tag is on the default branch. A
+# missing section does not stop a release here: 0.1.0 (tag mcp-v0.1.0) has no section of its own (the 0.2.0 section
+# says what it was), so "The tag names the package version" only warns and the notes then link to the CHANGELOG.
+#
 # Owner setup:
 # - First version only: npm configures trusted publishing from a package's own settings page, so the package must exist
 #   before this workflow can publish it. Run this workflow once (push the tag): it builds, tests and uploads the tarball
@@ -82,6 +88,10 @@ jobs:
           RT=$(node -p "require('./packages/runtime/package.json').version")
           grep -q "RUNTIME_VERSION = \"$RT\"" packages/mcp/src/clients.ts
           test "$(npm view "@genclass/runtime@$RT" version)" = "$RT"
+          # the version's CHANGELOG section becomes the GitHub release's notes (the github-release job); without one
+          # the notes link to the CHANGELOG (the header)
+          node .github/scripts/changelog-section.mjs packages/mcp/CHANGELOG.md "$PKG" > /dev/null \
+            || echo "::warning::packages/mcp/CHANGELOG.md has no released section for $PKG: the GitHub release will link to the CHANGELOG"
 
       - name: Install
         run: npm ci --no-audit --no-fund
@@ -162,6 +172,54 @@ jobs:
           # the published command answers an MCP initialize on stdio
           printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
             | GENCLASS_STATE_DIR=none timeout 10 npx --no-install genclass-mcp | head -1 | grep -q '"serverInfo":{"name":"genclass"'
+
+  github-release:
+    name: "GitHub release: notes from packages/mcp/CHANGELOG.md"
+    needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # gh release create; the only job that may write to the repository
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # --or-link: a version without a section of its own gets a link to the CHANGELOG (the header)
+      - name: Notes, the version's CHANGELOG section
+        run: |
+          node .github/scripts/changelog-section.mjs packages/mcp/CHANGELOG.md "${GITHUB_REF_NAME#mcp-v}" --or-link \
+            --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/packages/mcp/CHANGELOG.md" > "$RUNNER_TEMP/notes.md"
+
+      - name: Create the release
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#mcp-v}"
+          case "$VERSION" in
+            *-*) MARK=--prerelease ;;
+            *)
+              # the latest release only from the default branch (release.yml's header): "behind" or "identical" means
+              # the tagged commit is on it
+              STATUS=$(gh api "repos/$GITHUB_REPOSITORY/compare/$DEFAULT_BRANCH...$GITHUB_REF_NAME" --jq .status) || STATUS=unknown
+              if [ "$STATUS" = behind ] || [ "$STATUS" = identical ]; then
+                MARK=--latest
+              else
+                MARK=--latest=false
+                echo "::notice::$GITHUB_REF_NAME is not on $DEFAULT_BRANCH (compare: $STATUS), so its release does not become the latest one"
+              fi
+              ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "@genclass/mcp $VERSION" --notes-file "$RUNNER_TEMP/notes.md" "$MARK"
 
   registry:
     name: "Official MCP Registry: publish server.json (GitHub OIDC)"

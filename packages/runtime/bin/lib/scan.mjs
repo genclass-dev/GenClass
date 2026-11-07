@@ -60,7 +60,7 @@ export const USAGE = `Usage:
   genclass-runtime scan <url> [--json] [--phone] [--timeout <s>] [--hosted | --local]
   genclass-runtime audit <url> ...   (the same command)
 
-Audits one page with GenClass's 23 measured visual checks (unreadable text, broken images, fonts and
+Audits one page with GenClass's 26 measured visual checks (unreadable text, broken images, fonts and
 stylesheets, sideways scrolling, layers that swallow clicks, covered dialogs, template leaks, ...) and prints
 a score and each problem with the element, its selector and a suggested CSS fix, worst first.
 

@@ -1,7 +1,7 @@
 # GenClass visual checks: design (v1, with v2 and v3 outlined)
 
 GenClass measured visual checks find visual and CSS bugs that throw no error, such as unreadable text, broken images,
-fonts and stylesheets, sideways scrolling on phones, and invisible layers that swallow clicks (23 kinds, section 3).
+fonts and stylesheets, sideways scrolling on phones, and invisible layers that swallow clicks (26 kinds, section 3).
 They are deterministic measurements with documented thresholds; the model is not involved and does not look at
 pixels. In `@genclass/runtime` 0.3.0-beta.0 they are on by default on development hosts (`visual: "local"`), three
 narrow runtime fixes run only when the app opts in and the mode is guard or heal, and the measurements are in
@@ -1517,7 +1517,7 @@ What to say about v1, which shipped in 0.3.0-beta.0 (README and genclass.dev), i
 > colour, a leaked `pointer-events: none`, a stuck scroll lock); each is reversible, and observe mode never changes
 > the page.
 
-What it catches today (after v1): the 23 kinds in section 3, in the visitor's own colour scheme, viewport and
+What it catches today (after v1): the 26 kinds in section 3, in the visitor's own colour scheme, viewport and
 browser, on development hosts by default and in production when the app turns it on.
 
 What it does not catch yet, said plainly:

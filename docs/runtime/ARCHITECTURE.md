@@ -199,7 +199,7 @@ console text later moved into the lazy chunk). The script-tag build carries the 
 - **Flow expectations** (opt-in, `learn: { expectations: true }`, [EXPECTATIONS.md](EXPECTATIONS.md)): learned
   counts of what each user action usually causes (a request, a write, a navigation), and a report when a step did
   not happen. The model is not consulted, and nothing is held, retried or changed in any mode.
-- **Interaction analytics** (opt-in, `analytics: true` with the app's token, 0.3.0-beta.1, not on npm yet;
+- **Interaction analytics** (opt-in, `analytics: true` with the app's token, 0.3.0-beta.1 and later;
   [ANALYTICS.md](ANALYTICS.md)): page views, engaged time, scroll depth and clicks per element key, counted for the
   app's dashboard with their own passive listeners, outside the event log.
 

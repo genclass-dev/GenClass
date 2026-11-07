@@ -357,7 +357,7 @@ a heavy page, and findings could carry page text out of the page.
 
 ## T11. Interaction analytics
 
-**Threat.** Interaction analytics (0.3.0-beta.1, not on npm yet; [ANALYTICS.md](ANALYTICS.md)) send counts of page
+**Threat.** Interaction analytics (0.3.0-beta.1 and later; [ANALYTICS.md](ANALYTICS.md)) send counts of page
 views, engaged time, scroll depth and clicks per element key to the collector. The keys could identify a person or
 carry personal data, and in some jurisdictions the collection needs the visitor's consent.
 
