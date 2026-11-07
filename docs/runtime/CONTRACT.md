@@ -600,7 +600,8 @@ anything" (section 13), on these terms:
 - **Holds, bounded.** With a delivery schedule (set by the developer, their agent or a test) it holds fetch/XHR
   responses, each at most its emulated delay plus `maxHoldMs`; without one it holds only a page load's first responses
   until the bridge's hello, at most `helloTimeoutMs`; `hold: false` disables every hold. Responses are never changed,
-  dropped or invented. Protected requests and routes in mode "off" are never held unless `holdProtected` is set.
+  dropped or invented. Protected requests are never held unless `holdProtected` is set; a route in mode "off" is never
+  gated, so nothing there is ever held.
 - **Facts, not decisions.** Its recording (requests by key, delivery order, writes, errors, the `overwrote-newer` and
   `identical-in-flight` witnesses, snapshots) never feeds the model, situations, the gate or the event log, and it
   maps no fact to a diagnosis or an action. Model-visible text is unchanged (`situation-v2.3`).
