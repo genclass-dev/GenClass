@@ -6,6 +6,48 @@
   the link), the next steps name the overlay first, and the optional upgrades are one line pointing at `init --dry-run`,
   which still lists them.
 
+### The agent link (`@genclass/runtime/agent`, development builds only)
+
+What `@genclass/mcp`'s explore plan `systematic`, its coverage lines and its minimise probes need from the page
+(docs/runtime/AGENT.md sections 3 and 5). A page whose runtime has none of this gets schedules it can run from the
+bridge, labelled; nothing changes for an app that does not import the agent entry.
+
+- **Fix: a held fetch honours the app's abort.** Once a fetch was sent its abort listener was removed, so a response
+  held at the delivery gate (by an agent schedule, or by the runtime for a decision in guard or heal) reached the app
+  after the app had aborted it: impossible on a real network, stale data in guard and heal, and a false explore race
+  on a correct `AbortController` app. A held response whose fetch the app aborted now rejects with the signal's reason,
+  else an `AbortError`, when it is released (not at the moment of the abort). A response released at once, with nothing
+  held, is delivered exactly as before, so observe mode without the agent changes nothing. Known limitation: the
+  recording counts that fetch as delivered at its release. Tests: `test/fetch.test.ts` (guard mode, a scripted decision
+  holding the delivery), `test/agent-schedule.test.ts` (fifo with a delay, lifo).
+- **Fix: the hold bound.** With many responses ready at once, releases one per `gapMs` could run past a response's
+  delay plus `maxHoldMs` (60 at once take 59 gaps, 1,770 ms at 30 ms). A response whose deadline has come is now
+  released at once, without waiting for the gap, earliest arrival first, and counted as forced only when the schedule
+  still held it back (one that only waited for its turn is not). The others go one per `gapMs` as before. Tests: 60
+  responses ready at once stay within the bound in every order; a forced response is released by its delay plus
+  `maxHoldMs` (+1 ms) while a newer one becomes ready every 20 ms.
+- **New schedule orders and fields** (`ScheduleSpec`): `order: "lifo"` (among overlapping requests the newest-started
+  response goes first), `order: "ranked"` with `ranks` (keys from highest to lowest priority; unlisted keys below them,
+  in request order), `reverse: true` for `seeded` (the same seed with every overlapping pair the other way), and
+  `delaySeed` (seeds `delay` in place of `seed`, so loads of different orders get the same per-key delays). `lifo` and
+  `ranked` wait only for requests that started before the response was ready (strictly), never for a hedge or a request
+  of the response's own chain. `"lifo"` is a URL form of `genclass-schedule`. Releases that may go are ordered by ready
+  time in `lifo` and `ranked`. `parseSpec` caps `ranks` like `given` (2,000 keys of 300 characters), keeps `reverse`
+  only when it is `true` and `delaySeed` as an integer up to 2^31.
+- **The net log**: each request's start index, send, ready and delivery times, hold, `forced`, `pass` (released at once
+  without scheduling), the request whose chain sent it and how it ended without a delivery, by key, at most 2,000 per
+  page load (the rest counted in `netLost`), kept outside the 600-step window. Steps events carry what changed (`net`,
+  `netLost`), `recv` steps carry `ready` and `pass`, and `recorded()` returns `net` and `netLost` (type `NetEntry`).
+- **Hello `caps`** (`["lifo", "ranked", "reverse", "delaySeed", "net"]`) tell the bridge what this runtime can run. A
+  hello reply schedule this runtime cannot read is answered with `{ t: "schedule", spec: { order: "natural" },
+  fallback: true, rejected: "<order>" }` (the page delivers as responses arrive), and a page-set schedule it cannot run
+  is warned about once on the console and replaced by `natural`.
+- Every hold is still bounded by its delay plus `maxHoldMs`, and the link still never drops, changes or invents a
+  response (AGENTS.md rule 1, CONTRACT.md section 16). No model-visible text changed (`situation-v2.3`), telemetry is
+  unchanged, and the agent entry stays its own file: the first load measures 108.93 KB (`/auto`) and 100.66 KB (main
+  entry) on the development Mac (`test/bundle.test.ts`), within its limits of 109.0 and 100.7 KB. Tests: `test/agent-schedule.test.ts` (27), `test/agent-net.test.ts`
+  (13), 5 more in `test/fetch.test.ts`; the measured checks of the mechanism are in RESULTS.md section 28.
+
 ## 0.3.0-beta.5 (2026-11-02)
 
 Security fixes from the adversarial review of the mode-raise fix (`0.3.0-beta.2`); the same four fixes are in `0.2.3`

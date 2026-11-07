@@ -103,6 +103,7 @@ export interface AgentConnection {
   readonly schedule: ScheduleSpec | null;
   /** True at a quiet point (until the next event). */
   readonly settled: boolean;
+  /** This page load's recording: its steps (the newest 600), delivery order, forced count and net timing log. */
   recorded(): RecordedSchedule;
   witnesses(): Witness[];
   errors(): ErrorRec[];
