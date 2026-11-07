@@ -1,6 +1,6 @@
 // Cover rows for the systematic explore plan (AGENT.md section 5): sequence covering arrays over the responses that
 // overlap in the baselines, and the request timing log they are read from (net.ts).
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MAX_PERMUTED, buildCover, sequenceCover } from "../src/cover.js";
 import { inversionsOf, overlapOf, schedulable, startOrderOf } from "../src/net.js";
 import type { NetEntry } from "../src/types.js";
@@ -22,8 +22,11 @@ function missingTriples(n: number, rows: number[][]): number {
   return missing;
 }
 
-/** The rows sequenceCover needs for every ordering of every triple, n = 3..16 (deterministic, so pinned). */
-const ROWS: Record<number, number> = { 3: 6, 4: 10, 5: 12, 6: 12, 7: 14, 8: 14, 9: 14, 10: 16, 11: 16, 12: 16, 13: 18, 14: 18, 15: 18, 16: 18 };
+/**
+ * The rows sequenceCover needs for every ordering of every triple, n = 3..16 (deterministic, so pinned; the insertion
+ * greedy alone needed 6 10 12 12 14 14 14 16 16 16 18 18 18 18).
+ */
+const ROWS: Record<number, number> = { 3: 6, 4: 8, 5: 10, 6: 10, 7: 12, 8: 12, 9: 12, 10: 12, 11: 14, 12: 14, 13: 14, 14: 14, 15: 14, 16: 16 };
 const TABLE = Object.entries(ROWS)
   .map(([n, r]) => `${n}:${r}`)
   .join(" ");
@@ -60,6 +63,42 @@ describe("cover: sequenceCover (AGENT.md section 5, plan systematic)", () => {
       [1, 0, 2],
       [2, 0, 1],
     ]);
+  });
+
+  it("the same n gives the same rows: on repeated calls and from a fresh module (nothing kept), n = 3..16", async () => {
+    const first = Array.from({ length: 14 }, (_, i) => sequenceCover(i + 3, 1000));
+    vi.resetModules();
+    const fresh = await import("../src/cover.js");
+    for (let n = 3; n <= 16; n++) {
+      expect(sequenceCover(n, 1000), `n=${n}`).toEqual(first[n - 3]);
+      expect(fresh.sequenceCover(n, 1000), `n=${n}`).toEqual(first[n - 3]);
+    }
+    // the rows are fresh copies: changing them changes no later call
+    first[5].rows[2].reverse();
+    expect(sequenceCover(8, 1000).rows[2]).toEqual(fresh.sequenceCover(8, 1000).rows[2]);
+  });
+
+  it("maxRows cuts the complete rows: the first maxRows of them, and what those hold", () => {
+    for (const n of [3, 4, 7, 12, 16]) {
+      const all = sequenceCover(n, 1000);
+      for (let limit = 2; limit <= all.rows.length + 1; limit++) {
+        const c = sequenceCover(n, limit);
+        expect(c.rows, `n=${n} limit=${limit}`).toEqual(all.rows.slice(0, limit));
+        expect(c.complete).toBe(limit >= all.rows.length);
+        expect(c.covered).toBeLessThanOrEqual(c.triples);
+      }
+    }
+  });
+
+  it(`more than ${MAX_PERMUTED} elements keep the insertion greedy, still complete`, () => {
+    for (const n of [17, 20]) {
+      const c = sequenceCover(n, 1000);
+      expect(c.complete, `n=${n}`).toBe(true);
+      expect(missingTriples(n, c.rows), `n=${n}`).toBe(0);
+      for (let i = 0; i < c.rows.length; i += 2) expect(c.rows[i + 1]).toEqual([...c.rows[i]].reverse());
+    }
+    expect(sequenceCover(17, 1000).rows).toHaveLength(22);
+    expect(sequenceCover(20, 1000).rows).toHaveLength(22);
   });
 
   it("stops at maxRows (never below the identity and its reverse), and says it is incomplete", () => {
