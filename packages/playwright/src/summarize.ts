@@ -27,6 +27,7 @@
 // 60000; GitHub rejects comment bodies over 65,536 characters) by leaving out the least important lines, with a note.
 // Its last line (`REPORT_FOOTER`, unless `footer: false`) links to the package README's section on what the lines
 // mean and what the fixture can miss; it counts toward `maxChars` and is kept however the report is shortened.
+// `renderNothingFlagged` gives the one line an existing pull-request comment is edited to when a run flags nothing.
 
 import { parseRaces, validateRaces } from "./schema.js";
 import { CHECK_TRIGGER, PAGE_ERROR_TRIGGER, type GenClassRacesFile, type RaceChaosOrder, type RacesFileInput, type RacesParseResult } from "./types.js";
@@ -735,6 +736,26 @@ export function renderMarkdown(s: RaceSummary, options: SummarizeOptions = {}): 
 /** Files -> markdown: buildSummary + renderMarkdown. Pure; never throws on bad input (bad files are listed as skipped). */
 export function summarize(inputs: readonly RacesFileInput[], options: SummarizeOptions = {}): string {
   return renderMarkdown(buildSummary(inputs, options), options);
+}
+
+/**
+ * The text an earlier report's pull-request comment is edited to when a later run flags nothing: `REPORT_MARKER`, so
+ * the next run finds the comment again, and one line that says so with what was read, e.g.
+ * "**GenClass race report**: nothing flagged in this run (2 tests, 4 files read)." The command's `--comment` posts it
+ * only over a GenClass comment that is already there, never as a new comment. null when the summary has a signature:
+ * then the report itself is the comment. Pure.
+ */
+export function renderNothingFlagged(s: RaceSummary, options: SummarizeOptions = {}): string | null {
+  if (s.totals.signatures > 0) return null;
+  const title = escapeMarkdown(options.title?.trim() || "GenClass race report");
+  const skipped = s.skipped.length;
+  const what =
+    s.files > 0
+      ? ` (${plural(s.totals.tests, "test")}, ${plural(s.files, "file")} read${skipped ? `, ${skipped} skipped` : ""})`
+      : skipped
+        ? `: no race file could be read (${skipped} skipped)`
+        : ": no race files were found";
+  return `${REPORT_MARKER}\n**${title}**: nothing flagged in this run${what}.\n`;
 }
 
 // The format and its validator, so this entry alone is enough for a CI script.
