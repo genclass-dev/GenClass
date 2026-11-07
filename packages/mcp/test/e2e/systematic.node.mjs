@@ -35,7 +35,8 @@
 // priorities, a cover row's rank order on every overlapping pair); the hold bound (no delivery later than ready +
 // maxHoldMs + 1 ms); the plan's positions; the cover rows handed out equal buildCover() of the settled baselines and
 // the lifo load and list every key; coverage and each run's inversions equal an independent computation from the
-// page-side logs; no race on fixed and abort, a race on buggy; on abort every older response was held when aborted,
+// page-side logs, and the runs the coverage line names for the orderings still missing equal buildCover() of them;
+// no race on fixed and abort, a race on buggy; on abort every older response was held when aborted,
 // rejected with AbortError and never written; every probe ran; a minimal reproduction, its replay reproduced; the
 // regression test fails on buggy and passes on fixed and abort. This is a simulation through the real code, not a
 // browser measurement.
@@ -580,6 +581,19 @@ async function exploreSession(plan, variant, runs = 6) {
   ];
   const missing = reportSays.filter((x) => !rep.includes(x));
   check(`${tag}: the report text says the compared runs, the verdict and the coverage`, !missing.length, missing.join(" | "));
+  // orderings of triples still missing: the line names the runs whose cover rows deliver every one, buildCover of the slow
+  // baselines and the lifo load, computed here from the page-side logs; nothing is named once every ordering was delivered
+  s.runsAll = null;
+  if (c && c.orderingsSeen < c.orderings) {
+    const timedLoad = (l) => ({ net: Object.fromEntries(l.rec.net.map((e) => [e.key, e])), order: l.rec.order });
+    const slowBase = loads.filter((l) => l.schedule?.order === "fifo" && (l.schedule?.delay?.maxMs ?? 0) > 0);
+    const lifoLoad = loads.find((l) => l.schedule?.order === "lifo");
+    const full = buildCover({ baselines: slowBase.map(timedLoad), ...(lifoLoad ? { lifo: timedLoad(lifoLoad) } : {}), rows: 50 });
+    s.runsAll = full && full.rows.length < 50 ? full.rows.length + 1 : null;
+    const had = plan === "systematic" && runs - 1 >= (s.runsAll ?? Infinity) - 1;
+    const says = had ? `This session armed the ${s.runsAll - 1} cover rows every ordering of the overlapping triples takes` : `takes plan "systematic" with runs ${s.runsAll} (${s.runsAll - 1} cover rows from these baselines): genclass_explore {action:"start", plan:"systematic", runs:${s.runsAll}}.`;
+    check(`${tag}: the coverage line names runs ${s.runsAll} for the orderings still missing (buildCover of the page-side logs)`, s.runsAll !== null && rep.includes(says), rep.split("\n").find((x) => x.startsWith("Every ordering") || x.startsWith("This session armed")) ?? "no line");
+  } else check(`${tag}: no runs named once every ordering of the triples was delivered`, !rep.includes("Every ordering of the overlapping triples") && !rep.includes("This session armed"));
   s.races = (g?.diffs ?? []).filter((d) => d.tier === "visible");
   s.findings = r.findings;
   s.forced = loads.reduce((n, l) => n + l.rec.forced, 0);
@@ -730,6 +744,7 @@ for (const r of rows) console.log(line(r));
 for (const s of sessions.filter((x) => x.plan === "systematic")) console.log(`${s.tag}: ${s.coverRows} cover row load(s), ${s.standIns} seeded stand-in(s); races under: ${s.races.map((d) => d.label).join(", ") || "none"}`);
 for (const s of sessions.filter((x) => x.plan === "seeded")) console.log(`${s.tag}: races under: ${s.races.map((d) => d.label).join(", ") || "none"}`);
 console.log(`sequenceCover(5) has ${need + 2} rows (fifo, lifo and ${need} cover rows): runs 6 gives 5 cover slots, runs ${need + 1} gives ${need}.`);
+for (const s of sessions.filter((x) => x.runsAll !== null)) console.log(`${s.tag}: the coverage line names runs ${s.runsAll} for the orderings still missing`);
 for (const s of sessions.filter((x) => x.min?.result))
   console.log(`${s.tag} minimise: ${s.min.probes} probe(s) armed, ${s.min.leftOut} left out; ${s.min.result.probes.map((p) => `${p.index + 1} ${p.state}${p.reproduced === true ? " reproduced" : p.reproduced === false ? " not reproduced" : ""}`).join("; ")}`);
 const failed = checks.filter((c) => !c.ok);

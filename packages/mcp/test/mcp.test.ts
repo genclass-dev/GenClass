@@ -503,6 +503,43 @@ describe("mcp: plan systematic, coverage and minimise through the tools (AGENT.m
     expect(r.text).toContain("Coverage: 3 of 3 overlapping response pairs delivered both ways; 4 of 6 orderings of 1 overlapping triples.");
   });
 
+  it("orderings of overlapping triples missing: the coverage line names the runs whose cover rows try them all, or says the session had them", async () => {
+    const { c, port } = await start();
+    // runs 3: two cover slots, where three overlapping searches take four
+    await call(c, "genclass_explore", { action: "start", runs: 3, route: "/search", plan: "systematic" });
+    for (const order of [S, S, [S[2], S[1], S[0]], null, null, S]) {
+      const p = await page(port, "/search", undefined, PAGE.origin, CAPS);
+      await p.send(searchLoad(order ?? p.schedule.ranks));
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("Coverage: 3 of 3 overlapping response pairs delivered both ways; 4 of 6 orderings of 1 overlapping triples.");
+    expect(r.text).toContain('Every ordering of the overlapping triples takes plan "systematic" with runs 5 (4 cover rows from these baselines): genclass_explore {action:"start", plan:"systematic", runs:5}.');
+    // runs 5 has the four rows: every ordering delivered, nothing to name
+    await call(c, "genclass_explore", { action: "start", runs: 5, route: "/search", plan: "systematic" });
+    const loads: string[][] = [];
+    for (const order of [S, S, [S[2], S[1], S[0]], null, null, null, null, S]) {
+      const p = await page(port, "/search", undefined, PAGE.origin, CAPS);
+      loads.push(order ?? p.schedule.ranks);
+      await p.send(searchLoad(loads.at(-1)!));
+    }
+    const r5 = await call(c, "genclass_explore", { action: "report" });
+    expect(r5.text).toContain("6 of 6 orderings of 1 overlapping triples.");
+    expect(r5.text).not.toContain("Every ordering of the overlapping triples");
+    // the same rows, but one cover load delivered in request order (its pairs stopped overlapping, say): the session had them
+    await call(c, "genclass_explore", { action: "start", runs: 5, route: "/search", plan: "systematic" });
+    for (const order of [S, S, [S[2], S[1], S[0]], null, null, null, S, S]) {
+      const p = await page(port, "/search", undefined, PAGE.origin, CAPS);
+      await p.send(searchLoad(order ?? p.schedule.ranks));
+    }
+    const missed = await call(c, "genclass_explore", { action: "report" });
+    expect(missed.text).toContain("5 of 6 orderings of 1 overlapping triples.");
+    expect(missed.text).toContain("This session armed the 4 cover rows every ordering of the overlapping triples takes, and the orderings still missing were not delivered:");
+    // a seeded session names the systematic plan
+    await call(c, "genclass_explore", { action: "start", runs: 1, route: "/search" });
+    for (const order of [S, S, [S[2], S[0], S[1]]]) await (await page(port, "/search", undefined, PAGE.origin, CAPS)).send(searchLoad(order));
+    expect((await call(c, "genclass_explore", { action: "report" })).text).toContain('Every ordering of the overlapping triples takes plan "systematic" with runs 5 (4 cover rows from these baselines): genclass_explore {action:"start", plan:"systematic", runs:5}.');
+  });
+
   it("a page runtime without the net timing log: the report says coverage needs it", async () => {
     const { c, port } = await start();
     await call(c, "genclass_explore", { action: "start", runs: 1, route: "/search" });

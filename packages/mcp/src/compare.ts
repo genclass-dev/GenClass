@@ -49,6 +49,7 @@
 // of order. Coverage counts what was tried; it never makes or unmakes a race.
 
 import type { ActStep, NetEntry, Run, Snapshot } from "./types.js";
+import { MAX_EXPLORE_RUNS, buildCover } from "./cover.js";
 import { MAX_PAIRS, deliveredBefore, deliveryRanks, inversionsOf, keyOrder, overlapOf, pairKey, schedulable, unorderedKey } from "./net.js";
 import { ageless, agesIn, fieldShape, lineWeight, pathShape, q, routeShape, sameAges, sigOf, type Elapsed } from "./text.js";
 
@@ -247,6 +248,14 @@ export interface Coverage {
   unschedulable: number;
   /** triangles: counted up to 2,000; netLost: timing entries the runs lost; pairs: a run had more than 20,000. */
   capped?: { triangles?: boolean; netLost?: number; pairs?: boolean };
+  /**
+   * Set when some orderings of those triples were not seen: what a plan "systematic" session takes to deliver every one,
+   * from the cover rows of these baselines (cover.ts buildCover, with a row first for each pair the group's lifo load
+   * did not deliver the other way). `runs`: its cover rows are runs - 1 (null when that is more than one session arms,
+   * runs 50). `kept`: requests past the first 16 of a group of overlapping responses, which keep their request-order
+   * places in every cover row, so the triples with them never get every ordering, whatever the runs.
+   */
+  completeAt?: { runs: number | null; kept: number };
 }
 
 /** Triangles counted per group. */
@@ -974,7 +983,24 @@ export function coverageOf(base: Run[], runs: Run[]): Coverage | null {
   for (const b of timed) for (const e of Object.values(b.net ?? {})) if (!schedulable(e) && !schedulableKeys.has(e.key)) left.add(e.key);
   const netLost = runs.reduce((n, r) => n + (r.netLost ?? 0), 0);
   const capped = { ...(manyTriangles ? { triangles: true } : {}), ...(netLost > 0 ? { netLost } : {}), ...(manyPairs ? { pairs: true } : {}) };
-  return { pairs: pairs.size, bothWays, neverInverted, triples: triangles.length, orderings: 6 * triangles.length, orderingsSeen, unschedulable: left.size, ...(Object.keys(capped).length ? { capped } : {}) };
+  const out: Coverage = { pairs: pairs.size, bothWays, neverInverted, triples: triangles.length, orderings: 6 * triangles.length, orderingsSeen, unschedulable: left.size, ...(Object.keys(capped).length ? { capped } : {}) };
+  if (orderingsSeen < out.orderings) {
+    const at = completeAt(timed, runs.find((r) => r.schedule?.order === "lifo" && !!r.net));
+    if (at) out.completeAt = at;
+  }
+  return out;
+}
+
+/**
+ * The runs of a plan "systematic" session whose cover rows deliver every ordering of every overlapping triple of these
+ * baselines: buildCover's rows for them (a row first for each pair the lifo load did not deliver the other way, then
+ * each group's cover), runs - 1 of them; null runs past what one session arms.
+ */
+function completeAt(timed: Run[], lifo: Run | undefined): Coverage["completeAt"] {
+  // one row more than a session can have says that it needs more
+  const cover = buildCover({ baselines: timed, ...(lifo ? { lifo } : {}), rows: MAX_EXPLORE_RUNS });
+  if (!cover) return undefined;
+  return { runs: cover.rows.length < MAX_EXPLORE_RUNS ? cover.rows.length + 1 : null, kept: cover.kept };
 }
 
 /** Two lines the same but for numbers a little apart. */

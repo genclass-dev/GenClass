@@ -19,7 +19,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compareRuns, endedDifferently, fieldValue, nameDifference, sameScenario, sameValue, settledAfterActs, shownField, stateValue, strongestFirst, type FieldDiff, type GroupReport, type RunDiff, multiset } from "./compare.js";
-import { buildCover, type Cover } from "./cover.js";
+import { MAX_EXPLORE_RUNS, buildCover, type Cover } from "./cover.js";
 import { inversionsOf, pairKey, pairsOf, startOrderOf } from "./net.js";
 import { agesIn, clean, pathShape, q, routeShape, sameAges, shape, sigOf, type Elapsed } from "./text.js";
 import type { ExploreSession, Finding, FindingKind, MinimizeArm, NetEntry, PlanSlot, Probe, ReplayArm, Run, ScheduleSpec, Step } from "./types.js";
@@ -699,7 +699,7 @@ export class Store {
         this.covers.delete(x.id);
       }
     const id = `x${this.nextExplore++}`;
-    const n = Math.max(1, Math.min(o.runs ?? 6, 50));
+    const n = Math.max(1, Math.min(o.runs ?? 6, MAX_EXPLORE_RUNS));
     const seed0 = o.seed ?? 1;
     const fixed = (o.slowMode ?? (o.plan === "systematic" ? "fixed" : "uniform")) === "fixed";
     const delay = o.delay && fixed ? { minMs: o.delay.maxMs, maxMs: o.delay.maxMs } : o.delay;
