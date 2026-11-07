@@ -10,18 +10,19 @@
 // For each test it puts @genclass/runtime on the page before the app's first script (observe mode, telemetry off,
 // the model skipped unless asked), applies the seeded chaos when one is given, and at the end writes one
 // "genclass-races/1" file to `outDir` (default `genclass` in the project's outputDir, test-results/genclass) with what
-// the runtime saw, the seed and chaos that produced it and what the fixture could not do, which the reporter turns
-// into the pull-request comment. The runtime only observes: it never holds, delays or changes anything the app does.
-// Chaos, when given, holds matched requests before they leave (that is its job), never changes what they say. A
-// finding never changes a test's outcome. `enabled: false` makes the fixture inert: the page is Playwright's own and
-// nothing is written.
+// the runtime saw (detections, witnesses, the page's uncaught errors, with `visual: true` the measured checks), the
+// seed and chaos that produced it and what the fixture could not do, which the reporter turns into the pull-request
+// comment. The runtime only observes: it never holds, delays or changes anything the app does. Chaos, when given,
+// holds matched requests before they leave (that is its job), never changes what they say; with chaos on, the
+// fixture lets the page reach its quiet point (at most 2 s) before it collects. A finding never changes a test's
+// outcome. `enabled: false` makes the fixture inert: the page is Playwright's own and nothing is written.
 
 import { test as base, expect, type Page, type PlaywrightTestArgs, type PlaywrightTestOptions, type PlaywrightWorkerArgs, type PlaywrightWorkerOptions, type TestType } from "@playwright/test";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { DEFAULT_SEED, describeMatch, resolveChaos, type ChaosMatch, type ChaosMatchFn, type ChaosOptions } from "./chaos.js";
 import { install, type Collected, type PageLike } from "./install.js";
-import { buildRacesFile, racesFileName, writeRacesFile } from "./races.js";
-import type { GenClassRacesFile } from "./types.js";
+import { buildRacesFile, fileBursts, racesFileName, writeRacesFile } from "./races.js";
+import type { GenClassRacesFile, RacesFixtureInfo } from "./types.js";
 
 export interface GenClassOptions {
   /** false: the fixture does nothing (no runtime on the page, no file). Default true. */
@@ -39,6 +40,13 @@ export interface GenClassOptions {
   modelUrl?: string;
   /** Seeded network chaos (ChaosOptions; `true` for the defaults). Off unless given. */
   chaos?: ChaosOptions | true | false;
+  /**
+   * true: the runtime's measured visual checks run too, report only (observe mode never changes the page), and the
+   * file carries them as `check|<kind>|<route>` signatures (the kind, the element's selector and the measured numbers;
+   * never the element's text). The fixture runs one more pass at the end of the test (at most 2 s). Needs the
+   * runtime's dist/visual/index.js; without it the file says the checks did not run. Default false.
+   */
+  visual?: boolean;
   /**
    * Where the files go, relative to the Playwright config's directory. Default: `genclass` in the project's
    * outputDir (test-results/genclass), which Playwright empties at the start of each run, so no file of an earlier
@@ -109,30 +117,46 @@ export async function startGenClass(page: Page | PageLike, options: GenClassOpti
   if (o.enabled === false) return { finish: async () => empty };
   if (o.mode !== undefined && o.mode !== "observe") throw new Error(`@genclass/playwright: genclass.mode must be "observe" (got ${JSON.stringify(o.mode)}): guard and heal are not for tests`);
   if (o.model !== undefined && o.model !== "skip" && o.model !== "load") throw new Error(`@genclass/playwright: genclass.model must be "skip" or "load" (got ${JSON.stringify(o.model)})`);
+  if (o.visual !== undefined && typeof o.visual !== "boolean") throw new Error(`@genclass/playwright: genclass.visual must be true or false (got ${JSON.stringify(o.visual)})`);
   const chaos = o.chaos ? resolveChaos(o.chaos, info.repeatEachIndex) : null;
   const seed = chaos ? chaos.seed : DEFAULT_SEED + Math.max(0, Math.floor(info.repeatEachIndex) || 0);
   const model = o.model ?? "skip";
-  const session = await install(page as unknown as PageLike, { runtimeDir: o.runtimeDir, model, modelUrl: o.modelUrl, chaos });
+  const session = await install(page as unknown as PageLike, { runtimeDir: o.runtimeDir, model, modelUrl: o.modelUrl, chaos, visual: o.visual === true });
   return {
     async finish(): Promise<GenClassRun> {
       const collected = await session.finish();
       // a test skipped in its body was not run: no file, so the report does not count it as unchecked
       if (info.status === "skipped") return { collected, file: null, path: null };
+      const fixture: RacesFixtureInfo = {
+        model,
+        agent: collected.agent,
+        chaosApplied: chaos ? collected.plans.length : null,
+        serviceWorker: collected.serviceWorker,
+        ...(collected.modeOverridden ? { modeOverridden: collected.modeOverridden } : {}),
+      };
+      // the newer fields only when they apply (settled with chaos on, visual with `visual: true`): a test without chaos,
+      // checks or page errors writes the file it always wrote
+      if (collected.settled !== undefined) fixture.settled = collected.settled;
+      if (collected.visual !== undefined) fixture.visual = collected.visual;
       const file = buildRacesFile({
         test: testName(info),
         seed,
         mode: collected.mode,
         model: collected.model,
-        chaos: chaos ? { latencyMs: chaos.delayMs, reorder: chaos.reorder, routes: describeMatch(chaos.match) } : null,
+        chaos: chaos
+          ? {
+              latencyMs: chaos.delayMs,
+              reorder: chaos.reorder,
+              routes: describeMatch(chaos.match),
+              ...(chaos.order ? { order: chaos.order } : {}),
+              ...(chaos.order === "reverse" ? fileBursts(collected.bursts ?? []) : {}),
+            }
+          : null,
         records: collected.records,
         witnesses: collected.witnesses,
-        fixture: {
-          model,
-          agent: collected.agent,
-          chaosApplied: chaos ? collected.plans.length : null,
-          serviceWorker: collected.serviceWorker,
-          ...(collected.modeOverridden ? { modeOverridden: collected.modeOverridden } : {}),
-        },
+        errors: collected.errors,
+        checks: collected.checks,
+        fixture,
       });
       const path = writeRacesFile(outDirOf(info, o.outDir), racesFileName(file.test, info.testId, seed, info.retry ?? 0), file);
       return { collected, file, path };
