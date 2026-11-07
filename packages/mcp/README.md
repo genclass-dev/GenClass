@@ -363,9 +363,11 @@ overlapping triples (3 requests in flight together take `runs: 5`, 4 take 7, 5 o
 yet. For either plan, a recent page runtime adds a coverage line to the report ("Coverage: 10 of 10 overlapping
 response pairs delivered both ways; 53 of 60 orderings of 10 overlapping triples"), with the pairs never tried and the
 `runs` that would try the rest. `genclass_replay {action:"minimize"}` then finds the smallest reordering that
-reproduces a race, one page load per probe, and the finding replays it; a replay counts only when the harmful order
-happened in it, so a fix that stops sending the older request is proven by a new explore. A page whose runtime cannot
-run a schedule gets one it can, labelled. Details: [AGENT.md section 5](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md).
+reproduces a race, one page load per probe, and the finding replays it; a probe that ends with another wrong value
+counts only when another reordered run of the explore showed that value too. A replay counts only when the harmful
+order happened in it, so a fix that stops sending the older request is proven by a new explore. A page whose runtime
+cannot run a schedule gets one it can, labelled. Minimise, plan `systematic` and the coverage line need this server
+after `@genclass/mcp` 0.2.2 as well. Details: [AGENT.md section 5](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md).
 
 ## Tools
 

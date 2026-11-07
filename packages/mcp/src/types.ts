@@ -42,9 +42,9 @@ export interface NetEntry {
   key: string;
   /** Start index: the request's position among this page load's requests, by start time. */
   n: number;
-  /** Send (start) time. */
+  /** Send (start) time, to the microsecond (the page's own value, so the overlap is the one its schedule used). */
   s: number;
-  /** Ready time: arrived at the delivery gate, plus the emulated delay. */
+  /** Ready time, to the microsecond: arrived at the delivery gate, plus the emulated delay. */
   r?: number;
   /** Delivered to the app. */
   d?: number;
@@ -270,8 +270,10 @@ export interface Probe {
   between: number;
   /** 1: a moved to just after b (an older response delivered late); 2: b moved to just before a. */
   variant: 1 | 2;
-  /** The page load that ran it. */
+  /** The page load that ran it (the latest, when one did not get to a result and it went to another). */
   run?: string;
+  /** How many page loads it went to (at most store.ts MAX_PROBE_LOADS). */
+  loads?: number;
   /** Its page's runtime rejected it (a fallback): it is not assigned again. */
   rejected?: boolean;
 }
@@ -284,4 +286,9 @@ export interface MinimizeArm {
   probes: Probe[];
   /** Probes beyond the first 12 that were not armed. */
   leftOut: number;
+  /**
+   * Inversions of the failing run that gave no probe: their keys are not in the first baseline's start order, or start
+   * the other way round there, or they were past the 50 the finding keeps. Set when not 0.
+   */
+  skipped?: number;
 }

@@ -2,8 +2,16 @@
 // overlap in the baselines, and the request timing log they are read from (net.ts).
 import { describe, expect, it, vi } from "vitest";
 import { MAX_PERMUTED, buildCover, sequenceCover } from "../src/cover.js";
-import { inversionsOf, overlapOf, schedulable, startOrderOf } from "../src/net.js";
+import { inversionsOf, overlapOf, schedulable, startOrderOf, suffixed } from "../src/net.js";
 import type { NetEntry } from "../src/types.js";
+import { mergeNet, netEntry } from "../src/validate.js";
+
+/** Timing entries as the bridge keeps them from a steps event (validate.ts mergeNet). */
+function mergeNetOf(entries: unknown[]): Record<string, NetEntry> {
+  const into = Object.create(null) as Record<string, NetEntry>;
+  mergeNet(into, entries);
+  return into;
+}
 
 /** Every ordered triple (x, y, z) of 0..n-1 that no row holds in that order (brute force). */
 function missingTriples(n: number, rows: number[][]): number {
@@ -139,6 +147,33 @@ describe("cover: the timing log (net.ts, the overlap shared with the page)", () 
     expect(inversionsOf(flipped, ["GET /a#2", "GET /a#1", "GET /b#1"])).toEqual([["GET /a#1", "GET /a#2"]]);
     expect(inversionsOf(net, ["GET /a#1", "GET /a#2", "GET /b#1"])).toEqual([]);
     expect(inversionsOf(undefined, [])).toEqual([]);
+  });
+
+  it("only the runtime's suffix after the occurrence number marks a retry or a hedge: a \"~\" in a path is the path's", () => {
+    for (const k of ["GET /api/a#2~retry2", "GET /api/a#2~hedge", "GET /~alice/search#3~retry2", "GET /api/a#1~hedge~retry2", "GET /api/a#0~retry2"]) expect(suffixed(k), k).toBe(true);
+    for (const k of ["GET /~alice/search#1", "GET /~partytown/proxytown#2", "GET api.example.com/~x/y#1", "GET /a~hedge/b#1"]) expect(suffixed(k), k).toBe(false);
+    // the search race on a user's page: every response overlaps, #3 delivered first
+    const keys = ["GET /~alice/search#1", "GET /~alice/search#2", "GET /~alice/search#3"];
+    const net = log(e(keys[0], 0, 10, 110, 230), e(keys[1], 1, 30, 130, 260), e(keys[2], 2, 50, 150, 200));
+    expect(startOrderOf(net).map((x) => x.key)).toEqual(keys);
+    expect(inversionsOf(net, [keys[2], keys[0], keys[1]])).toEqual([
+      [keys[0], keys[2]],
+      [keys[1], keys[2]],
+    ]);
+  });
+
+  it("send and ready times keep their fractions: a request sent 0.2 ms before a response was ready overlaps it", () => {
+    // the page held a (ready at 100.4) for b (sent at 100.2); whole milliseconds would make both 100: no overlap
+    const fine = mergeNetOf([{ key: "GET /api/a#1", n: 0, s: 0, r: 100.4, d: 180, held: 80 }, { key: "GET /api/b#1", n: 1, s: 100.2, r: 150.2, d: 150 }]);
+    expect(fine["GET /api/a#1"]).toMatchObject({ s: 0, r: 100.4, d: 180, held: 80 });
+    expect(fine["GET /api/b#1"]).toMatchObject({ s: 100.2, r: 150.2 });
+    expect(overlapOf(fine)).toEqual([["GET /api/a#1", "GET /api/b#1"]]);
+    expect(inversionsOf(fine, ["GET /api/b#1", "GET /api/a#1"])).toEqual([["GET /api/a#1", "GET /api/b#1"]]);
+    // to the microsecond; still finite, non-negative and capped
+    expect(netEntry({ key: "GET /x#1", n: 0, s: 1.23456789, r: 2.0004 })).toEqual({ key: "GET /x#1", n: 0, s: 1.235, r: 2 });
+    expect(netEntry({ key: "GET /x#1", n: 0, s: -1 })).toBeNull();
+    expect(netEntry({ key: "GET /x#1", n: 0, s: 5, r: Number.POSITIVE_INFINITY })).toEqual({ key: "GET /x#1", n: 0, s: 5 });
+    expect(netEntry({ key: "GET /x#1", n: 0, s: 2e9, d: 3.7 })).toEqual({ key: "GET /x#1", n: 0, s: 1e9, d: 3 });
   });
 
   it("buildCover: every key in every row, components contiguous in order of first send, focus last, lifo pairs first", () => {

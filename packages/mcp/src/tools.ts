@@ -207,18 +207,23 @@ const PROBE_STATE: Record<string, string> = { pending: "pending", rejected: "not
 
 /** The minimise verdicts: one line per probe, then the minimal reproduction or what is still missing. */
 function minimizeLines(m: MinimizeResult): string[] {
-  const out = [`Minimise (${m.probes.length} probe(s), each moving one response of the failing order${m.leftOut ? `; ${m.leftOut} more were left out` : ""}):`];
+  const skipped = m.skipped ? `; ${m.skipped} inversion(s) of the failing run gave no probe (their requests are not in the first baseline's start order, or start the other way round there)` : "";
+  const out = [`Minimise (${m.probes.length} probe(s), each moving one response of the failing order${m.leftOut ? `; ${m.leftOut} more were left out` : ""}${skipped}):`];
   for (const p of m.probes) {
     const state = p.state === "done" ? (p.reproduced === true ? "REPRODUCED" : p.reproduced === false ? "not reproduced" : "inconclusive") : PROBE_STATE[p.state] ?? p.state;
     out.push(`- probe ${p.index + 1} ${q(p.label, 160)}${p.run ? ` (run ${p.run})` : ""}: ${state} · ${clean(p.note, 300)}`);
   }
+  const notTried = m.leftOut + (m.skipped ?? 0);
   if (m.minimal) {
     const x = m.minimal;
     const what = x.exact ? `the one inverted pair: ${q(x.a, 80)} delivered after ${q(x.b, 80)}` : x.variant === 1 ? `${q(x.a, 80)} delivered after ${q(x.b, 80)} and after the ${x.between} requests started between them` : `${q(x.b, 80)} delivered before ${q(x.a, 80)} and before the ${x.between} requests started between them`;
-    out.push(`Minimal reproduction (run ${x.run}): ${what}.${x.other ? " Its page ended with other values than the failing run, none of them the request-order baseline's where the failing run differed." : ""} genclass_replay {action:"arm", id:"${m.finding}"} now replays this order, and genclass_explain shows it.`);
+    out.push(`Minimal reproduction (run ${x.run}): ${what}.${x.other ? " Its page ended with other values than the failing run, ones another reordered run of the explore had too, and none of the request-order baseline's where the failing run differed; its replays are judged against that page's values." : ""} genclass_replay {action:"arm", id:"${m.finding}"} now replays this order, and genclass_explain shows it.`);
   } else if (m.none) out.push("No single response moved earlier or later reproduces it: it needs several reordered together, or the failing run's timing.");
+  else if (m.pending && m.expired) out.push(`${m.pending} probe(s) still without a result, and the probes expired 30 minutes after they were armed, so no page load gets one now: genclass_replay {action:"minimize", id:"${m.finding}"} arms them again (each probe runs again).`);
   else if (m.pending) out.push(`${m.pending} probe(s) still to run or settle: load the page fresh for each, do the same steps, await whenSettled(), then ask again.`);
-  else out.push("No minimal reproduction yet: an inconclusive probe comes before any that reproduced it (see its note).");
+  else if (m.probes.length && m.probes.every((p) => p.conclusive)) out.push(`None of the ${m.probes.length} probe(s) reproduced it; ${notTried} more single move(s) were not tried (left out, or with no probe), so one of them, or several responses moved together, may still reproduce it.`);
+  else if (m.probes.some((p) => p.reproduced === true)) out.push("No minimal reproduction yet: an inconclusive probe comes before any that reproduced it (see its note).");
+  else out.push("No minimal reproduction yet: no probe reproduced it, and some are inconclusive or could not run (see their notes).");
   return out;
 }
 
@@ -491,7 +496,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
         return { text: `Replay of ${a.finding} armed for the next ${a.remaining} page load(s) of ${q(a.route, 80)} for 30 minutes (schedule: ${scheduleText(a.spec)}). Load the page fresh, do the steps genclass_explain lists, await window.__GENCLASS_AGENT__.whenSettled(), then genclass_replay {action:"result", id:"${a.finding}"}.` };
       }
       if (args.action === "minimize") {
-        const m = (await ctx.api("finding.minimize", { id })) as null | { error: string } | { finding: string; route?: string; probes: { spec: ScheduleSpec }[]; leftOut: number };
+        const m = (await ctx.api("finding.minimize", { id })) as null | { error: string } | { finding: string; route?: string; probes: { spec: ScheduleSpec }[]; leftOut: number; skipped?: number };
         if (!m) return { text: `No finding ${clean(id, 20)}.`, isError: true };
         if ("error" in m) return { text: `Cannot minimise ${clean(id, 20)}: ${clean(m.error, 300)}`, isError: true };
         return {
@@ -499,8 +504,9 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
             `Minimise ${m.finding} armed for 30 minutes: the next ${m.probes.length} page load(s) of ${q(m.route, 80)} each get one probe, the failing order with one response moved ${PAGE_DATA}:`,
             ...m.probes.map((p, i) => `  ${i + 1}. ${q(p.spec.label, 200)}`),
             ...(m.leftOut ? [`${m.leftOut} more probe(s) were left out (the smallest moves come first).`] : []),
+            ...(m.skipped ? [`${m.skipped} inversion(s) of the failing run gave no probe: their requests are not in the first baseline's start order, or start the other way round there.`] : []),
             "",
-            `Do the same steps on each of those ${m.probes.length} page load(s), loading the page fresh every time (genclass_explain lists the steps), and await window.__GENCLASS_AGENT__.whenSettled() after them; with Playwright: \`--repeat-each ${m.probes.length} --workers 1\`. Probes go only to pages whose @genclass/runtime runs the ranked order. Then genclass_replay {action:"result", id:"${m.finding}"}: it names the smallest reordering that reproduces the race, and the finding replays it from then on.`,
+            `Do the same steps on each of those ${m.probes.length} page load(s), loading the page fresh every time (genclass_explain lists the steps), and await window.__GENCLASS_AGENT__.whenSettled() after them; with Playwright: \`--repeat-each ${m.probes.length} --workers 1\`. Probes go only to pages whose @genclass/runtime runs the ranked order; a probe whose page load leaves or goes quiet before a quiet point after the steps, or does other steps, goes to the next page load (3 in all). Then genclass_replay {action:"result", id:"${m.finding}"}: it names the smallest reordering that reproduces the race, and the finding replays it from then on.`,
           ].join("\n"),
         };
       }
@@ -587,7 +593,7 @@ function evidenceLines(f: Finding, ev: Record<string, unknown>): string[] {
       if (inv.length) out.push(`- The failing run delivered ${Number(ev.inversionsTotal) || inv.length} overlapping response pair(s) newer first, e.g. ${inv.slice(0, 3).map(([a, b]) => `${q(b, 80)} before ${q(a, 80)}`).join(", ")}${ev.minimal ? "" : ` (genclass_replay {action:"minimize", id:"${f.id}"} finds the smallest reordering that reproduces it)`}.`);
       else if (ev.reordered === false) out.push("- The failing run delivered no overlapping response out of request order (its own timing log): the difference comes from response timing.");
       const min = ev.minimal as { exact?: unknown; a?: unknown; b?: unknown; between?: unknown; variant?: unknown; run?: unknown; other?: unknown } | undefined;
-      if (min && typeof min === "object") out.push(`- Minimal reproduction (run ${clean(min.run, 20)}): ${min.exact ? `the one inverted pair, ${q(min.a, 80)} delivered after ${q(min.b, 80)}` : min.variant === 2 ? `${q(min.b, 80)} delivered before ${q(min.a, 80)} and before the ${clean(min.between, 6)} requests started between them` : `${q(min.a, 80)} delivered after ${q(min.b, 80)} and after the ${clean(min.between, 6)} requests started between them`}${min.other === true ? " (its page ends with other values than the failing run, none of them the baseline's)" : ""}; the replay below delivers it.`);
+      if (min && typeof min === "object") out.push(`- Minimal reproduction (run ${clean(min.run, 20)}): ${min.exact ? `the one inverted pair, ${q(min.a, 80)} delivered after ${q(min.b, 80)}` : min.variant === 2 ? `${q(min.b, 80)} delivered before ${q(min.a, 80)} and before the ${clean(min.between, 6)} requests started between them` : `${q(min.a, 80)} delivered after ${q(min.b, 80)} and after the ${clean(min.between, 6)} requests started between them`}${min.other === true ? " (its page ends with other values than the failing run, ones another reordered run had too, none of them the baseline's; its replays are judged against them)" : ""}; the replay below delivers it.`);
       if (Array.isArray(ev.endedWithout) && ev.endedWithout.length) out.push(`- Ended without a response in the failing run, delivered in the baselines: ${(ev.endedWithout as unknown[]).slice(0, 5).map((k) => q(k, 80)).join(", ")}`);
       break;
     }
