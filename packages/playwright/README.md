@@ -157,6 +157,11 @@ order next to each seed (`2 (reverse)`), and only the reordering seeds count tow
 in the natural run and one other seed is not reproducible yet. The default (`"random"`) is the order the measured
 numbers below were taken with; the systematic one has no measured false-report rate yet.
 
+These orders hold requests before they leave, as chaos always does; the fixture's agent link holds no response
+(`hold: false`). So they are not `@genclass/mcp`'s explore plan `systematic`, which orders responses at the runtime's
+delivery gate on a development build connected to the agent
+([AGENT.md section 5.1](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md)).
+
 ### The model trade-off
 
 By default (`model: "skip"`) nothing is downloaded and the file carries the runtime's **witnesses**: facts the
