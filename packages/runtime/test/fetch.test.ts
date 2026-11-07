@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createRuntime } from "../src/index.js";
 import { MAX_BODY, MAX_ENTRIES } from "../src/observe/cache.js";
 import { rebuildRequest } from "../src/observe/fetch.js";
-import { FakeClock, ManualDecider, ScriptedDecider, defaultScript, setup } from "./helpers.js";
+import { FakeClock, ManualDecider, ScriptedDecider, defaultScript, setup, type Route, type Setup } from "./helpers.js";
 
 describe("fetch observer", () => {
   it("plain traffic makes no model call (triage neutrality)", async () => {
@@ -366,5 +366,176 @@ describe("fetch observer: Request objects with bodies (one clone; replays come f
     expect(orig.bodyUsed).toBe(true);
     const r2 = rebuildRequest(Request, orig, new TextEncoder().encode("abc"))!;
     expect(await r2.text()).toBe("abc");
+  });
+});
+
+describe("fetch observer: a held delivery honours the app's abort (CONTRACT §6, §16)", () => {
+  it("guard: the app aborts while its response is held for a decision; its promise rejects with AbortError at the release", async () => {
+    const manual = new ManualDecider();
+    const s = setup({ decider: manual, triage: "always" });
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    const ac = new AbortController();
+    let got: unknown;
+    let err: unknown;
+    void s.fetch("/api/x", { signal: ac.signal }).then(
+      (r) => (got = r),
+      (e) => (err = e),
+    );
+    await s.clock.advance(10);
+    expect(manual.pending.map((p) => p.req.trigger)).toEqual(["request"]);
+    manual.answer(defaultScript()); // send
+    await s.clock.advance(100);
+    expect(manual.pending.map((p) => p.req.trigger)).toEqual(["delivery"]); // the response is held
+    ac.abort();
+    await s.clock.flush();
+    manual.answer(defaultScript()); // deliver: the app aborted meanwhile
+    await s.clock.flush();
+    expect(got).toBeUndefined();
+    expect((err as Error).name).toBe("AbortError");
+    expect(err).toBe(ac.signal.reason);
+    // no op or event change: the request ended when its response arrived
+    const op = [...s.rt.ops.byId.values()].find((o) => o.kind === "fetch")!;
+    expect(op.status).toBe("ok");
+  });
+
+  it("guard: the reason the app aborted with is what its promise rejects with", async () => {
+    const manual = new ManualDecider();
+    const s = setup({ decider: manual, triage: "always" });
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    const ac = new AbortController();
+    let err: unknown;
+    void s.fetch("/api/x", { signal: ac.signal }).catch((e) => (err = e));
+    await s.clock.advance(10);
+    manual.answer(defaultScript());
+    await s.clock.advance(100);
+    const why = new Error("the user left the page");
+    ac.abort(why);
+    manual.answer(defaultScript());
+    await s.clock.flush();
+    expect(err).toBe(why);
+  });
+
+  it("a held response the app did not abort is delivered after the decision, as before", async () => {
+    const manual = new ManualDecider();
+    const s = setup({ decider: manual, triage: "always" });
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    const ac = new AbortController();
+    let body: unknown;
+    void s.fetch("/api/x", { signal: ac.signal }).then(async (r) => (body = await r.json()));
+    await s.clock.advance(10);
+    manual.answer(defaultScript());
+    await s.clock.advance(100);
+    expect(body).toBeUndefined();
+    manual.answer(defaultScript());
+    await s.clock.flush();
+    expect(body).toEqual({ v: 1 });
+  });
+
+  it("no hold: a response released at once is delivered as today, even when the signal was aborted just before the gate", async () => {
+    const holder: { server?: { fetch: (u: unknown, i?: Record<string, unknown>) => Promise<Response> } } = {};
+    const ac = new AbortController();
+    // the native fetch resolves, then the app aborts before GenClass's delivery gate runs (a microtask later)
+    const native = (u: unknown, i?: Record<string, unknown>) =>
+      holder.server!.fetch(u, i).then((r) => {
+        ac.abort();
+        return r;
+      });
+    const s = setup({ mode: undefined, extraGlobal: { fetch: native } });
+    holder.server = s.server;
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    let got: Response | undefined;
+    let err: unknown;
+    void s.fetch("/api/x", { signal: ac.signal }).then(
+      (r) => (got = r),
+      (e) => (err = e),
+    );
+    await s.clock.advance(100);
+    expect(ac.signal.aborted).toBe(true);
+    expect(err).toBeUndefined();
+    expect(got?.status).toBe(200);
+  });
+
+  it("observe: an abort after the response was delivered changes nothing", async () => {
+    const s = setup({ mode: undefined });
+    s.server.on("GET", "/api/x", { body: { v: 1 }, latency: 50 });
+    const ac = new AbortController();
+    let got: Response | undefined;
+    void s.fetch("/api/x", { signal: ac.signal }).then((r) => (got = r));
+    await s.clock.advance(60);
+    expect(got?.status).toBe(200);
+    ac.abort();
+    await s.clock.flush();
+    expect(got?.status).toBe(200);
+  });
+});
+
+describe("fetch observer: a failure held at the failure gate honours the app's abort (CONTRACT §6, §16)", () => {
+  /** Heal, every trigger asked: the first fetch of `n` answers 200 (it fills the cache), later ones `fail`. */
+  function healServer(fail: Route, warm = false) {
+    const manual = new ManualDecider();
+    const s = setup({ decider: manual, triage: "always", mode: "heal" });
+    s.server.on("GET", "/api/x", ({ n }) => (warm && n === 1 ? { status: 200, body: { v: 1 }, latency: 20 } : fail));
+    return { s, manual };
+  }
+  /** The app's fetch with its own signal; its request is sent and its failure waits for the decision. */
+  async function heldFailure(s: Setup, manual: ManualDecider) {
+    const ac = new AbortController();
+    const out: { got?: Response; err?: unknown } = {};
+    void s.fetch("/api/x", { signal: ac.signal }).then(
+      (r) => (out.got = r),
+      (e) => (out.err = e),
+    );
+    await s.clock.advance(10);
+    expect(manual.pending.map((p) => p.req.trigger)).toEqual(["request"]);
+    manual.answer(defaultScript()); // send
+    await s.clock.advance(100);
+    expect(manual.pending.map((p) => p.req.trigger)).toEqual(["failure"]); // the failure is held
+    return { ac, out };
+  }
+
+  for (const [what, fail] of [
+    ["a 503", { status: 503, body: { e: 1 }, latency: 50 }],
+    ["a network error", { error: "network" as const, latency: 50 }],
+  ] as const) {
+    it(`heal: ${what} held for the decision that the app aborted meanwhile rejects with the abort at the release`, async () => {
+      const { s, manual } = healServer(fail);
+      const { ac, out } = await heldFailure(s, manual);
+      ac.abort();
+      await s.clock.flush();
+      expect(out).toEqual({}); // at the release, not at the abort
+      manual.answer(defaultScript()); // deliver: the app aborted meanwhile
+      await s.clock.flush();
+      expect(out.got).toBeUndefined();
+      expect(out.err).toBe(ac.signal.reason);
+      expect((out.err as Error).name).toBe("AbortError");
+    });
+  }
+
+  it("heal: a held failure the app did not abort is delivered after the decision, as before", async () => {
+    const { s, manual } = healServer({ status: 503, body: { e: 1 }, latency: 50 });
+    const { out } = await heldFailure(s, manual);
+    manual.answer(defaultScript());
+    await s.clock.flush();
+    expect(out.got?.status).toBe(503);
+  });
+
+  it("heal: the cached response a decision puts in place of a held failure the app aborted is not delivered either", async () => {
+    const { s, manual } = healServer({ status: 503, body: { e: 1 }, latency: 50 }, true);
+    // a first GET answers 200 and fills the cache (its decisions: deliver)
+    let first: Response | undefined;
+    void s.fetch("/api/x").then((r) => (first = r));
+    for (let i = 0; i < 8 && !first; i++) {
+      await s.clock.advance(50);
+      while (manual.pending.length) manual.answer(defaultScript());
+    }
+    await s.clock.advance(3000);
+    while (manual.pending.length) manual.answer(defaultScript());
+    expect(first?.status).toBe(200);
+    const { ac, out } = await heldFailure(s, manual);
+    ac.abort();
+    manual.answer(defaultScript({ failure: { diagnosis: "transient", action: "serve_cached" } }));
+    await s.clock.flush();
+    expect(out.got).toBeUndefined();
+    expect(out.err).toBe(ac.signal.reason);
   });
 });

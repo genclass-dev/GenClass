@@ -44,6 +44,7 @@ round 1, `r17-v2a` to `r17-v2c` and model 0.1.0 (`r17-v2b`) are superseded and k
 | Measured visual checks (deterministic, not the model) | fixture pages: 35 of 35 planted faults found, 0 false reports. Bench: 0 false reports and 0 fixes in 128 page views of the demos, templates and compat apps; recall 1.00 on 20 of 23 planted fault kinds (run 4), 19 of 23 (run 5); public sites: 8 findings in 96 loads in run 4 (5 confirmed real, 0 check errors, 3 unconfirmed), 6 findings in 97 loads in run 5 (after the review; not looked at) | §13, §14 |
 | Flow expectations (opt-in) | false-report rate not measured yet | §5 |
 | Coding agents: `genclass_explore` and `genclass_replay` on one real page (train VM, headless Chromium, 2026-10-20; one page, one bug class, not a recall figure) | explore found the stale-results race in 5 of 6 reordered runs of the buggy page and reported nothing on the fixed page (0 of 6 differ: no false report); replay reproduced it before the fix and not after; the generated Playwright test failed before and passed after | §18 |
+| Coding agents: explore plan `systematic` (opt-in, unreleased; a Node simulation through the real runtime and bridge, no browser) | race in 5 of 6 and 8 of 9 reordered runs of the buggy page, 0 of 30 on two correct pages (6 + 9 on each); every overlapping pair delivered both ways; every ordering of the overlapping triples with `runs: 9`. False-report rate: not measured yet (one simulated scenario, no browser, no real app) | §28 |
 
 ## 1. Model stages compared (held-out simulated apps)
 
@@ -1560,3 +1561,98 @@ Also: five adjacent `[redacted]` in a state value against 199 characters took ov
 **Report text.** On the hunts' Notes at 900 ms the sample before named "2m", "8", "3m", "Loading..." and never the differing "Maple note" row; the lists are now in reading order and the headline names the row. On planted pages the headline names the planted line in **48 of 48** sessions with a verdict (that it shows "Last synced 3 days ago", which the baseline does not; that form field "el-id-*-33" is "default one"; that requests sent to "POST /api/save" are "(absent)", "1" in the baseline). The Notes report itself cannot be shown again without its app.
 
 Caveats: one machine, seeds 1 to 6 only, other agents running on it (load 4 to 11). The stored rescoring reads text, not the runs: the limits above apply, and it says nothing about the new baseline. A page check is the hunt's own and narrow: a run it calls right can differ for a real reason (`rename-two`, `new-session`), and "false" means by that check. Real apps with the new baseline: OpenCode only, one build, the review's four scenarios. Not run: n8n, Open WebUI and Langflow with the new load (no installs, no room), the demos (each has its own runtime and shell on the page, so the harness's injected one would make two), the model suite, `realapps/`.
+
+## 28. Systematic explore: the mechanism (development Mac, Node 22, 2026-11-07, branch `feat/systematic-explore`)
+
+[AGENT.md](AGENT.md) sections 3 and 5: the agent link's `lifo` and `ranked` orders, seeded `reverse`, `delaySeed`, the
+hold bound and the net log; the bridge's plan `systematic`, coverage, minimise and the replay order check; the
+fixture's page errors, quiet point and systematic chaos orders. Mechanism numbers only: unit tests, the cover's row
+counts and an end-to-end simulation in Node. **No browser, real-app or false-report measurement of plan `systematic`
+exists yet**, so it is opt-in and `seeded` stays the default, the plan sections 20 to 22 and 27 measured. No false
+intervention rate applies: nothing here is a detection or an intervention.
+
+**Tests** (on the development Mac, `--maxWorkers=2`, after the review fixes; all pass):
+
+| package | the whole suite | this work's tests |
+|---|---|---|
+| `@genclass/runtime` | 1,321 passed, 16 skipped, 106 files: the 14 model-parity tests and the 2 of `test/install/scan.test.ts` that scan in headless Chromium, skipped by running with `PLAYWRIGHT_BROWSERS_PATH` pointing at no browser (a light run launches none; where Playwright's Chromium is installed they run, and the count is 1,323 passed, 14 skipped) | `agent-schedule.test.ts` 34 (the new orders, the strict overlap bound, fifo and lifo deliver every overlapping pair of eight bursts both ways, the same seed reversed inverts every overlapping pair of eight bursts for four seeds, the hold bound in every order and the order of a batch past its deadline, a same-signature request a handler sends, the abort while held), `agent-net.test.ts` 15 (the net log and its microsecond send and ready times, caps, the fallback and an exotic reply, the console warning), 9 in `fetch.test.ts` (guard: a held delivery the app aborted rejects at its release, without a hold as before; heal: a held failure, and the cached response that replaces it, the same) |
+| `@genclass/mcp` | 388 passed, 12 files (`test/mcpb.test.ts` not run: `@anthropic-ai/mcpb` is not installed here) | 64: `cover.test.ts` 11, coverage 5, the plans 12, minimise 16, the replay order check 5, the net log, validation, race evidence and persistence 6, the tools 8, the regression test's applied schedule 1 |
+| `@genclass/playwright` | 181 passed, 14 files | 67: page errors 17, the quiet point 8, systematic orders 23, measured checks 11, the page script 8 |
+
+The first load measures 108.93 KB (`/auto`) and 100.65 KB (the main entry) on this machine (`test/bundle.test.ts`),
+within its limits of 109.0 and 100.7 KB; the agent entry is its own file.
+
+**The hold bound and the abort, at unit level.** For each of `fifo`, `lifo`, `seeded`, `ranked` and `given`, 60
+responses ready at once are all delivered within `maxHoldMs` (1,000 ms) + 1 ms of being ready, none forced, in the
+schedule's order (checked for all but `seeded`); one release per 30 ms gap would have taken 59 gaps, 1,770 ms. With
+the 60 arriving 0.1 ms apart, as real responses do (`lifo` and `ranked`, the default 1,500 ms bound), the last ten
+reach their deadline in one wake-up and go newest first, none forced; released oldest arrival first, as before the
+review, 9 of them were forced and went in start order. A response held back by a newer request still in flight (3 s)
+is delivered forced by its delay plus `maxHoldMs` + 1 ms while a newer response becomes ready every 20 ms. A fetch the
+app aborts while its response is held (guard mode with a decision holding it; the agent link with `fifo` and a delay;
+`lifo` behind a newer request) rejects with `AbortError` (or the signal's reason) when it is released, and so does a
+failure heal holds for the model's decision (a 503, a network error, or the cached response a decision puts in its
+place); with nothing held, it is delivered as before.
+
+**The cover rows** (`sequenceCover`, every ordering of every triple checked by brute force for n = 3 to 16; pinned in
+`packages/mcp/test/cover.test.ts`). "Runs" is `buildCover` of n requests all in flight together, with a `lifo` load
+that delivered every pair the other way, plus 1: the `runs` of a systematic session that tries every ordering of their
+triples (`runs + 3` page loads).
+
+| requests in flight together | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| rows | 6 | 8 | 10 | 10 | 12 | 12 | 12 | 12 | 14 | 14 | 14 | 14 | 14 | 16 |
+| the insertion greedy alone | 6 | 10 | 12 | 12 | 14 | 14 | 14 | 16 | 16 | 16 | 18 | 18 | 18 | 18 |
+| `runs` for every ordering | 5 | 7 | 9 | 9 | 11 | 11 | 11 | 11 | 13 | 13 | 13 | 13 | 13 | 15 |
+
+17 and 20 requests: 22 rows (the greedy; a group is permuted 16 keys at a time). Each pair the `lifo` load did not
+deliver the other way adds one row.
+
+**End to end, in Node** (`packages/mcp/test/e2e/systematic.node.mjs`, after `npm run build -w @genclass/runtime && npm
+run build -w @genclass/mcp`): the real `@genclass/runtime` (observe mode, no model, telemetry off) and its agent entry,
+and the real `@genclass/mcp` bridge and tools over in-process stdio, with real HTTP between them. The page is
+simulated: a fresh runtime per page load with a fake window, a virtual clock, a virtual search server that answers
+each request 40 ms after it (so in request order), and a scripted user typing "react" one key every 80 ms, each key
+sending `GET /api/search?q=<prefix>`, whose response writes the results the page shows. Three variants: buggy (every
+response writes), fixed (only the latest query's answer writes) and abort (each key aborts the previous fetch and
+ignores the `AbortError`: correct). `slow_ms: 600` (fixed for `systematic`, uniform for `seeded`); seeds from 1.
+
+| variant | plan | loads | compared | races (visible) | false reports | pairs both ways | orderings seen | forced | minimal reproduction | its replay |
+|---|---|---|---|---|---|---|---|---|---|---|
+| buggy | systematic | 9 | 6 | 5 of 6 | - | 10/10 | 53/60 (10 triples) | 0 | exact: #4 after #5 (other value) | reproduced |
+| fixed | systematic | 9 | 6 | 0 of 6 | 0 | 10/10 | 53/60 (10 triples) | 0 | - | - |
+| abort | systematic | 9 | 6 | 0 of 6 | 0 | 10/10 | 53/60 (10 triples) | 0 | - | - |
+| buggy | seeded | 9 | 6 | 5 of 6 | - | 9/9 | 30/42 (7 triples) | 0 | not exact (1 between): #3 after #5 (other value) | reproduced |
+| fixed | seeded | 9 | 6 | 0 of 6 | 0 | 9/9 | 30/42 (7 triples) | 0 | - | - |
+| abort | seeded | 9 | 6 | 0 of 6 | 0 | 9/9 | 30/42 (7 triples) | 0 | - | - |
+| buggy | systematic (runs 9) | 12 | 9 | 8 of 9 | - | 10/10 | 60/60 (10 triples) | 0 | - | - |
+| fixed | systematic (runs 9) | 12 | 9 | 0 of 9 | 0 | 10/10 | 60/60 (10 triples) | 0 | - | - |
+| abort | systematic (runs 9) | 12 | 9 | 0 of 9 | 0 | 10/10 | 60/60 (10 triples) | 0 | - | - |
+
+- `#n` is `GET /api/search#n`. Five searches overlap: 10 pairs and 10 triples with the fixed 600 ms; with the seeded
+  plan's uniform delays the baselines overlap less (9 pairs, 7 triples).
+- Plan `systematic`, `runs: 6`: the races came under the `lifo` load and cover rows 1 to 4, every cover slot ran its
+  row (no seeded stand-in), and the coverage line named `runs: 9` for the 7 orderings still missing. With `runs: 9`
+  (8 cover rows, what `sequenceCover(5)` needs past `fifo` and `lifo`) all 60 orderings were delivered, and the race
+  showed under the `lifo` load and 7 of the 8 cover rows. The seeded session's coverage line named `runs: 9` as well.
+- Minimise on the buggy page: from the systematic session 12 probes armed (4 left out), 3 reproduced, the first of them
+  exact (`#4` delivered after `#5`, ending with another query's results, "other value", which another reordered run of
+  the explore showed too, as such a value must); from the seeded session 3
+  probes, 2 reproduced, the first not exact (`#3` after `#5` and the request between them, also another value). Each
+  finding's replay of its minimal reproduction reproduced, and its generated regression test, evaluated in Node under
+  its own page-set schedule, failed on the buggy page and passed on the fixed and abort pages.
+- On the abort page under plan `systematic` every older response was held when its fetch was aborted (4 `AbortError`s
+  per load, which the app ignored) and each load wrote once, the newest answer; in every plan the page showed "Results
+  for react" in every load. 0 false reports in the 42 reordered runs of the two correct pages (30 under plan
+  `systematic`, 12 under `seeded`).
+- Every schedule was realised as specified and every delivery came within its ready time plus `maxHoldMs` + 1 ms; what
+  the bridge stored (caps, schedule, net log, delivery order, steps, snapshot, end) equals what the page recorded;
+  coverage and each run's inversions equal an independent computation from the page-side logs, and the cover rows
+  handed out and the `runs` the coverage line names equal `buildCover` of those logs. 126 of 126 checks; 113 page loads, 382 posts to the bridge, 2.4 s of wall time
+  on the virtual clock. `--real-clock` (not run for this table) runs the page on real timers, about 3.5 minutes.
+
+This is a simulation of one scenario through the real code, written by the author of the code it checks: it shows the
+mechanism, not a recall or a false-report rate. What to measure next, with the false-report rate on the correct
+variants next to the races found, on the VM or in CI and with the owner's OK: the planted pages
+(`bench/explore/planted.mjs`) and the small apps (`bench/explore/apps.mjs`) with a `plan: "systematic"` option, which
+they do not have yet; `packages/mcp/test/e2e/race.e2e.mjs` in Chromium with the plan; and the apps hunted on 2026-11-04.

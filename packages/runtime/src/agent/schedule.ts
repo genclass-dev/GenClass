@@ -6,34 +6,68 @@
 // Orders:
 //   natural  deliver as responses arrive (no hold; recording only)
 //   fifo     deliver in the order the requests started: the serial baseline an explore run is compared with
+//   lifo     among overlapping requests the newest-started response goes first: a response waits for every newer
+//            request that started before it was ready, so fifo and lifo deliver every pair that overlaps in the lifo
+//            run itself (and was not forced) in both orders
 //   seeded   each request gets a priority hashed from the seed and its key; a response waits while a request with a
-//            higher priority is in flight (probabilistic concurrency testing over the requests that overlap)
+//            higher priority is in flight (probabilistic concurrency testing over the requests that overlap);
+//            `reverse` inverts the priorities, so the same seed reversed delivers its overlapping pairs the other way
+//   ranked   `ranks` lists keys from highest to lowest priority (unlisted keys below every listed one, among themselves
+//            in request order); a response waits for a higher-ranked request that started before it was ready
 //   given    a recorded delivery order (a run's `order`): each response waits for the keys listed before it
+//
+// Overlap, the one definition the MCP bridge shares: a response is ready at its arrival at the delivery gate plus its
+// emulated delay; request a, started before b, overlaps b in a run iff b started before a was ready (strictly). lifo and
+// ranked wait only for overlapping requests, never for a ~hedge (it answers the app on its own path) nor for a request
+// of the waiting one's own chain (a retry or hedge of it, or the request it retries).
+//
+// Release order (every order): the responses that may go are released one per `gapMs`: fifo in start order, given in
+// list order, seeded by priority, lifo and ranked by ready time, then request id (two of those never overlap, so start
+// order must not decide). Held responses whose deadline (arrival + delay + maxHoldMs) has come are released at once,
+// without waiting for `gapMs`, in the schedule's own order: one that may go first (in that order), each checked again
+// after every release, so one whose only blockers are in the same batch follows them and is not forced; when none may
+// go, the first of them in the schedule's order goes, forced (what holds it back is not in the batch).
 //
 // Deterministic: priorities and delays are hashes of the seed and the request key (never Math.random); time comes from
 // the injected Clock. A request's key is its signature and occurrence in this page load ("GET /api/search#3"), so the
 // same scenario gives the same keys on every run, whatever the query values or timing. A retry (attempt > 1) or a hedge
-// of a keyed request gets that request's key plus a suffix and does not shift the numbering.
+// of a keyed request (sent while that request was still in flight) gets that request's key plus a suffix and does not
+// shift the numbering; a request of the same signature that the request's response handler sends later (a next page, a
+// poll) is the app's own and numbered like any other. Each request also gets its start index `n` (its position among
+// this page load's requests, in start order).
 //
 // A response counts as delivered when the app receives it (`landed`), not when it is handed to the runtime's own
 // delivery path, which in guard or heal may hold it further: until then it still blocks later responses (bounded).
 
 import type { Clock } from "../types.js";
 
-export type ScheduleOrder = "natural" | "fifo" | "seeded" | "given";
+export type ScheduleOrder = "natural" | "fifo" | "lifo" | "seeded" | "ranked" | "given";
 
 /** How responses are delivered on this page (docs/runtime/AGENT.md section 3). */
 export interface ScheduleSpec {
+  /** natural, fifo, lifo, seeded, ranked or given (docs/runtime/AGENT.md section 3). */
   order: ScheduleOrder;
-  /** seeded: the seed (a non-negative integer). Also seeds `delay`. */
+  /** seeded: the seed (a non-negative integer). Also seeds `delay` when there is no `delaySeed`. */
   seed?: number;
   /** given: request keys in the order their responses are delivered. */
   given?: string[];
+  /** ranked: request keys from highest to lowest priority; unlisted keys rank below every listed one. */
+  ranks?: string[];
+  /** seeded: invert the priorities (only `true` is kept), so each overlapping pair of the seed goes the other way. */
+  reverse?: true;
   /** seeded: request signatures ("PUT /api/notes/:id") whose responses go after every other overlapping one. */
   focus?: string[];
-  /** Extra latency per response, uniform in [minMs, maxMs], hashed from the seed and the key (a slow network). */
+  /**
+   * Extra latency per response, uniform in [minMs, maxMs], hashed from `delaySeed` (else the seed) and the key (a slow
+   * network). It never counts against `maxHoldMs`.
+   */
   delay?: { minMs: number; maxMs: number };
-  /** A response is never held longer than this; then it is delivered and the run is marked forced. Default 1500. */
+  /** Seeds `delay` in place of `seed`, so runs of different orders get the same per-key latencies. */
+  delaySeed?: number;
+  /**
+   * A response is never held longer than this beyond its own `delay`: at that deadline it is delivered at once, and
+   * counted as forced (the run did not follow the schedule exactly) when the schedule still held it back. Default 1500.
+   */
   maxHoldMs?: number;
   /** Time between two releases, so one response's handlers run before the next arrives. Default 30. */
   gapMs?: number;
@@ -47,7 +81,10 @@ export const DEFAULT_MAX_HOLD_MS = 1500;
 export const DEFAULT_GAP_MS = 30;
 /** A request older than this neither blocks a delivery nor waits for one (long polls, streams), as in Runtime.busy. */
 export const LONG_RUNNING_MS = 10_000;
-const ORDERS: readonly ScheduleOrder[] = ["natural", "fifo", "seeded", "given"];
+const ORDERS: readonly ScheduleOrder[] = ["natural", "fifo", "lifo", "seeded", "ranked", "given"];
+/** Keys a `given` or `ranks` list keeps, and their length. */
+const MAX_KEYS = 2000;
+const MAX_KEY = 300;
 
 /** 32-bit FNV-1a: the priority and delay hash. */
 export function hash32(s: string): number {
@@ -68,10 +105,11 @@ export function hash32(s: string): number {
 /** A schedule from untrusted input (URL, a page global, the bridge), or null when it is not one. */
 export function parseSpec(v: unknown): ScheduleSpec | null {
   if (typeof v === "string") {
-    // URL forms: "fifo", "natural", "seeded:7", "explore:7" (alias), "given:<json array of keys>", or a JSON object
+    // URL forms: "fifo", "lifo", "natural", "seeded:7", "explore:7" (alias), "given:<json array of keys>", or a JSON
+    // object
     const s = v.trim();
-    const m = /^(natural|fifo|seeded|explore)(?::(\d{1,9}))?$/.exec(s);
-    if (m) return m[1] === "natural" || m[1] === "fifo" ? { order: m[1] } : { order: "seeded", seed: Number(m[2] ?? 1) };
+    const m = /^(natural|fifo|lifo|seeded|explore)(?::(\d{1,9}))?$/.exec(s);
+    if (m) return m[1] === "seeded" || m[1] === "explore" ? { order: "seeded", seed: Number(m[2] ?? 1) } : { order: m[1] as ScheduleOrder };
     if (s.startsWith("given:")) {
       try {
         return parseSpec({ order: "given", given: JSON.parse(s.slice(6)) as unknown });
@@ -94,20 +132,26 @@ export function parseSpec(v: unknown): ScheduleSpec | null {
   if (!ORDERS.includes(order)) return null;
   const out: ScheduleSpec = { order };
   const int = (x: unknown, max: number): number | undefined => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.min(Math.floor(x), max) : undefined);
+  const keys = (x: unknown[]): string[] => x.filter((k): k is string => typeof k === "string" && k.length <= MAX_KEY).slice(0, MAX_KEYS);
   const seed = int(o.seed, 2 ** 31);
   if (order === "seeded") out.seed = seed ?? 1;
   else if (seed !== undefined) out.seed = seed;
   if (order === "given") {
     if (!Array.isArray(o.given)) return null;
-    out.given = o.given.filter((k): k is string => typeof k === "string" && k.length <= 300).slice(0, 2000);
+    out.given = keys(o.given);
   }
-  if (Array.isArray(o.focus)) out.focus = o.focus.filter((k): k is string => typeof k === "string" && k.length <= 300).slice(0, 20);
+  // ranked without ranks: every key unlisted, so in request order (as fifo)
+  if (order === "ranked") out.ranks = Array.isArray(o.ranks) ? keys(o.ranks) : [];
+  if (o.reverse === true) out.reverse = true;
+  if (Array.isArray(o.focus)) out.focus = o.focus.filter((k): k is string => typeof k === "string" && k.length <= MAX_KEY).slice(0, 20);
   const d = o.delay as Record<string, unknown> | undefined;
   if (d && typeof d === "object") {
     const lo = int(d.minMs, 10_000) ?? 0;
     const hi = Math.max(lo, int(d.maxMs, 10_000) ?? lo);
     if (hi > 0) out.delay = { minMs: lo, maxMs: hi };
   }
+  const ds = int(o.delaySeed, 2 ** 31);
+  if (ds !== undefined) out.delaySeed = ds;
   const mh = int(o.maxHoldMs, 30_000);
   if (mh !== undefined) out.maxHoldMs = Math.max(50, mh);
   const gap = int(o.gapMs, 1000);
@@ -115,6 +159,11 @@ export function parseSpec(v: unknown): ScheduleSpec | null {
   if (typeof o.id === "string" && o.id.length <= 100) out.id = o.id;
   if (typeof o.label === "string" && o.label.length <= 200) out.label = o.label;
   return out;
+}
+
+/** One key is the other followed by "~" (a retry or hedge of it): the same request's chain. */
+function sameChain(a: string, b: string): boolean {
+  return a.length < b.length ? b.charCodeAt(a.length) === 126 && b.startsWith(a) : a.length > b.length && a.charCodeAt(b.length) === 126 && a.startsWith(b);
 }
 
 /** The request being scheduled (an OpRec of kind fetch/xhr, as far as the scheduler reads it). */
@@ -126,6 +175,8 @@ export interface SchedOp {
   attempt?: number;
   /** The op that was ambient when this one started (a hedge's is the request it hedges). */
   cause?: number;
+  /** When it ended (its response arrived, or it failed); unset while it is in flight. */
+  end?: number;
 }
 
 /** One request this page load: its key and where its response is. */
@@ -133,7 +184,9 @@ export interface Slot {
   op: SchedOp;
   /** "GET /api/search#3": signature and occurrence (1-based) in this page load; retries and hedges add a suffix. */
   key: string;
-  /** Seeded priority (higher goes first). */
+  /** Start index: the request's 0-based position among this page load's requests, in start order. */
+  n: number;
+  /** Seeded or ranked priority (higher goes first). */
   prio: number;
   /** When the response reached the delivery gate. */
   arrived?: number;
@@ -145,6 +198,8 @@ export interface Slot {
   done?: boolean;
   /** Released because its hold ran out, not because the schedule allowed it. */
   forced?: boolean;
+  /** Released at once without scheduling (pass(): a protected request, a route in mode "off"). */
+  pass?: boolean;
   go?: (landed: () => void) => void;
 }
 
@@ -157,6 +212,10 @@ export interface Delivered {
   /** How long the schedule held it (arrival to release). */
   heldMs: number;
   forced: boolean;
+  /** When it was ready: its arrival at the gate plus its emulated delay (a passed response: its arrival). */
+  ready?: number;
+  /** Released at once without scheduling (a protected request, a route in mode "off"). */
+  pass?: boolean;
 }
 
 /**
@@ -178,6 +237,7 @@ export class Scheduler {
   private pumping = false;
   private again = false;
   private disposed = false;
+  private nStarted = 0;
   forced = 0;
 
   constructor(
@@ -198,32 +258,34 @@ export class Scheduler {
   /** The schedule arrived (or changed). Held deliveries are re-evaluated at once. */
   setSpec(spec: ScheduleSpec): void {
     this.spec = spec;
-    this.rank = new Map((spec.order === "given" ? spec.given ?? [] : []).map((k, i) => [k, i]));
+    this.rank = new Map((spec.order === "given" ? spec.given : spec.order === "ranked" ? spec.ranks : undefined)?.map((k, i) => [k, i]) ?? []);
     for (const s of this.slots.values()) s.prio = this.prioOf(s.key, s.op.id);
     this.pump();
   }
 
-  /** A request started (fetch/xhr): its key is assigned now, in start order. */
+  /** A request started (fetch/xhr): its key and start index are assigned now, in start order. */
   started(op: SchedOp): Slot {
     let s = this.slots.get(op.id);
     if (s) return s;
     let key: string;
     const parent = op.cause !== undefined ? this.slots.get(op.cause) : undefined;
-    if (parent && parent.op.name === op.name) key = `${parent.key}~${(op.attempt ?? 1) > (parent.op.attempt ?? 1) ? `retry${op.attempt}` : "hedge"}`;
+    const retry = (op.attempt ?? 1) > (parent?.op.attempt ?? 1);
+    // a hedge is sent while the request it hedges is in flight; one its response's handler sends later is the app's own
+    if (parent && parent.op.name === op.name && (retry || parent.op.end === undefined || parent.op.end > op.start)) key = `${parent.key}~${retry ? `retry${op.attempt}` : "hedge"}`;
     else if ((op.attempt ?? 1) > 1) key = `${op.name}#${this.counts.get(op.name) ?? 0}~retry${op.attempt}`;
     else {
       const n = (this.counts.get(op.name) ?? 0) + 1;
       this.counts.set(op.name, n);
       key = `${op.name}#${n}`;
     }
-    s = { op, key, prio: this.prioOf(key, op.id) };
+    s = { op, key, n: this.nStarted++, prio: this.prioOf(key, op.id) };
     this.slots.set(op.id, s);
     if (this.slots.size > 4000) this.prune();
     return s;
   }
 
-  slot(id: number): Slot | undefined {
-    return this.slots.get(id);
+  slot(id: number | null | undefined): Slot | undefined {
+    return id === undefined || id === null ? undefined : this.slots.get(id);
   }
 
   /** A response reached the delivery gate. `go(landed)` delivers it; called exactly once (now or later). */
@@ -243,6 +305,7 @@ export class Scheduler {
     if (s.go || s.released !== undefined) return this.call(go, () => undefined);
     s.arrived = this.clock.now();
     s.go = go;
+    s.pass = true;
     this.release(s, false);
   }
 
@@ -254,7 +317,10 @@ export class Scheduler {
     s.delivered = now;
     this.deliveredKeys.add(s.key);
     try {
-      this.onDeliver({ key: s.key, op: s.op.id, at: now, heldMs: (s.released ?? now) - (s.arrived ?? now), forced: !!s.forced });
+      const arrived = s.arrived ?? now;
+      const d: Delivered = { key: s.key, op: s.op.id, at: now, heldMs: (s.released ?? now) - arrived, forced: !!s.forced, ready: s.pass ? arrived : this.readyOf(s) };
+      if (s.pass) d.pass = true;
+      this.onDeliver(d);
     } catch {
       /* recording never blocks a delivery */
     }
@@ -296,21 +362,38 @@ export class Scheduler {
 
   private prioOf(key: string, id: number): number {
     const spec = this.spec;
+    if (spec?.order === "ranked") {
+      // listed keys above every unlisted one; unlisted ones in request order
+      const r = this.rank.get(key);
+      return r === undefined ? -id : 2 ** 34 - r;
+    }
     if (!spec || spec.order !== "seeded") return -id;
     const base = key.slice(0, key.lastIndexOf("#"));
     const focus = spec.focus?.includes(base) ? 0 : 2 ** 32;
-    return focus + hash32(`${spec.seed ?? 1}|${key}`);
+    const h = hash32(`${spec.seed ?? 1}|${key}`);
+    return focus + (spec.reverse ? 0xffffffff - h : h);
   }
 
   private delayOf(key: string): number {
-    const d = this.spec?.delay;
+    const spec = this.spec;
+    const d = spec?.delay;
     if (!d) return 0;
     const span = d.maxMs - d.minMs;
-    return d.minMs + (span > 0 ? hash32(`${this.spec?.seed ?? 0}|delay|${key}`) % (span + 1) : 0);
+    return d.minMs + (span > 0 ? hash32(`${spec.delaySeed ?? spec.seed ?? 0}|delay|${key}`) % (span + 1) : 0);
   }
 
   private holdOf(): number {
     return this.spec?.maxHoldMs ?? DEFAULT_MAX_HOLD_MS;
+  }
+
+  /** When a response is ready to deliver: its arrival at the gate plus its emulated delay. */
+  private readyOf(s: Slot): number {
+    return (s.arrived ?? this.clock.now()) + this.delayOf(s.key);
+  }
+
+  /** When a held response is released whatever the schedule says: when it was ready, plus maxHoldMs. */
+  private deadlineOf(s: Slot): number {
+    return this.readyOf(s) + this.holdOf();
   }
 
   /** Does `o` keep later responses waiting? Not once done, delivered, long-running, or stuck in the runtime's path. */
@@ -330,17 +413,29 @@ export class Scheduler {
     const d = this.delayOf(s.key);
     if (now - arrived < d) return "wait";
     const timedOut = now - arrived - d >= hold;
+    const order = spec.order;
     let blocked = false;
-    if (spec.order === "fifo" || spec.order === "seeded") {
+    if (order === "fifo" || order === "seeded" || order === "lifo" || order === "ranked") {
+      const ready = arrived + d;
       for (const o of this.slots.values()) {
         if (o === s || !this.blocks(o, now)) continue;
-        const ahead = spec.order === "fifo" ? o.op.start < s.op.start || (o.op.start === s.op.start && o.op.id < s.op.id) : o.prio > s.prio;
+        let ahead: boolean;
+        if (order === "fifo") ahead = o.op.start < s.op.start || (o.op.start === s.op.start && o.op.id < s.op.id);
+        else if (order === "seeded") ahead = o.prio > s.prio;
+        // lifo, ranked: only a request that started before this response was ready holds it back (strictly: one that a
+        // released response's handler sent at that very instant does not); never a hedge, never its own chain
+        else
+          ahead =
+            o.op.start < ready &&
+            (order === "lifo" ? o.op.start > s.op.start || (o.op.start === s.op.start && o.op.id > s.op.id) : o.prio > s.prio) &&
+            !o.key.endsWith("~hedge") &&
+            !sameChain(o.key, s.key);
         if (ahead) {
           blocked = true;
           break;
         }
       }
-    } else if (spec.order === "given") {
+    } else if (order === "given") {
       const r = this.rank.get(s.key);
       if (r !== undefined) {
         const given = spec.given ?? [];
@@ -360,7 +455,7 @@ export class Scheduler {
     return timedOut ? "forced" : "wait";
   }
 
-  /** When should a waiting response be looked at again (its delay ends, or its hold runs out)? */
+  /** When should a held response be looked at again: its delay ends, else its deadline (pending: the hello's limit)? */
   private dueOf(s: Slot, now: number): number {
     const arrived = s.arrived ?? now;
     if (!this.spec) return Math.min(this.pendingUntil, arrived + this.holdOf());
@@ -368,7 +463,26 @@ export class Scheduler {
     return arrived + d > now ? arrived + d : arrived + d + this.holdOf();
   }
 
-  /** Release what may go, one at a time, `gapMs` apart; re-arm a wake-up for what still waits. */
+  /** Which of two responses that may overlap the schedule delivers first. */
+  private before(a: Slot, b: Slot): number {
+    const order = this.spec?.order;
+    if (order === "given") return (this.rank.get(a.key) ?? 1e9) - (this.rank.get(b.key) ?? 1e9) || a.op.id - b.op.id;
+    if (order === "seeded" || order === "ranked") return b.prio - a.prio;
+    if (order === "fifo") return a.op.start - b.op.start || a.op.id - b.op.id;
+    if (order === "lifo") return b.op.start - a.op.start || b.op.id - a.op.id;
+    return (a.arrived ?? 0) - (b.arrived ?? 0);
+  }
+
+  /**
+   * The order releases take among responses that may go: lifo and ranked by ready time, then request id (two of those
+   * never overlap, so start order must not decide); the other orders as before().
+   */
+  private releaseOrder(a: Slot, b: Slot): number {
+    const order = this.spec?.order;
+    return order === "lifo" || order === "ranked" ? this.readyOf(a) - this.readyOf(b) || a.op.id - b.op.id : this.before(a, b);
+  }
+
+  /** Release what may go: first whatever reached its deadline, then one at a time, `gapMs` apart; re-arm a wake-up. */
   private pump(): void {
     if (this.pumping) {
       this.again = true;
@@ -386,18 +500,23 @@ export class Scheduler {
   }
 
   private pumpOnce(): void {
-    if (this.gapTimer !== null) return;
     const now = this.clock.now();
-    const held = this.held();
-    if (!held.length) return;
-    const ready: { s: Slot; forced: boolean }[] = [];
-    let due = Infinity;
-    for (const s of held) {
-      const v = this.verdict(s, now);
-      if (v !== "wait") ready.push({ s, forced: v === "forced" });
-      else due = Math.min(due, this.dueOf(s, now));
+    // the hold limit binds: every response whose deadline has come goes now, without waiting for the gap, in the
+    // schedule's order: one that may go first, each looked at again after every release (one whose only blockers are
+    // in this batch follows them, not forced); when none may go, the first in the schedule's order goes, forced
+    let over = this.held()
+      .filter((s) => now >= this.deadlineOf(s))
+      .sort((a, b) => this.releaseOrder(a, b));
+    while (over.length) {
+      const s = over.find((x) => this.verdict(x, now) === "go");
+      if (s) this.release(s, false);
+      else this.release(over.reduce((m, x) => (this.before(x, m) < 0 ? x : m)), true);
+      over = over.filter((x) => x.go && x.released === undefined);
     }
-    // a waiting response always has a wake-up of its own (the clock may fire a timer a little early by its measure)
+    const held = this.held();
+    // every held response has a wake-up of its own (the clock may fire a timer a little early by its measure)
+    let due = Infinity;
+    for (const s of held) due = Math.min(due, this.dueOf(s, now));
     if (this.wakeTimer !== null) this.clock.clearTimeout(this.wakeTimer);
     this.wakeTimer = null;
     if (due < Infinity)
@@ -405,15 +524,14 @@ export class Scheduler {
         this.wakeTimer = null;
         this.pump();
       }, Math.max(1, due - now + 1));
+    if (this.gapTimer !== null) return;
+    // past their deadlines none is left: these are "go" or "wait"
+    const ready = held.filter((s) => this.verdict(s, now) !== "wait");
     if (!ready.length) return;
     const spec = this.spec;
-    ready.sort((a, b) => {
-      if (spec?.order === "given") return (this.rank.get(a.s.key) ?? 1e9) - (this.rank.get(b.s.key) ?? 1e9) || a.s.op.id - b.s.op.id;
-      if (spec?.order === "seeded") return b.s.prio - a.s.prio;
-      if (spec?.order === "fifo") return a.s.op.start - b.s.op.start || a.s.op.id - b.s.op.id;
-      return (a.s.arrived ?? 0) - (b.s.arrived ?? 0);
-    });
-    const gap = this.disposed || !spec || spec.order === "natural" ? 0 : spec.gapMs ?? DEFAULT_GAP_MS;
+    const order = spec?.order;
+    ready.sort((a, b) => this.releaseOrder(a, b));
+    const gap = this.disposed || !spec || order === "natural" ? 0 : spec.gapMs ?? DEFAULT_GAP_MS;
     const wait = this.lastRelease + gap - now;
     if (gap > 0 && wait > 0) {
       this.gapTimer = this.clock.setTimeout(() => {
@@ -423,10 +541,10 @@ export class Scheduler {
       return;
     }
     if (gap === 0) {
-      for (const r of ready) if (r.s.released === undefined) this.release(r.s, r.forced);
+      for (const s of ready) if (s.released === undefined) this.release(s, false);
       return;
     }
-    this.release(ready[0].s, ready[0].forced);
+    this.release(ready[0], false);
     if (this.held().length && this.gapTimer === null)
       this.gapTimer = this.clock.setTimeout(() => {
         this.gapTimer = null;

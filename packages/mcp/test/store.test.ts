@@ -3,8 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { Store, mergeOrder } from "../src/store.js";
-import { act, hello, snap } from "./helpers.js";
+import { ARM_TTL_MS, MAX_PROBE_LOADS, PROBE_IDLE_MS, Store, mergeOrder } from "../src/store.js";
+import type { MinimizeArm, ScheduleSpec } from "../src/types.js";
+import { CAPS, SEARCHES as S, act, hello, searchLoad, searchLog, snap } from "./helpers.js";
 
 function clock() {
   let t = 1_000_000;
@@ -474,5 +475,733 @@ describe("store: a race replay counts page lines (AGENT.md §5.2)", () => {
     r = load(s);
     r.send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "x" }, ["Reading lamp", "Reading lamp"]) }]);
     expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true, note: "the page shows the failing run's text again" });
+  });
+});
+
+/** A page load whose runtime says what it can run (hello `caps`; default: a current runtime). */
+function loadCaps(s: Store, route = "/search", caps: string[] = CAPS) {
+  const h = s.hello(hello(route, undefined, caps))!;
+  return { ...h, schedule: h.schedule as ScheduleSpec, send: (events: unknown[]) => s.events({ run: h.run, token: h.token, events }) };
+}
+
+describe("store: the explore plans (AGENT.md section 5.1, plan systematic)", () => {
+  it("the seeded plan stays today's, byte for byte", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 2, route: "/search", focus: ["PUT /api/x"], delay: { minMs: 0, maxMs: 600 }, seed: 5 });
+    expect(JSON.stringify(x.plan)).toBe(
+      '[{"order":"fifo","label":"baseline 1 (responses in request order)","delay":{"minMs":0,"maxMs":600},"maxHoldMs":2100},' +
+        '{"order":"fifo","label":"baseline 2 (responses in request order)","delay":{"minMs":0,"maxMs":600},"maxHoldMs":2100},' +
+        '{"order":"fifo","label":"baseline without added delay"},' +
+        '{"order":"seeded","seed":5,"label":"seed 5","delay":{"minMs":0,"maxMs":600},"maxHoldMs":2100,"focus":["PUT /api/x"]},' +
+        '{"order":"seeded","seed":6,"label":"seed 6","delay":{"minMs":0,"maxMs":600},"maxHoldMs":2100,"focus":["PUT /api/x"]}]',
+    );
+    expect(Object.keys(x).sort()).toEqual(["counted", "created", "focus", "id", "next", "plan", "route", "runs", "state"]);
+    expect(s.armExplore({ runs: 1, delay: { minMs: 0, maxMs: 600 }, slowMode: "fixed" }).plan[0].delay).toEqual({ minMs: 600, maxMs: 600 });
+  });
+
+  it("systematic: two baselines, lifo, runs - 1 cover slots and a last baseline, every one with the same fixed delay and delay seed", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 4, route: "/search", delay: { minMs: 0, maxMs: 600 }, seed: 3, plan: "systematic" });
+    expect(x.plan.map((p) => [p.order, p.label])).toEqual([
+      ["fifo", "baseline 1 (responses in request order)"],
+      ["fifo", "baseline 2 (responses in request order)"],
+      ["lifo", "lifo (every overlapping pair the other way)"],
+      ["seeded", "cover row 1 (chosen from the baselines)"],
+      ["seeded", "cover row 2 (chosen from the baselines)"],
+      ["seeded", "cover row 3 (chosen from the baselines)"],
+      ["fifo", "baseline 3 (last)"],
+    ]);
+    expect(x.plan.every((p) => JSON.stringify(p.delay) === '{"minMs":600,"maxMs":600}' && p.delaySeed === 3 && p.maxHoldMs === 2100)).toBe(true);
+    // a pending cover slot holds its seeded stand-in, never a placeholder: seed 4, 4 reversed, 5
+    expect(x.plan.slice(3, 6).map((p) => [p.seed, !!p.reverse])).toEqual([
+      [4, false],
+      [4, true],
+      [5, false],
+    ]);
+    expect(s.armExplore({ plan: "systematic" }).plan).toHaveLength(9);
+    expect(s.armExplore({ runs: 2, delay: { minMs: 0, maxMs: 600 }, plan: "systematic", slowMode: "uniform" }).plan[0].delay).toEqual({ minMs: 0, maxMs: 600 });
+    expect(s.armExplore({ runs: 1, plan: "systematic" }).plan).toEqual([
+      { order: "fifo", label: "baseline 1 (responses in request order)" },
+      { order: "fifo", label: "baseline 2 (responses in request order)" },
+      { order: "lifo", label: "lifo (every overlapping pair the other way)" },
+      { order: "fifo", label: "baseline 3 (last)" },
+    ]);
+  });
+
+  it("each cover slot gets its row at its page load, from the settled baselines' timing; the lifo load runs lifo", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 6, route: "/search", plan: "systematic" });
+    const b1 = loadCaps(s);
+    expect(b1.schedule).toMatchObject({ order: "fifo", label: "baseline 1 (responses in request order)" });
+    b1.send(searchLoad(S));
+    loadCaps(s).send(searchLoad(S));
+    const l = loadCaps(s);
+    expect(l.schedule).toEqual({ order: "lifo", id: x.id, label: "lifo (every overlapping pair the other way)" });
+    l.send(searchLoad([S[2], S[1], S[0]]));
+    const rows = [0, 1, 2, 3].map(() => loadCaps(s).schedule);
+    expect(rows.map((r) => [r.order, r.ranks, r.label])).toEqual([
+      ["ranked", [S[1], S[2], S[0]], "cover row 1"],
+      ["ranked", [S[0], S[2], S[1]], "cover row 2"],
+      ["ranked", [S[1], S[0], S[2]], "cover row 3"],
+      ["ranked", [S[2], S[0], S[1]], "cover row 4"],
+    ]);
+    // three overlapping requests need four rows past request order and its reverse: the fifth slot runs its stand-in
+    expect(loadCaps(s).schedule).toMatchObject({ order: "seeded", seed: 4, label: "seed 4" });
+    expect(loadCaps(s).schedule).toMatchObject({ order: "fifo", label: "baseline 3 (last)" });
+    expect(x.state).toBe("collecting");
+    expect(x.plan[3]).toMatchObject({ order: "ranked", ranks: [S[1], S[2], S[0]], label: "cover row 1" });
+    expect(x.slots!.filter((p) => p?.kind === "cover" && p.pending)).toEqual([]);
+  });
+
+  it("a pair the lifo load did not deliver the other way gets the first cover row", () => {
+    const s = new Store();
+    s.armExplore({ runs: 2, route: "/search", plan: "systematic" });
+    loadCaps(s).send(searchLoad(S));
+    loadCaps(s).send(searchLoad(S));
+    // the lifo load delivered #1 before #2 (its hold ran out, say)
+    loadCaps(s).send(searchLoad([S[2], S[0], S[1]]));
+    expect(loadCaps(s).schedule).toMatchObject({ order: "ranked", ranks: [S[1], S[0], S[2]], label: "cover row 1" });
+  });
+
+  it("a page whose runtime cannot run the new orders gets seeded stand-ins, labelled and noted; delays keep their seed", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 3, route: "/search", delay: { minMs: 0, maxMs: 300 }, plan: "systematic" });
+    const old = s.hello(hello("/search"))!;
+    expect(old.schedule).toEqual({ order: "fifo", delay: { minMs: 300, maxMs: 300 }, maxHoldMs: 1800, seed: 1, id: x.id, label: "baseline 1 (responses in request order) (page runtime has no delaySeed)" });
+    s.events({ run: old.run, token: old.token, events: searchLoad(S) });
+    loadCaps(s).send(searchLoad(S));
+    const l = s.hello(hello("/search"))!;
+    expect(l.schedule).toEqual({ order: "seeded", seed: 1, delay: { minMs: 300, maxMs: 300 }, maxHoldMs: 1800, id: x.id, label: "seed 1 (page runtime has no lifo, delaySeed)" });
+    expect(s.runs.get(l.run)!.notes).toEqual(["this page's runtime cannot run lifo, delaySeed: it ran seed 1 (page runtime has no lifo, delaySeed)"]);
+    // a cover row it cannot run: its stand-in without reverse (seed0 + 1 + k); the plan keeps the row for the next page
+    const c = s.hello(hello("/search"))!;
+    expect(c.schedule).toMatchObject({ order: "seeded", seed: 2, label: "seed 2 (page runtime has no ranked, delaySeed)" });
+    expect(x.plan[3]).toMatchObject({ order: "ranked", label: "cover row 1" });
+  });
+
+  it("cover slots with no row from the baselines keep their seeded stand-ins; without reverse, seed0 + 1 + k", () => {
+    const s = new Store();
+    s.armExplore({ runs: 3, route: "/search", plan: "systematic" });
+    // each search answered before the next was sent: nothing overlaps, so there is no row
+    const apart = [{ t: "steps", steps: [typeReact], order: S, net: S.map((key, i) => ({ key, n: i, s: 10 + 100 * i, r: 20 + 100 * i, d: 20 + 100 * i })) }, { t: "snapshot", snapshot: snap({ "search.results": "react!" }) }];
+    for (let i = 0; i < 3; i++) loadCaps(s).send(apart);
+    expect(loadCaps(s).schedule).toMatchObject({ order: "seeded", seed: 2, label: "seed 2" });
+    const noReverse = loadCaps(s, "/search", ["lifo", "ranked", "delaySeed", "net"]);
+    expect(noReverse.schedule).toMatchObject({ order: "seeded", seed: 3, label: "seed 3 (page runtime has no reverse)" });
+    expect(noReverse.schedule.reverse).toBeUndefined();
+  });
+
+  it("the rows are fixed from the first cover slot handed out with them; a slot given back is queued again as resolved", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 3, route: "/search", plan: "systematic" });
+    loadCaps(s).send(searchLoad(S));
+    const b2 = loadCaps(s);
+    b2.send(searchLoad(S));
+    loadCaps(s).send(searchLoad([S[2], S[1], S[0]]));
+    const c0 = loadCaps(s);
+    expect(c0.schedule.ranks).toEqual([S[1], S[2], S[0]]);
+    // the page's hello reply came too late and it ran natural: the slot goes back with its row
+    c0.send([{ t: "schedule", spec: { order: "natural" }, late: true }]);
+    expect(x.plan.at(-1)).toEqual({ order: "ranked", ranks: [S[1], S[2], S[0]], label: "cover row 1" });
+    expect(x.slots!.at(-1)).toEqual({ kind: "cover", k: 0, pending: false });
+    // a baseline that settles again with a fourth request changes no row any more
+    b2.send(searchLoad(S, "react!", ["Results for react"], [{ key: "GET /api/search#4", n: 3, s: 60, r: 160, d: 300 }]));
+    expect(loadCaps(s).schedule.ranks).toEqual([S[0], S[2], S[1]]);
+  });
+
+  it("a cover slot handed out before the baselines settled runs its stand-in; the later ones still get their rows", () => {
+    const s = new Store();
+    s.armExplore({ runs: 3, route: "/search", plan: "systematic" });
+    // loads in parallel: the baselines and the lifo load have not sent their snapshots when the first cover slot loads
+    const early = [loadCaps(s), loadCaps(s), loadCaps(s)];
+    expect(loadCaps(s).schedule).toMatchObject({ order: "seeded", seed: 2, label: "seed 2" });
+    early[0].send(searchLoad(S));
+    early[1].send(searchLoad(S));
+    early[2].send(searchLoad([S[2], S[1], S[0]]));
+    expect(loadCaps(s).schedule).toMatchObject({ order: "ranked", ranks: [S[0], S[2], S[1]], label: "cover row 2" });
+  });
+
+  it("a page-set schedule of an order this bridge does not know gets no assignment, and a note", () => {
+    const s = new Store();
+    s.armExplore({ runs: 1 });
+    const r = load(s, "/search", { order: "quantum", seed: 2 });
+    expect(r.schedule).toBeNull();
+    expect(s.runs.get(r.run)!.assignment).toBeUndefined();
+    expect(s.runs.get(r.run)!.notes).toEqual(["page-set schedule of an unknown order"]);
+    expect(load(s).schedule?.order).toBe("fifo");
+  });
+
+  it("a page whose runtime rejects the bridge's schedule falls back to natural: the slot comes back once as a stand-in, never again", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 1, route: "/search", plan: "systematic" });
+    loadCaps(s);
+    loadCaps(s);
+    const l = loadCaps(s);
+    l.send([{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "lifo" }]);
+    const run = s.runs.get(l.run)!;
+    expect(run.schedule).toEqual({ order: "natural" });
+    expect(run.assignment).toBeUndefined();
+    expect(run.notes).toEqual(['its runtime rejected the schedule "lifo" the bridge sent: responses were delivered as they arrived']);
+    expect(x.runs).not.toContain(l.run);
+    expect(x.plan).toHaveLength(5);
+    expect(x.plan[4]).toEqual({ order: "seeded", seed: 1, label: "seed 1 (page runtime has no lifo) (again, after a page fell back)" });
+    expect(loadCaps(s).schedule).toMatchObject({ label: "baseline 3 (last)" });
+    const again = loadCaps(s);
+    expect(again.schedule).toMatchObject({ order: "seeded", seed: 1 });
+    again.send([{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "seeded" }]);
+    expect(x.plan).toHaveLength(5);
+    expect(loadCaps(s).schedule).toBeNull();
+  });
+
+  it("the stand-in of a schedule a page rejected names what that page could not run, never a cap its hello listed", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 2, route: "/search", delay: { minMs: 0, maxMs: 300 }, plan: "systematic" });
+    loadCaps(s).send(searchLoad(S));
+    loadCaps(s).send(searchLoad(S));
+    // the page listed delaySeed (and lifo) and rejected lifo: the stand-in is for lifo alone
+    const l = loadCaps(s);
+    expect(l.schedule).toMatchObject({ order: "lifo", delaySeed: 1 });
+    l.send([{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "lifo" }]);
+    expect(x.plan.at(-1)).toEqual({ order: "seeded", seed: 1, delay: { minMs: 300, maxMs: 300 }, maxHoldMs: 1800, label: "seed 1 (page runtime has no lifo) (again, after a page fell back)" });
+    // a page without delaySeed in its hello rejected its cover row: both, in the order the schedule needs them
+    const c = s.hello(hello("/search", undefined, ["lifo", "ranked", "reverse", "net"]))!;
+    expect(c.schedule).toMatchObject({ order: "ranked", seed: 1, label: "cover row 1 (page runtime has no delaySeed)" });
+    s.events({ run: c.run, token: c.token, events: [{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "ranked" }] });
+    expect(x.plan.at(-1)).toMatchObject({ order: "seeded", seed: 2, label: "seed 2 (page runtime has no ranked, delaySeed) (again, after a page fell back)" });
+    // one that listed everything and rejected an order no cap names: the label says what it rejected
+    const f = loadCaps(s);
+    expect(f.schedule).toMatchObject({ order: "fifo", label: "baseline 3 (last)" });
+    f.send([{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "fifo" }]);
+    expect(x.plan.at(-1)).toMatchObject({ order: "fifo", seed: 1, label: 'baseline 3 (last) (page runtime rejected "fifo") (again, after a page fell back)' });
+  });
+
+  it("a replay whose page fell back is not armed again for it", () => {
+    const s = new Store();
+    const r = load(s);
+    r.send([{ t: "steps", steps: [typeReact], order: ["GET /api/search#2", "GET /api/search#1"] }, { t: "witness", witness: witness() }]);
+    const f = s.ranked()[0];
+    s.armReplay(f.id);
+    const p = loadCaps(s);
+    expect(p.schedule).toMatchObject({ order: "given" });
+    p.send([{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "given" }]);
+    expect(s.runs.get(p.run)!.assignment).toBeUndefined();
+    expect(loadCaps(s).schedule).toBeNull();
+  });
+});
+
+describe("store: schedules of the new orders are validated like the others (genclass-agent/1)", () => {
+  it("lifo and ranked; ranks like given keys, reverse only when true, delaySeed a non-negative integer", () => {
+    const s = new Store();
+    expect(load(s, "/search", { order: "ranked", ranks: ["GET /a#1", 7, "x".repeat(400)], reverse: "yes", delaySeed: 3.7, extra: 1 }).schedule).toEqual({ order: "ranked", ranks: ["GET /a#1", "x".repeat(300)], delaySeed: 3 });
+    expect(load(s, "/search", { order: "seeded", seed: 2, reverse: true, ranks: ["a"] }).schedule).toEqual({ order: "seeded", seed: 2, reverse: true });
+    expect(load(s, "/search", { order: "lifo", delaySeed: -1 }).schedule).toEqual({ order: "lifo" });
+    expect(load(s, "/search", { order: "ranked" }).schedule).toEqual({ order: "ranked", ranks: [] });
+    expect(load(s, "/search", { order: "ranked", ranks: Array(2500).fill("k") }).schedule.ranks).toHaveLength(2000);
+  });
+});
+
+describe("store: the net timing log (AGENT.md section 2, genclass-agent/1)", () => {
+  it("is merged by key from steps events, validated, and kept to 2,000 keys (the rest counted)", () => {
+    const s = new Store();
+    const r = load(s);
+    r.send([{ t: "steps", steps: [], order: [], net: [{ key: "GET /a#1", n: 0, s: 5, r: 100, colour: "red", forced: "yes", pass: 1 }, { key: "GET /b#1", n: -1, s: 0 }, { n: 1, s: 1 }, { key: "GET /c#1", n: 2, s: Infinity }, { key: "__proto__", n: 3, s: 9, end: "aborted-and-much-longer-than-twenty" }] }]);
+    const run = s.runs.get(r.run)!;
+    expect(Object.keys(run.net!).sort()).toEqual(["GET /a#1", "__proto__"]);
+    expect(run.net!["GET /a#1"]).toEqual({ key: "GET /a#1", n: 0, s: 5, r: 100 });
+    expect(run.net!["__proto__"]).toEqual({ key: "__proto__", n: 3, s: 9, end: "aborted-and-much-lon" });
+    expect(({} as Record<string, unknown>).n).toBeUndefined();
+    r.send([{ t: "steps", steps: [], order: [], net: [{ key: "GET /a#1", n: 0, s: 5, r: 100, d: 130, held: 20, forced: true }], netLost: 3 }]);
+    expect(run.net!["GET /a#1"]).toEqual({ key: "GET /a#1", n: 0, s: 5, r: 100, d: 130, held: 20, forced: true });
+    expect(run.netLost).toBe(3);
+    r.send([{ t: "steps", steps: [], order: [], net: Array.from({ length: 2000 }, (_, i) => ({ key: `GET /n#${i}`, n: i + 10, s: i })), netLost: 2 }]);
+    expect(Object.keys(run.net!)).toHaveLength(2000);
+    expect(run.netLost).toBe(5);
+    // recv steps carry the ready time and pass
+    r.send([{ t: "steps", steps: [{ k: "recv", t: 40, key: "GET /a#1", held: 5, ready: 35, pass: true }, { k: "recv", t: 41, key: "GET /b#1", ready: -1, pass: "yes" }] }]);
+    expect(run.steps.filter((x) => x.k === "recv")).toEqual([{ k: "recv", t: 40, key: "GET /a#1", held: 5, ready: 35, pass: true }, { k: "recv", t: 41, key: "GET /b#1" }]);
+    // hello caps: strings only, 20 of 40 characters at most
+    const h = s.hello({ ...hello("/x"), caps: ["lifo", 7, "x".repeat(60), ...Array(30).fill("ranked")] })!;
+    expect(s.runs.get(h.run)!.caps).toEqual(["lifo", "x".repeat(40), ...Array(18).fill("ranked")]);
+  });
+
+  it("a restored systematic session keeps how many cover slots it armed (its report says whether it ran every row)", () => {
+    const dir = join(mkdtempSync(join(tmpdir(), "gc-mcp-")), "state");
+    const s = new Store({ dir });
+    const x = s.armExplore({ runs: 5, route: "/search", plan: "systematic" });
+    expect(x.coverSlots).toBe(4);
+    s.save();
+    expect(new Store({ dir }).explores.get(x.id)).toMatchObject({ strategy: "systematic", coverSlots: 4, state: "stopped" });
+    // a state file is not trusted: a count that is no whole number, or past the cap, is dropped or capped
+    const file = join(dir, "state.json");
+    const d = JSON.parse(readFileSync(file, "utf8"));
+    d.explores[0].coverSlots = 1e9;
+    writeFileSync(file, JSON.stringify(d));
+    expect(new Store({ dir }).explores.get(x.id)!.coverSlots).toBe(50);
+    d.explores[0].coverSlots = "4";
+    writeFileSync(file, JSON.stringify(d));
+    expect(new Store({ dir }).explores.get(x.id)!.coverSlots).toBeUndefined();
+  });
+
+  it("persistence restores caps, the timing log, netLost, notes and a minimise assignment", () => {
+    const dir = join(mkdtempSync(join(tmpdir(), "gc-mcp-")), "state");
+    const s = new Store({ dir });
+    const r = loadCaps(s);
+    r.send([...searchLoad(S), { t: "steps", steps: [], order: [], netLost: 2 }]);
+    const run = s.runs.get(r.run)!;
+    run.notes = ["a note"];
+    run.assignment = { kind: "minimize", ref: "f1", index: 2, label: "minimise: x" };
+    s.save();
+    const back = new Store({ dir }).runs.get(r.run)!;
+    expect(back.caps).toEqual(CAPS);
+    expect({ ...back.net }).toEqual({ ...run.net });
+    expect(back.netLost).toBe(2);
+    expect(back.notes).toEqual(["a note"]);
+    expect(back.assignment).toEqual({ kind: "minimize", ref: "f1", index: 2, label: "minimise: x" });
+  });
+});
+
+/** An explore race: two baselines in request order, then a seeded load that delivered #3 first and showed the stale page. */
+function race(s = new Store()) {
+  const x = s.armExplore({ runs: 1, route: "/search" });
+  loadCaps(s).send(searchLoad(S));
+  loadCaps(s).send(searchLoad(S));
+  loadCaps(s).send(searchLoad([S[2], S[0], S[1]], "reac!", ["Results for reac"]));
+  return { s, f: s.reportExplore(x.id)!.findings[0] };
+}
+
+/**
+ * race(), with a second reordered load that delivered #2 last and showed another older query's results ("rea"): the
+ * values a minimise probe's other wrong value is checked against.
+ */
+function race2(s = new Store()) {
+  const x = s.armExplore({ runs: 2, route: "/search" });
+  loadCaps(s).send(searchLoad(S));
+  loadCaps(s).send(searchLoad(S));
+  loadCaps(s).send(searchLoad([S[2], S[0], S[1]], "reac!", ["Results for reac"]));
+  loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]));
+  return { s, f: s.reportExplore(x.id)!.findings[0] };
+}
+
+describe("store: race evidence from the timing log (AGENT.md section 5.1)", () => {
+  it("keeps the failing run's inversions, the first baseline's start order and what ended without a response", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 1, route: "/search" });
+    const suggest = (delivered: boolean) => ({ key: "GET /api/suggest#1", n: 3, s: 60, ...(delivered ? { r: 70, d: 300 } : { end: "aborted" }) });
+    loadCaps(s).send(searchLoad(S, "react!", ["Results for react"], [suggest(true)]));
+    loadCaps(s).send(searchLoad(S, "react!", ["Results for react"], [suggest(true)]));
+    loadCaps(s).send(searchLoad([S[2], S[0], S[1]], "reac!", ["Results for reac"], [suggest(false)]));
+    const f = s.reportExplore(x.id)!.findings[0];
+    expect(f.evidence).toMatchObject({ reordered: true, inversions: [[S[0], S[2]], [S[1], S[2]]], inversionsTotal: 2, startOrder: [...S, "GET /api/suggest#1"], endedWithout: ["GET /api/suggest#1"] });
+    expect(f.title.startsWith("The page depends on response order")).toBe(true);
+  });
+
+  it("a run that differs without delivering any response out of request order is titled by timing", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 1, route: "/search" });
+    loadCaps(s).send(searchLoad(S));
+    loadCaps(s).send(searchLoad(S));
+    loadCaps(s).send(searchLoad(S, "reac!", ["Results for reac"]));
+    const f = s.reportExplore(x.id)!.findings[0];
+    expect(f.title).toBe('The final state depends on response timing (no response was delivered out of request order): under "seed 1" it shows "Results for reac", which the baseline does not');
+    expect(f.evidence).toMatchObject({ reordered: false, inversions: [], inversionsTotal: 0 });
+  });
+});
+
+describe("store: minimise (AGENT.md section 5.2)", () => {
+  it("probes move one response each, the smallest moves first, both ways when requests started between", () => {
+    const { s, f } = race();
+    const arm = s.armMinimize(f.id) as MinimizeArm;
+    expect(arm.probes.map((p) => [p.spec.label, p.spec.ranks, p.intended])).toEqual([
+      [`minimise: ${S[1]} after ${S[2]}`, [S[0], S[2], S[1]], [[S[1], S[2]]]],
+      [`minimise: ${S[0]} after ${S[2]}`, [S[1], S[2], S[0]], [[S[0], S[2]], [S[0], S[1]]]],
+      [`minimise: ${S[2]} before ${S[0]}`, [S[2], S[0], S[1]], [[S[0], S[2]], [S[1], S[2]]]],
+    ]);
+    // the failing run's delays: its seed seeds them
+    expect(arm.probes[0].spec).toEqual({ order: "ranked", delaySeed: 1, ranks: [S[0], S[2], S[1]], label: `minimise: ${S[1]} after ${S[2]}` });
+    expect(arm.leftOut).toBe(0);
+    expect(s.armMinimize("f404")).toBeNull();
+  });
+
+  it("only a race with recorded inversions can be minimised", () => {
+    const s = new Store();
+    const r = load(s);
+    r.send([{ t: "error", error: { t: 1, name: "Error", message: "boom", chain: [] } }]);
+    expect(s.armMinimize(s.ranked()[0].id)).toMatchObject({ error: expect.stringContaining("only race findings") });
+    // a race from an older page runtime (no timing log)
+    const t = new Store();
+    const x = t.armExplore({ runs: 1, route: "/search" });
+    for (const v of ["react", "react", "reac"]) {
+      const p = load(t);
+      p.send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": v }, [`Results for ${v}`]) }]);
+    }
+    const f = t.reportExplore(x.id)!.findings[0];
+    expect(t.armMinimize(f.id)).toMatchObject({ error: expect.stringContaining("no reordering to minimise") });
+  });
+
+  it("a probe goes only to a page that runs ranked; a replay armed too comes first", () => {
+    const { s, f } = race();
+    s.armMinimize(f.id);
+    expect(load(s).schedule).toBeNull();
+    s.armReplay(f.id);
+    expect(loadCaps(s).schedule).toMatchObject({ order: "seeded", seed: 1, label: `replay of ${f.id}` });
+    const p = loadCaps(s);
+    expect(p.schedule).toMatchObject({ order: "ranked", ranks: [S[0], S[2], S[1]], id: f.id, label: `minimise: ${S[1]} after ${S[2]}` });
+    expect(s.runs.get(p.run)!.assignment).toEqual({ kind: "minimize", ref: f.id, index: 0, label: `minimise: ${S[1]} after ${S[2]}` });
+    // given back (its hello reply came late): queued again
+    p.send([{ t: "schedule", spec: { order: "natural" }, late: true }]);
+    expect(loadCaps(s).schedule).toMatchObject({ label: `minimise: ${S[1]} after ${S[2]}` });
+  });
+
+  it("the minimal reproduction is the first probe that reproduces it with every one before it conclusive; the finding then replays it", () => {
+    const { s, f } = race();
+    s.armMinimize(f.id);
+    const v0 = s.version;
+    // probe 1 delivers its order and the page is right; probe 2 delivers #1 after the others and the page is stale
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]]));
+    loadCaps(s).send(searchLoad([S[1], S[2], S[0]], "reac!", ["Results for reac"]));
+    const m = s.minimizeResult(f.id)!;
+    expect(m.probes.map((p) => [p.state, p.reproduced])).toEqual([
+      ["done", false],
+      ["done", true],
+      ["pending", null],
+    ]);
+    expect(m.minimal).toMatchObject({ a: S[0], b: S[2], between: 1, variant: 1, exact: false, inverted: [[S[0], S[1]], [S[0], S[2]]] });
+    expect(f.replay).toEqual({ order: "ranked", delaySeed: 1, ranks: [S[1], S[2], S[0]] });
+    expect(f.evidence.minimal).toMatchObject({ run: m.minimal!.run, exact: false, inverted: [[S[0], S[1]], [S[0], S[2]]] });
+    expect(s.version).toBeGreaterThan(v0);
+    const v1 = s.version;
+    s.minimizeResult(f.id);
+    expect(s.version).toBe(v1);
+    // the minimal run is kept with the finding
+    s.clear("runs");
+    expect(s.runs.has(m.minimal!.run)).toBe(true);
+  });
+
+  it("a probe whose page ends with another wrong value, one another reordered run showed too, reproduces it; its replays are judged against that page", () => {
+    const { s, f } = race2();
+    expect(f.evidence.reorderedValues).toEqual({ text: ["Results for reac", "Results for rea"], fields: [["search.results", ["reac!", "rea!"]]] });
+    s.armMinimize(f.id);
+    // probe 1 delivers #3 before #2 only: the page shows another older query's results, not the failing run's "reac"
+    // and not the baseline's "react" (search-as-you-type: whichever older response lands last wins); the second
+    // reordered load of the explore showed them too
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]));
+    const m = s.minimizeResult(f.id)!;
+    expect(m.probes[0]).toMatchObject({ state: "done", reproduced: true, conclusive: true, other: true, shown: { text: ["Results for rea"] }, realised: [[S[1], S[2]]] });
+    expect(m.probes[0].note).toBe(`the page shows none of the baseline's text where the failing run differed (missing "Results for react"), and in its place "Results for rea", which another reordered run of the explore showed too`);
+    expect(m.minimal).toMatchObject({ a: S[1], b: S[2], between: 0, exact: true, other: true, inverted: [[S[1], S[2]]] });
+    expect(f.evidence.minimal).toMatchObject({ exact: true, other: true, inverted: [[S[1], S[2]]], shown: { text: ["Results for rea"] } });
+    expect(f.replay).toEqual({ order: "ranked", delaySeed: 1, ranks: [S[0], S[2], S[1]] });
+    // the replay runs that order and is judged against that probe's page: the same value reproduces it, the baseline's
+    // text after a fix does not, a third value is inconclusive
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true, note: "the page shows the minimal reproduction's text again" });
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false, note: "the page shows the baseline's text" });
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "re!", ["Results for re"]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: null, note: `the page shows neither the minimal reproduction's text nor all of the baseline's (missing "Results for react")` });
+  });
+
+  it("another wrong value no reordered run of the explore showed is not a reproduction: a page changed since, a blank page, another failure", () => {
+    // the heading changed since the explore (the store holds the baseline's results): nothing the explore showed
+    let { s, f } = race2();
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "react!", ["Results for react (2 new)"]));
+    let m = s.minimizeResult(f.id)!;
+    expect(m.probes[0]).toMatchObject({ state: "done", reproduced: null, conclusive: false });
+    expect(m.probes[0].note).toBe(`the page shows none of the baseline's text where the failing run differed (missing "Results for react"), but nothing a reordered run of the explore showed in its place (the page may have changed since, or failed another way)`);
+    expect(m.minimal).toBeUndefined();
+    expect(f.evidence.minimal).toBeUndefined();
+    // a blank page
+    ({ s, f } = race2());
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "react!", []));
+    expect(s.minimizeResult(f.id)!.probes[0]).toMatchObject({ state: "done", reproduced: null, conclusive: false });
+    // another failure: an uncaught error the failing run did not have, even beside a value a reordered run showed
+    ({ s, f } = race2());
+    s.armMinimize(f.id);
+    loadCaps(s).send([...searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]), { t: "error", error: { t: 900, name: "TypeError", message: "TypeError: x is undefined", chain: [] } }]);
+    m = s.minimizeResult(f.id)!;
+    expect(m.probes[0]).toMatchObject({ state: "inconclusive", reproduced: null, conclusive: false });
+    expect(m.probes[0].note).toBe(`it ended with other values, but it also threw an error the failing run did not ("TypeError: x is undefined"): another failure, not necessarily this race`);
+    expect(m.minimal).toBeUndefined();
+    // only the failing run was reordered: nothing to say "rea" is this race's
+    ({ s, f } = race());
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]));
+    expect(s.minimizeResult(f.id)!.probes[0]).toMatchObject({ state: "done", reproduced: null, conclusive: false });
+  });
+
+  it("a replay of a finding without such a minimal reproduction stays strict: a third value is inconclusive", () => {
+    const { s, f } = race();
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[2], S[0], S[1]], "rea!", ["Results for rea"]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: null, note: `the page shows neither the failing run's text nor all of the baseline's (missing "Results for react")` });
+  });
+
+  it("form values: none of the baseline's, each one a reordered run had too, reproduces it; some of them, or a field gone, does not", () => {
+    const cart = (order: string[], qty: string, total: string, fields: Record<string, string> = { Quantity: qty, Total: total }) => [
+      { t: "steps", steps: [typeReact], order, net: searchLog(order) },
+      { t: "snapshot", snapshot: snap({ "cart.qty": qty }, ["Cart"], { fields }) },
+    ];
+    /** Two baselines, the failing load (3, 30) and a second reordered load (2, 20). */
+    const cartRace = () => {
+      const s = new Store();
+      const x = s.armExplore({ runs: 2, route: "/search" });
+      loadCaps(s).send(cart(S, "1", "10"));
+      loadCaps(s).send(cart(S, "1", "10"));
+      loadCaps(s).send(cart([S[2], S[0], S[1]], "3", "30"));
+      loadCaps(s).send(cart([S[0], S[2], S[1]], "2", "20"));
+      return { s, f: s.reportExplore(x.id)!.findings[0] };
+    };
+    let { s, f } = cartRace();
+    expect(f.evidence.fields).toEqual(expect.arrayContaining([expect.objectContaining({ where: "field", name: "Quantity", baseline: "1", run: "3" })]));
+    s.armMinimize(f.id);
+    loadCaps(s).send(cart([S[0], S[2], S[1]], "2", "20"));
+    loadCaps(s).send(cart([S[1], S[2], S[0]], "2", "10"));
+    const m = s.minimizeResult(f.id)!;
+    expect(m.probes[0]).toMatchObject({ state: "done", reproduced: true, other: true, shown: { fields: { Quantity: "2", Total: "20" } }, note: `ended with none of the request-order baseline's values and others another reordered run of the explore had too: Quantity = "2", Total = "20"` });
+    expect(m.probes[1]).toMatchObject({ state: "done", reproduced: null, conclusive: false, note: `ended with other values: Quantity = "2", Total = "10"` });
+    expect(m.minimal).toMatchObject({ a: S[1], b: S[2], exact: true, other: true });
+    // a value no reordered run had, and a page whose form is gone
+    for (const [fields, values] of [
+      [{ Quantity: "4", Total: "40" }, 'Quantity = "4", Total = "40"'],
+      [{}, 'Quantity = "(absent)", Total = "(absent)"'],
+    ] as const) {
+      ({ s, f } = cartRace());
+      s.armMinimize(f.id);
+      loadCaps(s).send(cart([S[0], S[2], S[1]], "1", "10", fields));
+      expect(s.minimizeResult(f.id)!.probes[0]).toMatchObject({ state: "done", reproduced: null, conclusive: false, note: `ended with none of the request-order baseline's values, but not with values a reordered run of the explore had (the page may have changed since, or failed another way): ${values}` });
+    }
+  });
+
+  it("a probe that delivered another inversion than it was built for is inconclusive and blocks the choice", () => {
+    const { s, f } = race();
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[2], S[0], S[1]], "reac!", ["Results for reac"]));
+    loadCaps(s).send(searchLoad([S[1], S[2], S[0]], "reac!", ["Results for reac"]));
+    const m = s.minimizeResult(f.id)!;
+    expect(m.probes[0]).toMatchObject({ state: "inconclusive", reproduced: null, conclusive: false });
+    expect(m.probes[0].note).toBe(`it also delivered "${S[2]}" before "${S[0]}"`);
+    expect(m.probes[1]).toMatchObject({ state: "done", reproduced: true });
+    expect(m.minimal).toBeUndefined();
+    expect(m.none).toBeUndefined();
+  });
+
+  it("every probe conclusive and none reproduces it: no single response moved reproduces it", () => {
+    const { s, f } = race();
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]]));
+    loadCaps(s).send(searchLoad([S[1], S[2], S[0]]));
+    loadCaps(s).send(searchLoad([S[2], S[0], S[1]]));
+    const m = s.minimizeResult(f.id)!;
+    expect(m.probes.every((p) => p.state === "done" && p.reproduced === false)).toBe(true);
+    expect(m.none).toBe(true);
+    expect(m.minimal).toBeUndefined();
+  });
+
+  it("at most 12 probes, the neighbour swaps first, and how many were left out", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 1, route: "/search" });
+    const K = Array.from({ length: 10 }, (_, i) => `GET /api/k#${i + 1}`);
+    const send = (order: string[], text: string) => [{ t: "steps", steps: [typeReact], order, net: K.map((key, i) => ({ key, n: i, s: 10 * i, r: 1000, d: 1000 + order.indexOf(key) })) }, { t: "snapshot", snapshot: snap({}, [text]) }];
+    loadCaps(s).send(send(K, "All ten"));
+    loadCaps(s).send(send(K, "All ten"));
+    loadCaps(s).send(send([...K].reverse(), "Only one"));
+    const f = s.reportExplore(x.id)!.findings[0];
+    expect(f.evidence.inversionsTotal).toBe(45);
+    const arm = s.armMinimize(f.id) as MinimizeArm;
+    expect(arm.probes).toHaveLength(12);
+    // 9 neighbour swaps and 36 other pairs both ways: 81 probes
+    expect(arm.leftOut).toBe(69);
+    expect(arm.probes.slice(0, 9).map((p) => [p.a, p.b, p.between])).toEqual(K.slice(0, 9).map((k, i) => [k, K[i + 1], 0]));
+  });
+});
+
+describe("store: a race replay checks that the harmful order happened (AGENT.md section 5.2)", () => {
+  it("a replay that did not deliver any of the failing run's inversions is inconclusive, whatever the page shows", () => {
+    const { s, f } = race();
+    s.armReplay(f.id);
+    // the fix cancels the older searches: nothing was delivered out of order, and the page is right
+    loadCaps(s).send(searchLoad(S));
+    const r = s.replayResult(f.id)!.results.at(-1)!;
+    expect(r.reproduced).toBeNull();
+    expect(r.note).toBe(`the harmful order did not happen in this run ("${S[0]}" was not delivered after "${S[2]}": requests renumbered or no longer overlapping). If the fix cancels or no longer sends the older request, the race cannot occur: run explore again to check other orders.`);
+    // the order happened: the page decides
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[2], S[0], S[1]]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false });
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[2], S[0], S[1]], "reac!", ["Results for reac"]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true });
+    // a run without a timing log (an older page runtime) is judged as before
+    s.armReplay(f.id);
+    load(s).send([{ t: "steps", steps: [typeReact], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "react!", "search.input": "react" }, ["Results for react"]) }]);
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: false });
+  });
+
+  it("after minimise, every pair of the minimal reproduction must happen", () => {
+    const { s, f } = race();
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]]));
+    loadCaps(s).send(searchLoad([S[1], S[2], S[0]], "reac!", ["Results for reac"]));
+    s.minimizeResult(f.id);
+    // the replay now runs the minimal probe's order; one that delivered #2 before #1 only is not it
+    const arm = s.armReplay(f.id) as { spec: ScheduleSpec };
+    expect(arm.spec).toMatchObject({ order: "ranked", ranks: [S[1], S[2], S[0]] });
+    loadCaps(s).send(searchLoad([S[1], S[0], S[2]], "reac!", ["Results for reac"]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: null });
+    s.armReplay(f.id);
+    loadCaps(s).send(searchLoad([S[1], S[2], S[0]], "reac!", ["Results for reac"]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ reproduced: true });
+  });
+
+  it("an older page runtime gets the finding's recorded order for a replay it cannot run", () => {
+    const { s, f } = race();
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]]));
+    loadCaps(s).send(searchLoad([S[1], S[2], S[0]], "reac!", ["Results for reac"]));
+    s.minimizeResult(f.id);
+    s.armReplay(f.id);
+    const old = s.hello(hello("/search"))!;
+    expect(old.schedule).toEqual({ order: "given", given: [S[2], S[0], S[1]], id: f.id, label: `replay of ${f.id} (page runtime has no ranked, delaySeed: recorded order)` });
+  });
+
+  it("a replay run of the failing order from before minimise keeps its verdict once a minimal reproduction is chosen", () => {
+    const { s, f } = race();
+    s.armReplay(f.id);
+    const rep = loadCaps(s);
+    expect(rep.schedule).toMatchObject({ order: "seeded", seed: 1 });
+    rep.send(searchLoad([S[2], S[0], S[1]], "reac!", ["Results for reac"]));
+    expect(s.replayResult(f.id)!.results).toEqual([expect.objectContaining({ run: rep.run, reproduced: true })]);
+    // minimise: the minimal reproduction inverts (#1, #2) too, which the failing order never does
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]]));
+    loadCaps(s).send(searchLoad([S[1], S[2], S[0]], "reac!", ["Results for reac"]));
+    expect(s.minimizeResult(f.id)!.minimal).toMatchObject({ inverted: [[S[0], S[1]], [S[0], S[2]]] });
+    // the replay ran the failing run's order: judged by its inversions, as when it ran
+    expect(s.replayResult(f.id)!.results).toEqual([expect.objectContaining({ run: rep.run, reproduced: true })]);
+    expect(f.replays).toEqual([expect.objectContaining({ run: rep.run, reproduced: true })]);
+  });
+
+  it("a replay of the failing order that was inconclusive stays so after a minimal reproduction chosen for other values", () => {
+    const { s, f } = race2();
+    s.armReplay(f.id);
+    const rep = loadCaps(s);
+    rep.send(searchLoad([S[2], S[0], S[1]], "rea!", ["Results for rea"]));
+    expect(s.replayResult(f.id)!.results.at(-1)).toMatchObject({ run: rep.run, reproduced: null });
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]));
+    expect(s.minimizeResult(f.id)!.minimal).toMatchObject({ other: true });
+    // it ran the failing run's order, not the minimal one: the failing run's values judge it, strictly
+    expect(s.replayResult(f.id)!.results.find((x) => x.run === rep.run)).toMatchObject({ reproduced: null, note: `the page shows neither the failing run's text nor all of the baseline's (missing "Results for react")` });
+  });
+});
+
+describe("store: minimise probes that do not get to a result (AGENT.md section 5.2)", () => {
+  const first = `minimise: ${S[1]} after ${S[2]}`;
+  const second = `minimise: ${S[0]} after ${S[2]}`;
+  /** A page load that typed, then left before a quiet point after it (its only snapshot came before the typing). */
+  const leftEarly = (order: string[]) => [
+    { t: "snapshot", snapshot: snap({ "search.results": "", "search.input": "" }, [], { t: 0 }) },
+    { t: "steps", steps: [act(0, "type", 'searchbox "Search"', "react", { count: 5, dur: 400, t: 500 })], order, net: searchLog(order) },
+    { t: "end", settled: false },
+  ];
+
+  it(`a probe whose page load left before a quiet point after its steps goes to the next page load, at most ${MAX_PROBE_LOADS} in all`, () => {
+    const { s, f } = race();
+    s.armMinimize(f.id);
+    const p1 = loadCaps(s);
+    expect(p1.schedule).toMatchObject({ label: first });
+    p1.send(leftEarly([S[0], S[2], S[1]]));
+    expect(s.minimizeResult(f.id)!.probes[0]).toMatchObject({ state: "pending", run: p1.run, note: "its page load ended before a quiet point after its steps: the next fresh page load gets it again (do the same steps)" });
+    // still to run, as genclass_status counts it
+    expect(s.probesOpen(s.minimizes[0])).toBe(3);
+    // the next page loads get it again, before the probes after it
+    for (let i = 1; i < MAX_PROBE_LOADS; i++) {
+      const p = loadCaps(s);
+      expect(p.schedule).toMatchObject({ label: first });
+      p.send(leftEarly([S[0], S[2], S[1]]));
+    }
+    const m = s.minimizeResult(f.id)!;
+    expect(m.probes[0]).toMatchObject({ state: "inconclusive", note: `its page load ended before a quiet point after its steps, on each of the ${MAX_PROBE_LOADS} page loads it went to: arm minimise again to try it once more` });
+    expect(m.pending).toBe(2);
+    expect(s.probesOpen(s.minimizes[0])).toBe(2);
+    expect(loadCaps(s).schedule).toMatchObject({ label: second });
+  });
+
+  it("a page load that settles after the steps on a retry gives the probe its verdict", () => {
+    const { s, f } = race();
+    s.armMinimize(f.id);
+    loadCaps(s).send(leftEarly([S[0], S[2], S[1]]));
+    const again = loadCaps(s);
+    expect(again.schedule).toMatchObject({ label: first });
+    again.send(searchLoad([S[0], S[2], S[1]]));
+    expect(s.minimizeResult(f.id)!.probes[0]).toMatchObject({ state: "done", reproduced: false, run: again.run });
+  });
+
+  it("so does a probe whose page load did other steps, is gone, or sent nothing for two minutes without settling", () => {
+    // other steps
+    let { s, f } = race();
+    s.armMinimize(f.id);
+    loadCaps(s).send([{ t: "steps", steps: [act(0, "click", 'button "Clear"')], order: S, net: searchLog([S[0], S[2], S[1]]) }, { t: "snapshot", snapshot: snap({ "search.results": "", "search.input": "" }, []) }]);
+    expect(s.minimizeResult(f.id)!.probes[0]).toMatchObject({ state: "pending", note: "its page load did other steps than the failing run: the next fresh page load gets it again (do the same steps)" });
+    expect(loadCaps(s).schedule).toMatchObject({ label: first });
+    // gone
+    ({ s, f } = race());
+    s.armMinimize(f.id);
+    s.runs.delete(loadCaps(s).run);
+    expect(s.minimizeResult(f.id)!.probes[0]).toMatchObject({ state: "pending", note: "its page load is gone: the next fresh page load gets it again (do the same steps)" });
+    expect(loadCaps(s).schedule).toMatchObject({ label: first });
+    // quiet: typed, then nothing
+    const c = clock();
+    ({ s, f } = race(new Store({ now: c.now })));
+    s.armMinimize(f.id);
+    loadCaps(s).send([{ t: "steps", steps: [typeReact], order: [] }]);
+    expect(loadCaps(s).schedule).toMatchObject({ label: second }); // still running: the next load gets the next probe
+    c.tick(PROBE_IDLE_MS);
+    expect(s.minimizeResult(f.id)!.probes[0]).toMatchObject({ state: "pending", note: "its page load sent nothing for 2 minutes without reaching a quiet point after its steps: the next fresh page load gets it again (do the same steps)" });
+    expect(loadCaps(s).schedule).toMatchObject({ label: first });
+  });
+
+  it("probes expire 30 minutes after they were armed: the result says so, and to arm them again", () => {
+    const c = clock();
+    const { s, f } = race(new Store({ now: c.now }));
+    s.armMinimize(f.id);
+    loadCaps(s).send(searchLoad([S[0], S[2], S[1]]));
+    c.tick(ARM_TTL_MS);
+    expect(loadCaps(s).schedule).toBeNull();
+    expect(s.probesOpen(s.minimizes[0])).toBe(0);
+    const m = s.minimizeResult(f.id)!;
+    expect(m).toMatchObject({ expired: true, pending: 2 });
+    expect(m.probes.map((p) => p.state)).toEqual(["done", "pending", "pending"]);
+    expect(m.probes[1].note).toBe("the probes expired 30 minutes after they were armed, so no page load gets this one now: arm minimise again");
+  });
+
+  it("inversions that give no probe are counted, and no single move is said not to reproduce it over them", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 1, route: "/p" });
+    const [A, B, C] = ["GET /api/a#1", "GET /api/b#1", "GET /api/c#1"];
+    const run = (starts: string[], order: string[], text: string) => [
+      { t: "steps", steps: [typeReact], order, net: starts.map((key, i) => ({ key, n: i, s: 10 * i, r: 500, d: 600 + 10 * order.indexOf(key) })) },
+      { t: "snapshot", snapshot: snap({}, [text]) },
+    ];
+    loadCaps(s, "/p").send(run([A, B, C], [A, B, C], "ok"));
+    loadCaps(s, "/p").send(run([A, B, C], [A, B, C], "ok"));
+    // the failing load started C first (its sends depend on responses) and delivered B, C, A
+    loadCaps(s, "/p").send(run([C, A, B], [B, C, A], "wrong"));
+    const f = s.reportExplore(x.id)!.findings[0];
+    expect(f.evidence).toMatchObject({ inversions: [[C, B], [A, B]], startOrder: [A, B, C] });
+    const arm = s.armMinimize(f.id) as MinimizeArm;
+    expect(arm.probes.map((p) => p.spec.label)).toEqual([`minimise: ${A} after ${B}`]);
+    expect(arm).toMatchObject({ leftOut: 0, skipped: 1 });
+    const p = loadCaps(s, "/p");
+    p.send(run([A, B, C], p.schedule.ranks!, "ok"));
+    const m = s.minimizeResult(f.id)!;
+    expect(m.probes[0]).toMatchObject({ state: "done", reproduced: false });
+    expect(m).toMatchObject({ skipped: 1, pending: 0 });
+    expect(m.none).toBeUndefined();
   });
 });
