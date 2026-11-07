@@ -1,7 +1,8 @@
 // Package invariants: no runtime dependencies (the fixture's needs, @playwright/test and @genclass/runtime, are
 // optional peer dependencies), nothing but the fixture imports Playwright, the pure entries use no Node APIs, the
 // page script imports nothing at all, the exports map names what tsup builds, the README shows the fixture's exact
-// report.
+// report. The repository's own installs use the workspace runtime: the devDependency is a range, and the root
+// lockfile installs none of this repository's packages from the registry.
 
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -16,6 +17,9 @@ const pkgDir = join(here, "..");
 const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")) as Record<string, unknown>;
 const src = (f: string) => readFileSync(join(pkgDir, "src", f), "utf8");
 const imports = (text: string) => [...text.matchAll(/^\s*(?:import|export)\s[^;]*?from\s+"([^"]+)"/gm)].map((m) => m[1]);
+const lock = JSON.parse(readFileSync(join(pkgDir, "..", "..", "package-lock.json"), "utf8")) as { packages: Record<string, Record<string, unknown>> };
+// one version and nothing else: 0.3.0-beta.1, =0.3.0-beta.1, v0.3.0 (npm installs exactly that version)
+const EXACT_VERSION = /^\s*(?:=|v)?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\s*$/;
 
 describe("package: dependencies and imports", () => {
   it("has no runtime dependencies; Playwright and the runtime are optional peer dependencies (the fixture's)", () => {
@@ -56,7 +60,6 @@ describe("package: dependencies and imports", () => {
   });
 
   it("the root package-lock.json has the workspace entry, matching package.json", () => {
-    const lock = JSON.parse(readFileSync(join(pkgDir, "..", "..", "package-lock.json"), "utf8")) as { packages: Record<string, Record<string, unknown>> };
     expect(lock.packages["node_modules/@genclass/playwright"]).toEqual({ resolved: "packages/playwright", link: true });
     const entry = lock.packages["packages/playwright"];
     expect(entry.name).toBe(pkg.name);
@@ -66,6 +69,33 @@ describe("package: dependencies and imports", () => {
     expect(entry.peerDependencies).toEqual(pkg.peerDependencies);
     expect(entry.peerDependenciesMeta).toEqual(pkg.peerDependenciesMeta);
     expect(entry.bin).toEqual(pkg.bin);
+  });
+
+  // An exact pin stops matching packages/runtime at the runtime's next version. npm then installs the pinned version
+  // from the registry under packages/playwright/node_modules: the fixture's e2e serves that copy instead of the
+  // workspace build, and every CI install without a warm npm cache downloads it (as the 0.3.0-beta.1 pin did from
+  // 2026-10-25, when the workspace moved to 0.3.0-beta.2).
+  it("the @genclass/runtime devDependency is a range, not an exact version", () => {
+    const range = (pkg.devDependencies as Record<string, string>)["@genclass/runtime"];
+    expect(range).toBeTypeOf("string");
+    expect(range, "use a range the workspace's packages/runtime satisfies, e.g. >=0.3.0-beta.1").not.toMatch(EXACT_VERSION);
+  });
+
+  it("the root lockfile installs none of this repository's packages from the registry: each is the workspace link", () => {
+    const own = new Set(Object.entries(lock.packages).filter(([k]) => k !== "" && !k.includes("node_modules/")).map(([k, e]) => String(e.name ?? k.split("/").pop())));
+    expect(own).toContain("@genclass/runtime");
+    expect(own).toContain("@genclass/playwright");
+    const copies = Object.entries(lock.packages)
+      .filter(([k, e]) => {
+        const m = /(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)$/.exec(k);
+        return m !== null && own.has(m[1]) && e.link !== true;
+      })
+      .map(([k, e]) => `${k} ${String(e.version)} ${String(e.resolved)}`);
+    // npm install keeps such a copy while it still satisfies the range, so widening the range alone does not remove it
+    expect(copies, "give the dependent a range the workspace version satisfies, delete these entries from package-lock.json, then npm install").toEqual([]);
+    const fromRegistry = Object.entries(lock.packages).filter(([, e]) => String(e.resolved ?? "").startsWith("https://registry.npmjs.org/@genclass/")).map(([k]) => k);
+    expect(fromRegistry).toEqual([]);
+    for (const [k, e] of Object.entries(lock.packages)) if (k.endsWith("node_modules/@genclass/runtime")) expect(e, k).toEqual({ resolved: "packages/runtime", link: true });
   });
 });
 

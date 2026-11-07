@@ -122,9 +122,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      # the npm cache, keyed on the root lockfile as in the other jobs: without it every run fetched every package
+      # from the registry
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - name: Install (root lockfile; vitest is hoisted)
         run: ONNXRUNTIME_NODE_INSTALL=skip npm ci --no-audit --no-fund
       - name: Unit tests
