@@ -8,6 +8,9 @@
 //     serve_cached), fail-open after the hold budget; keepalive requests are never held;
 //   - failure gate: network errors, timeouts, 5xx/429/408 wait for the model before the app sees them
 //     (deliver/retry/serve_cached);
+//   - delivery gate: a response held there (a decision, the agent link's schedule) that the app aborted meanwhile
+//     rejects with the abort, as on a slower network, and so does a failure held at the failure gate (or the cached
+//     response that replaces it); one released at once is delivered exactly as before;
 //   - stall watch: far past the learned latency, the model may hedge or serve a cached response;
 //   - the app always gets its own Response; GenClass buffers a clone for coalescing and the GET cache;
 //   - context: the op is ambient when the fetch promise and the Response body methods settle.
@@ -477,10 +480,12 @@ export function installFetch(host: NetHost): (() => void) | null {
       let answered = false;
       let sent = false;
       let cancelStall: () => void = () => undefined;
+      /** What an aborted fetch rejects with: the signal's reason, else the platform's default AbortError. */
+      const abortError = () => signal?.reason ?? new DOMException("The operation was aborted.", "AbortError");
       const onAbort = () => {
         if (!sent && !answered) {
           host.endOp(op, "aborted", { code: "aborted" });
-          answer(null, signal?.reason ?? new DOMException("The operation was aborted.", "AbortError"));
+          answer(null, abortError());
         }
       };
       const unlisten = () => signal?.removeEventListener?.("abort", onAbort);
@@ -495,7 +500,7 @@ export function installFetch(host: NetHost): (() => void) | null {
       };
       if (signal?.aborted) {
         host.endOp(op, "aborted", { code: "aborted" });
-        answer(null, signal.reason ?? new DOMException("The operation was aborted.", "AbortError"));
+        answer(null, abortError());
         return;
       }
       signal?.addEventListener?.("abort", onAbort, { once: true } as AddEventListenerOptions);
@@ -540,8 +545,12 @@ export function installFetch(host: NetHost): (() => void) | null {
               failureGate(sendOp, res, null, { kind: "http", status: res.status, statusText: res.statusText, durMs: (sendOp.end ?? host.clock.now()) - sendOp.start });
             } else if (!failed && host.gated(sendOp) && !answered) {
               if (json && req.method !== "GET" && req.method !== "HEAD" && res.ok) host.noteResponse?.({ op: sendOp, req, status: res.status, body: json });
-              // the delivery gate: delaying a response is only extra latency (any correct app tolerates it)
-              host.deliver({ op: sendOp, req, status: res.status, ...(json ? { body: json } : {}) }, () => answer(res));
+              // the delivery gate: delaying a response is only extra latency (any correct app tolerates it). A held
+              // response the app aborted meanwhile rejects as the abort, as on a slower network; a release inside
+              // deliver() (nothing held) answers as before
+              let held = false;
+              host.deliver({ op: sendOp, req, status: res.status, ...(json ? { body: json } : {}) }, () => (held && signal?.aborted ? answer(null, abortError()) : answer(res)));
+              held = true;
             } else answer(res);
           },
           (err: unknown) => {
@@ -567,11 +576,14 @@ export function installFetch(host: NetHost): (() => void) | null {
       // ------------------------------------------------------------------ failure gate (deliver/retry/serve_cached)
       const failureGate = (failedOp: OpRec, res: Response | null, err: unknown, failure: FailureInfo) => {
         let handled = false;
-        const deliver = () => {
+        // a failure held for the decision (or the cached response that replaces it) that the app aborted meanwhile
+        // rejects as the abort, as on a slower network
+        let held = false;
+        const deliver = (r = res) => {
           if (handled || answered) return;
           handled = true;
-          if (res) answer(res);
-          else answer(null, err);
+          if (held && signal?.aborted) answer(null, abortError());
+          else answer(r, err);
         };
         const ctl: Controller = {
           passive: deliver,
@@ -586,7 +598,7 @@ export function installFetch(host: NetHost): (() => void) | null {
                 host.clock.setTimeout(() => {
                   if (answered) return resolveEff({ changed: `Did not retry ${opLabel(failedOp)}: the request was already answered.` });
                   if (signal?.aborted) {
-                    answer(null, signal.reason);
+                    answer(null, abortError());
                     return rejectEff(new Error("aborted"));
                   }
                   const retryOp = host.startOp("fetch", req.signature, {
@@ -607,15 +619,14 @@ export function installFetch(host: NetHost): (() => void) | null {
             if (action === "serve_cached") {
               const b = host.cache.get(req.identity);
               if (!b || !R) throw new Error("no cached response");
-              const out = makeResponse(R, b, "cached");
-              handled = true;
-              answer(out);
+              deliver(makeResponse(R, b, "cached"));
               return { changed: `Replaced the failed response of ${opLabel(failedOp)} with the cached ${b.status} response from ${secs(host.clock.now() - b.t)} ago (x-genclass: cached).` };
             }
             throw new Error(`unsupported action ${action}`);
           },
         };
         host.trigger({ trigger: "failure", op: failedOp, req, failure }, ctl, { hold: true, priority: 2 });
+        held = true;
       };
 
       // ------------------------------------------------------------------ stall (wait/hedge/serve_cached)

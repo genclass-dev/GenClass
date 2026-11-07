@@ -1,5 +1,74 @@
 # Changelog
 
+## Unreleased
+
+Systematic explore (docs/runtime/AGENT.md section 5). The default plan and every existing report line are unchanged.
+The new orders and the coverage need a page runtime with the agent link's `lifo`, `ranked`, `reverse`, `delaySeed` and
+net timing log (unreleased, after `@genclass/runtime` 0.3.0-beta.5); a page whose hello does not list them gets
+schedules it can run, labelled, and its report says what it lacks.
+
+- **`plan: "systematic"`** for `genclass_explore {action: "start"}`, opt-in: two baselines, one `lifo` load (every
+  overlapping response pair the other way), `runs - 1` cover rows chosen from the baselines' timing (sequence covering
+  arrays: each row a `ranked` order, rows in pairs that, given enough of them, deliver every ordering of every
+  overlapping triple), and a third baseline last: `runs + 3` page loads, with `slow_ms` all with the same added
+  latency and delay seed. 3 to 8 requests in flight together take `runs` 5, 7, 9, 9, 11 and 11 for every ordering; the tool's description
+  says so. The cover is computed when a baseline settles, never at a page's hello, and fixed from the first row handed
+  out; a slot without a row runs a seeded stand-in ("seed 2", "seed 2 reversed"). Its false-report rate is not
+  measured yet: `seeded` stays the default, byte for byte what it was. `slow_mode`: `"uniform"` (0 to `slow_ms` per
+  response, the seeded default) or `"fixed"` (`slow_ms` for every response, the systematic default). Its baselines all
+  share the added latency, so it does not name what a slow response alone does (the seeded plan's load without it does).
+- **What a page can run** (its hello `caps`) is checked at every hello: an explore position it cannot run gets a
+  stand-in it can, labelled "(page runtime has no lifo)" and noted on the run (`genclass_status` shows the notes); a
+  replay gets the finding run's recorded order; a minimise probe waits for a page that runs `ranked`. A page whose
+  runtime rejects a schedule anyway falls back to `natural`: the load is not counted as that schedule, an explore
+  position comes back once as a stand-in that needs nothing of a runtime, labelled with what that page could not run
+  (never a cap its hello listed), and nothing is queued twice. A page-set schedule of an order the bridge does not know
+  gets no assignment.
+- **Coverage**, for both plans, from the pages' net timing log: each scenario's report says how many overlapping
+  response pairs some run delivered both ways and how many orderings of overlapping triples it tried ("Coverage: 10 of 10
+  overlapping response pairs delivered both ways; 53 of 60 orderings of 10 overlapping triples"), names up to three
+  pairs never delivered the other way with why ("did not overlap when reordered (sent by X's handler)", or not tried,
+  with what to run), and, when orderings are missing, the `runs` of a systematic session whose cover rows try every one
+  (`genclass_explore {action:"start", plan:"systematic", runs:9}`), or that the session already armed them, or why no
+  number of runs does. A page runtime without the log gets "coverage needs @genclass/runtime with the net timing log".
+- **Minimise**: `genclass_replay {action: "minimize", id}` on a race from explore arms probes, each the first baseline's
+  start order with one response of the failing order moved (the smallest moves first, at most 12), one page load each;
+  `genclass_replay {action: "result"}` names the smallest reordering that reproduces the race, exact ("the one inverted
+  pair") or not, and the finding replays it from then on (its regression test too). A probe whose page ends with another
+  wrong value than the failing run's, none of the baseline's, reproduces it ("other values") only when another
+  reordered run of the explore showed that value too (the race keeps what its reordered runs showed,
+  `evidence.reorderedValues`), no form field is gone and the page threw no error the failing run did not: a page that
+  changed since the explore, a blank page or another failure is inconclusive, never the minimal reproduction. A
+  minimal reproduction chosen for other values keeps them (`evidence.minimal.shown`), and its replays are judged
+  against them, strictly. A probe that did not deliver the order it was built for is inconclusive and says why. A
+  probe whose page load left or went quiet before a quiet point after its steps (2 minutes), is gone, or did other
+  steps goes to the next page load, at most 3 in all (`genclass_status` counts it as still to run); probes that expired
+  (30 minutes) say so, with how to arm them again. Inversions that give no probe (not in the first baseline's start order, or the other way round there) are
+  counted and said, and "no single response moved reproduces it" is never claimed over them or over probes left out:
+  the result says how many single moves were not tried.
+- **The replay order check**: a replay of a race whose harmful order is known counts only when that order happened in
+  it; otherwise it is inconclusive ("the harmful order did not happen in this run ... run explore again"), never "not
+  reproduced". Each replay run is judged by the order it ran: one of the minimal reproduction's order by all its pairs
+  (and that probe's values), any other, such as one armed before minimise, by the failing run's inversions and values,
+  so a verdict already given is never rewritten when a minimal reproduction is chosen later. A fix that stops sending
+  the older request is proven by a new explore.
+- **Race findings** keep the failing run's inversions, the first baseline's start order and the requests that ended
+  without a response, so minimise and replays need no baseline later; a race whose failing run delivered nothing out of
+  request order is titled "The final state depends on response timing". `genclass_explain` lists the inversions.
+- **Regression tests** assert the schedule the page put in force (`window.__GENCLASS_AGENT__.schedule`: its order,
+  `reverse`, `delaySeed` and every `ranks` key), so an older runtime that ignores the order makes the test fail
+  instead of pass on the bug.
+- **API**: `explore.start` takes `plan` and `slowMode`; `finding.minimize`; `replay.result` adds a `minimize` field
+  beside its unchanged `results`; `status` lists armed probes and run notes. Validation of the new fields (`caps`,
+  `ranks`, `reverse`, `delaySeed`, the net log: 2,000 keys, numbers finite and non-negative, strings capped; send and
+  ready times keep the page's fractions, to the microsecond, so the overlap is the one the page's schedule used). Only
+  the runtime's suffix after the occurrence number (`#3~retry2`, `#3~hedge`) marks a retry or a hedge: a `~` in a path
+  (`/~alice/search`) no longer drops a request from overlaps, inversions, coverage, cover rows and probes. A restored
+  systematic session keeps its count of cover slots, so its report still says whether it ran every row. What
+  `GENCLASS_REPORT` sends is unchanged.
+- `test/e2e/systematic.node.mjs`: the systematic plan end to end in Node through the real runtime and bridge, with a
+  simulated page (no browser): 126 checks, RESULTS.md section 28.
+
 ## 0.2.2 (2026-11-05)
 
 - **The agent shows each action and waits for a yes.** The skill (the plugin's, the root copy and the one `init`

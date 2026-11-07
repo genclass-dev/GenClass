@@ -19,9 +19,10 @@ your tests open, and turns what it flagged into one pull-request report. This pa
 
 What the fixture records without a model download: two happens-before facts the runtime computes on its own
 (`overwrote-newer`, a response that wrote a field over what a newer request or the user had written;
-`identical-in-flight`, two identical requests in flight together from separate user actions). With the model loaded
-(`model: "load"`, a 13 MB download), the file also carries the model's diagnoses with their confidence. Both are
-things to look at, not verdicts: the report says what happened and leaves the call to you.
+`identical-in-flight`, two identical requests in flight together from separate user actions), and the page's
+uncaught errors, by name and message shape. With the model loaded (`model: "load"`, a 13 MB download), the file also
+carries the model's diagnoses with their confidence; with `visual: true`, the runtime's measured visual checks. All of
+them are things to look at, not verdicts: the report says what happened and leaves the call to you.
 
 The runtime only observes: it never holds, delays or changes anything the app does. Chaos, when you turn it on, holds
 matched requests before they leave (that is its job) and never changes what they say. No finding changes a test's
@@ -88,6 +89,7 @@ Set in `use` in the config, or `test.use({ genclass: {...} })` in a spec or a `d
 | `model` | `"skip"` | `"skip"`: no model download; the file carries the runtime's witnesses, facts computed without the model, and no model confidences. `"load"`: the runtime loads its model (from `modelUrl`, else the package default on jsDelivr: 13 MB, cached by the browser) and the file also carries its detections with their confidence. |
 | `modelUrl` | package default | With `model: "load"`: a model directory URL (the runtime's `model.baseUrl`). |
 | `chaos` | off | Seeded network chaos (below): an object, or `true` for the defaults. Off unless given. |
+| `visual` | `false` | `true`: the runtime's measured visual checks run too, report only (below). Needs `@genclass/runtime`'s `dist/visual/index.js`; without it the file says the checks did not run. |
 | `outDir` | `genclass` in the project's `outputDir` | Where the files go, relative to the config's directory. The default (test-results/genclass) is emptied by Playwright at the start of each run, so files of an earlier run are never read as more seeds. The reporter reads it by default. |
 | `runtimeDir` | the installed package's `dist/` | `@genclass/runtime`'s `dist/` directory, when it is not resolvable from your project. |
 
@@ -103,6 +105,8 @@ use: { genclass: { chaos: { seed: 1, delayMs: [0, 600], reorder: true, match: ["
 | `delayMs` | `[0, 600]` | Extra latency per matched response, uniform in `[min, max]` ms, at most 10000. |
 | `reorder` | `true` | `false`: matched requests leave in the order the page sent them, at least 30 ms apart (latency only: with a server that answers in order, nothing overtakes). |
 | `match` | same-origin `/api*` or `Accept: json` | Which requests: a path prefix (`"/api"`), a URL prefix (`"https://api.example.com/"`), a RegExp tested against the full URL, a function of `{ url, method, resourceType, sameOrigin, accept }`, or a list of those. Without it: same-origin requests whose path starts with `/api` or whose Accept header asks for JSON. |
+| `order` | `"random"` | `"random"`: seeded delays in every repeat. `"systematic"`: the repeat index picks the order (below). Not with `reorder: false`. |
+| `windowMs` | `600` | The systematic reverse order: the longest a burst of matched requests is collected, ms (at most 10000). |
 
 How it works: with `page.route`, the fixture holds each matched request for its planned time and then passes it on
 (`route.fallback()`), the way a slow uplink would. The request then takes its normal path: your own routes
@@ -119,6 +123,45 @@ fulfils a request answers before chaos sees it, so that request gets no delay; c
 chaos run. And `page.route` does not see requests a service worker handles; with a service worker controlling the
 page, set `serviceWorkers: "block"` in `use`. The race file records how many requests chaos held and whether a
 service worker was in control, and the report notes a test where chaos held nothing.
+
+At the end of a test with chaos on, the fixture first lets the page reach a quiet point, at most 2 s: nothing in
+flight or held, no short timer pending, no event for the agent entry's settle time (400 ms). Chaos keeps its plan
+meanwhile, so a response still held when the test body ends arrives in its planned order instead of all at once. Then
+it collects what the page saw and releases what chaos still holds. The race file says whether the page settled
+(`fixture.settled`); the report notes a test where it did not, since what happened after the 2 s was not recorded.
+
+### Systematic orders
+
+```ts
+use: { genclass: { chaos: { order: "systematic" } } },
+repeatEach: 3,   // or more: repeat 0 natural, 1 reverse, 2 and later seeded
+```
+
+With `order: "systematic"`, Playwright's repeat index picks how chaos orders the matched requests, instead of seeded
+delays in every repeat:
+
+- **repeat 0, natural**: nothing is held. The baseline, run under the same fixture as the others.
+- **repeat 1, reverse**: matched requests are collected into bursts and each burst is released newest first, 30 ms
+  apart. A burst starts at a matched request and ends `windowMs` (600 ms) later or 100 ms after its latest request,
+  whichever comes first; a burst of one leaves as soon as its burst ends. Each request is held at most `windowMs` +
+  1000 ms. So requests sent close together leave in the opposite order once (with a server that answers in order,
+  their responses come back reversed too).
+- **repeat 2 and later, seeded**: the seeded delays of the default, with the same seeds (the repeat index added to
+  `seed`).
+
+It needs `repeatEach` of 3 or more to run all three, and it refuses `reorder: false`. The reverse order is repeatable
+for the same request timing, not deterministic on the wall clock: the bursts depend on when the page sends its
+requests, so a page whose request timing varies from run to run can get other bursts. Each file records its order
+(`chaos.order`) and, for the reverse one, each burst's keys and release order (`chaos.bursts`: requests named as
+operation names are, ids in a path as `:id`, `GET /api/reset/:id#1`, never the raw path). The report shows the
+order next to each seed (`2 (reverse)`), and only the reordering seeds count toward **Reproducible**: a signature seen
+in the natural run and one other seed is not reproducible yet. The default (`"random"`) is the order the measured
+numbers below were taken with; the systematic one has no measured false-report rate yet.
+
+These orders hold requests before they leave, as chaos always does; the fixture's agent link holds no response
+(`hold: false`). So they are not `@genclass/mcp`'s explore plan `systematic`, which orders responses at the runtime's
+delivery gate on a development build connected to the agent
+([AGENT.md section 5.1](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md)).
 
 ### The model trade-off
 
@@ -137,6 +180,34 @@ can see: stores registered with the runtime, or found by automatic state discove
 and Zustand stores whose devtools middleware is enabled, `devtools(..., { enabled: true })`; at its default the
 middleware is off outside development builds and the store is not found), which the fixture turns on.
 
+### Page errors
+
+The agent entry also records the page's uncaught errors and unhandled promise rejections, and the file carries each as a
+`page-error` signature (`page-error|<name>|<request>`, not the model's `error` trigger): the error's name, the request
+nearest to it in its causal chain (`GET /api/search`, or `no request`) and the shape of its message (quoted values
+become `…` and numbers `N`, the way `@genclass/mcp` groups errors; an apostrophe in a word such as `Couldn't` is not
+taken for a quote, and from a quote that is never closed, where the runtime cut a long message, the rest goes too).
+Nothing else of the error is kept: not its full message, its stack or its causal chain. An error whose stack starts in
+another origin's script (an analytics or ad script, a browser extension) is left out and only counted
+(`fixture.thirdPartyErrors`), and so is the browser's muted `Script error.` (all a cross-origin script loaded without
+CORS reports); one whose top stack frame names no script (no stack, or native code such as `JSON.parse` on top) is kept,
+with "origin unknown" in its line. Like a witness, a page error is a fact with no confidence and has its own group in
+the report.
+
+### Measured visual checks
+
+`visual: true` turns on the runtime's measured visual checks (unreadable text, failed images and stylesheets, pages
+that scroll sideways, layers that swallow clicks and the others in
+[`VISUAL.md`](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/VISUAL.md)), report only: in observe
+mode they never change the page, and nothing is printed. They are deterministic measurements against fixed thresholds,
+not the model. The checks start 1.5 s after the page's `load` event, and at the end of the test the fixture runs one
+more pass (at most 2 s), so a short test is checked too. Each finding becomes a `check|<kind>|<route>` signature in a
+group of its own, with the check kind, the element's CSS selector and the measured numbers as evidence; never the
+element's text or the console line. The runtime's build must have `dist/visual/index.js`; without it the checks stay
+off and the file says they did not run (`fixture.visual`), as it does when no pass ran before the fixture collected.
+
+### Loading the model
+
 With `model: "load"` the runtime downloads its model (about 13 MB with onnxruntime-web's wasm). Each Playwright test
 gets a fresh browser context, so in practice every test downloads it again. The model comes from jsDelivr unless
 `modelUrl` names your own copy; onnxruntime-web's wasm comes from jsDelivr either way. The file then also carries the
@@ -149,8 +220,8 @@ framework compatibility matrix (the "What to expect" section below).
 
 For the runtime to see the app's first requests and state, it has to be there before the app's first script, so
 the fixture adds one init script per page: the runtime's script-tag build (`dist/genclass.global.js`) with the
-page configuration `mode: "observe"`, `telemetry: false`, no visual checks, no devtools overlay and the model as
-chosen. If a URL or localStorage switch (`?genclass=heal`, `localStorage.genclass`, say from a saved storage state)
+page configuration `mode: "observe"`, `telemetry: false`, no visual checks (unless `visual: true`), no devtools
+overlay and the model as chosen. If a URL or localStorage switch (`?genclass=heal`, `localStorage.genclass`, say from a saved storage state)
 raised the mode, the fixture sets it back to observe and the race file says so. Likely detections reach the test
 runner from the runtime's `decide` event. The runtime's files are served from disk on the page's own origin at
 `/__genclass__/` with `page.route`, never from a CDN. The page then loads the runtime's agent entry
@@ -276,25 +347,42 @@ interface GenClassRacesFile {
   seed: number;                  // the chaos seed of this run
   signatures: {
     sig: string;                 // "trigger|diagnosis|op"
-    trigger: string;             // the runtime's trigger kind ("request", "delivery", "failure", ...) or "witness"
-    diagnosis: string;           // the model's diagnosis ("duplicate", "stale", "failing", ...) or the witness kind
-    op: string;                  // "POST /api/orders"
-    confidence: number;          // the model's probability for that diagnosis, 0 to 1; 1 for a witness (a fact)
-    evidence: string;            // the line the runtime printed, or the witness's line
+    trigger: string;             // the runtime's trigger kind ("request", "delivery", "failure", ...), or "witness",
+                                 // "page-error" or "check" (the fixture's records made without the model)
+    diagnosis: string;           // the model's diagnosis ("duplicate", "stale", "failing", ...), the witness kind,
+                                 // the error's name ("TypeError") or the check kind ("text-invisible")
+    op: string;                  // "POST /api/orders"; a page error's nearest request or "no request"; a check's route
+    confidence: number;          // the model's probability for that diagnosis, 0 to 1; 1 for a witness, a page error
+                                 // or a check (a fact or a measurement)
+    evidence: string;            // the line the runtime printed, or the fixture's line for the fact
     seeds: number[];             // the seeds this signature was seen in
   }[];
   mode?: string;                 // "observe"
   model?: { state?: string; name?: string; version?: string; device?: string } | null;  // null: GenClass never started
-  chaos?: { latencyMs?: [number, number]; reorder?: boolean; routes?: unknown[] } | null;  // the chaos option (latencyMs is delayMs)
+  chaos?: {                      // the chaos option (latencyMs is delayMs)
+    latencyMs?: [number, number];
+    reorder?: boolean;
+    routes?: unknown[];
+    order?: "natural" | "reverse" | "seeded";  // with order "systematic": this run's order
+    bursts?: { keys: string[]; released: string[]; more?: number }[];  // the reverse order's bursts (at most 200)
+    burstsLeftOut?: number;
+  } | null;
   fixture?: {                    // written by the fixture: what it could and could not do on the page
     model: "skip" | "load";      // the fixture's model option
     agent: string | null;        // null: the agent entry connected and witnesses were recorded; else why not
     chaosApplied: number | null; // how many requests chaos held (null: chaos off)
     serviceWorker: boolean;      // a service worker controlled the page
     modeOverridden?: string;     // a URL or localStorage switch had asked for this mode; set back to observe
+    settled?: boolean;           // chaos on: the page reached its quiet point before the fixture collected
+    thirdPartyErrors?: number;   // page errors left out because they came from another origin's script
+    visual?: string | null;      // visual: true: null when the measured checks ran, else why not
   };
 }
 ```
+
+Every field added after the first version (`order`, `bursts`, `settled`, `thirdPartyErrors`, `visual`, the
+`page-error` and `check` triggers) is optional and written only when it applies (`settled` whenever chaos is on), and
+the report of files without them is byte for byte what it was.
 
 The type is exported as `GenClassRacesFile`. A file that does not validate is never half-read: the report lists it
 under **Files skipped** with the field and the reason (for example
@@ -306,18 +394,24 @@ How the report groups them:
 - **by test**, then **by signature**: the same `sig` in several files of one test is one line, with the seeds merged,
   the highest confidence and that occurrence's evidence line;
 - **Reproducible** when a signature was flagged in at least `minSeeds` seeds of the same test; a signature seen in
-  fewer seeds may depend on that seed's timing;
+  fewer seeds may depend on that seed's timing. With chaos order `"systematic"` each seed shows its order, and the
+  natural seed does not count (it reordered nothing);
 - **groups by the model's diagnosis label**: `duplicate` (Duplicate submits), `stale` (Stale responses), `failing`
   (Failing endpoints) and everything else (Other detections: `transient`, `inconsistent`, `overload`, ...).
   `expected` is not a detection and is left out. Nothing looks at facts or decides on its own what is a bug;
 - **witnesses** (trigger `witness`) get their own group, shown only when there are any, with no confidence on the
-  line and a footer sentence saying what they are; they are never counted as duplicate submits or stale responses;
+  line and a footer sentence saying what they are; they are never counted as duplicate submits or stale responses.
+  So do **page errors** (trigger `page-error`) and **measured checks** (trigger `check`): a group, a table row and a
+  footer paragraph each, only when there are any; the model's footer paragraph is about the model's groups only;
 - a file that flagged nothing and whose `model.state` is not `ready` (for example `loading`, or `null` for a page
   where GenClass never started) may not have been checked, and the report notes it for that test. A fixture file
   with `model: "skip"` gets no model note; the fixture record decides instead: a file that flagged nothing while the
   witnesses could not be recorded, or while a service worker controlled the page, gets a note too, and so does a test
-  where chaos was on but held no request. A file with detections is reported as usual whatever the state: the runtime
-  can unload an idle model after it ran;
+  where chaos was on but held no request (the natural order of `"systematic"` holds nothing by design), whose page
+  had not settled when the fixture collected, or whose measured checks did not run. Only the model's own detections
+  count as flagged for the model's note, and only witnesses and page errors for the fixture's (what each note is
+  about): a witness does not say the model checked the run, nor a model detection that the agent entry did. A file
+  with detections is reported as usual whatever the state: the runtime can unload an idle model after it ran;
 - **nothing about interventions.** The files do not say what an action did to your app, so the report makes no
   claim about interventions, correct or false.
 
@@ -503,8 +597,15 @@ onnxruntime-web's wasm (from jsDelivr). The runtime on the page runs with `telem
 
 The files hold test titles, operation names and the runtime's evidence lines. For a witness that line includes the
 store field's name and the runtime's short summary of its value before and after (`2 items ["r one", "r two"]`;
-fields whose name says they hold a secret are redacted by the runtime, as elsewhere). The comment you post contains
-the same, so read a report before posting it from a repository whose test data is private.
+fields whose name says they hold a secret are redacted by the runtime, as elsewhere). They also hold the shapes of
+the page's uncaught error messages: the error's name and its message with quoted values replaced by `…` and numbers
+by `N` (a quote the message never closes takes the rest of it with it), next to the request nearest to the error.
+Words a message carries outside quotes stay as they are (an app that throws `User jane not found` writes that), while
+the error's stack, its causal chain and errors from other origins' scripts are never written. With
+`chaos.order: "systematic"` the reverse run's file names the requests of each burst as operation names are named (ids
+in a path as `:id`; other path segments, such as an email address in a path, stay as they are). With `visual: true`
+they hold the CSS selectors of the elements the checks measured and the measured numbers. The comment you post
+contains the same, so read a report before posting it from a repository whose test data is private.
 
 Without the fixture (the reporter alone, with `@genclass/runtime` installed in your app), the runtime under
 test sends **anonymous diagnostics by default** on public hosts: GenClass's decisions and counts,
@@ -524,7 +625,7 @@ From the repository root (CI runs these in `.github/workflows/playwright-reporte
 ```bash
 npm run typecheck -w @genclass/playwright
 npm run build -w @genclass/playwright
-cd packages/playwright && npx vitest run   # chaos, race files, the installer on a fake page, schema, summariser (exact output), reporter, command, package invariants
+cd packages/playwright && npx vitest run   # chaos (and its systematic orders), race files, page errors, measured checks, the quiet point, the page script and the installer on fakes, schema, summariser (exact output), reporter, command, package invariants
 ```
 
 The end-to-end check needs both builds and Chromium:

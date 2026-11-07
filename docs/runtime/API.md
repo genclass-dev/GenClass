@@ -1046,16 +1046,24 @@ connectAgent(runtime, opts?: {
   dom?: boolean;             // page text and form values in snapshots (default true)
   helloTimeoutMs?: number;   // how long a page load's first responses wait for the bridge's hello (default 600)
   hold?: boolean;            // false: never hold, even with a schedule (default true)
-  holdProtected?: boolean;   // also hold requests.protect and mode-"off" routes (default false: recorded, never held)
+  holdProtected?: boolean;   // also hold requests.protect (default false: recorded, never held); a route in
+                             // mode "off" is never gated, so it is never held either way
 }): AgentConnection;
 
 interface ScheduleSpec {
-  order: "natural" | "fifo" | "seeded" | "given";
-  seed?: number;             // seeded: the seed (also seeds delay)
+  order: "natural" | "fifo" | "lifo" | "seeded" | "ranked" | "given";
+                             // lifo: among overlapping requests the newest-started response first; ranked: by `ranks`
+  seed?: number;             // seeded: the seed (also seeds delay when there is no delaySeed)
+  reverse?: true;            // seeded: the priorities turned around, so each overlapping pair of the seed goes the
+                             // other way (only true is kept; anything else is ignored)
   given?: string[];          // given: request keys ("GET /api/search#3") in delivery order
+  ranks?: string[];          // ranked: keys from highest to lowest priority; unlisted keys below them, in request
+                             // order (none: request order, as fifo); at most 2,000 keys of 300 characters
   focus?: string[];          // seeded: signatures delivered after every overlapping response
-  delay?: { minMs: number; maxMs: number };   // extra latency per response, hashed from seed and key
-  maxHoldMs?: number;        // default 1500, beyond the response's own delay: then delivered, and the run is marked forced
+  delay?: { minMs: number; maxMs: number };   // extra latency per response, hashed from delaySeed (else seed) and key
+  delaySeed?: number;        // seeds delay instead of seed (an integer up to 2^31): the same delays for every order
+  maxHoldMs?: number;        // default 1500, beyond the response's own delay: then delivered at once, counted as
+                             // forced when the schedule still held it back
   gapMs?: number;            // default 30: time between two releases
 }
 
@@ -1066,7 +1074,9 @@ interface AgentConnection {
   readonly run: string | null;       // the bridge's id for this page load
   readonly schedule: ScheduleSpec | null;
   readonly settled: boolean;         // at a quiet point
-  recorded(): RecordedSchedule;      // { schema: "genclass-schedule/1", route, spec, steps, order, forced, truncated }
+  recorded(): RecordedSchedule;      // { schema: "genclass-schedule/1", route, spec, steps, order, forced, truncated,
+                                     //   net: NetEntry[], netLost }: net is each request's timing in start order
+                                     //   (at most 2,000 per page load; netLost counts the rest)
   witnesses(): Witness[];            // overwrote-newer and identical-in-flight facts
   errors(): ErrorRec[];              // uncaught errors with stack and causal chain
   snapshot(): Snapshot;              // store fields, page text, form values, requests per signature; at most 1,000
@@ -1079,13 +1089,34 @@ interface AgentConnection {
 }
 ```
 
+```ts
+interface NetEntry {         // one request's timing, ms since connectAgent (AGENT.md section 3)
+  key: string;               // "GET /api/search#3"
+  n: number;                 // start index: its 0-based position among the page load's requests, in start order
+  s: number;                 // sent, to the microsecond (0 for a request sent before connectAgent)
+  r?: number;                // ready, to the microsecond: its arrival at the delivery gate plus its emulated delay
+  d?: number;                // delivered to the app
+  held?: number;             // how long the schedule held it
+  forced?: true;             // released only because its hold ran out
+  pass?: true;               // released at once without scheduling (protected, a route in mode "off", no gate)
+  via?: string;              // the key of the request whose response chain sent it
+  end?: string;              // ended without a delivery: "aborted", "error", ...
+}
+```
+
 Connected only on pages served from this machine (localhost, 127.x, [::1], `*.localhost`) unless `anyHost` (then the
 bridge needs the exact origin in `GENCLASS_AGENT_ORIGINS`).
 Without a schedule only a page load's first responses wait for the bridge's hello (`helloTimeoutMs`); a response counts
-as delivered when the app receives it. Also exported: `parseSpec(v)` (a schedule from a URL form, `"fifo"`,
-`"seeded:7"`, `"given:[...]"`, or JSON), `hash32`,
+as delivered when the app receives it. A held response is released at most its delay plus `maxHoldMs` after it reached
+the delivery gate; an XHR the app aborted meanwhile is dropped, and a fetch the app aborted meanwhile rejects with the
+signal's reason when it is released. The hello tells the bridge what this runtime can run (`caps: ["lifo", "ranked", "reverse", "delaySeed",
+"net"]`), and a page-set `schedule` it cannot run is warned about once on the console and replaced by `natural`. The
+`lifo` and `ranked` orders, `reverse`, `delaySeed`, the net log and `caps` are unreleased (after 0.3.0-beta.5). Also
+exported: `parseSpec(v)` (a schedule from a URL form, `"fifo"`, `"lifo"`, `"seeded:7"`, `"given:[...]"`, or JSON for
+the rest), `hash32`,
 `AGENT_SCHEMA` (`"genclass-agent/1"`), `SCHEDULE_SCHEMA` (`"genclass-schedule/1"`), `DEFAULT_AGENT_URL`,
-`isLoopbackUrl`, `isDevHost`. While connected, the page has `window.__GENCLASS_AGENT__` (the connection), which
+`isLoopbackUrl`, `isDevHost`, and the types `ScheduleSpec`, `ScheduleOrder`, `RecordedSchedule`, `NetEntry`, `Step`,
+`ActStep`, `Witness`, `ErrorRec`. While connected, the page has `window.__GENCLASS_AGENT__` (the connection), which
 generated regression tests read.
 
 ## Types

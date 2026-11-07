@@ -2,6 +2,7 @@
 // that left fields out.
 import { describe, expect, it } from "vitest";
 import { compareRuns, fieldValue, groupRuns, nameDifference, sameScenario, sameValue, scenarioOf, shownField, strongestFirst } from "../src/compare.js";
+import { buildCover } from "../src/cover.js";
 import { ageless, agesIn, fieldShape, lineWeight, routeShape, sameAges } from "../src/text.js";
 import type { ActStep, Run, Snapshot, Step } from "../src/types.js";
 import { act, snap } from "./helpers.js";
@@ -878,5 +879,90 @@ describe("compare: requests to other sites (AGENT.md §5.1)", () => {
     const twice: Step[] = [{ k: "send", t: 1, key: `${CART}#1` }, { k: "send", t: 2, key: `${CART}#2` }, { k: "write", t: 3, store: "cart", paths: ["cart.count"], by: `${CART}#2` }];
     const cart = (n: number) => snap({ "cart.count": String(n) }, ["Home", String(n)], { requests: { [CART]: 2 } });
     expect(compareRuns([run("fifo", twice, cart(4)), run("fifo", twice, cart(4)), run("seeded", twice, cart(3))])[0].diffs[0].tier).toBe("visible");
+  });
+});
+
+describe("compare: coverage and inversions from the net timing log (AGENT.md section 5, plan systematic)", () => {
+  const X = "GET /x#1";
+  const Y = "GET /y#1";
+  const W = "GET /w#1";
+  const S = ["GET /api/s#1", "GET /api/s#2", "GET /api/s#3"];
+  /** The three searches' log: sent at 10, 30, 50, ready 100 ms later, delivered in `order`. */
+  const searches = (order: string[], extra: Partial<Run> = {}): Partial<Run> => ({
+    order,
+    net: Object.fromEntries(S.map((k, i) => [k, { key: k, n: i, s: 10 + 20 * i, r: 110 + 20 * i, d: 200 + 30 * order.indexOf(k) }])),
+    ...extra,
+  });
+  const same = snap({ "s.results": "3" }, ["Results"]);
+
+  it("the pairs that overlap in a baseline, delivered both ways across the group, and the orderings of their triple", () => {
+    const runs = [run("fifo", [click], same, searches(S)), run("fifo", [click], same, searches(S)), run("seeded", [click], same, searches([S[2], S[0], S[1]])), run("seeded", [click], same, searches([S[2], S[1], S[0]]))];
+    // 3 of 6 orderings: the cover of three overlapping responses has 4 rows past fifo and lifo, so runs 5
+    expect(compareRuns(runs)[0].coverage).toEqual({ pairs: 3, bothWays: 3, neverInverted: [], triples: 1, orderings: 6, orderingsSeen: 3, unschedulable: 0, completeAt: { runs: 5, kept: 0 } });
+  });
+
+  it("a pair never delivered the other way says why: no longer overlapping when reordered (sent by its via's handler), or not tried", () => {
+    const base: Partial<Run> = { order: [X, Y, W], net: { [X]: { key: X, n: 0, s: 0, r: 100, d: 100 }, [Y]: { key: Y, n: 1, s: 10, r: 50, d: 130, via: "GET /z#1" }, [W]: { key: W, n: 2, s: 20, r: 60, d: 160 } } };
+    // reordered: Y was sent only after X was ready; W still overlapped X but came after it again
+    const moved: Partial<Run> = { order: [X, W, Y], net: { [X]: { key: X, n: 0, s: 0, r: 100, d: 100 }, [W]: { key: W, n: 1, s: 20, r: 60, d: 105 }, [Y]: { key: Y, n: 2, s: 150, r: 200, d: 210 } } };
+    const g = compareRuns([run("fifo", [click], same, base), run("fifo", [click], same, base), run("seeded", [click], same, moved)])[0];
+    expect(g.coverage).toEqual({
+      pairs: 3,
+      bothWays: 1,
+      neverInverted: [
+        { a: X, b: Y, why: "did-not-overlap", via: "GET /z#1" },
+        { a: X, b: W, why: "not-tried" },
+      ],
+      triples: 1,
+      orderings: 6,
+      orderingsSeen: 2,
+      unschedulable: 0,
+      completeAt: { runs: 5, kept: 0 },
+    });
+  });
+
+  it("orderings of triples missing: completeAt names the runs whose cover rows deliver every one (buildCover), or why none does", () => {
+    /** n searches in flight together (sent 1 ms apart, all ready at 1000), delivered in `order`. */
+    const burst = (keys: string[], order: string[]): Partial<Run> => ({ order, net: Object.fromEntries(keys.map((k, i) => [k, { key: k, n: i, s: 10 + i, r: 1000, d: 1100 + order.indexOf(k) }])) });
+    const keys = (n: number) => Array.from({ length: n }, (_, i) => `GET /api/b#${i + 1}`);
+    const group = (k: string[], reordered: Partial<Run>[]) => compareRuns([run("fifo", [click], same, burst(k, k)), run("fifo", [click], same, burst(k, k)), ...reordered.map((x) => run("seeded", [click], same, x))])[0].coverage!;
+    // 5 in flight: sequenceCover(5) has 10 rows, fifo and lifo two of them: 8 cover rows, runs 9
+    const five = keys(5);
+    expect(group(five, [burst(five, [...five].reverse())]).completeAt).toEqual({ runs: 9, kept: 0 });
+    expect(buildCover({ baselines: [burst(five, five) as Run], rows: 1000 })!.rows).toHaveLength(8);
+    // 18 in flight: the cover permutes the first 16 (14 rows past fifo and lifo: runs 15); the other 2 keep their places
+    const many = keys(18);
+    expect(group(many, [burst(many, [...many].reverse())]).completeAt).toEqual({ runs: 15, kept: 2 });
+    // a lifo load that delivered 12 of them in request order: a row for each of its 66 pairs first, past runs 50
+    const twelve = keys(12);
+    const lifo = run("seeded", [click], same, { ...burst(twelve, twelve), schedule: { order: "lifo" } });
+    const g = compareRuns([run("fifo", [click], same, burst(twelve, twelve)), run("fifo", [click], same, burst(twelve, twelve)), lifo])[0].coverage!;
+    expect(g.completeAt).toEqual({ runs: null, kept: 0 });
+    // every ordering seen (three requests, all six orders): nothing to name
+    const all = [[S[0], S[2], S[1]], [S[1], S[0], S[2]], [S[1], S[2], S[0]], [S[2], S[0], S[1]], [S[2], S[1], S[0]]].map((o) => run("seeded", [click], same, searches(o)));
+    const full = compareRuns([run("fifo", [click], same, searches(S)), run("fifo", [click], same, searches(S)), ...all])[0].coverage!;
+    expect(full.orderingsSeen).toBe(6);
+    expect(full.completeAt).toBeUndefined();
+  });
+
+  it("no timing log in the baselines (an older page runtime): no coverage; requests left out are counted, lost entries noted", () => {
+    expect(compareRuns(session(same, [same]))[0].coverage).toBeNull();
+    const withLeft = searches(S);
+    withLeft.net!["POST /api/login#1"] = { key: "POST /api/login#1", n: 3, s: 60, r: 70, d: 70, pass: true };
+    withLeft.net!["GET /api/s#1~retry2"] = { key: "GET /api/s#1~retry2", n: 4, s: 70, r: 90, d: 90 };
+    const g = compareRuns([run("fifo", [click], same, withLeft), run("fifo", [click], same, withLeft), run("seeded", [click], same, searches(S, { netLost: 4 }))])[0];
+    expect(g.coverage).toMatchObject({ pairs: 3, unschedulable: 2, capped: { netLost: 4 } });
+  });
+
+  it("a run's inversions come from its own timing: reordered true, false, or null without a whole log", () => {
+    const other = snap({ "s.results": "2" }, ["Results for re"]);
+    const runs = [run("fifo", [click], same, searches(S)), run("fifo", [click], same, searches(S)), run("seeded", [click], other, searches([S[2], S[0], S[1]])), run("seeded", [click], other, searches(S)), run("seeded", [click], other), run("seeded", [click], other, searches([S[1], S[0], S[2]], { lost: 3 }))];
+    const d = compareRuns(runs)[0].diffs;
+    expect(d.map((x) => [x.reordered, x.inversions])).toEqual([
+      [true, 2],
+      [false, 0],
+      [null, 0],
+      [null, 1],
+    ]);
   });
 });

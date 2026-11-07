@@ -2,12 +2,32 @@
 // A file that fails validation is never half-read: the summariser lists it under "Files skipped" with these
 // messages, so a change of format on the fixture's side shows up in the pull-request comment instead of silently
 // producing an empty report. A file with another `schema` value is rejected on that field alone (its other fields
-// may legitimately differ).
+// may legitimately differ). The fields added after the first version are optional: the fixture record's new fields
+// are checked like its others; the chaos record's, like its others, are kept when valid and dropped when not.
 
-import { RACES_SCHEMA, type GenClassRacesFile, type RaceSignature, type RacesParseResult } from "./types.js";
+import { RACES_SCHEMA, type GenClassRacesFile, type RaceBurst, type RaceChaosOrder, type RaceSignature, type RacesParseResult } from "./types.js";
 
 /** At most this many messages per file; the rest are counted. */
 export const MAX_ERRORS = 8;
+
+const CHAOS_ORDERS: readonly RaceChaosOrder[] = ["natural", "reverse", "seeded"];
+/** Bursts kept of a file's chaos record, and keys kept of each (the fixture writes no more). */
+const MAX_BURSTS = 200;
+const MAX_BURST_KEYS = 100;
+
+/** The valid bursts of a chaos record (keys and release order as lists of strings), capped. */
+function bursts(v: unknown): RaceBurst[] {
+  if (!Array.isArray(v)) return [];
+  const out: RaceBurst[] = [];
+  for (const b of v.slice(0, MAX_BURSTS)) {
+    if (!isObject(b) || !Array.isArray(b.keys) || !Array.isArray(b.released)) continue;
+    if (!b.keys.every((k) => typeof k === "string") || !b.released.every((k) => typeof k === "string")) continue;
+    const r: RaceBurst = { keys: (b.keys as string[]).slice(0, MAX_BURST_KEYS), released: (b.released as string[]).slice(0, MAX_BURST_KEYS) };
+    if (isInt(b.more) && b.more > 0) r.more = b.more;
+    out.push(r);
+  }
+  return out;
+}
 
 function describe(v: unknown): string {
   if (v === undefined) return "nothing";
@@ -102,6 +122,9 @@ export function validateRaces(value: unknown): RacesParseResult {
       if (x.chaosApplied !== null && !(isInt(x.chaosApplied) && x.chaosApplied >= 0)) errors.push(`fixture.chaosApplied: expected a whole number or null, got ${describe(x.chaosApplied)}`);
       if (typeof x.serviceWorker !== "boolean") errors.push(`fixture.serviceWorker: expected true or false, got ${describe(x.serviceWorker)}`);
       if (x.modeOverridden !== undefined && typeof x.modeOverridden !== "string") errors.push(`fixture.modeOverridden: expected a string when present, got ${describe(x.modeOverridden)}`);
+      if (x.settled !== undefined && typeof x.settled !== "boolean") errors.push(`fixture.settled: expected true or false when present, got ${describe(x.settled)}`);
+      if (x.thirdPartyErrors !== undefined && !(isInt(x.thirdPartyErrors) && x.thirdPartyErrors >= 0)) errors.push(`fixture.thirdPartyErrors: expected a whole number when present, got ${describe(x.thirdPartyErrors)}`);
+      if (x.visual !== undefined && x.visual !== null && typeof x.visual !== "string") errors.push(`fixture.visual: expected a string or null when present, got ${describe(x.visual)}`);
     }
   }
   if (errors.length) return fail(errors);
@@ -124,12 +147,18 @@ export function validateRaces(value: unknown): RacesParseResult {
     if (typeof c.reorder === "boolean") out.reorder = c.reorder;
     if (typeof c.failRate === "number" && Number.isFinite(c.failRate)) out.failRate = c.failRate;
     if (Array.isArray(c.routes)) out.routes = c.routes.slice();
+    if (CHAOS_ORDERS.includes(c.order as RaceChaosOrder)) out.order = c.order as RaceChaosOrder;
+    if (Array.isArray(c.bursts)) out.bursts = bursts(c.bursts);
+    if (isInt(c.burstsLeftOut) && c.burstsLeftOut > 0) out.burstsLeftOut = c.burstsLeftOut;
     file.chaos = out;
   }
   if (isObject(value.fixture)) {
     const x = value.fixture;
     file.fixture = { model: x.model as "skip" | "load", agent: x.agent as string | null, chaosApplied: x.chaosApplied as number | null, serviceWorker: x.serviceWorker as boolean };
     if (typeof x.modeOverridden === "string") file.fixture.modeOverridden = x.modeOverridden;
+    if (typeof x.settled === "boolean") file.fixture.settled = x.settled;
+    if (isInt(x.thirdPartyErrors)) file.fixture.thirdPartyErrors = x.thirdPartyErrors;
+    if (x.visual === null || typeof x.visual === "string") file.fixture.visual = x.visual as string | null;
   }
   return { ok: true, file };
 }

@@ -354,6 +354,21 @@ that only reads are not differences by themselves; "3:30 PM" against "4:00 PM" a
 both slow baselines show and it does not is named as what a slow response alone does, and what only one of them does is
 "worth a look". A report that compared nothing says `NO VERDICT`, not "no race".
 
+**Systematic explore (unreleased; it needs the page runtime after `@genclass/runtime` 0.3.0-beta.5).** The default plan
+gives the reordered loads seeded orders, and it is the one with measured false-report rates.
+`genclass_explore {action:"start", plan:"systematic"}` instead runs two baselines, one load with every overlapping
+response pair the other way (`lifo`), `runs - 1` orders chosen from the baselines' timing toward every ordering of
+overlapping triples (3 requests in flight together take `runs: 5`, 4 take 7, 5 or 6 take 9), and a third baseline:
+`runs + 3` loads with the same added latency (`slow_mode: "fixed"` by default). Its false-report rate is not measured
+yet. For either plan, a recent page runtime adds a coverage line to the report ("Coverage: 10 of 10 overlapping
+response pairs delivered both ways; 53 of 60 orderings of 10 overlapping triples"), with the pairs never tried and the
+`runs` that would try the rest. `genclass_replay {action:"minimize"}` then finds the smallest reordering that
+reproduces a race, one page load per probe, and the finding replays it; a probe that ends with another wrong value
+counts only when another reordered run of the explore showed that value too. A replay counts only when the harmful
+order happened in it, so a fix that stops sending the older request is proven by a new explore. A page whose runtime
+cannot run a schedule gets one it can, labelled. Minimise, plan `systematic` and the coverage line need this server
+after `@genclass/mcp` 0.2.2 as well. Details: [AGENT.md section 5](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md).
+
 ## Tools
 
 | tool | |
@@ -361,8 +376,8 @@ both slow baselines show and it does not is named as what a slow response alone 
 | `genclass_status` | connected pages, counts of findings, explore and replay state |
 | `genclass_findings` | ranked, deduplicated findings: races, stale writes, errors, duplicate requests, model detections, visual checks |
 | `genclass_explain` | one finding in causal order, the recorded steps, the replay, a Playwright regression test |
-| `genclass_explore` | `start` / `report` / `stop`: find what depends on response order |
-| `genclass_replay` | `arm` / `result`: reproduce one finding exactly |
+| `genclass_explore` | `start` / `report` / `stop`: find what depends on response order; `plan: "systematic"` (opt-in) and `slow_mode`; each report says how much of the order it tried (coverage) |
+| `genclass_replay` | `arm` / `result`: reproduce one finding exactly; `minimize`: the smallest reordering that reproduces a race |
 | `genclass_analytics` | per-endpoint latency, error rates and request counts, learned relations and flows; production numbers from your GenClass dashboard |
 | `genclass_setup` | the lines to add for your framework, and the config lines for the client it runs in |
 | `genclass_scan` | `{url, phone?, hosted?}`: audit any page (the dev server or a site you do not own) with the 23 measured visual checks in headless Chromium: a score and each problem with its element, selector and a suggested CSS fix, plus the JSON report. Runs `npx @genclass/runtime@0.3.0-beta.5 scan --json --local` (or the project's own runtime); needs Playwright's Chromium (`npx playwright install chromium`), or `hosted: true` for the genclass.dev page check (public pages only, the URL is sent there); the agent asks before either |
