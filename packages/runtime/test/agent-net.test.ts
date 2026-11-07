@@ -74,6 +74,27 @@ describe("agent: the net log (AGENT.md §2, CONTRACT §16)", () => {
     ]);
   });
 
+  it("keeps send and ready times to the microsecond: the overlap the bridge reads is the one the page held for", async () => {
+    const s = setup({ mode: undefined });
+    const b = bridge(s);
+    s.server.on("GET", "/api/a", { body: { v: "a" }, latency: 100.4 });
+    s.server.on("GET", "/api/b", { body: { v: "b" }, latency: 50 });
+    const c = connectAgent(s.rt, { schedule: "lifo" });
+    const seen: string[] = [];
+    const get = (p: string) => void s.fetch(p).then(async (r) => seen.push(((await r.json()) as { v: string }).v));
+    get("/api/a");
+    await s.clock.advance(100.2);
+    get("/api/b"); // sent 0.2 ms before a is ready: the two overlap, so lifo holds a for b
+    await s.clock.advance(1000);
+    expect(seen).toEqual(["b", "a"]);
+    const [a, bb] = c.recorded().net;
+    expect(a).toMatchObject({ key: "GET /api/a#1", s: 0, r: 100.4 });
+    expect(bb).toMatchObject({ key: "GET /api/b#1", s: 100.2 });
+    // rounded to whole ms both would be 100, and the pair the page held a for would not overlap on the bridge
+    expect(bb.s).toBeLessThan(a.r!);
+    expect(b.net()).toEqual(c.recorded().net);
+  });
+
   it("marks a response released only because its hold ran out as forced", async () => {
     const s = setup({ mode: undefined });
     bridge(s);
@@ -173,6 +194,24 @@ describe("agent: hello caps and the schedule fallback (AGENT.md §4, CONTRACT §
     connectAgent(s.rt);
     await s.clock.advance(1000);
     expect(b.events.find((e) => e.t === "schedule")!.rejected).toBe("x".repeat(20));
+  });
+
+  it("an exotic reply schedule never throws into the page: it runs natural and the bridge still hears it fell back", async () => {
+    const s = setup({ mode: undefined });
+    const b = bridge(s, { order: { toString: 0 } });
+    const rejections: unknown[] = [];
+    const onRejection = (e: unknown) => rejections.push(e);
+    process.on("unhandledRejection", onRejection);
+    try {
+      const c = connectAgent(s.rt);
+      await s.clock.advance(1000);
+      await new Promise((r) => setImmediate(r)); // Node reports an unhandled rejection after the microtasks
+      expect(c.schedule).toEqual({ order: "natural" });
+      expect(b.events.filter((e) => e.t === "schedule")).toEqual([{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "?" }]);
+    } finally {
+      process.off("unhandledRejection", onRejection);
+    }
+    expect(rejections).toEqual([]);
   });
 
   it("no fallback message for a schedule it can run, for no schedule, or when the page set its own", async () => {

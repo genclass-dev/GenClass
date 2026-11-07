@@ -2,7 +2,7 @@
 // lifo, ranked, seeded reverse, delaySeed, the release order and the hold bound, and a held fetch the app aborts.
 import { describe, expect, it } from "vitest";
 import { connectAgent, hash32, parseSpec } from "../src/agent/index.js";
-import { Scheduler, type Delivered, type ScheduleSpec } from "../src/agent/schedule.js";
+import { Scheduler, type Delivered, type SchedOp, type ScheduleSpec } from "../src/agent/schedule.js";
 import { FakeClock, setup as baseSetup, type Setup } from "./helpers.js";
 
 const LOC = { href: "http://localhost:5173/search", pathname: "/search", hostname: "localhost", search: "" };
@@ -334,6 +334,112 @@ describe("agent: the hold bound and the release order (AGENT.md §3, CONTRACT §
     expect(r.at("GET /a#1")!.at - r.t0).toBe(10);
     expect(r.at("GET /b#1")!.at - r.t0).toBeLessThanOrEqual(10 + 50 + 1);
     expect(r.sc.forced).toBe(0);
+  });
+
+  for (const order of ["lifo", "ranked"] as const) {
+    it(`${order}: responses arriving 0.1 ms apart that reach their deadline in one wake-up go in the schedule's order, none forced`, async () => {
+      // real responses never arrive at the same instant: 100.0, 100.1, ... ms; about 50 go one per gap, the last ones
+      // reach their deadline together
+      const reqs = Array.from({ length: 60 }, (_, i) => ({ name: `GET /api/i${i}`, start: i, lat: 100 + 0.1 * i - i }));
+      const keys = reqs.map((q) => `${q.name}#1`);
+      const r = await run(order === "ranked" ? { order, ranks: [...keys].reverse() } : { order }, reqs);
+      expect(r.got).toHaveLength(60);
+      expect(r.sc.forced).toBe(0);
+      expect(r.got.filter((d) => d.forced)).toEqual([]);
+      expect(r.keys).toEqual([...keys].reverse());
+      for (const d of r.got) expect(d.at - d.ready!, d.key).toBeLessThanOrEqual(1500 + 1);
+    });
+  }
+
+  it("fifo: past their deadlines in one wake-up, the older response goes first even when the newer one arrived first", async () => {
+    // c's release starts a 1 s gap; b (newer) arrives 0.5 ms before a (older); both reach the 100 ms limit in the gap
+    const r = await run({ order: "fifo", maxHoldMs: 100, gapMs: 1000 }, [
+      { name: "GET /c", start: 0, lat: 5 },
+      { name: "GET /a", start: 1, lat: 9.5 },
+      { name: "GET /b", start: 2, lat: 8 },
+    ]);
+    expect(r.keys).toEqual(["GET /c#1", "GET /a#1", "GET /b#1"]);
+    expect(r.sc.forced).toBe(0);
+    for (const k of ["GET /a#1", "GET /b#1"]) expect(r.at(k)!.at - r.at(k)!.ready!).toBeLessThanOrEqual(100 + 1);
+  });
+
+  it("when none of a batch past its deadline may go, the first in the schedule's order goes forced; one that only waited for it is not", async () => {
+    // lifo: a (ready 100.0) waits for b; b (ready 100.5) waits for s, sent at 100.2 and slow; both reach the limit at once
+    const r = await run({ order: "lifo", maxHoldMs: 500 }, [
+      { name: "GET /a", start: 0, lat: 100 },
+      { name: "GET /b", start: 1, lat: 99.5 },
+      { name: "GET /s", start: 100.2, lat: 5000 },
+    ]);
+    expect(r.keys).toEqual(["GET /b#1", "GET /a#1", "GET /s#1"]);
+    expect(r.at("GET /b#1")!.forced).toBe(true);
+    expect(r.at("GET /a#1")!.forced).toBe(false);
+    expect(r.sc.forced).toBe(1);
+    expect(r.at("GET /a#1")!.at).toBe(r.at("GET /b#1")!.at);
+    expect(r.at("GET /b#1")!.at - r.at("GET /b#1")!.ready!).toBeLessThanOrEqual(500 + 1);
+  });
+});
+
+describe("agent: a same-signature request a response's handler sends is the app's own (AGENT.md §3, CONTRACT §16)", () => {
+  it("it gets its own number, not a ~hedge key, and lifo waits for it", async () => {
+    const clock = new FakeClock();
+    const got: string[] = [];
+    const sc = new Scheduler(clock, { order: "lifo" }, (d) => got.push(d.key));
+    const t = clock.now();
+    const users: SchedOp = { id: 1, name: "GET /api/users", start: t };
+    const page1: SchedOp = { id: 2, name: "GET /api/items", start: t + 1 };
+    sc.started(users);
+    sc.started(page1);
+    await clock.advance(50);
+    page1.end = clock.now(); // its response arrived
+    let page2: SchedOp | undefined;
+    sc.gate(page1, (landed) => {
+      landed();
+      // its handler asks for the next page: same signature, caused by page 1, sent after page 1 ended
+      page2 = { id: 3, name: "GET /api/items", start: clock.now(), cause: 2 };
+      sc.started(page2);
+    });
+    expect(sc.slot(3)!.key).toBe("GET /api/items#2");
+    await clock.advance(30);
+    sc.gate(users, (landed) => landed()); // ready at 80: page 2 is newer and was sent before that
+    await clock.advance(20);
+    expect(got).toEqual(["GET /api/items#1"]);
+    page2!.end = clock.now();
+    sc.gate(page2!, (landed) => landed());
+    await clock.advance(200);
+    expect(got).toEqual(["GET /api/items#1", "GET /api/items#2", "GET /api/users#1"]);
+    expect(sc.forced).toBe(0);
+  });
+
+  it("a GenClass hedge (sent while its request is in flight) keeps the ~hedge key, also when it is keyed after both ended", () => {
+    const clock = new FakeClock();
+    const sc = new Scheduler(clock, { order: "lifo" }, () => undefined);
+    const t = clock.now();
+    sc.started({ id: 1, name: "GET /b", start: t, end: t + 90 });
+    expect(sc.started({ id: 2, name: "GET /b", start: t + 40, cause: 1, end: t + 70 }).key).toBe("GET /b#1~hedge");
+    // a retry stays a retry whenever it is sent
+    expect(sc.started({ id: 3, name: "GET /b", start: t + 200, cause: 1, attempt: 2 }).key).toBe("GET /b#1~retry2");
+  });
+
+  it("through the runtime: page 2 of a list fetched from page 1's handler is numbered, and holds an older response in lifo", async () => {
+    const s = setup({ mode: undefined });
+    s.server.on("POST", "/v1/hello", { body: { run: "r1", schedule: null }, latency: 1 });
+    s.server.on("POST", "/v1/events", { body: { ok: true }, latency: 1 });
+    s.server.on("GET", "/api/users", { body: { v: "users" }, latency: 80 });
+    s.server.on("GET", "/api/items", ({ url }) => ({ body: { v: `page ${url.searchParams.get("page")}` }, latency: 50 }));
+    const c = connectAgent(s.rt, { schedule: "lifo" });
+    const seen: string[] = [];
+    const show = async (r: Response) => seen.push(((await r.json()) as { v: string }).v);
+    void s.fetch("/api/users").then(show);
+    void s.fetch("/api/items?page=1").then(async (r) => {
+      await show(r);
+      void s.fetch("/api/items?page=2").then(show);
+    });
+    await s.clock.advance(2000);
+    const net = c.recorded().net;
+    expect(net.map((e) => e.key)).toEqual(["GET /api/users#1", "GET /api/items#1", "GET /api/items#2"]);
+    expect(net[2].via).toBe("GET /api/items#1");
+    expect(seen).toEqual(["page 1", "page 2", "users"]);
+    expect(c.recorded().forced).toBe(0);
   });
 });
 
