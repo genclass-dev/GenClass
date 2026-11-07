@@ -9,6 +9,7 @@ import { RUNTIME_VERSION } from "../src/clients.js";
 import { McpServer, PROTOCOL_VERSIONS } from "../src/mcp.js";
 import { serve, channelEvent, type Served } from "../src/server.js";
 import { VERSION } from "../src/http.js";
+import { buildCover } from "../src/cover.js";
 import { Store } from "../src/store.js";
 import { INSTRUCTIONS, TOOLS, setupText } from "../src/tools.js";
 import { CAPS, PAGE, SEARCHES as S, act, hello, page, searchLoad, snap, tokenDir } from "./helpers.js";
@@ -501,6 +502,23 @@ describe("mcp: plan systematic, coverage and minimise through the tools (AGENT.m
     expect(r.text).toContain("Compared: 3 of 3 reordered run(s) against two baselines.");
     expect(r.text).toContain("No race found");
     expect(r.text).toContain("Coverage: 3 of 3 overlapping response pairs delivered both ways; 4 of 6 orderings of 1 overlapping triples.");
+  });
+
+  it("the plan's description says how many runs every ordering of overlapping triples takes, as the cover computes it", () => {
+    const plan = (TOOLS.find((t) => t.name === "genclass_explore")!.inputSchema as { properties: { plan: { description: string } } }).properties.plan.description;
+    expect(plan).not.toContain("so every ordering of overlapping triples gets tried");
+    expect(plan).toContain("They try every ordering only when there are enough of them");
+    /** n requests in flight together, the lifo load delivering every pair the other way: buildCover's rows, runs - 1 of them. */
+    const runsFor = (n: number) => {
+      const keys = Array.from({ length: n }, (_, i) => `GET /api/s#${i + 1}`);
+      const net = (order: string[]) => Object.fromEntries(keys.map((k, i) => [k, { key: k, n: i, s: 10 * i, r: 1000, d: 1000 + order.indexOf(k) }]));
+      const lifo = [...keys].reverse();
+      return buildCover({ baselines: [{ net: net(keys), order: keys }], lifo: { net: net(lifo), order: lifo }, rows: 1000 })!.rows.length + 1;
+    };
+    const said = new Map<number, number>();
+    for (const m of plan.matchAll(/(\d+)(?: or (\d+))?(?: requests in flight together take|,) runs (\d+)/g)) for (const n of [m[1], m[2]]) if (n) said.set(Number(n), Number(m[3]));
+    expect([...said.keys()]).toEqual([3, 4, 5, 6, 7, 8]);
+    for (const [n, runs] of said) expect(runs, `${n} requests`).toBe(runsFor(n));
   });
 
   it("orderings of overlapping triples missing: the coverage line names the runs whose cover rows try them all, or says the session had them", async () => {
