@@ -4,12 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
+import { makeApi } from "../src/api.js";
 import { RUNTIME_VERSION } from "../src/clients.js";
 import { McpServer, PROTOCOL_VERSIONS } from "../src/mcp.js";
 import { serve, channelEvent, type Served } from "../src/server.js";
 import { VERSION } from "../src/http.js";
+import { Store } from "../src/store.js";
 import { INSTRUCTIONS, TOOLS, setupText } from "../src/tools.js";
-import { act, page, snap, tokenDir } from "./helpers.js";
+import { CAPS, PAGE, SEARCHES as S, act, hello, page, searchLoad, snap, tokenDir } from "./helpers.js";
 
 /** A client on in-memory streams: send requests, read replies and notifications. */
 function client() {
@@ -479,6 +481,87 @@ describe("mcp: tools against a live bridge", () => {
   it("channelEvent meta keys are channel-safe", () => {
     const e = channelEvent({ id: "f3", kind: "duplicate-request", route: "/pay", title: "t", count: 2 });
     expect(e.meta.kind).toBe("duplicate_request");
+  });
+});
+
+describe("mcp: plan systematic, coverage and minimise through the tools (AGENT.md section 5)", () => {
+  it("explore start lists the systematic plan; the report has a coverage line per group", async () => {
+    const { c, port } = await start();
+    const st = await call(c, "genclass_explore", { action: "start", runs: 3, route: "/search", plan: "systematic" });
+    expect(st.text).toContain('Explore x1 armed with plan "systematic": the next 6 page loads of "/search" get these delivery schedules, in order:');
+    expect(st.text).toContain("  3. lifo (every overlapping pair the other way)");
+    expect(st.text).toContain('Plan "systematic": baseline 1, baseline 2, lifo, cover rows 1..2 (chosen from the baselines), baseline 3: 6 page loads.');
+    expect(st.text).toContain("--repeat-each 6");
+    for (const order of [S, S, [S[2], S[1], S[0]], null, null, S]) {
+      const p = await page(port, "/search", undefined, PAGE.origin, CAPS);
+      // a cover row's page delivers in its rank order (all three overlap)
+      await p.send(searchLoad(order ?? p.schedule.ranks));
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("Compared: 3 of 3 reordered run(s) against two baselines.");
+    expect(r.text).toContain("No race found");
+    expect(r.text).toContain("Coverage: 3 of 3 overlapping response pairs delivered both ways; 4 of 6 orderings of 1 overlapping triples.");
+  });
+
+  it("a page runtime without the net timing log: the report says coverage needs it", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 1, route: "/search" });
+    for (let i = 0; i < 3; i++) {
+      const p = await page(port, "/search");
+      await p.send([{ t: "steps", steps: [act(0, "type", 'searchbox "Search"', "react")], order: [] }, { t: "snapshot", snapshot: snap({ "search.results": "react" }) }]);
+    }
+    const r = await call(c, "genclass_explore", { action: "report" });
+    expect(r.text).toContain("Coverage: coverage needs @genclass/runtime with the net timing log (this page's runtime does not send it).");
+  });
+
+  it("replay minimize arms probes; the result names the smallest reordering, and explain and replay use it", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 1, route: "/search" });
+    for (const [order, v, t] of [[S, "react!", "Results for react"], [S, "react!", "Results for react"], [[S[2], S[0], S[1]], "reac!", "Results for reac"]] as const) {
+      const p = await page(port, "/search", undefined, PAGE.origin, CAPS);
+      await p.send(searchLoad([...order], v, [t]));
+    }
+    expect((await call(c, "genclass_explore", { action: "report" })).text).toContain("Race finding(s): f1");
+    const ex0 = await call(c, "genclass_explain", { id: "f1" });
+    expect(ex0.text).toContain(`- The failing run delivered 2 overlapping response pair(s) newer first, e.g. "${S[2]}" before "${S[0]}", "${S[2]}" before "${S[1]}" (genclass_replay {action:"minimize", id:"f1"} finds the smallest reordering that reproduces it).`);
+    const m = await call(c, "genclass_replay", { action: "minimize", id: "f1" });
+    expect(m.text).toContain('Minimise f1 armed for 30 minutes: the next 3 page load(s) of "/search" each get one probe');
+    expect(m.text).toContain(`  1. "minimise: ${S[1]} after ${S[2]}"`);
+    expect(m.text).toContain("--repeat-each 3 --workers 1");
+    expect((await call(c, "genclass_status")).text).toContain('Minimise armed for f1 on /search: 3 of 3 probe(s) still to run, one page load each (then genclass_replay {action:"result", id:"f1"}).');
+    let p = await page(port, "/search", undefined, PAGE.origin, CAPS);
+    expect(p.schedule).toMatchObject({ order: "ranked", ranks: [S[0], S[2], S[1]] });
+    await p.send(searchLoad([S[0], S[2], S[1]]));
+    p = await page(port, "/search", undefined, PAGE.origin, CAPS);
+    await p.send(searchLoad([S[1], S[2], S[0]], "reac!", ["Results for reac"]));
+    const res = await call(c, "genclass_replay", { action: "result", id: "f1" });
+    expect(res.text).toContain("No replay run of f1 yet.");
+    expect(res.text).toContain(`- probe 1 "minimise: ${S[1]} after ${S[2]}" (run r4): not reproduced`);
+    expect(res.text).toContain(`- probe 2 "minimise: ${S[0]} after ${S[2]}" (run r5): REPRODUCED`);
+    expect(res.text).toContain(`Minimal reproduction (run r5): "${S[0]}" delivered after "${S[2]}" and after the 1 requests started between them.`);
+    const ex = await call(c, "genclass_explain", { id: "f1" });
+    expect(ex.text).toContain("schedule: ranked order (3 keys)");
+    expect(ex.text).toContain('const SCHEDULE = {"order":"ranked","delaySeed":1,');
+    expect(ex.text).toContain(`- Minimal reproduction (run r5): "${S[0]}" delivered after "${S[2]}" and after the 1 requests started between them; the replay below delivers it.`);
+    expect((await call(c, "genclass_replay", { action: "minimize", id: "f9" })).isError).toBe(true);
+  });
+
+  it("the API: replay.result keeps its shape, and the minimise verdicts ride beside it only once probes are armed", () => {
+    const s = new Store();
+    const api = makeApi(s, { url: "http://127.0.0.1:1", port: 1 });
+    const x = s.armExplore({ runs: 1, route: "/search" });
+    for (const [order, v, t] of [[S, "react!", "Results for react"], [S, "react!", "Results for react"], [[S[2], S[0], S[1]], "reac!", "Results for reac"]] as const) {
+      const h = s.hello(hello("/search", undefined, CAPS))!;
+      s.events({ run: h.run, token: h.token, events: searchLoad([...order], v, [t]) });
+    }
+    const f = s.reportExplore(x.id)!.findings[0];
+    expect(api("replay.result", { id: f.id })).toEqual({ finding: f, results: [] });
+    expect(api("finding.minimize", { id: f.id })).toMatchObject({ finding: f.id, leftOut: 0 });
+    const r = api("replay.result", { id: f.id }) as { results: unknown[]; minimize: { probes: unknown[]; pending: number } };
+    expect(r.results).toEqual([]);
+    expect(r.minimize).toMatchObject({ finding: f.id, pending: 3 });
+    expect(r.minimize.probes).toHaveLength(3);
+    expect((api("status", {}) as { minimize: unknown[] }).minimize).toEqual([{ finding: f.id, route: "/search", probes: 3, remaining: 3 }]);
   });
 });
 

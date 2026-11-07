@@ -4,7 +4,7 @@
 // text for the model.
 
 import { regressionTest } from "./testgen.js";
-import { replaySpecOf, type Store } from "./store.js";
+import { ARM_TTL_MS, replaySpecOf, type Store } from "./store.js";
 import { scenarioOf, settledAfterActs } from "./compare.js";
 import type { ActStep, Finding, Run } from "./types.js";
 
@@ -25,7 +25,7 @@ export function runSummary(r: Run, now: number) {
     started: r.started,
     lastSeen: r.lastSeen,
     active: now - r.lastSeen < ACTIVE_MS && !r.ended,
-    schedule: r.schedule ? { order: r.schedule.order, ...(r.schedule.seed !== undefined ? { seed: r.schedule.seed } : {}), ...(r.schedule.label ? { label: r.schedule.label } : {}) } : null,
+    schedule: r.schedule ? { order: r.schedule.order, ...(r.schedule.seed !== undefined ? { seed: r.schedule.seed } : {}), ...(r.schedule.reverse ? { reverse: true } : {}), ...(r.schedule.label ? { label: r.schedule.label } : {}) } : null,
     assignment: r.assignment,
     runtime: r.runtime,
     actions: r.steps.filter((s) => s.k === "act").length,
@@ -35,6 +35,7 @@ export function runSummary(r: Run, now: number) {
     detections: r.detections.length,
     settled: settledAfterActs(r),
     forced: r.forced,
+    ...(r.notes?.length ? { notes: r.notes } : {}),
   };
 }
 
@@ -60,6 +61,9 @@ export function makeApi(store: Store, info: { url: string; port: number }): Api 
           findings: counts,
           explore: x ? { id: x.id, state: x.state, planned: x.plan.length, assigned: x.next, runs: x.runs, route: x.route } : null,
           replays: store.replays.filter((r) => r.remaining > 0).map((r) => ({ finding: r.finding, remaining: r.remaining, route: r.route })),
+          minimize: store.minimizes
+            .filter((m) => now - m.created < ARM_TTL_MS && m.probes.some((p) => !p.run && !p.rejected))
+            .map((m) => ({ finding: m.finding, route: m.route, probes: m.probes.length, remaining: m.probes.filter((p) => !p.run && !p.rejected).length })),
         };
       }
       case "findings": {
@@ -89,6 +93,8 @@ export function makeApi(store: Store, info: { url: string; port: number }): Api 
           ...(focus?.length ? { focus } : {}),
           ...(d ? { delay: d } : {}),
           ...(typeof a.seed === "number" ? { seed: a.seed } : {}),
+          ...(a.plan === "seeded" || a.plan === "systematic" ? { plan: a.plan } : {}),
+          ...(a.slowMode === "uniform" || a.slowMode === "fixed" ? { slowMode: a.slowMode } : {}),
         });
       }
       case "explore.report": {
@@ -101,8 +107,14 @@ export function makeApi(store: Store, info: { url: string; port: number }): Api 
         return store.stopExplore();
       case "replay.arm":
         return store.armReplay(String(a.id ?? ""), typeof a.times === "number" ? a.times : 1);
-      case "replay.result":
-        return store.replayResult(String(a.id ?? ""));
+      case "replay.result": {
+        // the minimise verdicts ride beside the replay results, which keep their shape (the reporter reads them)
+        const r = store.replayResult(String(a.id ?? ""));
+        const m = r ? store.minimizeResult(r.finding.id) : null;
+        return r && m ? { ...r, minimize: m } : r;
+      }
+      case "finding.minimize":
+        return store.armMinimize(String(a.id ?? ""));
       case "analytics":
         return analytics(store, typeof a.route === "string" ? a.route : undefined);
       case "digest":

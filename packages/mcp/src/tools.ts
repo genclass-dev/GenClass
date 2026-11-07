@@ -11,6 +11,7 @@ import { nameDifference, shownField, strongestFirst, type GroupReport, type RunD
 import { VERSION } from "./http.js";
 import { dashboardTarget, fetchProduction, type ProdStats } from "./production.js";
 import { runScan, type Runner, type ScanReport } from "./scan.js";
+import type { MinimizeResult } from "./store.js";
 import { ago, clean, cleanBlock, ms, q } from "./text.js";
 import type { ActStep, Finding, ScheduleSpec, Step } from "./types.js";
 
@@ -88,16 +89,23 @@ export const TOOLS: ToolDef[] = [
     name: "genclass_explore",
     title: "Explore response orders",
     description:
-      "Find races before users do. action \"start\" arms the next page loads: 2 baselines with responses in request order (with `slow_ms`, a third with no added delay), then `runs` loads where overlapping responses arrive in a seeded different order (optionally slower, or with `focus` endpoints last). Run the same scenario once per armed load, then action \"report\": each load's final state is compared with the baseline; a difference in what the page shows, its form values, the requests it sent or its errors depends on network timing (a race), and comes with a seed that replays it. Store values that differ while the page is the same are listed apart as internal state. Without `route`, the page of the first armed load is the page under test; set `route` when the scenario loads several pages. Armed loads expire after 30 minutes. \"stop\" disarms.",
+      "Find races before users do. action \"start\" arms the next page loads: 2 baselines with responses in request order (with `slow_ms`, a third with no added delay), then `runs` loads where overlapping responses arrive in a seeded different order (optionally slower, or with `focus` endpoints last). Run the same scenario once per armed load, then action \"report\": each load's final state is compared with the baseline; a difference in what the page shows, its form values, the requests it sent or its errors depends on network timing (a race), and comes with a seed that replays it. Store values that differ while the page is the same are listed apart as internal state; with a recent @genclass/runtime the report also says how many overlapping response pairs were delivered both ways. Without `route`, the page of the first armed load is the page under test; set `route` when the scenario loads several pages. Armed loads expire after 30 minutes. \"stop\" disarms.",
     inputSchema: {
       type: "object",
       properties: {
         action: { type: "string", enum: ["start", "report", "stop"] },
-        runs: { type: "number", description: "Seeded loads after the baselines (default 6, max 50)." },
+        runs: { type: "number", description: "Reordered loads after the two baselines (default 6, max 50)." },
         route: { type: "string", description: "Only arm page loads of this path (default: any page)." },
         focus: { type: "array", items: { type: "string" }, description: "Request signatures to deliver last, e.g. [\"PUT /api/notes/:id\"] (one production flagged)." },
         slow_ms: { type: "number", description: "Also add up to this much latency per response (a slow network), e.g. 800." },
         seed: { type: "number", description: "First seed (default 1)." },
+        plan: {
+          type: "string",
+          enum: ["seeded", "systematic"],
+          description:
+            "seeded (default, the plan with a measured false-report rate): the baselines, then `runs` seeded orders. systematic: the baselines, one load with every overlapping response pair the other way (lifo), `runs` - 1 orders chosen from the baselines' timing so every ordering of overlapping triples gets tried, and a third baseline last (`runs` + 3 loads; needs a recent @genclass/runtime, an older one gets seeded orders instead). Its false-report rate is not measured yet.",
+        },
+        slow_mode: { type: "string", enum: ["uniform", "fixed"], description: "With slow_ms: uniform adds 0 to slow_ms per response (default for seeded), fixed adds slow_ms to every response (default for systematic)." },
         id: { type: "string", description: "report: the session id (default the latest)." },
       },
       required: ["action"],
@@ -109,10 +117,10 @@ export const TOOLS: ToolDef[] = [
     name: "genclass_replay",
     title: "Replay a finding",
     description:
-      "Reproduce one finding exactly. action \"arm\": the next page load of the finding's route gets the delivery order that produced it; do the same steps (genclass_explain lists them). action \"result\": whether that replay reproduced it. Use before a fix to confirm the bug and after it to prove the fix.",
+      "Reproduce one finding exactly. action \"arm\": the next page load of the finding's route gets the delivery order that produced it; do the same steps (genclass_explain lists them). action \"result\": whether that replay reproduced it. Use before a fix to confirm the bug and after it to prove the fix. action \"minimize\" (a race from explore): the next page loads each move one response of the failing order, to find the smallest reordering that reproduces it; \"result\" then names it, and the finding replays it.",
     inputSchema: {
       type: "object",
-      properties: { action: { type: "string", enum: ["arm", "result"] }, id: { type: "string", description: "Finding id, e.g. f3." }, times: { type: "number", description: "arm: how many page loads (default 1)." } },
+      properties: { action: { type: "string", enum: ["arm", "result", "minimize"] }, id: { type: "string", description: "Finding id, e.g. f3." }, times: { type: "number", description: "arm: how many page loads (default 1)." } },
       required: ["action", "id"],
       additionalProperties: false,
     },
@@ -187,9 +195,46 @@ export interface ToolResult {
 
 function scheduleText(s: ScheduleSpec | null | undefined): string {
   if (!s) return "natural";
-  if (s.order === "seeded") return `seeded ${s.seed ?? 1}${s.focus?.length ? `, focus ${s.focus.map((f) => clean(f, 60)).join(", ")}` : ""}${s.delay ? `, +0-${s.delay.maxMs} ms` : ""}`;
+  const delay = s.delay ? (s.delay.minMs === s.delay.maxMs ? `, +${s.delay.maxMs} ms` : `, +${s.delay.minMs}-${s.delay.maxMs} ms`) : "";
+  if (s.order === "seeded") return `seeded ${s.seed ?? 1}${s.reverse ? " reversed" : ""}${s.focus?.length ? `, focus ${s.focus.map((f) => clean(f, 60)).join(", ")}` : ""}${delay}`;
   if (s.order === "given") return `recorded order (${s.given?.length ?? 0} keys)`;
+  if (s.order === "ranked") return `ranked order${s.ranks ? ` (${s.ranks.length} keys)` : ""}${delay}`;
   return s.order;
+}
+
+const PROBE_STATE: Record<string, string> = { pending: "pending", rejected: "not run (its page could not run it)", inconclusive: "inconclusive" };
+
+/** The minimise verdicts: one line per probe, then the minimal reproduction or what is still missing. */
+function minimizeLines(m: MinimizeResult): string[] {
+  const out = [`Minimise (${m.probes.length} probe(s), each moving one response of the failing order${m.leftOut ? `; ${m.leftOut} more were left out` : ""}):`];
+  for (const p of m.probes) {
+    const state = p.state === "done" ? (p.reproduced === true ? "REPRODUCED" : p.reproduced === false ? "not reproduced" : "inconclusive") : PROBE_STATE[p.state] ?? p.state;
+    out.push(`- probe ${p.index + 1} ${q(p.label, 160)}${p.run ? ` (run ${p.run})` : ""}: ${state} · ${clean(p.note, 300)}`);
+  }
+  if (m.minimal) {
+    const x = m.minimal;
+    const what = x.exact ? `the one inverted pair: ${q(x.a, 80)} delivered after ${q(x.b, 80)}` : x.variant === 1 ? `${q(x.a, 80)} delivered after ${q(x.b, 80)} and after the ${x.between} requests started between them` : `${q(x.b, 80)} delivered before ${q(x.a, 80)} and before the ${x.between} requests started between them`;
+    out.push(`Minimal reproduction (run ${x.run}): ${what}. genclass_replay {action:"arm", id:"${m.finding}"} now replays this order, and genclass_explain shows it.`);
+  } else if (m.none) out.push("No single response moved earlier or later reproduces it: it needs several reordered together, or the failing run's timing.");
+  else if (m.pending) out.push(`${m.pending} probe(s) still to run or settle: load the page fresh for each, do the same steps, await whenSettled(), then ask again.`);
+  else out.push("No minimal reproduction yet: an inconclusive probe comes before any that reproduced it (see its note).");
+  return out;
+}
+
+/** The coverage line of a group, and the pairs it did not deliver both ways (with why, and what to run). */
+function coverageLines(g: GroupReport, systematic: boolean): string[] {
+  const c = g.coverage;
+  if (c === undefined) return [];
+  if (c === null) return ["Coverage: coverage needs @genclass/runtime with the net timing log (this page's runtime does not send it)."];
+  if (!c.pairs) return [`Coverage: no two responses overlapped in the baselines, so there was no order to change${c.unschedulable ? ` (${c.unschedulable} request(s) left out: protected, retried or never delivered)` : ""}.`];
+  const capped = [c.capped?.triangles ? "triples counted up to 2,000" : "", c.capped?.pairs ? "pairs counted up to 20,000 per run" : "", c.capped?.netLost ? `${c.capped.netLost} timing entries lost` : "", c.unschedulable ? `${c.unschedulable} request(s) left out: protected, retried or never delivered` : ""].filter(Boolean);
+  const out = [`Coverage: ${c.bothWays} of ${c.pairs} overlapping response pairs delivered both ways; ${c.orderingsSeen} of ${c.orderings} orderings of ${c.triples} overlapping triples${capped.length ? ` (${capped.join("; ")})` : ""}.`];
+  if (c.bothWays < c.pairs && c.neverInverted.length) {
+    const why = (p: (typeof c.neverInverted)[number]) => (p.why === "did-not-overlap" ? `did not overlap when reordered${p.via ? ` (sent by ${q(p.via, 80)}'s handler)` : ""}` : "not tried the other way");
+    const tryMore = c.neverInverted.slice(0, 3).some((p) => p.why === "not-tried");
+    out.push(`Never delivered the other way ${PAGE_DATA}: ${c.neverInverted.slice(0, 3).map((p) => `${q(p.a, 80)} and ${q(p.b, 80)} (${why(p)})`).join("; ")}${c.pairs - c.bothWays > 3 ? `, and ${c.pairs - c.bothWays - 3} more` : ""}.${tryMore ? (systematic ? " More runs try more of them: genclass_explore {action:\"start\", plan:\"systematic\"} with a larger `runs`." : " To try them: genclass_explore {action:\"start\", plan:\"systematic\"}, or more runs.") : ""}`);
+  }
+  return out;
 }
 
 function stepLine(s: Step): string {
@@ -226,23 +271,25 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
     case "genclass_status": {
       const s = (await ctx.api("status")) as {
         bridge: { url: string; port: number };
-        pages: { id: string; route: string; url: string; active: boolean; schedule: ScheduleSpec | null; runtime?: { mode?: string; model?: string }; actions: number; requests: number; witnesses: number; errors: number; lastSeen: number; settled: boolean }[];
+        pages: { id: string; route: string; url: string; active: boolean; schedule: ScheduleSpec | null; runtime?: { mode?: string; model?: string }; actions: number; requests: number; witnesses: number; errors: number; lastSeen: number; settled: boolean; notes?: string[] }[];
         activePages: number;
         totalRuns: number;
         findings: Record<string, number>;
         explore: { id: string; state: string; planned: number; assigned: number; runs: string[]; route?: string } | null;
         replays: { finding: string; remaining: number; route?: string }[];
+        minimize?: { finding: string; route?: string; probes: number; remaining: number }[];
       };
       const out: string[] = [`GenClass bridge: ${s.bridge.url} · ${s.activePages} active page(s), ${s.totalRuns} recorded run(s)`];
       const fk = Object.entries(s.findings);
       out.push(fk.length ? `Findings: ${fk.map(([k, n]) => `${n} ${k}`).join(", ")} (genclass_findings)` : "Findings: none yet.");
       if (s.explore) out.push(`Explore ${s.explore.id}: ${s.explore.state}, ${s.explore.assigned} of ${s.explore.planned} loads assigned${s.explore.route ? ` on ${clean(s.explore.route, 60)}` : ""}${s.explore.state !== "stopped" ? ` (then genclass_explore {action:"report"})` : ""}`);
       for (const r of s.replays) out.push(`Replay armed for ${r.finding} on ${clean(r.route, 60)}: the next ${r.remaining} load(s).`);
+      for (const m of s.minimize ?? []) out.push(`Minimise armed for ${m.finding} on ${clean(m.route, 60)}: ${m.remaining} of ${m.probes} probe(s) still to run, one page load each (then genclass_replay {action:"result", id:"${m.finding}"}).`);
       if (s.pages.length) {
         out.push("", `Recent page loads ${PAGE_DATA}:`);
         for (const p of s.pages)
           out.push(
-            `- ${p.id} ${q(p.route, 80)} ${p.active ? "(active)" : ""} · schedule ${scheduleText(p.schedule)} · ${p.actions} actions, ${p.requests} requests, ${p.witnesses} witnesses, ${p.errors} errors · model ${clean(p.runtime?.model ?? "?", 12)}, mode ${clean(p.runtime?.mode ?? "?", 10)} · ${p.settled ? "settled" : "not settled yet"} · ${ago(p.lastSeen, now)}`,
+            `- ${p.id} ${q(p.route, 80)} ${p.active ? "(active)" : ""} · schedule ${scheduleText(p.schedule)} · ${p.actions} actions, ${p.requests} requests, ${p.witnesses} witnesses, ${p.errors} errors · model ${clean(p.runtime?.model ?? "?", 12)}, mode ${clean(p.runtime?.mode ?? "?", 10)} · ${p.settled ? "settled" : "not settled yet"} · ${ago(p.lastSeen, now)}${p.notes?.length ? ` · note: ${p.notes.slice(0, 2).map((n) => clean(n, 200)).join("; ")}` : ""}`,
           );
       } else out.push("", "No page has connected yet. The app's dev build needs connectAgent from @genclass/runtime/agent: see genclass_setup.");
       return { text: out.join("\n") };
@@ -295,13 +342,21 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
     case "genclass_explore": {
       const action = String(args.action ?? "");
       if (action === "start") {
-        const x = (await ctx.api("explore.start", { runs: args.runs, route: args.route, focus: args.focus, delayMs: args.slow_ms, seed: args.seed })) as { id: string; plan: ScheduleSpec[]; route?: string };
+        const x = (await ctx.api("explore.start", { runs: args.runs, route: args.route, focus: args.focus, delayMs: args.slow_ms, seed: args.seed, plan: args.plan, slowMode: args.slow_mode })) as { id: string; plan: ScheduleSpec[]; route?: string; strategy?: string; coverSlots?: number };
+        const systematic = x.strategy === "systematic";
+        const covers = x.coverSlots ?? 0;
         return {
           text: [
-            `Explore ${x.id} armed: the next ${x.plan.length} page loads ${x.route ? `of ${q(x.route, 80)}` : "of the page the first one loads (later loads of other pages and tabs are left alone)"} get these delivery schedules, in order:`,
+            `Explore ${x.id} armed${systematic ? ' with plan "systematic"' : ""}: the next ${x.plan.length} page loads ${x.route ? `of ${q(x.route, 80)}` : "of the page the first one loads (later loads of other pages and tabs are left alone)"} get these delivery schedules, in order:`,
             ...x.plan.map((s, i) => `  ${i + 1}. ${clean(s.label, 80)}`),
             "",
-            ...(x.plan.some((s) => s.delay) ? ["A difference between the slow baselines and the one without added delay is what a slow response alone does: the report names it."] : []),
+            ...(systematic
+              ? [
+                  `Plan "systematic": baseline 1, baseline 2, lifo, ${covers ? `cover rows 1..${covers} (chosen from the baselines), ` : ""}baseline 3: ${x.plan.length} page loads.${x.plan[0]?.delay ? ` Every load gets the same added latency (${x.plan[0].delay.minMs === x.plan[0].delay.maxMs ? `+${x.plan[0].delay.maxMs} ms per response` : `+${x.plan[0].delay.minMs}-${x.plan[0].delay.maxMs} ms, the same for each response in every load`}).` : ""} A page whose @genclass/runtime cannot run lifo or the ranked cover rows gets seeded orders instead (its run's notes say so). Its false-report rate is not measured yet: confirm a race it reports with genclass_replay.`,
+                ]
+              : x.plan.some((s) => s.delay)
+                ? ["A difference between the slow baselines and the one without added delay is what a slow response alone does: the report names it."]
+                : []),
             `Now run the same scenario ${x.plan.length} times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for \`await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))\`.`,
             `With Playwright: \`npx playwright test <spec> --repeat-each ${x.plan.length} --workers 1\`. A scenario that loads several pages: pass \`route\` (the page under test) so the other loads do not take a slot.`,
             `Then: genclass_explore {action:"report", id:"${x.id}"}.`,
@@ -315,7 +370,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
       if (action === "report") {
         type Diff = RunDiff;
         const r = (await ctx.api("explore.report", { id: args.id })) as null | {
-          session: { id: string; plan: ScheduleSpec[]; runs: string[]; state: string };
+          session: { id: string; plan: ScheduleSpec[]; runs: string[]; state: string; strategy?: string };
           runs: { id: string; route: string; schedule: ScheduleSpec | null; settled: boolean; forced: number; scenario: string }[];
           groups: GroupReport[];
           findings: { id: string }[];
@@ -377,6 +432,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
           }
           if (!seeded) {
             out.push(seededRuns ? "No verdict: 0 reordered runs were compared in this group (the reordered loads recorded other user actions: see the other groups)." : "No verdict: 0 reordered runs were compared (none has reached a quiet point after its steps yet: run the scenario for the remaining armed loads).");
+            out.push(...coverageLines(g, s.strategy === "systematic"));
             continue;
           }
           // tier: what the page showed or sent (a race), store values only, or an overwrite repaired along the way
@@ -405,6 +461,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
             out.push(`Along the way only (not a race by this check): ${along.length} of ${seeded} ended in the baseline's state but recorded an older response overwriting newer data that a later response repaired (users may see it flicker if the field is shown).`);
             for (const d of along.slice(0, 3)) diffLines(d);
           }
+          out.push(...coverageLines(g, s.strategy === "systematic"));
         }
         if (r.findings.length) out.push("", `Race finding(s): ${r.findings.map((f) => f.id).join(", ")}. Next: genclass_explain {id} for the replay and a regression test. If the user asked for a fix: fix it, then genclass_replay to verify.`);
         return { text: out.join("\n") };
@@ -420,11 +477,26 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
         if ("error" in a) return { text: `Cannot replay ${clean(id, 20)}: ${clean(a.error, 300)}`, isError: true };
         return { text: `Replay of ${a.finding} armed for the next ${a.remaining} page load(s) of ${q(a.route, 80)} for 30 minutes (schedule: ${scheduleText(a.spec)}). Load the page fresh, do the steps genclass_explain lists, await window.__GENCLASS_AGENT__.whenSettled(), then genclass_replay {action:"result", id:"${a.finding}"}.` };
       }
+      if (args.action === "minimize") {
+        const m = (await ctx.api("finding.minimize", { id })) as null | { error: string } | { finding: string; route?: string; probes: { spec: ScheduleSpec }[]; leftOut: number };
+        if (!m) return { text: `No finding ${clean(id, 20)}.`, isError: true };
+        if ("error" in m) return { text: `Cannot minimise ${clean(id, 20)}: ${clean(m.error, 300)}`, isError: true };
+        return {
+          text: [
+            `Minimise ${m.finding} armed for 30 minutes: the next ${m.probes.length} page load(s) of ${q(m.route, 80)} each get one probe, the failing order with one response moved ${PAGE_DATA}:`,
+            ...m.probes.map((p, i) => `  ${i + 1}. ${q(p.spec.label, 200)}`),
+            ...(m.leftOut ? [`${m.leftOut} more probe(s) were left out (the smallest moves come first).`] : []),
+            "",
+            `Do the same steps on each of those ${m.probes.length} page load(s), loading the page fresh every time (genclass_explain lists the steps), and await window.__GENCLASS_AGENT__.whenSettled() after them; with Playwright: \`--repeat-each ${m.probes.length} --workers 1\`. Probes go only to pages whose @genclass/runtime runs the ranked order. Then genclass_replay {action:"result", id:"${m.finding}"}: it names the smallest reordering that reproduces the race, and the finding replays it from then on.`,
+          ].join("\n"),
+        };
+      }
       if (args.action === "result") {
-        const r = (await ctx.api("replay.result", { id })) as null | { finding: Finding; results: { run: string; reproduced: boolean | null; note: string; scenarioMatches: boolean }[] };
+        const r = (await ctx.api("replay.result", { id })) as null | { finding: Finding; results: { run: string; reproduced: boolean | null; note: string; scenarioMatches: boolean }[]; minimize?: MinimizeResult };
         if (!r) return { text: `No finding ${clean(id, 20)}.`, isError: true };
-        if (!r.results.length) return { text: `No replay run of ${r.finding.id} yet. Arm it (genclass_replay {action:"arm"}), then load the page and do the steps.` };
-        const lines = r.results.map((x) => `- ${x.run}: ${x.reproduced === true ? "REPRODUCED" : x.reproduced === false ? "not reproduced" : "inconclusive"} · ${clean(x.note, 300)}`);
+        const mini = r.minimize ? ["", ...minimizeLines(r.minimize)] : [];
+        if (!r.results.length) return { text: mini.length ? [`No replay run of ${r.finding.id} yet.`, ...mini].join("\n") : `No replay run of ${r.finding.id} yet. Arm it (genclass_replay {action:"arm"}), then load the page and do the steps.` };
+        const lines = r.results.map((x) => `- ${x.run}: ${x.reproduced === true ? "REPRODUCED" : x.reproduced === false ? "not reproduced" : "inconclusive"} · ${clean(x.note, 500)}`);
         const last = r.results[r.results.length - 1];
         const verdict =
           last.reproduced === true
@@ -436,9 +508,9 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
                 ? "The recorded order no longer produces it: the fix holds for this schedule. Run genclass_explore once more to check other orders."
                 : "Not reproduced, but the steps differed from the original run: redo the same steps before trusting this."
               : "Inconclusive: see the note.";
-        return { text: [`Replays of ${r.finding.id}:`, ...lines, "", verdict].join("\n") };
+        return { text: [`Replays of ${r.finding.id}:`, ...lines, "", verdict, ...mini].join("\n") };
       }
-      return { text: "action must be arm or result", isError: true };
+      return { text: "action must be arm, result or minimize", isError: true };
     }
 
     case "genclass_analytics": {
@@ -498,6 +570,12 @@ function evidenceLines(f: Finding, ev: Record<string, unknown>): string[] {
       for (const l of ((ev.textOnlyRun as string[]) ?? []).slice(0, 4)) out.push(`- page text in the failing run only: ${q(l, 100)}`);
       for (const w of ((ev.witnesses as string[]) ?? []).slice(0, 4)) out.push(`- witness in the failing run only: ${clean(w, 160)}`);
       for (const e of ((ev.errors as string[]) ?? []).slice(0, 3)) out.push(`- error in the failing run only: ${q(e, 160)}`);
+      const inv = Array.isArray(ev.inversions) ? (ev.inversions as unknown[]).filter((p): p is [string, string] => Array.isArray(p) && p.length === 2) : [];
+      if (inv.length) out.push(`- The failing run delivered ${Number(ev.inversionsTotal) || inv.length} overlapping response pair(s) newer first, e.g. ${inv.slice(0, 3).map(([a, b]) => `${q(b, 80)} before ${q(a, 80)}`).join(", ")}${ev.minimal ? "" : ` (genclass_replay {action:"minimize", id:"${f.id}"} finds the smallest reordering that reproduces it)`}.`);
+      else if (ev.reordered === false) out.push("- The failing run delivered no overlapping response out of request order (its own timing log): the difference comes from response timing.");
+      const min = ev.minimal as { exact?: unknown; a?: unknown; b?: unknown; between?: unknown; variant?: unknown; run?: unknown } | undefined;
+      if (min && typeof min === "object") out.push(`- Minimal reproduction (run ${clean(min.run, 20)}): ${min.exact ? `the one inverted pair, ${q(min.a, 80)} delivered after ${q(min.b, 80)}` : min.variant === 2 ? `${q(min.b, 80)} delivered before ${q(min.a, 80)} and before the ${clean(min.between, 6)} requests started between them` : `${q(min.a, 80)} delivered after ${q(min.b, 80)} and after the ${clean(min.between, 6)} requests started between them`}; the replay below delivers it.`);
+      if (Array.isArray(ev.endedWithout) && ev.endedWithout.length) out.push(`- Ended without a response in the failing run, delivered in the baselines: ${(ev.endedWithout as unknown[]).slice(0, 5).map((k) => q(k, 80)).join(", ")}`);
       break;
     }
     case "detection": {
