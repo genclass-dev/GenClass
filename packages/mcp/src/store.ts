@@ -70,6 +70,11 @@ export interface ProbeResult {
   note: string;
   /** The inversions its run delivered (at most 50). */
   realised?: [string, string][];
+  /**
+   * Reproduced with other values than the failing run's: where the failing run differed from request order, the page
+   * showed none of the baseline's either (another response's data in their place).
+   */
+  other?: true;
 }
 
 /** Which minimise probes of a race finding reproduced it, and the smallest reordering that does. */
@@ -81,8 +86,8 @@ export interface MinimizeResult {
   leftOut: number;
   /** Probes still waiting for a page load (or for one to settle). */
   pending: number;
-  /** The first reproducing probe, every earlier one conclusive: the finding now replays it. */
-  minimal?: { run: string; label: string; a: string; b: string; between: number; variant: 1 | 2; exact: boolean; inverted: [string, string][] };
+  /** The first reproducing probe, every earlier one conclusive: the finding now replays it (`other`: with other values). */
+  minimal?: { run: string; label: string; a: string; b: string; between: number; variant: 1 | 2; exact: boolean; inverted: [string, string][]; other?: true };
   /** Every probe was conclusive, none was left out and none reproduced it. */
   none?: boolean;
 }
@@ -886,8 +891,11 @@ export class Store {
   /**
    * The minimise probes' verdicts. A probe counts when its run settled after the same steps as the failing run and
    * delivered the inversion it was built for and no other outside its intended ones (its own timing log); then the
-   * failing run's evidence decides, as for a replay. The minimal reproduction is the first reproducing probe, chosen
-   * only when every probe before it is conclusive; the finding then replays it (and its version moves on).
+   * failing run's evidence decides, as for a replay, except that a probe moved another response than the failing run
+   * did: one whose page shows none of the baseline's values where the failing run differed, and others than the failing
+   * run's in their place, reproduces it too (`other`; a stale search showing another older query's results). The
+   * minimal reproduction is the first reproducing probe, chosen only when every probe before it is conclusive; the
+   * finding then replays it (and its version moves on).
    */
   minimizeResult(findingId: string): MinimizeResult | null {
     const f = this.findings.get(findingId);
@@ -907,7 +915,7 @@ export class Store {
     const out: MinimizeResult = { finding: f.id, ...(arm.route ? { route: arm.route } : {}), probes, leftOut: arm.leftOut, pending: probes.filter((p) => p.state === "pending").length };
     if (minimal) {
       const p = arm.probes[minimal.index];
-      out.minimal = { run: minimal.run!, label: minimal.label, a: p.a, b: p.b, between: p.between, variant: p.variant, exact: p.between === 0, inverted: minimal.realised ?? [[p.a, p.b]] };
+      out.minimal = { run: minimal.run!, label: minimal.label, a: p.a, b: p.b, between: p.between, variant: p.variant, exact: p.between === 0, inverted: minimal.realised ?? [[p.a, p.b]], ...(minimal.other ? { other: true as const } : {}) };
       this.setMinimal(f, p, out.minimal);
     } else if (probes.length && probes.every((p) => p.conclusive) && arm.leftOut === 0) out.none = true;
     return out;
@@ -915,7 +923,7 @@ export class Store {
 
   private probeResult(ev: Record<string, unknown>, orig: Run | undefined, p: Probe, index: number): ProbeResult {
     const base = { index, label: p.spec.label ?? `probe ${index + 1}`, a: p.a, b: p.b, between: p.between, variant: p.variant, ...(p.run ? { run: p.run } : {}) };
-    const res = (state: ProbeResult["state"], reproduced: boolean | null, note: string, realised?: [string, string][]): ProbeResult => ({ ...base, state, reproduced, conclusive: state === "done" && reproduced !== null, note, ...(realised ? { realised: realised.slice(0, 50) } : {}) });
+    const res = (state: ProbeResult["state"], reproduced: boolean | null, note: string, realised?: [string, string][], other?: boolean): ProbeResult => ({ ...base, state, reproduced, conclusive: state === "done" && reproduced !== null, note, ...(realised ? { realised: realised.slice(0, 50) } : {}), ...(other ? { other: true as const } : {}) });
     if (p.rejected) return res("rejected", null, "its page's runtime rejected this schedule (the run's notes say so): it is not tried again");
     if (!p.run) return res("pending", null, "no page load has run it yet");
     const r = this.runs.get(p.run);
@@ -932,14 +940,15 @@ export class Store {
     const allowed = new Set(p.intended.map(([x, y]) => pairKey(x, y)));
     const extra = realised.filter(([x, y]) => !allowed.has(pairKey(x, y)));
     if (extra.length) return res("inconclusive", null, `it also delivered ${extra.slice(0, 3).map(([x, y]) => `${q(y, 60)} before ${q(x, 60)}`).join(", ")}${extra.length > 3 ? `, and ${extra.length - 3} more pair(s) out of order` : ""}`, realised);
-    const v = raceVerdict(ev, r, { min: r.started - orig.started - (orig.snapshot?.t ?? 0), max: r.started + (r.snapshot?.t ?? 0) - orig.started });
-    return res("done", v.reproduced, v.note, realised);
+    // another value of the same difference counts: the probe moved another response than the failing run did
+    const v = raceVerdict(ev, r, { min: r.started - orig.started - (orig.snapshot?.t ?? 0), max: r.started + (r.snapshot?.t ?? 0) - orig.started }, true);
+    return res("done", v.reproduced, v.note, realised, v.other);
   }
 
   /** The finding now replays its minimal reproduction: the evidence names it and the version moves on (once). */
   private setMinimal(f: Finding, p: Probe, m: NonNullable<MinimizeResult["minimal"]>): void {
     const ev = f.evidence as Record<string, unknown>;
-    const minimal = { inverted: m.inverted, exact: m.exact, run: m.run, label: m.label, a: m.a, b: m.b, between: m.between, variant: m.variant };
+    const minimal = { inverted: m.inverted, exact: m.exact, run: m.run, label: m.label, a: m.a, b: m.b, between: m.between, variant: m.variant, ...(m.other ? { other: true } : {}) };
     if (JSON.stringify(ev.minimal) === JSON.stringify(minimal)) return;
     f.evidence = { ...ev, minimal };
     const spec: ScheduleSpec = { ...p.spec };
@@ -988,8 +997,10 @@ export class Store {
           reproduced = null;
           note = `the harmful order did not happen in this run (${q(missed[0], 80)} was not delivered after ${q(missed[1], 80)}: requests renumbered or no longer overlapping). If the fix cancels or no longer sends the older request, the race cannot occur: run explore again to check other orders.`;
         } else {
-          // an age in a line of the finding has moved on by as long as has passed since
-          const v = raceVerdict(ev, r, { min: r.started - orig!.started - (orig!.snapshot?.t ?? 0), max: r.started + (r.snapshot?.t ?? 0) - orig!.started });
+          // an age in a line of the finding has moved on by as long as has passed since; a minimal reproduction chosen
+          // for ending with other values is replayed (its order), so its replay is judged as it was
+          const other = (ev.minimal as { other?: unknown } | undefined)?.other === true;
+          const v = raceVerdict(ev, r, { min: r.started - orig!.started - (orig!.snapshot?.t ?? 0), max: r.started + (r.snapshot?.t ?? 0) - orig!.started }, other);
           reproduced = scenarioMatches ? v.reproduced : null;
           note = v.note;
         }
@@ -1211,15 +1222,25 @@ function harmfulOrderMissed(ev: Record<string, unknown>, r: Run): [string, strin
   return inv.some(([a, b]) => got.has(pairKey(a, b))) ? null : inv[0];
 }
 
-/** Does a replay run show the race finding's difference again? From the evidence of the failing run. */
-function raceVerdict(ev: Record<string, unknown>, r: Run, later: Elapsed): { reproduced: boolean | null; note: string } {
+/**
+ * Does a replay run show the race finding's difference again? From the evidence of the failing run. `other`: the run
+ * delivered another order than the failing run (a minimise probe, or the replay of one), so a page that shows none of
+ * the baseline's values where the failing run differed, and others in their place, reproduces it too (`other` set):
+ * every shown field off its baseline value, or every line only the baseline showed missing. Without `other`, that is
+ * neither (null).
+ */
+function raceVerdict(ev: Record<string, unknown>, r: Run, later: Elapsed, other = false): { reproduced: boolean | null; note: string; other?: true } {
   const snap = r.snapshot!;
   const all = (ev.fields as { where: string; name: string; baseline: string; run: string; except?: string[] }[] | undefined) ?? [];
   const val = (d: { where: string; name: string; except?: string[] }) => (d.where === "state" ? stateValue(snap.state, d.name) : d.where === "field" ? fieldValue(snap.fields, d.name, d.except) : snap.requests[d.name] !== undefined ? String(snap.requests[d.name]) : undefined) ?? "(absent)";
-  const byValues = (fields: typeof all): { reproduced: boolean | null; note: string } => {
+  const byValues = (fields: typeof all): { reproduced: boolean | null; note: string; other?: true } => {
     const same = fields.every((d) => sameValue(val(d), d.run));
     const fixed = fields.every((d) => sameValue(val(d), d.baseline));
-    return same ? { reproduced: true, note: "ended with the same wrong values as the failing run" } : fixed ? { reproduced: false, note: "ended with the values of the request-order baseline" } : { reproduced: null, note: `ended with other values: ${fields.map((d) => `${clean(d.name, 40)} = ${q(val(d), 40)}`).join(", ")}` };
+    const values = fields.map((d) => `${clean(d.name, 40)} = ${q(val(d), 40)}`).join(", ");
+    if (same) return { reproduced: true, note: "ended with the same wrong values as the failing run" };
+    if (fixed) return { reproduced: false, note: "ended with the values of the request-order baseline" };
+    if (other && fields.length && fields.every((d) => !sameValue(val(d), d.baseline))) return { reproduced: true, other: true, note: `ended with none of the request-order baseline's values and others than the failing run's: ${values}` };
+    return { reproduced: null, note: `ended with other values: ${values}` };
   };
   // what the page showed or sent decides; store values only for a finding that has nothing else
   const shownFields = all.filter((d) => shownField(d as FieldDiff));
@@ -1249,6 +1270,7 @@ function raceVerdict(ev: Record<string, unknown>, r: Run, later: Elapsed): { rep
     const missing = onlyBase.filter((l) => seen(l) < Math.max(1, counts[l]?.baseline ?? 1));
     if (again || (!onlyRun.length && missing.length === onlyBase.length)) return { reproduced: true, note: "the page shows the failing run's text again" };
     if (!missing.length) return { reproduced: false, note: "the page shows the baseline's text" };
+    if (other && missing.length === onlyBase.length) return { reproduced: true, other: true, note: `the page shows none of the baseline's text where the failing run differed (missing ${q(missing[0], 60)}), and other text than the failing run's in its place` };
     return { reproduced: null, note: `the page shows neither the failing run's text nor all of the baseline's (missing ${q(missing[0], 60)})` };
   }
   if (all.length) return byValues(all);

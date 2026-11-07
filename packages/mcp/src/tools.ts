@@ -214,7 +214,7 @@ function minimizeLines(m: MinimizeResult): string[] {
   if (m.minimal) {
     const x = m.minimal;
     const what = x.exact ? `the one inverted pair: ${q(x.a, 80)} delivered after ${q(x.b, 80)}` : x.variant === 1 ? `${q(x.a, 80)} delivered after ${q(x.b, 80)} and after the ${x.between} requests started between them` : `${q(x.b, 80)} delivered before ${q(x.a, 80)} and before the ${x.between} requests started between them`;
-    out.push(`Minimal reproduction (run ${x.run}): ${what}. genclass_replay {action:"arm", id:"${m.finding}"} now replays this order, and genclass_explain shows it.`);
+    out.push(`Minimal reproduction (run ${x.run}): ${what}.${x.other ? " Its page ended with other values than the failing run, none of them the request-order baseline's where the failing run differed." : ""} genclass_replay {action:"arm", id:"${m.finding}"} now replays this order, and genclass_explain shows it.`);
   } else if (m.none) out.push("No single response moved earlier or later reproduces it: it needs several reordered together, or the failing run's timing.");
   else if (m.pending) out.push(`${m.pending} probe(s) still to run or settle: load the page fresh for each, do the same steps, await whenSettled(), then ask again.`);
   else out.push("No minimal reproduction yet: an inconclusive probe comes before any that reproduced it (see its note).");
@@ -573,8 +573,8 @@ function evidenceLines(f: Finding, ev: Record<string, unknown>): string[] {
       const inv = Array.isArray(ev.inversions) ? (ev.inversions as unknown[]).filter((p): p is [string, string] => Array.isArray(p) && p.length === 2) : [];
       if (inv.length) out.push(`- The failing run delivered ${Number(ev.inversionsTotal) || inv.length} overlapping response pair(s) newer first, e.g. ${inv.slice(0, 3).map(([a, b]) => `${q(b, 80)} before ${q(a, 80)}`).join(", ")}${ev.minimal ? "" : ` (genclass_replay {action:"minimize", id:"${f.id}"} finds the smallest reordering that reproduces it)`}.`);
       else if (ev.reordered === false) out.push("- The failing run delivered no overlapping response out of request order (its own timing log): the difference comes from response timing.");
-      const min = ev.minimal as { exact?: unknown; a?: unknown; b?: unknown; between?: unknown; variant?: unknown; run?: unknown } | undefined;
-      if (min && typeof min === "object") out.push(`- Minimal reproduction (run ${clean(min.run, 20)}): ${min.exact ? `the one inverted pair, ${q(min.a, 80)} delivered after ${q(min.b, 80)}` : min.variant === 2 ? `${q(min.b, 80)} delivered before ${q(min.a, 80)} and before the ${clean(min.between, 6)} requests started between them` : `${q(min.a, 80)} delivered after ${q(min.b, 80)} and after the ${clean(min.between, 6)} requests started between them`}; the replay below delivers it.`);
+      const min = ev.minimal as { exact?: unknown; a?: unknown; b?: unknown; between?: unknown; variant?: unknown; run?: unknown; other?: unknown } | undefined;
+      if (min && typeof min === "object") out.push(`- Minimal reproduction (run ${clean(min.run, 20)}): ${min.exact ? `the one inverted pair, ${q(min.a, 80)} delivered after ${q(min.b, 80)}` : min.variant === 2 ? `${q(min.b, 80)} delivered before ${q(min.a, 80)} and before the ${clean(min.between, 6)} requests started between them` : `${q(min.a, 80)} delivered after ${q(min.b, 80)} and after the ${clean(min.between, 6)} requests started between them`}${min.other === true ? " (its page ends with other values than the failing run, none of them the baseline's)" : ""}; the replay below delivers it.`);
       if (Array.isArray(ev.endedWithout) && ev.endedWithout.length) out.push(`- Ended without a response in the failing run, delivered in the baselines: ${(ev.endedWithout as unknown[]).slice(0, 5).map((k) => q(k, 80)).join(", ")}`);
       break;
     }

@@ -546,6 +546,24 @@ describe("mcp: plan systematic, coverage and minimise through the tools (AGENT.m
     expect((await call(c, "genclass_replay", { action: "minimize", id: "f9" })).isError).toBe(true);
   });
 
+  it("a minimal reproduction that ends with another wrong value says so in the result and in explain", async () => {
+    const { c, port } = await start();
+    await call(c, "genclass_explore", { action: "start", runs: 1, route: "/search" });
+    for (const [order, v, t] of [[S, "react!", "Results for react"], [S, "react!", "Results for react"], [[S[2], S[0], S[1]], "reac!", "Results for reac"]] as const) {
+      const p = await page(port, "/search", undefined, PAGE.origin, CAPS);
+      await p.send(searchLoad([...order], v, [t]));
+    }
+    expect((await call(c, "genclass_explore", { action: "report" })).text).toContain("Race finding(s): f1");
+    await call(c, "genclass_replay", { action: "minimize", id: "f1" });
+    const p = await page(port, "/search", undefined, PAGE.origin, CAPS);
+    await p.send(searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]));
+    const res = await call(c, "genclass_replay", { action: "result", id: "f1" });
+    expect(res.text).toContain(`- probe 1 "minimise: ${S[1]} after ${S[2]}" (run r4): REPRODUCED · the page shows none of the baseline's text where the failing run differed (missing "Results for react"), and other text than the failing run's in its place`);
+    expect(res.text).toContain(`Minimal reproduction (run r4): the one inverted pair: "${S[1]}" delivered after "${S[2]}". Its page ended with other values than the failing run, none of them the request-order baseline's where the failing run differed. genclass_replay {action:"arm", id:"f1"} now replays this order`);
+    const ex = await call(c, "genclass_explain", { id: "f1" });
+    expect(ex.text).toContain(`- Minimal reproduction (run r4): the one inverted pair, "${S[1]}" delivered after "${S[2]}" (its page ends with other values than the failing run, none of them the baseline's); the replay below delivers it.`);
+  });
+
   it("the API: replay.result keeps its shape, and the minimise verdicts ride beside it only once probes are armed", () => {
     const s = new Store();
     const api = makeApi(s, { url: "http://127.0.0.1:1", port: 1 });
