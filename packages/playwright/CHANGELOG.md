@@ -9,9 +9,13 @@ everything below is unreleased.
 - **Page errors**: the fixture also hands over the page's uncaught errors and unhandled rejections the agent entry
   records, as `page-error|<name>|<request>` signatures (trigger `page-error`, never the model's `error`), keeping only
   the error's name, its message shape (quoted values as `…`, numbers as `N`: `@genclass/mcp`'s `shape()`, copied,
-  with a test that the two agree), the request nearest to it in its causal chain (or `no request`) and whether its
-  top stack frame is on the page's origin. Errors from another origin's script (or a browser extension) are left out
-  and counted in `fixture.thirdPartyErrors`; one without a stack frame naming a script is kept. The report gives them
+  with a test that the two agree, and two more maskings: an apostrophe between two letters is no quote, so
+  `Couldn't load 'jane@example.com'` cannot leave the value in place, and a quote that is never closed, as where the
+  runtime cut a long message at 120 characters, takes the rest with it), the request nearest to it in its causal chain
+  (or `no request`) and whether its top stack frame is on the page's origin. Errors from another origin's script (or
+  a browser extension) are left out and counted in `fixture.thirdPartyErrors`, and so is the browser's muted
+  `Script error.` (no stack, from a cross-origin script loaded without CORS); one whose top stack frame names no script
+  is kept ("origin unknown: no script URL in its top stack frame"). The report gives them
   a group, a table row and a footer paragraph of their own, with no confidence; the model's footer paragraph now
   counts the model's groups only. The README's Privacy section says that error message shapes appear in the files.
 - **The quiet point**: with chaos on, the fixture first lets the page reach the agent entry's quiet point (at most
@@ -23,7 +27,9 @@ everything below is unreleased.
   ending at `windowMs`, default 600, or 100 ms after their latest request, released newest first 30 ms apart, each
   request held at most `windowMs` + 1000 ms), repeat 2 and later the seeded delays of the default. Needs `repeatEach`
   of 3 or more; refused with `reorder: false`. Each file records `chaos.order` and, for the reverse order, its bursts'
-  keys and release order (`chaos.bursts`); the report shows the order next to each seed (`2 (reverse)`) and counts
+  keys and release order (`chaos.bursts`, requests named as operation names are, with ids in a path as `:id` and
+  numbered by that name in send order, so no token or id in a path reaches the file; the id rule is the runtime's,
+  copied, with a test that the two agree); the report shows the order next to each seed (`2 (reverse)`) and counts
   only the reordering seeds toward Reproducible. The reverse order is repeatable for the same request timing, not on
   the wall clock. No false-report rate is measured for it yet; the default is unchanged. Like all chaos it holds
   requests, never responses (the fixture's agent link still runs with `hold: false`): it is not `@genclass/mcp`'s
@@ -33,7 +39,9 @@ everything below is unreleased.
   as measured checks, with evidence from the kind, the selector and the measured numbers only (never the element's
   text or the console line). Without `dist/visual/index.js` the checks stay off and `fixture.visual` says they did
   not run. A check never hides what the model or the agent entry could not check: the "witnesses not recorded" note
-  counts witness, page-error and model signatures, the model's note model and witness signatures.
+  counts witness and page-error signatures only, and the model's note the model's own detections only, so neither is
+  hidden by what the other part found ("nothing but the model's detections or measured checks was flagged", "nothing
+  but witnesses, page errors or measured checks was flagged").
 - Every new row, group, footer paragraph, note and file field appears only when it applies (`fixture.settled`
   whenever chaos is on, page-error signatures when the page threw): the report of files without them is byte for
   byte what it was, and so is the file of a test without chaos, errors or checks.

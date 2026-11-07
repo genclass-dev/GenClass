@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BURST_HOLD_SLACK_MS, BURST_QUIET_MS, ChaosScheduler, DEFAULT_WINDOW_MS, FIFO_GAP_MS, MAX_DELAY_MS, delayFor, resolveChaos, systematicOrder, type ChaosTimers } from "../src/chaos.js";
 import { startGenClass, type TestInfoLike } from "../src/fixture.js";
 import { install, type PageLike, type RequestLike, type RouteLike } from "../src/install.js";
-import { MAX_BURST_KEYS, MAX_FILE_BURSTS, fileBursts } from "../src/races.js";
+import { normalizePath } from "../../runtime/src/util.js";
+import { MAX_BURST_KEYS, MAX_FILE_BURSTS, fileBursts, idlessPath } from "../src/races.js";
 import { validateRaces } from "../src/schema.js";
 import { buildSummary, summarize } from "../src/summarize.js";
 import type { GenClassRacesFile, RaceSignature } from "../src/types.js";
@@ -222,6 +223,30 @@ describe("chaos: the file's bursts", () => {
     const one = fileBursts([{ keys, released: [...keys].reverse() }]);
     expect(one).toEqual({ bursts: [{ keys: keys.slice(0, MAX_BURST_KEYS), released: [...keys].reverse().slice(0, MAX_BURST_KEYS), more: 3 }] });
     expect(fileBursts([])).toEqual({ bursts: [] });
+  });
+
+  it("names a burst's requests as the runtime's operation names do: ids in a path as :id, numbered by that name in send order", () => {
+    const raw = [
+      "GET /api/password-reset/9f8e7d6c5b4a3f2e1d0c9b8a#1",
+      "GET /api/users/3/orders/48213#1",
+      "GET api.partner.example/v1/sessions/eyJhbGciOiJIUzI1NiJ9#1",
+      "GET /api/users/4/orders/48214#1",
+      "GET /api/items#1",
+      "GET /api/items#2",
+    ];
+    const r = fileBursts([
+      { keys: raw.slice(0, 3), released: raw.slice(0, 3).reverse() },
+      { keys: raw.slice(3), released: raw.slice(3).reverse() },
+    ]);
+    const first = ["GET /api/password-reset/:id#1", "GET /api/users/:id/orders/:id#1", "GET api.partner.example/v1/sessions/:id#1"];
+    const second = ["GET /api/users/:id/orders/:id#2", "GET /api/items#1", "GET /api/items#2"];
+    expect(r).toEqual({ bursts: [{ keys: first, released: [...first].reverse() }, { keys: second, released: [...second].reverse() }] });
+    for (const secret of ["9f8e7d6c5b4a3f2e1d0c9b8a", "48213", "eyJhbGciOiJIUzI1NiJ9"]) expect(JSON.stringify(r)).not.toContain(secret);
+  });
+
+  it("the id rule is @genclass/runtime's (packages/runtime/src/util.ts normalizePath)", () => {
+    const corpus = ["/api/users/123", "/api/x/550e8400-e29b-41d4-a716-446655440000", "/a/deadbeef12", "/a/sha256", "/a/oauth2", "/a/v2beta1", "/a/tasks-1cam", "/a/PPBqWA9", "/a/x7k2p", "/a/item42", "/a/ab12cd", "/a/%E2%9C%93", "/a/%zz", "/~alice/search", "/a/b/", "", "/a/jane.doe%40example.com", "/a/eyJhbGciOiJIUzI1NiJ9", "api.example.com/v1/k8s"];
+    for (const p of corpus) expect(idlessPath(p), p).toBe(normalizePath(p));
   });
 
   it("the validator keeps a valid order and bursts and drops invalid ones (chaos fields are lenient)", () => {

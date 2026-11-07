@@ -132,15 +132,16 @@ export interface TestSummary {
    * Files that flagged nothing and whose model was not "ready" when the fixture collected (null model: "not
    * started"), so those runs may not have been checked; and their states. Files with detections are not counted,
    * whatever the state (the runtime can unload an idle model after it ran), nor files whose `fixture.model` is
-   * "skip" (no model by choice: `unchecked` covers those). Page errors and measured checks do not count as flagged
-   * here (they say nothing about the model); `others`, set when it is not 0, counts the files that flagged only those.
+   * "skip" (no model by choice: `unchecked` covers those). Only the model's own detections count as flagged here:
+   * witnesses, page errors and measured checks say nothing about the model; `others`, set when it is not 0, counts
+   * the files that flagged only those.
    */
   modelNotReady: { files: number; states: string[]; others?: number };
   /**
    * Files the fixture wrote that flagged nothing although it could not check the page, and why: the agent entry did
    * not connect (no witnesses), or a service worker controlled the page (chaos and the runtime's files went past
-   * page.route). Measured checks do not count as flagged here (they do not need the agent entry); `others`, set when
-   * it is not 0, counts the files that flagged only those.
+   * page.route). Only witnesses and page errors count as flagged here (they need the agent entry; the model's
+   * detections and measured checks do not); `others`, set when it is not 0, counts the files that flagged only those.
    */
   unchecked: { files: number; reasons: string[]; others?: number };
   /**
@@ -248,21 +249,23 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
     t.seeds.add(f.seed);
     if (f.mode) t.modes.add(f.mode);
     const m = f.model;
-    // what each note counts as flagged: the model's note, the model's detections and the witnesses (as before page
-    // errors and checks existed); the fixture's note, those and the page errors (both come from the agent entry); a
-    // measured check needs neither, so it never hides that the model or the agent entry could not check the page
-    const flaggedHere = f.signatures.some((x) => !newerKind(x.trigger) && x.diagnosis !== "expected");
-    const flaggedAgent = flaggedHere || f.signatures.some((x) => x.trigger === PAGE_ERROR_TRIGGER);
-    const flaggedNewer = f.signatures.some((x) => newerKind(x.trigger));
-    const flaggedCheck = f.signatures.some((x) => x.trigger === CHECK_TRIGGER);
-    if (!flaggedHere && m === null) {
+    // what each note counts as flagged: the model's note, the model's own detections only (a witness, a page error or
+    // a check says nothing about whether the model checked the run); the fixture's note ("witnesses not recorded"),
+    // witnesses and page errors only (both need the agent entry, which the model's detections and the measured checks
+    // do not), so neither note is hidden by what the other part found
+    const byModel = (x: { trigger: string; diagnosis: string }) => x.trigger !== WITNESS_TRIGGER && !newerKind(x.trigger) && x.diagnosis !== "expected";
+    const flaggedModel = f.signatures.some(byModel);
+    const flaggedAgent = f.signatures.some((x) => x.trigger === WITNESS_TRIGGER || x.trigger === PAGE_ERROR_TRIGGER);
+    const flaggedNotModel = f.signatures.some((x) => x.trigger === WITNESS_TRIGGER || newerKind(x.trigger));
+    const flaggedNotAgent = f.signatures.some((x) => byModel(x) || x.trigger === CHECK_TRIGGER);
+    if (!flaggedModel && m === null) {
       t.notReady++;
       t.states.add("not started");
-      if (flaggedNewer) t.notReadyOthers++;
-    } else if (!flaggedHere && m && m.state !== undefined && m.state !== "ready" && f.fixture?.model !== "skip") {
+      if (flaggedNotModel) t.notReadyOthers++;
+    } else if (!flaggedModel && m && m.state !== undefined && m.state !== "ready" && f.fixture?.model !== "skip") {
       t.notReady++;
       t.states.add(m.state);
-      if (flaggedNewer) t.notReadyOthers++;
+      if (flaggedNotModel) t.notReadyOthers++;
     }
     const fx = f.fixture;
     // chaos.order "systematic": the order of this seed's run (the natural one does not count toward reproducible)
@@ -275,7 +278,7 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
       if (!flaggedAgent && why.length) {
         t.unchecked++;
         for (const w of why) t.reasons.add(w);
-        if (flaggedCheck) t.uncheckedOthers++;
+        if (flaggedNotAgent) t.uncheckedOthers++;
       }
       // the natural order holds nothing by design
       if (fx.chaosApplied === 0 && order !== "natural") t.chaosIdle++;
@@ -442,7 +445,7 @@ function fixtureNotes(t: TestSummary): string[] {
   const out: string[] = [];
   if (t.unchecked.files > 0)
     out.push(
-      `Note: in ${t.unchecked.files} of ${plural(t.files, "file")} for this test ${t.unchecked.others ? "nothing but measured checks was flagged" : "nothing was flagged"} and the fixture could not check the page (${t.unchecked.reasons.map(escapeMarkdown).join("; ")}), so those runs may not have been checked.`,
+      `Note: in ${t.unchecked.files} of ${plural(t.files, "file")} for this test ${t.unchecked.others ? "nothing but the model's detections or measured checks was flagged" : "nothing was flagged"} and the fixture could not check the page (${t.unchecked.reasons.map(escapeMarkdown).join("; ")}), so those runs may not have been checked.`,
     );
   if (t.chaosIdle > 0)
     out.push(
@@ -581,7 +584,7 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
     }
     if (t.modelNotReady.files > 0) {
       L.push(
-        `Note: in ${t.modelNotReady.files} of ${plural(t.files, "file")} for this test ${t.modelNotReady.others ? "nothing but page errors or measured checks was flagged" : "nothing was flagged"} and the model was not ready when the fixture collected (${t.modelNotReady.states.map(escapeMarkdown).join(", ")}), so those runs may not have been checked.`,
+        `Note: in ${t.modelNotReady.files} of ${plural(t.files, "file")} for this test ${t.modelNotReady.others ? "nothing but witnesses, page errors or measured checks was flagged" : "nothing was flagged"} and the model was not ready when the fixture collected (${t.modelNotReady.states.map(escapeMarkdown).join(", ")}), so those runs may not have been checked.`,
       );
       L.push("");
     }

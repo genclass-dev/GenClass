@@ -152,7 +152,8 @@ delays in every repeat:
 It needs `repeatEach` of 3 or more to run all three, and it refuses `reorder: false`. The reverse order is repeatable
 for the same request timing, not deterministic on the wall clock: the bursts depend on when the page sends its
 requests, so a page whose request timing varies from run to run can get other bursts. Each file records its order
-(`chaos.order`) and, for the reverse one, each burst's keys and release order (`chaos.bursts`). The report shows the
+(`chaos.order`) and, for the reverse one, each burst's keys and release order (`chaos.bursts`: requests named as
+operation names are, ids in a path as `:id`, `GET /api/reset/:id#1`, never the raw path). The report shows the
 order next to each seed (`2 (reverse)`), and only the reordering seeds count toward **Reproducible**: a signature seen
 in the natural run and one other seed is not reproducible yet. The default (`"random"`) is the order the measured
 numbers below were taken with; the systematic one has no measured false-report rate yet.
@@ -181,13 +182,17 @@ middleware is off outside development builds and the store is not found), which 
 
 ### Page errors
 
-The agent entry also records the page's uncaught errors and unhandled promise rejections, and the file carries each
-as a `page-error` signature (`page-error|<name>|<request>`, not the model's `error` trigger): the error's name, the
-request nearest to it in its causal chain (`GET /api/search`, or `no request`) and the shape of its message (quoted
-values become `…` and numbers `N`, the way `@genclass/mcp` groups errors). Nothing else of the error is kept: not its
-full message, its stack or its causal chain. An error whose stack starts in another origin's script (an analytics or
-ad script, a browser extension) is left out and only counted (`fixture.thirdPartyErrors`); one whose stack names no
-script is kept. Like a witness, a page error is a fact with no confidence and has its own group in the report.
+The agent entry also records the page's uncaught errors and unhandled promise rejections, and the file carries each as a
+`page-error` signature (`page-error|<name>|<request>`, not the model's `error` trigger): the error's name, the request
+nearest to it in its causal chain (`GET /api/search`, or `no request`) and the shape of its message (quoted values
+become `…` and numbers `N`, the way `@genclass/mcp` groups errors; an apostrophe in a word such as `Couldn't` is not
+taken for a quote, and from a quote that is never closed, where the runtime cut a long message, the rest goes too).
+Nothing else of the error is kept: not its full message, its stack or its causal chain. An error whose stack starts in
+another origin's script (an analytics or ad script, a browser extension) is left out and only counted
+(`fixture.thirdPartyErrors`), and so is the browser's muted `Script error.` (all a cross-origin script loaded without
+CORS reports); one whose top stack frame names no script (no stack, or native code such as `JSON.parse` on top) is kept,
+with "origin unknown" in its line. Like a witness, a page error is a fact with no confidence and has its own group in
+the report.
 
 ### Measured visual checks
 
@@ -403,8 +408,9 @@ How the report groups them:
   with `model: "skip"` gets no model note; the fixture record decides instead: a file that flagged nothing while the
   witnesses could not be recorded, or while a service worker controlled the page, gets a note too, and so does a test
   where chaos was on but held no request (the natural order of `"systematic"` holds nothing by design), whose page
-  had not settled when the fixture collected, or whose measured checks did not run. A page error or a check does not
-  count as flagged for the model's note, nor a check for the fixture's (neither needs what that note is about). A file
+  had not settled when the fixture collected, or whose measured checks did not run. Only the model's own detections
+  count as flagged for the model's note, and only witnesses and page errors for the fixture's (what each note is
+  about): a witness does not say the model checked the run, nor a model detection that the agent entry did. A file
   with detections is reported as usual whatever the state: the runtime can unload an idle model after it ran;
 - **nothing about interventions.** The files do not say what an action did to your app, so the report makes no
   claim about interventions, correct or false.
@@ -593,11 +599,13 @@ The files hold test titles, operation names and the runtime's evidence lines. Fo
 store field's name and the runtime's short summary of its value before and after (`2 items ["r one", "r two"]`;
 fields whose name says they hold a secret are redacted by the runtime, as elsewhere). They also hold the shapes of
 the page's uncaught error messages: the error's name and its message with quoted values replaced by `…` and numbers
-by `N`, next to the request nearest to the error. Words a message carries outside quotes stay as they are (an app
-that throws `User jane not found` writes that), while the error's stack, its causal chain and errors from other
-origins' scripts are never written. With `visual: true` they hold the CSS selectors of the elements the checks
-measured and the measured numbers. The comment you post contains the same, so read a report before posting it from
-a repository whose test data is private.
+by `N` (a quote the message never closes takes the rest of it with it), next to the request nearest to the error.
+Words a message carries outside quotes stay as they are (an app that throws `User jane not found` writes that), while
+the error's stack, its causal chain and errors from other origins' scripts are never written. With
+`chaos.order: "systematic"` the reverse run's file names the requests of each burst as operation names are named (ids
+in a path as `:id`; other path segments, such as an email address in a path, stay as they are). With `visual: true`
+they hold the CSS selectors of the elements the checks measured and the measured numbers. The comment you post
+contains the same, so read a report before posting it from a repository whose test data is private.
 
 Without the fixture (the reporter alone, with `@genclass/runtime` installed in your app), the runtime under
 test sends **anonymous diagnostics by default** on public hosts: GenClass's decisions and counts,

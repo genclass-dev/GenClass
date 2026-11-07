@@ -188,7 +188,7 @@ describe("report: measured checks", () => {
 
   it("a check does not hide that the witnesses were not recorded, and the note says what was flagged", () => {
     const md = summarize([{ name: "a.json", content: file("t", 1, [check(1)], { fixture: { ...fx, agent: "not-loaded" } }) }]);
-    expect(md).toContain("Note: in 1 of 1 file for this test nothing but measured checks was flagged and the fixture could not check the page (witnesses not recorded: not-loaded), so those runs may not have been checked.\n");
+    expect(md).toContain("Note: in 1 of 1 file for this test nothing but the model's detections or measured checks was flagged and the fixture could not check the page (witnesses not recorded: not-loaded), so those runs may not have been checked.\n");
   });
 
   it("checks that did not run: a note under a flagged test and in the nothing-flagged list", () => {
