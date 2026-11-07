@@ -1,6 +1,7 @@
 // Every version and pinned launcher that ships with this package or that directories read (the server's VERSION, the
 // MCP Registry entry, the Claude Code plugin and its marketplace entry, the repo-root manifests, the README's
-// install section) equals package.json's version, and no launcher is unpinned. With GENCLASS_SYNC=1
+// install section, the docs and starter templates that print the launcher) equals package.json's version, and no
+// launcher is unpinned. With GENCLASS_SYNC=1
 // (`npm run sync -w @genclass/mcp`) the test rewrites those files from package.json instead of failing. The same sync
 // keeps the repo-root copy of the skill (skills/genclass/SKILL.md, what skill directories such as skills.sh read)
 // byte-identical to the plugin's. The runtime this package runs and prints is pinned the same way: RUNTIME_VERSION and
@@ -86,6 +87,9 @@ const PINS: Pin[] = [
   { file: "docs/runtime/AGENT.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "README.md", text: (s) => s.replace(PINNED, pinned(V)) },
   { file: "packages/runtime/README.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  // the two templates' "See the race on demand" sections
+  { file: "templates/react-vite/README.md", text: (s) => s.replace(PINNED, pinned(V)) },
+  { file: "templates/vue-vite/README.md", text: (s) => s.replace(PINNED, pinned(V)) },
 ];
 
 function read(file: string): string {

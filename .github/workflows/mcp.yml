@@ -31,6 +31,8 @@ on:
       - "skills/**"
       - "docs/runtime/AGENT.md"
       - "docs/adoption/listings/mcp.md"
+      - "templates/react-vite/README.md"
+      - "templates/vue-vite/README.md"
   pull_request:
     paths:
       - "packages/mcp/**"
@@ -51,6 +53,8 @@ on:
       - "skills/**"
       - "docs/runtime/AGENT.md"
       - "docs/adoption/listings/mcp.md"
+      - "templates/react-vite/README.md"
+      - "templates/vue-vite/README.md"
   workflow_dispatch:
 
 permissions:
