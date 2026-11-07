@@ -1046,7 +1046,8 @@ connectAgent(runtime, opts?: {
   dom?: boolean;             // page text and form values in snapshots (default true)
   helloTimeoutMs?: number;   // how long a page load's first responses wait for the bridge's hello (default 600)
   hold?: boolean;            // false: never hold, even with a schedule (default true)
-  holdProtected?: boolean;   // also hold requests.protect and mode-"off" routes (default false: recorded, never held)
+  holdProtected?: boolean;   // also hold requests.protect (default false: recorded, never held); a route in
+                             // mode "off" is never gated, so it is never held either way
 }): AgentConnection;
 
 interface ScheduleSpec {
@@ -1092,8 +1093,8 @@ interface AgentConnection {
 interface NetEntry {         // one request's timing, ms since connectAgent (AGENT.md section 3)
   key: string;               // "GET /api/search#3"
   n: number;                 // start index: its 0-based position among the page load's requests, in start order
-  s: number;                 // sent (0 for a request sent before connectAgent)
-  r?: number;                // ready: its arrival at the delivery gate plus its emulated delay
+  s: number;                 // sent, to the microsecond (0 for a request sent before connectAgent)
+  r?: number;                // ready, to the microsecond: its arrival at the delivery gate plus its emulated delay
   d?: number;                // delivered to the app
   held?: number;             // how long the schedule held it
   forced?: true;             // released only because its hold ran out

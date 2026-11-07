@@ -98,7 +98,9 @@ lists. It never writes to the event log and never feeds a situation, a decision 
     keystroke count and duration (the pace a replay types at). A burst that goes on after it was sent is sent again;
   - `send`: a request by **key**: its signature and occurrence in this page load, `GET /api/search#3`. The same steps
     give the same keys on every run, whatever the query values or timing, which is what makes a schedule portable. A
-    GenClass retry or hedge gets its request's key with a suffix (`#3~retry2`) and does not shift the numbering;
+    GenClass retry or hedge gets its request's key with a suffix (`#3~retry2`, `#3~hedge`) and does not shift the
+    numbering; a hedge is sent while its request is still in flight, and a request of the same signature that a
+    response's handler sends later (the next page of a list, a poll) is the app's own and gets the next number;
   - `recv`: the moment the app received the response (and how long a schedule held it);
   - `end`: a request that ended without a delivery (failed, aborted, an XHR aborted while held);
   - `write`: a state write, with the request whose response chain made it;
@@ -165,12 +167,17 @@ loads one). The delay is the emulated network and never counts against the hold 
 
 Rules:
 - **The hold bound.** A response is never held longer than its delay plus `maxHoldMs` (default 1.5 s). When that
-  deadline comes it is released at once, without waiting for `gapMs`, earliest arrival first, and counted as *forced*
-  (the run did not follow the schedule exactly; reports say so) only when the schedule still held it back: one that
-  only waited for its turn in the gap is not. A waiting response always has a wake-up of its own (its ready time, then
-  its deadline, plus 1 ms), so a timer that fires a little early by the clock's measure cannot leave it waiting. Before
-  this rule a response past its deadline still waited for the gap: with many responses ready at once, one release per
-  `gapMs` could run past the bound (60 at once take 59 gaps, 1,770 ms, at 30 ms).
+  deadline comes it is released at once, without waiting for `gapMs`, and counted as *forced* (the run did not follow
+  the schedule exactly; reports say so) only when the schedule still held it back: one that only waited for its turn in
+  the gap is not. Responses whose deadlines come in the same wake-up go in the schedule's own order: one that may go
+  first (in the release order below), each looked at again after every release, so a response whose only blockers are in
+  the same batch follows them and is not forced; when none of them may go, the first in the schedule's order goes,
+  forced (what holds it back is not in the batch). Before, such a batch went oldest arrival first: as real responses
+  never arrive at the same instant, a `lifo` backlog that met the bound lost the very inversions it is there for and
+  counted forced responses it did not need. A waiting response always has a wake-up of its own (its ready time, then its
+  deadline, plus 1 ms), so a timer that fires a little early by the clock's measure cannot leave it waiting. Before this
+  rule a response past its deadline still waited for the gap: with many responses ready at once, one release per `gapMs`
+  could run past the bound (60 at once take 59 gaps, 1,770 ms, at 30 ms).
 - **Release order.** The responses that may go are released one per `gapMs` (default 30 ms), so one response's handlers
   run before the next arrives: `fifo` in start order, `given` in list order, `seeded` by priority, `lifo` and `ranked`
   by ready time, then request id (two of those that may both go never overlap, so start order must not decide).
@@ -179,14 +186,17 @@ Rules:
 - A request that fails or is aborted stops blocking at once. An XHR the app aborts while its response is held is
   dropped, never delivered (recorded as ended `aborted`). A **fetch** the app aborts while its response is held (by the
   schedule, or by the runtime for a decision in guard or heal) rejects with the signal's reason, else an `AbortError`,
-  when the response is released, as on a slower network; before this the app got the response it had aborted, which a
-  correct `AbortController` app never sees. The rejection comes at the release, not at the moment of the abort, and the
-  recording still counts that fetch as delivered then (its `recv` step and `d` in the net log): a known limitation. A
-  response released at once, with nothing held, is delivered exactly as before. Requests older than 10 s (long polls,
-  streams) neither block nor wait.
-- Protected requests (`requests.protect`, the presets) and routes in mode `"off"` are recorded but never held
-  (`holdProtected: true` opts in, to explore a checkout or a sign-in on purpose). WebSocket and EventSource messages are
-  recorded but never reordered (a socket's messages are ordered on the wire), and failure responses are not held (v1).
+  when the response is released, as on a slower network, and so does a failure (an error status or a network error) the
+  runtime holds for the model's decision in heal, or the cached response a decision puts in its place; before this the
+  app got the response it had aborted, which a correct `AbortController` app never sees. The rejection comes at the
+  release, not at the moment of the abort, and the recording still counts that fetch as delivered then (its `recv` step
+  and `d` in the net log): a known limitation. A response released at once, with nothing held, is delivered exactly as
+  before. Requests older than 10 s (long polls, streams) neither block nor wait.
+- Protected requests (`requests.protect`, the presets) are recorded but never held (`holdProtected: true` opts in, to
+  explore a checkout or a sign-in on purpose). A route in mode `"off"` is not gated at all: its responses never reach
+  the delivery gate, so they are recorded as passed and nothing holds them, `holdProtected` included (to explore such a
+  route, give it another mode in the development build). WebSocket and EventSource messages are recorded but never
+  reordered (a socket's messages are ordered on the wire), and failure responses are not held (v1).
 - Responses reach the runtime's own delivery path when released, so its facts and decisions see the actual order.
 
 **The net log** (`src/agent/record.ts`). Each request of the page load gets a key (section 2) and a **start index** `n`,
@@ -195,19 +205,22 @@ each request's timing by key: `n`, `s` (sent), `r` (ready), `d` (delivered to th
 it), `forced`, `pass` (released at once without scheduling: a protected request, a route in mode `"off"`, or a response
 that reached the app without the delivery gate), `via` (the key of the request whose response chain sent it) and `end`
 (how it ended without a delivery: `aborted`, `error`, ...), times in ms since `connectAgent` (a request sent before it
-counts from 0). At most 2,000 requests per page load; later ones are counted in `netLost`. Each steps event carries the
-entries new or changed since the last one (`net`, whole entries the bridge merges by key) and `netLost`; `recv` steps
-carry `ready` and `pass`; `recorded().net` returns the log. The bridge reads overlaps, coverage and inversions from it
-(section 5), never from the step window, and validates it like everything else (numbers finite and non-negative,
-strings capped, unknown fields dropped, at most 2,000 keys).
+counts from 0): `s` and `r` to the microsecond, the very values the schedule compared, so the bridge's overlap is the
+page's (rounded to whole milliseconds, a request sent 0.2 ms before an older response was ready would overlap it on the
+page and not on the bridge); `d` and `held` in whole milliseconds. At most 2,000 requests per page load; later ones are
+counted in `netLost`. Each steps event carries the entries new or changed since the last one (`net`, whole entries the
+bridge merges by key) and `netLost`; `recv` steps carry `ready` and `pass`; `recorded().net` returns the log. The bridge
+reads overlaps, coverage and inversions from it (section 5), never from the step window, and validates it like
+everything else (numbers finite and non-negative, strings capped, unknown fields dropped, at most 2,000 keys).
 
 **Hello caps.** A page's hello says what its runtime can run beyond `natural`, `fifo`, `seeded` and `given`:
 `caps: ["lifo", "ranked", "reverse", "delaySeed", "net"]`. The bridge never sends a page a schedule its caps lack (a
 runtime that sends no `caps` has none of them): it sends a stand-in the page can run, labelled (section 5.1, "Plans").
 If a page still cannot read the schedule in the hello reply, it delivers as responses arrive and says so,
-`{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "<the order, at most 20 characters>" }`, so the
-bridge neither counts that load as the schedule nor gives it the same one again. A page-set schedule (the option, the
-page global or the URL) of an order this runtime cannot run is warned about once on the console
+`{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "<the order, at most 20 characters>" }` (`"?"`
+when the order cannot be made a string; such a reply never throws into the page), so the bridge neither counts that load
+as the schedule nor gives it the same one again. A page-set schedule (the option, the page global or the URL) of an
+order this runtime cannot run is warned about once on the console
 (`[GenClass] agent: this @genclass/runtime cannot run the schedule "<order>"; responses are delivered as they arrive`),
 and responses are then delivered as they arrive; the hello tells the bridge `natural`, so it assigns none.
 
@@ -606,16 +619,21 @@ element names changed with the order still counts as the same steps when its act
 inconclusive, and says why, until the run has settled and recorded user actions, when its steps differ from the
 original run's, and when the original run is gone; it also says when holds ran out.
 
-**The replay order check.** A race finding that knows its harmful order (a minimal reproduction, below, else the
-failing run's inversions) and a replay run with a net log: the replay counts only when that order happened in it, every
-pair of the minimal reproduction, else at least one of the failing run's inversions, delivered newer first again. When
-it did not, the replay is inconclusive, never "not reproduced": "the harmful order did not happen in this run (A was not
-delivered after B: requests renumbered or no longer overlapping). If the fix cancels or no longer sends the older
-request, the race cannot occur: run explore again to check other orders." So a fix that aborts the older request is
-proven by a new explore, not by the replay. A finding or a replay run without a net log (an older page runtime) is
-judged as before. Without such a check a replay can pass while the harmful timing never happened: the test generated
-for redux-toolkit#5139 passed 5 of 5 on the buggy app (RESULTS.md section 19, a witness finding, which this check does
-not cover: it applies to race findings from explore).
+**The replay order check.** A race finding that knows its harmful order (a minimal reproduction, below, else the failing
+run's inversions) and a replay run with a net log: the replay counts only when that order happened in it. A run of the
+minimal reproduction's order (its schedule has that probe's ranks) must deliver every pair of it newer first again; any
+other run, such as one armed before minimise with the failing run's order, at least one of the failing run's inversions,
+and it is judged against the failing run's values, so a verdict already given is never rewritten when a minimal
+reproduction is chosen later. When the order did not happen, the replay is inconclusive, never "not reproduced": "the
+harmful order did not happen in this run (A was not delivered after B: requests renumbered or no longer overlapping). If
+the fix cancels or no longer sends the older request, the race cannot occur: run explore again to check other orders."
+What a fix that cancels the older request shows depends on when it cancels: a fetch aborted while the schedule held its
+response is still recorded as delivered at its release (section 3), so the order happened and the page decides, usually
+"not reproduced"; one aborted before its response arrived, or a request no longer sent, gives that inconclusive note.
+Either way a new explore checks the other orders. A finding or a replay run without a net log (an older page runtime) is
+judged as before. Without such a check a replay can pass while the harmful timing never happened: the test generated for
+redux-toolkit#5139 passed 5 of 5 on the buggy app (RESULTS.md section 19, a witness finding, which this check does not
+cover: it applies to race findings from explore).
 
 #### Minimise (`store.ts` `armMinimize`, `minimizeResult`)
 
@@ -625,25 +643,37 @@ failing run and what it carries along: for an inversion (a, b) (b delivered befo
 (an older response delivered late; it also inverts a with each request started between them), then b moved to just
 before a (when some started between them: b also goes before each of those). Probes go smallest move first (fewest
 requests between, then by a's start index), at most 12 (the rest are counted and said), each one page load with the
-`ranked` order, the failing run's delays (its `delaySeed`, else its seed) and hold limit. Probes go only to pages that
-run `ranked`; the next page loads of the finding's page get them in turn, one each, with the same steps.
+`ranked` order, the failing run's delays (its `delaySeed`, else its seed) and hold limit. An inversion that gives no
+probe (its requests are not in the first baseline's start order, or start the other way round there, or it is past
+the 50 a finding keeps) is counted and said too. Probes go only to pages that run `ranked`; the next page loads of the
+finding's page get them in turn, one each, with the same steps. A probe whose page load will not get to a result goes
+to the next page load again, at most 3 in all: its run is gone, it ended before a quiet point after its steps (a
+closed tab, a failed Playwright step), it sent nothing for 2 minutes without one, or it did other steps. Probes are
+handed out for 30 minutes; after that the result says they expired and to arm them again.
 
 `genclass_replay {action: "result"}` then judges each probe from its run: pending until it ran and settled after the
-steps; inconclusive when its steps differ from the failing run's, when it has no whole net log, or when it did not
-deliver the inversion it was built for, or delivered one beyond those it may carry (each named); otherwise reproduced
-or not by the failing run's evidence, as a replay is, with one difference: a probe moved another response than the
-failing run did, so its page may end with another wrong value (a stale search showing another older query's results).
-A probe whose page shows none of the baseline's values where the failing run differed, and others than the failing
-run's in their place, reproduces it too, and says so ("other values"); without that rule it would be inconclusive.
+steps (or while it waits for another page load, above); inconclusive when it has no whole net log, or when it did not
+deliver the inversion it was built for, or delivered one beyond those it may carry (each named), or when three page
+loads did not get it to a result; otherwise reproduced or not by the failing run's evidence, as a replay is, with one
+difference: a probe moved another response than the failing run did, so its page may end with another wrong value (a
+stale search showing another older query's results). A probe whose page shows none of the baseline's values where the
+failing run differed reproduces it too ("other values") only when, in their place, it shows values another reordered
+run of the explore showed too (the race finding keeps what its group's reordered runs showed in place of the
+baseline's, `evidence.reorderedValues`: their lines and their values of the fields that differed), no field is gone,
+and its page threw no error the failing run did not. Otherwise it is inconclusive and says why: a page that changed
+since the explore, a blank page, a form that is gone or another failure is not this race.
 
 The **minimal reproduction** is the first probe that reproduced it, taken only when every probe before it is
 conclusive. It is exact when nothing started between the two ("the one inverted pair: A delivered after B"), else "A
 delivered after B and after the k requests started between them" (or "B delivered before A and before ..."). The finding
 keeps it (`evidence.minimal`: the pairs its run delivered newer first, exact or not, its run and label) and replays its
-order from then on, and its regression test sets it; a replay of a minimal reproduction chosen for other values is
-judged the same way, so the replay of a probe that ended with another wrong value reproduces when the page shows none
-of the baseline's values again. When every probe is conclusive, none was left out and none reproduced it: "no single
+order from then on, and its regression test sets it. A minimal reproduction chosen for other values keeps them
+(`evidence.minimal.shown`: that probe's lines in place of the baseline's, or its field values), and a replay of its
+order is judged against them, strictly: the same values again reproduce it, the baseline's do not, a third value is
+inconclusive. When every probe is conclusive, none was left out or gave no probe, and none reproduced it: "no single
 response moved earlier or later reproduces it: it needs several reordered together, or the failing run's timing".
+When every armed probe is conclusive and none reproduced it but some single moves were not tried, the result says how
+many, and that one of them, or several responses moved together, may still reproduce it.
 
 ### 5.3 Regression tests (`src/testgen.ts`)
 
@@ -811,8 +841,13 @@ script).
   overlap when reordered (sent by X's handler)", never as tried both ways, and the cover cannot invert it.
 - **Minimise moves one response at a time**, at most 12 probes (the smallest moves first): a race that needs several
   responses reordered together gets "no single response moved earlier or later reproduces it", and a probe that
-  delivered other inversions than the ones it was built for is inconclusive.
+  delivered other inversions than the ones it was built for is inconclusive. A probe that ends with another wrong
+  value counts only when a reordered run of the explore showed that value too, so a real stale value the explore
+  never showed leaves it inconclusive (never a false "reproduced").
 - **A held fetch that the app aborted** rejects at its release, not at the abort, and is still recorded as delivered.
+- **A route in mode `"off"` cannot be explored**: it is never gated, so its responses are delivered at once whatever
+  the schedule (`holdProtected` holds protected requests only). Give the route another mode in the development build
+  to explore it.
 
 ## 9. Relation to the rules
 

@@ -44,7 +44,7 @@ round 1, `r17-v2a` to `r17-v2c` and model 0.1.0 (`r17-v2b`) are superseded and k
 | Measured visual checks (deterministic, not the model) | fixture pages: 35 of 35 planted faults found, 0 false reports. Bench: 0 false reports and 0 fixes in 128 page views of the demos, templates and compat apps; recall 1.00 on 20 of 23 planted fault kinds (run 4), 19 of 23 (run 5); public sites: 8 findings in 96 loads in run 4 (5 confirmed real, 0 check errors, 3 unconfirmed), 6 findings in 97 loads in run 5 (after the review; not looked at) | §13, §14 |
 | Flow expectations (opt-in) | false-report rate not measured yet | §5 |
 | Coding agents: `genclass_explore` and `genclass_replay` on one real page (train VM, headless Chromium, 2026-10-20; one page, one bug class, not a recall figure) | explore found the stale-results race in 5 of 6 reordered runs of the buggy page and reported nothing on the fixed page (0 of 6 differ: no false report); replay reproduced it before the fix and not after; the generated Playwright test failed before and passed after | §18 |
-| Coding agents: explore plan `systematic` (opt-in, unreleased; a Node simulation through the real runtime and bridge, no browser) | race in 5 of 6 and 8 of 9 reordered runs of the buggy page, 0 of 42 on two correct pages; every overlapping pair delivered both ways; every ordering of the overlapping triples with `runs: 9`. False-report rate in browsers and on real apps: not measured yet | §28 |
+| Coding agents: explore plan `systematic` (opt-in, unreleased; a Node simulation through the real runtime and bridge, no browser) | race in 5 of 6 and 8 of 9 reordered runs of the buggy page, 0 of 30 on two correct pages (6 + 9 on each); every overlapping pair delivered both ways; every ordering of the overlapping triples with `runs: 9`. False-report rate: not measured yet (one simulated scenario, no browser, no real app) | §28 |
 
 ## 1. Model stages compared (held-out simulated apps)
 
@@ -1571,24 +1571,28 @@ counts and an end-to-end simulation in Node. **No browser, real-app or false-rep
 exists yet**, so it is opt-in and `seeded` stays the default, the plan sections 20 to 22 and 27 measured. No false
 intervention rate applies: nothing here is a detection or an intervention.
 
-**Tests** (light runs on the development Mac, `--maxWorkers=2`; all pass):
+**Tests** (on the development Mac, `--maxWorkers=2`, after the review fixes; all pass):
 
 | package | the whole suite | this work's tests |
 |---|---|---|
-| `@genclass/runtime` | 1,310 passed, 14 skipped (the model-parity tests), 106 files | `agent-schedule.test.ts` 27 (the new orders, the strict overlap bound, fifo and lifo deliver every overlapping pair of eight bursts both ways, the same seed reversed inverts every overlapping pair of eight bursts for four seeds, the hold bound in every order, the abort while held), `agent-net.test.ts` 13 (the net log, caps, the fallback, the console warning), 5 in `fetch.test.ts` (guard mode: a held delivery the app aborted rejects at its release; without a hold, as before) |
-| `@genclass/mcp` | 376 passed, 12 files (`test/mcpb.test.ts` not run: `@anthropic-ai/mcpb` is not installed here) | 52: `cover.test.ts` 9, coverage 5, the plans 12, minimise 10, the replay order check 3, the net log, validation and race evidence 5, the tools 7, the regression test's applied schedule 1 |
-| `@genclass/playwright` | 177 passed, 14 files | 63: page errors 15, the quiet point 8, systematic orders 21, measured checks 11, the page script 8 |
+| `@genclass/runtime` | 1,321 passed, 16 skipped, 106 files: the 14 model-parity tests and the 2 of `test/install/scan.test.ts` that scan in headless Chromium, skipped by running with `PLAYWRIGHT_BROWSERS_PATH` pointing at no browser (a light run launches none; where Playwright's Chromium is installed they run, and the count is 1,323 passed, 14 skipped) | `agent-schedule.test.ts` 34 (the new orders, the strict overlap bound, fifo and lifo deliver every overlapping pair of eight bursts both ways, the same seed reversed inverts every overlapping pair of eight bursts for four seeds, the hold bound in every order and the order of a batch past its deadline, a same-signature request a handler sends, the abort while held), `agent-net.test.ts` 15 (the net log and its microsecond send and ready times, caps, the fallback and an exotic reply, the console warning), 9 in `fetch.test.ts` (guard: a held delivery the app aborted rejects at its release, without a hold as before; heal: a held failure, and the cached response that replaces it, the same) |
+| `@genclass/mcp` | 388 passed, 12 files (`test/mcpb.test.ts` not run: `@anthropic-ai/mcpb` is not installed here) | 64: `cover.test.ts` 11, coverage 5, the plans 12, minimise 16, the replay order check 5, the net log, validation, race evidence and persistence 6, the tools 8, the regression test's applied schedule 1 |
+| `@genclass/playwright` | 181 passed, 14 files | 67: page errors 17, the quiet point 8, systematic orders 23, measured checks 11, the page script 8 |
 
-The first load measures 108.93 KB (`/auto`) and 100.66 KB (the main entry) on this machine (`test/bundle.test.ts`),
+The first load measures 108.93 KB (`/auto`) and 100.65 KB (the main entry) on this machine (`test/bundle.test.ts`),
 within its limits of 109.0 and 100.7 KB; the agent entry is its own file.
 
 **The hold bound and the abort, at unit level.** For each of `fifo`, `lifo`, `seeded`, `ranked` and `given`, 60
 responses ready at once are all delivered within `maxHoldMs` (1,000 ms) + 1 ms of being ready, none forced, in the
-schedule's order (checked for all but `seeded`); one release per 30 ms gap would have taken 59 gaps, 1,770 ms. A
-response held back by a newer request still in flight (3 s) is delivered forced by its delay plus `maxHoldMs` + 1 ms
-while a newer response becomes ready every 20 ms. A fetch the app aborts while its response is held (guard mode with a decision holding it; the agent link
-with `fifo` and a delay; `lifo` behind a newer request) rejects with `AbortError` (or the signal's reason) when it is
-released; with nothing held, it is delivered as before.
+schedule's order (checked for all but `seeded`); one release per 30 ms gap would have taken 59 gaps, 1,770 ms. With
+the 60 arriving 0.1 ms apart, as real responses do (`lifo` and `ranked`, the default 1,500 ms bound), the last ten
+reach their deadline in one wake-up and go newest first, none forced; released oldest arrival first, as before the
+review, 9 of them were forced and went in start order. A response held back by a newer request still in flight (3 s)
+is delivered forced by its delay plus `maxHoldMs` + 1 ms while a newer response becomes ready every 20 ms. A fetch the
+app aborts while its response is held (guard mode with a decision holding it; the agent link with `fifo` and a delay;
+`lifo` behind a newer request) rejects with `AbortError` (or the signal's reason) when it is released, and so does a
+failure heal holds for the model's decision (a 503, a network error, or the cached response a decision puts in its
+place); with nothing held, it is delivered as before.
 
 **The cover rows** (`sequenceCover`, every ordering of every triple checked by brute force for n = 3 to 16; pinned in
 `packages/mcp/test/cover.test.ts`). "Runs" is `buildCover` of n requests all in flight together, with a `lifo` load
@@ -1632,13 +1636,15 @@ ignores the `AbortError`: correct). `slow_ms: 600` (fixed for `systematic`, unif
   (8 cover rows, what `sequenceCover(5)` needs past `fifo` and `lifo`) all 60 orderings were delivered, and the race
   showed under the `lifo` load and 7 of the 8 cover rows. The seeded session's coverage line named `runs: 9` as well.
 - Minimise on the buggy page: from the systematic session 12 probes armed (4 left out), 3 reproduced, the first of them
-  exact (`#4` delivered after `#5`, ending with another query's results: "other value"); from the seeded session 3
+  exact (`#4` delivered after `#5`, ending with another query's results, "other value", which another reordered run of
+  the explore showed too, as such a value must); from the seeded session 3
   probes, 2 reproduced, the first not exact (`#3` after `#5` and the request between them, also another value). Each
   finding's replay of its minimal reproduction reproduced, and its generated regression test, evaluated in Node under
   its own page-set schedule, failed on the buggy page and passed on the fixed and abort pages.
 - On the abort page under plan `systematic` every older response was held when its fetch was aborted (4 `AbortError`s
   per load, which the app ignored) and each load wrote once, the newest answer; in every plan the page showed "Results
-  for react" in every load. 0 false reports in the 42 reordered runs of the two correct pages.
+  for react" in every load. 0 false reports in the 42 reordered runs of the two correct pages (30 under plan
+  `systematic`, 12 under `seeded`).
 - Every schedule was realised as specified and every delivery came within its ready time plus `maxHoldMs` + 1 ms; what
   the bridge stored (caps, schedule, net log, delivery order, steps, snapshot, end) equals what the page recorded;
   coverage and each run's inversions equal an independent computation from the page-side logs, and the cover rows
