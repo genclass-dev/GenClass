@@ -2,27 +2,35 @@
 // Function.prototype.toString, so this file imports nothing and the function below references only its parameters
 // and the page's globals). What it does, before any script of the app runs:
 //
-//   1. sets window.GENCLASS_CONFIG: observe mode, telemetry off, no visual checks, no devtools, the model as the
-//      fixture chose;
+//   1. sets window.GENCLASS_CONFIG: observe mode, telemetry off, no devtools, the model as the fixture chose, and the
+//      measured visual checks off unless the fixture's `visual: true` turned them on (report only: in observe mode
+//      they never change the page; the runtime's reports stay silent, so they print nothing either);
 //   2. runs the runtime's script-tag build (dist/genclass.global.js) with a stand-in for `document.currentScript`
 //      (an init script has no tag, and the build reads `data-base` from its own tag: the stand-in points it at the
 //      fixture's virtual path, so everything it loads later comes from the same place);
 //   3. holds the runtime to observe: if the URL or localStorage switch (?genclass=heal, localStorage.genclass) raised
 //      the mode, it is set back with rt.setMode("observe") and the file says so;
 //   4. hands every likely detection to Node from the runtime's "decide" event, synchronously (with the model's
-//      diagnosis confidence and the console line the runtime printed);
+//      diagnosis confidence and the console line the runtime printed), and with the checks on every measured check
+//      from its "check" event, reduced here to its kind, route, selector and numeric measurements (never the
+//      element's text or the console line);
 //   5. loads the agent entry (dist/agent.js) and connects it with every hold off, so the runtime records the two
-//      happens-before witnesses (overwrote-newer, identical-in-flight) that need no model, and hands each new one to
-//      Node as it appears. connectAgent binds the page's fetch once, when it is called: for that call only, fetch is
-//      a stand-in that answers the agent's own URL with "null" without a request (so the link stays unconnected and
-//      sends nothing, no console error, no failed request, no CSP report) and passes every other call to the real one;
+//      happens-before witnesses (overwrote-newer, identical-in-flight) that need no model and the page's uncaught
+//      errors, and hands each new witness and error to Node as it appears (an error with its name, message, stack,
+//      causal chain and the page's origin: races.ts keeps only its name, message shape, request and origin verdict).
+//      connectAgent binds the page's fetch once, when it is called: for that call only, fetch is a stand-in that
+//      answers the agent's own URL with "null" without a request (so the link stays unconnected and sends nothing, no
+//      console error, no failed request, no CSP report) and passes every other call to the real one;
 //   6. reports the runtime's mode and model status, at start, on every status change, when the page goes away, and
-//      on request (window.__GENCLASS_PLAYWRIGHT__.collect(), which the fixture calls at the end of the test), with
+//      on request (window.__GENCLASS_PLAYWRIGHT__.collect(settleMs, checkMs), which the fixture calls at the end of
+//      the test: with `settleMs` it first waits, at most that long, for the agent entry's quiet point (chaos is still
+//      on its plan meanwhile); with `checkMs` and the checks on it runs one more pass, at most that long), with
 //      whether a service worker controls the page (page.route does not see what it handles).
 //
 // Observe only: nothing here holds, delays or changes anything in the page; the agent link is connected with
-// `hold: false` and never reaches a bridge. Top frame only, and only on http(s) pages (about:blank and
-// page.setContent get nothing). Never throws into the page.
+// `hold: false` and never reaches a bridge. The fixture's own waits use the page's timers as they were before the
+// runtime and the agent entry wrapped them, so they never count as the app's. Top frame only, and only on http(s)
+// pages (about:blank and page.setContent get nothing). Never throws into the page.
 
 /** What install.ts passes to the page script. */
 export interface PageScriptConfig {
@@ -34,12 +42,16 @@ export interface PageScriptConfig {
   agentUrl: string;
   /** The name of the function Node exposed (page.exposeFunction) that receives every item. */
   binding: string;
+  /** Report-only measured visual checks (the fixture's `visual: true`, with dist/visual/index.js present). */
+  visual?: boolean;
 }
 
-/** The agent entry's connection, as far as this script uses it. */
+/** The agent entry's connection, as far as this script uses it (errors and whenSettled may be missing in old builds). */
 interface AgentConnection {
   reason: string | null;
   witnesses(): unknown[];
+  errors?(): unknown[];
+  whenSettled?(timeoutMs?: number): Promise<boolean>;
 }
 
 /**
@@ -65,9 +77,19 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
       /* never into the page */
     }
   };
+  // the page's timer as it is now, before the runtime's observers and the agent entry wrap it: the fixture's waits
+  // must not look like the app's timers (they would keep the page from looking quiet)
+  const nativeSetTimeout = w.setTimeout as (fn: () => void, ms: number) => unknown;
+  const later = (fn: () => void, ms: number): void => {
+    try {
+      nativeSetTimeout.call(window, fn, ms);
+    } catch {
+      fn();
+    }
+  };
 
   // 1. the runtime's configuration (read by the script-tag build at init, before the app's own scripts run)
-  w.GENCLASS_CONFIG = { mode: "observe", telemetry: false, visual: false, analytics: false, devtools: false, report: "silent", model: cfg.model };
+  w.GENCLASS_CONFIG = { mode: "observe", telemetry: false, visual: cfg.visual === true, analytics: false, devtools: false, report: "silent", model: cfg.model };
 
   // 2. the script-tag build, with a tag of its own to read data-base from
   let rt: Record<string, unknown> | null = null;
@@ -106,9 +128,10 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
     }
   };
 
-  // 5. witnesses through the agent entry (hands each new one over as it appears)
+  // 5. witnesses and page errors through the agent entry (hands each new one over as it appears)
   let conn: AgentConnection | null = null;
   let handed = 0;
+  let handedErrors = 0;
   let queued = false;
   const drain = (): void => {
     if (!conn) return;
@@ -118,11 +141,75 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
     } catch {
       /* ignore */
     }
+    try {
+      const errors = typeof conn.errors === "function" ? conn.errors() : [];
+      for (; handedErrors < errors.length; handedErrors++) {
+        const e = (errors[handedErrors] ?? {}) as { name?: unknown; message?: unknown; stack?: unknown; chain?: unknown };
+        push({
+          t: "error",
+          error: { name: String(e.name ?? "Error"), message: String(e.message ?? ""), stack: typeof e.stack === "string" ? e.stack : undefined, chain: Array.isArray(e.chain) ? e.chain.slice(0, 10) : [] },
+          pageOrigin: location.origin,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
   };
+  // the measured checks' last pass (collect, with the checks on): did they run, and if not, why not
+  let checksSeen = 0;
+  const runChecks = (ms: number): Promise<string | null> =>
+    new Promise((resolve) => {
+      let done = false;
+      const fin = (): void => {
+        if (done) return;
+        done = true;
+        let ran = checksSeen > 0;
+        try {
+          const v = rt && typeof rt.summary === "function" ? ((rt.summary as () => { visual?: { passes?: number } }).call(rt).visual ?? null) : null;
+          if (v && (v.passes ?? 0) > 0) ran = true;
+        } catch {
+          /* no summary */
+        }
+        resolve(ran ? null : "no pass ran");
+      };
+      later(fin, ms);
+      try {
+        const p = rt && typeof rt.checkNow === "function" ? (rt.checkNow as () => Promise<unknown>).call(rt) : null;
+        if (p && typeof p.then === "function") p.then(fin, fin);
+        else fin();
+      } catch {
+        fin();
+      }
+    });
   const api = {
-    collect(): Record<string, unknown> {
-      drain();
-      return { mode: rt ? String(rt.mode) : null, model: status(), agent: conn ? conn.reason : "not-loaded", serviceWorker: serviceWorker() };
+    collect(settleMs?: number, checkMs?: number): Record<string, unknown> | Promise<Record<string, unknown>> {
+      const result = (): Record<string, unknown> => {
+        drain();
+        return { mode: rt ? String(rt.mode) : null, model: status(), agent: conn ? conn.reason : "not-loaded", serviceWorker: serviceWorker() };
+      };
+      const c = conn;
+      const settle = typeof settleMs === "number" && settleMs > 0 && !!c && c.reason === null && typeof c.whenSettled === "function";
+      const check = typeof checkMs === "number" && checkMs > 0 && cfg.visual === true;
+      if (!settle && !check) return result();
+      // the quiet point first (chaos is still on its plan), then the checks' last pass, then what the page holds
+      let settling: Promise<boolean | undefined> = Promise.resolve(undefined);
+      if (settle)
+        try {
+          settling = Promise.resolve((c!.whenSettled as (ms: number) => Promise<boolean>).call(c, settleMs)).then(
+            (ok) => ok === true,
+            () => false,
+          );
+        } catch {
+          settling = Promise.resolve(false);
+        }
+      return settling.then((ok) =>
+        (check ? runChecks(checkMs as number) : Promise.resolve(undefined)).then((visual) => {
+          const out = result();
+          if (settle) out.settled = ok === true;
+          if (check) out.visual = visual ?? null;
+          return out;
+        }),
+      );
     },
   };
   w.__GENCLASS_PLAYWRIGHT__ = api;
@@ -162,6 +249,28 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
   } catch {
     /* an older runtime without this event */
   }
+  // 4. measured checks: the kind, the route, the selector and the numeric measurements only
+  if (cfg.visual === true)
+    try {
+      on?.call(rt, "check", (v: unknown) => {
+        try {
+          const f = v as { kind?: unknown; route?: unknown; selector?: unknown; measured?: unknown };
+          if (!f || typeof f.kind !== "string") return;
+          const measured: Record<string, number> = {};
+          const m = f.measured && typeof f.measured === "object" ? (f.measured as Record<string, unknown>) : {};
+          for (const k of Object.keys(m)) {
+            const n = m[k];
+            if (typeof n === "number" && isFinite(n)) measured[k] = n;
+          }
+          checksSeen++;
+          push({ t: "check", check: { kind: f.kind, route: typeof f.route === "string" ? f.route : "", selector: typeof f.selector === "string" ? f.selector.slice(0, 300) : "", measured } });
+        } catch {
+          /* never into the page */
+        }
+      });
+    } catch {
+      /* an older runtime without this event */
+    }
   try {
     on?.call(rt, "status", report);
     // a witness is computed inside the runtime's event dispatch: look after it, once per burst

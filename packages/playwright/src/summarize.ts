@@ -10,9 +10,13 @@
 //   - signatures whose trigger is "witness" (the fixture's happens-before facts, computed by the runtime without the
 //     model: overwrote-newer, identical-in-flight) get a group of their own, shown only when there are any, with no
 //     confidence (a fact happened or not) and a footer sentence that says what they are. They are never counted as
-//     duplicate submits or stale responses: whether one is a bug is for the reader.
+//     duplicate submits or stale responses: whether one is a bug is for the reader. The same holds for the page's
+//     uncaught errors (trigger "page-error") and the measured visual checks (trigger "check"): a group, a table row
+//     and a footer paragraph each, only when there are any, no confidence; the model's paragraph is about the model's
+//     groups only. A report without them is byte for byte what it was before they existed.
 //   - a signature flagged in at least `minSeeds` seeds of the same test (default 2, the fixture's 2-seed rule) is
-//     marked reproducible; one seen in fewer may depend on that seed's timing.
+//     marked reproducible; one seen in fewer may depend on that seed's timing. A seed whose file ran in the natural
+//     order (chaos order "systematic", repeat 0: nothing reordered) is shown as such and does not count.
 //   - totals per group.
 //   - nothing about interventions or false interventions: the files do not carry what an action did to the app, so
 //     the report makes no claim either way.
@@ -23,23 +27,40 @@
 // 60000; GitHub rejects comment bodies over 65,536 characters) by leaving out the least important lines, with a note.
 
 import { parseRaces, validateRaces } from "./schema.js";
-import type { GenClassRacesFile, RacesFileInput, RacesParseResult } from "./types.js";
+import { CHECK_TRIGGER, PAGE_ERROR_TRIGGER, type GenClassRacesFile, type RaceChaosOrder, type RacesFileInput, type RacesParseResult } from "./types.js";
 
-/** The report groups, in report order. "witness" holds the fixture's model-less facts (trigger "witness"). */
-export type RaceCategory = "duplicate" | "stale" | "failing" | "other" | "witness";
+/**
+ * The report groups, in report order: the model's four, then the fixture's records made without the model: the
+ * page's uncaught errors (trigger "page-error"), the measured visual checks (trigger "check") and the witnesses
+ * (trigger "witness"), last.
+ */
+export type RaceCategory = "duplicate" | "stale" | "failing" | "other" | "page-error" | "check" | "witness";
 
-export const CATEGORIES: readonly RaceCategory[] = ["duplicate", "stale", "failing", "other", "witness"];
+export const CATEGORIES: readonly RaceCategory[] = ["duplicate", "stale", "failing", "other", "page-error", "check", "witness"];
+
+/** The model's groups: the model's footer paragraph and its "not ready" note are about these only. */
+export const MODEL_CATEGORIES: readonly RaceCategory[] = ["duplicate", "stale", "failing", "other"];
+
+/** The groups `totals.byCategory` always counts; the page errors and the measured checks appear there only when present. */
+export type CoreCategory = Exclude<RaceCategory, "page-error" | "check">;
 
 export const CATEGORY_TITLES: Readonly<Record<RaceCategory, string>> = {
   duplicate: "Duplicate submits",
   stale: "Stale responses",
   failing: "Failing endpoints",
   other: "Other detections",
+  "page-error": "Page errors (uncaught, recorded without the model)",
+  check: "Measured checks (visual measurements, not the model)",
   witness: "Witnesses (facts measured without the model)",
 };
 
 /** The trigger the fixture gives a witness signature. */
 export const WITNESS_TRIGGER = "witness";
+
+/** A signature kind added after the first version (a page error or a measured check), which the older notes do not count. */
+function newerKind(trigger: string): boolean {
+  return trigger === PAGE_ERROR_TRIGGER || trigger === CHECK_TRIGGER;
+}
 
 /** The default number of seeds a signature must be seen in to count as reproducible. */
 export const DEFAULT_MIN_SEEDS = 2;
@@ -53,11 +74,13 @@ export const MIN_MAX_CHARS = 1000;
 /**
  * The group of a diagnosis label: "duplicate", "stale" and "failing" have their own; everything else (transient,
  * inconsistent, conflict, overload, slow, unusual, a plugin's own labels) is "other". "expected" is not a detection
- * and is left out of the report. With the trigger given, a witness (trigger "witness") is "witness" whatever its
- * label says.
+ * and is left out of the report. With the trigger given, a witness (trigger "witness") is "witness", a page error
+ * (trigger "page-error") "page-error" and a measured check (trigger "check") "check", whatever the label says.
  */
 export function categoryOf(diagnosis: string, trigger?: string): RaceCategory {
   if (trigger === WITNESS_TRIGGER) return "witness";
+  if (trigger === PAGE_ERROR_TRIGGER) return "page-error";
+  if (trigger === CHECK_TRIGGER) return "check";
   return diagnosis === "duplicate" || diagnosis === "stale" || diagnosis === "failing" ? diagnosis : "other";
 }
 
@@ -109,19 +132,30 @@ export interface TestSummary {
    * Files that flagged nothing and whose model was not "ready" when the fixture collected (null model: "not
    * started"), so those runs may not have been checked; and their states. Files with detections are not counted,
    * whatever the state (the runtime can unload an idle model after it ran), nor files whose `fixture.model` is
-   * "skip" (no model by choice: `unchecked` covers those).
+   * "skip" (no model by choice: `unchecked` covers those). Page errors and measured checks do not count as flagged
+   * here (they say nothing about the model); `others`, set when it is not 0, counts the files that flagged only those.
    */
-  modelNotReady: { files: number; states: string[] };
+  modelNotReady: { files: number; states: string[]; others?: number };
   /**
    * Files the fixture wrote that flagged nothing although it could not check the page, and why: the agent entry did
    * not connect (no witnesses), or a service worker controlled the page (chaos and the runtime's files went past
-   * page.route).
+   * page.route). Measured checks do not count as flagged here (they do not need the agent entry); `others`, set when
+   * it is not 0, counts the files that flagged only those.
    */
-  unchecked: { files: number; reasons: string[] };
-  /** Files whose chaos was on but held no request (nothing matched, or a user route or service worker answered first). */
+  unchecked: { files: number; reasons: string[]; others?: number };
+  /**
+   * Files whose chaos was on but held no request (nothing matched, or a user route or service worker answered first).
+   * A file of the natural order (chaos order "systematic", repeat 0) holds nothing by design and is not counted.
+   */
   chaosIdle: number;
   /** The chaos of the first file (by name) that carries one. */
   chaos?: GenClassRacesFile["chaos"];
+  /** Set when some file records its chaos order ("systematic"): the order of each such seed (by seed). */
+  seedOrders?: Record<string, RaceChaosOrder>;
+  /** Set when not 0: files whose page had not settled when the fixture collected (`fixture.settled` false). */
+  unsettled?: number;
+  /** Set when some file says its measured checks did not run (`fixture.visual`): how many, and why. */
+  visualNotRun?: { files: number; reasons: string[] };
 }
 
 export interface CategoryTotals {
@@ -143,7 +177,8 @@ export interface RaceSummary {
     testsWithSignatures: number;
     signatures: number;
     reproducible: number;
-    byCategory: Record<RaceCategory, CategoryTotals>;
+    /** Per group: always the model's four and the witnesses; the page errors and the measured checks when present. */
+    byCategory: Record<CoreCategory, CategoryTotals> & Partial<Record<RaceCategory, CategoryTotals>>;
   };
 }
 
@@ -154,11 +189,17 @@ interface Acc {
   sigs: Map<string, SignatureSummary>;
   modes: Set<string>;
   notReady: number;
+  notReadyOthers: number;
   states: Set<string>;
   unchecked: number;
+  uncheckedOthers: number;
   reasons: Set<string>;
   chaosIdle: number;
   chaos?: GenClassRacesFile["chaos"];
+  orders: Map<number, RaceChaosOrder>;
+  unsettled: number;
+  visualNotRun: number;
+  visualReasons: Set<string>;
 }
 
 function byName(a: RacesFileInput, b: RacesFileInput): number {
@@ -184,34 +225,70 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
     }
     files++;
     const f = r.file;
-    const t: Acc = tests.get(f.test) ?? { test: f.test, seeds: new Set(), files: 0, sigs: new Map(), modes: new Set(), notReady: 0, states: new Set(), unchecked: 0, reasons: new Set(), chaosIdle: 0 };
+    const t: Acc = tests.get(f.test) ?? {
+      test: f.test,
+      seeds: new Set(),
+      files: 0,
+      sigs: new Map(),
+      modes: new Set(),
+      notReady: 0,
+      notReadyOthers: 0,
+      states: new Set(),
+      unchecked: 0,
+      uncheckedOthers: 0,
+      reasons: new Set(),
+      chaosIdle: 0,
+      orders: new Map(),
+      unsettled: 0,
+      visualNotRun: 0,
+      visualReasons: new Set(),
+    };
     tests.set(f.test, t);
     t.files++;
     t.seeds.add(f.seed);
     if (f.mode) t.modes.add(f.mode);
     const m = f.model;
-    const flaggedHere = f.signatures.some((x) => x.diagnosis !== "expected");
+    // what each note counts as flagged: the model's note, the model's detections and the witnesses (as before page
+    // errors and checks existed); the fixture's note, those and the page errors (both come from the agent entry); a
+    // measured check needs neither, so it never hides that the model or the agent entry could not check the page
+    const flaggedHere = f.signatures.some((x) => !newerKind(x.trigger) && x.diagnosis !== "expected");
+    const flaggedAgent = flaggedHere || f.signatures.some((x) => x.trigger === PAGE_ERROR_TRIGGER);
+    const flaggedNewer = f.signatures.some((x) => newerKind(x.trigger));
+    const flaggedCheck = f.signatures.some((x) => x.trigger === CHECK_TRIGGER);
     if (!flaggedHere && m === null) {
       t.notReady++;
       t.states.add("not started");
+      if (flaggedNewer) t.notReadyOthers++;
     } else if (!flaggedHere && m && m.state !== undefined && m.state !== "ready" && f.fixture?.model !== "skip") {
       t.notReady++;
       t.states.add(m.state);
+      if (flaggedNewer) t.notReadyOthers++;
     }
     const fx = f.fixture;
+    // chaos.order "systematic": the order of this seed's run (the natural one does not count toward reproducible)
+    const order = f.chaos?.order;
+    if (order && !t.orders.has(f.seed)) t.orders.set(f.seed, order);
     if (fx) {
       const why: string[] = [];
       if (fx.agent !== null) why.push(`witnesses not recorded: ${fx.agent}`);
       if (fx.serviceWorker) why.push("a service worker controlled the page");
-      if (!flaggedHere && why.length) {
+      if (!flaggedAgent && why.length) {
         t.unchecked++;
         for (const w of why) t.reasons.add(w);
+        if (flaggedCheck) t.uncheckedOthers++;
       }
-      if (fx.chaosApplied === 0) t.chaosIdle++;
+      // the natural order holds nothing by design
+      if (fx.chaosApplied === 0 && order !== "natural") t.chaosIdle++;
+      if (fx.settled === false) t.unsettled++;
+      if (typeof fx.visual === "string") {
+        t.visualNotRun++;
+        t.visualReasons.add(fx.visual);
+      }
     }
     if (f.chaos && t.chaos === undefined) t.chaos = f.chaos;
     for (const s of f.signatures) {
-      if (s.diagnosis === "expected") continue;
+      // "expected" is the model's label for nothing wrong; a page error or a check named so is still one
+      if (s.diagnosis === "expected" && !newerKind(s.trigger)) continue;
       const seeds = s.seeds.length ? s.seeds : [f.seed];
       for (const n of seeds) t.seeds.add(n);
       const prev = t.sigs.get(s.sig);
@@ -227,7 +304,7 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
     }
   }
 
-  const byCategory = Object.fromEntries(CATEGORIES.map((c) => [c, { signatures: 0, reproducible: 0 }])) as Record<RaceCategory, CategoryTotals>;
+  const counts = new Map<RaceCategory, CategoryTotals>(CATEGORIES.map((c) => [c, { signatures: 0, reproducible: 0 }]));
   let signatures = 0;
   let reproducible = 0;
   const out: TestSummary[] = [];
@@ -235,11 +312,13 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
     const sigs = [...t.sigs.values()];
     for (const s of sigs) {
       s.seeds.sort((a, b) => a - b);
-      s.reproducible = s.seeds.length >= minSeeds;
-      byCategory[s.category].signatures++;
+      // a seed of the natural order reordered nothing: it does not make a signature reproducible
+      s.reproducible = s.seeds.filter((n) => t.orders.get(n) !== "natural").length >= minSeeds;
+      const c = counts.get(s.category)!;
+      c.signatures++;
       signatures++;
       if (s.reproducible) {
-        byCategory[s.category].reproducible++;
+        c.reproducible++;
         reproducible++;
       }
     }
@@ -257,15 +336,24 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
       files: t.files,
       signatures: sigs,
       modes: [...t.modes].sort(),
-      modelNotReady: { files: t.notReady, states: [...t.states].sort() },
-      unchecked: { files: t.unchecked, reasons: [...t.reasons].sort() },
+      modelNotReady: { files: t.notReady, states: [...t.states].sort(), ...(t.notReadyOthers ? { others: t.notReadyOthers } : {}) },
+      unchecked: { files: t.unchecked, reasons: [...t.reasons].sort(), ...(t.uncheckedOthers ? { others: t.uncheckedOthers } : {}) },
       chaosIdle: t.chaosIdle,
     };
     if (t.chaos !== undefined) ts.chaos = t.chaos;
+    if (t.orders.size) ts.seedOrders = Object.fromEntries([...t.orders].sort((a, b) => a[0] - b[0]).map(([n, o]) => [String(n), o]));
+    if (t.unsettled) ts.unsettled = t.unsettled;
+    if (t.visualNotRun) ts.visualNotRun = { files: t.visualNotRun, reasons: [...t.visualReasons].sort() };
     out.push(ts);
   }
   const rep = (t: TestSummary) => t.signatures.filter((s) => s.reproducible).length;
   out.sort((a, b) => rep(b) - rep(a) || b.signatures.length - a.signatures.length || cmpStr(a.test, b.test));
+  // the model's groups and the witnesses always; the page errors and the measured checks only when there are any
+  const byCategory = {} as RaceSummary["totals"]["byCategory"];
+  for (const c of CATEGORIES) {
+    const v = counts.get(c)!;
+    if (!newerCategory(c) || v.signatures > 0) byCategory[c] = v;
+  }
   return {
     minSeeds,
     tests: out,
@@ -274,6 +362,10 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
     sources: options.sources ? [...options.sources] : [],
     totals: { tests: out.length, testsWithSignatures: out.filter((t) => t.signatures.length > 0).length, signatures, reproducible, byCategory },
   };
+}
+
+function newerCategory(c: RaceCategory): boolean {
+  return c === "page-error" || c === "check";
 }
 
 // ------------------------------------------------------------------------------------------------ rendering
@@ -321,8 +413,9 @@ function clip(s: string, n: number): string {
   return t.length > n ? `${t.slice(0, Math.max(1, n - 1))}…` : t;
 }
 
-function seedList(seeds: readonly number[]): string {
-  return seeds.join(", ");
+/** "1, 2, 3", or with chaos order "systematic" each seed's order next to it: "1 (natural), 2 (reverse), 3 (seeded)". */
+function seedList(seeds: readonly number[], orders?: Readonly<Record<string, RaceChaosOrder>>): string {
+  return seeds.map((n) => (orders?.[String(n)] ? `${n} (${orders[String(n)]})` : String(n))).join(", ");
 }
 
 function chaosText(c: NonNullable<GenClassRacesFile["chaos"]>): string {
@@ -334,9 +427,9 @@ function chaosText(c: NonNullable<GenClassRacesFile["chaos"]>): string {
 }
 
 function signatureLines(s: SignatureSummary, t: TestSummary, maxEvidence: number): string[] {
-  const seen = `${s.seeds.length} of ${plural(t.seeds.length, "seed")} (${seedList(s.seeds)})`;
-  // a witness is a fact that happened: it has no confidence to show
-  const conf = s.category === "witness" ? "" : ` · confidence ${s.confidence.toFixed(2)}`;
+  const seen = `${s.seeds.length} of ${plural(t.seeds.length, "seed")} (${seedList(s.seeds, t.seedOrders)})`;
+  // only the model's diagnoses carry a probability: a witness, a page error and a check are facts or measurements
+  const conf = MODEL_CATEGORIES.includes(s.category) ? ` · confidence ${s.confidence.toFixed(2)}` : "";
   const head = `${s.reproducible ? "**Reproducible**: " : ""}${seen} · ${code(s.op || s.sig)} · ${code(`${s.trigger}:${s.diagnosis}`)}${conf}`;
   const lines = [`- ${head}`];
   const ev = clip(s.evidence, maxEvidence);
@@ -349,12 +442,18 @@ function fixtureNotes(t: TestSummary): string[] {
   const out: string[] = [];
   if (t.unchecked.files > 0)
     out.push(
-      `Note: in ${t.unchecked.files} of ${plural(t.files, "file")} for this test nothing was flagged and the fixture could not check the page (${t.unchecked.reasons.map(escapeMarkdown).join("; ")}), so those runs may not have been checked.`,
+      `Note: in ${t.unchecked.files} of ${plural(t.files, "file")} for this test ${t.unchecked.others ? "nothing but measured checks was flagged" : "nothing was flagged"} and the fixture could not check the page (${t.unchecked.reasons.map(escapeMarkdown).join("; ")}), so those runs may not have been checked.`,
     );
   if (t.chaosIdle > 0)
     out.push(
       `Note: in ${t.chaosIdle} of ${plural(t.files, "file")} for this test chaos was on but held no request (nothing matched its filter, or a route of the test or a service worker answered first).`,
     );
+  if (t.unsettled)
+    out.push(
+      `Note: in ${t.unsettled} of ${plural(t.files, "file")} for this test the page had not settled when the fixture collected, 2 s after the test (a request in flight or held, a short timer pending, or events still coming), so what happened after that was not recorded.`,
+    );
+  if (t.visualNotRun)
+    out.push(`Note: in ${t.visualNotRun.files} of ${plural(t.files, "file")} for this test the measured checks did not run (${t.visualNotRun.reasons.map(escapeMarkdown).join("; ")}).`);
   return out;
 }
 
@@ -430,7 +529,11 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
   }
 
   const T = s.totals;
-  const rule = s.minSeeds === 1 ? "at least 1 seed" : `${s.minSeeds} or more seeds`;
+  const orders = s.tests.some((t) => t.seedOrders !== undefined);
+  // a natural-order seed does not count toward reproducible: then the rule says which seeds do
+  const natural = s.tests.some((t) => Object.values(t.seedOrders ?? {}).includes("natural"));
+  const seedWord = natural ? "reordered seed" : "seed";
+  const rule = s.minSeeds === 1 ? `at least 1 ${seedWord}` : `${s.minSeeds} or more ${seedWord}s`;
   const head =
     s.files === 0
       ? "**No race file could be read**"
@@ -444,12 +547,13 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
   const note = cutNote(s, lim, maxChars);
   if (note) L.push(note, "");
 
-  const witnesses = T.byCategory.witness.signatures > 0;
+  const count = (c: RaceCategory): number => T.byCategory[c]?.signatures ?? 0;
+  const witnesses = count("witness") > 0;
   if (T.signatures > 0) {
     L.push("| | signatures | reproducible |");
     L.push("|---|---:|---:|");
-    // the witness row only when there are any (a reporter-only setup never has them)
-    for (const c of CATEGORIES) if (c !== "witness" || witnesses) L.push(`| ${CATEGORY_TITLES[c]} | ${T.byCategory[c].signatures} | ${T.byCategory[c].reproducible} |`);
+    // the model's rows always; the others only when there are any (a reporter-only setup never has them)
+    for (const c of CATEGORIES) if (MODEL_CATEGORIES.includes(c) || count(c) > 0) L.push(`| ${CATEGORY_TITLES[c]} | ${count(c)} | ${T.byCategory[c]?.reproducible ?? 0} |`);
     L.push("");
   }
 
@@ -458,7 +562,7 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
   for (const t of flagged.slice(0, lim.tests)) {
     L.push(`### ${escapeMarkdown(t.test)}`);
     L.push("");
-    const meta = [`${plural(t.seeds.length, "seed")} (${seedList(t.seeds)})`, plural(t.signatures.length, "signature")];
+    const meta = [`${plural(t.seeds.length, "seed")} (${seedList(t.seeds, t.seedOrders)})`, plural(t.signatures.length, "signature")];
     if (t.chaos) meta.push(`chaos: ${chaosText(t.chaos)}`);
     L.push(meta.join(" · "));
     L.push("");
@@ -477,7 +581,7 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
     }
     if (t.modelNotReady.files > 0) {
       L.push(
-        `Note: in ${t.modelNotReady.files} of ${plural(t.files, "file")} for this test nothing was flagged and the model was not ready when the fixture collected (${t.modelNotReady.states.map(escapeMarkdown).join(", ")}), so those runs may not have been checked.`,
+        `Note: in ${t.modelNotReady.files} of ${plural(t.files, "file")} for this test ${t.modelNotReady.others ? "nothing but page errors or measured checks was flagged" : "nothing was flagged"} and the model was not ready when the fixture collected (${t.modelNotReady.states.map(escapeMarkdown).join(", ")}), so those runs may not have been checked.`,
       );
       L.push("");
     }
@@ -495,7 +599,9 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
       const notReady = t.modelNotReady.files > 0 ? `; model not ready in ${t.modelNotReady.files} of ${plural(t.files, "file")} (${t.modelNotReady.states.map(escapeMarkdown).join(", ")})` : "";
       const unchecked = t.unchecked.files > 0 ? `; not checked in ${t.unchecked.files} of ${plural(t.files, "file")} (${t.unchecked.reasons.map(escapeMarkdown).join("; ")})` : "";
       const idle = t.chaosIdle > 0 ? `; chaos held no request in ${t.chaosIdle} of ${plural(t.files, "file")}` : "";
-      L.push(`- ${escapeMarkdown(t.test)} (${plural(t.seeds.length, "seed")}: ${seedList(t.seeds)}${notReady}${unchecked}${idle})`);
+      const unsettled = t.unsettled ? `; not settled when collected in ${t.unsettled} of ${plural(t.files, "file")}` : "";
+      const visual = t.visualNotRun ? `; measured checks did not run in ${t.visualNotRun.files} of ${plural(t.files, "file")} (${t.visualNotRun.reasons.map(escapeMarkdown).join("; ")})` : "";
+      L.push(`- ${escapeMarkdown(t.test)} (${plural(t.seeds.length, "seed")}: ${seedList(t.seeds, t.seedOrders)}${notReady}${unchecked}${idle}${unsettled}${visual})`);
     }
     if (quiet.length > lim.items) L.push(`- …and ${quiet.length - lim.items} more`);
     L.push("");
@@ -515,12 +621,28 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
     L.push("---");
     L.push("");
     const parts: string[] = [];
-    if (T.signatures > T.byCategory.witness.signatures) {
+    // the model's paragraph is about the model's groups only
+    if (MODEL_CATEGORIES.some((c) => count(c) > 0)) {
       parts.push(
         `Each line is a diagnosis by GenClass's on-device model in the page under test, one per signature (trigger, diagnosis, operation). ` +
           `Reproducible: flagged in ${rule} of the same test. ` +
           `A signature seen in fewer seeds may depend on that seed's timing: re-run with more seeds before acting on it. ` +
           `Confidence is the model's probability for the diagnosis (the highest over the seeds), and the quoted evidence line is from that seed.`,
+      );
+    }
+    if (count("page-error") > 0) {
+      parts.push(
+        `Lines under "${CATEGORY_TITLES["page-error"]}" are uncaught errors and unhandled rejections the runtime recorded in the page, one per signature (error name, the request nearest to the error in its causal chain, or "no request"): ` +
+          `the quoted line is the error's name and the shape of its message (quoted values as "…", numbers as N), nothing else of it. ` +
+          `Errors whose stack starts in another origin's script (a third-party script, an extension) are left out and counted in the race file. ` +
+          `They carry no confidence: an error is listed when it was thrown. Reproducible: seen in ${rule} of the same test.`,
+      );
+    }
+    if (count("check") > 0) {
+      parts.push(
+        `Lines under "${CATEGORY_TITLES.check}" are the runtime's measured visual checks (deterministic measurements against fixed, documented thresholds; the model is not involved), one per signature (check kind, route): ` +
+          `the quoted line is the check, the element's selector and the measured numbers. ` +
+          `They carry no confidence: a measurement crossed its threshold or not. Reproducible: seen in ${rule} of the same test.`,
       );
     }
     if (witnesses) {
@@ -530,6 +652,12 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
           `identical-in-flight, two identical requests in flight together from separate user actions. ` +
           `They carry no confidence: a fact is listed when it happened. Reproducible: seen in ${rule} of the same test. ` +
           `Whether a fact is a bug is for you to decide (some overwrites are intended; many are repaired a moment later).`,
+      );
+    }
+    if (orders) {
+      parts.push(
+        `A seed marked (natural), (reverse) or (seeded) ran with chaos order "systematic": natural held nothing (the baseline, not counted toward Reproducible), ` +
+          `reverse released each burst of requests newest first, seeded held each request for its seeded delay.`,
       );
     }
     L.push(parts.join("\n\n"));
@@ -583,6 +711,6 @@ export function summarize(inputs: readonly RacesFileInput[], options: SummarizeO
 }
 
 // The format and its validator, so this entry alone is enough for a CI script.
-export { RACES_SCHEMA } from "./types.js";
-export type { GenClassRacesFile, RaceSignature, RacesFileInput, RacesParseResult } from "./types.js";
+export { RACES_SCHEMA, PAGE_ERROR_TRIGGER, CHECK_TRIGGER } from "./types.js";
+export type { GenClassRacesFile, RaceBurst, RaceChaosOrder, RaceSignature, RacesFileInput, RacesFixtureInfo, RacesParseResult } from "./types.js";
 export { parseRaces, validateRaces, MAX_ERRORS } from "./schema.js";
