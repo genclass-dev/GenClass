@@ -14,6 +14,11 @@ const int = (v: unknown, max: number): number | undefined => {
   const n = num(v);
   return n === undefined || n < 0 ? undefined : Math.min(Math.floor(n), max);
 };
+/** A time in ms, at least 0 and at most `max`, to the microsecond (net entries' send and ready times keep fractions). */
+const ms = (v: unknown, max: number): number | undefined => {
+  const n = num(v);
+  return n === undefined || n < 0 ? undefined : Math.min(Math.round(n * 1000) / 1000, max);
+};
 const strs = (v: unknown, maxItems: number, maxLen: number): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, maxItems).map((s) => s.slice(0, maxLen)) : []);
 
 export function spec(v: unknown): ScheduleSpec | null {
@@ -157,16 +162,21 @@ export function step(v: unknown): Step | null {
   }
 }
 
-/** One timing entry (the steps event's `net`): key, start index and send time required, the rest as sent and valid. */
+/**
+ * One timing entry (the steps event's `net`): key, start index and send time required, the rest as sent and valid. The
+ * send and ready times keep their fractions (to the microsecond): the overlap s(b) < r(a) is the page's own comparison.
+ */
 export function netEntry(v: unknown): NetEntry | null {
   const o = obj(v);
   const key = str(o?.key, 300);
   if (!o || !key) return null;
   const n = int(o.n, 1e6);
-  const s = int(o.s, 1e9);
+  const s = ms(o.s, 1e9);
   if (n === undefined || s === undefined) return null;
   const e: NetEntry = { key, n, s };
-  for (const k of ["r", "d", "held"] as const) {
+  const r = ms(o.r, 1e9);
+  if (r !== undefined) e.r = r;
+  for (const k of ["d", "held"] as const) {
     const x = int(o[k], 1e9);
     if (x !== undefined) e[k] = x;
   }

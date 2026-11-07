@@ -11,7 +11,7 @@ import { serve, channelEvent, type Served } from "../src/server.js";
 import { VERSION } from "../src/http.js";
 import { buildCover } from "../src/cover.js";
 import { Store } from "../src/store.js";
-import { INSTRUCTIONS, TOOLS, setupText } from "../src/tools.js";
+import { INSTRUCTIONS, TOOLS, callTool, setupText } from "../src/tools.js";
 import { CAPS, PAGE, SEARCHES as S, act, hello, page, searchLoad, snap, tokenDir } from "./helpers.js";
 
 /** A client on in-memory streams: send requests, read replies and notifications. */
@@ -603,8 +603,9 @@ describe("mcp: plan systematic, coverage and minimise through the tools (AGENT.m
 
   it("a minimal reproduction that ends with another wrong value says so in the result and in explain", async () => {
     const { c, port } = await start();
-    await call(c, "genclass_explore", { action: "start", runs: 1, route: "/search" });
-    for (const [order, v, t] of [[S, "react!", "Results for react"], [S, "react!", "Results for react"], [[S[2], S[0], S[1]], "reac!", "Results for reac"]] as const) {
+    await call(c, "genclass_explore", { action: "start", runs: 2, route: "/search" });
+    // the second reordered load shows another older query's results: what the probe's other value is checked against
+    for (const [order, v, t] of [[S, "react!", "Results for react"], [S, "react!", "Results for react"], [[S[2], S[0], S[1]], "reac!", "Results for reac"], [[S[0], S[2], S[1]], "rea!", "Results for rea"]] as const) {
       const p = await page(port, "/search", undefined, PAGE.origin, CAPS);
       await p.send(searchLoad([...order], v, [t]));
     }
@@ -613,10 +614,45 @@ describe("mcp: plan systematic, coverage and minimise through the tools (AGENT.m
     const p = await page(port, "/search", undefined, PAGE.origin, CAPS);
     await p.send(searchLoad([S[0], S[2], S[1]], "rea!", ["Results for rea"]));
     const res = await call(c, "genclass_replay", { action: "result", id: "f1" });
-    expect(res.text).toContain(`- probe 1 "minimise: ${S[1]} after ${S[2]}" (run r4): REPRODUCED · the page shows none of the baseline's text where the failing run differed (missing "Results for react"), and other text than the failing run's in its place`);
-    expect(res.text).toContain(`Minimal reproduction (run r4): the one inverted pair: "${S[1]}" delivered after "${S[2]}". Its page ended with other values than the failing run, none of them the request-order baseline's where the failing run differed. genclass_replay {action:"arm", id:"f1"} now replays this order`);
+    expect(res.text).toContain(`- probe 1 "minimise: ${S[1]} after ${S[2]}" (run r5): REPRODUCED · the page shows none of the baseline's text where the failing run differed (missing "Results for react"), and in its place "Results for rea", which another reordered run of the explore showed too`);
+    expect(res.text).toContain(`Minimal reproduction (run r5): the one inverted pair: "${S[1]}" delivered after "${S[2]}". Its page ended with other values than the failing run, ones another reordered run of the explore had too, and none of the request-order baseline's where the failing run differed; its replays are judged against that page's values. genclass_replay {action:"arm", id:"f1"} now replays this order`);
     const ex = await call(c, "genclass_explain", { id: "f1" });
-    expect(ex.text).toContain(`- Minimal reproduction (run r4): the one inverted pair, "${S[1]}" delivered after "${S[2]}" (its page ends with other values than the failing run, none of them the baseline's); the replay below delivers it.`);
+    expect(ex.text).toContain(`- Minimal reproduction (run r5): the one inverted pair, "${S[1]}" delivered after "${S[2]}" (its page ends with other values than the failing run, ones another reordered run had too, none of them the baseline's; its replays are judged against them); the replay below delivers it.`);
+  });
+
+  it("the minimise result says what is left when no probe reproduced it: moves left out, inversions with no probe, expired probes", async () => {
+    let t = 1_000_000;
+    const s = new Store({ now: () => t });
+    const api = makeApi(s, { url: "http://127.0.0.1:1", port: 1 });
+    const ctx = { api: async (m: string, p?: unknown) => api(m, p), now: () => t, cwd: tmpdir(), env: {} };
+    const typing = act(0, "type", 'searchbox "Search"', "react", { count: 5, dur: 400 });
+    const loadOf = () => {
+      const h = s.hello(hello("/search", undefined, CAPS))!;
+      return { ...h, schedule: h.schedule as { ranks?: string[] } | null, send: (events: unknown[]) => s.events({ run: h.run, token: h.token, events }) };
+    };
+    // ten requests in flight together, delivered in reverse: 81 single moves, 12 armed
+    const x = s.armExplore({ runs: 1, route: "/search" });
+    const K = Array.from({ length: 10 }, (_, i) => `GET /api/k#${i + 1}`);
+    const send = (order: string[], text: string) => [{ t: "steps", steps: [typing], order, net: K.map((key, i) => ({ key, n: i, s: 10 * i, r: 1000, d: 1000 + order.indexOf(key) })) }, { t: "snapshot", snapshot: snap({}, [text]) }];
+    loadOf().send(send(K, "All ten"));
+    loadOf().send(send(K, "All ten"));
+    loadOf().send(send([...K].reverse(), "Only one"));
+    const f = s.reportExplore(x.id)!.findings[0];
+    expect(await callTool("genclass_replay", { action: "minimize", id: f.id }, ctx)).toMatchObject({ text: expect.stringContaining("69 more probe(s) were left out") });
+    // every probe runs its order and the page is right: none reproduced it, but 69 moves were never tried
+    for (let i = 0; i < 12; i++) {
+      const l = loadOf();
+      l.send(send(l.schedule!.ranks!, "All ten"));
+    }
+    const res = await callTool("genclass_replay", { action: "result", id: f.id }, ctx);
+    expect(res.text).toContain("None of the 12 probe(s) reproduced it; 69 more single move(s) were not tried (left out, or with no probe), so one of them, or several responses moved together, may still reproduce it.");
+    expect(res.text).not.toContain("an inconclusive probe comes before");
+    // armed again, then 30 minutes pass: the probes no page load ran are no longer handed out
+    s.armMinimize(f.id);
+    loadOf().send(send(K, "All ten"));
+    t += 30 * 60_000;
+    const late = await callTool("genclass_replay", { action: "result", id: f.id }, ctx);
+    expect(late.text).toContain(`11 probe(s) still without a result, and the probes expired 30 minutes after they were armed, so no page load gets one now: genclass_replay {action:"minimize", id:"${f.id}"} arms them again (each probe runs again).`);
   });
 
   it("the API: replay.result keeps its shape, and the minimise verdicts ride beside it only once probes are armed", () => {

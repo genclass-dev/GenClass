@@ -35,12 +35,23 @@ schedules it can run, labelled, and its report says what it lacks.
   start order with one response of the failing order moved (the smallest moves first, at most 12), one page load each;
   `genclass_replay {action: "result"}` names the smallest reordering that reproduces the race, exact ("the one inverted
   pair") or not, and the finding replays it from then on (its regression test too). A probe whose page ends with another
-  wrong value than the failing run's, none of the baseline's, reproduces it ("other values"), and so does a replay of
-  that order. A probe that did not deliver the order it was built for is inconclusive and says why.
-- **The replay order check**: a replay of a race whose harmful order is known (a minimal reproduction, else the failing
-  run's inversions) counts only when that order happened in it; otherwise it is inconclusive ("the harmful order did
-  not happen in this run ... run explore again"), never "not reproduced". A fix that stops sending the older request is
-  proven by a new explore.
+  wrong value than the failing run's, none of the baseline's, reproduces it ("other values") only when another
+  reordered run of the explore showed that value too (the race keeps what its reordered runs showed,
+  `evidence.reorderedValues`), no form field is gone and the page threw no error the failing run did not: a page that
+  changed since the explore, a blank page or another failure is inconclusive, never the minimal reproduction. A
+  minimal reproduction chosen for other values keeps them (`evidence.minimal.shown`), and its replays are judged
+  against them, strictly. A probe that did not deliver the order it was built for is inconclusive and says why. A
+  probe whose page load left or went quiet before a quiet point after its steps (2 minutes), is gone, or did other
+  steps goes to the next page load, at most 3 in all (`genclass_status` counts it as still to run); probes that expired
+  (30 minutes) say so, with how to arm them again. Inversions that give no probe (not in the first baseline's start order, or the other way round there) are
+  counted and said, and "no single response moved reproduces it" is never claimed over them or over probes left out:
+  the result says how many single moves were not tried.
+- **The replay order check**: a replay of a race whose harmful order is known counts only when that order happened in
+  it; otherwise it is inconclusive ("the harmful order did not happen in this run ... run explore again"), never "not
+  reproduced". Each replay run is judged by the order it ran: one of the minimal reproduction's order by all its pairs
+  (and that probe's values), any other, such as one armed before minimise, by the failing run's inversions and values,
+  so a verdict already given is never rewritten when a minimal reproduction is chosen later. A fix that stops sending
+  the older request is proven by a new explore.
 - **Race findings** keep the failing run's inversions, the first baseline's start order and the requests that ended
   without a response, so minimise and replays need no baseline later; a race whose failing run delivered nothing out of
   request order is titled "The final state depends on response timing". `genclass_explain` lists the inversions.
@@ -49,7 +60,11 @@ schedules it can run, labelled, and its report says what it lacks.
   instead of pass on the bug.
 - **API**: `explore.start` takes `plan` and `slowMode`; `finding.minimize`; `replay.result` adds a `minimize` field
   beside its unchanged `results`; `status` lists armed probes and run notes. Validation of the new fields (`caps`,
-  `ranks`, `reverse`, `delaySeed`, the net log: 2,000 keys, numbers finite and non-negative, strings capped). What
+  `ranks`, `reverse`, `delaySeed`, the net log: 2,000 keys, numbers finite and non-negative, strings capped; send and
+  ready times keep the page's fractions, to the microsecond, so the overlap is the one the page's schedule used). Only
+  the runtime's suffix after the occurrence number (`#3~retry2`, `#3~hedge`) marks a retry or a hedge: a `~` in a path
+  (`/~alice/search`) no longer drops a request from overlaps, inversions, coverage, cover rows and probes. A restored
+  systematic session keeps its count of cover slots, so its report still says whether it ran every row. What
   `GENCLASS_REPORT` sends is unchanged.
 - `test/e2e/systematic.node.mjs`: the systematic plan end to end in Node through the real runtime and bridge, with a
   simulated page (no browser): 126 checks, RESULTS.md section 28.

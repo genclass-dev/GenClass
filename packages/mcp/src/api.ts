@@ -4,7 +4,7 @@
 // text for the model.
 
 import { regressionTest } from "./testgen.js";
-import { ARM_TTL_MS, replaySpecOf, type Store } from "./store.js";
+import { replaySpecOf, type Store } from "./store.js";
 import { scenarioOf, settledAfterActs } from "./compare.js";
 import type { ActStep, Finding, Run } from "./types.js";
 
@@ -61,9 +61,11 @@ export function makeApi(store: Store, info: { url: string; port: number }): Api 
           findings: counts,
           explore: x ? { id: x.id, state: x.state, planned: x.plan.length, assigned: x.next, runs: x.runs, route: x.route } : null,
           replays: store.replays.filter((r) => r.remaining > 0).map((r) => ({ finding: r.finding, remaining: r.remaining, route: r.route })),
+          // a probe whose page load got stuck goes to the next one: it is still to run
           minimize: store.minimizes
-            .filter((m) => now - m.created < ARM_TTL_MS && m.probes.some((p) => !p.run && !p.rejected))
-            .map((m) => ({ finding: m.finding, route: m.route, probes: m.probes.length, remaining: m.probes.filter((p) => !p.run && !p.rejected).length })),
+            .map((m) => ({ m, remaining: store.probesOpen(m, now) }))
+            .filter((x) => x.remaining > 0)
+            .map(({ m, remaining }) => ({ finding: m.finding, route: m.route, probes: m.probes.length, remaining })),
         };
       }
       case "findings": {

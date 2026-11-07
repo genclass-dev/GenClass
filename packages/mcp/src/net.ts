@@ -6,18 +6,23 @@
 // run's own timing, no baseline needed.
 //
 // Only schedulable keys take part: delivered through the schedule's gate (d and r), not released at once by pass()
-// (protected requests, routes in mode "off"), not a retry or a hedge (a "~retryN" or "~hedge" suffix). Everything else is
-// left out of overlaps, inversions, coverage, cover rows and probes, and counted. Pure and deterministic (no clock, no
-// randomness, no I/O); the numbers come from the page, validated (validate.ts netEntry), and are never trusted to be
-// consistent: a bad log gives fewer pairs, never a crash.
+// (protected requests, responses that reached the app without the gate), not a retry or a hedge (a "~retryN" or
+// "~hedge" suffix right after the occurrence number; a "~" in a path, "/~alice/", is part of the path). Everything else
+// is left out of overlaps, inversions, coverage, cover rows and probes, and counted. Send and ready times carry the
+// page's fractions of a millisecond, so the overlap is the one the page's schedule used. Pure and deterministic (no
+// clock, no randomness, no I/O); the numbers come from the page, validated (validate.ts netEntry), and are never
+// trusted to be consistent: a bad log gives fewer pairs, never a crash.
 
 import type { NetEntry, Run } from "./types.js";
 
 /** At most this many overlapping pairs per run: a page with thousands of requests in flight together stays cheap. */
 export const MAX_PAIRS = 20_000;
 
-/** A retry or a hedge of a keyed request ("GET /api/a#2~retry2", "GET /api/a#2~hedge"). */
-export const suffixed = (key: string): boolean => key.includes("~");
+/**
+ * A retry or a hedge of a keyed request ("GET /api/a#2~retry2", "GET /api/a#2~hedge"): the runtime's suffix always
+ * follows the occurrence number, and a path cannot hold a "#", so "GET /~alice/search#1" is a plain key.
+ */
+export const suffixed = (key: string): boolean => /#\d+~/.test(key);
 
 /** Delivered through the schedule (d and r), not passed at once, not a retry or a hedge. */
 export function schedulable(e: NetEntry | undefined): e is NetEntry & { r: number; d: number } {

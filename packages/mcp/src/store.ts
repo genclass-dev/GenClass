@@ -52,6 +52,20 @@ export interface Hello {
 
 /** Minimise probes armed at once (the smallest reorderings first). */
 export const MAX_PROBES = 12;
+/** A probe goes to at most this many page loads: its first, and two more when one did not get to a result. */
+export const MAX_PROBE_LOADS = 3;
+/** A probe's page load that sent nothing this long, without a quiet point after its steps, lets the probe go again. */
+export const PROBE_IDLE_MS = 2 * 60_000;
+/** Lines of the reordered runs a race keeps, to check a minimise probe's other value against. */
+const MAX_REORDERED_LINES = 100;
+
+/** What a probe that reproduced a race with other values ended with: its replays are judged against these. */
+export interface OtherValues {
+  /** Lines it showed where the baseline's were missing, each one a reordered run of the explore showed too. */
+  text?: string[];
+  /** Its values of the fields that decided, by field name. */
+  fields?: Record<string, string>;
+}
 
 /** One probe's verdict (minimizeResult). */
 export interface ProbeResult {
@@ -72,9 +86,12 @@ export interface ProbeResult {
   realised?: [string, string][];
   /**
    * Reproduced with other values than the failing run's: where the failing run differed from request order, the page
-   * showed none of the baseline's either (another response's data in their place).
+   * showed none of the baseline's either, and in their place values another reordered run of the explore showed too
+   * (another older response's data), with no error the failing run did not have.
    */
   other?: true;
+  /** With `other`: the values it ended with (a replay of it is judged against them). */
+  shown?: OtherValues;
 }
 
 /** Which minimise probes of a race finding reproduced it, and the smallest reordering that does. */
@@ -84,11 +101,15 @@ export interface MinimizeResult {
   probes: ProbeResult[];
   /** Probes past the first 12 that were not armed. */
   leftOut: number;
+  /** Inversions of the failing run that gave no probe (MinimizeArm.skipped); set when not 0. */
+  skipped?: number;
   /** Probes still waiting for a page load (or for one to settle). */
   pending: number;
+  /** The probes were armed more than 30 minutes ago: no page load gets one now (arm minimise again). */
+  expired?: true;
   /** The first reproducing probe, every earlier one conclusive: the finding now replays it (`other`: with other values). */
   minimal?: { run: string; label: string; a: string; b: string; between: number; variant: 1 | 2; exact: boolean; inverted: [string, string][]; other?: true };
-  /** Every probe was conclusive, none was left out and none reproduced it. */
+  /** Every probe was conclusive, none was left out or skipped, and none reproduced it. */
   none?: boolean;
 }
 
@@ -245,18 +266,25 @@ export class Store {
     return { spec: { order: "given", given: fr.order.slice() }, label: `${label} (page runtime has no ${missing.join(", ")}: recorded order)`, missing };
   }
 
-  /** The next minimise probe for this page's route; only a runtime that runs the ranked order gets one. */
+  /**
+   * The next minimise probe for this page's route; only a runtime that runs the ranked order gets one. A probe whose
+   * page load will not get to a result (it is gone, left before a quiet point after its steps, went quiet, or did other
+   * steps) goes to the next page load again, at most MAX_PROBE_LOADS times in all.
+   */
   private assignProbe(run: Run, here: string, now: number): boolean {
     if (!(run.caps ?? []).includes("ranked")) return false;
     for (const m of this.minimizes) {
       if (now - m.created >= ARM_TTL_MS || (m.route && routeShape(m.route) !== here)) continue;
-      const i = m.probes.findIndex((p) => !p.run && !p.rejected);
+      const f = this.findings.get(m.finding);
+      const orig = f?.run ? this.runs.get(f.run) : undefined;
+      const i = m.probes.findIndex((p) => !p.rejected && (!p.run || ((p.loads ?? 1) < MAX_PROBE_LOADS && this.probeStuck(p, orig, now) !== null)));
       if (i < 0) continue;
       const p = m.probes[i];
       const missing = lacking(p.spec, run.caps);
       const spec = missing.includes("delaySeed") ? seedForDelays(p.spec) : p.spec;
       const label = `${p.spec.label ?? `minimise ${i + 1}`}${missing.length ? ` (page runtime has no ${missing.join(", ")})` : ""}`;
       p.run = run.id;
+      p.loads = (p.loads ?? 0) + 1;
       run.schedule = { ...spec, id: m.finding, label };
       run.assignment = { kind: "minimize", ref: m.finding, index: i, label };
       if (missing.length) note(run, `this page's runtime cannot run ${missing.join(", ")}: it ran ${label}`);
@@ -529,7 +557,11 @@ export class Store {
       }
     } else if (a.kind === "minimize") {
       const p = this.minimizes.find((m) => m.finding === a.ref)?.probes[a.index];
-      if (p && p.run === run.id) delete p.run;
+      if (p && p.run === run.id) {
+        // the page did not run it: that load does not count against the probe's page loads
+        delete p.run;
+        p.loads = Math.max(0, (p.loads ?? 1) - 1);
+      }
     } else {
       const arm = this.replays.find((r) => r.finding === a.ref && r.runs.includes(run.id));
       if (arm) {
@@ -788,7 +820,7 @@ export class Store {
       };
       if (g.delay) finding(g.delay, "slow|", delayTitle(g.delay, g.delay.oneLoad), { delayOnly: true, plainBaseline: g.plainBaseline, failingRuns: [{ run: g.delay.run, label: g.delay.label, endedDifferently: true }], of: g.delay.of, differing: g.delay.differing });
       const d = races[0];
-      if (d) finding(d, "", raceTitle(d), { failingRuns: races.map((y) => ({ run: y.run, label: y.label, endedDifferently: endedDifferently(y) })), of: g.compared });
+      if (d) finding(d, "", raceTitle(d), { failingRuns: races.map((y) => ({ run: y.run, label: y.label, endedDifferently: endedDifferently(y) })), of: g.compared, reorderedValues: reorderedValues(g.diffs) });
     }
     x.counted = [...counted].slice(-500);
     if (x.state === "collecting" && x.runs.length >= x.plan.length) x.state = "stopped";
@@ -846,7 +878,8 @@ export class Store {
    * Arm minimise probes for a race finding: for each inversion (a, b) of its failing run, the first baseline's start
    * order with a moved to just after b (an older response delivered late), then with b moved to just before a (the
    * same probe when nothing started between them). The smallest moves first (fewest requests between, then by a's start
-   * index), at most 12; each probe is one page load with the ranked order, the failing run's delays and hold limit.
+   * index), at most 12 (the rest counted in `leftOut`); each probe is one page load with the ranked order, the failing
+   * run's delays and hold limit. An inversion that gives no probe is counted in `skipped`.
    */
   armMinimize(findingId: string): MinimizeArm | { error: string } | null {
     const f = this.findings.get(findingId);
@@ -889,7 +922,11 @@ export class Store {
       }
     }
     this.minimizes = this.minimizes.filter((x) => x.finding !== f.id);
-    const arm: MinimizeArm = { finding: f.id, route: f.route, created: this.now(), probes, leftOut: total - probes.length };
+    // inversions that gave no probe (not in the first baseline's start order, or the other way round there, or past the
+    // 50 the finding keeps) are never tried: counted, so "none reproduces it" is never claimed over them
+    const all = typeof ev.inversionsTotal === "number" && Number.isFinite(ev.inversionsTotal) ? Math.max(inv.length, Math.floor(ev.inversionsTotal)) : inv.length;
+    const skipped = all - moves.length;
+    const arm: MinimizeArm = { finding: f.id, route: f.route, created: this.now(), probes, leftOut: total - probes.length, ...(skipped > 0 ? { skipped } : {}) };
     this.minimizes.push(arm);
     if (this.minimizes.length > 20) this.minimizes.shift();
     return arm;
@@ -899,10 +936,12 @@ export class Store {
    * The minimise probes' verdicts. A probe counts when its run settled after the same steps as the failing run and
    * delivered the inversion it was built for and no other outside its intended ones (its own timing log); then the
    * failing run's evidence decides, as for a replay, except that a probe moved another response than the failing run
-   * did: one whose page shows none of the baseline's values where the failing run differed, and others than the failing
-   * run's in their place, reproduces it too (`other`; a stale search showing another older query's results). The
-   * minimal reproduction is the first reproducing probe, chosen only when every probe before it is conclusive; the
-   * finding then replays it (and its version moves on).
+   * did: one whose page shows none of the baseline's values where the failing run differed, and in their place values
+   * another reordered run of the explore showed too, with no error the failing run did not have, reproduces it too
+   * (`other`; a stale search showing another older query's results). The minimal reproduction is the first reproducing
+   * probe, chosen only when every probe before it is conclusive; the finding then replays it (and its version moves on).
+   * A probe whose page load will not get to a result goes to the next one (assignProbe); after 30 minutes the probes are
+   * no longer handed out (`expired`).
    */
   minimizeResult(findingId: string): MinimizeResult | null {
     const f = this.findings.get(findingId);
@@ -910,7 +949,9 @@ export class Store {
     if (!f || !arm) return null;
     const orig = f.run ? this.runs.get(f.run) : undefined;
     const ev = f.evidence as Record<string, unknown>;
-    const probes = arm.probes.map((p, i) => this.probeResult(ev, orig, p, i));
+    const now = this.now();
+    const expired = now - arm.created >= ARM_TTL_MS;
+    const probes = arm.probes.map((p, i) => this.probeResult(ev, orig, p, i, now, expired));
     let minimal: ProbeResult | undefined;
     for (const p of probes) {
       if (!p.conclusive) break;
@@ -919,26 +960,53 @@ export class Store {
         break;
       }
     }
-    const out: MinimizeResult = { finding: f.id, ...(arm.route ? { route: arm.route } : {}), probes, leftOut: arm.leftOut, pending: probes.filter((p) => p.state === "pending").length };
+    const out: MinimizeResult = { finding: f.id, ...(arm.route ? { route: arm.route } : {}), probes, leftOut: arm.leftOut, ...(arm.skipped ? { skipped: arm.skipped } : {}), pending: probes.filter((p) => p.state === "pending").length, ...(expired ? { expired: true as const } : {}) };
     if (minimal) {
       const p = arm.probes[minimal.index];
       out.minimal = { run: minimal.run!, label: minimal.label, a: p.a, b: p.b, between: p.between, variant: p.variant, exact: p.between === 0, inverted: minimal.realised ?? [[p.a, p.b]], ...(minimal.other ? { other: true as const } : {}) };
-      this.setMinimal(f, p, out.minimal);
-    } else if (probes.length && probes.every((p) => p.conclusive) && arm.leftOut === 0) out.none = true;
+      this.setMinimal(f, p, out.minimal, minimal.shown);
+    } else if (probes.length && probes.every((p) => p.conclusive) && arm.leftOut === 0 && !arm.skipped) out.none = true;
     return out;
   }
 
-  private probeResult(ev: Record<string, unknown>, orig: Run | undefined, p: Probe, index: number): ProbeResult {
-    const base = { index, label: p.spec.label ?? `probe ${index + 1}`, a: p.a, b: p.b, between: p.between, variant: p.variant, ...(p.run ? { run: p.run } : {}) };
-    const res = (state: ProbeResult["state"], reproduced: boolean | null, note: string, realised?: [string, string][], other?: boolean): ProbeResult => ({ ...base, state, reproduced, conclusive: state === "done" && reproduced !== null, note, ...(realised ? { realised: realised.slice(0, 50) } : {}), ...(other ? { other: true as const } : {}) });
-    if (p.rejected) return res("rejected", null, "its page's runtime rejected this schedule (the run's notes say so): it is not tried again");
-    if (!p.run) return res("pending", null, "no page load has run it yet");
+  /** How many probes of an arm the next page load of its route could get: never run, or their page load got stuck. */
+  probesOpen(m: MinimizeArm, now = this.now()): number {
+    if (now - m.created >= ARM_TTL_MS) return 0;
+    const f = this.findings.get(m.finding);
+    const orig = f?.run ? this.runs.get(f.run) : undefined;
+    return m.probes.filter((p) => !p.rejected && (!p.run || ((p.loads ?? 1) < MAX_PROBE_LOADS && this.probeStuck(p, orig, now) !== null))).length;
+  }
+
+  /**
+   * Why a probe's page load will not get it to a result, so the next page load may run it (null: it still may, or it
+   * did): its run is gone, left before a quiet point after its steps, sent nothing for PROBE_IDLE_MS without one, or did
+   * other steps than the failing run.
+   */
+  private probeStuck(p: Probe, orig: Run | undefined, now: number): string | null {
+    if (!p.run) return null;
     const r = this.runs.get(p.run);
-    if (!r) return res("inconclusive", null, "its run is gone");
+    if (!r) return "its page load is gone";
+    if (settledAfterActs(r)) return orig && !sameScenario(orig, r) ? "its page load did other steps than the failing run" : null;
+    if (r.ended) return "its page load ended before a quiet point after its steps";
+    if (now - r.lastSeen >= PROBE_IDLE_MS) return `its page load sent nothing for ${PROBE_IDLE_MS / 60_000} minutes without reaching a quiet point after its steps`;
+    return null;
+  }
+
+  private probeResult(ev: Record<string, unknown>, orig: Run | undefined, p: Probe, index: number, now: number, expired: boolean): ProbeResult {
+    const base = { index, label: p.spec.label ?? `probe ${index + 1}`, a: p.a, b: p.b, between: p.between, variant: p.variant, ...(p.run ? { run: p.run } : {}) };
+    const res = (state: ProbeResult["state"], reproduced: boolean | null, note: string, realised?: [string, string][], other?: OtherValues): ProbeResult => ({ ...base, state, reproduced, conclusive: state === "done" && reproduced !== null, note, ...(realised ? { realised: realised.slice(0, 50) } : {}), ...(other ? { other: true as const, shown: other } : {}) });
+    const gone = "the probes expired 30 minutes after they were armed, so no page load gets this one now: arm minimise again";
+    if (p.rejected) return res("rejected", null, "its page's runtime rejected this schedule (the run's notes say so): it is not tried again");
+    if (!p.run) return res("pending", null, expired ? gone : "no page load has run it yet");
     if (!orig) return res("inconclusive", null, "the failing run is gone, so the steps cannot be compared: record the bug again");
+    const stuck = this.probeStuck(p, orig, now);
+    if (stuck) {
+      if ((p.loads ?? 1) >= MAX_PROBE_LOADS) return res("inconclusive", null, `${stuck}, on each of the ${p.loads ?? 1} page loads it went to: arm minimise again to try it once more`);
+      return res("pending", null, `${stuck}: ${expired ? gone : "the next fresh page load gets it again (do the same steps)"}`);
+    }
+    const r = this.runs.get(p.run)!;
     if (orig.steps.some((s) => s.k === "act") && !r.steps.some((s) => s.k === "act")) return res("pending", null, "no user actions were recorded in this run yet: do the steps, await whenSettled(), then ask again");
     if (!settledAfterActs(r)) return res("pending", null, "the run has not reached a quiet point after its steps yet: wait for whenSettled(), then ask again");
-    if (!sameScenario(orig, r)) return res("inconclusive", null, "its user actions differ from the failing run's: do the same steps");
     if (!r.net) return res("inconclusive", null, "its page sent no net timing log, so which responses it delivered out of order cannot be checked");
     if ((r.netLost ?? 0) > 0 || r.lost > 0) return res("inconclusive", null, "its page could not keep its whole timing log, so which responses it delivered out of order cannot be checked");
     const realised = inversionsOf(r.net, r.order);
@@ -949,13 +1017,19 @@ export class Store {
     if (extra.length) return res("inconclusive", null, `it also delivered ${extra.slice(0, 3).map(([x, y]) => `${q(y, 60)} before ${q(x, 60)}`).join(", ")}${extra.length > 3 ? `, and ${extra.length - 3} more pair(s) out of order` : ""}`, realised);
     // another value of the same difference counts: the probe moved another response than the failing run did
     const v = raceVerdict(ev, r, { min: r.started - orig.started - (orig.snapshot?.t ?? 0), max: r.started + (r.snapshot?.t ?? 0) - orig.started }, true);
-    return res("done", v.reproduced, v.note, realised, v.other);
+    if (v.other) {
+      // unless the page failed another way: an uncaught error the failing run did not have
+      const fresh = r.errors.find((e) => !orig.errors.some((o) => o.name === e.name && shape(o.message) === shape(e.message)));
+      if (fresh) return res("inconclusive", null, `it ended with other values, but it also threw an error the failing run did not (${q(fresh.message, 100)}): another failure, not necessarily this race`, realised);
+    }
+    return res("done", v.reproduced, v.note, realised, v.other ? v.shown ?? {} : undefined);
   }
 
   /** The finding now replays its minimal reproduction: the evidence names it and the version moves on (once). */
-  private setMinimal(f: Finding, p: Probe, m: NonNullable<MinimizeResult["minimal"]>): void {
+  private setMinimal(f: Finding, p: Probe, m: NonNullable<MinimizeResult["minimal"]>, shown?: OtherValues): void {
     const ev = f.evidence as Record<string, unknown>;
-    const minimal = { inverted: m.inverted, exact: m.exact, run: m.run, label: m.label, a: m.a, b: m.b, between: m.between, variant: m.variant, ...(m.other ? { other: true } : {}) };
+    // chosen for other values: what that probe's page showed, which its replays are judged against
+    const minimal = { inverted: m.inverted, exact: m.exact, run: m.run, label: m.label, a: m.a, b: m.b, between: m.between, variant: m.variant, ...(m.other ? { other: true, shown: shown ?? {} } : {}) };
     if (JSON.stringify(ev.minimal) === JSON.stringify(minimal)) return;
     f.evidence = { ...ev, minimal };
     const spec: ScheduleSpec = { ...p.spec };
@@ -998,16 +1072,19 @@ export class Store {
         reproduced = hit;
         note = hit ? "the same error was thrown again" : "the error did not recur";
       } else if (f.kind === "race") {
-        const missed = harmfulOrderMissed(ev, r);
+        // judged by the order this run ran: the minimal reproduction's (all its pairs, and the values of that probe
+        // when it was chosen for other values), or another, such as the failing run's from a replay armed before
+        // minimise (one of the failing run's inversions, and its values)
+        const minimal = ranMinimal(f, r);
+        const missed = harmfulOrderMissed(ev, r, minimal);
         if (missed) {
           // a run that did not deliver the harmful order says nothing about the fix, either way
           reproduced = null;
           note = `the harmful order did not happen in this run (${q(missed[0], 80)} was not delivered after ${q(missed[1], 80)}: requests renumbered or no longer overlapping). If the fix cancels or no longer sends the older request, the race cannot occur: run explore again to check other orders.`;
         } else {
-          // an age in a line of the finding has moved on by as long as has passed since; a minimal reproduction chosen
-          // for ending with other values is replayed (its order), so its replay is judged as it was
-          const other = (ev.minimal as { other?: unknown } | undefined)?.other === true;
-          const v = raceVerdict(ev, r, { min: r.started - orig!.started - (orig!.snapshot?.t ?? 0), max: r.started + (r.snapshot?.t ?? 0) - orig!.started }, other);
+          // an age in a line of the finding has moved on by as long as has passed since
+          const byMinimal = minimal && (ev.minimal as { other?: unknown }).other === true;
+          const v = raceVerdict(byMinimal ? minimalEvidence(ev) : ev, r, { min: r.started - orig!.started - (orig!.snapshot?.t ?? 0), max: r.started + (r.snapshot?.t ?? 0) - orig!.started }, false, byMinimal ? "the minimal reproduction" : undefined);
           reproduced = scenarioMatches ? v.reproduced : null;
           note = v.note;
         }
@@ -1123,7 +1200,9 @@ export class Store {
       const o = x as ExploreSession;
       if (!o || typeof o.id !== "string" || !Array.isArray(o.plan) || !Array.isArray(o.runs)) continue;
       const plan = o.plan.map((p) => V.spec(p)).filter((p): p is ScheduleSpec => !!p);
-      this.explores.set(o.id, { id: o.id, created: Number(o.created) || 0, plan, next: Math.min(Number(o.next) || 0, plan.length), runs: o.runs.filter((r) => typeof r === "string"), state: "stopped", ...(typeof o.route === "string" ? { route: o.route } : {}), counted: Array.isArray(o.counted) ? o.counted.filter((c) => typeof c === "string") : [], ...(o.strategy === "systematic" ? { strategy: "systematic" as const } : {}) });
+      // a systematic session keeps how many cover slots it armed: its report still says whether it ran every row
+      const coverSlots = o.strategy === "systematic" && Number.isInteger(o.coverSlots) && o.coverSlots! >= 0 ? { coverSlots: Math.min(o.coverSlots!, MAX_EXPLORE_RUNS) } : {};
+      this.explores.set(o.id, { id: o.id, created: Number(o.created) || 0, plan, next: Math.min(Number(o.next) || 0, plan.length), runs: o.runs.filter((r) => typeof r === "string"), state: "stopped", ...(typeof o.route === "string" ? { route: o.route } : {}), counted: Array.isArray(o.counted) ? o.counted.filter((c) => typeof c === "string") : [], ...(o.strategy === "systematic" ? { strategy: "systematic" as const } : {}), ...coverSlots });
     }
   }
 }
@@ -1216,12 +1295,40 @@ function delayTitle(d: RunDiff, oneLoad?: boolean): string {
 }
 
 /**
- * Did a replay run miss the order that made the race? Checked only when the finding knows it (its minimal reproduction,
- * else the failing run's inversions) and the run has a timing log: every pair of the minimal one, else at least one of
- * the failing run's, must be an inversion of the replay. The first pair it missed, or null (delivered, or not checked).
+ * Did a replay run run the minimal reproduction's order (the ranks of the probe the finding replays since minimise),
+ * rather than one armed before it (the failing run's)? Its schedule says.
  */
-function harmfulOrderMissed(ev: Record<string, unknown>, r: Run): [string, string] | null {
-  const m = ev.minimal && typeof ev.minimal === "object" ? pairsOf((ev.minimal as { inverted?: unknown }).inverted, 50) : [];
+function ranMinimal(f: Finding, r: Run): boolean {
+  const ev = f.evidence as Record<string, unknown>;
+  if (!ev.minimal || typeof ev.minimal !== "object" || f.replay?.order !== "ranked" || r.schedule?.order !== "ranked") return false;
+  const a = f.replay.ranks ?? [];
+  const b = r.schedule.ranks ?? [];
+  return a.length === b.length && a.every((k, i) => k === b[i]);
+}
+
+/**
+ * What a replay of the minimal reproduction is judged against: the failing run's evidence, except that a minimal chosen
+ * for other values brings that probe's own (its lines in place of the failing run's, its field values), so its replay
+ * reproduces only when the page ends that way again (an old state file without them: the failing run's, strictly).
+ */
+function minimalEvidence(ev: Record<string, unknown>): Record<string, unknown> {
+  const m = ev.minimal as { other?: unknown; shown?: { text?: unknown; fields?: unknown } } | undefined;
+  if (m?.other !== true || !m.shown || typeof m.shown !== "object") return ev;
+  const out: Record<string, unknown> = { ...ev };
+  if (Array.isArray(m.shown.text)) out.textOnlyRun = m.shown.text.filter((l): l is string => typeof l === "string");
+  const values = m.shown.fields && typeof m.shown.fields === "object" ? (m.shown.fields as Record<string, unknown>) : null;
+  if (values && Array.isArray(ev.fields))
+    out.fields = (ev.fields as { name: string; run: string }[]).map((d) => (Object.prototype.hasOwnProperty.call(values, d.name) && typeof values[d.name] === "string" ? { ...d, run: values[d.name] as string } : d));
+  return out;
+}
+
+/**
+ * Did a replay run miss the order that made the race? Checked only when the finding knows it and the run has a timing
+ * log: a run of the minimal reproduction's order must deliver every pair of it newer first again, any other run at
+ * least one of the failing run's inversions. The first pair it missed, or null (delivered, or not checked).
+ */
+function harmfulOrderMissed(ev: Record<string, unknown>, r: Run, minimal: boolean): [string, string] | null {
+  const m = minimal && ev.minimal && typeof ev.minimal === "object" ? pairsOf((ev.minimal as { inverted?: unknown }).inverted, 50) : [];
   const inv = pairsOf(ev.inversions, 50);
   if ((!m.length && !inv.length) || !r.net) return null;
   const got = new Set(inversionsOf(r.net, r.order).map(([a, b]) => pairKey(a, b)));
@@ -1230,23 +1337,51 @@ function harmfulOrderMissed(ev: Record<string, unknown>, r: Run): [string, strin
 }
 
 /**
- * Does a replay run show the race finding's difference again? From the evidence of the failing run. `other`: the run
- * delivered another order than the failing run (a minimise probe, or the replay of one), so a page that shows none of
- * the baseline's values where the failing run differed, and others in their place, reproduces it too (`other` set):
- * every shown field off its baseline value, or every line only the baseline showed missing. Without `other`, that is
- * neither (null).
+ * What the reordered runs of a race's group showed in place of the baselines': the lines only they showed, and their
+ * values of the fields that differed. A minimise probe that ends with another wrong value reproduces the race only when
+ * one of them showed that value too, so a page that changed since the explore, a blank page or another failure does not.
  */
-function raceVerdict(ev: Record<string, unknown>, r: Run, later: Elapsed, other = false): { reproduced: boolean | null; note: string; other?: true } {
+function reorderedValues(diffs: RunDiff[]): { text: string[]; fields: [string, string[]][] } {
+  const text = new Set<string>();
+  const fields = new Map<string, string[]>();
+  for (const d of diffs) {
+    for (const l of d.textOnlyRun) if (text.size < MAX_REORDERED_LINES) text.add(l);
+    for (const f of d.fields) {
+      let vs = fields.get(f.name);
+      if (!vs && fields.size < 50) fields.set(f.name, (vs = []));
+      if (vs && vs.length < 20 && !vs.includes(f.run)) vs.push(f.run);
+    }
+  }
+  return { text: [...text], fields: [...fields.entries()] };
+}
+
+/**
+ * Does a replay run show the race finding's difference again? From the evidence of the failing run. `other`: the run
+ * is a minimise probe, which delivered another order than the failing run, so a page that shows none of the baseline's
+ * values where the failing run differed reproduces it too (`other` set, `shown` the values) when, in their place, it
+ * shows values another reordered run of the explore showed too (`reorderedValues`): every shown field off its baseline
+ * value, none absent, each one a reordered run had; or every line only the baseline showed missing and a line a
+ * reordered run showed instead. Without `other`, or without such a value, that is neither (null).
+ */
+function raceVerdict(ev: Record<string, unknown>, r: Run, later: Elapsed, other = false, of = "the failing run"): { reproduced: boolean | null; note: string; other?: true; shown?: OtherValues } {
   const snap = r.snapshot!;
   const all = (ev.fields as { where: string; name: string; baseline: string; run: string; except?: string[] }[] | undefined) ?? [];
   const val = (d: { where: string; name: string; except?: string[] }) => (d.where === "state" ? stateValue(snap.state, d.name) : d.where === "field" ? fieldValue(snap.fields, d.name, d.except) : snap.requests[d.name] !== undefined ? String(snap.requests[d.name]) : undefined) ?? "(absent)";
-  const byValues = (fields: typeof all): { reproduced: boolean | null; note: string; other?: true } => {
+  // what the explore's reordered runs showed in place of the baseline's (a finding from before they were kept: nothing)
+  const reordered = (ev.reorderedValues as { text?: unknown; fields?: unknown } | undefined) ?? {};
+  const seenLines = new Set(Array.isArray(reordered.text) ? reordered.text.filter((l): l is string => typeof l === "string") : []);
+  const seenFields = new Map(Array.isArray(reordered.fields) ? reordered.fields.filter((p): p is [string, string[]] => Array.isArray(p) && typeof p[0] === "string" && Array.isArray(p[1])) : []);
+  const seenValue = (name: string, v: string) => (seenFields.get(name) ?? []).some((x) => typeof x === "string" && sameValue(v, x));
+  const byValues = (fields: typeof all): { reproduced: boolean | null; note: string; other?: true; shown?: OtherValues } => {
     const same = fields.every((d) => sameValue(val(d), d.run));
     const fixed = fields.every((d) => sameValue(val(d), d.baseline));
     const values = fields.map((d) => `${clean(d.name, 40)} = ${q(val(d), 40)}`).join(", ");
-    if (same) return { reproduced: true, note: "ended with the same wrong values as the failing run" };
+    if (same) return { reproduced: true, note: `ended with the same wrong values as ${of}` };
     if (fixed) return { reproduced: false, note: "ended with the values of the request-order baseline" };
-    if (other && fields.length && fields.every((d) => !sameValue(val(d), d.baseline))) return { reproduced: true, other: true, note: `ended with none of the request-order baseline's values and others than the failing run's: ${values}` };
+    if (other && fields.length && fields.every((d) => !sameValue(val(d), d.baseline))) {
+      if (fields.every((d) => val(d) !== "(absent)" && seenValue(d.name, val(d)))) return { reproduced: true, other: true, shown: { fields: Object.fromEntries(fields.map((d) => [d.name, val(d)])) }, note: `ended with none of the request-order baseline's values and others another reordered run of the explore had too: ${values}` };
+      return { reproduced: null, note: `ended with none of the request-order baseline's values, but not with values a reordered run of the explore had (the page may have changed since, or failed another way): ${values}` };
+    }
     return { reproduced: null, note: `ended with other values: ${values}` };
   };
   // what the page showed or sent decides; store values only for a finding that has nothing else
@@ -1275,10 +1410,14 @@ function raceVerdict(ev: Record<string, unknown>, r: Run, later: Elapsed, other 
   if (onlyRun.length || onlyBase.length) {
     const again = onlyRun.some((l) => seen(l) >= Math.max(1, counts[l]?.run ?? 1));
     const missing = onlyBase.filter((l) => seen(l) < Math.max(1, counts[l]?.baseline ?? 1));
-    if (again || (!onlyRun.length && missing.length === onlyBase.length)) return { reproduced: true, note: "the page shows the failing run's text again" };
+    if (again || (!onlyRun.length && missing.length === onlyBase.length)) return { reproduced: true, note: `the page shows ${of}'s text again` };
     if (!missing.length) return { reproduced: false, note: "the page shows the baseline's text" };
-    if (other && missing.length === onlyBase.length) return { reproduced: true, other: true, note: `the page shows none of the baseline's text where the failing run differed (missing ${q(missing[0], 60)}), and other text than the failing run's in its place` };
-    return { reproduced: null, note: `the page shows neither the failing run's text nor all of the baseline's (missing ${q(missing[0], 60)})` };
+    if (other && missing.length === onlyBase.length) {
+      const instead = [...new Set(lines.filter((l) => seenLines.has(l) && !onlyRun.includes(l)))];
+      if (instead.length) return { reproduced: true, other: true, shown: { text: instead.slice(0, 20) }, note: `the page shows none of the baseline's text where the failing run differed (missing ${q(missing[0], 60)}), and in its place ${q(instead[0], 60)}, which another reordered run of the explore showed too` };
+      return { reproduced: null, note: `the page shows none of the baseline's text where the failing run differed (missing ${q(missing[0], 60)}), but nothing a reordered run of the explore showed in its place (the page may have changed since, or failed another way)` };
+    }
+    return { reproduced: null, note: `the page shows neither ${of}'s text nor all of the baseline's (missing ${q(missing[0], 60)})` };
   }
   if (all.length) return byValues(all);
   const wits = (ev.witnesses as string[] | undefined) ?? [];
