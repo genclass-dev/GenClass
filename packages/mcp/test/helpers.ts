@@ -41,9 +41,12 @@ export function options(port: number, path: string, headers: Record<string, stri
 
 export const PAGE = { origin: "http://localhost:5173" };
 
+/** What a current page runtime says it can run (hello `caps`, genclass-agent/1). */
+export const CAPS = ["lifo", "ranked", "reverse", "delaySeed", "net"];
+
 /** A page load: hello, then a function that sends events for its run (with its token). */
-export async function page(port: number, route = "/search", schedule?: unknown, origin = PAGE.origin) {
-  const h = await post(port, "/v1/hello", hello(route, schedule), { origin });
+export async function page(port: number, route = "/search", schedule?: unknown, origin = PAGE.origin, caps?: string[]) {
+  const h = await post(port, "/v1/hello", hello(route, schedule, caps), { origin });
   const { run, token } = h.json as { run: string; token: string };
   return {
     run,
@@ -65,10 +68,29 @@ export function snap(state: Record<string, string>, text: string[] = [], extra: 
   return { t: 1000, state, text, requests: {}, witnesses: 0, errors: 0, forced: 0, ...extra };
 }
 
-export function hello(route = "/search", schedule: unknown = undefined) {
-  return { schema: "genclass-agent/1", page: { url: `http://localhost:5173${route}`, route, title: "App" }, runtime: { mode: "observe", model: "ready" }, ...(schedule ? { schedule } : {}) };
+export function hello(route = "/search", schedule: unknown = undefined, caps?: string[]) {
+  return { schema: "genclass-agent/1", page: { url: `http://localhost:5173${route}`, route, title: "App" }, runtime: { mode: "observe", model: "ready" }, ...(schedule ? { schedule } : {}), ...(caps ? { caps } : {}) };
 }
 
 export function steps(...s: Step[]): Step[] {
   return s;
+}
+
+/** The three searches typing "react" sends (request keys in start order). */
+export const SEARCHES = ["GET /api/search#1", "GET /api/search#2", "GET /api/search#3"];
+
+/**
+ * Their timing log as a page sends it (genclass-agent/1 `net`): sent at 10, 30 and 50 ms, ready 100 ms later (so all
+ * three overlap), delivered 30 ms apart in `order`; `extra` entries are appended.
+ */
+export function searchLog(order: string[], extra: Record<string, unknown>[] = []) {
+  return [...SEARCHES.map((key, i) => ({ key, n: i, s: 10 + 20 * i, r: 110 + 20 * i, d: 200 + 30 * order.indexOf(key) })), ...extra];
+}
+
+/** One load of the search scenario: typing, the deliveries in `order` with their log, then the state it settled in. */
+export function searchLoad(order: string[], results = "react!", text = ["Results for react"], extra: Record<string, unknown>[] = []) {
+  return [
+    { t: "steps", steps: [act(0, "type", 'searchbox "Search"', "react", { count: 5, dur: 400 })], order, net: searchLog(order, extra) },
+    { t: "snapshot", snapshot: snap({ "search.results": results, "search.input": "react" }, text) },
+  ];
 }
