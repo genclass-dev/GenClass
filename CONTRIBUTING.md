@@ -23,6 +23,11 @@ Thanks for looking. Issues and pull requests are welcome.
   with an unsupported runtime and no deprecation warning from npm. Marking it is a maintainer step:
   `npm deprecate genclass-runtime "Use @genclass/runtime: npx @genclass/runtime init"`. Use
   `npx @genclass/runtime@beta init` (or `npx @genclass/runtime init` for 0.2.x).
+- `packages/genclass/` is `genclass`, the short command: its `cli.mjs` runs the runtime's CLI, its version is the
+  runtime's, and its `@genclass/runtime` range links the workspace (its test checks both; `ci.yml`'s `runtime` job
+  runs it). It is not on npm: `release.yml` publishes it after the runtime only for stable versions, and only when the
+  repository variable `GENCLASS_CLI` is `on`, with exactly that runtime version as its dependency; its first version
+  is the owner's. Until it is published, no document here prints its command (its test checks that too).
 - `sim/`, `realapps/`, `training/` produce and train on the model's data; `demos/`, `compat/`, `bench/heal/`
   evaluate the result; `bench/visual/` measures the visual checks' false reports, recall and cost (GitHub Actions
   only). `docs/runtime/RESULTS.md` is where every measured number lives.
@@ -51,6 +56,7 @@ npm run typecheck -w @genclass/runtime
 npm run build -w @genclass/runtime
 cd packages/runtime
 NODE_OPTIONS=--expose-gc npx vitest run --exclude "test/browser/**" --exclude test/review-perf.test.ts
+(cd ../genclass && npx vitest run)   # genclass, the short command (packages/genclass)
 NODE_OPTIONS=--expose-gc npx vitest run test/review-perf.test.ts --retry=2   # timing budgets; reported, not blocking
 ```
 
@@ -113,7 +119,8 @@ Say in the PR which of them you could not run.
 `packages/runtime/package.json`; its header comment is the authority on the order. In this order:
 
 1. On the release branch (`release/<version>`): `packages/runtime/package.json` and `packages/runtime/src/version.ts`
-   (`RUNTIME_VERSION`) have the version (`release.yml` checks both), the CHANGELOG section is final and dated, CI is
+   (`RUNTIME_VERSION`) have the version (`release.yml` checks both), so does `packages/genclass/package.json` (its
+   test checks it, and `release.yml` too when it publishes genclass), the CHANGELOG section is final and dated, CI is
    green, and the first-load limits in `test/bundle.test.ts` match the README and `docs/runtime/RESULTS.md`. Every place
    a reader sees the version says the same: the version notes at the top of `docs/runtime/API.md`,
    `docs/runtime/OPTIONS-SPEC.md`, `packages/runtime/TELEMETRY.md` and `packages/runtime/INTERCEPTION.md` (and any other

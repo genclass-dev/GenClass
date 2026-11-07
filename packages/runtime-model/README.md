@@ -151,6 +151,6 @@ Apache-2.0. Initialised from `jhu-clsp/ettin-encoder-17m` (MIT); trained only on
 
 <!-- Maintainers: npmjs.com shows the README and package.json fields (description, keywords, homepage) of the
 published version, MODEL_CARD.md ships in the same tarball, and a published version cannot be republished. On
-2026-10-22 npm has 0.2.0, published 2026-10-08 with an older README and description; release.yml publishes only
-@genclass/runtime. Edits here reach npm only with a new version of this package (same model files), which is the
+2026-10-22 npm has 0.2.0, published 2026-10-08 with an older README and description; no release workflow publishes
+this package. Edits here reach npm only with a new version of this package (same model files), which is the
 owner's decision. -->

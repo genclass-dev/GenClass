@@ -2,7 +2,7 @@
 
 `genclass-runtime` is the deprecated, unscoped short name for the command line of
 [`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime). Use `@genclass/runtime` instead: this package
-is no longer published (the release workflow publishes only `@genclass/runtime`), and its newest version on npm
+is no longer published (no release workflow publishes it), and its newest version on npm
 installs an unsupported runtime.
 
 GenClass Runtime (`@genclass/runtime`) is an open-source (Apache-2.0) browser library that reports race conditions
@@ -58,8 +58,8 @@ sending Global Privacy Control are never collected. Details:
 
 <!-- Maintainers: npmjs.com shows the README and package.json fields of the published version. On 2026-10-27 npm has
 genclass-runtime 0.1.0-beta.3 (latest, published 2026-10-09) with its older README and description ("Short alias for
-the @genclass/runtime CLI ...") and no deprecation flag; release.yml packs and publishes only packages/runtime
-(@genclass/runtime, 0.3.0-beta.5 on main), so this README and the description here do not reach npm. The notice
+the @genclass/runtime CLI ...") and no deprecation flag; no release workflow packs or publishes
+packages/genclass-runtime, so this README and the description here do not reach npm. The notice
 reaches npm users only through
 `npm deprecate genclass-runtime "Deprecated: use @genclass/runtime (npx @genclass/runtime@beta init)"`, which
 npmjs.com shows and npm prints when it installs the package; that is the owner's call. genclass-runtime@0.3.0-beta.1,

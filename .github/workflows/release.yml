@@ -18,6 +18,25 @@ name: Release
 # Gemini CLI and `gh skill` install from the latest release, and a tag on a release branch can predate the plugin
 # (v0.2.3, tagged on release/0.2.3, has no gemini-extension.json).
 #
+# genclass, the short command (packages/genclass; it runs this version's CLI): for a stable version (no `-`), and only
+# when the repository variable GENCLASS_CLI is `on` (Settings → Secrets and variables → Actions → Variables), the
+# genclass job publishes genclass at the same version after the runtime, to `latest`, with its dependency set to
+# exactly this runtime version (`npm pkg set` before `npm pack`; the repository's range only links the workspace), so
+# the short command runs the newest stable line; a prerelease line stays on `@genclass/runtime@beta`. "The tag
+# names the package version" checks genclass's version and README first, so neither stops a release after npm has the
+# runtime, and the genclass job runs once npm has the runtime, even if a later step of the publish job fails. The
+# genclass job asks the npm-publish environment's reviewers once more. AGENTS.md rule 9 has to name genclass before its
+# first publish. First version only (npm sets up trusted publishing only for a package it has): in the release commit,
+# take the "Not on npm yet" note out of packages/genclass/README.md and give its commands with the short name instead
+# of `@genclass/runtime@beta` (packages/genclass's test checks both); set GENCLASS_CLI to `on`; push the tag. The
+# genclass job uploads the `genclass-tarball` artifact and stops at "npm has genclass": publish that tarball
+# once from your own npm login (`npm publish genclass-<version>.tgz --access public`). Later stable versions publish
+# from here once genclass has a trusted publisher: on npmjs.com, genclass → Settings → Trusted publishing → GitHub
+# Actions: organization genclass-dev, repository GenClass, workflow filename release.yml, environment npm-publish, with
+# npm publish ticked under Allowed actions. A new configuration expires unless it publishes within 2 days
+# (https://docs.npmjs.com/trusted-publishers; release-packages.yml's header), so add it on the day of the next stable
+# release, before its tag.
+#
 # Before you push the tag (the order is load-bearing from 0.3.0; packages/runtime/CHANGELOG.md "Dashboard counts"):
 # 1. The previous release is on npm: `npm view @genclass/runtime dist-tags` shows it as `latest`, and
 #    https://cdn.jsdelivr.net/npm/@genclass/runtime@<that version> answers 200 (the docs call it the stable line).
@@ -58,6 +77,10 @@ jobs:
     permissions:
       contents: read
       id-token: write # OIDC token for npm trusted publishing and the provenance attestation
+    # true once npm has the runtime at this version (the publish step), also when a later step fails: the genclass job
+    # follows it from then on
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
     env:
       ONNXRUNTIME_NODE_INSTALL: skip
     steps:
@@ -76,6 +99,9 @@ jobs:
         run: npm install -g npm@11 && npm --version
 
       - name: The tag names the package version
+        env:
+          # true when the genclass job publishes genclass after the runtime: the condition of that job
+          GENCLASS: ${{ vars.GENCLASS_CLI == 'on' && !contains(github.ref_name, '-') }}
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           PKG=$(node -p "require('./packages/runtime/package.json').version")
@@ -87,6 +113,16 @@ jobs:
             echo "::error::packages/runtime/CHANGELOG.md has no released section for $PKG: head it \"## $PKG (<date>)\""
             exit 1
           }
+          # genclass follows the runtime at the same version (the header): checked here, before the runtime is published
+          if [ "$GENCLASS" = true ]; then
+            GC=$(node -p "require('./packages/genclass/package.json').version")
+            echo "genclass $GC"
+            test "$GC" = "$PKG"
+            if grep -qi "not on npm" packages/genclass/README.md; then
+              echo "::error::packages/genclass/README.md still says genclass is not on npm yet: take that note out in the release commit"
+              exit 1
+            fi
+          fi
 
       - name: Install
         run: npm ci --no-audit --no-fund
@@ -125,6 +161,7 @@ jobs:
       # prereleases go to the dist-tag named after them (0.1.0-beta.5 -> beta); the owner moves `latest`
       # (`npm dist-tag add @genclass/runtime@<version> latest`) after checking the release
       - name: Publish with provenance
+        id: publish
         working-directory: packages/runtime
         run: |
           VERSION=$(node -p "require('./package.json').version")
@@ -133,6 +170,7 @@ jobs:
             *) DIST_TAG=latest ;;
           esac
           npm publish "${{ steps.pack.outputs.file }}" --provenance --access public --tag "$DIST_TAG"
+          echo "published=true" >> "$GITHUB_OUTPUT"
 
       - name: Verify the registry signature and provenance
         run: |
@@ -192,3 +230,112 @@ jobs:
               ;;
           esac
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "@genclass/runtime $VERSION" --notes-file "$RUNNER_TEMP/notes.md" "$MARK"
+
+  # genclass, the short command (packages/genclass; the header): after the runtime, for a stable version only, and only
+  # when the repository variable GENCLASS_CLI is on. It runs once npm has the runtime (the publish job's `published`),
+  # also when a later step of that job fails, such as its signature check: a re-run of that job stops at its npm
+  # publish, so waiting for the whole job would leave genclass a version behind
+  genclass:
+    name: "genclass: the short command at this version (stable versions, GENCLASS_CLI on)"
+    needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !cancelled() && needs.publish.outputs.published == 'true' && vars.GENCLASS_CLI == 'on' && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing and the provenance attestation
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # trusted publishing needs npm >= 11.5.1 (Node 22 ships npm 10)
+      - name: npm 11
+        run: npm install -g npm@11 && npm --version
+
+      # no repository code runs here: npm pkg set edits package.json, npm pack --ignore-scripts runs no scripts
+      - name: Pack genclass with exactly this runtime version as its dependency
+        id: pack
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # stable versions only (the job's condition); a prerelease line stays on @genclass/runtime@beta
+          case "$VERSION" in
+            *-*) echo "::error::genclass is published for stable versions only, not $VERSION"; exit 1 ;;
+          esac
+          test "$(node -p "require('./packages/genclass/package.json').version")" = "$VERSION"
+          # the repository's range links the workspace runtime; the published genclass names exactly this version
+          npm pkg set "dependencies.@genclass/runtime=$VERSION" -w genclass
+          FILE=$(npm pack -w genclass --ignore-scripts --silent | tail -1)
+          tar -xOzf "$FILE" package/package.json > "$RUNNER_TEMP/genclass-package.json"
+          node -e '
+            const [file, version] = process.argv.slice(1);
+            const pkg = JSON.parse(require("node:fs").readFileSync(file, "utf8"));
+            const deps = JSON.stringify(pkg.dependencies);
+            if (pkg.name !== "genclass" || pkg.version !== version || deps !== JSON.stringify({ "@genclass/runtime": version })) {
+              console.log("::error::the tarball holds " + pkg.name + "@" + pkg.version + " with dependencies " + deps + ", not genclass@" + version + " with exactly @genclass/runtime@" + version);
+              process.exit(1);
+            }
+            for (const k of ["devDependencies", "peerDependencies", "optionalDependencies", "bundleDependencies", "bundledDependencies", "scripts"]) {
+              if (pkg[k] !== undefined) { console.log("::error::the tarball package.json has " + k); process.exit(1); }
+            }
+            console.log("genclass@" + version + " depends on exactly @genclass/runtime@" + version);
+          ' "$RUNNER_TEMP/genclass-package.json" "$VERSION"
+          # the four files the package names, nothing else
+          tar -tzf "$FILE" | LC_ALL=C sort > "$FILE.files.txt"
+          cat "$FILE.files.txt"
+          test "$(tr '\n' ' ' < "$FILE.files.txt")" = "package/LICENSE package/README.md package/cli.mjs package/package.json "
+          sha512sum "$FILE"
+          {
+            echo "file=$FILE"
+            echo "version=$VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: genclass-tarball
+          path: |
+            ${{ steps.pack.outputs.file }}
+            ${{ steps.pack.outputs.file }}.files.txt
+          if-no-files-found: error
+
+      # npm sets up trusted publishing only for a package it has, so genclass's first version is the owner's (the header)
+      - name: npm has genclass
+        env:
+          FILE: ${{ steps.pack.outputs.file }}
+        run: |
+          if npm view genclass name --prefer-online > /dev/null 2> "$RUNNER_TEMP/view.err"; then exit 0; fi
+          cat "$RUNNER_TEMP/view.err"
+          if grep -q E404 "$RUNNER_TEMP/view.err"; then
+            echo "::error::genclass is not on npm yet: publish this run's genclass-tarball artifact once from your own npm login (npm publish $FILE --access public), then add its trusted publisher (the header of release.yml)"
+          fi
+          exit 1
+
+      - name: Publish with provenance, to latest
+        env:
+          FILE: ${{ steps.pack.outputs.file }}
+        run: npm publish "$FILE" --provenance --access public --tag latest
+
+      - name: Verify the registry signature and provenance, and the command
+        env:
+          VERSION: ${{ steps.pack.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/verify"
+          cd "$RUNNER_TEMP/verify" || exit 1
+          npm init -y > /dev/null
+          # a new version can take several minutes to appear in the registry after it is published
+          for i in $(seq 1 40); do npm view "genclass@$VERSION" version --prefer-online && break; sleep 20; done
+          for i in $(seq 1 10); do npm install --no-audit --no-fund --ignore-scripts "genclass@$VERSION" && break; sleep 30; done
+          # it installed exactly this runtime, and the command runs that runtime's CLI
+          test "$(node -p "require('@genclass/runtime/package.json').version")" = "$VERSION"
+          npx --no-install genclass --help > "$RUNNER_TEMP/genclass-help.txt"
+          grep -q "^  genclass-runtime init " "$RUNNER_TEMP/genclass-help.txt"
+          # the attestations endpoint can lag the version by minutes (the publish job)
+          for i in $(seq 1 20); do npm audit signatures && exit 0; echo "attestations not served yet, retry $i"; sleep 30; done
+          exit 1

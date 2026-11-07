@@ -46,6 +46,12 @@ jobs:
           NODE_OPTIONS: --expose-gc
         run: npx vitest run --exclude "test/browser/**" --exclude test/review-perf.test.ts
 
+      # genclass, the short command (packages/genclass): its version and range against the runtime's, the forwarding,
+      # release.yml's genclass job, and no document outside the package printing the command before it is on npm
+      - name: genclass tests
+        working-directory: packages/genclass
+        run: npx vitest run
+
       # Reported, not blocking: shared GitHub runners are ~10% slower than the machines these budgets were set on
       # (redux-style dispatch measured 1.08-1.10 ms vs its 1 ms bound on 2026-10-09). Run them on a quiet machine
       # before a release.

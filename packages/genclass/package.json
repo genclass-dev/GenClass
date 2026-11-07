@@ -1,0 +1,40 @@
+{
+  "name": "genclass",
+  "version": "0.3.0-beta.5",
+  "description": "The short command for GenClass: runs the CLI of @genclass/runtime at the same version (init sets it up in a project, scan checks one page). GenClass Runtime is a browser library that reports race conditions, stale responses and duplicate requests in web apps.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/genclass-dev/GenClass.git",
+    "directory": "packages/genclass"
+  },
+  "homepage": "https://genclass.dev",
+  "bugs": {
+    "url": "https://github.com/genclass-dev/GenClass/issues"
+  },
+  "keywords": [
+    "genclass",
+    "cli",
+    "race-condition",
+    "stale-response",
+    "duplicate-request",
+    "double-submit",
+    "frontend-reliability",
+    "debugging"
+  ],
+  "bin": {
+    "genclass": "./cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@genclass/runtime": ">=0.3.0-beta.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
