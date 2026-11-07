@@ -11,8 +11,12 @@
 //   - exposes one function (page.exposeFunction) the page pushes each finding through as it happens, so navigations
 //     and an early page close lose nothing;
 //   - with chaos, routes every request through the seeded scheduler (chaos.ts): a matched fetch/XHR request is held
-//     for its planned time and then passed on with route.fallback(), so it still reaches the user's own routes
-//     (context.route, routeFromHAR), the browser's network stack and its cache. Anything else is passed on at once.
+//     for its planned time (or, in the reverse order, until its burst is released; in the natural order not at all)
+//     and then passed on with route.fallback(), so it still reaches the user's own routes (context.route,
+//     routeFromHAR), the browser's network stack and its cache. Anything else is passed on at once.
+// At the end, finish() asks the page for what it still holds: with chaos on it first lets the page reach its quiet
+// point (at most SETTLE_WAIT_MS, chaos still on its plan), with the visual checks on it lets one more pass run (at
+// most CHECK_WAIT_MS), and only then releases what chaos still holds.
 // The page's agent link never sends a request (page.ts gives it a stand-in fetch); requests to its URL are aborted
 // anyway as a safety net. Observe only: no hold on the page's side, no change to any request or response (chaos
 // changes when a request leaves, never what it says). Every handler catches its own errors: a page that closes
@@ -21,7 +25,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, extname, join, resolve, sep } from "node:path";
-import { ChaosScheduler, RUNTIME_PATH, isCandidate, isRuntimeUrl, type ResolvedChaos } from "./chaos.js";
+import { ChaosScheduler, RUNTIME_PATH, isCandidate, isRuntimeUrl, type ChaosBurst, type ResolvedChaos } from "./chaos.js";
 import { genclassPageScript, type PageScriptConfig } from "./page.js";
 
 /** The page methods the installer uses (a subset of Playwright's Page, by shape). */
@@ -56,6 +60,8 @@ export interface InstallOptions {
   modelUrl?: string;
   /** Resolved chaos, or null for none. */
   chaos: ResolvedChaos | null;
+  /** Report-only measured visual checks (the fixture's `visual: true`). Default false. */
+  visual?: boolean;
 }
 
 /** The runtime's model status as the page reported it last. */
@@ -84,6 +90,20 @@ export interface Collected {
   serviceWorker: boolean;
   /** The URL or localStorage switch had put the runtime in another mode; the fixture set it back to observe. */
   modeOverridden: string | null;
+  /**
+   * The page's uncaught errors as the agent entry recorded them (name, message, stack, causal chain, and the page's
+   * `pageOrigin`), in order; absent when there were none. races.ts keeps only each one's name, message shape, request
+   * and origin verdict; nothing of them is written as is.
+   */
+  errors?: unknown[];
+  /** The measured visual checks the page reported (kind, route, selector, numeric measurements); absent when none. */
+  checks?: unknown[];
+  /** With chaos on: whether the page reached its quiet point before the fixture collected (absent: not known). */
+  settled?: boolean;
+  /** With `visual` on: null when the measured checks ran, else why they did not. */
+  visual?: string | null;
+  /** The reverse order: its bursts (keys in the order sent, then in the order released). */
+  bursts?: ChaosBurst[];
 }
 
 export interface Session {
@@ -95,6 +115,18 @@ export interface Session {
 export const BINDING = "__genclassPlaywright";
 /** The loopback URL the page's agent link is pointed at; the fixture aborts every request to it. */
 export const AGENT_URL = "http://127.0.0.1:9";
+/** With chaos on: how long finish() lets the page reach its quiet point (the agent entry's whenSettled) first. */
+export const SETTLE_WAIT_MS = 2000;
+/** With the visual checks on: how long finish() lets their last pass run. */
+export const CHECK_WAIT_MS = 2000;
+/** How long finish() waits for the page's answer, beyond those two waits. */
+export const COLLECT_TIMEOUT_MS = 2000;
+/** What the file says when `visual` is on but the runtime's build has no checks chunk. */
+export const VISUAL_MISSING = "dist/visual/index.js missing";
+/** What the file says when the checks were on but no pass ran before the fixture collected. */
+export const VISUAL_NO_PASS = "no pass ran";
+/** Page errors and check findings kept per test (the agent entry keeps 100 errors per page load). */
+const MAX_ITEMS = 1000;
 
 const require = createRequire(import.meta.url);
 const CONTENT_TYPES: Record<string, string> = {
@@ -177,13 +209,23 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
   const runtimeDir = resolveRuntimeDir(o.runtimeDir);
   const collected: Collected = { records: [], witnesses: [], mode: null, model: null, agent: "not-loaded", plans: [], serviceWorker: false, modeOverridden: null };
   const scheduler = o.chaos ? new ChaosScheduler(o.chaos) : null;
+  // the checks load their chunk from dist/visual/index.js: without it they cannot run, so they stay off (the stub
+  // would warn on the page's console) and the file says why
+  const visual = o.visual === true && existsSync(join(runtimeDir, "visual", "index.js"));
+  if (o.visual === true && !visual) collected.visual = VISUAL_MISSING;
 
   const take = (item: unknown): void => {
     if (!item || typeof item !== "object") return;
     const x = item as Record<string, unknown>;
     if (x.t === "record" && x.record) collected.records.push(x.record);
     else if (x.t === "witness" && x.witness) collected.witnesses.push(x.witness);
-    else if (x.t === "status") {
+    else if (x.t === "error" && x.error && typeof x.error === "object") {
+      const list = (collected.errors ??= []);
+      if (list.length < MAX_ITEMS) list.push({ ...(x.error as Record<string, unknown>), pageOrigin: typeof x.pageOrigin === "string" ? x.pageOrigin : undefined });
+    } else if (x.t === "check" && x.check && typeof x.check === "object") {
+      const list = (collected.checks ??= []);
+      if (list.length < MAX_ITEMS) list.push(x.check);
+    } else if (x.t === "status") {
       collected.mode = typeof x.mode === "string" ? x.mode : null;
       collected.model = x.model && typeof x.model === "object" ? (x.model as ModelInfo) : null;
       if (typeof x.overridden === "string") collected.modeOverridden = x.overridden;
@@ -213,7 +255,8 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
         }
         const req = { url, method: request.method(), resourceType: request.resourceType(), sameOrigin: origin !== null && origin === originOf(frameUrl), accept };
         // planned now, in the order the page sent its requests; the request itself is only held, never fetched here
-        if (isCandidate(req, chaos.match)) await scheduler.hold(scheduler.plan(req.method, req.url, req.sameOrigin));
+        // (the natural order holds nothing)
+        if (scheduler.holding && isCandidate(req, chaos.match)) await scheduler.hold(scheduler.plan(req.method, req.url, req.sameOrigin));
         await route.fallback();
       } catch {
         /* the page closed while the request was held */
@@ -240,18 +283,27 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
     model: o.model === "load" ? (o.modelUrl ? { baseUrl: o.modelUrl } : {}) : false,
     agentUrl: AGENT_URL,
     binding: BINDING,
+    ...(visual ? { visual: true } : {}),
   };
   await page.addInitScript({ content: initScriptContent(runtimeDir, cfg) });
 
   return {
     async finish(): Promise<Collected> {
+      // with chaos on, the page's quiet point first (chaos keeps its plan until the end of finish), with the checks
+      // on, their last pass; the wait for the answer covers both
+      const settleMs = scheduler ? SETTLE_WAIT_MS : 0;
+      const checkMs = visual ? CHECK_WAIT_MS : 0;
       try {
         if (!page.isClosed?.()) {
+          const timedOut = {};
+          const call = settleMs || checkMs ? `a.collect(${settleMs}, ${checkMs})` : "a.collect()";
           const r = await Promise.race([
-            page.evaluate(`(function () { var a = window.__GENCLASS_PLAYWRIGHT__; return a ? a.collect() : null; })()`),
-            new Promise<null>((res) => setTimeout(() => res(null), 2000).unref?.()),
+            page.evaluate(`(function () { var a = window.__GENCLASS_PLAYWRIGHT__; return a ? ${call} : null; })()`),
+            new Promise<unknown>((res) => setTimeout(() => res(timedOut), COLLECT_TIMEOUT_MS + settleMs + checkMs).unref?.()),
           ]);
-          if (r && typeof r === "object") {
+          if (r === timedOut) {
+            if (settleMs) collected.settled = false;
+          } else if (r && typeof r === "object") {
             const x = r as Record<string, unknown>;
             if (typeof x.mode === "string") collected.mode = x.mode;
             if (x.model && typeof x.model === "object") collected.model = x.model as ModelInfo;
@@ -259,6 +311,8 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
             if (x.agent === null) collected.agent = null;
             else if (typeof x.agent === "string" && (collected.agent === null || collected.agent === "not-loaded")) collected.agent = x.agent;
             if (x.serviceWorker === true) collected.serviceWorker = true;
+            if (settleMs && typeof x.settled === "boolean") collected.settled = x.settled;
+            if (visual && (x.visual === null || typeof x.visual === "string")) collected.visual = x.visual;
           }
         }
       } catch {
@@ -266,6 +320,9 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
       }
       scheduler?.dispose();
       collected.plans = scheduler ? scheduler.plans.slice() : [];
+      if (scheduler?.chaos.order === "reverse") collected.bursts = scheduler.bursts.map((b) => ({ keys: b.keys.slice(), released: b.released.slice() }));
+      // the page did not answer: the checks ran if they reported something
+      if (visual && collected.visual === undefined) collected.visual = collected.checks?.length ? null : VISUAL_NO_PASS;
       return collected;
     },
   };
