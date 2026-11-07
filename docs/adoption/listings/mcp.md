@@ -1,16 +1,27 @@
 # Listing `@genclass/mcp`: every directory, ready to send
 
-Submission steps, required fields and a draft entry in each list's own format, for the day `@genclass/mcp` is on npm.
-Checked against each directory's own pages on 2026-10-24; each section names its source. Nothing here has been
-submitted.
+Submission steps, required fields and a draft entry in each list's own format. Checked against each directory's own
+pages on 2026-10-24 (section 2 on 2026-11-07); each section names its source. Of the directories below, sent so far
+(checked 2026-11-07): the official MCP Registry (0.2.0 to 0.2.2, by the release workflow), the Anthropic directory
+(section 3, submitted 2026-10-28), and pull requests to awesome-mcp-servers
+([#18644](https://github.com/punkpeye/awesome-mcp-servers/pull/18644), open, waiting for the Glama listing) and
+awesome-playwright ([#278](https://github.com/mxschmitt/awesome-playwright/pull/278), open). Six lists not covered here
+also got a pull request for the server or the skill between 2026-11-03 and 2026-11-05: TensorBlock/awesome-mcp-servers
+([#5290](https://github.com/TensorBlock/awesome-mcp-servers/pull/5290), merged), MobinX/awesome-mcp-list
+([#1108](https://github.com/MobinX/awesome-mcp-list/pull/1108), closed without a merge), and four still open:
+yzfly/Awesome-MCP-ZH ([#951](https://github.com/yzfly/Awesome-MCP-ZH/pull/951)), karanb192/awesome-claude-skills
+([#650](https://github.com/karanb192/awesome-claude-skills/pull/650)), Jenqyang/Awesome-AI-Agents
+([#728](https://github.com/Jenqyang/Awesome-AI-Agents/pull/728)) and ai-for-developers/awesome-ai-coding-tools
+([#1211](https://github.com/ai-for-developers/awesome-ai-coding-tools/pull/1211)).
 
 ## What is true today (keep every entry to this)
 
-- **Not released yet.** `@genclass/mcp` 0.1.0 is not on npm: its first version is published by the owner from the
-  `mcp-tarball` artifact of `.github/workflows/release-mcp.yml` (AGENTS.md rule 9). The page side,
-  `@genclass/runtime` 0.3.0-beta.1 (the agent link, `@genclass/runtime/agent`), is waiting on its release approval.
-  Until both are out, no install line below works. Send nothing before then, except where a section says the
-  listing reads only the repository.
+- **Released.** `@genclass/mcp` 0.2.2 is on npm (`latest`) and in the official MCP Registry as
+  `io.github.genclass-dev/genclass` (`active`, `isLatest`), both checked 2026-11-07;
+  `.github/workflows/release-mcp.yml` publishes each version from its `mcp-v*` tag (AGENTS.md rule 9). The page
+  side, the agent link (`@genclass/runtime/agent`), is in `@genclass/runtime` 0.3.0-beta.1 and later, on npm's `beta`
+  dist-tag (0.3.0-beta.5); npm's `latest`, 0.2.3, does not have it, so runtime install lines name
+  `@genclass/runtime@beta`.
 - **Measured on one page.** In headless Chromium (`packages/mcp/test/e2e/race.e2e.mjs`, docs/runtime/AGENT.md
   section 7): a search page whose results are written by each response, on an in-order backend that answers in
   40 ms. `genclass_explore` (2 baselines, 6 reordered runs, `slow_ms: 600`) found the race in **5 of 6** reordered
@@ -20,9 +31,10 @@ submitted.
   "zero false positives" or any rate beyond this.
 - **What it needs.** Node 20 or later, a web app on a local dev server, and two lines in the app's development build
   (`connectAgent` from `@genclass/runtime/agent`). Any MCP client over stdio. No API key, no account.
-- **What it sends.** Nothing leaves the machine: the bridge listens on 127.0.0.1 only. The one exception is opt-in:
-  `genclass_analytics {source: "production"}` reads the developer's own GenClass dashboard when they set
-  `GENCLASS_DASHBOARD`.
+- **What it sends.** By default nothing leaves the machine: the bridge listens on 127.0.0.1 only. Three things are
+  opt-in: the dashboard read (`genclass_analytics {source: "production"}` with `GENCLASS_DASHBOARD`), the dashboard
+  mirror (`GENCLASS_REPORT`) and `genclass_scan` with `hosted: true` (the URL goes to the genclass.dev page check).
+  `genclass_scan` also downloads the pinned runtime from npm when the project does not have it.
 - **Repository.** Public URL: https://github.com/genclass-dev/GenClass (`daybot-solutions-inc/GenClass-lib` and
   `genclass-dev/GenClass-lib` are old names that GitHub redirects; submit the `genclass-dev/GenClass` one everywhere).
   Server: `packages/mcp`. Claude Code plugin: `packages/mcp/plugin`.
@@ -57,7 +69,7 @@ submitted.
 
 ## Order
 
-1. Official MCP Registry (automatic, by the release workflow), then the GitHub MCP Registry email.
+1. Official MCP Registry (automatic, by the release workflow), then the GitHub MCP Registry onboarding request.
 2. Anthropic directory (plugin), Glama (claim), Cline, mcpservers.org, mcp.so, cursor.directory, Cursor Marketplace,
    Gemini gallery topic, Smithery (bundle).
 3. Lists that review by hand once a listing exists: awesome-mcp-servers (needs the Glama score), awesome-claude-code
@@ -87,24 +99,32 @@ issue modelcontextprotocol/registry#1468.
 
 ## 2. GitHub MCP Registry (github.com/mcp) and the VS Code MCP gallery
 
-Source: github.blog "How to find, install, and manage MCP servers with the GitHub MCP Registry" (2025-10-24);
-github/github-mcp-server discussion 1257 (2026-05-19: onboarding is manual curation; later versions sync from the
-official registry); docs.github.com "Extend Copilot Chat with MCP" (VS Code adds servers from the GitHub MCP Registry).
+Source: github/github-mcp-server [discussion 1257](https://github.com/github/github-mcp-server/discussions/1257)
+(checked 2026-11-07: GitHub's answer of 2026-05-19 says onboarding a new server is manual curation and that later
+versions sync from the official registry; the notes at the top of the thread, October 2026, list what a request
+holds); github.blog "How to find, install, and manage MCP servers with the GitHub MCP Registry" (2025-10-24);
+docs.github.com "Extend Copilot Chat with MCP" (VS Code adds servers from the GitHub MCP Registry).
 
-- **How.** After the official registry lists the server, email partnerships@github.com asking for it to be included.
-- **Draft email.**
+- **How.** A comment in discussion 1257 asking for onboarding, once the official registry lists the server as
+  `active` and `isLatest` (true on 2026-11-07). That thread is where requests are posted now; it is marked closed and
+  still takes comments. The blog post's route, an email to partnerships@github.com with the same facts, is the older
+  one. Read the values from the registry before posting, as the thread asks. On 2026-11-07 GitHub's catalog did not
+  list GenClass (`curl "https://api.mcp.github.com/v0.1/servers?search=genclass"` returned no server), and no request
+  had been posted.
+- **Draft comment.**
 
-  > Subject: MCP server for the GitHub MCP Registry: io.github.genclass-dev/genclass
+  > **Onboarding request: GenClass (`io.github.genclass-dev/genclass`)**
   >
-  > Hello, we publish io.github.genclass-dev/genclass to the official MCP Registry (npm `@genclass/mcp`, stdio,
-  > Apache-2.0, source https://github.com/genclass-dev/GenClass/tree/main/packages/mcp) and would like it included
-  > in the GitHub MCP Registry. It is a local server for coding agents: it shows the agent what happened inside a web
-  > app's pages on the developer's machine in causal order, re-runs a page with network responses delivered in
-  > different orders to find race conditions, replays one exact order to prove a fix, and writes a Playwright
-  > regression test. It needs no account or API key and sends nothing off the machine unless you turn that on. Measured so far on one page
-  > (a stale-response race): it found the race in 5 of 6 reordered runs and reported nothing on the fixed page.
-  > Install in VS Code: `code --add-mcp '{"name":"genclass","command":"npx","args":["-y","@genclass/mcp@0.2.2"]}'`.
-  > Thank you.
+  > - Registry name: [`io.github.genclass-dev/genclass`](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.genclass-dev/genclass)
+  > - Version: npm `@genclass/mcp@0.2.2`, `active` and `isLatest: true` in the registry
+  > - Transport: stdio (`npx -y @genclass/mcp@0.2.2`)
+  > - Repository: https://github.com/genclass-dev/GenClass (the server is in `packages/mcp`)
+  > - License: Apache-2.0
+  > - What it does: a local server for coding agents. It shows the agent what happened inside a web app's pages on
+  >   the developer's machine in causal order, re-runs a page with network responses delivered in different orders to
+  >   find race conditions, replays one exact order to prove a fix, and writes a Playwright regression test. It needs
+  >   no account or API key and sends nothing off the machine unless the user turns that on.
+  > - Verification: `curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.genclass-dev/genclass"`
 
 ## 3. Anthropic directory (claude.ai/directory/manage)
 
@@ -224,7 +244,7 @@ Source: glama.ai/mcp/faq; glama.ai/blog/2025-07-08-what-is-glamajson; schema gla
   schema in `schemas.test.ts`); add the other maintainers' GitHub usernames before claiming, then run Claim
   ownership again after any change to the file.
 - **Build.** The score needs the server to start and answer introspection. Glama takes a Dockerfile in its own admin
-  page, not from the repository. This one works for a stdio server from npm (paste it there once 0.1.0 is on npm):
+  page, not from the repository. This one works for a stdio server from npm (paste it there):
 
 ```dockerfile
 FROM node:22-alpine
@@ -307,9 +327,9 @@ Source: cursor.com/docs/reference/plugins ("Submitting a plugin").
 Source: google-gemini/gemini-cli `docs/extensions/releasing.md` and `docs/extensions/reference.md`.
 
 - **How.** No submission: a daily crawler lists public repositories with the GitHub topic `gemini-cli-extension`
-  whose root holds `gemini-extension.json`. Add the topic to `genclass-dev/GenClass` once 0.1.0 is on npm. The
-  committed `gemini-extension.json` starts `npx -y @genclass/mcp@0.2.2` (kept equal to the package version by
-  `manifests.test.ts`).
+  whose root holds `gemini-extension.json`. `genclass-dev/GenClass` and genclass-plugin both carry the topic (checked
+  2026-11-07). The committed `gemini-extension.json` starts `npx -y @genclass/mcp@0.2.2` (kept equal to the package
+  version by `manifests.test.ts`).
 - **Install line for the entry.** `gemini extensions install https://github.com/genclass-dev/GenClass`. This
   clones the whole repository, which is large; `gemini mcp add genclass npx -- -y @genclass/mcp@0.2.2` adds the server
   alone.
@@ -322,7 +342,7 @@ Source: smithery.ai/docs/build/publish ("Local (MCPB Bundle)"), smithery.ai/docs
   (`npm run bundle -w @genclass/mcp`, `mcp-bundle` artifact: `genclass-<version>.mcpb` and its sha256; the bundle
   was built, validated with `mcpb validate` and its unpacked server answered an MCP initialize). The owner publishes
   it: `npm install -g smithery@latest`, `smithery auth login`,
-  `smithery mcp publish genclass-0.1.0.mcpb -n genclass/genclass` (the qualified name is the owner's choice), then
+  `smithery mcp publish genclass-<version>.mcpb -n genclass/genclass` (the qualified name is the owner's choice), then
   completes the publishing flow on the site.
 
 ## 13. hesreallyhim/awesome-claude-code

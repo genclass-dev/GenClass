@@ -7,34 +7,49 @@ name: MCP server
 # nothing on the fixed page. A separate workflow from ci.yml so it never blocks the main CI job. It sends nothing
 # anywhere: the bridge and the app listen on 127.0.0.1 inside the runner.
 
+# Outside packages/mcp, the paths name the files test/manifests.test.ts checks (the pins in the READMEs, AGENT.md, the
+# listings and the root skill, the runtime's version, the plugin marketplaces), so a stale pin fails on its own pull
+# request.
 on:
   push:
     paths:
       - "packages/mcp/**"
       - "packages/runtime/src/agent/**"
       - "packages/runtime/src/runtime.ts"
+      - "packages/runtime/package.json"
+      - "packages/runtime/README.md"
       - "package-lock.json"
       - ".github/workflows/mcp.yml"
       - ".github/workflows/release-mcp.yml"
+      - ".agents/**"
       - ".claude-plugin/**"
       - ".cursor-plugin/**"
       - "gemini-extension.json"
       - "glama.json"
       - "llms-install.md"
+      - "README.md"
+      - "skills/**"
+      - "docs/runtime/AGENT.md"
       - "docs/adoption/listings/mcp.md"
   pull_request:
     paths:
       - "packages/mcp/**"
       - "packages/runtime/src/agent/**"
       - "packages/runtime/src/runtime.ts"
+      - "packages/runtime/package.json"
+      - "packages/runtime/README.md"
       - "package-lock.json"
       - ".github/workflows/mcp.yml"
       - ".github/workflows/release-mcp.yml"
+      - ".agents/**"
       - ".claude-plugin/**"
       - ".cursor-plugin/**"
       - "gemini-extension.json"
       - "glama.json"
       - "llms-install.md"
+      - "README.md"
+      - "skills/**"
+      - "docs/runtime/AGENT.md"
       - "docs/adoption/listings/mcp.md"
   workflow_dispatch:
 

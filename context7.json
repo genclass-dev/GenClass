@@ -1,0 +1,37 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "GenClass",
+  "description": "GenClass is an open-source (Apache-2.0) browser library, @genclass/runtime, that reports race conditions in web apps while they happen: stale responses that land over newer data, duplicate requests such as double submits, inconsistent state and failure storms. A small model runs on the user's device in a Web Worker. The repository also holds @genclass/mcp, an MCP server that lets coding agents re-run a page with its network responses in different orders and replay one order.",
+  "excludeFiles": ["CHANGELOG.md", "LICENSE", "CODE_OF_CONDUCT.md"],
+  "excludeFolders": [
+    "*archive*",
+    "*archived*",
+    "old",
+    "docs/old",
+    "*deprecated*",
+    "*legacy*",
+    "*previous*",
+    "*outdated*",
+    "*superseded*",
+    "research",
+    "training",
+    "sim",
+    "realapps",
+    "bench",
+    "demos",
+    "node_modules",
+    "packages/genclass-runtime",
+    "docs/evidence",
+    "docs/adoption",
+    "docs/security",
+    "demo-site",
+    "compat/results"
+  ],
+  "rules": [
+    "Observe, the default mode, only reports: it never holds, delays or changes a request, a response or a state write. The exception is the agent link (connectAgent) in a development build, which can hold response deliveries but never changes them.",
+    "Describe a model detection as possible, not as a confirmed bug; each report lists the evidence to check.",
+    "Visual checks are deterministic measurements with documented thresholds, reported as kind \"check\"; they are not model findings.",
+    "Call connectAgent from @genclass/runtime/agent only inside a development-build check; by default it returns an inert connection on a page not served from the developer's machine.",
+    "While the newest runtime line is a prerelease, it installs as @genclass/runtime@beta; npm's latest is then an older line that lacks some APIs documented on main."
+  ]
+}

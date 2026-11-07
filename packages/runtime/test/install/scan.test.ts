@@ -1,7 +1,8 @@
 // `genclass-runtime scan <url>` / `audit` (bin/lib/scan.mjs): the report's pieces (URL handling, merging, the score,
-// the hosted report's mapping), the CLI against a mock hosted page check on loopback (the fallback message without
-// Playwright, exit codes, --json on stdout only), and one real local scan of a fixture page in headless Chromium
-// when Playwright's Chromium is installed (skipped otherwise; CI's main job has none). No test reaches the network.
+// the hosted report's mapping, the help's number of checks against the runtime's KINDS), the CLI against a mock
+// hosted page check on loopback (the fallback message without Playwright, exit codes, --json on stdout only), and one
+// real local scan of a fixture page in headless Chromium when Playwright's Chromium is installed (skipped otherwise;
+// CI's main job has none). No test reaches the network.
 
 import { execFile } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -13,7 +14,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // @ts-expect-error plain ESM module without types
-import { formatReport, hostedReport, localReport, mergeFindings, normaliseUrl, privateHost, visualScore } from "../../bin/lib/scan.mjs";
+import { formatReport, hostedReport, localReport, mergeFindings, normaliseUrl, privateHost, USAGE, visualScore } from "../../bin/lib/scan.mjs";
+import { KINDS } from "../../src/visual/engine.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BIN = resolve(HERE, "..", "..", "bin", "genclass-runtime.mjs");
@@ -79,6 +81,12 @@ const HOSTED_REPORT = {
 };
 
 describe("scan: report pieces (bin/lib/scan.mjs)", () => {
+  it("the help names as many measured visual checks as the runtime has (KINDS in src/visual/engine.ts)", () => {
+    const named = /GenClass's (\d+) measured visual checks/.exec(USAGE);
+    expect(named, "the help names its number of checks").not.toBeNull();
+    expect(Number(named![1])).toBe(KINDS.length);
+  });
+
   it("normalises URLs: https:// for bare hosts, http:// for loopback, refuses other schemes and credentials", () => {
     expect(normaliseUrl("example.com/pricing")).toBe("https://example.com/pricing");
     expect(normaliseUrl("localhost:5173")).toBe("http://localhost:5173/");

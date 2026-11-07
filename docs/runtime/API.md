@@ -1016,7 +1016,7 @@ Subpath exports: `@genclass/runtime/react` (`useGenClassState(name, initial, opt
 `@genclass/runtime/sinks/{console-json,webhook}` (each also its default export; see "See it where you already
 look"; there is no Sentry, PostHog or Datadog adapter in the free runtime), `@genclass/runtime/visual`
 (`checkPage(options?)`, the measured visual checks without a runtime; 0.3.0). They are documented with their source.
-From 0.3.0-beta.1 (not on npm yet) the devtools overlay is in genclass.dev's black design whatever the page's theme
+From 0.3.0-beta.1 the devtools overlay is in genclass.dev's black design whatever the page's theme
 (`theme: "dark"`, the new default; `"light"` is the same design on white, `"auto"` follows `prefers-color-scheme`).
 0.3.0-beta.0 and 0.2.x use their earlier design and default to `"auto"`.
 

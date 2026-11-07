@@ -2,7 +2,7 @@
 
 > GenClass Runtime (`@genclass/runtime`) is an open-source (Apache-2.0) browser library that reports race conditions in web apps while they happen: stale responses that land over newer data, duplicate requests such as double submits, inconsistent state and failure storms. A small model runs on the user's device, in a Web Worker on WebGPU or WASM, and each report comes with its evidence. By default it only reports (`observe`): it never holds, delays or changes a request, a response or a state write. The opt-in `guard` mode may act on a few of them, and `heal` is experimental.
 
-This file indexes the Markdown sources in the GenClass repository, for `@genclass/runtime` 0.2.2 (npm `latest`) and 0.3.0-beta.0 (`beta`) as of 2026-10-22, both with the model `@genclass/runtime-model@0.2.0`, and the unreleased work on `main`. It holds no numbers on purpose: every measured number, each recall next to its false rate, is in docs/runtime/RESULTS.md, so quote numbers from there. On public hosts it sends anonymous diagnostics about its own decisions to its maintainers by default (with the page's hostname and id-normalised path, and no page text unless the app opts in); TELEMETRY.md lists every field and every opt-out. The website keeps its own index at https://genclass.dev/llms.txt.
+This file indexes the Markdown sources in the GenClass repository, for `@genclass/runtime` 0.2.3 (npm `latest`) and 0.3.0-beta.5 (`beta`, installed as `@genclass/runtime@beta`) as of 2026-11-07, both with the model `@genclass/runtime-model@0.2.0`, and the unreleased work on `main`. The MCP server for coding agents, `@genclass/mcp`, is on npm (0.2.2, `latest`); `@genclass/playwright`, `@genclass/sv`, `@genclass/nuxt` and `@genclass/astro` are not on npm yet. It holds no numbers on purpose: every measured number, each recall next to its false rate, is in docs/runtime/RESULTS.md, so quote numbers from there. On public hosts it sends anonymous diagnostics about its own decisions to its maintainers by default (with the page's hostname and id-normalised path, and no page text unless the app opts in); TELEMETRY.md lists every field and every opt-out. The website keeps its own index at https://genclass.dev/llms.txt.
 
 ## Start here
 
@@ -18,6 +18,8 @@ This file indexes the Markdown sources in the GenClass repository, for `@genclas
 - [SINKS.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/SINKS.md): sending reports to your own logging or endpoint, and the record format
 - [API.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/API.md): every export, option, event, action and type
 - [OPTIONS-SPEC.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/OPTIONS-SPEC.md): why each configuration option exists and how the options combine
+- [@genclass/mcp README](https://raw.githubusercontent.com/genclass-dev/GenClass/main/packages/mcp/README.md): the MCP server for coding agents: the install for each client, the `genclass` skill, the tools, environment variables, security and privacy
+- [llms-install.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/llms-install.md): the steps an agent follows to install the MCP server
 
 ## Behaviour, privacy and security
 
@@ -44,8 +46,8 @@ This file indexes the Markdown sources in the GenClass repository, for `@genclas
 - [ARCHITECTURE.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/ARCHITECTURE.md): how the parts fit together and why they are built this way
 - [VISUAL.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/VISUAL.md): design of the measured visual and CSS checks, which are deterministic checks, not the model
 - [EXPECTATIONS.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/EXPECTATIONS.md): design of the opt-in flow expectations, whose false-report rate is not measured yet
-- [ANALYTICS.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/ANALYTICS.md): design of the opt-in interaction analytics, not yet in a published version
-- [AGENT.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/AGENT.md): the coding-agent link (`@genclass/runtime/agent`, 0.3.0-beta.1) and the `@genclass/mcp` server, which record a page's run, replay one delivery order, explore others to find races, and generate a Playwright test; neither on npm yet
+- [ANALYTICS.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/ANALYTICS.md): design of the opt-in interaction analytics, in 0.3.0-beta.1 and later (not in 0.2.x)
+- [AGENT.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/AGENT.md): the coding-agent link (`@genclass/runtime/agent`, in 0.3.0-beta.1 and later) and the `@genclass/mcp` server, which record a page's run, replay one delivery order, explore others to find races, and generate a Playwright test
 - [QUERY-CACHE-ADAPTERS.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/QUERY-CACHE-ADAPTERS.md): a proposal for TanStack Query and SWR adapters, not built
 - [CONTRACT.md](https://raw.githubusercontent.com/genclass-dev/GenClass/main/docs/runtime/CONTRACT.md): the binding rules for people changing the runtime and its training pipeline
 - [CHANGELOG](https://raw.githubusercontent.com/genclass-dev/GenClass/main/packages/runtime/CHANGELOG.md): what changed in each release of `@genclass/runtime`
