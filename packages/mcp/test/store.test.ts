@@ -653,6 +653,28 @@ describe("store: the explore plans (AGENT.md section 5.1, plan systematic)", () 
     expect(loadCaps(s).schedule).toBeNull();
   });
 
+  it("the stand-in of a schedule a page rejected names what that page could not run, never a cap its hello listed", () => {
+    const s = new Store();
+    const x = s.armExplore({ runs: 2, route: "/search", delay: { minMs: 0, maxMs: 300 }, plan: "systematic" });
+    loadCaps(s).send(searchLoad(S));
+    loadCaps(s).send(searchLoad(S));
+    // the page listed delaySeed (and lifo) and rejected lifo: the stand-in is for lifo alone
+    const l = loadCaps(s);
+    expect(l.schedule).toMatchObject({ order: "lifo", delaySeed: 1 });
+    l.send([{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "lifo" }]);
+    expect(x.plan.at(-1)).toEqual({ order: "seeded", seed: 1, delay: { minMs: 300, maxMs: 300 }, maxHoldMs: 1800, label: "seed 1 (page runtime has no lifo) (again, after a page fell back)" });
+    // a page without delaySeed in its hello rejected its cover row: both, in the order the schedule needs them
+    const c = s.hello(hello("/search", undefined, ["lifo", "ranked", "reverse", "net"]))!;
+    expect(c.schedule).toMatchObject({ order: "ranked", seed: 1, label: "cover row 1 (page runtime has no delaySeed)" });
+    s.events({ run: c.run, token: c.token, events: [{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "ranked" }] });
+    expect(x.plan.at(-1)).toMatchObject({ order: "seeded", seed: 2, label: "seed 2 (page runtime has no ranked, delaySeed) (again, after a page fell back)" });
+    // one that listed everything and rejected an order no cap names: the label says what it rejected
+    const f = loadCaps(s);
+    expect(f.schedule).toMatchObject({ order: "fifo", label: "baseline 3 (last)" });
+    f.send([{ t: "schedule", spec: { order: "natural" }, fallback: true, rejected: "fifo" }]);
+    expect(x.plan.at(-1)).toMatchObject({ order: "fifo", seed: 1, label: 'baseline 3 (last) (page runtime rejected "fifo") (again, after a page fell back)' });
+  });
+
   it("a replay whose page fell back is not armed again for it", () => {
     const s = new Store();
     const r = load(s);

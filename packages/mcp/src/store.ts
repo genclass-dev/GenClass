@@ -312,9 +312,10 @@ export class Store {
 
   /**
    * An explore position for a page's runtime: as planned when it can run it; otherwise the lifo load becomes seed seed0,
-   * a cover row its seeded stand-in, a reversed seed seed0 + 1 + k, and delaySeed the seed of the delays (labelled).
+   * a cover row its seeded stand-in, a reversed seed seed0 + 1 + k, and delaySeed the seed of the delays, labelled
+   * "(page runtime has no ...)" with what `caps` lacks, or with `why` when the caller knows better (a page that fell back).
    */
-  private fitExplore(x: ExploreSession, pos: number, caps: string[] | undefined): { spec: ScheduleSpec; missing: string[] } {
+  private fitExplore(x: ExploreSession, pos: number, caps: string[] | undefined, why?: string): { spec: ScheduleSpec; missing: string[] } {
     const spec = x.plan[pos];
     const missing = lacking(spec, caps);
     if (!missing.length) return { spec, missing };
@@ -329,7 +330,7 @@ export class Store {
       else delete s.reverse;
     }
     if (s.delaySeed !== undefined && !has("delaySeed")) s = seedForDelays(s);
-    return { spec: { ...s, label: `${s.label ?? spec.label ?? `explore ${pos + 1}`} (page runtime has no ${missing.join(", ")})` }, missing };
+    return { spec: { ...s, label: `${s.label ?? spec.label ?? `explore ${pos + 1}`} (${why ?? `page runtime has no ${missing.join(", ")}`})` }, missing };
   }
 
   /** Runs a finding, a live explore session, an armed replay or a minimise probe refers to: never dropped, always saved. */
@@ -558,8 +559,14 @@ export class Store {
       if (x) {
         x.runs = x.runs.filter((r) => r !== run.id);
         const subs = x.substituted ?? (x.substituted = []);
-        if (x.plan[a.index] && x.state !== "stopped" && !subs.includes(a.index)) {
-          const { spec } = this.fitExplore(x, a.index, []);
+        const planned = x.plan[a.index];
+        if (planned && x.state !== "stopped" && !subs.includes(a.index)) {
+          // the stand-in needs nothing of a runtime; its label names what this page could not run: the order it
+          // rejected and what the schedule needs that its hello did not list, never a cap the page listed
+          const listed = run.caps ?? [];
+          const missing = capsNeeded(planned).filter((c) => c === rejected || !listed.includes(c));
+          const why = missing.length ? `page runtime has no ${missing.join(", ")}` : `page runtime rejected ${rejected === "?" ? "the schedule" : JSON.stringify(clean(rejected, 20))}`;
+          const { spec } = this.fitExplore(x, a.index, [], why);
           x.plan.push({ ...spec, label: `${spec.label ?? `explore ${a.index + 1}`} (again, after a page fell back)` });
           if (x.slots) x.slots.push(this.slotCopy(x, a.index));
           subs.push(x.plan.length - 1);
