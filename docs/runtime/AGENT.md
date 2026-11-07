@@ -695,6 +695,19 @@ After the page loads, the test also asserts the schedule in force (`window.__GEN
 (lifo, ranked, reverse and delaySeed need a newer one) delivers as responses arrive, and the test would otherwise pass
 on the bug.
 
+#### Run the generated test in CI
+
+The test needs no bridge and no MCP server, but it needs the agent link on the page. Its first assertion, right after
+`page.goto` and before any recorded action, is that `window.__GENCLASS_AGENT__` exists ("the dev build calls
+connectAgent(rt) from @genclass/runtime/agent"); the schedule in force is the second. So the e2e job must serve a
+build that calls `connectAgent`: the dev server, or a build made only for the e2e job (never deployed, not even as a
+preview) in which the check around `connectAgent` is true. In a production build that check is false and the link is
+gone (section 1), so the test fails at its first assertion, before it tests anything. The test must also reach the page
+by a loopback name (`localhost`, `127.x`, `[::1]`, `*.localhost`): on any other host, such as another container's
+service name, `connectAgent` returns an inert connection and sets no `window.__GENCLASS_AGENT__`, unless the app passes
+`anyHost: true` (section 1). The test loads `GENCLASS_APP_URL` (default: the recorded page's origin) with the recorded
+path; set it to the served origin, such as `http://localhost:3000`, when the two differ.
+
 ## 6. Untrusted input and security
 
 Everything a page sends (URLs, element names, values, error messages, store summaries, page text, the model's facts) is

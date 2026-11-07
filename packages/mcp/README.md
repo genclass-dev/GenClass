@@ -369,6 +369,32 @@ order happened in it, so a fix that stops sending the older request is proven by
 cannot run a schedule gets one it can, labelled. Minimise, plan `systematic` and the coverage line need this server
 after `@genclass/mcp` 0.2.2 as well. Details: [AGENT.md section 5](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md).
 
+## Run the generated test in CI
+
+The test `genclass_explain` writes sets its own delivery schedule through a page global, so CI needs no bridge and no
+MCP server. It does need the agent link: its first assertion, before any recorded action, is that the page called
+`connectAgent(rt)` (`window.__GENCLASS_AGENT__` exists). So the e2e job must:
+
+- serve a build that calls `connectAgent`: the dev server, or a build made only for the e2e job (never deployed, not
+  even as a preview) in which the check around it is true. In a production build that check is false and the link is
+  gone, so the test fails at that first assertion before it tests anything;
+- reach the app by a loopback name: `localhost`, `127.x`, `[::1]` or a `*.localhost` name. On another host, such as
+  another container's service name, the link stays inert unless the app passes `connectAgent(rt, { anyHost: true })`;
+- set `GENCLASS_APP_URL` to the served origin when it is not the one the test was recorded on (the test loads that
+  origin with the recorded path).
+
+Playwright can start the dev server for the job, in `playwright.config.ts`:
+
+```ts
+webServer: { command: "npm run dev", url: "http://localhost:5173", reuseExistingServer: !process.env.CI },
+```
+
+The second assertion is the schedule in force. When `SCHEDULE` in the test has a `lifo` or `ranked` order, `reverse`
+or `delaySeed`, it needs a page runtime after `@genclass/runtime` 0.3.0-beta.5; with an older one the test fails there
+instead of passing without that order ever being delivered. A test for which GenClass found no generic assertion
+(a model detection, for one) has an `expect(false, ...)` line that fails until you replace it with the domain
+assertion.
+
 ## Tools
 
 | tool | |
