@@ -6,15 +6,20 @@ name: Release packages
 # Authentication: npm trusted publishing (OIDC, `id-token: write` in the publish job only); no npm token is stored in
 # the repository.
 #
-# Jobs: `packages` picks the tag's package (all four on a pull request). `build` checks the version, installs, builds
-# the runtime, then typechecks, builds and unit-tests the package (Node 22 for playwright and sv, Node 24 for nuxt and
-# astro, as in their own workflows; sv's unit project only), packs it, uploads the tarball as the `<package>-tarball`
-# artifact and runs `npm publish --dry-run` on it. On a tag push only, `publish` publishes that tarball from the
-# npm-publish environment (it checks out nothing and runs no repository code), and `verify` installs the published
-# version and runs `npm audit signatures`. On a pull request that changes this file or one of the four package.json
-# files, everything up to the dry run runs, for all four; nothing on a pull request has the OIDC token, the npm-publish
-# environment or a secret. The end-to-end checks are in the packages' own workflows (playwright-reporter.yml,
-# sv-addon.yml, integrations.yml): check that they are green on the commit you tag.
+# Jobs: `packages` picks the tag's package (all four on a pull request). `build` checks the version and that the
+# package's CHANGELOG.md has a section for it whose heading does not say unreleased (a tag push fails without one, a
+# pull request gets a notice), installs, builds the runtime, then typechecks, builds and unit-tests the package (Node 22
+# for playwright and sv, Node 24 for nuxt and astro, as in their own workflows; sv's unit project only), packs it,
+# uploads the tarball as the `<package>-tarball` artifact and runs `npm publish --dry-run` on it. On a tag push only,
+# `publish` publishes that tarball from the npm-publish environment (it checks out nothing and runs no repository
+# code), `verify` installs the published version and runs `npm audit signatures`, and `github-release` (the only job
+# that may write to the repository) creates the tag's GitHub release with that CHANGELOG section as its notes
+# (.github/scripts/changelog-section.mjs), marked as a prerelease for a prerelease version and never as the
+# repository's latest release: Gemini CLI and `gh skill` install from that one, which release.yml and release-mcp.yml
+# set. On a pull request that changes this file or one of the four package.json files, everything up to the dry run
+# runs, for all four; nothing on a pull request has the OIDC token, the npm-publish environment or a secret. The
+# end-to-end checks are in the packages' own workflows (playwright-reporter.yml, sv-addon.yml, integrations.yml): check
+# that they are green on the commit you tag.
 #
 # Owner setup:
 # - AGENTS.md rule 9 has to name this workflow before its first publish.
@@ -22,7 +27,12 @@ name: Release packages
 #   package must exist before this workflow can publish it. Push the tag: the run builds, tests and uploads the tarball
 #   as the `<package>-tarball` artifact, and its publish job publishes nothing: it fails, saying the package is not on
 #   npm yet (or reject that job's deployment). Publish that exact tarball once from your own npm login
-#   (`npm publish genclass-<package>-<version>.tgz --access public`).
+#   (`npm publish genclass-<package>-<version>.tgz --access public`). The github-release job runs only after this
+#   workflow's own publish, so that version's GitHub release is yours too, from the repository root:
+#   `node .github/scripts/changelog-section.mjs packages/<package>/CHANGELOG.md <version> --url
+#   https://github.com/genclass-dev/GenClass/blob/<package>-v<version>/packages/<package>/CHANGELOG.md > notes.md`, then
+#   `gh release create <package>-v<version> --verify-tag --latest=false --title "@genclass/<package> <version>"
+#   --notes-file notes.md` (add `--prerelease` for a prerelease version).
 # - Later versions publish from here once the package has a trusted publisher: on npmjs.com, @genclass/<package> →
 #   Settings → Trusted publishing → GitHub Actions: organization genclass-dev, repository GenClass, workflow filename
 #   release-packages.yml, environment npm-publish. Two conditions from npm's docs
@@ -127,6 +137,15 @@ jobs:
             TAG="${GITHUB_REF_NAME#"$PKG"-v}"
             echo "tag $TAG, package.json $VERSION"
             test "$TAG" = "$VERSION"
+          fi
+          # the version's CHANGELOG section becomes the GitHub release's notes (the github-release job): a tag push
+          # without one fails here, before anything is installed or published; a pull request only says so
+          if ! (cd "$GITHUB_WORKSPACE" && node .github/scripts/changelog-section.mjs "packages/$PKG/CHANGELOG.md" "$VERSION" > /dev/null); then
+            if [ "$GITHUB_EVENT_NAME" = push ]; then
+              echo "::error::packages/$PKG/CHANGELOG.md has no released section for $VERSION: head it \"## $VERSION (<date>)\""
+              exit 1
+            fi
+            echo "::notice::packages/$PKG/CHANGELOG.md has no released section for $VERSION yet: a tag push fails here until its heading is \"## $VERSION (<date>)\""
           fi
           # prereleases go to the dist-tag named after them (0.2.0-beta.1 -> beta), other versions to latest
           case "$VERSION" in
@@ -318,3 +337,40 @@ jobs:
           # the attestations endpoint can lag the version by minutes (release.yml)
           for i in $(seq 1 20); do npm audit signatures && exit 0; echo "attestations not served yet, retry $i"; sleep 30; done
           exit 1
+
+  github-release:
+    name: "GitHub release: notes from the package's CHANGELOG.md (tag push only)"
+    needs: [packages, publish]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # gh release create; the only job that may write to the repository
+    env:
+      PKG: ${{ needs.packages.outputs.package }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Notes, the version's CHANGELOG section
+        run: |
+          node .github/scripts/changelog-section.mjs "packages/$PKG/CHANGELOG.md" "${GITHUB_REF_NAME#"$PKG"-v}" \
+            --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/packages/$PKG/CHANGELOG.md" > "$RUNNER_TEMP/notes.md"
+
+      # never the repository's latest release (the header)
+      - name: Create the release
+        run: |
+          VERSION="${GITHUB_REF_NAME#"$PKG"-v}"
+          PRERELEASE=()
+          case "$VERSION" in
+            *-*) PRERELEASE=(--prerelease) ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag --latest=false "${PRERELEASE[@]}" --title "@genclass/$PKG $VERSION" --notes-file "$RUNNER_TEMP/notes.md"

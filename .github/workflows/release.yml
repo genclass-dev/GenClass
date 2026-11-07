@@ -10,6 +10,14 @@ name: Release
 # GenClass, workflow filename release.yml, environment npm-publish; and a GitHub environment `npm-publish`
 # (Settings → Environments), ideally with required reviewers.
 #
+# GitHub release: after the publish job, the github-release job (the only job that may write to the repository)
+# creates the tag's release with the version's section of packages/runtime/CHANGELOG.md as its notes
+# (.github/scripts/changelog-section.mjs; relative links point at the tag). "The tag names the package version" fails
+# before anything is built when that section is missing or its heading still says unreleased. A prerelease is marked
+# as one. A stable release becomes the repository's latest release only when its tag is on the default branch:
+# Gemini CLI and `gh skill` install from the latest release, and a tag on a release branch can predate the plugin
+# (v0.2.3, tagged on release/0.2.3, has no gemini-extension.json).
+#
 # Before you push the tag (the order is load-bearing from 0.3.0; packages/runtime/CHANGELOG.md "Dashboard counts"):
 # 1. The previous release is on npm: `npm view @genclass/runtime dist-tags` shows it as `latest`, and
 #    https://cdn.jsdelivr.net/npm/@genclass/runtime@<that version> answers 200 (the docs call it the stable line).
@@ -74,6 +82,11 @@ jobs:
           echo "tag $TAG, package.json $PKG"
           test "$TAG" = "$PKG"
           grep -q "\"$PKG\"" packages/runtime/src/version.ts
+          # the version's CHANGELOG section becomes the GitHub release's notes (the github-release job)
+          node .github/scripts/changelog-section.mjs packages/runtime/CHANGELOG.md "$PKG" > /dev/null || {
+            echo "::error::packages/runtime/CHANGELOG.md has no released section for $PKG: head it \"## $PKG (<date>)\""
+            exit 1
+          }
 
       - name: Install
         run: npm ci --no-audit --no-fund
@@ -132,3 +145,50 @@ jobs:
           # the attestations endpoint can lag the version by minutes (0.3.0-beta.0: 404 right after publish, 200 later)
           for i in $(seq 1 20); do npm audit signatures && exit 0; echo "attestations not served yet, retry $i"; sleep 30; done
           exit 1
+
+  github-release:
+    name: "GitHub release: notes from packages/runtime/CHANGELOG.md"
+    needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # gh release create; the only job that may write to the repository
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Notes, the version's CHANGELOG section
+        run: |
+          node .github/scripts/changelog-section.mjs packages/runtime/CHANGELOG.md "${GITHUB_REF_NAME#v}" \
+            --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/packages/runtime/CHANGELOG.md" > "$RUNNER_TEMP/notes.md"
+
+      - name: Create the release
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          case "$VERSION" in
+            *-*) MARK=--prerelease ;;
+            *)
+              # the latest release only from the default branch (the header): "behind" or "identical" means the
+              # tagged commit is on it
+              STATUS=$(gh api "repos/$GITHUB_REPOSITORY/compare/$DEFAULT_BRANCH...$GITHUB_REF_NAME" --jq .status) || STATUS=unknown
+              if [ "$STATUS" = behind ] || [ "$STATUS" = identical ]; then
+                MARK=--latest
+              else
+                MARK=--latest=false
+                echo "::notice::$GITHUB_REF_NAME is not on $DEFAULT_BRANCH (compare: $STATUS), so its release does not become the latest one"
+              fi
+              ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "@genclass/runtime $VERSION" --notes-file "$RUNNER_TEMP/notes.md" "$MARK"

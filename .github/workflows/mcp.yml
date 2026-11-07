@@ -9,7 +9,9 @@ name: MCP server
 
 # Outside packages/mcp, the paths name the files test/manifests.test.ts checks (the pins in the READMEs, AGENT.md, the
 # listings and the root skill, the runtime's version, the plugin marketplaces), so a stale pin fails on its own pull
-# request.
+# request, and the ones test/release-notes.test.ts checks (the three release workflows,
+# .github/scripts/changelog-section.mjs, which writes their GitHub releases' notes, and the published sections of
+# packages/runtime/CHANGELOG.md).
 on:
   push:
     paths:
@@ -18,9 +20,13 @@ on:
       - "packages/runtime/src/runtime.ts"
       - "packages/runtime/package.json"
       - "packages/runtime/README.md"
+      - "packages/runtime/CHANGELOG.md"
       - "package-lock.json"
       - ".github/workflows/mcp.yml"
       - ".github/workflows/release-mcp.yml"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/release-packages.yml"
+      - ".github/scripts/**"
       - ".agents/**"
       - ".claude-plugin/**"
       - ".cursor-plugin/**"
@@ -40,9 +46,13 @@ on:
       - "packages/runtime/src/runtime.ts"
       - "packages/runtime/package.json"
       - "packages/runtime/README.md"
+      - "packages/runtime/CHANGELOG.md"
       - "package-lock.json"
       - ".github/workflows/mcp.yml"
       - ".github/workflows/release-mcp.yml"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/release-packages.yml"
+      - ".github/scripts/**"
       - ".agents/**"
       - ".claude-plugin/**"
       - ".cursor-plugin/**"

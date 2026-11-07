@@ -154,6 +154,19 @@ CHANGELOG section is final and dated and its own workflow (`playwright-reporter.
 `integrations.yml`) is green on that commit. Push one tag at a time: GitHub starts no workflow for tags pushed more
 than three at once.
 
+### GitHub releases
+
+When the publish job succeeds, each release workflow's `github-release` job creates the tag's GitHub release, with that
+version's CHANGELOG section as its notes (`.github/scripts/changelog-section.mjs`; relative links point at the tag).
+`release.yml` and `release-packages.yml` stop before anything is published when the section is missing or its heading
+still says unreleased; `release-mcp.yml` warns and links to its CHANGELOG instead, because `@genclass/mcp` 0.1.0 has
+no section of its own. A prerelease is marked as one. Only a stable release from `release.yml` or `release-mcp.yml`
+whose tag is on `main` becomes the repository's latest release, which Gemini CLI and `gh skill` install from. A
+version published by hand, such as each package's first, gets its release by hand: the command is in
+`release-packages.yml`'s header. So does a version whose publish job failed after npm had it: in `release.yml` and
+`release-mcp.yml`, "Verify the registry signature and provenance" is a step of that job, and a re-run stops at
+`npm publish`.
+
 ## Reporting a false flag
 
 GenClass flagged or acted on code that was right? That is a bug we want: use the "False flag or false
