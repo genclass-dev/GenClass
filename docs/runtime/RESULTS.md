@@ -1035,7 +1035,7 @@ passes (1,101 tests, 14 model-parity skips); `review-perf` 4 of 4.
 
 ## 19. Coding agents on a real library issue: redux-toolkit#5139 (local, 2026-10-25, Chromium through Playwright 1.63.0)
 
-[docs/adoption/hunts/rtk-5139.md](../adoption/hunts/rtk-5139.md). The agent link and `@genclass/mcp` (both built from
+the RTK #5139 hunt notes (internal, not in this repository). The agent link and `@genclass/mcp` (both built from
 the repository) recording a standalone Redux Toolkit 2.13.0 reproduction: an optimistic `updateQueryData` patch
 replaced by a polling or refetch-on-focus fetch while the mutation is pending. `mode: "observe"`, `model: false`,
 `telemetry: false`, Redux discovery only, `connectAgent(rt, { hold: false })`. 10 natural runs per variant.
@@ -1111,7 +1111,7 @@ and session files outside `.gitignore`.
 
 ## 21. Coding agents on a real app: Gitea's markdown preview (cloud container, 2026-10-25, adoption hunt)
 
-[adoption/hunts/gitea.md](../adoption/hunts/gitea.md). Gitea `main` at `ff68b39` (same code as v28.2.0), built from
+the Gitea hunt notes (internal, not in this repository). Gitea `main` at `ff68b39` (same code as v28.2.0), built from
 source with SQLite; GenClass from `main` at `d77ffd8` (runtime 0.3.0-beta.1, mcp 0.1.0), injected from outside through
 Playwright 1.63.0 / Chromium 1243 (the script-tag build plus `connectAgent`, `model: false`, telemetry off, one `rt.atom`
 per watched pane because GenClass discovers no store on Gitea's stack). Each explore session: 2 fifo baselines + N
@@ -1134,8 +1134,8 @@ where the baselines lost the update too. One app, three surfaces of one bug clas
 
 ## 22. Coding agents: explore's false reports before and after (cloud session, 2026-10-25, branch `claude/great-dijkstra-oa9emj`)
 
-[AGENT.md](AGENT.md) sections 2 and 5.1. The Strapi race hunt (`docs/adoption/hunts/strapi.md` on the
-`claude/dazzling-cray-8tqzkn` branch) found a real race on the Strapi admin and also showed `genclass_explore`
+[AGENT.md](AGENT.md) sections 2 and 5.1. The Strapi race hunt (internal notes, not in this
+repository) found a real race on the Strapi admin and also showed `genclass_explore`
 reporting races on Redux Toolkit Query's bookkeeping. This measures the same sessions with the comparison of `main`
 (`d77ffd8`, "before", built in a git worktree) and with this branch ("after"), on the same machine: a cloud container
 (4 cores), Node 22.22.0, Chromium 1243 headless shell through Playwright 1.63.0, Strapi 5.59.0 on SQLite set up as in
