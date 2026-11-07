@@ -35,6 +35,11 @@ export interface GenClassReporterOptions {
    * left out, and the note that says so: see SummarizeOptions.maxChars.
    */
   maxChars?: number;
+  /**
+   * End the report with one line that links to what its lines mean and what the fixture can miss (REPORT_FOOTER).
+   * Default true; `false` leaves that line out.
+   */
+  footer?: boolean;
 }
 
 /** The parts of Playwright's FullConfig this reporter reads. */
@@ -99,6 +104,7 @@ export default class GenClassReporter {
         minSeeds: o.minSeeds,
         title: o.title,
         maxChars: o.maxChars,
+        footer: o.footer,
       });
       this.markdown = r.markdown;
       this.path = r.path;

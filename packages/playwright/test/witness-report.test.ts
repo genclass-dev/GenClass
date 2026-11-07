@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { CATEGORIES, CATEGORY_TITLES, WITNESS_TRIGGER, buildSummary, categoryOf, summarize } from "../src/summarize.js";
 import type { GenClassRacesFile, RaceSignature } from "../src/types.js";
-import { FIXTURE_REPORT, fixtureInputs } from "./helpers.js";
+import { FIXTURE_REPORT, FOOTER, fixtureInputs } from "./helpers.js";
 
 const witness = (op: string, seed: number, kind = "overwrote-newer"): RaceSignature => ({
   sig: `witness|${kind}|${op}`,
@@ -67,7 +67,9 @@ describe("witnesses: the report", () => {
     const footer = md.slice(md.lastIndexOf("\n---\n"));
     expect(footer.indexOf("Each line is a diagnosis by GenClass's on-device model")).toBeGreaterThan(0);
     expect(footer.indexOf("Lines under")).toBeGreaterThan(footer.indexOf("Each line is a diagnosis"));
-    expect(footer.split("\n\n")).toHaveLength(3);
+    // the rule, the two paragraphs, then the report's last line (the link to what the lines mean)
+    expect(footer.split("\n\n")).toHaveLength(4);
+    expect(footer.endsWith(`\n\n${FOOTER}\n`)).toBe(true);
   });
 
   it("model notes: a fixture file with model skip gets none; a model-only file with state off still does", () => {
