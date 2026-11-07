@@ -9,6 +9,9 @@
 //
 // Every string from the page goes into the file as a JSON string literal (never as code); patterns are built at run
 // time with new RegExp from such a literal. Values the page redacted ("[redacted]") become a placeholder.
+//
+// The test also asserts the schedule the page put in force: a @genclass/runtime that cannot run an order (lifo, ranked,
+// reverse, delaySeed need a newer one) ignores it, and the test would then pass on the bug.
 
 import type { ActStep, Finding, Run, ScheduleSpec } from "./types.js";
 import { agesIn, clean, pathShape, shape } from "./text.js";
@@ -138,9 +141,12 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
   const schedule: ScheduleSpec = spec ?? { order: "given", given: run.order.slice(0, 400) };
   const sched = { ...schedule };
   if (sched.given) sched.given = sched.given.map((k) => clean(k, 300));
+  if (sched.ranks) sched.ranks = sched.ranks.map((k) => clean(k, 300));
   if (sched.focus) sched.focus = sched.focus.map((k) => clean(k, 300));
   delete sched.id;
   delete sched.label;
+  // what the page must report back as its schedule (the order, and the fields an older runtime drops)
+  const applied = { order: sched.order, ...(sched.reverse ? { reverse: true } : {}), ...(sched.delaySeed !== undefined ? { delaySeed: sched.delaySeed } : {}) };
   const ev = f.evidence as Record<string, unknown>;
   const what =
     f.kind === "stale-write"
@@ -168,6 +174,9 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
   lines.push(`  await page.goto(APP + ${lit(pathOf(run.page.url))});`);
   const has = "page.evaluate(() => !!(window as any).__GENCLASS_AGENT__)";
   lines.push(`  expect(await ${has}, "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);`);
+  lines.push(`  const applied = await page.evaluate(() => (window as any).__GENCLASS_AGENT__?.schedule);`);
+  lines.push(`  expect(applied, ${JSON.stringify("the app's @genclass/runtime must apply this schedule (lifo, ranked, reverse and delaySeed need a newer @genclass/runtime)")}).toMatchObject(${JSON.stringify(applied)});`);
+  if (sched.ranks) lines.push(`  expect(applied?.ranks?.length, "every ranked key is in force").toBe(${sched.ranks.length});`);
   lines.push(`  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));`);
   for (const l of actionLines(acts)) lines.push(`  ${l}`);
   lines.push(`  await page.evaluate(() => (window as any).__GENCLASS_AGENT__.whenSettled(15000));`);
