@@ -584,5 +584,5 @@ export function summarize(inputs: readonly RacesFileInput[], options: SummarizeO
 
 // The format and its validator, so this entry alone is enough for a CI script.
 export { RACES_SCHEMA } from "./types.js";
-export type { GenClassRacesFile, RaceSignature, RacesFileInput, RacesParseResult } from "./types.js";
+export type { GenClassRacesFile, RaceSignature, RacesFileInput, RacesLocation, RacesParseResult } from "./types.js";
 export { parseRaces, validateRaces, MAX_ERRORS } from "./schema.js";

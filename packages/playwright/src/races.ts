@@ -14,7 +14,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { RACES_SCHEMA, type GenClassRacesFile, type RaceSignature, type RacesFixtureInfo } from "./types.js";
+import { RACES_SCHEMA, type GenClassRacesFile, type RaceSignature, type RacesFixtureInfo, type RacesLocation } from "./types.js";
 
 /** The `trigger` of a witness signature. */
 export const WITNESS_TRIGGER = "witness";
@@ -50,6 +50,8 @@ export interface RacesInput {
   witnesses: readonly unknown[];
   /** What the fixture could and could not do on the page (written as the file's `fixture`). */
   fixture?: RacesFixtureInfo;
+  /** Where the test is declared (written as the file's `location`), when the fixture could tell. */
+  location?: RacesLocation;
 }
 
 const METHOD_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+([^\s()?#]+)/;
@@ -126,6 +128,7 @@ export function buildRacesFile(i: RacesInput): GenClassRacesFile {
   file.model = i.model ?? null;
   if (i.chaos !== undefined) file.chaos = i.chaos;
   if (i.fixture) file.fixture = { ...i.fixture };
+  if (i.location) file.location = { file: i.location.file, line: i.location.line };
   return file;
 }
 

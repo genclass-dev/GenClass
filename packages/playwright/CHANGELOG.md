@@ -6,6 +6,13 @@ everything below is unreleased.
 
 ## Unreleased
 
+- **Where the test is declared**: the fixture writes an optional `location` (`{ file, line }`) into each race file,
+  the test file's path relative to the repository root (`GITHUB_WORKSPACE` on GitHub Actions, else the Playwright
+  config's directory) and the line Playwright gives for the test. It is left out when there is no line or the file is
+  outside that directory, and a `location` that is not a relative path with a line from 1 rejects the file like any
+  other bad field. The report does not use it: it is for genclass[bot], the GitHub App
+  (`docs/github-app/README.md`), which reads the uploaded race files and comments on the test's line when the pull
+  request's diff shows it. `locationOf` and the `RacesLocation` type are exported with the fixture.
 - **The fixture**, `@genclass/playwright/fixture`: Playwright's `test` (`test.extend`) and `expect`, with a
   `genclass` option (`use: { genclass: {...} }`). On every `page` it puts `@genclass/runtime`'s script-tag build
   before the app's first script, in observe mode with telemetry off, the visual checks and the devtools off, and

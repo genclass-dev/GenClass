@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { outDirOf, startGenClass, testName, type TestInfoLike } from "../src/fixture.js";
+import { locationOf, outDirOf, startGenClass, testName, type TestInfoLike } from "../src/fixture.js";
 import type { PageLike } from "../src/install.js";
 import { parseRaces } from "../src/schema.js";
 
@@ -75,6 +75,37 @@ describe("fixture: names and places", () => {
     expect(outDirOf(info(), "out/races")).toBe(join(root, "out", "races"));
     expect(outDirOf(info(), join(root, "abs"))).toBe(join(root, "abs"));
     expect(outDirOf(info({ config: { rootDir: join(root, "tests") }, project: { name: "", testDir: join(root, "tests") } }))).toBe(join(root, "tests", "test-results", "genclass"));
+  });
+});
+
+describe("fixture: where the test is declared (the file's location)", () => {
+  it("relative to the repository's checkout on GitHub Actions, else to the config's directory; none without a line or outside it", () => {
+    const i = info({ line: 12, file: join(root, "apps", "web", "tests", "checkout.spec.ts"), config: { configFile: join(root, "apps", "web", "playwright.config.ts"), rootDir: join(root, "apps", "web", "tests") } });
+    expect(locationOf(i, root)).toEqual({ file: "apps/web/tests/checkout.spec.ts", line: 12 });
+    expect(locationOf(i, "")).toEqual({ file: "tests/checkout.spec.ts", line: 12 });
+    expect(locationOf(info({ line: 3 }), undefined)).toEqual({ file: "tests/checkout.spec.ts", line: 3 });
+    expect(locationOf(info(), root)).toBeUndefined();
+    expect(locationOf(info({ line: 0 }), root)).toBeUndefined();
+    expect(locationOf(info({ line: 1.5 }), root)).toBeUndefined();
+    // a test file outside the checkout is never named by a path that climbs out of it
+    expect(locationOf(info({ line: 3 }), join(root, "somewhere", "else"))).toBeUndefined();
+  });
+
+  it("the fixture writes it into the race file when Playwright gives the line", async () => {
+    const page = new FakePage();
+    page.evaluateResult = { mode: "observe", model: { state: "off" }, agent: null };
+    const before = process.env.GITHUB_WORKSPACE;
+    process.env.GITHUB_WORKSPACE = root;
+    try {
+      const run = await startGenClass(page, { runtimeDir }, info({ line: 9 }));
+      const r = await run.finish();
+      expect(r.file!.location).toEqual({ file: "tests/checkout.spec.ts", line: 9 });
+      const parsed = parseRaces(readFileSync(r.path!, "utf8"));
+      expect(parsed.ok && parsed.file.location).toEqual({ file: "tests/checkout.spec.ts", line: 9 });
+    } finally {
+      if (before === undefined) delete process.env.GITHUB_WORKSPACE;
+      else process.env.GITHUB_WORKSPACE = before;
+    }
   });
 });
 

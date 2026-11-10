@@ -107,6 +107,15 @@ describe("races: signatures and the file", () => {
     ]);
   });
 
+  it("carries where the test is declared when the fixture could tell, and nothing otherwise", () => {
+    const base = { test: "t", seed: 1, mode: "observe", model: { state: "off" }, chaos: null, records: [], witnesses: [] };
+    const file = buildRacesFile({ ...base, location: { file: "tests/a.spec.ts", line: 7 } });
+    expect(file.location).toEqual({ file: "tests/a.spec.ts", line: 7 });
+    const r = validateRaces(file);
+    expect(r.ok && r.file.location).toEqual({ file: "tests/a.spec.ts", line: 7 });
+    expect("location" in buildRacesFile({ ...base, location: undefined })).toBe(false);
+  });
+
   it("a page where GenClass never started: model null, no mode, no signatures (still a valid file)", () => {
     const file = buildRacesFile({ test: "t", seed: 1, mode: null, model: null, chaos: null, records: [], witnesses: [] });
     expect(file).toEqual({ schema: "genclass-races/1", test: "t", seed: 1, signatures: [], model: null, chaos: null });

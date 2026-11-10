@@ -26,6 +26,14 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
+/** A path inside a repository: relative, "/" separators, no "." or ".." segment, no control character, at most 400 characters. */
+function isRepoPath(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > 400 || v.startsWith("/") || v.includes("\\")) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(v) || /^[A-Za-z]:/.test(v)) return false;
+  return v.split("/").every((seg) => seg !== "" && seg !== "." && seg !== "..");
+}
+
 function fail(errors: string[]): RacesParseResult {
   if (errors.length > MAX_ERRORS) {
     const more = errors.length - MAX_ERRORS;
@@ -104,6 +112,14 @@ export function validateRaces(value: unknown): RacesParseResult {
       if (x.modeOverridden !== undefined && typeof x.modeOverridden !== "string") errors.push(`fixture.modeOverridden: expected a string when present, got ${describe(x.modeOverridden)}`);
     }
   }
+  if (value.location !== undefined) {
+    const l = value.location;
+    if (!isObject(l)) errors.push(`location: expected an object when present, got ${describe(l)}`);
+    else {
+      if (!isRepoPath(l.file)) errors.push(`location.file: expected a relative path with "/" separators, got ${describe(l.file)}`);
+      if (!(isInt(l.line) && l.line >= 1)) errors.push(`location.line: expected a line number from 1, got ${describe(l.line)}`);
+    }
+  }
   if (errors.length) return fail(errors);
 
   const file: GenClassRacesFile = { schema: RACES_SCHEMA, test: (value.test as string).trim(), seed: value.seed as number, signatures };
@@ -131,6 +147,7 @@ export function validateRaces(value: unknown): RacesParseResult {
     file.fixture = { model: x.model as "skip" | "load", agent: x.agent as string | null, chaosApplied: x.chaosApplied as number | null, serviceWorker: x.serviceWorker as boolean };
     if (typeof x.modeOverridden === "string") file.fixture.modeOverridden = x.modeOverridden;
   }
+  if (isObject(value.location)) file.location = { file: value.location.file as string, line: value.location.line as number };
   return { ok: true, file };
 }
 

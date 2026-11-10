@@ -68,6 +68,19 @@ export interface GenClassRacesFile {
    * `modeOverridden`: the mode a URL or localStorage switch had asked for, set back to observe.
    */
   fixture?: RacesFixtureInfo;
+  /**
+   * Optional, written by the fixture: where the test is declared. `file` is a path with "/" separators relative to the
+   * repository root (the directory in GITHUB_WORKSPACE on GitHub Actions, else the Playwright config's directory),
+   * `line` its 1-based line. It lets a pull-request review (genclass[bot]) put a finding next to the test when that
+   * line is part of the diff; the summariser and the report do not use it.
+   */
+  location?: RacesLocation;
+}
+
+/** Where a test is declared (GenClassRacesFile.location). */
+export interface RacesLocation {
+  file: string;
+  line: number;
 }
 
 /** The fixture's own record in a race file (GenClassRacesFile.fixture). */

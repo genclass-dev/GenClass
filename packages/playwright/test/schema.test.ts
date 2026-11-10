@@ -109,6 +109,19 @@ describe("schema: rejected files and their messages", () => {
     expect(errors({ ...ok, signatures: [{ ...okSig, confidence: Number.NaN }] })).toEqual(["signatures[0].confidence: expected a number from 0 to 1, got NaN"]);
   });
 
+  it("location: a path inside the repository and a line are kept; anything else rejects the file", () => {
+    const r = validateRaces({ ...ok, location: { file: "tests/e2e/checkout.spec.ts", line: 12, column: 5 } });
+    expect(r.ok && r.file.location).toEqual({ file: "tests/e2e/checkout.spec.ts", line: 12 });
+    expect(validateRaces(ok).ok && "location" in (validateRaces(ok) as { file: object }).file).toBe(false);
+    for (const file of ["/abs/a.spec.ts", "../a.spec.ts", "a/../../b.ts", "a//b.ts", "./a.ts", "C:/a.ts", "a\\b.ts", "", 3, "a\u0000b"]) {
+      expect(errors({ ...ok, location: { file, line: 1 } }), String(file)).toEqual([expect.stringMatching(/^location\.file: expected a relative path with "\/" separators, got /)]);
+    }
+    expect(errors({ ...ok, location: { file: "a.ts", line: 0 } })).toEqual(["location.line: expected a line number from 1, got 0"]);
+    expect(errors({ ...ok, location: { file: "a.ts", line: 1.5 } })).toEqual(["location.line: expected a line number from 1, got 1.5"]);
+    expect(errors({ ...ok, location: "a.ts:1" })).toEqual(['location: expected an object when present, got "a.ts:1"']);
+    expect(errors({ ...ok, location: { file: `${"a/".repeat(250)}x.ts`, line: 1 } })).toHaveLength(1);
+  });
+
   it("checks the optional fields when present", () => {
     expect(errors({ ...ok, mode: 3, model: { state: 1 }, chaos: "fast" })).toEqual([
       "mode: expected a string when present, got 3",

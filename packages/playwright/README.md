@@ -293,8 +293,17 @@ interface GenClassRacesFile {
     serviceWorker: boolean;      // a service worker controlled the page
     modeOverridden?: string;     // a URL or localStorage switch had asked for this mode; set back to observe
   };
+  location?: {                   // written by the fixture: where the test is declared
+    file: string;                // "tests/checkout.spec.ts": relative to the repository root, "/" separators
+    line: number;
+  };
 }
 ```
+
+`location` is relative to the checkout on GitHub Actions (`GITHUB_WORKSPACE`), else to the Playwright config's
+directory, and is left out when Playwright gives no line or the test file is outside that directory. The report does
+not use it; [genclass[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), the GitHub
+App, puts a finding next to the test with it when that line is part of a pull request's diff.
 
 The type is exported as `GenClassRacesFile`. A file that does not validate is never half-read: the report lists it
 under **Files skipped** with the field and the reason (for example
@@ -462,6 +471,25 @@ The same with the GitHub CLI only (it updates the bot's comment that starts with
             gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@genclass-report.md > /dev/null
           fi
 ```
+
+### With the GitHub App instead
+
+[genclass[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), GenClass's GitHub App
+(not installable yet), does the posting itself: the workflow only uploads the race files, with no write permission, so
+it is the same for pull requests from forks. The app keeps one comment per pull request, numbers the findings, says
+from push to push which are new, still flagged or not flagged at the new commit, and answers `@genclass replay 1`.
+
+```yaml
+      - run: npx playwright test --repeat-each 2
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: genclass-races
+          path: test-results/genclass
+          retention-days: 7
+```
+
+Use one or the other: with the app installed, leave out the comment step above, or a pull request gets two comments.
 
 ## What to expect from the model
 
