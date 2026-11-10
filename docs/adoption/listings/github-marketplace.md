@@ -1,8 +1,8 @@
 # Listing genclass-dev[bot] on GitHub Marketplace
 
 Research and steps, written 2026-11-09 from GitHub's documentation as read that day, and the listing as it was
-filled in on GitHub on 2026-11-10 ([The draft on GitHub](#the-draft-on-github)). The listing is a draft: it has not
-been submitted for review. Sources:
+filled in on GitHub on 2026-11-10 ([The draft on GitHub](#the-draft-on-github)). The owner submitted it for review
+that day; GitHub answers by email. Sources:
 [Requirements for listing an app](https://docs.github.com/en/apps/github-marketplace/creating-apps-for-github-marketplace/requirements-for-listing-an-app),
 [Writing a listing description](https://docs.github.com/en/apps/github-marketplace/listing-an-app-on-github-marketplace/writing-a-listing-description-for-your-app),
 [Setting pricing plans](https://docs.github.com/en/apps/github-marketplace/listing-an-app-on-github-marketplace/setting-pricing-plans-for-your-listing),
@@ -50,7 +50,7 @@ For every listing (quoted from the requirements page):
 | "Listings must provide a method to receive support through a valid support link and/or a support email address." | The repository's issues, and the email above. |
 | "Apps must provide value to customers and integrate with the platform in some way beyond authentication." | Checks, comments, commands. |
 | "Apps must be publicly available in GitHub Marketplace and cannot be in public preview or available by invite only." | The manifest registers it as public. It must be past "nothing can be installed today" first: SETUP.md, "Before anything else". |
-| "Apps must have webhook events set up to notify the publisher of any plan changes or cancellations using the GitHub Marketplace API." | `POST /api/github/marketplace` takes `marketplace_purchase`: purchased, changed, cancelled, pending_change, pending_change_cancelled. The listing's webhook is set on the listing page with its own secret (`GITHUB_MARKETPLACE_WEBHOOK_SECRET`) and must be Active before review. **Not set yet**: the one item still open on the listing's checklist. |
+| "Apps must have webhook events set up to notify the publisher of any plan changes or cancellations using the GitHub Marketplace API." | `POST /api/github/marketplace` takes `marketplace_purchase`: purchased, changed, cancelled, pending_change, pending_change_cancelled. The listing's webhook is set on the listing page with its own secret (`GITHUB_MARKETPLACE_WEBHOOK_SECRET`) and must be Active before review. Set on 2026-11-10; the first delivery, the ping, was answered 202. |
 | "Apps must have a logo, feature card, and screenshots images that meet the recommendations" | Uploaded: see Images. |
 | For a GitHub App: "your app must identify users following the OAuth authorization flow"; the Setup URL "is a required field"; "Your app must provision a customer account for all new purchases." | Connect GitHub is the OAuth flow; the Setup URL is `/github/setup`; a purchase is recorded per GitHub account in `github_marketplace`. Whether a row per GitHub account, with no GenClass account until the person connects, satisfies "provision a customer account" is a question for the onboarding review. |
 
@@ -143,8 +143,12 @@ none.
 ## The draft on GitHub
 
 `https://github.com/marketplace/genclass-dev/edit` (organization owners only; GitHub asks for sudo). State on
-2026-11-10: contact info, listing description, plans and pricing, and security and compliance are complete; the
-webhook is not. The Developer Agreement (v2.4) is signed by the owner.
+2026-11-10: all five items are complete, the Developer Agreement (v2.4) is signed by the owner, and the listing is
+"Pending for publish": the owner requested publication, and "Withdraw request" on that page takes it back.
+
+The webhook is `https://genclass.dev/api/github/marketplace`, JSON, Active, with a secret of its own that is also the
+worker's `GITHUB_MARKETPLACE_WEBHOOK_SECRET`. The owner set both; the ping was answered 202. From then on the
+listing's endpoint no longer accepts the app's own webhook secret.
 
 Security and compliance, as entered:
 
@@ -179,19 +183,20 @@ In [`docs/github-app/media/`](../../github-app/media/), as uploaded on 2026-11-1
 ## Steps
 
 Done: the app is public and reviewed real pull requests ([SETUP.md](../../github-app/SETUP.md)); the question under
-"Free and paid" is decided; logo, feature card and screenshots; the listing's text, plan and security information.
+"Free and paid" is decided; logo, feature card and screenshots; the listing's text, plan and security information; the
+listing's webhook with its own secret; the request for publication (2026-11-10).
 
 Left:
 
-1. The listing's webhook: `https://genclass.dev/api/github/marketplace`, **Content type: application/json**, a new
-   secret of its own (not the app's webhook secret), Active. Store the same secret as
-   `GITHUB_MARKETPLACE_WEBHOOK_SECRET` on the worker first. The form's other content type,
-   `application/x-www-form-urlencoded`, puts the JSON in a form field named `payload`; the worker reads that too, when
-   the body is exactly that one field, but JSON is what GitHub recommends. GitHub does not send a failed Marketplace
-   delivery again, so open the listing's delivery list and check that the first delivery, the ping, was answered with
-   202.
-2. Test the purchase flow as GitHub's "Testing your app" page describes (the stubbed Marketplace endpoints), then
-   request publication. The owner does that.
+1. GitHub's review. "An onboarding expert will reach out to you with additional information", by email to the
+   contacts on the listing.
+2. The purchase flow was not tested with GitHub's stubbed Marketplace endpoints ("Testing your app") before the
+   request. The unit tests cover the purchase events; a delivery from GitHub itself has only been the ping. Test it
+   when the onboarding contact writes, and in any case before a paid plan.
 3. A privacy page on genclass.dev that shows "The GitHub App" from `PRIVACY.md`, and terms that mention the app; then
    point the listing at them.
 4. When the listing is live: add the Marketplace link next to the install link in the README and on `/github`.
+
+To change the webhook's secret later: put the new value on the worker first
+(`wrangler secret put GITHUB_MARKETPLACE_WEBHOOK_SECRET`), then "Change secret" in the listing's webhook form. GitHub
+does not send a failed Marketplace delivery again, so do both in one sitting.
