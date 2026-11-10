@@ -11,9 +11,9 @@ It reads the race files your workflow uploads, never your source code. It is fre
 - Code: [`telemetry-worker/src/github/`](../../telemetry-worker/src/github/)
 - For whoever runs the app: [SETUP.md](SETUP.md). How it is built and why: [DESIGN.md](DESIGN.md).
 
-> **Status (2026-11-09):** the code and its tests are in this repository. The app is not registered on GitHub yet and
-> `@genclass/playwright` is not on npm yet, so nothing below can be installed today. [SETUP.md](SETUP.md) lists what
-> is left, in order.
+> **Status (2026-11-10):** the app is registered as GenClass.dev and reviews this repository's own pull requests
+> ([the first one](https://github.com/genclass-dev/GenClass/pull/177)). It is private to this organization until
+> `@genclass/playwright` is on npm, because step 2 below needs that package. [SETUP.md](SETUP.md) lists what is left.
 
 ## Setup
 

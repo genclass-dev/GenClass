@@ -136,7 +136,24 @@ npx --yes wrangler@4 deploy
    the "In production" section when the pull request changes a route file.
 7. Uninstall. `SELECT COUNT(*) FROM github_installations` is 0 again.
 
-What has been verified so far (2026-11-09), all without GitHub itself:
+What has been verified so far.
+
+Against GitHub itself (2026-11-10), with the app installed on this organization and its webhook pointed at a
+no-traffic preview version of the worker (`wrangler versions upload --preview-alias`), on
+[pull request 177](https://github.com/genclass-dev/GenClass/pull/177):
+
+- GitHub's own deliveries (`installation`, `workflow_run`, `pull_request`, `issue_comment`) passed the signature
+  check and answered 202;
+- the app's token, signed by the worker with the PKCS#1 key, was accepted;
+- a draft pull request was left alone; marked ready, it was reviewed from the artifact `genclass-races` that this
+  repository's own workflow run uploaded (15 race files): one check, neutral, "1 finding, 1 reproducible", and one
+  comment with the witness on `GET /api/search` that the e2e app plants on purpose;
+- `/genclass replay 1` from someone with write access got the eyes reaction and one reply.
+
+Not yet run against GitHub: Connect GitHub, a pull request from a fork, a private repository, `issues: merge`, the
+fix workflow, a rate limit.
+
+Without GitHub:
 
 - the test suite (`telemetry-worker/test/github*.test.ts`): signed deliveries through the real handler against a
   fake GitHub, with the real migrations under `node:sqlite`;
@@ -147,8 +164,6 @@ What has been verified so far (2026-11-09), all without GitHub itself:
 - the three pages, opened in a browser against that local worker at desktop and phone widths, with a repository
   linked and paused from `/account/github`.
 
-No step above has been run against GitHub itself: registering the app, a real webhook, a real artifact download, real
-rate limits and Connect GitHub against github.com are first tried at step 1.
 
 ## Try it without touching production
 

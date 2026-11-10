@@ -174,9 +174,10 @@ the GenClass fixture, your workflow uploads the race files it writes, and the ap
 each finding with its test, the seeds it was flagged in and the evidence line. It reads those files and never your
 source code, it comments only where it is installed, and it is free on public repositories.
 
-> Not installable yet (2026-11-09): the code is in [`telemetry-worker/src/github`](telemetry-worker/src/github), the
-> app is not registered on GitHub and `@genclass/playwright` is not on npm. When it is: **Install** at
-> `https://genclass.dev/github`.
+> Not open to everyone yet (2026-11-10): the app is registered as GenClass.dev and reviews this repository's own pull
+> requests ([the first one](https://github.com/genclass-dev/GenClass/pull/177)); it stays private to this organization
+> until `@genclass/playwright` is on npm, because the fixture in that package is what writes the files it reads. Then:
+> **Install** at `https://genclass.dev/github`. The code is in [`telemetry-worker/src/github`](telemetry-worker/src/github).
 
 ```ts
 // playwright.config.ts
