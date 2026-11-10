@@ -3,81 +3,197 @@
 //
 // Invariants:
 // - The app acts only inside an installation, on the repository an event is about, and only in answer to an event
-//   from GitHub that passed the signature check (src/github/http.ts). It never opens a pull request, never comments
-//   on a repository it is not installed on, and never @mentions anyone.
+//   from GitHub that passed the signature check (src/github/http.ts), or, in the daily sweep, to run a review that
+//   such an event started and that is still owed. It never opens a pull request, never comments on a repository it
+//   is not installed on, and never @mentions anyone.
 // - A review reads: the pull request's own fields, the repository's settings file on its default branch, the workflow
 //   runs and artifacts of the head commit and, only when needed, the list of changed files. It never reads file
-//   contents, and of a file's patch it keeps the line ranges only.
-// - It writes at most: one check run per head commit, one summary comment per pull request (edited in place), one
-//   review with inline comments per new reproducible finding, and one reply per command. An unchanged result is not
-//   written again (body hashes in the pull request's state).
+//   contents, and of a file's patch it keeps the line ranges only. Before an issue is opened at a merge, the issues
+//   the app itself opened in the repository are listed, so that no finding is filed twice.
+// - It writes at most: one check run per head commit (a second only to take the place of one in progress whose id
+//   was lost with the job that created it), one summary comment per pull request (edited in place), one review with
+//   inline comments per new reproducible finding, and one reply per command. An unchanged result is not written again
+//   (body hashes in the pull request's state). An issue is opened only when the repository's settings ask for one at
+//   a merge (`issues: merge`: one per pull request, and none for a finding that already has one) or a person with
+//   write access asks (`issue <n>`).
+// - A repository hears nothing until there is something to read for it. Before race files were read for it once, a
+//   pull request without them gets no check and no comment. The exceptions: once per repository of an installation on
+//   selected repositories, a check that says what the app reads; once per private repository without a plan, a check
+//   that says so; a repository linked to a GenClass app; a pull request that had race files or a comment itself; and
+//   a person who asks (a command, Re-run on the check), who always gets an answer. An artifact that could not be
+//   read is not race files read: it changes none of this. Only race files from inside a repository (a branch of it,
+//   or an author GitHub calls owner, member or collaborator) make it one whose every pull request gets the check.
+// - The pull request's state (its head commit, open or closed) is always asked of GitHub, never taken from a webhook
+//   payload: a payload may be old (a redelivery, deliveries out of order).
+// - A check run is never left "in progress" without something certain to finish it. One is left in progress only
+//   under `check.fail_on`, while its commit's test run can still report, and the row says so before the check exists
+//   (PrState.waiting and held, the row's `due`). Every way a wait can end without a review finishes the check and
+//   says why: a pause, a setting, a newer commit, a closed pull request, a limit reached for good. An hourly limit, a
+//   failed job, and a job the platform stopped leave the review owed, and the daily sweep (githubSweep) runs it.
+// - A verdict a commit's race files gave is not replaced by a weaker one because those files cannot be read again.
+// - A repository's settings are never guessed. The defaults stand in only when GitHub says there is no settings file
+//   (or that the app may not read it, or that it is too large). When the file could not be fetched, the job fails
+//   before it writes anything, nothing is cached, and the next event asks again: a repository that turned the comment,
+//   reviews or commands off is not treated as having the defaults because GitHub did not answer.
 // - Commands are taken only from people GitHub says have write access (for review, replay and help: also the pull
 //   request's author), never from bots, and `fix` never for a pull request from a fork (an agent workflow would run
-//   that fork's code with the repository's secrets).
+//   that fork's code with the repository's secrets). "Write access" is GitHub's answer to the permission question for
+//   that person on that repository, never the association an event carries (it calls a member whose membership is
+//   private a contributor, and a member with read access a member). A review asked for by the author without write
+//   access reads the commit again; it does not lift a pause on the pull request or `reviews.ignore_authors`.
+// - An issue (`issues: merge`) is opened under the pull request's lease, only for findings flagged in the race files
+//   of the commit that merged (they are read first when the stored findings are an older commit's), never for a
+//   paused pull request or repository, once per pull request, and never for a finding that an issue the app opened
+//   in the repository already lists.
 // - A private repository without a plan that includes it is not read (src/github/entitlement.ts).
-// - One review at a time per pull request (the lease), at most REVIEWS_PER_HOUR per installation and REVIEWS_PER_PR
-//   per pull request; a rate limit from GitHub ends the job quietly and the next event tries again.
+// - One review at a time per pull request (the lease). Limits: PR_REVIEWS_PER_HOUR per pull request an hour, counted
+//   before anything is asked of GitHub; REVIEWS_PER_HOUR per installation an hour, counted only for a review that
+//   reads a commit's evidence (of them at most PUSH_REVIEWS_PER_HOUR started by pull_request events and
+//   OUTSIDE_REVIEWS_PER_HOUR for pull requests by authors from outside the repository); REVIEWS_PER_PR writes per pull
+//   request in all. A rate limit from GitHub ends the job quietly and the next event tries again.
+// - A job stops itself JOB_MS after its webhook arrived, well inside the 30 seconds the platform gives it: no request
+//   to GitHub starts after that, the lease is released, the review is left owed and the job fails, so its delivery
+//   is forgotten and can be redelivered.
 // - Nothing from GitHub is logged except a short outcome word per delivery.
 
 import type { Env } from "../collector.js";
 import type { D1Like } from "../dashboard.js";
-import { forgetInstallation, GithubError, installationClient, posInt, repoPath, type Fetch, type GithubClient } from "./api.js";
+import { appClient, forgetInstallation, GithubError, installationClient, posInt, repoPath, type Fetch, type GithubClient } from "./api.js";
 import { NEEDS_FINDING, NEEDS_WRITE, parseCommand } from "./commands.js";
-import type { GithubAppConfig } from "./config.js";
+import { githubApp, type GithubAppConfig } from "./config.js";
 import { repoEntitled } from "./entitlement.js";
 import { ciEvidence, productionEvidence, type CiEvidence } from "./evidence.js";
 import {
   CHECK_NAME,
   inlineComments,
+  issueFingerprints,
   mergeFindings,
   parseState,
   patchLines,
   renderCheck,
   renderFixBrief,
   renderHelp,
+  renderIntro,
   renderIssue,
+  renderOverLimit,
   renderReplay,
+  renderStopped,
   renderSummary,
   REPLY_MARKER,
   sha256Hex,
   summaryOf,
   testLocations,
+  unread,
+  type CheckOutput,
   type PrState,
   type ReviewLinks,
   type ReviewModel,
+  type StopReason,
+  type StoredFinding,
   type TestLocation,
 } from "./review.js";
 import { branchMatches, readSettings, SETTINGS_PATH, type RepoSettings } from "./settings.js";
 import {
+  claimPrHour,
+  claimRepoFact,
   claimReview,
   closePr,
   deleteInstallation,
   deleteMarketplace,
+  DUE_AFTER_MS,
+  duePrs,
   installationById,
+  PENDING_ASKED,
+  PENDING_AUTHOR,
+  PR_REVIEWS_PER_HOUR,
   prRow,
   prsAtSha,
+  PUSH_REVIEWS_PER_HOUR,
+  releaseIssueTurn,
   releaseLease,
   removeRepos,
   repoById,
+  repoFacts,
+  REVIEWS_PER_HOUR,
   REVIEWS_PER_PR,
   savePr,
+  setDue,
   setMarketplace,
   setMarketplacePending,
+  setSelection,
   setSuspended,
+  takeIssueTurn,
   takeLease,
   touchRepo,
   upsertInstallation,
   type Installation,
   type PrRow,
+  type RepoRow,
 } from "./store.js";
 
 export interface Ctx {
   env: Env;
   db: D1Like;
   cfg: GithubAppConfig;
+  /** Requests to GitHub. In a job (jobContext) none starts after the deadline. */
   f: Fetch;
   now: () => Date;
+  /** When the job must have stopped, in ms by `now`: nothing new is started after it. */
+  deadline: number;
 }
+
+// --------------------------------------------------------------------------------------------- a job's time
+
+/**
+ * How long a job may work, from the moment its webhook arrived. The platform stops whatever still runs 30 seconds
+ * after the webhook's response, without running another line: a job that stops itself well before that ends like any
+ * failed job, with its lease released, its review left owed and its delivery forgotten.
+ */
+export const JOB_MS = 20_000;
+/** A request that writes and started before the deadline may be answered until this long after the job's start. */
+const JOB_HARD_MS = 27_000;
+/** The least time left in which another pass over a pull request, or another pull request, is started. */
+export const PASS_MS = 5_000;
+/** Passes over one pull request in one job, however many events arrive while it runs. */
+const MAX_PASSES = 5;
+/** The REST client's own timeout per request (src/github/api.ts). */
+const FETCH_MS = 10_000;
+/** The daily sweep: pull requests looked at in one run, and how long one run may take. */
+const SWEEP_ROWS = 100;
+const SWEEP_MS = 240_000;
+
+/**
+ * A job's context. Its `f` starts no request to GitHub once JOB_MS have passed since `startedMs` (the REST client
+ * reports that as a network error, so the job fails the ordinary way), and no request waits past the time the job has.
+ */
+export function jobContext(base: Omit<Ctx, "deadline">, startedMs: number): Ctx {
+  const deadline = startedMs + JOB_MS;
+  const hard = startedMs + JOB_HARD_MS;
+  const f: Fetch = (input, init) => {
+    const nowMs = base.now().getTime();
+    if (nowMs >= deadline) return Promise.reject(new Error("the job's time is up"));
+    // a read is given up at the deadline; a write that has started is given time to be answered, so that the id of
+    // what it made (a check run, a comment) is not lost
+    const left = ((init?.method ?? "GET") === "GET" ? deadline : hard) - nowMs;
+    return base.f(input, left < FETCH_MS ? { ...init, signal: AbortSignal.timeout(left) } : init);
+  };
+  return { ...base, f, deadline };
+}
+
+const timeLeft = (ctx: Ctx): number => ctx.deadline - ctx.now().getTime();
+
+/**
+ * What a job fails with when too little of its time is left to start what remains (another pass, another pull
+ * request). The webhook reports it, and a request refused after the deadline, as "deadline".
+ */
+export class OutOfTime extends GithubError {
+  constructor() {
+    super("network", 0, "the job's time is up");
+  }
+}
+const timeUp = (): OutOfTime => new OutOfTime();
+/** The end of the current UTC hour as "HH:MM", for the sentences about an hourly limit. */
+const hourEnd = (now: Date): string => new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000 + 3_600_000).toISOString().slice(11, 16);
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {});
@@ -111,46 +227,95 @@ function repoOf(p: Obj): RepoRef | null {
 
 const installationIdOf = (p: Obj): number | null => posInt(obj(p.installation).id);
 
-/** The installation an event is about; recorded from the event itself when its `created` event never arrived. */
+/**
+ * A login as GitHub can give one, else null: letters, digits and hyphens; for an Enterprise Managed User an underscore
+ * before the short code ("mona-cat_octo"); for a bot the "[bot]" ending. A login is only ever used as one segment of
+ * an API path and printed through the escaping, so this checks what those two uses need (no "/", ".", "%", space or
+ * markup), not that the account exists.
+ */
+export function githubLogin(v: unknown): string | null {
+  return typeof v === "string" && /^[A-Za-z0-9_-]{1,39}(?:\[bot\])?$/.test(v) ? v : null;
+}
+
+/**
+ * The installation an event is about; recorded from the event itself when its `created` event never arrived. Such an
+ * event does not say whether the installation covers all repositories or selected ones: that stays "unknown" until
+ * GitHub is asked (selectionOf).
+ */
 async function installationFor(ctx: Ctx, id: number, repo: RepoRef | null): Promise<Installation | null> {
   const known = await installationById(ctx.db, id);
   if (known || !repo?.owner) return known;
-  await upsertInstallation(ctx.db, { id, accountId: repo.owner.id, login: repo.owner.login, type: repo.owner.type, selection: "selected" }, ctx.now());
+  await upsertInstallation(ctx.db, { id, accountId: repo.owner.id, login: repo.owner.login, type: repo.owner.type, selection: "unknown" }, ctx.now());
   return installationById(ctx.db, id);
+}
+
+/**
+ * Whether the installation covers all repositories or selected ones. One that was first seen through an event is
+ * asked about once, as the app, and the answer is stored. Until GitHub has answered it counts as "all", the quieter
+ * of the two (a repository of it gets nothing before race files were read for it).
+ */
+async function selectionOf(ctx: Ctx, inst: Installation): Promise<"all" | "selected"> {
+  if (inst.selection === "all" || inst.selection === "selected") return inst.selection;
+  try {
+    const answer = obj(await appClient(ctx.cfg, ctx.f, ctx.now, 2).get(`/app/installations/${inst.id}`));
+    const selection = answer.repository_selection === "all" ? "all" : answer.repository_selection === "selected" ? "selected" : null;
+    if (!selection) return "all";
+    await setSelection(ctx.db, inst.id, selection, ctx.now());
+    inst.selection = selection;
+    return selection;
+  } catch {
+    return "all";
+  }
 }
 
 // --------------------------------------------------------------------------------------------- settings
 
 const SETTINGS_TTL_MS = 120_000;
-const settingsCache = new Map<number, { exp: number; text: string | null }>();
+/** What GitHub answered about a repository's settings file: its text, null when there is none to read, or that it is too large. */
+const settingsCache = new Map<number, { exp: number; text: string | null; tooLarge: boolean }>();
 /** Drops cached settings files (tests). */
 export const resetSettingsCache = (): void => settingsCache.clear();
 
-/** The repository's settings file on its default branch (cached two minutes per isolate), parsed. */
+/**
+ * The repository's settings file on its default branch (cached two minutes per isolate), parsed.
+ * The defaults are returned only when GitHub itself says there is nothing to read: no file (404), the app may not read
+ * it (403: it was registered without the single-file permission, docs/github-app/SETUP.md), or the file is too large
+ * (the check says so). Every other failure is thrown and nothing is cached: GitHub did not answer, answered 5xx, gave
+ * no installation token, or sent something that cannot be read. The caller's job then fails before it has written
+ * anything from these settings, and the next event asks GitHub again. A repository that set `comment: never`,
+ * `reviews: false` or `commands: false` is never treated as having the defaults because the file could not be fetched.
+ */
 async function settingsOf(ctx: Ctx, gh: GithubClient, repo: RepoRef): Promise<{ settings: RepoSettings; warnings: string[] }> {
   const nowMs = ctx.now().getTime();
   const hit = settingsCache.get(repo.id);
-  if (hit && hit.exp > nowMs) return readSettings(hit.text);
-  let text: string | null = null;
-  let tooLarge = false;
-  try {
-    // no `ref`: the default branch, whatever a pull request's head says
-    const file = obj(await gh.get(`${repo.path}/contents/${SETTINGS_PATH}`, { maxBytes: 64 * 1024 }));
-    if (file.type === "file" && file.encoding === "base64" && typeof file.content === "string") {
-      const bin = atob(file.content.replace(/\s+/g, ""));
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      text = new TextDecoder().decode(bytes);
+  let got = hit && hit.exp > nowMs ? hit : null;
+  if (!got) {
+    let text: string | null = null;
+    let tooLarge = false;
+    try {
+      // no `ref`: the default branch, whatever a pull request's head says
+      const file = obj(await gh.get(`${repo.path}/contents/${SETTINGS_PATH}`, { maxBytes: 64 * 1024 }));
+      if (file.type === "file" && file.encoding === "base64" && typeof file.content === "string") {
+        const bin = atob(file.content.replace(/\s+/g, ""));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        text = new TextDecoder().decode(bytes);
+      } else if (file.type === "file") {
+        // a file GitHub describes without its content (over 1 MB)
+        tooLarge = true;
+      }
+    } catch (e) {
+      const kind = e instanceof GithubError ? e.kind : null;
+      if (kind !== "not_found" && kind !== "forbidden" && kind !== "too_large") throw e;
+      tooLarge = kind === "too_large";
     }
-  } catch (e) {
-    if (e instanceof GithubError && (e.kind === "rate_limited" || e.kind === "unauthorized" || e.kind === "budget")) throw e;
-    tooLarge = e instanceof GithubError && e.kind === "too_large";
-    // no file, or the app was not given the single-file permission: the defaults
+    // only an answer from GitHub is kept: the file, or its word that there is none to read
+    if (settingsCache.size > 2000) settingsCache.clear();
+    got = { exp: nowMs + SETTINGS_TTL_MS, text, tooLarge };
+    settingsCache.set(repo.id, got);
   }
-  if (settingsCache.size > 2000) settingsCache.clear();
-  settingsCache.set(repo.id, { exp: nowMs + SETTINGS_TTL_MS, text });
-  const out = readSettings(text);
-  if (tooLarge) out.warnings.push(`${SETTINGS_PATH} is too large to read; the defaults are used.`);
+  const out = readSettings(got.text);
+  if (got.tooLarge) out.warnings.push(`${SETTINGS_PATH} is too large to read; the defaults are used.`);
   return out;
 }
 
@@ -160,8 +325,14 @@ function retryable(e: unknown): boolean {
   return e instanceof GithubError && (e.kind === "rate_limited" || e.kind === "unauthorized" || e.kind === "budget" || e.kind === "network" || e.kind === "server");
 }
 
-/** Create or update the check run on `headSha`. Returns its id (null when it could not be written). */
-async function publishCheck(gh: GithubClient, repo: RepoRef, row: PrRow, state: PrState, headSha: string, out: ReturnType<typeof renderCheck>): Promise<number | null> {
+/** The pull request's row as a pass sees it: kept current as the pass saves. */
+type RowView = Pick<PrRow, "head_sha" | "check_run_id" | "comment_id">;
+
+/**
+ * Create or update the check run on `headSha`; with `create` false one that exists is rewritten and none is made.
+ * Returns its id (null when there is none) and whether GitHub was written to: an unchanged result is not sent again.
+ */
+async function publishCheck(gh: GithubClient, repo: RepoRef, row: RowView, state: PrState, headSha: string, out: CheckOutput, create = true): Promise<{ id: number | null; wrote: boolean }> {
   const body: Obj = {
     name: CHECK_NAME,
     head_sha: headSha,
@@ -172,7 +343,7 @@ async function publishCheck(gh: GithubClient, repo: RepoRef, row: PrRow, state: 
   };
   const hash = (await sha256Hex(JSON.stringify(body))).slice(0, 32);
   const same = row.check_run_id !== null && row.head_sha === headSha;
-  if (same && state.checkHash === hash) return row.check_run_id;
+  if (same && state.checkHash === hash) return { id: row.check_run_id, wrote: false };
   let id: number | null = null;
   if (same) {
     const { head_sha: _sha, ...patch } = body;
@@ -183,35 +354,60 @@ async function publishCheck(gh: GithubClient, repo: RepoRef, row: PrRow, state: 
       if (!(e instanceof GithubError && e.kind === "not_found")) throw e;
     }
   }
-  if (id === null) id = posInt(obj(await gh.post(`${repo.path}/check-runs`, body)).id);
+  if (id === null) {
+    if (!create) return { id: null, wrote: false };
+    id = posInt(obj(await gh.post(`${repo.path}/check-runs`, body)).id);
+  }
   state.checkHash = hash;
-  return id;
+  return { id, wrote: true };
 }
 
 /**
- * Create or update the summary comment. Returns its id, or null when there is none now. A comment someone deleted is
- * written again only when there is a new finding to tell them about.
+ * Create or update the summary comment. Returns its id (null when there is none now) and whether GitHub was written
+ * to. A comment someone deleted is written again only when there is a new finding to tell them about.
  */
-async function publishComment(gh: GithubClient, repo: RepoRef, number: number, row: PrRow, state: PrState, body: string | null, wanted: boolean, hasNew: boolean): Promise<number | null> {
-  if (body === null || !wanted) return row.comment_id;
+async function publishComment(gh: GithubClient, repo: RepoRef, number: number, row: RowView, state: PrState, body: string | null, wanted: boolean, hasNew: boolean): Promise<{ id: number | null; wrote: boolean }> {
+  if (body === null || !wanted) return { id: row.comment_id, wrote: false };
   const hash = (await sha256Hex(body)).slice(0, 32);
   if (row.comment_id !== null) {
-    if (state.commentHash === hash) return row.comment_id;
+    if (state.commentHash === hash) return { id: row.comment_id, wrote: false };
     try {
       await gh.patch(`${repo.path}/issues/comments/${row.comment_id}`, { body });
       state.commentHash = hash;
-      return row.comment_id;
+      return { id: row.comment_id, wrote: true };
     } catch (e) {
       if (!(e instanceof GithubError && e.kind === "not_found")) throw e;
       state.commentHash = null;
       state.commentDeleted = true;
     }
   }
-  if (state.commentDeleted && !hasNew) return null;
+  if (state.commentDeleted && !hasNew) return { id: null, wrote: false };
   const id = posInt(obj(await gh.post(`${repo.path}/issues/${number}/comments`, { body })).id);
   state.commentHash = id ? hash : null;
   if (id) state.commentDeleted = false;
-  return id;
+  return { id, wrote: true };
+}
+
+/** The workflow runs on a commit, from one request: which of them have completed. */
+async function runsOf(gh: GithubClient, repo: RepoRef, sha: string): Promise<{ id: number; completed: boolean }[]> {
+  const listed = obj(await gh.get(`${repo.path}/actions/runs`, { query: { head_sha: sha, per_page: 100 } }));
+  const out: { id: number; completed: boolean }[] = [];
+  for (const r0 of Array.isArray(listed.workflow_runs) ? listed.workflow_runs : []) {
+    const r = obj(r0);
+    const id = posInt(r.id);
+    if (id && r.head_sha === sha) out.push({ id, completed: r.status === "completed" });
+  }
+  return out;
+}
+
+/**
+ * Whether some of a commit's race files could not be read this time: a file in an artifact that was skipped, or an
+ * artifact that could not be listed, downloaded or opened, or was left out. src/github/evidence.ts reports the latter
+ * as sentences. The two sentences that do not mean a file went unread are named here, so any other note, a new kind
+ * included, counts as unread: the safe side, because a commit read in part is never a success.
+ */
+function partialEvidence(ci: CiEvidence): boolean {
+  return ci.inputs.some((i) => i.error !== undefined) || ci.notes.some((n) => !n.endsWith("holds no .json file.") && !n.startsWith("No artifact whose name starts with"));
 }
 
 // --------------------------------------------------------------------------------------------- the review
@@ -223,10 +419,34 @@ export interface ReviewTarget {
 }
 
 export interface ReviewOptions {
-  /** The pull request as a webhook payload carried it (saves one request on the first pass). */
+  /**
+   * The pull request as a webhook payload carried it. It is used for one thing: the head commit on which a private
+   * repository without a plan is told, once, why nothing is read (nothing may be asked of GitHub about it). A review
+   * itself always asks GitHub for the pull request.
+   */
   pull?: Obj;
-  /** A person asked for it: run even when automatic reviews are off, a draft, or paused on the pull request. */
-  asked?: boolean;
+  /**
+   * A person asked for it. `true`: someone with write access did (a command, Re-run on the check): run even when
+   * automatic reviews are off, for a draft, a base branch or an author the settings leave out, when paused on the pull
+   * request, or in a repository the app has had nothing to read for yet. "author": the pull request's author, whom
+   * GitHub does not give write access, typed `review`: the same, except that a pause on the pull request and
+   * `reviews.ignore_authors` still hold. Only someone with write access lifts those.
+   */
+  asked?: boolean | "author";
+  /**
+   * Started by a pull_request event (an open, a push). The commit's test run has usually not finished then, so these
+   * reviews use at most PUSH_REVIEWS_PER_HOUR of the installation's hour.
+   */
+  push?: boolean;
+  /**
+   * The workflow run whose end started the review, when it uploaded an artifact whose name starts with the `artifact`
+   * setting: that run's artifacts are asked for first.
+   */
+  run?: number;
+  /** The daily sweep: a wait that nothing ended is ended with what there is, as for a person who asks. */
+  final?: boolean;
+  /** A `closed` event: GitHub is asked whether the pull request is closed now, and nothing is reviewed when it is not. */
+  closing?: boolean;
 }
 
 interface Pull {
@@ -236,9 +456,20 @@ interface Pull {
   headSha: string;
   baseRef: string;
   author: string;
+  /** GitHub's word for what the author is to the repository ("OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR", "NONE"...). */
+  association: string;
   /** The head branch lives in this repository (not a fork). */
   sameRepo: boolean;
 }
+
+/** Authors GitHub counts as part of the repository. */
+const INSIDE: readonly string[] = ["OWNER", "MEMBER", "COLLABORATOR"];
+
+const OVER_PR = "over the pull request's budget";
+const OVER_PR_HOUR = "over the pull request's hourly budget";
+const OVER_HOUR = "over the hourly budget";
+const NOT_CLOSED = "not closed";
+const ISSUE_OPENED = "issue opened";
 
 function pullOf(p: Obj, repo: RepoRef): Pull | null {
   const head = obj(p.head);
@@ -252,14 +483,22 @@ function pullOf(p: Obj, repo: RepoRef): Pull | null {
     headSha: sha,
     baseRef: str(base.ref, 255),
     author: str(obj(p.user).login, 60).toLowerCase(),
+    association: str(p.author_association, 30),
     sameRepo: posInt(obj(head.repo).id) === repo.id,
   };
 }
 
+/** What one pass over a pull request ended with: a word for the delivery's answer, and whether a review is still owed. */
+interface Pass {
+  word: string;
+  due: boolean;
+}
+
 /**
  * Review one pull request: read its evidence, fold it into the stored findings, and write what changed. Returns a
- * short word for what happened. Throws GithubError when GitHub could not be reached or refused (the caller forgets
- * the delivery so a redelivery tries again).
+ * short word for what happened. Throws GithubError when GitHub could not be reached or refused, or when the job's time
+ * ran out (the caller forgets the delivery so a redelivery tries again); the pull request's row then stays due, and
+ * the daily sweep reviews it if nothing else does first.
  */
 export async function reviewPull(ctx: Ctx, t: ReviewTarget, o: ReviewOptions = {}): Promise<string> {
   const { db } = ctx;
@@ -268,85 +507,218 @@ export async function reviewPull(ctx: Ctx, t: ReviewTarget, o: ReviewOptions = {
   if (inst.suspended) return "suspended";
   const stored = await repoById(db, t.repo.id);
   if (stored) await touchRepo(db, { repoId: t.repo.id, installationId: t.installationId, fullName: t.repo.fullName, private: t.repo.private }, ctx.now());
-  if (stored?.paused) return "paused";
-
-  let row = await takeLease(db, { repoId: t.repo.id, number: t.number, installationId: t.installationId }, ctx.now());
-  if (!row) return "busy";
-  let outcome = "nothing";
-  try {
-    for (let pass = 0; pass < 3 && row; pass++) {
-      if (row.reviews >= REVIEWS_PER_PR) {
-        outcome = "over the pull request's budget";
-        break;
-      }
-      if (!(await claimReview(db, t.installationId, ctx.now()))) {
-        outcome = "over the hourly budget";
-        break;
-      }
-      outcome = await reviewOnce(ctx, t, inst, stored?.project_id ?? null, row, pass === 0 ? o : { asked: o.asked });
-      // something arrived while this pass ran: once more, from the pull request's current state
-      const again = await releaseLease(db, t.repo.id, t.number);
-      row = again ? await takeLease(db, { repoId: t.repo.id, number: t.number, installationId: t.installationId }, ctx.now()) : null;
-    }
-  } finally {
-    if (row) await releaseLease(db, t.repo.id, t.number).catch(() => undefined);
+  // a paused repository is left alone, with one exception: a check it left in progress is finished
+  if (stored?.paused) {
+    const known = await prRow(db, t.repo.id, t.number);
+    if (!known || !parseState(known.state).held) return "paused";
   }
-  return outcome;
+
+  const key = { repoId: t.repo.id, number: t.number, installationId: t.installationId };
+  let row = await takeLease(db, { ...key, asked: o.asked }, ctx.now());
+  if (!row) return "busy";
+  let asked: boolean | "author" = o.asked ?? false;
+  // a `closed` event's question is answered by the first pass; a pass after it is a review like any other
+  let closing = !!o.closing;
+  let open = false;
+  for (let pass = 1; ; pass++) {
+    let result: Pass | null = null;
+    let failure: unknown;
+    try {
+      result = await reviewOnce(ctx, t, inst, stored, row, { ...o, asked, closing });
+      if (result.word === NOT_CLOSED) open = true;
+      closing = false;
+    } catch (e) {
+      failure = e;
+    }
+    // let go. A pass that failed leaves the row due, as takeLease marked it: its review is owed
+    const settled = result ? { due: result.due ? ctx.now().toISOString() : null } : {};
+    const pending = await releaseLease(db, t.repo.id, t.number, { lease: row.lease, ...settled }).catch(() => 0);
+    if (pending) {
+      // something arrived while this pass ran (after a failure too): once more, from the pull request's current state
+      if (pass >= MAX_PASSES || timeLeft(ctx) < PASS_MS) {
+        // no time for it in this job: the review is owed, and the job fails so that its delivery can be redelivered
+        await setDue(db, t.repo.id, t.number, ctx.now().toISOString()).catch(() => undefined);
+        throw result ? timeUp() : failure;
+      }
+      // a request that arrived meanwhile is run as one: with what its asker may lift
+      if (pending === PENDING_ASKED) asked = true;
+      else if (pending === PENDING_AUTHOR && !asked) asked = "author";
+      const next = await takeLease(db, { ...key, asked }, ctx.now());
+      if (next) {
+        row = next;
+        continue;
+      }
+      // another review took the pull request first: it starts from the current state, which is what the mark asked for
+    }
+    if (!result) throw failure;
+    return open ? NOT_CLOSED : result.word;
+  }
 }
 
-async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, projectId: string | null, row: PrRow, o: ReviewOptions): Promise<string> {
+async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored: RepoRow | null, leased: PrRow, o: ReviewOptions): Promise<Pass> {
   const { db, cfg } = ctx;
   const { repo, number } = t;
-  const state = parseState(row.state);
-
-  const entitled = await repoEntitled(db, ctx.env, cfg, inst, repo, ctx.now());
+  const row: RowView = { head_sha: leased.head_sha, check_run_id: leased.check_run_id, comment_id: leased.comment_id };
+  const state = parseState(leased.state);
+  const links = linksOf(cfg);
   const gh = installationClient(cfg, ctx.f, ctx.now, t.installationId, repo.id);
+  const repoKey = { repoId: repo.id, installationId: t.installationId };
+  const save = (v: Parameters<typeof savePr>[3]): Promise<void> => savePr(db, repo.id, number, v, ctx.now());
+  // a pass that wrote something on GitHub counts once toward the pull request's lifetime budget
+  let counted = false;
+  const count = (wrote: boolean): boolean => (wrote && !counted ? (counted = true) : false);
+  /** `commands` of the settings, once they are read (the sentences that name a command leave it out when they are off). */
+  let commands: boolean | undefined;
 
-  // nothing of a private repository without a plan is read: only an event that carried the pull request goes on, to say why
-  if (!entitled.ok && !o.pull) return "private repository without a plan";
-  const pull = pullOf(o.pull ?? obj(await gh.get(`${repo.path}/pulls/${number}`)), repo);
-  if (!pull) return "unreadable pull request";
+  /**
+   * End the pass without a review. A check that waits on the stored head commit is told why, so that it never goes on
+   * saying it waits, or stays in progress, when nothing will read the commit. An hourly limit is different: the review
+   * is still owed, so the wait is kept (a check in progress stays in progress, with the reason) and the row stays due.
+   */
+  const stop = async (word: string, why: StopReason): Promise<Pass> => {
+    const owed = why === "hour" || why === "pr-hour";
+    const had = state.waiting !== null;
+    const waits = had && state.waiting === row.head_sha;
+    const known = row.check_run_id !== null;
+    // these three change nothing for a check that is already completed: only one left in progress is rewritten
+    const heldOnly = owed || why === "closed" || why === "plan";
+    let wrote = false;
+    // A check in progress whose id the row does not have (the job that created it was stopped before it could store
+    // the id) cannot be rewritten: a new check run on the commit takes its place, as GitHub shows the latest of a name.
+    if (waits && (state.held || (known && !heldOnly))) {
+      const limit = why === "hour" ? REVIEWS_PER_HOUR : why === "pr-hour" ? PR_REVIEWS_PER_HOUR : why === "pr-total" ? REVIEWS_PER_PR : undefined;
+      const out = renderStopped(why, { mention: cfg.slug, held: state.held, commands, limit, after: hourEnd(ctx.now()) });
+      const res = await publishCheck(gh, repo, row, state, row.head_sha, out, !known);
+      wrote = res.wrote;
+      row.check_run_id = res.id;
+    }
+    if (had && !owed) {
+      state.waiting = null;
+      state.held = false;
+    }
+    if (had || wrote) await save({ checkRunId: row.check_run_id, state: JSON.stringify(state), reviewed: count(wrote) });
+    return { word, due: owed };
+  };
+
+  // nothing of a private repository without a plan is read
+  const entitled = await repoEntitled(db, ctx.env, cfg, inst, repo, ctx.now());
+  if (!entitled.ok) {
+    const word = "private repository without a plan";
+    // a check from the time the repository was reviewed is not left waiting
+    if (state.waiting !== null) return stop(word, "plan");
+    // The repository is told why once: a check on the first pull request an event carries, never again, never as a
+    // comment. The claim comes before the write, so two pull requests opened together cannot both get it.
+    const head = o.pull ? pullOf(o.pull, repo) : null;
+    if (head?.open && (await claimRepoFact(db, repoKey, "plan_notice", ctx.now()))) {
+      const empty: CiEvidence = { state: "none", runs: [], artifacts: [], inputs: [], notes: [] };
+      const model: ReviewModel = { repo: repo.fullName, number, headSha: head.headSha, mention: cfg.slug, ci: empty, summary: null, findings: [], production: null, settings: readSettings(null).settings, warnings: [], links };
+      const res = await publishCheck(gh, repo, row, state, head.headSha, renderCheck(model, { entitled: false, plansUrl: `${cfg.origin}/github#plans` }));
+      await save({ headSha: head.headSha, checkRunId: res.id, state: JSON.stringify(state), reviewed: count(res.wrote) });
+    }
+    return { word, due: false };
+  }
+
+  // the limits that need nothing from GitHub come before anything is asked of it
+  if (stored?.paused) return stop("paused", "repo-paused");
+  if (leased.reviews >= REVIEWS_PER_PR) return stop(OVER_PR, "pr-total");
+  if (!(await claimPrHour(db, repo.id, number, ctx.now()))) return stop(OVER_PR_HOUR, "pr-hour");
+
+  // The pull request as GitHub has it now. A webhook's copy may be old (a redelivery, deliveries out of order), and an
+  // old copy must not move the row back to a commit that is no longer the head, or reopen a pull request that closed.
+  const pull = pullOf(obj(await gh.get(`${repo.path}/pulls/${number}`)), repo);
+  if (!pull) return { word: "unreadable pull request", due: state.waiting !== null };
   if (!pull.open) {
     await closePr(db, repo.id, number, ctx.now());
-    return "closed";
+    const closed = await stop("closed", "closed");
+    // Merged: whether an issue is opened (`issues: merge`) is decided here, under the lease, by the first pass that
+    // finds the pull request merged, whichever event started it.
+    return pull.merged ? issueOnMerge(ctx, t, gh, leased, state, pull, o.run) : closed;
   }
+  if (o.closing) return { word: NOT_CLOSED, due: state.waiting !== null };
   // reopened: its row counts as open again (workflow runs find it, the sweep leaves it)
-  if (row.closed) await savePr(db, repo.id, number, { closed: null }, ctx.now());
-  // a check run belongs to one commit: the stored one is this commit's, or there is none yet
-  const ownCheck = row.head_sha === pull.headSha ? row.check_run_id : null;
-  const links = linksOf(cfg);
+  if (leased.closed) await save({ closed: null });
 
-  if (!entitled.ok) {
-    const empty: CiEvidence = { state: "none", runs: [], artifacts: [], inputs: [], notes: [] };
-    const model: ReviewModel = { repo: repo.fullName, number, headSha: pull.headSha, mention: cfg.slug, ci: empty, summary: null, findings: [], production: null, settings: readSettings(null).settings, warnings: [], links };
-    const check = await publishCheck(gh, repo, row, state, pull.headSha, renderCheck(model, { entitled: false, plansUrl: `${cfg.origin}/github#plans` }));
-    await savePr(db, repo.id, number, { headSha: pull.headSha, checkRunId: check, state: JSON.stringify(state), reviewed: true }, ctx.now());
-    return "private repository without a plan";
+  // A check run belongs to one commit. When the head moved, the stored one is the old commit's: one left in progress
+  // there is finished, and the row is about the new commit from here on (its workflow runs find the pull request).
+  if (row.head_sha !== pull.headSha) {
+    let wrote = false;
+    if (state.held && state.waiting === row.head_sha) {
+      // (when the row never got the id of the check in progress, a new check run on the old commit takes its place)
+      wrote = (await publishCheck(gh, repo, row, state, row.head_sha, renderStopped("superseded", { mention: cfg.slug, held: true, head: pull.headSha }), row.check_run_id === null)).wrote;
+    }
+    state.waiting = null;
+    state.held = false;
+    state.checkHash = null;
+    await save({ headSha: pull.headSha, checkRunId: null, state: JSON.stringify(state), reviewed: count(wrote) });
+    row.head_sha = pull.headSha;
+    row.check_run_id = null;
   }
 
   const { settings, warnings } = await settingsOf(ctx, gh, repo);
+  commands = settings.commands;
   if (!o.asked) {
-    if (!settings.reviews.auto) return "automatic reviews are off";
-    if (pull.draft && !settings.reviews.drafts) return "draft";
-    if (!branchMatches(settings.reviews.branches, pull.baseRef)) return "base branch not reviewed";
-    if (settings.reviews.ignoreAuthors.includes(pull.author)) return "author not reviewed";
-    if (state.paused) return "paused on this pull request";
+    if (!settings.reviews.auto) return stop("automatic reviews are off", "auto-off");
+    if (pull.draft && !settings.reviews.drafts) return stop("draft", "draft");
+    if (!branchMatches(settings.reviews.branches, pull.baseRef)) return stop("base branch not reviewed", "branch");
+  }
+  // an author the settings leave out and a pause on the pull request are lifted only by someone with write access
+  if (o.asked !== true) {
+    if (settings.reviews.ignoreAuthors.includes(pull.author)) return stop("author not reviewed", "author");
+    if (leased.paused) return stop("paused on this pull request", "paused");
   }
 
-  const ci = await ciEvidence(gh, repo.path, pull.headSha, settings);
+  // A repository hears nothing until there is something to read for it. It "speaks" once race files were read for it,
+  // for a pull request that had race files or a comment itself, when it is linked to a GenClass app, when a check on
+  // this commit says it waits, and always to a person who asks.
+  const facts = await repoFacts(db, repo.id);
+  const projectId = stored?.project_id ?? null;
+  const wantProduction = !!projectId && settings.production.enabled;
+  const speaks = !!o.asked || !!facts?.evidence || state.evidence !== null || row.comment_id !== null || wantProduction || state.waiting === pull.headSha;
+  /**
+   * Nothing to read, in a repository nothing was read for yet: no check, no comment. One exception, once per
+   * repository of an installation on selected repositories: a check that says what the app reads and how to give it
+   * something. It is left out where the check may fail a pull request (`check.fail_on`): "skipped" would pass.
+   */
+  const quiet = async (): Promise<Pass> => {
+    if (settings.check.enabled && settings.check.failOn === "never" && !facts?.intro && row.check_run_id === null && (await selectionOf(ctx, inst)) === "selected") {
+      if (await claimRepoFact(db, repoKey, "intro", ctx.now())) {
+        const res = await publishCheck(gh, repo, row, state, pull.headSha, renderIntro({ links, settings }));
+        await save({ checkRunId: res.id, state: JSON.stringify(state), reviewed: count(res.wrote) });
+      }
+    }
+    return { word: "no race files", due: false };
+  };
+  // the cheapest look, counted against no hour: until a workflow run of this commit has finished there is no artifact to read
+  if (!speaks && o.run === undefined && !(await runsOf(gh, repo, pull.headSha)).some((r) => r.completed)) return quiet();
+
+  // the installation's hour is charged here, for a review that reads the commit's evidence, and not before
+  const outside = !pull.sameRepo && !INSIDE.includes(pull.association);
+  if (!(await claimReview(db, t.installationId, ctx.now(), o.push ? PUSH_REVIEWS_PER_HOUR : REVIEWS_PER_HOUR, outside))) return stop(OVER_HOUR, "hour");
+
+  const ci = await ciEvidence(gh, repo.path, pull.headSha, settings, { firstRun: o.run });
+  // a pause that arrived while the commit's files were read holds from here on: nothing more is written for this pass
+  if (o.asked !== true && (await prRow(db, repo.id, number))?.paused) return stop("paused on this pull request", "paused");
   // GitHub often tells us about a push before it has created the commit's workflow runs. Where the check may fail a
   // pull request (fail_on), "no run yet" must not read as "nothing to wait for": the check waits, and the run's own
-  // event finishes it. A person asking for a review gets the answer as it stands, so a commit that starts no workflow
-  // at all cannot leave the check waiting for good.
-  if (ci.state === "none" && ci.runs.length === 0 && settings.check.failOn !== "never" && !o.asked) ci.state = "pending";
+  // event finishes it. A person asking for a review gets the answer as it stands, and so does the daily sweep, so a
+  // commit that starts no workflow at all cannot leave the check waiting for good.
+  if (ci.state === "none" && ci.runs.length === 0 && settings.check.failOn !== "never" && !o.asked && !o.final) ci.state = "pending";
   const summary = summaryOf(ci.inputs, settings);
-  const merged = await mergeFindings(state, summary, pull.headSha);
+  // no race file that could be read: nothing was learned about this commit's tests
+  const nothingRead = summary === null || unread(summary);
+  // still nothing read for this repository: an artifact that could not be read, or files that are not race files, do
+  // not end the silence (a person who asks is told what was wrong with them)
+  if (!speaks && nothingRead) return quiet();
+  // This commit's race files were read before and cannot be read now (an expired artifact, a download that failed):
+  // what was said from them stands. "No race files" must never replace a result, least of all a failing one.
+  if (nothingRead && state.evidence === pull.headSha) return { word: "race files not read again", due: false };
+  const partial = partialEvidence(ci);
+  const merged = await mergeFindings(state, nothingRead ? null : summary, pull.headSha, { partial });
   const next = merged.state;
 
   // the changed files are listed only when something needs their paths: a linked app's pages, or an inline comment
   const locations = settings.inline ? testLocations(ci.inputs) : new Map<string, TestLocation>();
   const wantInline = settings.inline && merged.view.some((f) => f.status === "new" && f.rep && f.now && !next.inline.includes(f.fp) && locations.has(f.test));
-  const wantProduction = !!projectId && settings.production.enabled;
   const paths: string[] = [];
   const diff = new Map<string, [number, number][]>();
   if (wantInline || wantProduction) {
@@ -365,27 +737,51 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, project
   }
   const production = wantProduction ? await productionEvidence(db, ctx.env, projectId, paths, settings, ctx.now()).catch(() => null) : null;
 
-  const model: ReviewModel = { repo: repo.fullName, number, headSha: pull.headSha, mention: cfg.slug, ci, summary, findings: merged.view, production, settings, warnings, links };
+  const model: ReviewModel = { repo: repo.fullName, number, headSha: pull.headSha, mention: cfg.slug, ci, summary, findings: merged.view, production, settings, warnings, links, partial, unlisted: merged.unlisted };
   const check = renderCheck(model);
-  next.waiting = check.status === "in_progress" ? pull.headSha : null;
+  // the commit's runs have not all finished: its last run to finish reads again, and until then a review is owed
+  const waiting = summary === null && ci.state === "pending";
+  next.waiting = waiting ? pull.headSha : null;
+  next.held = false;
 
-  let checkId = ownCheck;
-  if (settings.check.enabled) checkId = await publishCheck(gh, repo, row, next, pull.headSha, check);
+  if (settings.check.enabled) {
+    if (check.status === "in_progress") {
+      // A check about to be left in progress is recorded before it exists. Whatever happens to this job after the
+      // request, the row says that a check waits on this commit, and the sweep finishes it.
+      if (!(state.held && state.waiting === pull.headSha)) {
+        state.waiting = pull.headSha;
+        state.held = true;
+        await save({ state: JSON.stringify(state) });
+      }
+      next.held = true;
+    }
+    const res = await publishCheck(gh, repo, row, next, pull.headSha, check);
+    row.check_run_id = res.id;
+    // the row knows the check at once: a failure after this cannot lead to a second check run on the commit
+    await save({ checkRunId: res.id, state: JSON.stringify({ ...state, waiting: next.waiting, held: next.held, checkHash: next.checkHash }), reviewed: count(res.wrote) });
+  } else if (state.held && state.waiting === pull.headSha && row.check_run_id !== null) {
+    // the check was turned off while one was in progress on this commit: that one is finished
+    const res = await publishCheck(gh, repo, row, next, pull.headSha, renderStopped("check-off", { mention: cfg.slug, held: true }), false);
+    await save({ state: JSON.stringify({ ...state, waiting: next.waiting, held: false, checkHash: next.checkHash }), reviewed: count(res.wrote) });
+  }
 
   const openNow = merged.view.some((f) => f.status === "new" || f.status === "still");
-  // new in this review: flagged now and not already reported as new by an earlier one
-  const was = new Map(state.findings.map((f) => [f.fp, f.status]));
-  const hasNew = merged.view.some((f) => f.status === "new" && was.get(f.fp) !== "new");
+  // new to the people in the pull request: a finding it has never listed. One that was listed before and is flagged
+  // again (its test was not in a run, or ran once without it) is not: a deleted comment does not come back for it.
+  const was = new Set(state.findings.map((f) => f.fp));
+  const hasNew = merged.view.some((f) => f.status === "new" && !was.has(f.fp));
   const news = openNow || (production?.touched.length ?? 0) > 0;
   const wanted = settings.comment === "always" || (settings.comment === "findings" && (news || row.comment_id !== null));
   // the row is saved as soon as the comment exists, so a failure after it cannot lead to a second comment
-  const commentId = await publishComment(gh, repo, number, row, next, renderSummary(model), wanted, hasNew);
-  await savePr(db, repo.id, number, { headSha: pull.headSha, commentId, checkRunId: checkId, state: JSON.stringify(next) }, ctx.now());
+  const comment = await publishComment(gh, repo, number, row, next, renderSummary(model), wanted, hasNew);
+  row.comment_id = comment.id;
+  await save({ commentId: comment.id, state: JSON.stringify(next), reviewed: count(comment.wrote) });
 
   if (wantInline) {
     const comments = inlineComments(model, next, locations, diff);
     if (comments.length) {
       for (const c of comments) next.inline.push(c.fp);
+      let posted = false;
       try {
         await gh.post(`${repo.path}/pulls/${number}/reviews`, {
           commit_id: pull.headSha,
@@ -393,15 +789,23 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, project
           body: `GenClass flagged ${comments.length === 1 ? "a test" : `${comments.length} tests`} this pull request changes. The summary comment has the whole report.`,
           comments: comments.map((c) => ({ path: c.path, line: c.line, side: "RIGHT", body: c.body })),
         });
+        posted = true;
       } catch (e) {
         if (retryable(e)) throw e;
         // a line GitHub does not accept (the diff moved): the summary comment still carries the finding
       }
+      await save({ state: JSON.stringify(next), reviewed: count(posted) });
     }
   }
-  await savePr(db, repo.id, number, { state: JSON.stringify(next), reviewed: true }, ctx.now());
-  if (!summary) return ci.state === "pending" ? "waiting for the test run" : "no race files";
-  return openNow ? "findings" : "nothing flagged";
+
+  // Race files were read for this repository: from now on each of its pull requests gets the check. Only race files
+  // from inside the repository count for that (a branch of it, or an author GitHub calls owner, member or
+  // collaborator): a fork's workflow uploads what it likes, and must not switch the check on for every pull request.
+  if (!nothingRead && !facts?.evidence && !outside) await claimRepoFact(db, repoKey, "evidence", ctx.now());
+
+  if (summary === null) return { word: waiting ? "waiting for the test run" : "no race files", due: waiting };
+  if (nothingRead) return { word: "no race file could be read", due: false };
+  return { word: openNow ? "findings" : "nothing flagged", due: false };
 }
 
 // --------------------------------------------------------------------------------------------- events
@@ -454,31 +858,130 @@ async function onPullRequest(ctx: Ctx, p: Obj): Promise<string> {
   if (!repo || !installationId || !number) return "ignored";
   const action = str(p.action, 30);
   if (action === "closed") {
+    if (!(await prRow(ctx.db, repo.id, number))) return "closed";
+    // GitHub is asked whether the pull request is closed now: an old `closed` delivery must not close one that was
+    // reopened since. Under the lease, so a check left in progress on its head commit is finished with it.
+    const word = await reviewPull(ctx, { installationId, repo, number }, { closing: true });
+    // the pass that found it merged decided about the issue (`issues: merge`), under the lease
+    if (word === NOT_CLOSED || word === ISSUE_OPENED) return word;
+    // Where GitHub could not be asked (paused, suspended, a private repository without a plan, a limit, a review
+    // that is running), the event is taken at its word, for the row only. No issue is opened from a payload: a review
+    // that is running goes round once more and finds the pull request merged, one that an hourly limit stopped is
+    // owed and the daily sweep runs it, and for the rest (paused, no plan, the pull request's limit) there is none.
+    if (word !== "closed") await closePr(ctx.db, repo.id, number, ctx.now());
+    return "closed";
+  }
+  if (action === "converted_to_draft") {
+    // nothing new to review. A check or comment that waits for the commit's test run is told at once when drafts are
+    // not reviewed here (the pass stops at that setting and finishes the check); otherwise the event is nothing to act on
     const row = await prRow(ctx.db, repo.id, number);
-    if (!row) return "closed";
-    await closePr(ctx.db, repo.id, number, ctx.now());
-    return pull.merged === true ? await issueOnMerge(ctx, { installationId, repo, number }, row, str(obj(pull.head).sha, 64)) : "closed";
+    if (!row || parseState(row.state).waiting === null) return "ignored";
+    return reviewPull(ctx, { installationId, repo, number });
   }
   if (!["opened", "reopened", "synchronize", "ready_for_review"].includes(action)) return "ignored";
-  return reviewPull(ctx, { installationId, repo, number }, { pull });
+  return reviewPull(ctx, { installationId, repo, number }, { pull, push: true });
 }
 
-/** `issues: merge`: one issue for a pull request that merges with reproducible findings still flagged. */
-async function issueOnMerge(ctx: Ctx, t: ReviewTarget, row: PrRow, headSha: string): Promise<string> {
-  const state = parseState(row.state);
-  const left = state.findings.filter((f) => (f.status === "new" || f.status === "still") && f.rep);
-  if (!left.length || state.issue !== null) return "closed";
-  const inst = await installationFor(ctx, t.installationId, t.repo);
-  if (!inst || inst.suspended || !(await repoEntitled(ctx.db, ctx.env, ctx.cfg, inst, t.repo, ctx.now())).ok) return "closed";
-  const gh = installationClient(ctx.cfg, ctx.f, ctx.now, t.installationId, t.repo.id);
-  const { settings } = await settingsOf(ctx, gh, t.repo);
-  if (settings.issues !== "merge") return "closed";
-  const issue = renderIssue(left, { repo: t.repo.fullName, number: t.number, headSha: headSha || row.head_sha, mention: ctx.cfg.slug, links: linksOf(ctx.cfg), merged: true });
-  const made = posInt(obj(await gh.post(`${t.repo.path}/issues`, issue)).number);
-  if (!made) return "closed";
-  state.issue = made;
-  await savePr(ctx.db, t.repo.id, t.number, { state: JSON.stringify(state) }, ctx.now());
-  return "issue opened";
+/**
+ * Review several pull requests of one event in turn. When the job's time runs out before the last of them, the rest
+ * are left owed (the daily sweep reviews them) and the job fails, so that its delivery can be redelivered.
+ */
+async function reviewEach(ctx: Ctx, installationId: number, repo: RepoRef, numbers: number[], o: ReviewOptions): Promise<string> {
+  let outcome = "ok";
+  for (let i = 0; i < numbers.length; i++) {
+    if (i > 0 && timeLeft(ctx) < PASS_MS) {
+      for (const n of numbers.slice(i)) await setDue(ctx.db, repo.id, n, ctx.now().toISOString()).catch(() => undefined);
+      throw timeUp();
+    }
+    outcome = await reviewPull(ctx, { installationId, repo, number: numbers[i]! }, o);
+  }
+  return outcome;
+}
+
+/**
+ * The fingerprints of the findings that issues the app opened in this repository already list. Open and closed issues
+ * both count: one that someone closed (an overwrite that is intended, say) must not be opened again by the next pull
+ * request that merges. Only the app's own issues count, whatever GitHub's `creator` filter let through: anyone can
+ * write a marker into an issue of theirs. The newest 300 are looked at.
+ */
+async function filedFindings(gh: GithubClient, repo: RepoRef, slug: string): Promise<Set<string>> {
+  const bot = `${slug}[bot]`.toLowerCase();
+  const listed = await gh.list<Obj>(`${repo.path}/issues`, { query: { state: "all", creator: `${slug}[bot]` }, max: 300, maxBytes: 4 * 1024 * 1024 });
+  const out = new Set<string>();
+  for (const i of listed) {
+    if (i.pull_request || str(obj(i.user).login, 60).toLowerCase() !== bot) continue;
+    for (const fp of issueFingerprints(i.body)) out.add(fp);
+  }
+  return out;
+}
+
+/**
+ * `issues: merge`: one issue for a pull request that merged with reproducible findings flagged in the race files of
+ * the commit that merged. Called by the review pass that finds the pull request merged (reviewOnce), so it runs under
+ * the pull request's lease, on the row as that pass took it, whichever event got there first: `closed`, or the end of
+ * the last push's test run.
+ * - Never for a paused pull request (a pass over a paused repository does not get here), and once per pull request.
+ * - The stored findings count only when they were worked out from the merged commit's race files. When they are an
+ *   older commit's (the last push's test run was not read before the merge), that commit's race files are read first.
+ *   With none to read no issue is opened; while its runs are still going the review stays owed, and the daily sweep
+ *   comes back to it.
+ * - A finding that an issue the app opened here already lists is left out: the same finding is in every pull
+ *   request's race files until someone fixes it, and one issue is enough. When those issues cannot be listed, none is
+ *   opened.
+ * - One pull request at a time lists and opens in a repository (takeIssueTurn). Two that merge together with the same
+ *   finding would each find no issue for it. The one that has to wait is owed its review, and the daily sweep decides
+ *   it when the list shows what the first one opened.
+ * `run`: the workflow run whose end started the pass, if one did.
+ */
+async function issueOnMerge(ctx: Ctx, t: ReviewTarget, gh: GithubClient, leased: PrRow, state: PrState, pull: Pull, run: number | undefined): Promise<Pass> {
+  const { db, cfg } = ctx;
+  const { repo, number } = t;
+  const closed: Pass = { word: "closed", due: false };
+  if (leased.issue !== null || leased.paused) return closed;
+  const short = pull.headSha.slice(0, 7);
+  /** Reproducible findings flagged in the merged commit's race files, by a state worked out from those files. */
+  const flagged = (s: PrState): StoredFinding[] => (s.evidence === pull.headSha ? s.findings.filter((f) => (f.status === "new" || f.status === "still") && f.rep && f.last === short) : []);
+  // the merged commit's files were read and left nothing to file: the settings need not be asked for
+  if (state.evidence === pull.headSha && !flagged(state).length) return closed;
+  const { settings } = await settingsOf(ctx, gh, repo);
+  if (settings.issues !== "merge") return closed;
+  let current = state;
+  if (state.evidence !== pull.headSha) {
+    // what is stored is an older commit's evidence, or none: an issue must not say it of the commit that merged
+    const outside = !pull.sameRepo && !INSIDE.includes(pull.association);
+    if (!(await claimReview(db, t.installationId, ctx.now(), REVIEWS_PER_HOUR, outside))) return { word: "closed", due: true };
+    const ci = await ciEvidence(gh, repo.path, pull.headSha, settings, { firstRun: run });
+    const summary = summaryOf(ci.inputs, settings);
+    if (summary === null || unread(summary)) return { word: "closed", due: ci.state === "pending" };
+    current = (await mergeFindings(state, summary, pull.headSha, { partial: partialEvidence(ci) })).state;
+    await savePr(db, repo.id, number, { state: JSON.stringify(current) }, ctx.now());
+  }
+  const left = flagged(current);
+  if (!left.length) return closed;
+  const turn = await takeIssueTurn(db, { repoId: repo.id, installationId: t.installationId }, ctx.now());
+  if (!turn) return { word: "closed", due: true };
+  let sent = false;
+  let made: number | null = null;
+  try {
+    const filed = await filedFindings(gh, repo, cfg.slug);
+    const fresh = left.filter((f) => !filed.has(f.fp));
+    if (fresh.length) {
+      const issue = renderIssue(fresh, { repo: repo.fullName, number, headSha: pull.headSha, mention: cfg.slug, links: linksOf(cfg), merged: true });
+      sent = true;
+      made = posInt(obj(await gh.post(`${repo.path}/issues`, issue)).number);
+    }
+  } catch (e) {
+    // GitHub could not be reached: the pass fails and is run again (an issue that was made after all is found by its
+    // markers then). Anything else (issues are turned off in the repository, the list is too large): no issue.
+    if (retryable(e)) throw e;
+  } finally {
+    // Nothing was sent: the turn goes back at once. After a request to open an issue it is kept until it runs out, so
+    // that the next pull request to look finds the issue in GitHub's list.
+    if (!sent) await releaseIssueTurn(db, repo.id, turn).catch(() => undefined);
+  }
+  if (!made) return closed;
+  await savePr(db, repo.id, number, { issue: made, reviewed: true }, ctx.now());
+  return { word: ISSUE_OPENED, due: false };
 }
 
 async function onWorkflowRun(ctx: Ctx, p: Obj): Promise<string> {
@@ -497,20 +1000,34 @@ async function onWorkflowRun(ctx: Ctx, p: Obj): Promise<string> {
     if (n && str(obj(obj(pr).head).sha, 64) === sha) numbers.add(n);
   }
   if (!numbers.size) return "no pull request at this commit";
-  // a commit has many workflow runs; only one that uploaded race files, or one a waiting check waits for, starts a review
-  if (!rows.some((r) => parseState(r.state).waiting === sha)) {
-    const inst = await installationFor(ctx, installationId, repo);
-    if (!inst || inst.suspended) return "suspended";
-    if (!(await repoEntitled(ctx.db, ctx.env, ctx.cfg, inst, repo, ctx.now())).ok) return "private repository without a plan";
-    const gh = installationClient(ctx.cfg, ctx.f, ctx.now, installationId, repo.id);
-    const { settings } = await settingsOf(ctx, gh, repo);
-    const listed = obj(await gh.get(`${repo.path}/actions/runs/${runId}/artifacts`, { query: { per_page: 50 } }));
-    const has = (Array.isArray(listed.artifacts) ? listed.artifacts : []).some((a) => str(obj(a).name, 100).startsWith(settings.artifact) && obj(a).expired !== true);
-    if (!has) return "no race files in this run";
+  const inst = await installationFor(ctx, installationId, repo);
+  if (!inst || inst.suspended) return "suspended";
+  // pull requests whose check or comment says it waits for this commit's test run, and those whose check is in progress
+  const waiting = rows.filter((r) => parseState(r.state).waiting === sha).map((r) => r.number);
+  const held = rows.filter((r) => parseState(r.state).held && parseState(r.state).waiting === sha).map((r) => r.number);
+  // A paused repository and a private one without a plan are not read. A check left in progress there is finished
+  // (reviewPull reads nothing for it either); everything else is left alone.
+  const stopped = (await repoById(ctx.db, repo.id))?.paused ? "paused" : (await repoEntitled(ctx.db, ctx.env, ctx.cfg, inst, repo, ctx.now())).ok ? null : "private repository without a plan";
+  if (stopped) {
+    if (held.length) await reviewEach(ctx, installationId, repo, held, {});
+    return stopped;
   }
-  let outcome = "ok";
-  for (const number of [...numbers].slice(0, 5)) outcome = await reviewPull(ctx, { installationId, repo, number });
-  return outcome;
+  // A commit has many workflow runs, and a review is not started for each. One request says whether this run uploaded
+  // race files: then the review reads them. When it did not, only a pull request that waits is looked at, and only once
+  // the commit's other runs have finished too (one more request), so that the wait is ended once, by its last run.
+  const gh = installationClient(ctx.cfg, ctx.f, ctx.now, installationId, repo.id);
+  const { settings } = await settingsOf(ctx, gh, repo).catch(async (e: unknown) => {
+    // The settings could not be read, so which artifact holds the race files is not known and nothing is done now.
+    // The pull requests at this commit are owed their review: the daily sweep runs it if no event does first.
+    for (const r of rows) if (r.due === null) await setDue(ctx.db, repo.id, r.number, ctx.now().toISOString()).catch(() => undefined);
+    throw e;
+  });
+  const listed = obj(await gh.get(`${repo.path}/actions/runs/${runId}/artifacts`, { query: { per_page: 50 } }));
+  const has = (Array.isArray(listed.artifacts) ? listed.artifacts : []).some((a) => str(obj(a).name, 100).startsWith(settings.artifact) && obj(a).expired !== true);
+  if (has) return reviewEach(ctx, installationId, repo, [...numbers].slice(0, 5), { run: runId });
+  if (!waiting.length) return "no race files in this run";
+  if ((await runsOf(gh, repo, sha)).some((r) => r.id !== runId && !r.completed)) return "waiting for the test run";
+  return reviewEach(ctx, installationId, repo, waiting, {});
 }
 
 async function onCheckRun(ctx: Ctx, p: Obj): Promise<string> {
@@ -521,9 +1038,8 @@ async function onCheckRun(ctx: Ctx, p: Obj): Promise<string> {
   if (!repo || !installationId || String(obj(check.app).id ?? "") !== ctx.cfg.appId) return "ignored";
   const sha = str(check.head_sha, 64);
   const rows = await prsAtSha(ctx.db, repo.id, sha);
-  let outcome = "no pull request at this commit";
-  for (const r of rows) outcome = await reviewPull(ctx, { installationId, repo, number: r.number }, { asked: true });
-  return outcome;
+  if (!rows.length) return "no pull request at this commit";
+  return reviewEach(ctx, installationId, repo, rows.map((r) => r.number), { asked: true });
 }
 
 async function onComment(ctx: Ctx, p: Obj): Promise<string> {
@@ -532,16 +1048,16 @@ async function onComment(ctx: Ctx, p: Obj): Promise<string> {
   if (!issue.pull_request) return "not a pull request";
   const comment = obj(p.comment);
   const user = obj(comment.user);
-  const login = str(user.login, 60);
   // never answer a bot (itself included): two bots must not be able to talk to each other
-  if (user.type === "Bot" || obj(p.sender).type === "Bot" || login.endsWith("[bot]") || str(comment.body, 200).includes(REPLY_MARKER)) return "bot";
+  if (user.type === "Bot" || obj(p.sender).type === "Bot" || str(user.login, 60).endsWith("[bot]") || str(comment.body, 200).includes(REPLY_MARKER)) return "bot";
   const cmd = parseCommand(comment.body, ctx.cfg.slug);
   if (!cmd) return "no command";
   const repo = repoOf(p);
   const installationId = installationIdOf(p);
   const number = posInt(issue.number);
   const commentId = posInt(comment.id);
-  if (!repo || !installationId || !number || !commentId || !/^[A-Za-z0-9-]{1,39}$/.test(login)) return "ignored";
+  const login = githubLogin(user.login);
+  if (!repo || !installationId || !number || !commentId || !login) return "ignored";
   if (issue.state !== "open") return "closed";
 
   const inst = await installationFor(ctx, installationId, repo);
@@ -552,14 +1068,23 @@ async function onComment(ctx: Ctx, p: Obj): Promise<string> {
   const { settings } = await settingsOf(ctx, gh, repo);
   if (!settings.commands) return "commands are off";
 
-  // who is asking, by GitHub's own account of it
-  const collaborator = ["OWNER", "MEMBER", "COLLABORATOR"].includes(str(comment.author_association, 30));
+  // Who is asking, by GitHub's answer to the question itself: this person's permission on this repository. The
+  // association the event carries is not used: it calls a member of the organization whose membership is private
+  // (GitHub's default) a contributor, and it calls a member who can only read a member.
   const author = posInt(user.id) !== null && posInt(user.id) === posInt(obj(issue.user).id);
-  if (NEEDS_WRITE.includes(cmd.name)) {
-    if (!collaborator) return "not allowed";
-    const perm = str(obj(await gh.get(`${repo.path}/collaborators/${login}/permission`)).permission, 20);
-    if (perm !== "admin" && perm !== "write") return "not allowed";
-  } else if (!collaborator && !author) return "not allowed";
+  const needsWrite = NEEDS_WRITE.includes(cmd.name);
+  let write = false;
+  // the author may use review, replay and help without write access; for `review`, having it decides what the review lifts
+  if (needsWrite || !author || cmd.name === "review") {
+    try {
+      const perm = str(obj(await gh.get(`${repo.path}/collaborators/${login}/permission`)).permission, 20);
+      write = perm === "admin" || perm === "write";
+    } catch (e) {
+      // GitHub does not know this person on the repository: no access
+      if (!(e instanceof GithubError && e.kind === "not_found")) throw e;
+    }
+  }
+  if (!write && (needsWrite || !author)) return "not allowed";
 
   const row = (await prRow(ctx.db, repo.id, number)) ?? null;
   if (row && row.reviews >= REVIEWS_PER_PR) return "over the pull request's budget";
@@ -577,13 +1102,30 @@ async function onComment(ctx: Ctx, p: Obj): Promise<string> {
     await say(renderHelp(ctx.cfg.slug, links));
     return "help";
   }
-  if (cmd.name === "review") return reviewPull(ctx, { installationId, repo, number }, { asked: true });
+  if (cmd.name === "review") {
+    // from the author without write access, a pause on the pull request and `reviews.ignore_authors` still hold
+    const word = await reviewPull(ctx, { installationId, repo, number }, { asked: write ? true : "author" });
+    // a person who asks always gets an answer: when a limit for this hour stopped the review, a reply says so
+    if (word === OVER_HOUR) await say(renderOverLimit({ scope: "installation", limit: REVIEWS_PER_HOUR, after: hourEnd(ctx.now()) }));
+    else if (word === OVER_PR_HOUR) await say(renderOverLimit({ scope: "pull request", limit: PR_REVIEWS_PER_HOUR, after: hourEnd(ctx.now()) }));
+    return word;
+  }
   if (cmd.name === "pause" || cmd.name === "resume") {
-    if (!row) await takeLease(ctx.db, { repoId: repo.id, number, installationId }, ctx.now()).then(() => releaseLease(ctx.db, repo.id, number));
-    state.paused = cmd.name === "pause";
-    await savePr(ctx.db, repo.id, number, { state: JSON.stringify(state) }, ctx.now());
-    await say(`${REPLY_MARKER}\n${state.paused ? `Paused: this pull request is not updated until someone with write access replies \`@${ctx.cfg.slug} resume\`.` : "Resumed: the next push or test run updates this pull request again."}\n`);
-    return state.paused ? "paused" : "resumed";
+    // a pull request not seen before gets its row (made by the lease, which is let go at once with nothing owed)
+    if (!row) await takeLease(ctx.db, { repoId: repo.id, number, installationId }, ctx.now()).then((made) => (made ? releaseLease(ctx.db, repo.id, number, { lease: made.lease, due: null }) : 0));
+    const paused = cmd.name === "pause";
+    // A column of its own, written in one statement: a review that is running cannot undo it when it saves, and the
+    // findings that review saves are not written over by a copy read before it.
+    await savePr(ctx.db, repo.id, number, { paused }, ctx.now());
+    await say(`${REPLY_MARKER}\n${paused ? `Paused: this pull request is not updated until someone with write access replies \`@${ctx.cfg.slug} resume\`.` : "Resumed: the next push or test run updates this pull request again."}\n`);
+    // Paused: a check that waits for the test run is told so now, not left waiting, and a review that is running is
+    // told too (it goes round once more and stops at the pause). Resumed: what the pause skipped is read now, under
+    // the repository's settings as for any push. The command itself is done either way: a failure here leaves the
+    // review owed, it does not run the command again.
+    const cur = await prRow(ctx.db, repo.id, number);
+    const running = !!cur?.lease && cur.lease >= ctx.now().toISOString();
+    if (!paused || running || parseState(cur?.state).waiting !== null) await reviewPull(ctx, { installationId, repo, number }).catch(() => undefined);
+    return paused ? "paused" : "resumed";
   }
 
   if (NEEDS_FINDING.includes(cmd.name)) {
@@ -644,6 +1186,59 @@ async function onMarketplace(ctx: Ctx, p: Obj): Promise<string> {
     default:
       return "ignored";
   }
+}
+
+// --------------------------------------------------------------------------------------------- the daily sweep
+
+/**
+ * Daily (index.ts): the reviews that are owed. A pull request is due while a review of it started and has not ended
+ * (the platform stopped the job), after one that failed or could not run (GitHub's rate limit, an hourly limit, no
+ * time left), and while its check or comment says it waits for the commit's test run. Each one due for more than
+ * DUE_AFTER_MS is reviewed once here, as `final`: a wait that nothing ended is ended with what there is. This is what
+ * makes it certain that a check left in progress is finished. Returns how many pull requests were looked at.
+ */
+export async function githubSweep(env: Env, o: { now?: () => Date; fetch?: Fetch } = {}): Promise<number> {
+  const cfg = githubApp(env);
+  const db = env.DB;
+  if (!cfg || !db) return 0;
+  const now = o.now ?? (() => new Date());
+  const f: Fetch = o.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i));
+  const started = now().getTime();
+  let looked = 0;
+  for (const row of await duePrs(db, new Date(started - DUE_AFTER_MS), now(), SWEEP_ROWS)) {
+    if (now().getTime() - started > SWEEP_MS) break;
+    looked++;
+    // looked at now: whatever happens below, the row goes to the back of the line
+    const again = now().toISOString();
+    try {
+      const inst = await installationById(db, row.installation_id);
+      if (!inst) {
+        await setDue(db, row.repo_id, row.number, null);
+        continue;
+      }
+      if (inst.suspended) {
+        await setDue(db, row.repo_id, row.number, again);
+        continue;
+      }
+      // The repository's name and visibility are not kept: GitHub names it in its answer to a token request for it.
+      const minted = obj(await appClient(cfg, f, now, 2).post(`/app/installations/${row.installation_id}/access_tokens`, { repository_ids: [row.repo_id] }));
+      const repo = repoOf({ repository: (Array.isArray(minted.repositories) ? minted.repositories : []).find((r) => posInt(obj(r).id) === row.repo_id) });
+      if (!repo) {
+        await setDue(db, row.repo_id, row.number, again);
+        continue;
+      }
+      const word = await reviewPull(jobContext({ env, db, cfg, f, now }, now().getTime()), { installationId: row.installation_id, repo, number: row.number }, { final: true });
+      // a review that ran settled the row itself; these did not get that far
+      if (word === "paused" || word === "unknown installation") await setDue(db, row.repo_id, row.number, null);
+      else if (word === "busy" || word === "suspended") await setDue(db, row.repo_id, row.number, again);
+    } catch (e) {
+      // GitHub gives no token for it: the repository left the installation, or the installation is gone. Nothing is
+      // owed any more. Anything else is tried again by a later sweep.
+      const gone = e instanceof GithubError && (e.kind === "not_found" || e.kind === "validation");
+      await setDue(db, row.repo_id, row.number, gone ? null : again).catch(() => undefined);
+    }
+  }
+  return looked;
 }
 
 /** Handle one verified webhook event. Returns a short word for what happened (the delivery's answer, and the tests). */

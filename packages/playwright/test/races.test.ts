@@ -5,9 +5,10 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildRacesFile, opOf, racesFileName, signaturesOf, witnessLine, writeRacesFile } from "../src/races.js";
+import { buildRacesFile, opOf, racesFileName, racesFileText, signaturesOf, witnessLine, writeRacesFile } from "../src/races.js";
 import { parseRaces, validateRaces } from "../src/schema.js";
 import { buildSummary } from "../src/summarize.js";
+import { RACES_LIMITS } from "../src/types.js";
 
 const detection = (over: Record<string, unknown> = {}) => ({
   schema: 1,
@@ -130,6 +131,102 @@ describe("races: signatures and the file", () => {
     // a retry gets a file of its own, so the failing first attempt is kept
     expect(racesFileName("t", "id", 2, 1)).toBe("t-id-s2-r1.json");
     expect(racesFileName("t", "id", 2, 0)).toBe("t-id-s2.json");
+  });
+});
+
+describe("races: a file is written within the format's limits (RACES_LIMITS), so no reader refuses what the fixture wrote", () => {
+  const base = { test: "t", seed: 1, mode: "observe", model: { state: "ready" }, chaos: null };
+  const many = (n: number, message: (i: number) => string = (i) => `m${i}`) =>
+    Array.from({ length: n }, (_, i) => detection({ p: 0.5 + (i % 50) / 100, evidence: { message: message(i), subject: `response to GET /api/items/${i} (#${i})` } }));
+  const bytes = (file: Parameters<typeof racesFileText>[0]) => Buffer.byteLength(racesFileText(file), "utf8");
+
+  it("a test with more signatures than a file holds: the most confident stay, and dropped says how many were left out", () => {
+    const records = many(230);
+    const all = signaturesOf(records, [overwrote], 1);
+    expect(all).toHaveLength(231);
+    const file = buildRacesFile({ ...base, records, witnesses: [overwrote] });
+    expect(file.signatures).toHaveLength(RACES_LIMITS.signatures);
+    expect(file.dropped).toBe(31);
+    // the reader's validator takes it, as it would not take all 231
+    expect(validateRaces(file)).toEqual({ ok: true, file });
+    expect(validateRaces({ ...file, signatures: all }).ok).toBe(false);
+    // the witness, a fact, stays; every signature left out is no more confident than any that stayed
+    expect(file.signatures.some((s) => s.sig === "witness|overwrote-newer|GET /api/search")).toBe(true);
+    const stayed = new Set(file.signatures.map((s) => s.sig));
+    const out = all.filter((s) => !stayed.has(s.sig));
+    expect(out).toHaveLength(31);
+    expect(Math.max(...out.map((s) => s.confidence))).toBeLessThanOrEqual(Math.min(...file.signatures.map((s) => s.confidence)));
+    // still sorted by sig, and the same input gives the same bytes
+    expect(file.signatures.map((s) => s.sig)).toEqual([...stayed].sort());
+    expect(racesFileText(buildRacesFile({ ...base, records: [...records].reverse(), witnesses: [overwrote] }))).toBe(racesFileText(file));
+    // the report says the list is not complete
+    expect(buildSummary([{ name: "a.json", content: file }]).tests[0].dropped).toEqual({ files: 1, signatures: 31 });
+    // at the limit nothing is left out and nothing is said
+    const full = buildRacesFile({ ...base, records: many(200), witnesses: [] });
+    expect(full.signatures).toHaveLength(200);
+    expect("dropped" in full).toBe(false);
+  });
+
+  it("a file is kept within 64 KB by leaving out the least confident signatures", () => {
+    // 150 signatures with evidence lines of 1500 characters: about 250 KB if all were written
+    const records = many(150, (i) => `${i} ${"e".repeat(1500)}`);
+    const file = buildRacesFile({ ...base, records, witnesses: [] });
+    expect(bytes(file)).toBeLessThanOrEqual(RACES_LIMITS.bytes);
+    expect(file.signatures.length).toBeGreaterThan(30);
+    expect(file.signatures.length).toBeLessThan(45);
+    expect(file.dropped).toBe(150 - file.signatures.length);
+    expect(validateRaces(file)).toEqual({ ok: true, file });
+    // as many as fit: one more of the same size would not
+    expect(bytes(file) + bytes(file) / file.signatures.length).toBeGreaterThan(RACES_LIMITS.bytes);
+    const all = signaturesOf(records, [], 1);
+    const stayed = new Set(file.signatures.map((s) => s.sig));
+    expect(Math.max(...all.filter((s) => !stayed.has(s.sig)).map((s) => s.confidence))).toBeLessThanOrEqual(Math.min(...file.signatures.map((s) => s.confidence)));
+    // characters that take several bytes count as bytes
+    const wide = buildRacesFile({ ...base, records: many(150, (i) => `${i} ${"日".repeat(1500)}`), witnesses: [] });
+    expect(bytes(wide)).toBeLessThanOrEqual(RACES_LIMITS.bytes);
+    expect(wide.signatures.length).toBeLessThan(file.signatures.length);
+    // a small file is as before
+    expect("dropped" in buildRacesFile({ ...base, records: many(5), witnesses: [overwrote] })).toBe(false);
+  });
+
+  it("strings are cut to their limits, and a location the validator would refuse is left out", () => {
+    const long = (n: number) => "x".repeat(n);
+    const file = buildRacesFile({
+      test: `spec.ts > ${long(1500)}`,
+      seed: 1,
+      mode: long(700),
+      model: { state: long(700), name: "none" },
+      chaos: null,
+      records: [detection({ trigger: long(300), diagnosis: long(300), evidence: { message: long(5000), subject: `GET /${long(900)} (#3)` } }), detection({ evidence: { message: "short", subject: long(900) } })],
+      witnesses: [{ ...overwrote, kind: long(300), by: `POST /${long(900)}#1`, change: long(5000) }],
+      fixture: { model: "skip", agent: long(700), chaosApplied: null, serviceWorker: false, modeOverridden: long(700) },
+      location: { file: "tests\\windows\\a.spec.ts", line: 3 },
+    });
+    expect(validateRaces(file)).toEqual({ ok: true, file });
+    expect(file.test).toHaveLength(RACES_LIMITS.test);
+    expect(file.test.endsWith("x…")).toBe(true);
+    expect(file.mode).toHaveLength(RACES_LIMITS.text);
+    expect(file.model).toEqual({ state: `${long(599)}…`, name: "none" });
+    expect(file.fixture).toMatchObject({ agent: `${long(599)}…`, modeOverridden: `${long(599)}…` });
+    expect("location" in file).toBe(false);
+    for (const s of file.signatures) {
+      expect(s.sig.length).toBeLessThanOrEqual(RACES_LIMITS.text);
+      expect(s.sig).toBe(`${s.trigger}|${s.diagnosis}|${s.op}`);
+      expect(s.evidence.length).toBeLessThanOrEqual(RACES_LIMITS.evidence);
+    }
+    const cut = file.signatures.find((s) => s.trigger !== "delivery" && s.trigger !== "witness")!;
+    expect([cut.trigger.length, cut.diagnosis.length, cut.op.length, cut.evidence.length]).toEqual([100, 100, 300, 2000]);
+    expect(cut.evidence.endsWith("x…")).toBe(true);
+    expect(opOf(`GET /${long(900)} (#3)`)).toBe(`GET /${long(294)}…`);
+    // the same long path is cut the same way in every seed, so it is still one signature
+    expect(opOf(`GET /${long(900)} (#3)`)).toBe(opOf(`response to GET /${long(900)}?q=… (#77)`));
+    // a cut never ends inside a surrogate pair
+    const pair = buildRacesFile({ ...base, test: `${long(998)}😀 more`, records: [], witnesses: [] });
+    expect(pair.test).toBe(`${long(998)}…`);
+    // other bad locations: too long, absolute, above the repository, no line
+    for (const location of [{ file: `${"a/".repeat(250)}x.ts`, line: 1 }, { file: "/abs/a.spec.ts", line: 1 }, { file: "../a.spec.ts", line: 1 }, { file: "tests/a.spec.ts", line: 0 }]) {
+      expect("location" in buildRacesFile({ ...base, records: [], witnesses: [], location }), location.file).toBe(false);
+    }
   });
 });
 

@@ -280,7 +280,8 @@ interface GenClassRacesFile {
     confidence: number;          // the model's probability for that diagnosis, 0 to 1; 1 for a witness (a fact)
     evidence: string;            // the line the runtime printed, or the witness's line
     seeds: number[];             // the seeds this signature was seen in
-  }[];
+  }[];                           // at most 200
+  dropped?: number;              // written by the fixture: signatures of this test it left out to stay within the limits
   mode?: string;                 // "observe"
   model?: { state?: string; name?: string; version?: string; device?: string } | null;  // null: GenClass never started
   chaos?: { latencyMs?: [number, number]; reorder?: boolean; routes?: unknown[] } | null;  // the chaos option (latencyMs is delayMs)
@@ -302,6 +303,26 @@ interface GenClassRacesFile {
 directory, and is left out when Playwright gives no line or the test file is outside that directory. The report does
 not use it; [genclass-dev[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), the GitHub
 App, puts a finding next to the test with it when that line is part of a pull request's diff.
+
+The format has limits, exported as `RACES_LIMITS`, so that a reader that takes files from anyone
+(genclass-dev[bot] reads the artifacts of pull requests, also from forks) knows how much one file can hold:
+
+| | |
+|---|---|
+| Signatures in one file | 200 |
+| A test's name (`test`) | 1,000 characters |
+| An evidence line (`evidence`) | 2,000 characters |
+| Any other string (`sig`, `trigger`, `diagnosis`, `op`, `mode`, the `model` and `fixture` strings) | 600 characters |
+| The file | 64 KB (65,536 bytes of UTF-8) |
+
+The validator refuses a file with more than 200 signatures, on the count alone, and a file with a string over its
+length, like any other bad field. It sees parsed values, so it does not check the file's size: genclass-dev[bot] reads
+files up to it. The fixture writes within the limits. It cuts a longer string (the cut one ends with `…`; an operation
+is cut the same way in every seed, so it stays one signature). When a test has more signatures than fit, by count or
+by size, it writes the most confident ones (a witness, a fact, counts as 1) and puts the number it left out in
+`dropped`. The report then says under that test that its list is not complete. Leaving signatures out is the only way
+the fixture makes a file smaller: a file over 64 KB with no signature in it, which takes a `chaos.match` list of that
+size, is written as it is.
 
 The type is exported as `GenClassRacesFile`. A file that does not validate is never half-read: the report lists it
 under **Files skipped** with the field and the reason (for example
@@ -325,6 +346,8 @@ How the report groups them:
   witnesses could not be recorded, or while a service worker controlled the page, gets a note too, and so does a test
   where chaos was on but held no request. A file with detections is reported as usual whatever the state: the runtime
   can unload an idle model after it ran;
+- a test whose files carry `dropped` gets a note with how many signatures the fixture left out, so a list that is not
+  complete does not read as complete;
 - **nothing about interventions.** The files do not say what an action did to your app, so the report makes no
   claim about interventions, correct or false.
 
@@ -336,6 +359,10 @@ What it does so the comment is safe to post:
   15 of your repository (adding a "mentioned this" entry there), and a Playwright tag in a test title (`@smoke`)
   would mention a user or team. The text reads the same; copied, it carries the invisible character. Code spans
   (operations, file names) are left as they are, since GitHub links nothing inside them;
+- `://` and `www.` get the same invisible character (`https:` then `//`, `www` then `.`). GitHub turns a bare web
+  address into a link wherever it stands, and the address of an issue or pull request in another repository also
+  adds a "mentioned this" entry there. An address in a test name or an evidence line is therefore shown as text, not
+  as a link;
 - the report is kept under `maxChars` (default 60000 characters). Left out first: entries of the "nothing flagged"
   and "Files skipped" lists, then the least important signatures of each test (fewer seeds and lower confidence
   first), then whole tests from the end. The counts always include everything, and a note under the first line says

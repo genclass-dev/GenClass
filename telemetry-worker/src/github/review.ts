@@ -15,7 +15,16 @@
 //   summariser's escaping (no markup, no links, no @mentions, no #references) and the fix brief's JSON only cut and
 //   stripped of control characters; the brief tells its reader that those fields are data, not instructions.
 // - One summary comment per pull request, edited in place; numbers once given to a finding never change, so
-//   "@genclass-dev fix 2" means the same finding after the next push.
+//   "@genclass-dev fix 2" means the same finding after the next push. A finding that is flagged is never dropped to
+//   make room for another: over MAX_FINDINGS, the ones that do not fit get no number and are counted ("N more findings
+//   flagged at this commit are not listed"), so nothing comes back as new with another number.
+// - An issue carries the fingerprint of each finding it lists in a hidden marker, so that the same finding is not
+//   filed a second time from another pull request (issueFingerprints).
+// - "Nothing flagged" and a green check are said only of race files that were read: files that could not be read are
+//   "No race file could be read", and a commit whose evidence was read only in part is never a success.
+// - A check says it waits only while its commit's test run can still report. When nothing more will be read for a
+//   commit, the check says why in one or two plain sentences (renderStopped), and when the app has nothing to read
+//   for a repository yet it says what it reads, once (renderIntro).
 
 import {
   buildSummary,
@@ -35,12 +44,17 @@ export const SUMMARY_MARKER = "<!-- genclass-bot:summary -->";
 export const BRIEF_MARKER = "<!-- genclass-bot:fix-brief -->";
 export const REPLY_MARKER = "<!-- genclass-bot:reply -->";
 export const ISSUE_MARKER = "<!-- genclass-bot:issue -->";
+/** Findings one issue lists, each with its fingerprint marker. */
+export const MAX_ISSUE_FINDINGS = 20;
 export const BRIEF_SCHEMA = "genclass-brief/1";
 export const CHECK_NAME = "GenClass";
 /** Under GitHub's 65,536 characters per comment and 65,535 per check-run field. */
 export const MAX_COMMENT_CHARS = 60_000;
 export const MAX_CHECK_CHARS = 60_000;
-/** Findings remembered per pull request (the oldest that are no longer flagged go first). */
+/**
+ * Findings remembered per pull request. To make room for a new one, the oldest that are no longer flagged go first;
+ * one that is flagged is never dropped, and what does not fit is counted, not numbered (mergeFindings).
+ */
 export const MAX_FINDINGS = 100;
 /** Rows of the summary table; the rest are counted. */
 export const MAX_TABLE_ROWS = 25;
@@ -77,20 +91,24 @@ export interface PrState {
   findings: StoredFinding[];
   /** The head commit whose race files the statuses were last worked out from. */
   evidence: string | null;
-  /** A check run was left "in progress" for this head commit, waiting for its workflow runs. */
+  /**
+   * The head commit whose review ended before its workflow runs had (its check or comment says it waits for the test
+   * run): the last of the commit's runs to finish reads again, and until then a review of the pull request is owed.
+   */
   waiting: string | null;
+  /** The check run on `waiting` was left "in progress" (check.fail_on): something must finish it, whatever happens. */
+  held: boolean;
   commentHash: string | null;
   /** Someone deleted the summary comment: it is written again only for a finding they have not been told about. */
   commentDeleted: boolean;
   checkHash: string | null;
   /** Fingerprints that already have an inline comment. */
   inline: string[];
-  paused: boolean;
-  /** The issue opened for this pull request's findings, if any. */
-  issue: number | null;
 }
 
-export const emptyState = (): PrState => ({ v: 1, next: 1, findings: [], evidence: null, waiting: null, commentHash: null, commentDeleted: false, checkHash: null, inline: [], paused: false, issue: null });
+// Whether the pull request is paused, and the issue opened for it, are not part of this state: a command changes them
+// while a review may be running, so each is a column of its own (github_prs.paused, github_prs.issue; store.ts savePr).
+export const emptyState = (): PrState => ({ v: 1, next: 1, findings: [], evidence: null, waiting: null, held: false, commentHash: null, commentDeleted: false, checkHash: null, inline: [] });
 
 const CATS: readonly RaceCategory[] = ["duplicate", "stale", "failing", "other", "witness"];
 const STATUSES: readonly FindingStatus[] = ["new", "still", "gone", "not-run"];
@@ -137,12 +155,11 @@ export function parseState(raw: string | null | undefined): PrState {
   s.next = typeof o.next === "number" && Number.isInteger(o.next) && o.next > maxN ? o.next : maxN + 1;
   s.evidence = str(o.evidence, /^[0-9a-f]{40,64}$/);
   s.waiting = str(o.waiting, /^[0-9a-f]{40,64}$/);
+  s.held = o.held === true && s.waiting !== null;
   s.commentHash = str(o.commentHash, /^[0-9a-f]{16,64}$/);
   s.checkHash = str(o.checkHash, /^[0-9a-f]{16,64}$/);
   s.inline = Array.isArray(o.inline) ? o.inline.filter((x): x is string => typeof x === "string" && /^[0-9a-f]{16}$/.test(x)).slice(0, MAX_FINDINGS) : [];
-  s.paused = o.paused === true;
   s.commentDeleted = o.commentDeleted === true;
-  s.issue = typeof o.issue === "number" && Number.isSafeInteger(o.issue) && o.issue > 0 ? o.issue : null;
   return s;
 }
 
@@ -162,15 +179,33 @@ export interface ViewFinding extends StoredFinding {
   now: { confidence: number; evidence: string } | null;
 }
 
+/** Findings flagged in a commit's race files that are over MAX_FINDINGS: counted, never numbered or listed. */
+export interface Unlisted {
+  n: number;
+  /** Of them, the reproducible ones (they count for `check.fail_on` like any other). */
+  rep: number;
+}
+
+const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 /**
  * Fold a commit's race summary into the pull request's findings. `summary` null (no race files for this commit yet)
  * changes nothing. A finding in the files is "new" the first time and "still" on a later commit; one that is absent
  * is "gone" when its test ran in these files and "not-run" when it did not. Numbers are never reused.
+ * `partial`: some of the commit's race files could not be read this time. A finding that was flagged in this same
+ * commit's files before, and whose test is not in what was read now, then stays as it was: an unread file is not a
+ * run without the finding.
+ * At most MAX_FINDINGS are kept. A finding that is flagged is never dropped: room for a new one is made only by the
+ * oldest that are no longer flagged, and when the flagged ones alone are more than fit, the rest are not taken in
+ * (no number is given, `next` does not move) and are counted in `unlisted`. Which ones are taken does not depend on
+ * the order of the files: reproducible first, then by test and signature. So a finding that was given a number keeps
+ * it for as long as it is flagged, and reading the same files again changes nothing.
  */
-export async function mergeFindings(prev: PrState, summary: RaceSummary | null, headSha: string): Promise<{ state: PrState; view: ViewFinding[] }> {
+export async function mergeFindings(prev: PrState, summary: RaceSummary | null, headSha: string, o: { partial?: boolean } = {}): Promise<{ state: PrState; view: ViewFinding[]; unlisted: Unlisted }> {
   const state: PrState = { ...prev, findings: prev.findings.map((f) => ({ ...f, seeds: [...f.seeds] })), inline: [...prev.inline] };
   const live = new Map<string, { sig: SignatureSummary; test: TestSummary }>();
-  if (!summary) return { state, view: state.findings.map((f) => ({ ...f, now: null })) };
+  const unlisted: Unlisted = { n: 0, rep: 0 };
+  if (!summary) return { state, view: state.findings.map((f) => ({ ...f, now: null })), unlisted };
 
   const sameCommit = prev.evidence === headSha;
   const short = shortSha(headSha);
@@ -185,11 +220,28 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
       f.seeds = hit.sig.seeds.slice(0, 20);
       f.of = hit.test.seeds.length;
       f.last = short;
-    } else f.status = ran.has(f.test) ? "gone" : "not-run";
+    } else if (ran.has(f.test)) f.status = "gone";
+    else if (!(o.partial && sameCommit && (f.status === "new" || f.status === "still"))) f.status = "not-run";
   }
   const known = new Set(state.findings.map((f) => f.fp));
-  for (const [fp, hit] of live) {
-    if (known.has(fp)) continue;
+  let fresh = [...live].filter(([fp]) => !known.has(fp));
+  // the flagged ones stay whatever comes: only what is left of MAX_FINDINGS can be taken in
+  const room = Math.max(0, MAX_FINDINGS - state.findings.filter(open).length);
+  if (fresh.length > room) {
+    fresh.sort((a, b) => Number(b[1].sig.reproducible) - Number(a[1].sig.reproducible) || byText(a[1].test.test, b[1].test.test) || byText(a[1].sig.sig, b[1].sig.sig));
+    const rest = fresh.slice(room);
+    unlisted.n = rest.length;
+    unlisted.rep = rest.filter(([, hit]) => hit.sig.reproducible).length;
+    fresh = fresh.slice(0, room);
+  }
+  // room for the ones taken in is made by the oldest findings that are no longer flagged
+  const excess = state.findings.length + fresh.length - MAX_FINDINGS;
+  if (excess > 0) {
+    const drop = new Set(state.findings.filter((f) => !open(f)).sort((a, b) => a.n - b.n).slice(0, excess).map((f) => f.fp));
+    state.findings = state.findings.filter((f) => !drop.has(f.fp));
+    state.inline = state.inline.filter((fp) => !drop.has(fp));
+  }
+  for (const [fp, hit] of fresh) {
     state.findings.push({
       n: state.next++,
       fp,
@@ -205,19 +257,12 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
       status: "new",
     });
   }
-  // over the cap: the oldest findings that are no longer flagged go first, then the oldest of all
-  if (state.findings.length > MAX_FINDINGS) {
-    const order = [...state.findings].sort((a, b) => Number(a.status === "new" || a.status === "still") - Number(b.status === "new" || b.status === "still") || a.n - b.n);
-    const drop = new Set(order.slice(0, state.findings.length - MAX_FINDINGS).map((f) => f.fp));
-    state.findings = state.findings.filter((f) => !drop.has(f.fp));
-    state.inline = state.inline.filter((fp) => !drop.has(fp));
-  }
   state.evidence = headSha;
   const view = state.findings.map((f) => {
     const hit = live.get(f.fp);
     return { ...f, now: hit ? { confidence: hit.sig.confidence, evidence: hit.sig.evidence } : null };
   });
-  return { state, view };
+  return { state, view, unlisted };
 }
 
 // --------------------------------------------------------------------------------------------- the review model
@@ -247,12 +292,19 @@ export interface ReviewModel {
   /** Problems with the settings file, for the repository's owners. */
   warnings: string[];
   links: ReviewLinks;
+  /** Some of this commit's race files could not be read (an artifact, or a file in one): the check is never a success. */
+  partial?: boolean;
+  /** Findings flagged in this commit's files over MAX_FINDINGS: in the counts and the verdict, not in the table. */
+  unlisted?: Unlisted;
 }
 
 /** The race summary of a commit's files under the repository's settings; null when no file was read. */
 export function summaryOf(inputs: readonly RacesFileInput[], settings: RepoSettings): RaceSummary | null {
   return inputs.length ? buildSummary(inputs, { minSeeds: settings.minSeeds }) : null;
 }
+
+/** Files were found for the commit, and not one of them is a race file that could be read: nothing was learned about its tests. */
+export const unread = (summary: RaceSummary | null): boolean => summary !== null && summary.files === 0;
 
 const open = (f: StoredFinding): boolean => f.status === "new" || f.status === "still";
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
@@ -324,20 +376,25 @@ function seenText(f: StoredFinding): string {
   return `${seeds}${f.rep ? ", **reproducible**" : ""}`;
 }
 
+/** The sentence for findings over MAX_FINDINGS: flagged in this commit's files, counted, and not numbered or listed. */
+const unlistedLine = (u: Unlisted): string => `${plural(u.n, "more finding")} flagged at this commit ${u.n === 1 ? "is" : "are"} not listed: at most ${MAX_FINDINGS} are kept for a pull request.`;
+
 /** The first line of a review: counts, in the summariser's words. */
-export function headline(m: Pick<ReviewModel, "findings" | "summary" | "ci" | "headSha">): string {
+export function headline(m: Pick<ReviewModel, "findings" | "summary" | "ci" | "headSha" | "unlisted">): string {
   const at = code(shortSha(m.headSha));
   const now = m.findings.filter(open);
+  const more = m.unlisted?.n ?? 0;
   const gone = m.findings.filter((f) => f.status === "gone").length;
   if (!m.summary) {
     if (m.ci.state === "pending") return `Waiting for the test run of ${at}: its race files are read when the workflow finishes.`;
     return `No race files for ${at}.`;
   }
+  if (unread(m.summary)) return `No race file could be read for ${at}: ${plural(m.summary.skipped.length, "file")} skipped. The report lists each with why.`;
   const tests = plural(m.summary.totals.tests, "test");
-  if (!now.length) return `**Nothing flagged** in ${tests} at ${at}${gone ? ` · ${plural(gone, "earlier finding")} not flagged now` : ""}`;
+  if (!now.length && !more) return `**Nothing flagged** in ${tests} at ${at}${gone ? ` · ${plural(gone, "earlier finding")} not flagged now` : ""}`;
   const fresh = now.filter((f) => f.status === "new").length;
-  const rep = now.filter((f) => f.rep).length;
-  const parts = [`**${plural(now.length, "finding")}** in this pull request's tests at ${at}`, `${rep} reproducible`];
+  const rep = now.filter((f) => f.rep).length + (m.unlisted?.rep ?? 0);
+  const parts = [`**${plural(now.length + more, "finding")}** in this pull request's tests at ${at}`, `${rep} reproducible`];
   if (fresh && fresh !== now.length) parts.push(`${fresh} new`);
   if (gone) parts.push(`${gone} not flagged now`);
   parts.push(`${tests} read`);
@@ -397,6 +454,7 @@ export function renderSummary(m: ReviewModel): string | null {
   const table = findingsTable(m.findings);
   if (table.length) {
     L.push(...table, "");
+    if (m.unlisted?.n) L.push(unlistedLine(m.unlisted), "");
     if (m.findings.some(open) && m.settings.commands) {
       const n = m.findings.find(open)!.n;
       L.push(`Reply ${code(`@${m.mention} replay ${n}`)} for the steps to reproduce a finding, or ${code(`@${m.mention} fix ${n}`)} for a brief a coding agent can work from.`, "");
@@ -416,7 +474,11 @@ export function renderSummary(m: ReviewModel): string | null {
 
 export interface CheckOutput {
   status: "completed" | "in_progress";
-  conclusion: "success" | "neutral" | "failure" | null;
+  /**
+   * GitHub counts success, neutral and skipped as passing a required check; failure and cancelled do not pass, and a
+   * check in progress (null) holds the pull request until it is finished.
+   */
+  conclusion: "success" | "neutral" | "failure" | "skipped" | "cancelled" | null;
   title: string;
   summary: string;
   text: string;
@@ -434,17 +496,23 @@ export function renderCheck(m: ReviewModel, o: { entitled: boolean; plansUrl?: s
     };
   }
   const now = m.findings.filter(open);
-  const rep = now.filter((f) => f.rep).length;
+  // findings over MAX_FINDINGS are not listed, and count like the others: a required check must not pass for them
+  const flagged = now.length + (m.unlisted?.n ?? 0);
+  const rep = now.filter((f) => f.rep).length + (m.unlisted?.rep ?? 0);
   const waiting = !m.summary && m.ci.state === "pending" && m.settings.check.failOn !== "never";
+  // a verdict comes only from race files that were read: none found, or none readable, is neither a failure nor a success
+  const read = m.summary !== null && !unread(m.summary);
   let title: string;
   if (!m.summary) title = m.ci.state === "pending" ? "Waiting for this commit's test run" : "No race files for this commit";
-  else if (!now.length) title = `Nothing flagged in ${plural(m.summary.totals.tests, "test")}`;
-  else title = `${plural(now.length, "finding")}, ${rep} reproducible`;
-  const fail = m.summary !== null && ((m.settings.check.failOn === "any" && now.length > 0) || (m.settings.check.failOn === "reproducible" && rep > 0));
-  const conclusion: CheckOutput["conclusion"] = waiting ? null : fail ? "failure" : m.summary && !now.length ? "success" : "neutral";
+  else if (!read) title = "No race file could be read";
+  else if (!flagged) title = `Nothing flagged in ${plural(m.summary.totals.tests, "test")}`;
+  else title = `${plural(flagged, "finding")}, ${rep} reproducible`;
+  const fail = read && ((m.settings.check.failOn === "any" && flagged > 0) || (m.settings.check.failOn === "reproducible" && rep > 0));
+  const conclusion: CheckOutput["conclusion"] = waiting ? null : fail ? "failure" : read && !m.partial && !flagged ? "success" : "neutral";
 
   const S: string[] = [headline(m), ""];
   S.push(...findingsTable(m.findings));
+  if (m.unlisted?.n) S.push("", unlistedLine(m.unlisted));
   if (!m.summary && m.ci.state !== "pending") {
     S.push(
       "",
@@ -463,6 +531,113 @@ export function renderCheck(m: ReviewModel, o: { entitled: boolean; plansUrl?: s
     T.unshift(raceReport(m.summary, MAX_CHECK_CHARS - used), "");
   }
   return { status: waiting ? "in_progress" : "completed", conclusion, title, summary: S.join("\n").slice(0, MAX_CHECK_CHARS), text: T.join("\n").slice(0, MAX_CHECK_CHARS) };
+}
+
+/**
+ * The one check a repository gets before any race file was read for it (an installation on selected repositories,
+ * once per repository): what the app reads and how to give it something. "skipped": nothing was reviewed.
+ */
+export function renderIntro(m: Pick<ReviewModel, "links" | "settings">): CheckOutput {
+  return {
+    status: "completed",
+    conclusion: "skipped",
+    title: "No race files to read yet",
+    summary: [
+      `This check reads the race files the [GenClass Playwright fixture](${m.links.docs}) writes while your end-to-end tests run, from an artifact whose name starts with ${code(m.settings.artifact)}; none has been read for this repository yet.`,
+      `[Set it up](${m.links.setup}) in two steps: use the fixture in your Playwright tests, and upload ${code("test-results/genclass")} from the workflow.`,
+      "This check is written once: the next one appears when a workflow run uploads race files.",
+    ].join(" "),
+    text: "",
+  };
+}
+
+/**
+ * Why a commit's test run is not read (any more):
+ * - plan, repo-paused, paused, draft, auto-off, branch, author, check-off: a setting or a person stopped reviews;
+ * - hour, pr-hour: a limit for this hour was reached, and the review is still owed;
+ * - pr-total: the pull request reached its limit for good;
+ * - closed, superseded: the commit is no longer what the pull request is about.
+ */
+export type StopReason = "plan" | "repo-paused" | "paused" | "draft" | "auto-off" | "branch" | "author" | "check-off" | "hour" | "pr-hour" | "pr-total" | "closed" | "superseded";
+
+/**
+ * The check on a commit whose test run the app was waiting for, when the wait ends without a review. `held`: the
+ * check was in progress (check.fail_on), so its conclusion decides whether a required check passes. A setting or a
+ * person that stops reviews ends it neutral; an hourly limit leaves a held check in progress, because the review is
+ * still owed and will be run; a limit reached for good, a closed pull request and a newer commit end a held check as
+ * cancelled, which does not pass. `limit`: the number the limit is; `after`: when the hour ends ("14:00");
+ * `head`: the newer commit.
+ */
+export function renderStopped(why: StopReason, m: { mention: string; held: boolean; commands?: boolean; limit?: number; after?: string; head?: string }): CheckOutput {
+  const cmd = (c: string): string => code(`@${m.mention} ${c}`);
+  const later = `They are read when someone re-runs this check${m.commands === false ? "" : ` or replies ${cmd("review")}`} after ${m.after ?? "the hour"} UTC, and within a day otherwise.`;
+  let title: string;
+  let summary: string;
+  let conclusion: CheckOutput["conclusion"] = "neutral";
+  switch (why) {
+    case "plan":
+      title = "Private repositories need a plan";
+      summary = `This repository is private and its installation has no plan that includes private repositories, so this commit's race files are not read.`;
+      break;
+    case "repo-paused":
+      title = "Reviews are paused";
+      summary = "Reviews are paused for this repository, so this commit's race files are not read.";
+      break;
+    case "paused":
+      title = "Paused on this pull request";
+      summary = `Updates are paused on this pull request, so this commit's race files are not read. Someone with write access can reply ${cmd("resume")}.`;
+      break;
+    case "draft":
+      title = "Draft pull requests are not reviewed";
+      summary = `This repository's settings leave drafts out (${code("reviews.drafts")}). This commit's race files are read when the pull request is marked ready for review.`;
+      break;
+    case "auto-off":
+      title = "Automatic reviews are off";
+      summary = `This repository's settings turn automatic reviews off (${code("reviews.auto")}), so this commit's race files are not read.${m.commands === false ? "" : ` Reply ${cmd("review")} to read them.`}`;
+      break;
+    case "branch":
+      title = "Base branch not reviewed";
+      summary = `This repository's settings leave pull requests into this base branch out (${code("reviews.branches")}), so this commit's race files are not read.`;
+      break;
+    case "author":
+      title = "Author not reviewed";
+      summary = `This repository's settings leave this author's pull requests out (${code("reviews.ignore_authors")}), so this commit's race files are not read.`;
+      break;
+    case "check-off":
+      title = "This check is turned off";
+      summary = `This repository's settings turn the GenClass check off (${code("check.enabled")}), so this check is not updated any more.`;
+      break;
+    case "hour":
+      title = "Hourly review limit reached";
+      summary = `This installation reached the app's limit of ${m.limit ?? 0} reviews an hour, so this commit's race files have not been read yet. ${later}`;
+      conclusion = m.held ? null : "neutral";
+      break;
+    case "pr-hour":
+      title = "Hourly review limit reached";
+      summary = `This pull request reached the app's limit of ${m.limit ?? 0} reviews an hour, so this commit's race files have not been read yet. ${later}`;
+      conclusion = m.held ? null : "neutral";
+      break;
+    case "pr-total":
+      title = "Review limit reached";
+      summary = `This pull request reached the app's limit of ${m.limit ?? 0} reviews, so it is not updated any more and this commit's race files are not read.`;
+      conclusion = m.held ? "cancelled" : "neutral";
+      break;
+    case "closed":
+      title = "Pull request closed";
+      summary = "The pull request was closed before this commit's test run was read.";
+      conclusion = m.held ? "cancelled" : "neutral";
+      break;
+    default:
+      title = "A newer commit was pushed";
+      summary = `The pull request's head moved${m.head ? ` to ${code(shortSha(m.head))}` : ""} before this commit's test run was read.`;
+      conclusion = m.held ? "cancelled" : "neutral";
+  }
+  return { status: conclusion === null ? "in_progress" : "completed", conclusion, title, summary, text: "" };
+}
+
+/** The reply to a `review` command that could not run because a limit for this hour was reached. */
+export function renderOverLimit(m: { scope: "installation" | "pull request"; limit: number; after: string }): string {
+  return `${REPLY_MARKER}\nThis ${m.scope} reached the app's limit of ${m.limit} reviews an hour, so this commit's race files were not read. Ask again after ${m.after} UTC.\n`;
 }
 
 // --------------------------------------------------------------------------------------------- inline comments
@@ -637,6 +812,25 @@ export function renderFixBrief(f: StoredFinding, m: { repo: string; number: numb
   return `${L.join("\n")}\n`;
 }
 
+/** The hidden line an issue carries for each finding it lists: the finding's fingerprint. */
+const findingMarker = (fp: string): string => `<!-- genclass-bot:finding ${fp} -->`;
+
+/**
+ * The fingerprints of the findings an issue's body lists (the markers renderIssue writes). A fingerprint is the same
+ * in every pull request of a repository, so a finding that has an issue is not filed again when another pull request
+ * merges with it.
+ */
+export function issueFingerprints(body: unknown): string[] {
+  if (typeof body !== "string") return [];
+  return [...body.slice(0, 70_000).matchAll(/<!-- genclass-bot:finding ([0-9a-f]{16}) -->/g)].map((x) => x[1]!);
+}
+
+/**
+ * An issue for findings of a pull request: `merged` when the repository's settings asked for it (`issues: merge`),
+ * else a person with write access did. For a merge, the caller passes only findings flagged in the race files of
+ * `headSha`, the commit that merged (handlers.ts issueOnMerge). The first MAX_ISSUE_FINDINGS are listed, each with
+ * its fingerprint marker.
+ */
 export function renderIssue(findings: readonly StoredFinding[], m: { repo: string; number: number; headSha: string; mention: string; links: ReviewLinks; merged: boolean }): { title: string; body: string } {
   const first = findings[0]!;
   const heading = findings.length === 1 ? `${findingTitle(first)} on ${first.op} (GenClass, from #${m.number})`.slice(0, 200) : `${findings.length} runtime findings from #${m.number} (GenClass)`;
@@ -645,9 +839,9 @@ export function renderIssue(findings: readonly StoredFinding[], m: { repo: strin
     `Pull request #${m.number}${m.merged ? " was merged" : ""} with ${plural(findings.length, "finding")} that GenClass's Playwright fixture flagged in its tests at ${code(shortSha(m.headSha))}.`,
     "",
   ];
-  for (const f of findings.slice(0, 20)) {
+  for (const f of findings.slice(0, MAX_ISSUE_FINDINGS)) {
     const cmd = reproduceCommand(f);
-    L.push(`### ${title(f)} on ${code(f.op)}`, "", `- Test: ${cell(f.test)}`, `- Seen: ${f.seeds.length} of ${plural(f.of, "seed")}${f.rep ? ", reproducible" : ""}, last at ${code(f.last)}`);
+    L.push(findingMarker(f.fp), `### ${title(f)} on ${code(f.op)}`, "", `- Test: ${cell(f.test)}`, `- Seen: ${f.seeds.length} of ${plural(f.of, "seed")}${f.rep ? ", reproducible" : ""}, last at ${code(f.last)}`);
     if (cmd) L.push(`- Reproduce: ${code(cmd)}`);
     L.push("", usualFix(f), "");
   }

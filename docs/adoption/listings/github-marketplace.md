@@ -140,8 +140,11 @@ that shows `PRIVACY.md` (to do); Documentation
 3. Decide the question under "Free and paid" about private repositories by agreement.
 4. Logo, feature card, screenshots.
 5. On the app's page: List in Marketplace. Fill the text above, add the Open source plan, set the listing's webhook to
-   `https://genclass.dev/api/github/marketplace` with a new secret, store that secret as
-   `GITHUB_MARKETPLACE_WEBHOOK_SECRET`, tick Active.
+   `https://genclass.dev/api/github/marketplace` with **Content type: application/json** and a new secret, store that
+   secret as `GITHUB_MARKETPLACE_WEBHOOK_SECRET`, tick Active. The form's other content type,
+   `application/x-www-form-urlencoded`, puts the JSON in a form field named `payload`; the worker reads that too, but
+   JSON is what GitHub recommends. GitHub does not send a failed Marketplace delivery again, so open the listing's
+   delivery list and check that the first delivery, the ping, was answered with 202.
 6. Test the purchase flow as GitHub's "Testing your app" page describes (the stubbed Marketplace endpoints), then
    submit.
 7. When the listing is live: set the two `available: false` lines in `billing/plans.json` to `true`, and add the

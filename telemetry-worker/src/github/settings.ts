@@ -6,6 +6,9 @@
 // - A missing file means the defaults. A file that cannot be parsed, or a value that is not allowed, never stops a
 //   review: the default stands in and the problem is listed as a warning in the check run, where the repository's
 //   owners see it.
+// - A file that could not be fetched is not a missing file. `readSettings(null)` is for GitHub's own answer that there
+//   is no file to read; when GitHub did not answer, the caller (src/github/handlers.ts settingsOf) fails its job and
+//   keeps nothing, so that a repository's `comment: never` or `reviews: false` is never replaced by the defaults.
 // - Unknown keys are warnings too (a typo should not silently do nothing).
 // - Every list and string is capped, so a hostile file cannot make a review slow or its report long.
 
@@ -71,7 +74,8 @@ const MAX_WARNINGS = 12;
 const isMap = (v: YamlValue | undefined): v is { [key: string]: YamlValue } => v !== null && typeof v === "object" && !Array.isArray(v);
 
 /**
- * Settings from the file's text (null: no file). Never throws. `warnings` are sentences for the repository's owners.
+ * Settings from the file's text (null: GitHub says there is no file to read; never pass null for a file that could
+ * not be fetched). Never throws. `warnings` are sentences for the repository's owners.
  */
 export function readSettings(text: string | null): { settings: RepoSettings; warnings: string[] } {
   const s: RepoSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS)) as RepoSettings;

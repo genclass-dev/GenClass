@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAX_ERRORS, parseRaces, validateRaces } from "../src/schema.js";
-import { RACES_SCHEMA } from "../src/types.js";
+import { RACES_LIMITS, RACES_SCHEMA } from "../src/types.js";
 import { racesDir } from "./helpers.js";
 
 const okSig = { sig: "request|duplicate|POST /api/orders", trigger: "request", diagnosis: "duplicate", op: "POST /api/orders", confidence: 0.9, evidence: "e", seeds: [1] };
@@ -140,5 +140,53 @@ describe("schema: rejected files and their messages", () => {
 
   it("cuts long values in messages", () => {
     expect(errors({ ...ok, schema: "x".repeat(60) })).toEqual([`schema: expected "genclass-races/1", got "${"x".repeat(39)}…"`]);
+  });
+});
+
+describe("schema: the format's limits (RACES_LIMITS)", () => {
+  const many = (n: number) => ({ ...ok, signatures: Array.from({ length: n }, (_, i) => ({ ...okSig, sig: `request|duplicate|POST /api/orders/${i}`, op: `POST /api/orders/${i}` })) });
+  const long = (n: number) => "x".repeat(n);
+
+  it("a file holds at most 200 signatures: one more rejects it on the count alone", () => {
+    expect(RACES_LIMITS).toEqual({ signatures: 200, test: 1000, evidence: 2000, text: 600, bytes: 65536 });
+    expect(validateRaces(many(200)).ok).toBe(true);
+    expect(errors(many(201))).toEqual(["signatures: expected at most 200 signatures, got 201"]);
+    // over the limit the signatures are not looked at one by one: 100,000 that are no signatures give one message,
+    // not the seven bad fields of each
+    const junk = { ...ok, signatures: Array.from({ length: 100_000 }, () => ({})) };
+    expect(errors(junk)).toEqual(["signatures: expected at most 200 signatures, got 100000"]);
+    expect(parseRaces(JSON.stringify(junk))).toEqual({ ok: false, errors: ["signatures: expected at most 200 signatures, got 100000"] });
+  });
+
+  it("a string longer than its limit rejects the file, like any other bad field", () => {
+    const fixture = { model: "skip", agent: long(600), chaosApplied: null, serviceWorker: false, modeOverridden: long(600) };
+    const atLimit = { ...ok, test: long(1000), signatures: [{ ...okSig, sig: long(600), trigger: long(600), diagnosis: long(600), op: long(600), evidence: long(2000) }], mode: long(600), model: { state: long(600), name: long(600), version: long(600), device: long(600) }, fixture };
+    expect(validateRaces(atLimit).ok).toBe(true);
+    expect(errors({ ...ok, test: long(1001) })).toEqual(["test: expected at most 1000 characters, got 1001"]);
+    expect(errors({ ...ok, signatures: [{ ...okSig, sig: long(601), trigger: long(601), diagnosis: long(601), op: long(601), evidence: long(2001) }] })).toEqual([
+      "signatures[0].sig: expected at most 600 characters, got 601",
+      "signatures[0].trigger: expected at most 600 characters, got 601",
+      "signatures[0].diagnosis: expected at most 600 characters, got 601",
+      "signatures[0].op: expected at most 600 characters, got 601",
+      "signatures[0].evidence: expected at most 2000 characters, got 2001",
+    ]);
+    expect(errors({ ...ok, mode: long(601), model: { state: long(601), device: long(700) }, fixture: { ...fixture, agent: long(601), modeOverridden: long(601) } })).toEqual([
+      "mode: expected at most 600 characters, got 601",
+      "model.state: expected at most 600 characters, got 601",
+      "model.device: expected at most 600 characters, got 700",
+      "fixture.agent: expected at most 600 characters, got 601",
+      "fixture.modeOverridden: expected at most 600 characters, got 601",
+    ]);
+    // a wrong type is still the type's message, once
+    expect(errors({ ...ok, test: 5 })).toEqual(["test: expected a non-empty string, got 5"]);
+  });
+
+  it("dropped: a whole number, kept when present", () => {
+    const r = validateRaces({ ...ok, dropped: 4 });
+    expect(r.ok && r.file.dropped).toBe(4);
+    expect(validateRaces(ok).ok && "dropped" in (validateRaces(ok) as { file: object }).file).toBe(false);
+    expect(errors({ ...ok, dropped: -1 })).toEqual(["dropped: expected a whole number when present, got -1"]);
+    expect(errors({ ...ok, dropped: 1.5 })).toEqual(["dropped: expected a whole number when present, got 1.5"]);
+    expect(errors({ ...ok, dropped: "3" })).toEqual(['dropped: expected a whole number when present, got "3"']);
   });
 });

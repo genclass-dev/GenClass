@@ -15,15 +15,33 @@
 // - A webhook is acted on only when its X-Hub-Signature-256 is the HMAC-SHA256 of the exact bytes received under the
 //   app's webhook secret (WebCrypto's verify, constant time). No signature, a wrong one, or an app that is not set up
 //   on this server: nothing is parsed. A delivery id is handled once.
-// - The webhook answers at once and works after the response (waitUntil), so GitHub's 10 seconds are never at risk; a
-//   job that fails forgets its delivery id, so "Redeliver" on GitHub's side runs it again.
+// - The webhook answers at once and works after the response (waitUntil), so GitHub's 10 seconds are never at risk.
+//   The job has a deadline counted from the moment the webhook arrived (handlers.ts JOB_MS), well inside the 30
+//   seconds the platform gives work after a response. A job that fails, or runs out of time, forgets its delivery id,
+//   so "Redeliver" on GitHub's side runs it again; a job that ended marks its delivery done, and one the platform
+//   stopped before it could do either can be redelivered a minute later (store.ts claimDelivery).
 // - /github/setup trusts nothing in its address (GitHub's documentation warns that `installation_id` there can be
 //   made up): it is a static page. Who may manage what is established only by /github/connect, where GitHub itself
 //   answers which installations and repositories the signed-in person can reach.
+// - An installation is managed (its `owner`, whose plan decides whether its private repositories are read:
+//   entitlement.ts) only by the GenClass account of the person whose own GitHub account it is on, by GitHub's answer
+//   to who they are. Reaching or pushing to a repository of an installation never makes an account its manager. An
+//   organization's installation is never claimed here: with this app's permissions GitHub does not say who
+//   administers an organization (GET /user/memberships/orgs/{org} needs the organization permission "Members"), so
+//   the server's operator sets that account by hand (docs/github-app/SETUP.md). Connecting never takes an
+//   installation from an account whose plan includes private repositories for one whose plan does not.
 // - The user access token from /github/callback is used for those few questions and dropped: never stored, never
 //   logged. What is kept for 30 minutes is the answer (repository ids, names and whether the person can push).
 // - A repository is linked to a GenClass app only by an account that owns the app AND can push to the repository
-//   according to that answer, from the browser, with this server's Origin (CSRF).
+//   according to that answer, from the browser, with this server's Origin (CSRF). Taking a link away needs less: the
+//   account that owns the linked app can always do it (same browser session and Origin), with or without access to
+//   the repository, because the link posts that app's findings there.
+// - The account page reads its rows in a few statements however many repositories GitHub listed (store.ts
+//   installationsByIds, reposByIds), never one statement per repository.
+// - The Marketplace listing's webhook may be set to send a form (application/x-www-form-urlencoded: the JSON in a
+//   field named `payload`, signed over the form's bytes). Such a delivery is checked against its signature over the
+//   exact bytes received before anything is parsed, like every other; only then is the field taken out and handed
+//   to the webhook handler as the JSON delivery it stands for (formDelivery).
 // - The OAuth state is single use, kept server-side and named by a cookie that holds only its row id; the callback
 //   must arrive in the session that started it.
 
@@ -33,14 +51,15 @@ import type { Env, HandleOptions } from "../collector.js";
 import { randomBase62 } from "../dashboard.js";
 import { json, readCapped } from "../http.js";
 import { securityHeaders } from "../pages.js";
-import { accountAccess } from "../plans.js";
+import { accountAccess, entitled } from "../plans.js";
 import { b64url, equalStrings } from "../webauthn.js";
 import { GithubError, posInt, repoPath, userClient, type Fetch } from "./api.js";
 import { githubApp, installUrl, type GithubAppConfig } from "./config.js";
-import { handleEvent, type Ctx } from "./handlers.js";
+import { repoEntitled } from "./entitlement.js";
+import { handleEvent, jobContext, OutOfTime } from "./handlers.js";
 import { AppKeyError } from "./jwt.js";
 import { accountGithubPage, githubLandingPage, githubSetupPage, type GithubAccountView } from "./pages.js";
-import { claimDelivery, forgetDelivery, installationById, installationsOf, linkRepo, pauseRepo, repoById, reposOfInstallation, setInstallationOwner, upsertInstallation } from "./store.js";
+import { claimDelivery, finishDelivery, forgetDelivery, installationById, installationsByIds, installationsOf, linkRepo, pauseRepo, repoById, reposByIds, reposLinkedToAccount, setInstallationOwner, unlinkRepo, upsertInstallation } from "./store.js";
 
 /** Largest webhook body read (an installation event lists every repository it covers). */
 export const MAX_WEBHOOK_BYTES = 3 * 1024 * 1024;
@@ -71,6 +90,9 @@ export async function verifyGithubSignature(body: Uint8Array, header: string | n
 async function webhook(request: Request, env: Env, opts: HandleOptions, cfg: GithubAppConfig | null, which: "app" | "marketplace"): Promise<Response> {
   if (request.method !== "POST") return fail(405, "method not allowed");
   if (!cfg || !env.DB) return fail(503, "the GitHub App is not set up on this server");
+  const now = opts.now ?? (() => new Date());
+  // the job's time is counted from here: what reading and checking the delivery takes is part of it
+  const started = now().getTime();
   const raw = await readCapped(request, MAX_WEBHOOK_BYTES);
   if (raw === null) return fail(413, "body too large");
   // the listing's webhook has a secret of its own on GitHub's side; unset here, the app's is expected for both
@@ -89,23 +111,69 @@ async function webhook(request: Request, env: Env, opts: HandleOptions, cfg: Git
     return fail(400, "invalid JSON");
   }
   const db = env.DB;
-  const now = opts.now ?? (() => new Date());
   if (!(await claimDelivery(db, delivery, event, now()))) return json(200, { ok: true, duplicate: true });
-  const ctx: Ctx = { env, db, cfg, f: opts.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i)), now };
-  const job = handleEvent(ctx, event, payload).catch(async (e: unknown) => {
-    // forgotten, so that a redelivery runs it; the reason is a word, never a payload
-    await forgetDelivery(db, delivery).catch(() => undefined);
-    const why = e instanceof GithubError ? e.kind : "error";
-    // a key that cannot be used says why in words that hold no key material (jwt.ts), which is what setup needs to see
-    console.log(`github webhook: ${event} failed: ${why}${e instanceof AppKeyError ? ` (${e.message})` : ""}`);
-    return `failed: ${why}`;
-  });
+  const ctx = jobContext({ env, db, cfg, f: opts.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i)), now }, started);
+  const job = handleEvent(ctx, event, payload)
+    .then(async (result) => {
+      // ended: never run again. (A delivery left neither done nor forgotten is one the platform stopped.)
+      await finishDelivery(db, delivery, now()).catch(() => undefined);
+      return result;
+    })
+    .catch(async (e: unknown) => {
+      // forgotten, so that a redelivery runs it; the reason is a word, never a payload
+      await forgetDelivery(db, delivery).catch(() => undefined);
+      const why = e instanceof OutOfTime || now().getTime() >= ctx.deadline ? "deadline" : e instanceof GithubError ? e.kind : "error";
+      // a key that cannot be used says why in words that hold no key material (jwt.ts), which is what setup needs to see
+      console.log(`github webhook: ${event} failed: ${why}${e instanceof AppKeyError ? ` (${e.message})` : ""}`);
+      return `failed: ${why}`;
+    });
   if (opts.waitUntil) {
     opts.waitUntil(job);
     return json(202, { ok: true, queued: true });
   }
   const result = await job;
   return json(result.startsWith("failed") ? 502 : 200, { ok: !result.startsWith("failed"), result });
+}
+
+// --------------------------------------------------------------------------------------------- the listing's webhook, sent as a form
+
+const FORM_TYPE = "application/x-www-form-urlencoded";
+
+/** "sha256=<hex>" for `body` under `secret`: what verifyGithubSignature accepts for exactly these bytes. */
+async function githubSignature(body: Uint8Array, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, body as BufferSource));
+  let hex = "";
+  for (const b of sig) hex += b.toString(16).padStart(2, "0");
+  return `sha256=${hex}`;
+}
+
+/**
+ * The Marketplace listing's webhook form offers two content types. With application/x-www-form-urlencoded GitHub posts
+ * `payload=<the JSON, percent-encoded>` and signs those bytes; GitHub does not send a Marketplace delivery again, so
+ * a purchase answered with "invalid JSON" would be lost. This takes such a delivery before the webhook handler does:
+ * the signature is checked over the exact bytes received (401 otherwise, nothing parsed), then the handler gets the
+ * JSON from the `payload` field as an ordinary JSON delivery with the same event and delivery headers. Its
+ * signature header is computed here for those JSON bytes under the same secret, because the handler checks every
+ * body it parses; that value is made only for a body GitHub's own signature covered and never leaves this worker.
+ * Any other request (JSON, another method, an app that is not set up) is returned untouched, its body unread.
+ */
+async function formDelivery(request: Request, env: Env, cfg: GithubAppConfig | null): Promise<Request | Response> {
+  const type = (request.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+  if (request.method !== "POST" || !cfg || type !== FORM_TYPE) return request;
+  const raw = await readCapped(request, MAX_WEBHOOK_BYTES);
+  if (raw === null) return fail(413, "body too large");
+  // the same secret the webhook handler expects on this endpoint: the listing's own, else the app's
+  const secret = (env.GITHUB_MARKETPLACE_WEBHOOK_SECRET ?? "").trim() || cfg.webhookSecret;
+  if (!(await verifyGithubSignature(raw, request.headers.get("x-hub-signature-256"), secret))) return fail(401, "signature check failed");
+  const payload = new URLSearchParams(new TextDecoder().decode(raw)).get("payload");
+  if (payload === null) return fail(400, "invalid JSON");
+  const body = new TextEncoder().encode(payload);
+  const headers = new Headers(request.headers);
+  headers.set("content-type", "application/json");
+  headers.set("x-hub-signature-256", await githubSignature(body, secret));
+  headers.delete("content-length");
+  return new Request(request.url, { method: "POST", headers, body });
 }
 
 // --------------------------------------------------------------------------------------------- connect (OAuth)
@@ -205,7 +273,8 @@ async function connectCallback(c: C, cfg: GithubAppConfig, f: Fetch): Promise<Re
 
 /**
  * Ask GitHub, as the person, who they are and which installations of THIS app and which of their repositories they
- * can reach; record the installations they may manage. The token goes no further than this function.
+ * can reach; record those installations, and make this account the manager of the one on their own GitHub account.
+ * The token goes no further than this function.
  */
 async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string, accountId: string): Promise<Grant> {
   const gh = userClient(cfg, f, () => c.now, token, 4 + MAX_INSTALLATIONS * 3);
@@ -230,27 +299,42 @@ async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string, ac
     const acctLogin = typeof acct.login === "string" && /^[A-Za-z0-9-]{1,39}$/.test(acct.login) ? acct.login : null;
     if (!acctId || !acctLogin) continue;
     const mine = await gh.list<Record<string, unknown>>(`/user/installations/${iid}/repositories`, { max: MAX_GRANT_REPOS, key: "repositories" });
-    let canPush = false;
     for (const r of mine) {
       const rid = posInt(r.id);
       const name = typeof r.full_name === "string" && repoPath(r.full_name) ? r.full_name : null;
       if (!rid || !name) continue;
       const perms = (r.permissions ?? {}) as Record<string, unknown>;
       const push = perms.push === true || perms.admin === true;
-      canPush ||= push;
       if (repos.length >= MAX_GRANT_REPOS) {
         more = true;
         continue;
       }
       repos.push({ id: rid, name, private: r.private !== false, installation: iid, push });
     }
-    // the installation is recorded (its webhook may have been missed), and managed by this account when nobody
-    // manages it yet and the person can push to something in it, or when it is their own account's installation
+    // the installation is recorded (its webhook may have been missed)
     await upsertInstallation(c.db, { id: iid, accountId: acctId, login: acctLogin, type: String(acct.type ?? "User"), selection: String(i.repository_selection ?? "selected"), suspended: !!i.suspended_at }, c.now);
-    const known = await installationById(c.db, iid);
-    if (known && known.owner !== accountId && (acctId === id || (known.owner === null && canPush))) await setInstallationOwner(c.db, iid, accountId, c.now);
+    // Managed by this account only when the installation is on the GitHub account of the person connecting: GitHub's
+    // own answer to who they are. What they can reach or push to in it proves nothing about the account it is on
+    // (an outside collaborator on one repository of an organization can push there), so it never counts.
+    if (acctId === id) await manageInstallation(c, iid, accountId);
   }
   return { github: { id, login }, repos, more, expires: new Date(c.now.getTime() + GRANT_MS).toISOString() };
+}
+
+/**
+ * Make `accountId` the installation's managing account, for a person GitHub said is the account the installation is
+ * on. One case leaves it as it is: the account managing it now has a plan with private repositories and this one has
+ * not (the same person's other GenClass account, or one the server's operator set), so that connecting never turns
+ * reviews of private repositories off.
+ */
+async function manageInstallation(c: C, installationId: number, accountId: string): Promise<void> {
+  const known = await installationById(c.db, installationId);
+  if (!known || known.owner === accountId) return;
+  if (known.owner) {
+    const theirs = await accountAccess(c.db, known.owner, c.env, c.now);
+    if (entitled(theirs.plan, "github_private") && !entitled((await accountAccess(c.db, accountId, c.env, c.now)).plan, "github_private")) return;
+  }
+  await setInstallationOwner(c.db, installationId, accountId, c.now);
 }
 
 async function grantOf(c: C, accountId: string): Promise<Grant | null> {
@@ -274,19 +358,33 @@ async function accountView(c: C, cfg: GithubAppConfig, accountId: string, who: s
   const managed = await installationsOf(c.db, accountId);
   const projects = (await accountProjects(c, accountId)).map((p) => ({ id: p.id!, name: p.name }));
   const access = await accountAccess(c.db, accountId, c.env, c.now);
-  const byId = new Map(managed.map((i) => [i.id, { id: i.id, login: i.account_login, type: i.account_type, selection: i.selection, suspended: !!i.suspended, managed: true }]));
-  const repos: GithubAccountView["repos"] = [];
-  const stored = new Map<number, { project: string | null; paused: boolean }>();
-  for (const i of managed) for (const r of await reposOfInstallation(c.db, i.id)) stored.set(r.repo_id, { project: r.project_id, paused: !!r.paused });
-  for (const r of grant?.repos ?? []) {
-    if (!byId.has(r.installation)) {
-      const inst = await installationById(c.db, r.installation);
-      if (inst) byId.set(inst.id, { id: inst.id, login: inst.account_login, type: inst.account_type, selection: inst.selection, suspended: !!inst.suspended, managed: inst.owner === accountId });
-    }
-    const s = stored.get(r.id) ?? (await repoById(c.db, r.id).then((x) => (x ? { project: x.project_id, paused: !!x.paused } : null)));
+  const granted = grant?.repos ?? [];
+  // The rows come in a few statements however many repositories GitHub listed (up to MAX_GRANT_REPOS): the
+  // installations not already at hand in one, what is kept for the repositories in one per 90. Nothing below asks
+  // the database once per repository.
+  const insts = new Map(managed.map((i) => [i.id, i]));
+  for (const i of await installationsByIds(c.db, granted.map((r) => r.installation).filter((id) => !insts.has(id)))) insts.set(i.id, i);
+  const stored = new Map((await reposByIds(c.db, granted.map((r) => r.id))).map((r) => [r.repo_id, r]));
+  // Whether a private repository is reviewed is a matter of its installation (the plan of the account managing it,
+  // or its Marketplace plan), not of the account looking at this page: asked once per installation that lists one.
+  const unread = new Map<number, boolean>();
+  for (const id of new Set(granted.filter((r) => r.private).map((r) => r.installation))) {
+    const inst = insts.get(id);
+    unread.set(id, !inst || !(await repoEntitled(c.db, c.env, cfg, inst, { private: true }, c.now)).ok);
+  }
+  const repos: GithubAccountView["repos"] = granted.map((r) => {
+    const s = stored.get(r.id);
     // a link to another account's app is shown as linked, never by name
-    const mine = s?.project && projects.some((p) => p.id === s.project) ? s.project : null;
-    repos.push({ id: r.id, name: r.name, private: r.private, installation: r.installation, push: r.push, project: mine, linkedElsewhere: !!s?.project && !mine, paused: !!s?.paused });
+    const mine = s?.project_id && projects.some((p) => p.id === s.project_id) ? s.project_id : null;
+    return { id: r.id, name: r.name, private: r.private, installation: r.installation, push: r.push, project: mine, linkedElsewhere: !!s?.project_id && !mine, paused: !!s?.paused, needsPlan: r.private && unread.get(r.installation) === true };
+  });
+  // Links to this account's apps on repositories GitHub's answer does not list (no answer now, or no access any
+  // more): all this page can do there is take the link away. A private one is not named: its name may have changed
+  // since this account could see it.
+  const listed = new Set(granted.map((r) => r.id));
+  const linked: GithubAccountView["linked"] = [];
+  for (const r of await reposLinkedToAccount(c.db, accountId)) {
+    if (r.project_id && !listed.has(r.repo_id)) linked.push({ id: r.repo_id, name: r.private ? null : r.full_name, private: !!r.private, project: r.project_id });
   }
   return {
     who,
@@ -294,15 +392,22 @@ async function accountView(c: C, cfg: GithubAppConfig, accountId: string, who: s
     slug: cfg.slug,
     canConnect: !!cfg.clientId,
     connected: grant ? { login: grant.github.login, expires: grant.expires, more: grant.more } : null,
-    installations: [...byId.values()].sort((a, b) => a.login.localeCompare(b.login)),
+    installations: [...insts.values()]
+      .map((i) => ({ id: i.id, login: i.account_login, type: i.account_type, selection: i.selection, suspended: !!i.suspended, managed: i.owner === accountId, managedElsewhere: !!i.owner && i.owner !== accountId }))
+      .sort((a, b) => a.login.localeCompare(b.login)),
     repos: repos.sort((a, b) => a.name.localeCompare(b.name)),
+    linked,
     projects,
     notice: c.url.searchParams.get("connected") === "1" ? "GitHub is connected. Link a repository to one of your apps below." : null,
     privatePlan: cfg.privateRepos === "open" || access.plan.entitlements.github_private === true,
   };
 }
 
-/** POST /api/account/github/repos/<id>: link a repository to one of the account's apps, unlink it, pause or resume it. */
+/**
+ * POST /api/account/github/repos/<id>: link a repository to one of the account's apps, unlink it, pause or resume it.
+ * Everything needs GitHub's answer that the person can push to the repository, except `{ "project_id": null }` alone
+ * from the account that owns the linked app.
+ */
 async function updateRepo(c: C, repoId: number): Promise<Response> {
   const a = await webSession(c);
   if (!a) return fail(401, "not signed in");
@@ -311,6 +416,14 @@ async function updateRepo(c: C, repoId: number): Promise<Response> {
   if (body instanceof Response) return body;
   const grant = await grantOf(c, a.account.id);
   const r = grant?.repos.find((x) => x.id === repoId);
+  // Taking the link away, and nothing else, is also for the account that owns the linked app, without GitHub's word
+  // on the repository: the link posts that app's findings on its pull requests, and an account that lost its access
+  // there (or whose answer from GitHub ran out) must still be able to stop that.
+  if (!r?.push && body.project_id === null && typeof body.paused !== "boolean") {
+    const row = await repoById(c.db, repoId);
+    const own = row?.project_id ? await ownedProject(c, a.account.id, row.project_id) : null;
+    if (row && own?.id && (await unlinkRepo(c.db, repoId, own.id, c.now))) return json(200, { ok: true, repo: { id: repoId, project: null, paused: !!row.paused } });
+  }
   // GitHub's own answer, at most 30 minutes old, that this person can push to this repository
   if (!grant || !r) return fail(403, "connect GitHub again: this page only changes repositories GitHub just confirmed you can reach");
   if (!r.push) return fail(403, "you need write access to this repository on GitHub to change its GenClass settings");
@@ -342,7 +455,11 @@ export async function routeGithub(request: Request, url: URL, path: string, env:
   const m = request.method;
   const get = m === "GET" || m === "HEAD";
   if (path === "/api/github/webhook") return webhook(request, env, opts, cfg, "app");
-  if (path === "/api/github/marketplace") return webhook(request, env, opts, cfg, "marketplace");
+  if (path === "/api/github/marketplace") {
+    // the listing's webhook may be set to send a form instead of JSON: the same delivery either way
+    const delivery = await formDelivery(request, env, cfg);
+    return delivery instanceof Response ? delivery : webhook(delivery, env, opts, cfg, "marketplace");
+  }
   if (path.startsWith("/api/github/")) return fail(404, "not found");
 
   // without the app's secrets this server has no GitHub App: its pages are not found (the site may answer them)

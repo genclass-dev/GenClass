@@ -7,8 +7,9 @@
 //   another GitHub account, which a mention would notify, so that spelling is never a command. Mentions in the middle of a sentence, inside a quote ("> ...") or
 //   inside a fenced code block are not commands, so quoting the bot's own help text never runs anything.
 // - Only the first command of a comment counts, and only the first lines of a comment are looked at.
-// - Who may run what is decided by the caller from GitHub's own data (src/github/handlers.ts); nothing in the comment
-//   can widen it.
+// - Who may run what is decided by the caller from GitHub's answer about the commenter's permission on the repository
+//   (src/github/handlers.ts onComment), not from the association a comment event carries; nothing in the comment can
+//   widen it.
 
 export type CommandName = "review" | "replay" | "fix" | "issue" | "help" | "pause" | "resume";
 
@@ -20,7 +21,10 @@ export interface Command {
 
 /** Commands that act on one finding. */
 export const NEEDS_FINDING: readonly CommandName[] = ["replay", "fix", "issue"];
-/** Commands only people with write access to the repository may run (the others: also the pull request's author). */
+/**
+ * Commands only people with write access to the repository may run. The others (review, replay, help) are also the
+ * pull request's author's; a `review` from an author without write access does not lift a pause or `ignore_authors`.
+ */
 export const NEEDS_WRITE: readonly CommandName[] = ["fix", "issue", "pause", "resume"];
 
 const NAMES: Record<string, CommandName> = { review: "review", "re-review": "review", replay: "replay", reproduce: "replay", fix: "fix", issue: "issue", help: "help", pause: "pause", resume: "resume" };

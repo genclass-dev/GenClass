@@ -169,32 +169,67 @@ export interface GithubAccountView {
   canConnect: boolean;
   /** GitHub's answer for this account, while it lasts. */
   connected: { login: string; expires: string; more: boolean } | null;
-  installations: { id: number; login: string; type: string; selection: string; suspended: boolean; managed: boolean }[];
-  repos: { id: number; name: string; private: boolean; installation: number; push: boolean; project: string | null; linkedElsewhere: boolean; paused: boolean }[];
+  /**
+   * `managed`: this account manages the installation (it is on the GitHub account the person connected as, or the
+   * server's operator set it). `managedElsewhere`: another GenClass account does. Neither: nobody does.
+   */
+  installations: { id: number; login: string; type: string; selection: string; suspended: boolean; managed: boolean; managedElsewhere: boolean }[];
+  /**
+   * The repositories GitHub's answer lists. `needsPlan`: private, and its installation has no plan that includes
+   * private repositories (the managing account's, or a Marketplace plan), so it is not reviewed.
+   */
+  repos: { id: number; name: string; private: boolean; installation: number; push: boolean; project: string | null; linkedElsewhere: boolean; paused: boolean; needsPlan: boolean }[];
+  /**
+   * Repositories linked to one of this account's apps that GitHub's answer does not list (there is no answer now, or
+   * the person cannot reach them any more): the link can be taken away, nothing else. `name` is null for a private one.
+   */
+  linked: { id: number; name: string | null; private: boolean; project: string }[];
   projects: { id: string; name: string }[];
   notice: string | null;
-  /** Private repositories are reviewed for this account (its plan, or the server's setting). */
+  /** This account's own plan includes private repositories, or the server reviews every repository. */
   privatePlan: boolean;
 }
+
+/** Who manages an installation, and what that decides (HTML; the same sentences as docs/github-app/README.md, "Plans"). */
+const managing = (): string => `The plan that counts for an installation's private repositories is the plan of the GenClass account that manages it. An installation on your own GitHub account is managed by the GenClass account you choose Connect GitHub from. For an organization, the managing account is set when the plan is agreed: write to <a href="mailto:${esc(PLANS_FILE.contact)}">${esc(PLANS_FILE.contact)}</a>. Being able to push to a repository does not make an account the manager of its installation.`;
+
+/** What the list of links outside GitHub's answer is (the same sentences as docs/github-app/README.md, "Production findings"). */
+const LINKED_ELSEWHERE =
+  "These repositories are linked to one of your apps, and GitHub's answer does not list them: this page has not asked GitHub in the last 30 minutes, or you can no longer reach them. The link puts your app's production findings on their pull requests. You can take it away here at any time. Anything else needs GitHub's answer that you have write access.";
 
 /** /account/github: which repositories the app is on, and which GenClass app each one is linked to. */
 export function accountGithubPage(nonce: string, v: GithubAccountView): string {
   const org = orgName(v.who);
   const options = (current: string | null): string =>
     `<option value="">Not linked</option>${v.projects.map((p) => `<option value="${esc(p.id)}"${p.id === current ? " selected" : ""}>${esc(p.name)}</option>`).join("")}`;
+  const appName = (id: string): string => v.projects.find((p) => p.id === id)?.name ?? "one of your apps";
+  // the one control an app's own account has on a repository it cannot write to: take its app's link away
+  const unlink = (repoId: number, what: string): string => `<button class="btn sm ghost" type="button" data-unlink="${repoId}" aria-label="Unlink ${esc(what)}"><span>Unlink</span></button>`;
   const rows = v.repos
     .map((r) => {
       const where = `<a href="https://github.com/${esc(r.name)}" rel="noreferrer">${esc(r.name)}</a>${r.private ? ' <span class="aside">· private</span>' : ""}`;
-      const link = !r.push
-        ? `<span class="aside">${r.project || r.linkedElsewhere ? "Linked" : "Not linked"} (you need write access on GitHub to change it)</span>`
-        : `<select data-repo="${r.id}" aria-label="GenClass app for ${esc(r.name)}"${v.projects.length ? "" : " disabled"}>${options(r.project)}</select>${r.linkedElsewhere ? ' <span class="aside">linked to an app of another account</span>' : ""}`;
-      const pause = r.push ? `<button class="btn sm ghost" type="button" data-pause="${r.id}" data-on="${r.paused ? "1" : "0"}"><span>${r.paused ? "Resume" : "Pause"}</span></button>` : "";
-      const note = r.private && !v.privatePlan ? ' <span class="aside">· not reviewed: private repositories need a plan</span>' : r.paused ? ' <span class="aside">· paused</span>' : "";
-      return `<tr><td data-l="Repository">${where}${note}</td><td data-l="GenClass app">${link}</td><td class="act">${pause}</td></tr>`;
+      const link = r.push
+        ? `<select data-repo="${r.id}" aria-label="GenClass app for ${esc(r.name)}"${v.projects.length ? "" : " disabled"}>${options(r.project)}</select>${r.linkedElsewhere ? ' <span class="aside">linked to an app of another account</span>' : ""}`
+        : r.project
+          ? `<span class="aside" data-linkstate>Linked to ${esc(appName(r.project))} (you need write access on GitHub to change anything but this link)</span>`
+          : `<span class="aside">${r.linkedElsewhere ? "Linked" : "Not linked"} (you need write access on GitHub to change it)</span>`;
+      const act = r.push ? `<button class="btn sm ghost" type="button" data-pause="${r.id}" data-on="${r.paused ? "1" : "0"}"><span>${r.paused ? "Resume" : "Pause"}</span></button>` : r.project ? unlink(r.id, r.name) : "";
+      const note = r.needsPlan
+        ? ` <span class="aside">· not reviewed: ${v.privatePlan ? "your plan counts for the installations this account manages, and it does not manage this one" : "private repositories need a plan"}</span>`
+        : r.paused
+          ? ' <span class="aside">· paused</span>'
+          : "";
+      return `<tr><td data-l="Repository">${where}${note}</td><td data-l="GenClass app">${link}</td><td class="act">${act}</td></tr>`;
+    })
+    .join("");
+  const linkedRows = v.linked
+    .map((r) => {
+      const where = r.name ? `<a href="https://github.com/${esc(r.name)}" rel="noreferrer">${esc(r.name)}</a>` : `A private repository <span class="aside">· GitHub's id ${r.id}</span>`;
+      return `<tr><td data-l="Repository">${where}</td><td data-l="GenClass app"><span class="aside" data-linkstate>Linked to ${esc(appName(r.project))}</span></td><td class="act">${unlink(r.id, r.name ?? "the private repository")}</td></tr>`;
     })
     .join("");
   const installs = v.installations.length
-    ? `<ul class="facts">${v.installations.map((i) => `<li><b>${esc(i.login)}</b> (${i.type === "Organization" ? "organization" : "personal account"}, ${i.selection === "all" ? "all repositories" : "selected repositories"})${i.suspended ? ", suspended on GitHub" : ""}${i.managed ? "" : ", managed by another GenClass account"}</li>`).join("")}</ul>`
+    ? `<ul class="facts">${v.installations.map((i) => `<li><b>${esc(i.login)}</b> (${i.type === "Organization" ? "organization" : "personal account"}, ${i.selection === "all" ? "all repositories" : "selected repositories"})${i.suspended ? ", suspended on GitHub" : ""}, ${i.managed ? "managed by this account" : i.managedElsewhere ? "managed by another GenClass account" : "managed by no GenClass account"}</li>`).join("")}</ul><p class="gh-note">${managing()}</p>`
     : `<p class="intro">No installation is connected to this account yet.</p>`;
   const connect = !v.canConnect
     ? `<p class="intro">This server cannot ask GitHub who you are, so repositories cannot be linked here. Reviews work without it.</p>`
@@ -206,9 +241,11 @@ export function accountGithubPage(nonce: string, v: GithubAccountView): string {
     : v.connected
       ? `<p class="intro">GitHub lists no repository you can reach through an installation of ${esc(v.slug)}[bot]. <a href="/github/install">Install it</a> on an account or an organization first.</p>`
       : "";
+  // one place for what a failed change says, in whichever table is on the page
+  const errp = `<p class="err" id="gherr" role="alert"></p>`;
   const body = `
 <div class="sb-page" id="mc" tabindex="-1">
-<style nonce="${nonce}">${GH_CSS}.gh .pnl+.pnl{margin-top:20px}.gh .pnl-b{padding:16px 20px}.gh .pnl-h h1{font-size:14px;color:var(--ink)}.gh select{max-width:260px}.gh .aside{font-size:12px;color:var(--ink3)}.gh-ok{font-size:14px;color:var(--ink2);margin-bottom:16px}.gh-ok b{font-weight:500;color:var(--accent)}</style>
+<style nonce="${nonce}">${GH_CSS}.gh .pnl+.pnl{margin-top:20px}.gh .pnl-b{padding:16px 20px}.gh .pnl-h h1{font-size:14px;color:var(--ink)}.gh select{max-width:260px}.gh .aside{font-size:12px;color:var(--ink3)}.gh .gh-note{margin:10px 0 14px}.gh-ok{font-size:14px;color:var(--ink2);margin-bottom:16px}.gh-ok b{font-weight:500;color:var(--accent)}</style>
 <div class="gh">
 ${v.notice ? `<p class="gh-ok" role="status"><b>Done.</b> ${esc(v.notice)}</p>` : ""}
 <section class="pnl">
@@ -219,7 +256,8 @@ ${v.notice ? `<p class="gh-ok" role="status"><b>Done.</b> ${esc(v.notice)}</p>` 
     ${connect}
   </div>
 </section>
-${table ? `<section class="pnl"><div class="pnl-h"><h2>Repositories</h2><span class="aside">${v.repos.length} you can reach</span></div><div class="pnl-b">${table}<p class="err" id="gherr" role="alert"></p></div></section>` : ""}
+${table ? `<section class="pnl"><div class="pnl-h"><h2>Repositories</h2><span class="aside">${v.repos.length} you can reach</span></div><div class="pnl-b">${table}${errp}</div></section>` : ""}
+${linkedRows ? `<section class="pnl"><div class="pnl-h"><h2>Linked, not in GitHub's answer</h2><span class="aside">${v.linked.length} linked to your apps</span></div><div class="pnl-b"><p class="intro">${LINKED_ELSEWHERE}${v.linked.some((r) => !r.name) ? " A private repository is listed without its name." : ""}</p><div class="tablewrap"><table class="dt rows"><thead><tr><th>Repository</th><th>GenClass app</th><th></th></tr></thead><tbody>${linkedRows}</tbody></table></div>${table ? "" : errp}</div></section>` : ""}
 </div>
 </div>`;
   const script = `
@@ -242,6 +280,17 @@ ${table ? `<section class="pnl"><div class="pnl-h"><h2>Repositories</h2><span cl
       gcPost("/api/account/github/repos/" + encodeURIComponent(b.getAttribute("data-pause")), { paused: !on })
         .then(function(){ b.setAttribute("data-on", on ? "0" : "1"); b.lastChild.textContent = on ? "Pause" : "Resume"; }, say)
         .then(function(){ b.disabled = false; });
+    });
+  });
+  document.querySelectorAll("button[data-unlink]").forEach(function(b){
+    b.addEventListener("click", function(){
+      say(null); b.disabled = true;
+      gcPost("/api/account/github/repos/" + encodeURIComponent(b.getAttribute("data-unlink")), { project_id: null })
+        .then(function(){
+          var row = b.closest("tr"), st = row && row.querySelector("[data-linkstate]");
+          if (st) st.textContent = "Not linked";
+          b.lastChild.textContent = "Unlinked";
+        }, function(e){ b.disabled = false; say(e); });
     });
   });
 })();`;

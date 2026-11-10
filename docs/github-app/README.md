@@ -52,11 +52,23 @@ It reads the race files your workflow uploads, never your source code. It is fre
    A whole workflow file is in [`workflows/genclass-e2e.yml`](workflows/genclass-e2e.yml). The job needs no secret and
    no write permission, so it works the same for pull requests from forks.
 
-4. **Open a pull request.** The GenClass check appears on its commits. When something is flagged, the comment below
-   appears, and later pushes edit it in place.
+4. **Open a pull request.** When its test run has uploaded race files, the GenClass check appears on the commit. When
+   something is flagged, the comment below appears, and later pushes edit it in place. Once race files were read for
+   a repository, the check is on every commit of every pull request there, with or without race files.
 
-Reviews start with the first push or comment after the app is installed; a pull request that was already open is
-picked up on its next push, or when someone comments `@genclass-dev review`.
+Nothing is written when the app is installed. Reviews start with the first push or comment after that; a pull request
+that was already open is picked up on its next push, or when someone comments `@genclass-dev review`.
+
+Until race files were read for a repository once, the app stays silent there: a pull request without race files gets
+no check and no comment. There are two exceptions. On an installation for selected repositories, the first pull
+request the app sees without race files gets one check, marked skipped, that says what the app reads and how to set it
+up; it is written once per repository, and not where `check.fail_on` is set, because a skipped check passes. (An
+installation for all repositories gets none: most of its repositories never asked for one.) And
+`@genclass-dev review`, or Re-run on the check, always gets an answer.
+
+Race files uploaded for a pull request from a fork review that pull request like any other. They do not switch the
+check on for the repository's other pull requests: for that, race files must come from a branch of the repository or
+from an author GitHub lists as its owner, member or collaborator.
 
 ## What a review looks like
 
@@ -85,7 +97,10 @@ Reply `@genclass-dev replay 1` for the steps to reproduce a finding, or `@gencla
 ```
 
 The check on the commit carries the same table as its summary and the whole race report on its page. By default it is
-neutral with findings and green with none; it fails only if you ask it to (`check.fail_on`).
+neutral with findings and green with none; it fails only if you ask it to (`check.fail_on`). It is green only when
+every race file of the commit was read: files that are not race files give "No race file could be read", neutral, and
+a commit whose artifacts could be read only in part is neutral too. A result a commit already has is kept when its
+race files cannot be read again (an expired artifact, a failed download).
 
 ## What the lines mean
 
@@ -99,8 +114,8 @@ neutral with findings and green with none; it fails only if you ask it to (`chec
   others) with its confidence.
 - **Reproducible** means flagged in `min_seeds` or more seeds of the same test (2 by default). A signature seen in
   fewer seeds may depend on that seed's timing: run more seeds before acting on it.
-- **Status**, from push to push: *New* (first seen at this commit), *Still flagged*, *Not flagged now* (its test ran
-  at this commit without it), *Test not in this run*.
+- **Status**, from push to push: *New* (seen for the first time at this commit, or flagged again after a run in which
+  it was not), *Still flagged*, *Not flagged now* (its test ran at this commit without it), *Test not in this run*.
 - **"Not flagged now" is not "fixed".** The app never says fixed. A replay that reproduced the finding before your
   change and does not after it is the evidence of a fix, and that happens on your machine or in your CI
   ([Fix with a coding agent](#fix)).
@@ -119,15 +134,19 @@ Each on a line of its own, in a comment on the pull request:
 | `@genclass-dev replay <n>` | Replies with the steps to reproduce finding n on your machine. | write access, or the author |
 | `@genclass-dev fix <n>` | Replies with a brief a coding agent can work from ([below](#fix)). Never for a pull request from a fork. | write access |
 | `@genclass-dev issue <n>` | Opens an issue for finding n. | write access |
-| `@genclass-dev pause` / `resume` | Stops and starts updates on this pull request. | write access |
+| `@genclass-dev pause` / `resume` | Stops and starts updates on this pull request. `resume` reads the current commit at once. | write access |
 | `@genclass-dev help` | Lists the commands. | write access, or the author |
 
 `/genclass` works in place of the mention for every command (`/genclass review`, `/genclass fix 2`), and notifies
 nobody. The mention is `@genclass-dev`, the organization that owns the app; `@genclass` without `-dev` is another GitHub
 account and is never read as a command.
 
-"Write access" is what GitHub says about the commenter at that moment. The app adds an eyes reaction to a command it
-took.
+"Write access" is GitHub's answer when the app asks it for the commenter's permission on the repository, at that
+moment: admin, maintain or write. The role GitHub shows next to a comment is not used, so a member whose organization
+membership is private can use every command, and a member who can only read cannot. A `review` from the pull
+request's author without write access reads the commit again; it does not lift a pause on the pull request or
+`reviews.ignore_authors`. The app adds an eyes reaction to a command it took. A `review` that an hourly limit stopped
+gets a reply that says so.
 It never answers a bot, a comment that only mentions it in a sentence, a quoted line or a code block, and it says
 nothing at all to someone who may not use a command.
 
@@ -160,9 +179,25 @@ issues: never           # never | merge: open an issue when a pull request merge
 the default stands in and the check lists what was wrong. The file is a small subset of YAML (mappings, lists,
 strings, numbers, true and false; no anchors, tags or multi-line strings).
 
-With `check.fail_on` set, the check stays "in progress" on a new commit until its test run finishes, so a required
-check cannot pass before the race files arrive. A commit that starts no workflow at all keeps waiting;
-`@genclass-dev review` ends the wait with what there is.
+The defaults apply when the repository has no settings file. When GitHub cannot give the app the file (an outage, a
+timeout), the app does not fall back to the defaults: it writes nothing for that event and reads the file again at
+the next one, or at the daily sweep.
+
+With `issues: merge`, a pull request that merges gets one issue for the reproducible findings flagged in the race
+files of the commit that merged. If that commit's test run was not read before the merge, it is read first; when it
+uploaded no race files, no issue is opened. A finding that an issue from the app already lists, open or closed, is
+not filed again: one finding gets one issue, however many pull requests merge with it. When two pull requests merge
+at the same moment, one is decided at once and the other by the daily sweep. A paused pull request or repository gets
+none. `@genclass-dev issue <n>` opens one on request.
+
+With `check.fail_on` set, and once race files were read for the repository, the check stays "in progress" on a new
+commit until its test run finishes, so a required check cannot pass before the race files arrive. A check in progress
+is always finished. The commit's last workflow run to finish ends the wait. So do `@genclass-dev review` and Re-run,
+with what there is. When the pull request is paused or converted to a draft, the check ends neutral at once and says
+why, and a setting that leaves the pull request out does the same at its next event; when it is closed, or a newer
+commit is pushed, the old commit's check ends cancelled. When an hourly limit is reached the check stays in progress
+and says so. A commit that starts no workflow at all, and a review that failed, are picked up by a sweep that runs
+once a day and ends the wait with what there is.
 
 ## Production findings
 
@@ -175,6 +210,11 @@ changed files serve.
    kept; the answer is kept for 30 minutes.
 2. Pick the GenClass app for a repository. You need write access to the repository and the app must be in your
    account.
+
+Taking a link away needs less: the account that owns the linked app can always do it, also after it lost write access
+to the repository. The page lists the repositories linked to one of your apps that GitHub's answer does not list (this
+page has not asked GitHub in the last 30 minutes, or you can no longer reach them), each with **Unlink**; a private
+one is listed without its name.
 
 What appears on the pull request is the kind of each finding, the page route and a count. On a public repository,
 everyone who can see the pull request sees them. Changed files are matched to pages by path alone, for Next.js (app
@@ -216,9 +256,9 @@ The app itself never writes code: it has no access to repository contents. What 
 | Pull requests: read and write | The list of files a pull request changes (their paths and which lines the diff shows), and its own comments. |
 | Checks: write | The GenClass check on each commit. |
 | Actions: read | The workflow runs of a pull request's head commit, and the artifact with the race files. |
-| Issues: read and write | GitHub delivers pull-request comments (the commands) under this permission. The app reacts to a command, and opens an issue only when a setting or a person with write access asks. |
+| Issues: read and write | GitHub delivers pull-request comments (the commands) under this permission. The app reacts to a command, and opens an issue only when a setting or a person with write access asks. Before it opens one for `issues: merge` it lists the issues it opened itself, so that no finding is filed twice. |
 | Single file: read, `.github/genclass.yml` | Your settings. |
-| Metadata: read | Required by GitHub for every app. |
+| Metadata: read | Required by GitHub for every app. With it the app asks what permission a commenter has on the repository before it takes a command. |
 
 It does not ask for repository contents. It cannot read, clone or change your code, branches, workflows, secrets or
 settings, and it never opens a pull request. Events it receives: pull requests, pull-request and issue comments,
@@ -227,11 +267,14 @@ workflow runs, check runs (its own "Re-run"), and installs and uninstalls.
 ## What it keeps
 
 - For an installation: the GitHub account's id and name, whether all or selected repositories, and the GenClass
-  account that manages it, if one connected.
-- For a repository: its id, name and visibility, only when it is linked to a GenClass app or paused.
-- For a pull request: the ids of the app's comment and check, the head commit, and per finding a fingerprint (a
-  hash), its group, operation, test title and seeds: what is in the comment already. 30 days after it closes, the row
-  is deleted.
+  account that manages it, if there is one ([Plans](#plans)).
+- For a repository: its id, name and visibility, only when it is linked to a GenClass app or paused. And, by id only,
+  when each of three things happened for it, so that none happens twice: race files were first read, the one check
+  that says what the app reads was written, the one check that says a private repository needs a plan was written.
+  And for a minute at most, that a pull request has the repository's turn to open an issue.
+- For a pull request: the ids of the app's comment and check, the head commit, whether it is paused, the number of
+  the issue opened for it, and per finding a fingerprint (a hash), its group, operation, test title and seeds: what
+  is in the comment already. 30 days after it closes, the row is deleted.
 - Webhook delivery ids, for a week, so that one delivery is handled once.
 - Never: source code, diffs, file contents, race files or tokens. An artifact is read in memory and dropped; the
   installation token lives in memory for under an hour; your GitHub token from Connect is used once.
@@ -244,31 +287,52 @@ Uninstalling the app, or taking a repository out of it, deletes what was kept fo
 - **Public repositories: free**, for every account and organization, with no limit on repositories or pull requests
   other than the [limits](#limits) below.
 - **Private repositories: the Enterprise plan**, by agreement (mehar@daybot.ca), until a paid plan is offered on
-  GitHub Marketplace. Without it a private repository is not read at all: its pull requests get one neutral check that
-  says so, and no comment.
+  GitHub Marketplace. Without it a private repository is not read at all: it gets one neutral check that says so, on
+  the first pull request the app sees there, once per repository, and no comment.
+- **Whose plan counts.** The plan that counts for an installation's private repositories is the plan of the GenClass
+  account that manages it. An installation on your own GitHub account is managed by the GenClass account you choose
+  Connect GitHub from. For an organization, the managing account is set when the plan is agreed: write to
+  mehar@daybot.ca. Being able to push to a repository does not make an account the manager of its installation.
+  <https://genclass.dev/account/github> shows for each installation whether your account, another account or no
+  account manages it.
 
 ## Limits
 
 | | |
 |---|---|
-| Reviews per installation | 120 an hour |
-| Reviews per pull request | 400 in all |
-| Artifacts read per review | 6, each at most 4 MB (12 MB in all) |
-| Race files read per review | 600, each at most 256 KB |
-| Workflow runs looked at per commit | the 8 newest |
-| Findings remembered per pull request | 100 |
+| Reviews per installation | 120 an hour. Only a review that reads a commit's race files counts. Of them, at most 90 are started by pushes, and at most 60 are for pull requests whose author is not an owner, member or collaborator of the repository |
+| Reviews per pull request | 30 an hour; 400 that wrote something, in all |
+| One webhook's work | 20 seconds; what is left is picked up at the next event, a redelivery or the daily sweep |
+| Artifacts read per review | 6, each at most 4 MB as a zip (12 MB in all) |
+| Race files read per review | 600, each at most 64 KB, and 4 MB in all, unzipped. A file that is started and cannot be read counts too |
+| Signatures | 200 in one race file; 2,000 in the race files of one review |
+| Text in a race file | 1,000 characters for a test's name, 2,000 for an evidence line, 600 for any other string |
+| Workflow runs per commit | The first 100 GitHub lists are looked at. The artifacts of at most 30 finished runs are asked for: the most recently finished first, and one run of every workflow before a second run of any |
+| Findings remembered per pull request | 100. A finding that is flagged keeps its number. With more than 100 flagged at once, the rest are counted in the comment and the check ("N more findings flagged at this commit are not listed") and count for `check.fail_on` |
 | Comment and check size | 60,000 characters; a longer report is shortened and says so |
 | Settings file | 16 KB |
 
+What is over a limit is not read, and the review says so: a race file is listed under "Files skipped" with the reason,
+and a note in the check and the comment says what was left out. The limits count for one review as a whole, however
+many artifacts the race files come in. `@genclass/playwright`'s fixture writes within the limits for one race file (of
+a test with more signatures than fit it leaves out the least confident, and the report says how many), so those stop
+only files something else wrote. With more than 30 finished workflow runs on a commit, a note says how many had their
+artifacts looked at, when no race file was read or when a workflow had none of its runs looked at.
+
 When GitHub's own rate limit for the installation is used up, the app stops until the time GitHub names and picks the
-pull request up again at its next event.
+pull request up again at its next event, or at the daily sweep.
 
 ## Security
 
 - Every webhook is checked against the app's secret before anything is parsed, and a delivery is handled once.
 - Race files are untrusted input, most of all from forks. They are read under the limits above, only `.json` entries,
-  each through the format's validator; nothing in them is executed or fetched. Text from them is escaped before it is
-  shown, so it cannot become markup, a link, an `@mention` or an issue reference.
+  each through the format's validator; nothing in them is executed or fetched. An artifact is unzipped by the app's
+  own code, which stops at the size an entry claims, so an archive made to unpack into gigabytes costs what it claims
+  and no more. Text from race files is escaped before it is shown, so it cannot become markup, an `@mention`, an issue
+  or pull request reference, or a link to a web address: an invisible zero-width space breaks `#` before a number, `@`
+  before a name, `://` and `www.`. An address in a test's name or an evidence line is shown as text, and the address
+  of another repository's issue leaves no "mentioned this" there. Operations are shown as code, where GitHub links
+  nothing.
 - The installation token is asked for one repository at a time, and the address GitHub gives for an artifact is
   fetched without any credential.
 - Report a vulnerability privately: [SECURITY.md](../../SECURITY.md).
@@ -278,8 +342,15 @@ pull request up again at its next event.
 - **"No race files for this commit".** No artifact whose name starts with `genclass` was uploaded by a workflow run on
   that commit. Check the upload step ran (`if: ${{ !cancelled() }}`) and that `test-results/genclass` has files:
   `npx genclass-playwright-report` prints the same report locally.
-- **The check stays "Waiting for this commit's test run".** A workflow run on the commit has not finished, or GitHub's
-  rate limit was hit. `@genclass-dev review` reads again.
+- **No check at all.** No race file was read for the repository yet, so a pull request without them gets none
+  ([Setup](#setup), step 4). That includes an artifact that was uploaded and could not be read. `@genclass-dev review`
+  answers with what there is, and says what was wrong with an artifact.
+- **The check stays "Waiting for this commit's test run".** A workflow run on the commit has not finished. When the
+  last one finishes without race files, the check says "No race files for this commit". `@genclass-dev review` reads
+  at once; a wait that nothing ended is ended by the daily sweep.
+- **"Hourly review limit reached".** The installation or the pull request used its reviews for this hour
+  ([Limits](#limits)). Re-run the check or comment `@genclass-dev review` after the hour; the daily sweep reads the
+  commit otherwise.
 - **No comment.** The default posts one only when something is flagged (`comment: always` changes that).
 - **A private repository shows "Private repositories need a plan".** See [Plans](#plans).
 - **Settings do not apply.** The file must be on the default branch; the check lists any mistake in it. Changes are

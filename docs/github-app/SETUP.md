@@ -86,7 +86,7 @@ GitHub". If the app's URL name is not `genclass-dev`, set `GITHUB_APP_SLUG` in `
 
 ## 4. The tables
 
-Migration `0013_github_app.sql` adds six tables and changes none. As for every migration, look before applying (an
+Migration `0013_github_app.sql` adds seven tables and changes none. As for every migration, look before applying (an
 earlier migration was once left unapplied):
 
 ```bash
@@ -104,6 +104,9 @@ The worker tolerates the other order too: with the tables missing, the app's own
 
 `wrangler.toml` gained one route, `genclass.dev/github*`, and two vars.
 
+The checks the app writes link to `docs/github-app/README.md` on the `main` branch of this repository. Merge this
+branch to `main` before deploying: until the file is there, those links answer 404.
+
 ```bash
 npx --yes wrangler@4 deploy
 ```
@@ -116,8 +119,10 @@ npx --yes wrangler@4 deploy
    GitHub and in the worker differ; a 503 means a secret is missing.
 3. Install the app on one repository of your own that has Playwright tests with the fixture and the upload step
    ([README.md](README.md), "Setup").
-4. Open a pull request there. Expect, in order: the GenClass check, neutral, "No race files for this commit"; when the
-   test run finishes, the same check with the findings, and the comment if anything was flagged.
+4. Open a pull request there. Expect, in order: the GenClass check, skipped, "No race files to read yet" (written once
+   per repository, and only on an installation for selected repositories; on one for all repositories there is no
+   check yet); when the test run finishes, the same check with the findings, and the comment if anything was flagged.
+   From then on a pull request without race files gets "No race files for this commit", neutral.
 5. Comment `@genclass-dev help`. Expect an eyes reaction and one reply.
 6. Sign in at `https://genclass.dev/account/github`, Connect GitHub, link the repository to an app, push again. Expect
    the "In production" section when the pull request changes a route file.
@@ -160,18 +165,29 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
   and the pages are gone, at once. Or suspend installations from the app's page on GitHub.
 - **Stop one repository.** Its owner can pause it on `/account/github` or with `@genclass-dev pause` on a pull request. By
   hand: `UPDATE github_repos SET paused = 1 WHERE full_name = '<owner/name>'` (insert the row if there is none).
+- **Take a repository's link to an app away.** Someone with write access to the repository can on `/account/github`,
+  and so can the account that owns the linked app, with or without access to the repository. By hand:
+  `UPDATE github_repos SET project_id = NULL, linked_by = NULL, linked = NULL WHERE repo_id = ?`.
 - **A delivery failed.** GitHub does not retry. The app forgets a delivery whose job failed, so Redeliver on the app's
-  Advanced page runs it again; a delivery that succeeded is not run twice. The only thing logged is one line per
-  failed delivery: the event's name and one word for the reason (`npx --yes wrangler@4 tail` shows it live; for a
-  private key the worker cannot use, the line also says what is wrong with it, never the key).
+  Advanced page runs it again; a delivery whose job ended is not run twice. A job stops itself 20 seconds after its
+  delivery arrived (the platform stops work 30 seconds after the response): that is logged as `deadline`, and the
+  delivery can be redelivered. A delivery whose job the platform stopped anyway, with no log line, can be redelivered
+  a minute after it arrived. Without a redelivery, the pull request is reviewed at its next event, or by the daily
+  sweep (the worker's cron), which reviews every pull request whose review has been owed for more than an hour; that
+  is also what finishes a check left in progress. The only thing logged is one line per failed delivery: the event's
+  name and one word for the reason (`npx --yes wrangler@4 tail` shows it live; for a private key the worker cannot
+  use, the line also says what is wrong with it, never the key).
 - **Rotate the private key.** Generate a new key on the app's page, `wrangler secret put GITHUB_APP_PRIVATE_KEY`, then
   delete the old key on GitHub. Tokens in flight keep working for up to an hour.
 - **Rotate the webhook secret.** GitHub has one secret at a time: set it on GitHub and in the worker together, then
   redeliver what failed in between.
-- **Rate limits.** The app stops calling GitHub for an installation until the time GitHub names. 120 reviews an hour
-  per installation and 400 per pull request are its own caps (`src/github/store.ts`).
+- **Rate limits.** The app stops calling GitHub for an installation until the time GitHub names. Its own caps
+  (`src/github/store.ts`): 120 reviews an hour per installation that read a commit's race files (90 of them started by
+  pushes, 60 for pull requests by authors from outside the repository), 30 reviews an hour per pull request, and 400
+  reviews or replies written per pull request in all.
 - **A request to delete data.** Uninstalling deletes everything kept for an installation. For one repository:
-  `DELETE FROM github_prs WHERE repo_id = ?` and `DELETE FROM github_repos WHERE repo_id = ?`.
+  `DELETE FROM github_prs WHERE repo_id = ?`, `DELETE FROM github_repos WHERE repo_id = ?` and
+  `DELETE FROM github_repo_facts WHERE repo_id = ?`.
 
 ## Plans and private repositories
 
@@ -179,6 +195,17 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
 - `GITHUB_APP_PRIVATE_REPOS = "plan"` (the default) reviews a private repository only when the GenClass account
   managing the installation has a plan with `github_private` (`billing/plans.json`: Enterprise, so a grant by
   `comp_until` is how an agreement is switched on), or the GitHub account has a paid plan on GitHub Marketplace.
+- The account managing an installation is `github_installations.owner`. For an installation on a person's own GitHub
+  account, the worker sets it when that person uses Connect GitHub: GitHub says who they are, and the installation is
+  on that account. For an organization the worker never sets it. GitHub answers who administers an organization only
+  to an app with the organization permission "Members" (`GET /user/memberships/orgs/{org}`), which this app does not
+  ask for, and being able to push to one of the organization's repositories proves nothing about the organization.
+  Set it by hand when the agreement is made, with the id of the organization's GenClass account (`accounts.id`) and
+  the installation's id (`github_installations.id`, also in the address of the installation's page on GitHub):
+  `npx --yes wrangler@4 d1 execute genclass-dashboard --remote --command "UPDATE github_installations SET owner = '<accounts.id>' WHERE id = <installation id>"`.
+  `owner = NULL` takes it away again.
+- Connect GitHub never takes an installation from an account whose plan has `github_private` for one whose plan has
+  not, so an account set by hand stays.
 - `GITHUB_APP_PRIVATE_REPOS = "open"` reviews every repository: for a beta, or a self-hosted collector.
 - The two lines added to `billing/plans.json` are marked `available: false`, so the pricing page shows them as coming
   next. Set them to `true` when the app is live.
@@ -189,6 +216,12 @@ The listing draft, GitHub's requirements and what is still missing are in
 [`docs/adoption/listings/github-marketplace.md`](../adoption/listings/github-marketplace.md). In short: a free listing
 needs the app to be public, a logo and screenshots, links to a privacy policy and to support, and a listing webhook
 (`https://genclass.dev/api/github/marketplace`). A paid plan needs a verified publisher and 100 installations first.
+
+In the listing's webhook form, choose **Content type: application/json**. The form's other choice,
+`application/x-www-form-urlencoded`, sends the same JSON in a form field named `payload`; the worker reads that too,
+after the same signature check. GitHub does not send a Marketplace delivery again, so look at the listing's first
+delivery (the ping) in its delivery list: the answer must be 202. A 401 means the secret differs, a 400 that the body
+could not be read.
 
 ## A self-hosted collector, GitHub Enterprise Server
 

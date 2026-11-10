@@ -193,6 +193,66 @@ describe("summarize: nothing in the comment links an issue or mentions anyone on
     expect(md).toContain("### t # x @ y\n");
     expect(escapeMarkdown("#12 and @x")).toBe(`\\#${Z}12 and @${Z}x`);
   });
+
+  it("puts a zero-width space in :// and in www., so no address in the files becomes a link or a reference on another repository", () => {
+    // GitHub links a scheme followed by "://" wherever it stands; the address of an issue also leaves a "mentioned this" there
+    expect(escapeMarkdown("see https://github.com/some-org/some-repo/issues/1")).toBe(`see https:${Z}//github.com/some-org/some-repo/issues/1`);
+    expect(escapeMarkdown("http://a.example ftp://b.example HTTPS://C.EXAMPLE")).toBe(`http:${Z}//a.example ftp:${Z}//b.example HTTPS:${Z}//C.EXAMPLE`);
+    // and "www." after a space, "(", "*", "_" or "~": every one is broken, whatever stands before it
+    expect(escapeMarkdown("www.a.example (www.b.example) _www.c.example ~www.d.example WWW.E.EXAMPLE xwww.f.example")).toBe(
+      `www${Z}.a.example (www${Z}.b.example) \\_www${Z}.c.example \\~www${Z}.d.example WWW${Z}.E.EXAMPLE xwww${Z}.f.example`,
+    );
+    // the bracket form is escaped as before, and what is left of it is no address either
+    expect(escapeMarkdown("[x](https://evil.example)")).toBe(`\\[x\\](https:${Z}//evil.example)`);
+    expect(escapeMarkdown("a :/ b :// c ://// www")).toBe(`a :/ b :${Z}// c :${Z}//// www`);
+    const md = summarize(
+      [
+        {
+          name: "a.json",
+          content: file(
+            "cart.spec.ts > regression https://github.com/vercel/next.js/issues/1 www.evil.example",
+            1,
+            [sig({ trigger: "request", diagnosis: "duplicate", op: "GET https://api.example/items", evidence: "(http://evil.example/login) and [x](https://evil.example) or www.evil.example/path", seeds: [1] })],
+            { mode: "observe http://evil.example" },
+          ),
+        },
+        { name: "b.json", content: file("quiet www.evil.example https://evil.example", 1, [], { fixture: { model: "skip", agent: "see https://evil.example/agent", chaosApplied: null, serviceWorker: false } }) },
+      ],
+      { title: "Races https://evil.example" },
+    );
+    expect(md).toContain(`## Races https:${Z}//evil.example\n`);
+    expect(md).toContain(`### cart.spec.ts > regression https:${Z}//github.com/vercel/next.js/issues/1 www${Z}.evil.example\n`);
+    expect(md).toContain(`  > (http:${Z}//evil.example/login) and \\[x\\](https:${Z}//evil.example) or www${Z}.evil.example/path\n`);
+    expect(md).toContain(` · mode observe http:${Z}//evil.example\n`);
+    expect(md).toContain(`(witnesses not recorded: see https:${Z}//evil.example/agent)`);
+    // the operation is shown as code, as it was written: GitHub links nothing inside a code span
+    expect(md).toContain("`GET https://api.example/items`");
+    // nowhere else in the report: a scheme followed by "://", or "www."
+    expect(md.replace(/`[^`\n]*`/g, "")).not.toMatch(/:\/\/|www\./i);
+  });
+});
+
+describe("summarize: signatures the fixture left out of a file", () => {
+  it("says under the test that its list is not complete, and nothing for files without `dropped`", () => {
+    const one = (seed: number) => [sig({ trigger: "request", diagnosis: "duplicate", op: "POST /x", seeds: [seed] })];
+    const inputs = [
+      { name: "a.json", content: file("t", 1, one(1), { dropped: 12 }) },
+      { name: "b.json", content: file("t", 2, one(2)) },
+      // every signature of this file was left out: the test is not one where nothing was flagged
+      { name: "c.json", content: file("u", 1, [], { dropped: 3, model: { state: "loading" } }) },
+    ];
+    const s = buildSummary(inputs);
+    expect(s.tests.map((t) => [t.test, t.dropped])).toEqual([
+      ["t", { files: 1, signatures: 12 }],
+      ["u", { files: 1, signatures: 3 }],
+    ]);
+    expect(s.tests[1].modelNotReady.files).toBe(0);
+    const md = summarize(inputs);
+    expect(md).toContain("Note: in 1 of 2 files for this test the fixture left out 12 signatures, the least confident first, to keep the file within the format's limits, so this list is not complete.\n");
+    expect(md).toContain("- u (1 seed: 1; the fixture left out 3 signatures in 1 of 1 file)\n");
+    expect(summarize(fixtureInputs())).not.toContain("left out");
+    expect(buildSummary(fixtureInputs()).tests.every((t) => t.dropped.files === 0 && t.dropped.signatures === 0)).toBe(true);
+  });
 });
 
 describe("summarize: maxChars keeps the report within one GitHub comment", () => {

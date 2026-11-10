@@ -52,12 +52,18 @@ export interface DeliverOptions {
   path?: string;
   /** ctx.waitUntil as in production: the response comes first, the returned promises hold the work. */
   waitUntil?: (p: Promise<unknown>) => void;
+  /**
+   * Send it as a webhook set to application/x-www-form-urlencoded does: the JSON percent-encoded in a field named
+   * `payload`, the signature over those form bytes. A string is sent as the form body itself (to send a broken one).
+   */
+  form?: boolean | string;
 }
 
 /** Deliver a webhook as GitHub does: no Origin, no cookie, signed, with its event and delivery headers. */
 export async function deliver(env: Env, event: string, payload: unknown, o: DeliverOptions = {}): Promise<Response> {
-  const body = typeof payload === "string" ? payload : JSON.stringify(payload);
-  const headers: Record<string, string> = { "content-type": "application/json", "x-github-event": event, "x-github-delivery": o.id ?? deliveryId(), "user-agent": "GitHub-Hookshot/test" };
+  const json = typeof payload === "string" ? payload : JSON.stringify(payload);
+  const body = typeof o.form === "string" ? o.form : o.form ? new URLSearchParams({ payload: json }).toString() : json;
+  const headers: Record<string, string> = { "content-type": o.form ? "application/x-www-form-urlencoded" : "application/json", "x-github-event": event, "x-github-delivery": o.id ?? deliveryId(), "user-agent": "GitHub-Hookshot/test" };
   const sig = o.header === undefined ? await signature(body, o.secret) : o.header;
   if (sig !== null) headers["x-hub-signature-256"] = sig;
   return handle(new Request(`${ORIGIN}${o.path ?? "/api/github/webhook"}`, { method: "POST", headers, body }), env, { now, fetch: o.fetch, waitUntil: o.waitUntil });
@@ -109,6 +115,7 @@ export function pull(number: number, sha: string, over: Record<string, unknown> 
     draft: false,
     merged: false,
     user: { id: 77, login: "ada", type: "User" },
+    author_association: "MEMBER",
     head: { sha, ref: "feature", repo: { id: REPO.id, full_name: REPO.full_name } },
     base: { ref: "main", repo: { id: REPO.id, full_name: REPO.full_name } },
     ...over,
@@ -192,6 +199,8 @@ export interface FakeRun {
   created_at?: string;
   /** Artifacts by name: the zip bytes. */
   artifacts?: Record<string, Uint8Array>;
+  /** Names of artifacts GitHub lists as expired (their retention ran out). */
+  expired?: string[];
 }
 
 function decodeJwt(token: string): { header: any; payload: any; valid: boolean } {
@@ -205,7 +214,9 @@ function decodeJwt(token: string): { header: any; payload: any; valid: boolean }
 /**
  * A fake api.github.com (and the storage host artifacts redirect to). State is plain and public so a test can set it
  * up and look at it: `pulls`, `files`, `settings` (the settings file's text per repository), `runs`, `permissions`
- * (login -> permission), and what the app wrote: `checks`, `comments`, `reviews`, `issues`, `reactions`.
+ * (login -> permission; a login that is not set has "none"), `selections` (installation id -> "all" | "selected", what GET /app/installations/{id}
+ * answers; "selected" when not set), `privates` (ids of private repositories), and what the app wrote: `checks`,
+ * `comments`, `reviews`, `issues`, `reactions`.
  * `answer` runs first for every request (return a Response to take it over: a rate limit, a failure).
  */
 export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response | undefined } = {}) {
@@ -213,6 +224,8 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
   const storage: { url: string; headers: Record<string, string> }[] = [];
   const tokens = new Map<string, { installation: number; repos: number[] }>();
   const repos = new Map<string, number>([[REPO.full_name, REPO.id]]);
+  const selections = new Map<number, string>();
+  const privates = new Set<number>();
   const pulls = new Map<string, any>();
   const files = new Map<string, any[]>();
   const settings = new Map<string, string>();
@@ -222,7 +235,8 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
   const comments = new Map<number, { repo: string; issue: number; body: string }>();
   const deletedComments = new Set<number>();
   const reviews: { repo: string; number: number; body: any }[] = [];
-  const issues: { repo: string; number: number; title: string; body: string }[] = [];
+  /** Issues in the repositories. `user` (default: the app's bot) and `state` (default "open") are what GitHub lists them with. */
+  const issues: { repo: string; number: number; title: string; body: string; user?: string; state?: string }[] = [];
   const reactions: { comment: number; content: string }[] = [];
   const artifactBytes = new Map<number, Uint8Array>();
   const user = { id: 77, login: "ada", installations: [] as any[], repositories: new Map<number, any[]>() };
@@ -270,8 +284,19 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
       const nowS = Math.floor(now().getTime() / 1000);
       if (!jwt.valid || jwt.header.alg !== "RS256" || String(jwt.payload.iss) !== APP_ID || jwt.payload.iat > nowS || jwt.payload.exp <= nowS || jwt.payload.exp - nowS > 600) return ok({ message: "A JSON web token could not be decoded" }, 401);
       const token = `ghs_test_${++minted}_${"x".repeat(60)}`;
-      tokens.set(token, { installation: Number(mint[1]), repos: body?.repository_ids ?? [] });
-      return ok({ token, expires_at: new Date(now().getTime() + 3_600_000).toISOString(), permissions: {}, repository_selection: "selected" }, 201);
+      const ids: number[] = body?.repository_ids ?? [];
+      // GitHub refuses a token for a repository the installation does not cover
+      if (ids.some((id) => ![...repos.values()].includes(id))) return ok({ message: "There is at least one repository that does not exist or is not accessible to the parent installation." }, 422);
+      tokens.set(token, { installation: Number(mint[1]), repos: ids });
+      // as GitHub answers a token request for named repositories: the repositories themselves
+      const named = [...repos].filter(([, id]) => ids.includes(id)).map(([full_name, id]) => ({ id, name: full_name.split("/")[1], full_name, private: privates.has(id), owner: OWNER }));
+      return ok({ token, expires_at: new Date(now().getTime() + 3_600_000).toISOString(), permissions: {}, repository_selection: "selected", repositories: named }, 201);
+    }
+    const about = /^\/app\/installations\/(\d+)$/.exec(path);
+    if (about && method === "GET") {
+      // asked as the app: its JWT, never an installation token
+      if (!decodeJwt(bearer).valid) return ok({ message: "A JSON web token could not be decoded" }, 401);
+      return ok({ id: Number(about[1]), app_id: Number(APP_ID), account: OWNER, repository_selection: selections.get(Number(about[1])) ?? "selected" });
     }
 
     if (path === "/user" || path.startsWith("/user/")) {
@@ -329,7 +354,7 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
       const arts = Object.entries(run.artifacts ?? {}).map(([name, bytes], i) => {
         const id = run.id * 100 + i;
         artifactBytes.set(id, bytes);
-        return { id, name, size_in_bytes: bytes.length, expired: false };
+        return { id, name, size_in_bytes: bytes.length, expired: run.expired?.includes(name) ?? false };
       });
       return ok({ total_count: arts.length, artifacts: arts });
     }
@@ -344,7 +369,10 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
     if ((x = /^\/check-runs\/(\d+)$/.exec(rest)) && method === "PATCH") {
       const c = checks.get(Number(x[1]));
       if (!c) return notFound();
-      checks.set(Number(x[1]), { ...c, ...body });
+      const next = { ...c, ...body };
+      // a check run set back to "in progress" has no conclusion any more
+      if (body.status && body.status !== "completed") delete next.conclusion;
+      checks.set(Number(x[1]), next);
       return ok({ id: Number(x[1]) });
     }
     if ((x = /^\/issues\/(\d+)\/comments$/.exec(rest)) && method === "POST") {
@@ -371,6 +399,18 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
       issues.push({ repo: full, number, title: body.title, body: body.body });
       return ok({ number, id: ++nextId }, 201);
     }
+    if (rest === "/issues" && method === "GET") {
+      // as GitHub lists a repository's issues: newest first, open ones unless `state` says otherwise, by `creator` when given
+      const want = url.searchParams.get("state") ?? "open";
+      const creator = url.searchParams.get("creator");
+      const all = issues
+        .filter((i) => i.repo === full && (want === "all" || (i.state ?? "open") === want) && (!creator || (i.user ?? `${SLUG}[bot]`) === creator))
+        .map((i) => ({ number: i.number, title: i.title, body: i.body, state: i.state ?? "open", user: { login: i.user ?? `${SLUG}[bot]`, type: i.user ? "User" : "Bot" } }))
+        .reverse();
+      const per = Number(url.searchParams.get("per_page") ?? 30);
+      const page = Number(url.searchParams.get("page") ?? 1);
+      return ok(all.slice((page - 1) * per, page * per));
+    }
     return ok({ message: `fake GitHub has no ${method} ${path}` }, 404);
   };
 
@@ -380,6 +420,8 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
     storage,
     tokens,
     repos,
+    selections,
+    privates,
     pulls,
     files,
     settings,

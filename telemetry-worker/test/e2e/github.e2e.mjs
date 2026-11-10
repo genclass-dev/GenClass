@@ -227,7 +227,7 @@ compatibility_date = "2026-09-01"
 AUTH_ORIGIN = "${ORIGIN}"
 AUTH_RP_ID = "localhost"
 DASHBOARD_ORIGIN = "${ORIGIN}"
-GITHUB_APP_SLUG = "genclass"
+GITHUB_APP_SLUG = "genclass-dev"
 GITHUB_API_URL = "${GH}"
 GITHUB_WEB_URL = "${GH}"
 
@@ -246,6 +246,8 @@ writeFileSync(join(dir, ".dev.vars"), `GITHUB_APP_ID=${APP_ID}\nGITHUB_APP_WEBHO
 
 const github = standIn();
 let worker = null;
+// the worker's own output: on a failure, its lines about the webhook say why (one word per failed delivery)
+let log = "";
 const npx = process.platform === "win32" ? "npx.cmd" : "npx";
 try {
   await new Promise((ok, no) => github.once("error", no).listen(GH_PORT, "127.0.0.1", ok));
@@ -257,7 +259,6 @@ try {
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, CI: "1", WRANGLER_SEND_METRICS: "false" },
   });
-  let log = "";
   worker.stdout.on("data", (d) => (log += d));
   worker.stderr.on("data", (d) => (log += d));
   const up = await until("the worker to answer /v1/health", async () => (await fetch(`${ORIGIN}/v1/health`).catch(() => null))?.status === 200, 90_000);
@@ -279,7 +280,7 @@ try {
   const checkRun = [...seen.checks.values()][0] ?? {};
   check("the check: neutral, 2 findings, 1 reproducible", checkRun.conclusion === "neutral" && checkRun.output?.title === "2 findings, 1 reproducible", JSON.stringify(checkRun.output?.title));
   const comment = [...seen.comments.values()][0] ?? "";
-  check("the comment came through DecompressionStream, the validator and the summariser", comment.includes("| 1 | New | Duplicate submit · `POST /api/orders` |") && comment.includes("| 2 | New | Stale response · `GET /api/search` |"), comment.slice(0, 300));
+  check("the comment came through the unzip, the validator and the summariser", comment.includes("| 1 | New | Duplicate submit · `POST /api/orders` |") && comment.includes("| 2 | New | Stale response · `GET /api/search` |"), comment.slice(0, 300));
 
   // 3. the same run again: nothing is written twice
   const writes = () => seen.calls.filter((c) => /^(POST|PATCH) \/repos/.test(c)).length;
@@ -298,7 +299,7 @@ try {
   const page = await fetch(`${ORIGIN}/github`);
   check("/github is served and may be indexed", page.status === 200 && page.headers.get("x-robots-tag") === "index, follow" && (await page.text()).includes("Runtime evidence on your pull requests"));
   const install = await fetch(`${ORIGIN}/github/install`, { redirect: "manual" });
-  check("/github/install goes to the app's install page", install.status === 302 && install.headers.get("location") === `${GH}/apps/genclass/installations/new`, String(install.headers.get("location")));
+  check("/github/install goes to the app's install page", install.status === 302 && install.headers.get("location") === `${GH}/apps/genclass-dev/installations/new`, String(install.headers.get("location")));
   check("/github/setup is served", (await fetch(`${ORIGIN}/github/setup?installation_id=1`)).status === 200);
 
   // 6. uninstalled: nothing is left
@@ -312,6 +313,11 @@ try {
   failed++;
   console.error(`e2e: ${e?.message ?? e}`);
 } finally {
+  if (failed) {
+    const said = log.split("\n").filter((l) => /github webhook|Error|error/.test(l)).slice(-12);
+    console.log(`     the worker said:\n${said.map((l) => `       ${l.slice(0, 300)}`).join("\n") || "       (nothing about the webhook)"}`);
+    console.log(`     the last calls to the stand-in:\n${seen.calls.slice(-14).map((c) => `       ${c}`).join("\n")}`);
+  }
   if (worker) worker.kill("SIGTERM");
   github.close();
   await sleep(500);

@@ -13,23 +13,30 @@ import {
   emptyState,
   fingerprint,
   inlineComments,
+  issueFingerprints,
   MAX_COMMENT_CHARS,
   MAX_FINDINGS,
+  MAX_ISSUE_FINDINGS,
   mergeFindings,
   parseState,
   patchLines,
   renderCheck,
   renderFixBrief,
   renderHelp,
+  renderIntro,
   renderIssue,
+  renderOverLimit,
   renderReplay,
+  renderStopped,
   renderSummary,
   reproduceCommand,
   summaryOf,
   SUMMARY_MARKER,
   testLocations,
   testParts,
+  unread,
   type ReviewModel,
+  type StopReason,
 } from "../src/github/review.js";
 import { githubSetupPage } from "../src/github/pages.js";
 import { matchesRoute, routeOfFile, routesOfFiles } from "../src/github/routes.js";
@@ -116,9 +123,98 @@ describe("github app: findings from push to push (docs/github-app/README.md, \"W
     expect(b.state.findings).toHaveLength(MAX_FINDINGS);
     expect(b.state.findings.some((f) => f.op === "GET /old")).toBe(false);
     expect(new Set(b.state.findings.map((f) => f.n)).size).toBe(MAX_FINDINGS);
-    // 1 was the old finding's; the 120 new ones took 2 to 121, whether or not they were kept
-    expect(b.state.next).toBe(2 + MAX_FINDINGS + 20);
+    // 1 was the old finding's; the 100 that fit took 2 to 101, and the 20 that did not were given no number
+    expect(b.state.next).toBe(2 + MAX_FINDINGS);
+    expect(b.unlisted).toEqual({ n: 20, rep: 0 });
     expect(Math.max(...b.state.findings.map((f) => f.n))).toBeLessThan(b.state.next);
+  });
+
+  it("over MAX_FINDINGS flagged at once: the ones with a number keep it at every review, nothing comes back as new, and the rest are counted", async () => {
+    const t = "big.spec.ts > one";
+    const many = (seeds: number[]) => Array.from({ length: MAX_FINDINGS + 50 }, (_, i) => i).flatMap((i) => seeds.map((s) => ({ ...race(t, s, [{ d: "duplicate", op: `POST /api/x${i}` }]), name: `x${i}-s${s}.json` })));
+    const summary = summaryOf(many([1]), DEFAULT_SETTINGS);
+    const first = await mergeFindings(emptyState(), summary, SHA1);
+    expect(first.state.findings).toHaveLength(MAX_FINDINGS);
+    expect(first.state.findings.map((f) => f.n)).toEqual(Array.from({ length: MAX_FINDINGS }, (_, i) => i + 1));
+    expect(first.state.next).toBe(MAX_FINDINGS + 1);
+    expect(first.unlisted).toEqual({ n: 50, rep: 0 });
+    const numbers = (s: typeof first.state) => new Map(s.findings.map((f) => [f.fp, f.n]));
+    // the same commit read again, and the same findings at the next two commits: the same hundred, the same numbers
+    const again = await mergeFindings(first.state, summary, SHA1);
+    expect(numbers(again.state)).toEqual(numbers(first.state));
+    expect(again.state.findings.every((f) => f.status === "new")).toBe(true);
+    let state = again.state;
+    for (const sha of [SHA2, "c".repeat(40)]) {
+      const next = await mergeFindings(state, summary, sha);
+      expect(numbers(next.state)).toEqual(numbers(first.state));
+      expect(next.state.findings.every((f) => f.status === "still")).toBe(true);
+      expect(next.state.next).toBe(MAX_FINDINGS + 1);
+      expect(next.unlisted).toEqual({ n: 50, rep: 0 });
+      state = next.state;
+    }
+    // which hundred does not depend on the order the files came in
+    const reversed = await mergeFindings(emptyState(), summaryOf([...many([1])].reverse(), DEFAULT_SETTINGS), SHA1);
+    expect(new Set(reversed.state.findings.map((f) => f.fp))).toEqual(new Set(first.state.findings.map((f) => f.fp)));
+    // an inline mark stays with its finding
+    const marked = await mergeFindings({ ...first.state, inline: [first.state.findings[0]!.fp] }, summary, SHA2);
+    expect(marked.state.inline).toEqual([first.state.findings[0]!.fp]);
+    // room opens only when a finding is no longer flagged: then the oldest such one goes, and one more is taken in
+    const fewer = summaryOf(many([1]).filter((f) => f.name !== "x0-s1.json").concat([{ ...race(t, 1, []), name: "clean.json" }]), DEFAULT_SETTINGS);
+    const moved = await mergeFindings(state, fewer, "d".repeat(40));
+    expect(moved.state.findings).toHaveLength(MAX_FINDINGS);
+    expect(moved.state.findings.some((f) => f.op === "POST /api/x0")).toBe(false);
+    expect(moved.state.findings.filter((f) => f.status === "new").map((f) => f.n)).toEqual([MAX_FINDINGS + 1]);
+    expect(moved.unlisted.n).toBe(49);
+  });
+
+  it("findings that are not listed still count: in the headline, in the check's title, and for fail_on", async () => {
+    const t = "big.spec.ts > one";
+    // a hundred seen in one seed are kept; then a reproducible one appears, and there is no room for it
+    const single = Array.from({ length: MAX_FINDINGS }, (_, i) => ({ ...race(t, 1, [{ d: "duplicate", op: `POST /api/x${i}` }]), name: `x${i}.json` }));
+    const first = await mergeFindings(emptyState(), summaryOf(single, DEFAULT_SETTINGS), SHA1);
+    expect(first.unlisted).toEqual({ n: 0, rep: 0 });
+    const more = [...single, { ...race(t, 1, [{ d: "stale", op: "GET /api/late" }]), name: "late-1.json" }, { ...race(t, 2, [{ d: "stale", op: "GET /api/late" }]), name: "late-2.json" }];
+    const summary = summaryOf(more, DEFAULT_SETTINGS);
+    const second = await mergeFindings(first.state, summary, SHA2);
+    expect(second.state.findings.map((f) => f.n)).toEqual(first.state.findings.map((f) => f.n));
+    expect(second.unlisted).toEqual({ n: 1, rep: 1 });
+    const m = (failOn: "never" | "reproducible"): ReviewModel => ({ repo: "acme/shop", number: 12, headSha: SHA2, mention: "genclass-dev", ci: ci({ inputs: more }), summary, findings: second.view, production: null, settings: { ...DEFAULT_SETTINGS, check: { enabled: true, failOn } }, warnings: [], links: LINKS, unlisted: second.unlisted });
+    const line = "1 more finding flagged at this commit is not listed: at most 100 are kept for a pull request.";
+    expect(renderSummary(m("never"))).toContain(`**101 findings** in this pull request's tests at \`bbbbbbb\` · 1 reproducible`);
+    expect(renderSummary(m("never"))).toContain(line);
+    const check = renderCheck(m("reproducible"));
+    expect(check.title).toBe("101 findings, 1 reproducible");
+    expect(check.summary).toContain(line);
+    // the reproducible one has no row in the table, and a required check does not pass for that
+    expect(check.conclusion).toBe("failure");
+    expect(renderCheck(m("never")).conclusion).toBe("neutral");
+  });
+
+  it("some of a commit's race files unread: a finding flagged in that same commit's files before stays as it was", async () => {
+    const t1 = "checkout.spec.ts > checkout > places one order";
+    const shardA = [race(t1, 1, [{ d: "duplicate", op: "POST /api/orders" }]), race(t1, 2, [{ d: "duplicate", op: "POST /api/orders" }])];
+    const shardB = [race("search.spec.ts > s", 1, [{ d: "stale", op: "GET /api/search" }])];
+    const first = await mergeFindings(emptyState(), summaryOf([...shardA, ...shardB], DEFAULT_SETTINGS), SHA1);
+    expect(first.state.findings.map((f) => [f.n, f.status])).toEqual([[1, "new"], [2, "new"]]);
+    // the same commit read again with shard A unread: without `partial` its finding would be "not-run"
+    const strict = await mergeFindings(first.state, summaryOf(shardB, DEFAULT_SETTINGS), SHA1);
+    expect(strict.state.findings.map((f) => [f.n, f.status])).toEqual([[1, "not-run"], [2, "new"]]);
+    const partial = await mergeFindings(first.state, summaryOf(shardB, DEFAULT_SETTINGS), SHA1, { partial: true });
+    expect(partial.state.findings.map((f) => [f.n, f.status, f.rep])).toEqual([[1, "new", true], [2, "new", false]]);
+    // a test that did run in what was read, without the finding, is still "gone": that is evidence
+    const ranClean = await mergeFindings(first.state, summaryOf([race(t1, 1, []), ...shardB], DEFAULT_SETTINGS), SHA1, { partial: true });
+    expect(ranClean.state.findings.map((f) => [f.n, f.status])).toEqual([[1, "gone"], [2, "new"]]);
+    // on another commit, a test that is not in the files read is "not-run" as always
+    const next = await mergeFindings(first.state, summaryOf(shardB, DEFAULT_SETTINGS), SHA2, { partial: true });
+    expect(next.state.findings.map((f) => [f.n, f.status])).toEqual([[1, "not-run"], [2, "still"]]);
+  });
+
+  it("parseState keeps `held` only together with the commit a check waits on", () => {
+    expect(parseState(JSON.stringify({ v: 1, waiting: SHA1, held: true }))).toMatchObject({ waiting: SHA1, held: true });
+    expect(parseState(JSON.stringify({ v: 1, waiting: SHA1 }))).toMatchObject({ waiting: SHA1, held: false });
+    expect(parseState(JSON.stringify({ v: 1, waiting: null, held: true }))).toMatchObject({ waiting: null, held: false });
+    expect(parseState(JSON.stringify({ v: 1, waiting: "short", held: "yes" }))).toMatchObject({ waiting: null, held: false });
+    expect(emptyState().held).toBe(false);
   });
 
   it("parseState accepts only what mergeFindings writes and survives anything else", () => {
@@ -132,8 +228,9 @@ describe("github app: findings from push to push (docs/github-app/README.md, \"W
     expect(s.findings[0]!.test).toHaveLength(240);
     expect(s.next).toBe(3);
     expect(s.inline).toEqual(["0123456789abcdef"]);
-    expect(s.paused).toBe(false);
-    expect(s.issue).toBeNull();
+    // a pause and an issue number are the row's own columns (store.ts savePr): whatever the state holds is not read
+    expect(s).not.toHaveProperty("paused");
+    expect(s).not.toHaveProperty("issue");
     expect(s.evidence).toBeNull();
   });
 });
@@ -203,7 +300,7 @@ describe("github app: the summary comment and the check run", () => {
     expect(body).toContain("\\<script>alert(1)\\</script>");
     expect(body).toContain("Detection, weird\\<b>");
     expect(body).not.toContain("[link](https://evil.test)");
-    expect(body).toContain("\\[link\\](https://evil.test)");
+    expect(body).toContain("\\[link\\](https:\u200B//evil.test)");
     expect(body).not.toMatch(/@octocat|@team/);
     expect(body).toContain("@\u200Boctocat");
     expect(body).toContain("#\u200B12");
@@ -235,6 +332,78 @@ describe("github app: the summary comment and the check run", () => {
     expect(c).toMatchObject({ status: "completed", conclusion: "neutral", title: "No race files for this commit" });
     expect(c.summary).toContain("upload `test-results/genclass` from the workflow");
     expect(renderCheck({ ...none, settings: failing("any") }).conclusion).toBe("neutral");
+  });
+
+  it("no race file that could be read is not \"Nothing flagged\": the check is neutral and says so, with and without fail_on", async () => {
+    const junk = [{ name: "results.json", content: '{"suites":[]}' }, { name: "big.json", content: "", error: "not read: too large" }];
+    const failing = (failOn: "reproducible" | "any" | "never") => ({ ...DEFAULT_SETTINGS, check: { enabled: true, failOn } });
+    const summary = summaryOf(junk, DEFAULT_SETTINGS);
+    expect(summary).not.toBeNull();
+    expect(unread(summary)).toBe(true);
+    expect(unread(null)).toBe(false);
+    expect(unread(summaryOf(INPUTS, DEFAULT_SETTINGS))).toBe(false);
+    const m: ReviewModel = { repo: "acme/shop", number: 12, headSha: SHA1, mention: "genclass-dev", ci: ci({ inputs: junk }), summary, findings: [], production: null, settings: DEFAULT_SETTINGS, warnings: [], links: LINKS };
+    for (const failOn of ["never", "reproducible", "any"] as const) {
+      const c = renderCheck({ ...m, settings: failing(failOn) });
+      expect(c, failOn).toMatchObject({ status: "completed", conclusion: "neutral", title: "No race file could be read" });
+      expect(c.summary).toContain("No race file could be read for `aaaaaaa`: 2 files skipped. The report lists each with why.");
+      expect(c.summary).not.toContain("Nothing flagged");
+      expect(c.text).toContain("`results.json`");
+    }
+    // findings kept from an earlier commit do not make it a failure either: nothing was read at this one
+    const earlier = await model();
+    const stale = renderCheck({ ...m, headSha: SHA2, findings: earlier.m.findings, settings: failing("any") });
+    expect(stale).toMatchObject({ conclusion: "neutral", title: "No race file could be read" });
+    // the comment, where there is one, says the same in its first line
+    expect(renderSummary(m)).toContain("No race file could be read for `aaaaaaa`");
+    expect(renderSummary(m)).not.toContain("Nothing flagged");
+  });
+
+  it("race files read only in part are never a success; a failure found in what was read still fails", async () => {
+    const clean = await model([fixture("search-1.json")]);
+    expect(renderCheck(clean.m).conclusion).toBe("success");
+    expect(renderCheck({ ...clean.m, partial: true })).toMatchObject({ status: "completed", conclusion: "neutral", title: "Nothing flagged in 1 test" });
+    const { m } = await model();
+    const failing = { ...m.settings, check: { enabled: true, failOn: "reproducible" as const } };
+    expect(renderCheck({ ...m, partial: true, settings: failing }).conclusion).toBe("failure");
+  });
+
+  it("the one check before any race file was read: skipped, what the app reads, how to set it up, and that it is written once", () => {
+    const c = renderIntro({ links: LINKS, settings: { ...DEFAULT_SETTINGS, artifact: "races" } });
+    expect(c).toMatchObject({ status: "completed", conclusion: "skipped", title: "No race files to read yet", text: "" });
+    expect(c.summary).toBe(
+      "This check reads the race files the [GenClass Playwright fixture](https://example.test/docs) writes while your end-to-end tests run, from an artifact whose name starts with `races`; none has been read for this repository yet. " +
+        "[Set it up](https://example.test/setup) in two steps: use the fixture in your Playwright tests, and upload `test-results/genclass` from the workflow. " +
+        "This check is written once: the next one appears when a workflow run uploads race files.",
+    );
+    // three sentences, and none of them calls anything a bug
+    expect(c.summary.split(/(?<=[a-z]\.) (?=[A-Z[])/)).toHaveLength(3);
+    expect(c.summary.toLowerCase()).not.toMatch(/\bbug|\bfixed/);
+  });
+
+  it("a wait that ends without a review: what stops reviews ends a check neutral, an hourly limit keeps one in progress, and what is over for good cancels it", () => {
+    const at = (why: StopReason, held: boolean) => renderStopped(why, { mention: "genclass-dev", held, limit: 120, after: "14:00", head: SHA2 });
+    for (const why of ["plan", "repo-paused", "paused", "draft", "auto-off", "branch", "author", "check-off"] as const) {
+      for (const held of [true, false]) expect(at(why, held), why).toMatchObject({ status: "completed", conclusion: "neutral", text: "" });
+    }
+    for (const why of ["hour", "pr-hour"] as const) {
+      // still owed: a check that was in progress stays so, with the reason, and does not pass meanwhile
+      expect(at(why, true), why).toMatchObject({ status: "in_progress", conclusion: null, title: "Hourly review limit reached" });
+      expect(at(why, false), why).toMatchObject({ status: "completed", conclusion: "neutral" });
+      expect(at(why, true).summary).toContain("limit of 120 reviews an hour");
+      expect(at(why, true).summary).toContain("They are read when someone re-runs this check or replies `@genclass-dev review` after 14:00 UTC, and within a day otherwise.");
+    }
+    for (const why of ["pr-total", "closed", "superseded"] as const) {
+      // nothing will read this commit any more, and a required check must not pass because of that
+      expect(at(why, true), why).toMatchObject({ status: "completed", conclusion: "cancelled" });
+      expect(at(why, false), why).toMatchObject({ status: "completed", conclusion: "neutral" });
+    }
+    expect(at("superseded", true).summary).toBe("The pull request's head moved to `bbbbbbb` before this commit's test run was read.");
+    expect(at("paused", true).summary).toContain("`@genclass-dev resume`");
+    // where commands are off, no sentence names one
+    expect(renderStopped("auto-off", { mention: "genclass-dev", held: true, commands: false }).summary).not.toContain("@genclass-dev");
+    expect(renderStopped("hour", { mention: "genclass-dev", held: true, commands: false, limit: 120, after: "14:00" }).summary).not.toContain("@genclass-dev");
+    expect(renderOverLimit({ scope: "pull request", limit: 30, after: "14:00" })).toBe("<!-- genclass-bot:reply -->\nThis pull request reached the app's limit of 30 reviews an hour, so this commit's race files were not read. Ask again after 14:00 UTC.\n");
   });
 
   it("the check carries the settings file's problems, and a private repository without a plan gets one sentence", async () => {
@@ -329,6 +498,24 @@ describe("github app: replies", () => {
     expect(issue.body).toContain("### Duplicate submit on `POST /api/orders`");
     expect(issue.body).toContain("not a confirmed bug");
     expect(renderIssue([state.findings[0]!], { repo: "acme/shop", number: 12, headSha: SHA1, mention: "genclass-dev", links: LINKS, merged: false }).title).toBe("Duplicate submit on POST /api/orders (GenClass, from #12)");
+  });
+
+  it("an issue carries the fingerprint of each finding it lists, hidden, so that the same finding is not filed twice", async () => {
+    const { state } = await model();
+    const at = { repo: "acme/shop", number: 12, headSha: SHA1, mention: "genclass-dev", links: LINKS };
+    const both = renderIssue(state.findings, { ...at, merged: true });
+    expect(issueFingerprints(both.body)).toEqual(state.findings.map((f) => f.fp));
+    // one line of its own before the finding's heading, in a comment: nothing of it is shown
+    expect(both.body).toContain(`<!-- genclass-bot:finding ${state.findings[0]!.fp} -->\n### Duplicate submit on \`POST /api/orders\``);
+    // an issue opened on request carries it too
+    expect(issueFingerprints(renderIssue([state.findings[1]!], { ...at, merged: false }).body)).toEqual([state.findings[1]!.fp]);
+    // only the findings an issue lists: the first MAX_ISSUE_FINDINGS
+    const many = Array.from({ length: MAX_ISSUE_FINDINGS + 5 }, (_, i) => ({ ...state.findings[0]!, n: i + 1, fp: i.toString(16).padStart(16, "0") }));
+    expect(issueFingerprints(renderIssue(many, { ...at, merged: true }).body)).toEqual(many.slice(0, MAX_ISSUE_FINDINGS).map((f) => f.fp));
+    // anything that is not exactly a marker is not one
+    expect(issueFingerprints("<!-- genclass-bot:finding XYZ --> <!-- genclass-bot:finding 0123 --> genclass-bot:finding 0123456789abcdef")).toEqual([]);
+    expect(issueFingerprints(null)).toEqual([]);
+    expect(issueFingerprints(undefined)).toEqual([]);
   });
 });
 

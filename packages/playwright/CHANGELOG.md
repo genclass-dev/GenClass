@@ -7,6 +7,17 @@ Changes to `@genclass/playwright`, the Playwright reporter for
 
 The first version on npm.
 
+- **A web address in the files' text is not a link in the report**: `://` and `www.` get a zero-width space, like `#`
+  and `@` before them, so GitHub links no address from a test name or an evidence line and leaves no "mentioned this"
+  on another repository's issue. Operations stay as written, in code spans.
+- **The format has limits** (`RACES_LIMITS`): the validator refuses a file with more than 200 signatures, or with a
+  string over its length (1,000 characters for `test`, 2,000 for `evidence`, 600 for any other), like any other bad
+  field.
+- **The fixture writes within them**, and keeps a file to 64 KB: it cuts a longer string (it then ends with `…`), and
+  of a test with more signatures than fit it writes the most confident and puts the number left out in a new optional
+  field, `dropped`. The report says under that test that its list is not complete.
+- **A `location` the validator would refuse is left out by the fixture** (a path over 400 characters, or with a
+  backslash or a control character in a name): the file is written without it and validates.
 - **Where the test is declared**: the fixture writes an optional `location` (`{ file, line }`) into each race file,
   the test file's path relative to the repository root (`GITHUB_WORKSPACE` on GitHub Actions, else the Playwright
   config's directory) and the line Playwright gives for the test. It is left out when there is no line or the file is

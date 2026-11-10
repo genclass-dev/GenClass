@@ -14,13 +14,17 @@
 //   - a signature flagged in at least `minSeeds` seeds of the same test (default 2, the fixture's 2-seed rule) is
 //     marked reproducible; one seen in fewer may depend on that seed's timing.
 //   - totals per group.
+//   - a note under a test whose files say the fixture left signatures out to stay within the format's limits
+//     (`dropped`): that test's list is not complete.
 //   - nothing about interventions or false interventions: the files do not carry what an action did to the app, so
 //     the report makes no claim either way.
 //
 // Made to be posted as a GitHub comment: text from the files (test names, evidence lines) is escaped so it cannot
 // turn into markup, and "#123", "GH-123" and "@name" get a zero-width space so GitHub neither links the runtime's
-// request ids to the repository's issues nor mentions anyone. The whole report is kept under `maxChars` (default
-// 60000; GitHub rejects comment bodies over 65,536 characters) by leaving out the least important lines, with a note.
+// request ids to the repository's issues nor mentions anyone. "://" and "www." get one too: GitHub links a bare
+// address wherever it stands, and the address of an issue or pull request in another repository also leaves a
+// "mentioned this" entry there. The whole report is kept under `maxChars` (default 60000; GitHub rejects comment
+// bodies over 65,536 characters) by leaving out the least important lines, with a note.
 
 import { parseRaces, validateRaces } from "./schema.js";
 import type { GenClassRacesFile, RacesFileInput, RacesParseResult } from "./types.js";
@@ -120,6 +124,11 @@ export interface TestSummary {
   unchecked: { files: number; reasons: string[] };
   /** Files whose chaos was on but held no request (nothing matched, or a user route or service worker answered first). */
   chaosIdle: number;
+  /**
+   * Files in which the fixture left out signatures to keep the file within the format's limits (`dropped`), and how
+   * many it left out over those files. The test's list is then not complete, and the report says so.
+   */
+  dropped: { files: number; signatures: number };
   /** The chaos of the first file (by name) that carries one. */
   chaos?: GenClassRacesFile["chaos"];
 }
@@ -158,6 +167,8 @@ interface Acc {
   unchecked: number;
   reasons: Set<string>;
   chaosIdle: number;
+  dropFiles: number;
+  dropped: number;
   chaos?: GenClassRacesFile["chaos"];
 }
 
@@ -184,13 +195,19 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
     }
     files++;
     const f = r.file;
-    const t: Acc = tests.get(f.test) ?? { test: f.test, seeds: new Set(), files: 0, sigs: new Map(), modes: new Set(), notReady: 0, states: new Set(), unchecked: 0, reasons: new Set(), chaosIdle: 0 };
+    const t: Acc = tests.get(f.test) ?? { test: f.test, seeds: new Set(), files: 0, sigs: new Map(), modes: new Set(), notReady: 0, states: new Set(), unchecked: 0, reasons: new Set(), chaosIdle: 0, dropFiles: 0, dropped: 0 };
     tests.set(f.test, t);
     t.files++;
     t.seeds.add(f.seed);
     if (f.mode) t.modes.add(f.mode);
     const m = f.model;
-    const flaggedHere = f.signatures.some((x) => x.diagnosis !== "expected");
+    const left = f.dropped ?? 0;
+    if (left > 0) {
+      t.dropFiles++;
+      t.dropped += left;
+    }
+    // signatures the fixture left out were flagged too: such a file is never one where "nothing was flagged"
+    const flaggedHere = left > 0 || f.signatures.some((x) => x.diagnosis !== "expected");
     if (!flaggedHere && m === null) {
       t.notReady++;
       t.states.add("not started");
@@ -260,6 +277,7 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
       modelNotReady: { files: t.notReady, states: [...t.states].sort() },
       unchecked: { files: t.unchecked, reasons: [...t.reasons].sort() },
       chaosIdle: t.chaosIdle,
+      dropped: { files: t.dropFiles, signatures: t.dropped },
     };
     if (t.chaos !== undefined) ts.chaos = t.chaos;
     out.push(ts);
@@ -282,7 +300,7 @@ function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** U+200B ZERO WIDTH SPACE: invisible, and enough to stop GitHub's issue references and @mentions. */
+/** U+200B ZERO WIDTH SPACE: invisible, and enough to stop GitHub's issue references, @mentions and address links. */
 export const ZERO_WIDTH_SPACE = "\u200B";
 
 /**
@@ -291,8 +309,10 @@ export const ZERO_WIDTH_SPACE = "\u200B";
  * become one space. Then, so that a pull-request comment neither cross-links nor notifies anyone, a zero-width space
  * goes after "#" before a digit (the runtime's request ids, "#15", would link issue #15, and "owner/repo#15" another
  * repository's), after "GH-" before a digit, and after "@" before a letter or digit (a Playwright tag in a test
- * title, "@smoke", would mention a user or team). The text reads the same; copied, it carries the invisible
- * character.
+ * title, "@smoke", would mention a user or team). The same goes between ":" and "//" and between "www" and "."
+ * (every one, whatever stands before it): GitHub's autolinks need "://" after a scheme or the letters "www.", so no
+ * address in the text becomes a link, and the address of another repository's issue or pull request leaves no
+ * reference there. The text reads the same; copied, it carries the invisible character.
  */
 export function escapeMarkdown(s: string): string {
   return s
@@ -304,7 +324,9 @@ export function escapeMarkdown(s: string): string {
     .replace(/^(\d+)([.)])/, "$1\\$2")
     .replace(/#(?=\d)/g, `#${ZERO_WIDTH_SPACE}`)
     .replace(/\b(GH)-(?=\d)/gi, `$1-${ZERO_WIDTH_SPACE}`)
-    .replace(/@(?=[A-Za-z0-9])/g, `@${ZERO_WIDTH_SPACE}`);
+    .replace(/@(?=[A-Za-z0-9])/g, `@${ZERO_WIDTH_SPACE}`)
+    .replace(/:\/\//g, `:${ZERO_WIDTH_SPACE}//`)
+    .replace(/(www)\./gi, `$1${ZERO_WIDTH_SPACE}.`);
 }
 
 /** Inline code that survives backticks in the text. */
@@ -354,6 +376,10 @@ function fixtureNotes(t: TestSummary): string[] {
   if (t.chaosIdle > 0)
     out.push(
       `Note: in ${t.chaosIdle} of ${plural(t.files, "file")} for this test chaos was on but held no request (nothing matched its filter, or a route of the test or a service worker answered first).`,
+    );
+  if (t.dropped.files > 0)
+    out.push(
+      `Note: in ${t.dropped.files} of ${plural(t.files, "file")} for this test the fixture left out ${plural(t.dropped.signatures, "signature")}, the least confident first, to keep the file within the format's limits, so this list is not complete.`,
     );
   return out;
 }
@@ -495,7 +521,8 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
       const notReady = t.modelNotReady.files > 0 ? `; model not ready in ${t.modelNotReady.files} of ${plural(t.files, "file")} (${t.modelNotReady.states.map(escapeMarkdown).join(", ")})` : "";
       const unchecked = t.unchecked.files > 0 ? `; not checked in ${t.unchecked.files} of ${plural(t.files, "file")} (${t.unchecked.reasons.map(escapeMarkdown).join("; ")})` : "";
       const idle = t.chaosIdle > 0 ? `; chaos held no request in ${t.chaosIdle} of ${plural(t.files, "file")}` : "";
-      L.push(`- ${escapeMarkdown(t.test)} (${plural(t.seeds.length, "seed")}: ${seedList(t.seeds)}${notReady}${unchecked}${idle})`);
+      const left = t.dropped.files > 0 ? `; the fixture left out ${plural(t.dropped.signatures, "signature")} in ${t.dropped.files} of ${plural(t.files, "file")}` : "";
+      L.push(`- ${escapeMarkdown(t.test)} (${plural(t.seeds.length, "seed")}: ${seedList(t.seeds)}${notReady}${unchecked}${idle}${left})`);
     }
     if (quiet.length > lim.items) L.push(`- …and ${quiet.length - lim.items} more`);
     L.push("");
@@ -583,6 +610,6 @@ export function summarize(inputs: readonly RacesFileInput[], options: SummarizeO
 }
 
 // The format and its validator, so this entry alone is enough for a CI script.
-export { RACES_SCHEMA } from "./types.js";
+export { RACES_LIMITS, RACES_SCHEMA } from "./types.js";
 export type { GenClassRacesFile, RaceSignature, RacesFileInput, RacesLocation, RacesParseResult } from "./types.js";
 export { parseRaces, validateRaces, MAX_ERRORS } from "./schema.js";

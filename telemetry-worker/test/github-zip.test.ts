@@ -4,11 +4,27 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { crc32, DEFAULT_ZIP_LIMITS, MAX_SKIPPED, readZip, ZipError } from "../src/github/zip.js";
+import { constants, deflateRawSync } from "node:zlib";
+import { describe, expect, it, vi } from "vitest";
+import { crc32, DEFAULT_ZIP_LIMITS, inflateRaw, MAX_SKIPPED, readZip, ZipError } from "../src/github/zip.js";
 import { makeZip } from "./github-zip-helper.js";
 
 const text = (b: Uint8Array) => new TextDecoder().decode(b);
+
+/** Bits packed the way deflate packs them: the first bit is the lowest bit of the first byte. */
+function pack(bits: number[]): Uint8Array {
+  const out = new Uint8Array(Math.ceil(bits.length / 8));
+  bits.forEach((b, i) => {
+    if (b) out[i >> 3]! |= 1 << (i & 7);
+  });
+  return out;
+}
+/** A header field or extra bits: `n` bits of `value`, lowest first. A Huffman code: its `n` bits, highest first. */
+const field = (value: number, n: number): number[] => Array.from({ length: n }, (_, i) => (value >> i) & 1);
+const code = (value: number, n: number): number[] => Array.from({ length: n }, (_, i) => (value >> (n - 1 - i)) & 1);
+/** The start of a last block of a type (1: fixed codes, 2: dynamic), and the fixed code of a literal below 144. */
+const lastBlock = (type: number): number[] => [1, ...field(type, 2)];
+const literal = (byte: number): number[] => code(0x30 + byte, 8);
 
 /** mulberry32: a small seeded generator, so the random cases are the same on every run. */
 function prng(seed: number): () => number {
@@ -114,17 +130,168 @@ describe("github app: reading an artifact's zip (docs/github-app/README.md, \"Se
     expect(r.total).toBe(12);
   });
 
-  it("a deflate bomb costs one entry's cap: 8 MB of zeros declared as 100 bytes is dropped while it inflates", async () => {
+  it("a deflate bomb costs its claimed size: one whose data is longer than that size can need is not started, one that fits is cut at the size", async () => {
+    // 8 MB of zeros claimed to be 100 bytes: 8 KB of deflate data cannot be the stream of a 100-byte entry
     const bomb = makeZip([{ name: "bomb.json", data: new Uint8Array(8 * 1024 * 1024), declaredSize: 100 }, { name: "after.json", data: "still read" }]);
     expect(bomb.length).toBeLessThan(20_000);
-    const t0 = performance.now();
     const r = await readZip(bomb);
-    expect(performance.now() - t0).toBeLessThan(2000);
-    expect(r.skipped).toEqual([{ name: "bomb.json", reason: "too large" }]);
+    expect(r.skipped).toEqual([{ name: "bomb.json", reason: "corrupt entry" }]);
     expect(r.entries.map((e) => e.name)).toEqual(["after.json"]);
+    // and it counted for nothing: it was refused before any work
+    expect(r.spent).toBe("still read".length);
+    // 1 MB of zeros is about 1 KB of deflate data, which a 4000-byte entry could need: it is started, and stopped at 4000
+    const fits = makeZip([{ name: "bomb.json", data: new Uint8Array(1024 * 1024), declaredSize: 4000 }, { name: "after.json", data: "still read" }]);
+    const f = await readZip(fits);
+    expect(f.skipped).toEqual([{ name: "bomb.json", reason: "corrupt entry" }]);
+    expect(f.entries.map((e) => e.name)).toEqual(["after.json"]);
+    expect(f.spent).toBe(4000 + "still read".length);
     // declared honestly, it is not even started
     const honest = await readZip(makeZip([{ name: "big.json", data: new Uint8Array(DEFAULT_ZIP_LIMITS.maxEntryBytes + 1) }]));
     expect(honest.skipped).toEqual([{ name: "big.json", reason: "too large" }]);
+    expect(honest.spent).toBe(0);
+  });
+
+  it("no entry is handed to the runtime's DecompressionStream, which inflates a whole write before its output can be counted (workerd)", async () => {
+    // a stand-in for that behaviour: it counts what it is given and never gives anything back
+    let made = 0;
+    vi.stubGlobal(
+      "DecompressionStream",
+      class {
+        constructor() {
+          made++;
+          throw new Error("the zip reader must not use DecompressionStream");
+        }
+      },
+    );
+    try {
+      const zip = makeZip([
+        { name: "a.json", data: '{"schema":"genclass-races/1"}' },
+        { name: "zeros.json", data: new Uint8Array(100_000) },
+        { name: "bomb.json", data: new Uint8Array(1024 * 1024), declaredSize: 4000 },
+      ]);
+      const r = await readZip(zip);
+      expect(r.entries.map((e) => [e.name, e.bytes.length])).toEqual([
+        ["a.json", 29],
+        ["zeros.json", 100_000],
+      ]);
+      expect(made).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("inflateRaw gives what zlib's inflate gives, for stored, fixed and dynamic blocks at every level and strategy", () => {
+    const rand = prng(7);
+    const noise = (n: number) => Uint8Array.from({ length: n }, () => Math.floor(rand() * 256));
+    const race = JSON.stringify({ schema: "genclass-races/1", test: "checkout.spec.ts > checkout > places one order", seed: 1, signatures: Array.from({ length: 40 }, (_, i) => ({ sig: `request|duplicate|POST /api/orders/${i}`, trigger: "request", diagnosis: "duplicate", op: `POST /api/orders/${i}`, confidence: 0.9, evidence: `1 identical POST /api/orders/${i} request in the last 10s`, seeds: [1, 2] })) }, null, 2);
+    const far = new Uint8Array(70_000);
+    // a 300-byte pattern repeated 32 KB apart: matches at the largest distances
+    for (let i = 0; i < far.length; i++) far[i] = i % 32_700 < 300 ? (i * 7) & 0xff : Math.floor(rand() * 256);
+    const inputs: [string, Uint8Array][] = [
+      ["empty", new Uint8Array(0)],
+      ["one byte", Uint8Array.of(0x61)],
+      ["a race file", new TextEncoder().encode(race)],
+      ["zeros", new Uint8Array(300_000)],
+      ["every byte value", Uint8Array.from({ length: 4096 }, (_, i) => i & 0xff)],
+      ["noise", noise(70_000)],
+      ["far matches", far],
+      ["text and noise", new Uint8Array([...new TextEncoder().encode(race.slice(0, 3000)), ...noise(3000), ...new TextEncoder().encode(race.slice(0, 3000))])],
+    ];
+    const strategies = [constants.Z_DEFAULT_STRATEGY, constants.Z_FILTERED, constants.Z_HUFFMAN_ONLY, constants.Z_RLE, constants.Z_FIXED];
+    let streams = 0;
+    for (const [what, input] of inputs) {
+      for (const strategy of strategies) {
+        // memLevel 1 ends a block every 128 symbols: many blocks in one stream; windowBits 9 keeps distances short
+        for (const o of [{ level: 0 }, { level: 1 }, { level: 6 }, { level: 9 }, { level: 6, memLevel: 1 }, { level: 9, memLevel: 9, windowBits: 9 }]) {
+          const packed = deflateRawSync(input, { ...o, strategy });
+          const got = inflateRaw(new Uint8Array(packed), input.length);
+          expect(got !== null && Buffer.compare(got, input) === 0, `${what}, ${JSON.stringify({ ...o, strategy })}`).toBe(true);
+          streams++;
+        }
+      }
+    }
+    expect(streams).toBe(inputs.length * strategies.length * 6);
+    // bytes after the last block are not the entry's and are not read
+    const packed = deflateRawSync(Buffer.from("hello hello hello"));
+    expect(text(inflateRaw(new Uint8Array([...packed, 1, 2, 3]), 17)!)).toBe("hello hello hello");
+  });
+
+  it("inflateRaw gives null, never more than the size and never an exception, for a wrong size or a damaged stream", () => {
+    const input = new TextEncoder().encode("the same words, the same words, the same words: over and over and over again");
+    const packed = new Uint8Array(deflateRawSync(input));
+    expect(inflateRaw(packed, input.length)).toEqual(input);
+    // the size is a claim the stream must meet exactly
+    for (const size of [0, 1, input.length - 1, input.length + 1, input.length * 2]) expect(inflateRaw(packed, size), `size ${size}`).toBeNull();
+    // cut anywhere, it is not a whole stream
+    for (let cut = 0; cut < packed.length; cut++) expect(inflateRaw(packed.subarray(0, cut), input.length), `cut at ${cut}`).toBeNull();
+    // the reserved block type; a stored block whose length and complement disagree; a stored block longer than the data
+    expect(inflateRaw(pack(lastBlock(3)), 0)).toBeNull();
+    expect(inflateRaw(Uint8Array.of(0x01, 0x05, 0x00, 0x00, 0x00, 1, 2, 3, 4, 5), 5)).toBeNull();
+    expect(inflateRaw(Uint8Array.of(0x01, 0x05, 0x00, 0xfa, 0xff, 1, 2), 5)).toBeNull();
+    expect(inflateRaw(Uint8Array.of(0x01, 0x05, 0x00, 0xfa, 0xff, 1, 2, 3, 4, 5), 5)).toEqual(Uint8Array.of(1, 2, 3, 4, 5));
+    // blocks written bit by bit, fixed codes: "a" and the end code; "a" and a copy of 3 from 1 behind, which overlaps
+    const end = code(0, 7);
+    const copy3from1 = [...code(1, 7), ...code(0, 5)];
+    expect(text(inflateRaw(pack([...lastBlock(1), ...literal(0x61), ...end]), 1)!)).toBe("a");
+    expect(text(inflateRaw(pack([...lastBlock(1), ...literal(0x61), ...copy3from1, ...end]), 4)!)).toBe("aaaa");
+    // the same copy as the first thing in the output reaches before its start; with room for 3 bytes it would write 4
+    expect(inflateRaw(pack([...lastBlock(1), ...copy3from1, ...end]), 3)).toBeNull();
+    expect(inflateRaw(pack([...lastBlock(1), ...literal(0x61), ...copy3from1, ...end]), 3)).toBeNull();
+    // no end code; a length code that does not exist (286); a distance code that does not exist (30)
+    expect(inflateRaw(pack([...lastBlock(1), ...literal(0x61)]), 1)).toBeNull();
+    expect(inflateRaw(pack([...lastBlock(1), ...literal(0x61), ...code(0xc0 + 6, 8), ...code(0, 5), ...end]), 300)).toBeNull();
+    expect(inflateRaw(pack([...lastBlock(1), ...literal(0x61), ...code(1, 7), ...code(30, 5), ...end, ...end]), 4)).toBeNull();
+    // a dynamic block whose code lengths are no prefix code: 19 codes of one bit each
+    const header = [...lastBlock(2), ...field(0, 5), ...field(0, 5), ...field(15, 4)];
+    expect(inflateRaw(pack([...header, ...Array.from({ length: 19 }, () => field(1, 3)).flat(), ...end, ...end]), 0)).toBeNull();
+    // whatever bits are flipped: null, or exactly `size` bytes
+    const rand = prng(20261110);
+    for (let round = 0; round < 3000; round++) {
+      const c = packed.slice();
+      const flips = 1 + Math.floor(rand() * 4);
+      for (let i = 0; i < flips; i++) c[Math.floor(rand() * c.length)]! ^= 1 << Math.floor(rand() * 8);
+      const got = inflateRaw(c, input.length);
+      if (got !== null) expect(got.length, `round ${round}`).toBe(input.length);
+    }
+    // random bytes as a stream: the same
+    for (let round = 0; round < 3000; round++) {
+      const junk = Uint8Array.from({ length: 1 + Math.floor(rand() * 60) }, () => Math.floor(rand() * 256));
+      const size = Math.floor(rand() * 200);
+      const got = inflateRaw(junk, size);
+      if (got !== null) expect(got.length, `junk round ${round}`).toBe(size);
+    }
+  });
+
+  it("many records that point at one entry's data read it once", async () => {
+    const zip = makeZip([{ name: "one.json", data: "x".repeat(5000) }, ...Array.from({ length: 300 }, (_, i) => ({ name: `again-${i}.json`, data: "", sameDataAs: 0 }))]);
+    // 301 records, the data of one
+    expect(zip.length).toBeLessThan(25_000);
+    const r = await readZip(zip);
+    expect(r.total).toBe(301);
+    expect(r.entries.map((e) => e.name)).toEqual(["one.json"]);
+    expect(r.spent).toBe(5000);
+    expect(r.skipped).toHaveLength(MAX_SKIPPED);
+    expect(r.skipped.every((s) => s.reason === "corrupt entry")).toBe(true);
+  });
+
+  it("an entry that is read and turns out bad counts against the limits like a good one", async () => {
+    const bad = Array.from({ length: 10 }, (_, i) => ({ name: `f${i}.json`, data: "x".repeat(100), crc: 1 }));
+    const few = await readZip(makeZip(bad), { limits: { maxEntries: 3 } });
+    expect(few.entries).toEqual([]);
+    expect(few.skipped.map((s) => s.reason)).toEqual([...Array(3).fill("crc mismatch"), ...Array(7).fill("too many files")]);
+    expect(few.spent).toBe(300);
+    const bytes = await readZip(makeZip(bad), { limits: { maxTotalBytes: 250 } });
+    expect(bytes.skipped.map((s) => s.reason)).toEqual([...Array(2).fill("crc mismatch"), ...Array(8).fill("archive too large")]);
+    expect(bytes.spent).toBe(200);
+    // a wrong size is the same: each claim of 90 bytes for 100 is started, fails, and is counted
+    const lying = Array.from({ length: 10 }, (_, i) => ({ name: `f${i}.json`, data: `${i}`.repeat(100), declaredSize: 90 }));
+    const sized = await readZip(makeZip(lying), { limits: { maxEntries: 4 } });
+    expect(sized.skipped.map((s) => s.reason)).toEqual([...Array(4).fill("corrupt entry"), ...Array(6).fill("too many files")]);
+    expect(sized.spent).toBe(360);
+    // what costs nothing is not counted: an encrypted entry, a name outside the filter
+    const free = await readZip(makeZip([{ name: "enc.json", data: "x", encrypted: true }, { name: "skip.txt", data: "x" }, { name: "ok.json", data: "ok" }]), { filter: (n) => n.endsWith(".json"), limits: { maxEntries: 1 } });
+    expect(free.entries.map((e) => e.name)).toEqual(["ok.json"]);
+    expect(free.spent).toBe(2);
   });
 
   it("the limits: entries, bytes per entry, bytes in total; the list of skipped entries is capped too", async () => {

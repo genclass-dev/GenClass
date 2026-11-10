@@ -978,7 +978,7 @@ what it defends against: [`DESIGN.md`](../docs/github-app/DESIGN.md). Registerin
 
 | route | behaviour |
 |---|---|
-| `POST /api/github/webhook` | GitHub only. `X-Hub-Signature-256` must be the HMAC-SHA256 of the exact body under the app's secret (401 otherwise, before anything is parsed); at most 3 MB; `X-GitHub-Delivery` is claimed in `github_deliveries` (a repeat answers `{ ok, duplicate: true }`). 202 `{ ok, queued: true }` at once, the work in `ctx.waitUntil`; a job that fails forgets its delivery, so Redeliver runs it. Events: `installation`, `installation_repositories`, `pull_request`, `workflow_run`, `check_run`, `issue_comment`, `ping`; anything else is acknowledged and ignored. 503 while the app is not set up |
+| `POST /api/github/webhook` | GitHub only. `X-Hub-Signature-256` must be the HMAC-SHA256 of the exact body under the app's secret (401 otherwise, before anything is parsed); at most 3 MB; `X-GitHub-Delivery` is claimed in `github_deliveries` (a repeat answers `{ ok, duplicate: true }`). 202 `{ ok, queued: true }` at once, the work in `ctx.waitUntil`, with a deadline of 20 seconds from the moment the delivery arrived (the platform stops work 30 seconds after the response). A job that fails or runs out of time forgets its delivery, so Redeliver runs it; one that ended marks it done; one the platform stopped can be redelivered a minute later. Events: `installation`, `installation_repositories`, `pull_request`, `workflow_run`, `check_run`, `issue_comment`, `ping`; anything else is acknowledged and ignored. 503 while the app is not set up |
 | `POST /api/github/marketplace` | GitHub only: the Marketplace listing's webhook (`marketplace_purchase`), signed with `GITHUB_MARKETPLACE_WEBHOOK_SECRET` (default: the app's). The app's webhook ignores plan events and this one ignores everything else |
 | `GET /github` | the app's public page (the one page of this worker that may be indexed): what it does, what it may read and write, what it keeps, the plans |
 | `GET /github/install` | 302 to `https://github.com/apps/<slug>/installations/new` |
@@ -990,31 +990,50 @@ what it defends against: [`DESIGN.md`](../docs/github-app/DESIGN.md). Registerin
 ### What a review does
 
 On `pull_request` (opened, reopened, synchronize, ready_for_review), on a `workflow_run` that completed on a pull
-request's head commit with an artifact whose name starts with the `artifact` setting, on `@genclass-dev review` and on
-Re-run of its own check, `reviewPull` (src/github/handlers.ts): takes the pull request's lease (`github_prs.lease`,
-one minute; a second event sets `pending` and the holder goes round once more), counts the review against the
-installation's hour (`github_usage`, 120) and the pull request's total (400), reads the settings file from the default
-branch (cached two minutes per isolate), lists the head commit's workflow runs and their artifacts, downloads at most
+request's head commit with an artifact whose name starts with the `artifact` setting (or, for a pull request whose
+check or comment says it waits for the test run, as the last of the commit's runs to finish), on
+`@genclass-dev review`, on Re-run of its own check and from the daily sweep, `reviewPull` (src/github/handlers.ts):
+takes the pull request's lease (`github_prs.lease`, 35 seconds; a second event sets `pending` on the live lease and
+the holder goes round once more) and marks the row `due` until the review ends, counts the review against the pull
+request's hour (30), asks GitHub for the pull request (a webhook's copy is never trusted), reads the settings file
+from the default branch (cached two minutes per isolate; when it cannot be fetched the job fails, nothing is cached
+and the defaults are not used), and stops there for a pull request a setting leaves out.
+Until race files were read for the repository once (`github_repo_facts.evidence`), a pull request without them gets
+nothing: one request says whether a workflow run of the commit has finished, and if none has the review ends there,
+counted against no hour (on an installation for selected repositories the first such review writes one skipped check
+that says what the app reads, once per repository). Otherwise it counts the review against the installation's hour
+(`github_usage`, 120; 90 for reviews started by pushes, 60 for pull requests by authors from outside the repository),
+lists the head commit's workflow runs and their artifacts, downloads at most
 6 artifacts of 4 MB (GitHub's redirect is followed without credentials), unzips in memory under caps, validates each
 `.json` as `genclass-races/1`, summarises with the reporter's own code, folds the result into the pull request's
 findings (`github_prs.state`), and writes what changed: the check run on that commit, the summary comment (edited in
 place), a review with inline comments for new reproducible findings whose test line the diff shows. Body hashes in
-the state keep an unchanged result from being written again. It makes 4 requests to GitHub for a pull request with no
-test run yet and 7 or 8 with one artifact.
+the state keep an unchanged result from being written again, and only a review that wrote something counts toward the
+pull request's total (400). It makes 5 requests to GitHub for a pull request with no test run yet (the token, the
+pull request, the settings file, the commit's runs, the check); with an artifact, the requests that read it come on
+top (src/github/evidence.ts).
+
+A check is never left in progress without something certain to finish it. Under `check.fail_on` the check waits in
+progress for the commit's test run, and the row records that before the check exists. A pause, a setting that leaves
+the pull request out, a newer commit, a closed pull request and the pull request's limit of 400 finish it at once
+with the reason; an hourly limit keeps it in progress with the reason. `githubSweep` (the worker's daily cron,
+src/index.ts) reviews every pull request that has been `due` for more than an hour: one whose job failed or was
+stopped by the platform, one an hourly limit left out, and one whose wait no event ended.
 
 A private repository is reviewed only when `GITHUB_APP_PRIVATE_REPOS` is `open`, the managing account's plan has
 `github_private`, or the GitHub account has a paid Marketplace plan (src/github/entitlement.ts); otherwise nothing of
-it is read and its pull requests get one neutral check.
+it is read and the repository gets one neutral check that says so, once (`github_repo_facts.plan_notice`).
 
 ### Tables (migration 0013)
 
 | table | columns | notes |
 |---|---|---|
-| `github_installations` | `id` PK (GitHub's), `account_id`, `account_login`, `account_type`, `selection`, `owner` (accounts.id or NULL), `suspended`, `created`, `updated` | deleted with everything below on uninstall |
+| `github_installations` | `id` PK (GitHub's), `account_id`, `account_login`, `account_type`, `selection` (`all`, `selected`, or `unknown` until GitHub was asked), `owner` (accounts.id or NULL), `suspended`, `created`, `updated` | deleted with everything below on uninstall |
 | `github_repos` | `repo_id` PK, `installation_id`, `full_name`, `private`, `project_id`, `linked_by`, `linked`, `paused`, `updated` | only repositories that are linked or paused |
-| `github_prs` | (`repo_id`, `number`) PK, `installation_id`, `head_sha`, `comment_id`, `check_run_id`, `state` (JSON: findings' fingerprints, groups, titles, seeds, statuses; body hashes; paused), `reviews`, `lease`, `pending`, `closed`, `updated` | 30 days after closing, 180 at most |
-| `github_deliveries` | `id` PK, `event`, `received` | 7 days |
-| `github_usage` | (`installation_id`, `hour`) PK, `reviews` | 2 days |
+| `github_repo_facts` | `repo_id` PK, `installation_id`, `evidence`, `intro`, `plan_notice` (each the time it happened, or NULL), `issue_turn` (until when a pull request has the turn to open an issue there, a minute at most), `updated` | what was done once for a repository; not swept, deleted with the installation or the repository |
+| `github_prs` | (`repo_id`, `number`) PK, `installation_id`, `head_sha`, `comment_id`, `check_run_id`, `state` (JSON: findings' fingerprints, groups, titles, seeds, statuses; body hashes; the commit a check waits on), `paused`, `issue` (the issue `issues: merge` opened), `reviews`, `lease`, `pending`, `due`, `hour`, `hour_reviews`, `closed`, `updated` | 30 days after closing, 180 at most |
+| `github_deliveries` | `id` PK, `event`, `received`, `done` | 7 days |
+| `github_usage` | (`installation_id`, `hour`) PK, `reviews`, `outside` | 2 days |
 | `github_marketplace` | `account_id` PK (GitHub's), `login`, `plan_id`, `plan_name`, `monthly_cents`, `unit_count`, `free_trial_ends`, `pending`, `updated` | deleted on `cancelled` |
 
 Never stored: code, diffs, file contents, race files, tokens. Installation tokens are asked for one repository at a
