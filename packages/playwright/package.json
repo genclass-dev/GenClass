@@ -87,7 +87,7 @@
     }
   },
   "devDependencies": {
-    "@genclass/runtime": "0.3.0-beta.1",
+    "@genclass/runtime": ">=0.3.0-beta.1",
     "@playwright/test": "1.63.0",
     "@types/node": "^22.0.0",
     "tsup": "^8.5.1",

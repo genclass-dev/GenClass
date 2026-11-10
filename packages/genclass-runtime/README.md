@@ -63,4 +63,6 @@ the @genclass/runtime CLI ...") and no deprecation flag; release.yml packs and p
 reaches npm users only through
 `npm deprecate genclass-runtime "Deprecated: use @genclass/runtime (npx @genclass/runtime@beta init)"`, which
 npmjs.com shows and npm prints when it installs the package; that is the owner's call. genclass-runtime@0.3.0-beta.1,
-the version in package.json here (depending on @genclass/runtime 0.3.0-beta.1), was never published. -->
+the version in package.json here, was never published. package.json is `"private": true`, so `npm publish` refuses it,
+and its dependency is `>=0.3.0-beta.1`, which the workspace's runtime satisfies, so npm links packages/runtime instead
+of installing 0.3.0-beta.1 from the registry. -->
