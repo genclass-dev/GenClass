@@ -20,6 +20,12 @@ It reads the race files your workflow uploads, never your source code. It is fre
 1. **Install the app** on the account or organization, for all repositories or the ones you pick. Nothing else is
    asked: no sign-up, no token.
 
+   Then give it something to read, one of two ways. **With no change to your tests:** copy
+   [`workflows/genclass.yml`](workflows/genclass.yml) to `.github/workflows/genclass.yml` and go to step 4. It runs
+   your existing Playwright suite under GenClass in a job of its own that is allowed to fail, and uploads the race
+   files ([how it works and what it does not cover](../../packages/playwright/README.md#without-changing-your-tests)).
+   **Or in your own e2e job,** steps 2 and 3.
+
 2. **Use the fixture in your Playwright tests.** It puts `@genclass/runtime` on each page under test in observe mode:
    it reports, and never holds, delays or changes anything your app does. With chaos on, each seed delays and reorders
    responses differently ([`packages/playwright`](../../packages/playwright/README.md) has every option).

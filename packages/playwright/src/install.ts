@@ -17,6 +17,11 @@
 // anyway as a safety net. Observe only: no hold on the page's side, no change to any request or response (chaos
 // changes when a request leaves, never what it says). Every handler catches its own errors: a page that closes
 // mid-test is not a failure.
+//
+// An install belongs to one test. The fixture finishes it with that test. The register entry installs on a browser
+// context, which can stay open after its test: it passes `live` (asked before anything is taken or held) and calls
+// release(), so that from the moment the test is over nothing is recorded and no request is held. The runtime's files
+// are still served after that: the init script stays on the context, and a page that asks for them must get them.
 
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -56,6 +61,14 @@ export interface InstallOptions {
   modelUrl?: string;
   /** Resolved chaos, or null for none. */
   chaos: ResolvedChaos | null;
+  /** The name of the function exposed for the page to hand items over through. Default BINDING. */
+  binding?: string;
+  /**
+   * Asked each time the page hands something over and each time a request could be held: false when the test this
+   * install belongs to is no longer the one running. The item is then dropped and the request passed on at once, so
+   * nothing is filed under a test that did not see it. Default: always live (the fixture finishes with its test).
+   */
+  live?: () => boolean;
 }
 
 /** The runtime's model status as the page reported it last. */
@@ -89,10 +102,28 @@ export interface Collected {
 export interface Session {
   /** Collect what the page still holds, release every chaos hold, and return everything seen. */
   finish(): Promise<Collected>;
+  /**
+   * What the page handed over so far, without asking it and without releasing anything: for a caller that cannot
+   * wait (the process is exiting with the page still open). A copy; `finish()` stays the complete answer.
+   */
+  snapshot(): Collected;
+  /**
+   * Stops the install without asking the page: every held request leaves now, later ones are passed on at once, and
+   * nothing the page hands over from here on is kept. For a page that is still open when its test is over.
+   * `snapshot()` then gives what was handed over until this call; `finish()` no longer asks the page.
+   */
+  release(): void;
 }
 
-/** The name of the function exposed on the page. */
+/** The name of the function the fixture exposes on a page. */
 export const BINDING = "__genclassPlaywright";
+/**
+ * The name of the function the register entry exposes on a browser context. A name of its own: Playwright refuses a
+ * page-level function whose name the page's context already has, so with one shared name a page-level install next to
+ * a context-level one would throw into the test. With two names, the second init script to run stops at the first
+ * one's window.__GENCLASS_PLAYWRIGHT__ and nothing is installed twice.
+ */
+export const CONTEXT_BINDING = "__genclassPlaywrightContext";
 /** The loopback URL the page's agent link is pointed at; the fixture aborts every request to it. */
 export const AGENT_URL = "http://127.0.0.1:9";
 
@@ -123,6 +154,24 @@ export function resolveRuntimeDir(given?: string): string {
   if (!existsSync(join(dir, "genclass.global.js"))) throw new Error(`@genclass/playwright: ${dir} has no genclass.global.js: the installed @genclass/runtime has no build`);
   if (!existsSync(join(dir, "agent.js"))) throw new Error(`@genclass/playwright: ${dir} has no agent.js: the fixture needs @genclass/runtime 0.3.0-beta.1 or later`);
   return dir;
+}
+
+/**
+ * The same for a suite that was not written for GenClass (the register entry and its command): the directory given,
+ * else the package installed next to this one, else the project's own, resolved from `cwd`. Throws
+ * resolveRuntimeDir's error when there is none.
+ */
+export function findRuntimeDir(given: string | undefined, cwd: string): string {
+  try {
+    return resolveRuntimeDir(given);
+  } catch (e) {
+    if (given) throw e;
+    try {
+      return resolveRuntimeDir(join(dirname(createRequire(join(cwd, "noop.js")).resolve("@genclass/runtime/package.json")), "dist"));
+    } catch {
+      throw e;
+    }
+  }
 }
 
 function readCached(path: string): Buffer {
@@ -177,8 +226,21 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
   const runtimeDir = resolveRuntimeDir(o.runtimeDir);
   const collected: Collected = { records: [], witnesses: [], mode: null, model: null, agent: "not-loaded", plans: [], serviceWorker: false, modeOverridden: null };
   const scheduler = o.chaos ? new ChaosScheduler(o.chaos) : null;
+  const binding = o.binding ?? BINDING;
+  let released = false;
+  // the test this install belongs to is still the one running (a `live` that throws counts as over: never misfile)
+  const live = (): boolean => {
+    if (released) return false;
+    if (!o.live) return true;
+    try {
+      return o.live() !== false;
+    } catch {
+      return false;
+    }
+  };
 
   const take = (item: unknown): void => {
+    if (!live()) return;
     if (!item || typeof item !== "object") return;
     const x = item as Record<string, unknown>;
     if (x.t === "record" && x.record) collected.records.push(x.record);
@@ -189,7 +251,7 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
       if (typeof x.overridden === "string") collected.modeOverridden = x.overridden;
     } else if (x.t === "agent") collected.agent = x.ok === true ? null : String(x.reason ?? "unknown");
   };
-  await page.exposeFunction(BINDING, take);
+  await page.exposeFunction(binding, take);
 
   // chaos first: the routes below are matched before it (Playwright tries the last registered handler first)
   if (scheduler) {
@@ -198,6 +260,8 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
       try {
         const url = request.url();
         if (isRuntimeUrl(url) || isAgentUrl(url)) return await route.fallback();
+        // the test is over (a context kept for later tests): its chaos is not theirs
+        if (!live()) return await route.fallback();
         let frameUrl = "";
         try {
           frameUrl = request.frame().url();
@@ -239,14 +303,14 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
     base: RUNTIME_PATH,
     model: o.model === "load" ? (o.modelUrl ? { baseUrl: o.modelUrl } : {}) : false,
     agentUrl: AGENT_URL,
-    binding: BINDING,
+    binding,
   };
   await page.addInitScript({ content: initScriptContent(runtimeDir, cfg) });
 
   return {
     async finish(): Promise<Collected> {
       try {
-        if (!page.isClosed?.()) {
+        if (!released && !page.isClosed?.()) {
           const r = await Promise.race([
             page.evaluate(`(function () { var a = window.__GENCLASS_PLAYWRIGHT__; return a ? a.collect() : null; })()`),
             new Promise<null>((res) => setTimeout(() => res(null), 2000).unref?.()),
@@ -267,6 +331,13 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
       scheduler?.dispose();
       collected.plans = scheduler ? scheduler.plans.slice() : [];
       return collected;
+    },
+    snapshot(): Collected {
+      return { ...collected, records: collected.records.slice(), witnesses: collected.witnesses.slice(), plans: scheduler ? scheduler.plans.slice() : [] };
+    },
+    release(): void {
+      released = true;
+      scheduler?.dispose();
     },
   };
 }

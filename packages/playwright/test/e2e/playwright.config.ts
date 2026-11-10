@@ -1,6 +1,7 @@
 // The fixture's end-to-end check (run.mjs drives it): the search page from server.mjs, the fixture with seeded chaos,
 // five seeds per test (repeatEach: the fixture adds the repeat index to the seed), and this package's reporter, so
-// the run ends with test-results/genclass/*.json and genclass-report.md in this directory. Chromium only.
+// the run ends with test-results/genclass/*.json and genclass-report.md in this directory. Chromium only. Every wait
+// has a limit: the run as a whole (globalTimeout), each test, the web server's start.
 import { defineConfig } from "@playwright/test";
 
 const port = Number(process.env.GENCLASS_E2E_PORT ?? 47431);
@@ -13,6 +14,7 @@ export default defineConfig({
   repeatEach: 5,
   retries: 0,
   timeout: 30_000,
+  globalTimeout: 240_000,
   reporter: [["list"], ["@genclass/playwright/reporter"]],
   webServer: {
     command: `node server.mjs ${port}`,

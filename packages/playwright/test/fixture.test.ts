@@ -187,3 +187,55 @@ describe("fixture: startGenClass", () => {
     expect(r.file).toMatchObject({ seed: 1, chaos: { latencyMs: [0, 600], reorder: true, routes: ["same-origin /api* or Accept: json"] }, model: null, signatures: [], fixture: { model: "skip", agent: "not-loaded", chaosApplied: 0, serviceWorker: false } });
   });
 });
+
+describe("fixture: next to the register entry (@genclass/playwright/register)", () => {
+  const KEY = Symbol.for("@genclass/playwright/register");
+  const g = globalThis as unknown as Record<symbol, unknown>;
+
+  it("a page whose browser context the entry already instruments is left to it: nothing is installed twice, nothing is written here", async () => {
+    const before = g[KEY];
+    const covered = {};
+    const other = {};
+    const state = { contexts: new WeakSet<object>([covered]), fixturePages: 0 };
+    g[KEY] = state;
+    try {
+      const page = Object.assign(new FakePage(), { context: () => covered });
+      const run = await startGenClass(page, { runtimeDir, chaos: true }, info());
+      expect(page.untouched()).toBe(true);
+      expect(await run.finish()).toEqual({ collected: null, file: null, path: null });
+      expect(existsSync(join(root, "test-results"))).toBe(false);
+      expect(state.fixturePages).toBe(1);
+      // options that are wrong are still refused, covered or not
+      await expect(startGenClass(page, { runtimeDir, mode: "guard" as unknown as "observe" }, info())).rejects.toThrow(/must be "observe"/);
+      // a page of a context the entry does not have is the fixture's, as always
+      const own = Object.assign(new FakePage(), { context: () => other });
+      const ownRun = await startGenClass(own, { runtimeDir }, info());
+      expect(own.initScripts).toHaveLength(1);
+      expect((await ownRun.finish()).path).not.toBeNull();
+      expect(state.fixturePages).toBe(1);
+    } finally {
+      if (before === undefined) delete g[KEY];
+      else g[KEY] = before;
+    }
+  });
+
+  it("without the entry in the process (or with a state it cannot read), the fixture is as it was", async () => {
+    const before = g[KEY];
+    try {
+      for (const state of [undefined, {}, { contexts: null }, "nonsense"]) {
+        if (state === undefined) delete g[KEY];
+        else g[KEY] = state;
+        const page = Object.assign(new FakePage(), {
+          context: () => {
+            throw new Error("no context");
+          },
+        });
+        await startGenClass(page, { runtimeDir }, info({ testId: `t-${String(typeof state)}` }));
+        expect(page.initScripts).toHaveLength(1);
+      }
+    } finally {
+      if (before === undefined) delete g[KEY];
+      else g[KEY] = before;
+    }
+  });
+});
