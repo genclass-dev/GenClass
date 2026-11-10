@@ -83,7 +83,20 @@ describe("fixture: where the test is declared (the file's location)", () => {
     const i = info({ line: 12, file: join(root, "apps", "web", "tests", "checkout.spec.ts"), config: { configFile: join(root, "apps", "web", "playwright.config.ts"), rootDir: join(root, "apps", "web", "tests") } });
     expect(locationOf(i, root)).toEqual({ file: "apps/web/tests/checkout.spec.ts", line: 12 });
     expect(locationOf(i, "")).toEqual({ file: "tests/checkout.spec.ts", line: 12 });
-    expect(locationOf(info({ line: 3 }), undefined)).toEqual({ file: "tests/checkout.spec.ts", line: 3 });
+    // no root given: GITHUB_WORKSPACE when it is set (it is, where this suite runs in CI), else the config's directory
+    const before = process.env.GITHUB_WORKSPACE;
+    try {
+      delete process.env.GITHUB_WORKSPACE;
+      expect(locationOf(info({ line: 3 }), undefined)).toEqual({ file: "tests/checkout.spec.ts", line: 3 });
+      expect(locationOf(i)).toEqual({ file: "tests/checkout.spec.ts", line: 12 });
+      process.env.GITHUB_WORKSPACE = root;
+      expect(locationOf(i)).toEqual({ file: "apps/web/tests/checkout.spec.ts", line: 12 });
+      process.env.GITHUB_WORKSPACE = join(root, "somewhere", "else");
+      expect(locationOf(i)).toBeUndefined();
+    } finally {
+      if (before === undefined) delete process.env.GITHUB_WORKSPACE;
+      else process.env.GITHUB_WORKSPACE = before;
+    }
     expect(locationOf(info(), root)).toBeUndefined();
     expect(locationOf(info({ line: 0 }), root)).toBeUndefined();
     expect(locationOf(info({ line: 1.5 }), root)).toBeUndefined();
