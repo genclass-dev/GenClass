@@ -1,13 +1,16 @@
 name: Playwright reporter
 
 # @genclass/playwright (packages/playwright): typecheck, build and the unit tests of the fixture (on a fake page),
-# the reporter, the summariser and the command, then one real Playwright run (no browser) that loads the reporter by
-# its module name, and in a second job the fixture's end-to-end check in Chromium (packages/playwright/test/e2e):
-# the MCP e2e search page with the fixture's seeded chaos, five seeds per test, the buggy page must get the
+# the register entry (on fakes of Playwright's objects, and in real Playwright runs without a browser), the reporter,
+# the summariser and the commands, then one real Playwright run (no browser) that loads the reporter by its module
+# name, and in a second job the end-to-end check in Chromium (packages/playwright/test/e2e), in two halves. The
+# fixture: the MCP e2e search page with the fixture's seeded chaos, five seeds per test, the buggy page must get the
 # overwrote-newer witness, the fixed page and the latency-only run must get nothing, and the reporter must render
-# it. A separate workflow from ci.yml so it never blocks the main CI job. It renders the unit-test fixture's report
-# into the job summary to show what a pull-request comment would look like; it posts nothing and sends nothing
-# anywhere (the app server listens on 127.0.0.1 inside the runner; the page's model is skipped).
+# it. Then the same page under a suite that imports only @playwright/test (packages/playwright/test/e2e-unmodified),
+# run through genclass-playwright-run: the same three requirements, under the command's two seeds. A separate
+# workflow from ci.yml so it never blocks the main CI job. It renders the unit-test fixture's report into the job
+# summary to show what a pull-request comment would look like; it posts nothing and sends nothing anywhere (the app
+# server listens on 127.0.0.1 inside the runner; the page's model is skipped).
 
 on:
   push:
@@ -88,7 +91,7 @@ jobs:
           grep -qF '**1 reproducible**' genclass-report.md
 
   e2e:
-    name: "@genclass/playwright: the fixture end to end in Chromium"
+    name: "@genclass/playwright: the fixture and an unmodified suite end to end in Chromium"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -117,14 +120,17 @@ jobs:
         working-directory: packages/playwright
         run: npx vitest run test/install.test.ts
 
-      - name: The fixture end to end (buggy page flagged, fixed page and latency-only run clean, report rendered)
+      # Three Playwright runs, each a child process with a time limit: the fixture's suite (15 tests), then the
+      # unmodified suite twice through genclass-playwright-run (latency only: 2 tests; the defaults: 4 tests).
+      - name: End to end (the fixture, then an unmodified suite through the command; buggy page flagged, fixed page and latency-only runs clean)
         # shell: bash runs with pipefail, so a failing run.mjs fails the step even though tee succeeds
         shell: bash
         run: node packages/playwright/test/e2e/run.mjs | tee "$RUNNER_TEMP/e2e.log"
 
       # The race files of this run, for genclass-dev[bot]: the GitHub App (docs/github-app/) reads artifacts whose name
       # starts with "genclass" and reviews the pull request from them. The buggy page of the e2e app is flagged on
-      # purpose (it is what the check above requires), so a pull request that runs this job shows one finding.
+      # purpose (it is what the check above requires), so a pull request that runs this job shows that finding once
+      # for each suite that found it: the fixture's below, and the unmodified suite's in the artifact after it.
       - name: Upload the race files
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -134,13 +140,30 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # The race files genclass-playwright-run wrote for the unmodified suite on its defaults (two tests, two seeds):
+      # the kind of files the workflow users copy (docs/github-app/workflows/genclass.yml) uploads, so the app reviews
+      # this repository's pull requests from files written without the fixture too. The app puts every artifact's
+      # files together and tells tests apart by name: these are "[chromium] search.spec.ts > ..." (the unmodified
+      # suite's project has a name), the fixture's are "search.spec.ts > ...", so neither set is counted into the
+      # other. The latency-only files of that suite carry the same test names under other chaos settings and are not
+      # uploaded.
+      - name: Upload the unmodified suite's race files
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: genclass-races-unmodified
+          path: packages/playwright/test/e2e-unmodified/test-results/genclass
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Summary
         if: always()
         run: |
           {
-            echo '### GenClass fixture, end to end'
+            echo '### GenClass fixture and unmodified suite, end to end'
             echo '```json'
-            sed -n '/^{/,$p' "$RUNNER_TEMP/e2e.log" | tail -60
+            # the check's own summary: from its last line that is "{" alone to the end
+            awk '/^\{$/ { n = NR } { line[NR] = $0 } END { if (n) for (i = n; i <= NR; i++) print line[i] }' "$RUNNER_TEMP/e2e.log" | tail -200
             echo '```'
             if [ -f packages/playwright/test/e2e/genclass-report.md ]; then
               echo

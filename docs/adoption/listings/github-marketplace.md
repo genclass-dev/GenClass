@@ -20,7 +20,8 @@ repository, and the app is not registered yet ([docs/github-app/SETUP.md](../../
   "flagged" and "reproducible in N seeds", never "finds every race" and never "fixes".
 - No number about how often it is right belongs in the listing unless
   [docs/runtime/RESULTS.md](../../runtime/RESULTS.md) has it, with the false-report rate next to it.
-- It is free on public repositories. Private repositories are by agreement.
+- It is free, on public and private repositories (decided 2026-11-10; a paid plan for private repositories may come
+  later). With no paid service sold elsewhere, a free listing is allowed.
 - It never comments where it is not installed.
 
 ## How the Marketplace works

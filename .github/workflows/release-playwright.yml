@@ -7,18 +7,20 @@ name: Release Playwright
 #
 # Owner setup:
 # - First version only: npm configures trusted publishing from a package's own settings page, so the package must exist
-#   before this workflow can publish it. Push the tag once: the run builds, tests (unit, then the fixture end to end in
-#   Chromium) and uploads the tarball as the `playwright-tarball` artifact, and its publish step fails without a
-#   trusted publisher. Publish that exact tarball once from your own npm login
+#   before this workflow can publish it. Push the tag once: the run builds, tests (unit, then end to end in Chromium:
+#   the fixture, and an unmodified suite through genclass-playwright-run) and uploads the tarball as the
+#   `playwright-tarball` artifact, and its publish step fails without a trusted publisher. Publish that exact tarball
+#   once from your own npm login
 #   (`npm publish genclass-playwright-<version>.tgz --access public`), then on npmjs.com: @genclass/playwright →
 #   Settings → Trusted publishing → GitHub Actions: organization genclass-dev, repository GenClass, workflow filename
 #   release-playwright.yml, environment npm-publish. Later versions publish from here.
 # - The npm-publish GitHub environment (shared with release.yml and release-mcp.yml) asks its reviewers to approve
 #   each run.
 #
-# The fixture needs a runtime with the agent entry (@genclass/runtime >= 0.3.0-beta.1, `dist/agent.js`); the run
-# checks that npm serves the runtime version this repository builds, with that file in it. The GitHub App
-# (docs/github-app/) reads the race files this package's fixture writes, so its guide names this package.
+# The fixture and the register entry need a runtime with the agent entry (@genclass/runtime >= 0.3.0-beta.1,
+# `dist/agent.js`); the run checks that npm serves the runtime version this repository builds, with that file in it.
+# The GitHub App (docs/github-app/) reads the race files this package writes, so its guide names this package, and
+# the workflow users copy (docs/github-app/workflows/genclass.yml) runs this package's command from npm.
 
 on:
   push:
@@ -92,7 +94,9 @@ jobs:
       - name: Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: The fixture end to end (buggy page flagged, fixed page and latency-only run clean, report rendered)
+      # Two halves, each a Playwright run in Chromium with a time limit: the fixture's suite (15 tests), then a suite
+      # that imports only @playwright/test, twice through genclass-playwright-run (2 and 4 tests).
+      - name: End to end (the fixture, then an unmodified suite through the command; buggy page flagged, fixed page and latency-only runs clean)
         run: node packages/playwright/test/e2e/run.mjs
 
       - name: Pack
@@ -104,12 +108,18 @@ jobs:
           sha512sum "$FILE"
           tar -tzf "$FILE" | sort > "$FILE.files.txt"
           cat "$FILE.files.txt"
-          # the tarball holds the built fixture, reporter, summariser and the report command; no tests or sources
+          # the tarball holds the built fixture, reporter, summariser and register entry, and the two commands with
+          # the built files they import; no tests or sources
           grep -qx "package/dist/index.js" "$FILE.files.txt"
           grep -qx "package/dist/fixture.js" "$FILE.files.txt"
           grep -qx "package/dist/reporter.js" "$FILE.files.txt"
           grep -qx "package/dist/summarize.js" "$FILE.files.txt"
+          grep -qx "package/dist/register.js" "$FILE.files.txt"
+          grep -qx "package/dist/register.d.ts" "$FILE.files.txt"
           grep -qx "package/bin/genclass-playwright-report.mjs" "$FILE.files.txt"
+          grep -qx "package/dist/cli.js" "$FILE.files.txt"
+          grep -qx "package/bin/genclass-playwright-run.mjs" "$FILE.files.txt"
+          grep -qx "package/dist/run.js" "$FILE.files.txt"
           ! grep -q "package/test/" "$FILE.files.txt"
           ! grep -q "package/src/" "$FILE.files.txt"
 
@@ -141,3 +151,7 @@ jobs:
           for i in $(seq 1 20); do npm audit signatures && break; echo "attestations not served yet, retry $i"; sleep 30; done
           # the published command renders a report from an empty folder without failing
           mkdir -p empty && npx --no-install genclass-playwright-report empty --out - | head -5
+          # the published run command starts (its usage needs no Playwright), and the register entry is importable by
+          # name and does nothing in a process that is not a Playwright worker
+          npx --no-install genclass-playwright-run --help | grep "^usage: genclass-playwright-run"
+          node --input-type=module -e 'await import("@genclass/playwright/register"); console.log("register entry:", globalThis[Symbol.for("@genclass/playwright/register")].state)' | grep -qx "register entry: idle"

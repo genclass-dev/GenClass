@@ -15,106 +15,19 @@
 // Chaos, when given, holds matched requests before they leave (that is its job), never changes what they say. A
 // finding never changes a test's outcome. `enabled: false` makes the fixture inert: the page is Playwright's own and
 // nothing is written.
+//
+// This module is the Playwright binding only: what a test run is (the options, the names, the file) lives in
+// session.ts, which the register entry (`@genclass/playwright/register`, for suites that keep their own imports)
+// shares. It is the one module of the package that imports Playwright.
 
 import { test as base, expect, type Page, type PlaywrightTestArgs, type PlaywrightTestOptions, type PlaywrightWorkerArgs, type PlaywrightWorkerOptions, type TestType } from "@playwright/test";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
-import { DEFAULT_SEED, describeMatch, resolveChaos, type ChaosMatch, type ChaosMatchFn, type ChaosOptions } from "./chaos.js";
-import { install, type Collected, type PageLike } from "./install.js";
-import { buildRacesFile, racesFileName, writeRacesFile } from "./races.js";
-import type { GenClassRacesFile, RacesLocation } from "./types.js";
-
-export interface GenClassOptions {
-  /** false: the fixture does nothing (no runtime on the page, no file). Default true. */
-  enabled?: boolean;
-  /** Only "observe": the runtime reports and never holds, delays or changes anything. Guard and heal are not for tests. */
-  mode?: "observe";
-  /**
-   * "skip" (default): no model download (13 MB), so the file carries the runtime's witnesses (overwrote-newer,
-   * identical-in-flight), facts computed without the model, and no model diagnoses or confidences. "load": the
-   * runtime loads its model (from `modelUrl`, else the package default on jsDelivr) and the file also carries its
-   * detections with their confidence.
-   */
-  model?: "skip" | "load";
-  /** With `model: "load"`: a model directory URL (the runtime's `model.baseUrl`). */
-  modelUrl?: string;
-  /** Seeded network chaos (ChaosOptions; `true` for the defaults). Off unless given. */
-  chaos?: ChaosOptions | true | false;
-  /**
-   * Where the files go, relative to the Playwright config's directory. Default: `genclass` in the project's
-   * outputDir (test-results/genclass), which Playwright empties at the start of each run, so no file of an earlier
-   * run is read as another seed. The reporter reads both places by default.
-   */
-  outDir?: string;
-  /** @genclass/runtime's dist/ directory. Default: the installed package's. */
-  runtimeDir?: string;
-}
+import type { ChaosMatch, ChaosMatchFn, ChaosOptions } from "./chaos.js";
+import type { Collected, PageLike } from "./install.js";
+import { startGenClass as start, type GenClassOptions, type GenClassRun, type TestInfoLike } from "./session.js";
+import type { RacesLocation } from "./types.js";
 
 export interface GenClassFixtures {
   genclass: GenClassOptions;
-}
-
-/** The parts of Playwright's TestInfo the fixture reads. */
-export interface TestInfoLike {
-  titlePath: readonly string[];
-  file: string;
-  /** The line the test is declared on (Playwright's TestInfo.line). */
-  line?: number;
-  testId: string;
-  repeatEachIndex: number;
-  /** The attempt (0 for the first run); a retry writes a file of its own. */
-  retry?: number;
-  /** The test's status when the fixture finishes ("skipped": no file is written). */
-  status?: string;
-  project: { name: string; testDir: string; outputDir?: string };
-  config: { configFile?: string; rootDir: string };
-}
-
-/** The test's name in the file: "[project] file.spec.ts > describe > title" (the project only when it has a name). */
-export function testName(info: TestInfoLike): string {
-  const path = [...info.titlePath];
-  // TestInfo.titlePath starts with the file ([file, ...describes, title]); a reporter's TestCase.titlePath() adds
-  // ["", project] in front. Find the file to be safe about either shape
-  const rel = relative(info.project.testDir, info.file).split(sep).join("/");
-  let at = path.findIndex((t) => t === rel || t.split(sep).join("/") === rel);
-  if (at < 0) at = path.findIndex((t) => t.endsWith(".ts") || t.endsWith(".js") || t.endsWith(".mjs") || t.endsWith(".tsx") || t.endsWith(".jsx"));
-  const titles = at >= 0 ? path.slice(at) : path.filter(Boolean);
-  if (at >= 0 && titles[0] !== rel && rel) titles[0] = rel;
-  const name = titles.join(" > ") || info.testId;
-  const project = info.project.name;
-  return project ? `[${project}] ${name}` : name;
-}
-
-/**
- * The directory the file goes to: `outDir` against the config's directory (else the root dir); by default `genclass`
- * in the project's outputDir (else test-results/genclass next to the config).
- */
-export function outDirOf(info: TestInfoLike, outDir?: string): string {
-  const base = info.config.configFile ? dirname(info.config.configFile) : info.config.rootDir;
-  if (!outDir) return info.project.outputDir ? join(info.project.outputDir, "genclass") : join(base, "test-results", "genclass");
-  return isAbsolute(outDir) ? outDir : join(base, outDir);
-}
-
-/**
- * Where the test is declared, for the file's `location`: its path relative to the repository root and its line.
- * `root` is the repository's checkout (GITHUB_WORKSPACE on GitHub Actions); without it, the Playwright config's
- * directory, which is the repository root in the usual layout. Undefined when Playwright gave no line or the file is
- * outside that directory, so a file never names a path above the repository.
- */
-export function locationOf(info: TestInfoLike, root: string | undefined = process.env.GITHUB_WORKSPACE): RacesLocation | undefined {
-  const line = info.line;
-  if (typeof line !== "number" || !Number.isInteger(line) || line < 1) return undefined;
-  const base = root || (info.config.configFile ? dirname(info.config.configFile) : info.config.rootDir);
-  if (!base || !info.file) return undefined;
-  const rel = relative(base, info.file).split(sep).join("/");
-  if (!rel || rel === ".." || rel.startsWith("../") || isAbsolute(rel) || /^[A-Za-z]:/.test(rel)) return undefined;
-  return { file: rel, line };
-}
-
-export interface GenClassRun {
-  /** What the page reported and the file written for it (null while the test runs or when disabled). */
-  readonly collected: Collected | null;
-  readonly file: GenClassRacesFile | null;
-  readonly path: string | null;
 }
 
 /**
@@ -122,41 +35,7 @@ export interface GenClassRun {
  * test ends. Exported for tests and for custom fixtures; `test` below does this on its `page`.
  */
 export async function startGenClass(page: Page | PageLike, options: GenClassOptions | undefined, info: TestInfoLike): Promise<{ finish(): Promise<GenClassRun> }> {
-  const o = options ?? {};
-  const empty: GenClassRun = { collected: null, file: null, path: null };
-  if (o.enabled === false) return { finish: async () => empty };
-  if (o.mode !== undefined && o.mode !== "observe") throw new Error(`@genclass/playwright: genclass.mode must be "observe" (got ${JSON.stringify(o.mode)}): guard and heal are not for tests`);
-  if (o.model !== undefined && o.model !== "skip" && o.model !== "load") throw new Error(`@genclass/playwright: genclass.model must be "skip" or "load" (got ${JSON.stringify(o.model)})`);
-  const chaos = o.chaos ? resolveChaos(o.chaos, info.repeatEachIndex) : null;
-  const seed = chaos ? chaos.seed : DEFAULT_SEED + Math.max(0, Math.floor(info.repeatEachIndex) || 0);
-  const model = o.model ?? "skip";
-  const session = await install(page as unknown as PageLike, { runtimeDir: o.runtimeDir, model, modelUrl: o.modelUrl, chaos });
-  return {
-    async finish(): Promise<GenClassRun> {
-      const collected = await session.finish();
-      // a test skipped in its body was not run: no file, so the report does not count it as unchecked
-      if (info.status === "skipped") return { collected, file: null, path: null };
-      const file = buildRacesFile({
-        test: testName(info),
-        seed,
-        mode: collected.mode,
-        model: collected.model,
-        chaos: chaos ? { latencyMs: chaos.delayMs, reorder: chaos.reorder, routes: describeMatch(chaos.match) } : null,
-        records: collected.records,
-        witnesses: collected.witnesses,
-        fixture: {
-          model,
-          agent: collected.agent,
-          chaosApplied: chaos ? collected.plans.length : null,
-          serviceWorker: collected.serviceWorker,
-          ...(collected.modeOverridden ? { modeOverridden: collected.modeOverridden } : {}),
-        },
-        location: locationOf(info),
-      });
-      const path = writeRacesFile(outDirOf(info, o.outDir), racesFileName(file.test, info.testId, seed, info.retry ?? 0), file);
-      return { collected, file, path };
-    },
-  };
+  return start(page as unknown as PageLike, options, info);
 }
 
 /**
@@ -182,5 +61,6 @@ export const test: TestType<PlaywrightTestArgs & PlaywrightTestOptions & GenClas
 });
 
 export { expect };
-export type { ChaosMatch, ChaosMatchFn, ChaosOptions, Collected, PageLike, RacesLocation };
+export { locationOf, outDirOf, testName } from "./session.js";
+export type { ChaosMatch, ChaosMatchFn, ChaosOptions, Collected, GenClassOptions, GenClassRun, PageLike, RacesLocation, TestInfoLike };
 export { RUNTIME_PATH } from "./chaos.js";

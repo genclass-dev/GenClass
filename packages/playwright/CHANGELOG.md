@@ -5,8 +5,71 @@ Changes to `@genclass/playwright`, the Playwright reporter for
 
 ## 0.1.0 (2026-11-10)
 
-The first version on npm.
+The first version on npm: the fixture, the reporter, and the same without editing a suite (the command
+`genclass-playwright-run` and the entry `@genclass/playwright/register`).
 
+- **A suite nobody edits** (`genclass-playwright-run`, `@genclass/playwright/register`): GenClass on an existing
+  Playwright suite with no change to its test files or its `playwright.config`. The command finds the project's own
+  Playwright and its config the way Playwright does (`--config` / `-c`, else `playwright.config.ts`, `.js`, `.mts`,
+  `.mjs`, `.cts`, `.cjs` in the working directory), writes a config next to it that imports the register entry by
+  file URL and then hands Playwright the user's config unchanged (imported or required as Playwright would have
+  loaded it), runs `playwright test` on it with every other argument passed through, and removes the file when the
+  run ends, also on failure and on SIGINT. Defaults for a first run: chaos on, `--repeat-each 2` unless one is
+  given, race files in `test-results/genclass` under the working directory whatever the config's `outputDir`
+  (an earlier run's race files there are removed first). It prints where the race files are and what they hold;
+  its exit code is Playwright's (2 when Playwright could not be started).
+- **The register entry** wraps, in a Playwright worker and through the prototypes of public objects only,
+  `browserType.launch`, `launchPersistentContext`, `connect`, `connectOverCDP`, `browser.newContext`, `browser.close`
+  and `browserContext.close`. A browser context a test makes gets what the fixture gives a page (the runtime before
+  the app's first script, observe mode, telemetry off; the seeded chaos when it is on), at the level of the context,
+  so `context.newPage()` pages and popups are covered. The test comes from the project's own `test.info()` (the copy
+  of Playwright that runs the worker; never a second one). Before a context closes, its pages are asked and one
+  `genclass-races/1` file per test, seed and retry is written, with the fixture's names, fields and `location`;
+  several pages or contexts of one test are merged into the one file. A wrapped call keeps its result, its error and
+  its API name in Playwright's messages; the entry never throws into a run: a failure is one remembered line and a
+  context without GenClass.
+- **A context is one test's, or it is left alone.** A context made when no test is running is left as Playwright
+  made it, and so is one made while a `beforeAll` or `afterAll` hook runs: the tests of the describe share it. (Which
+  hook is running is the one thing the entry reads from outside Playwright's public API,
+  `testInfo._currentHookType()`, by shape; where it is missing, the next rule alone applies.) A context counts for
+  the test that was running when it was made, and only while that test runs: what its pages hand over at any other
+  time is dropped and its requests are no longer held, so a context kept for later tests (a variable, a
+  worker-scoped fixture) or left open puts nothing into another test's file. Such a context is not asked at its
+  close; its own test's file is written with what it handed over while the test ran, when the next test makes its
+  first context, when the context or its browser closes, or when the worker exits. One line in the summary says so.
+- **The pages of a context share one binding**, `__genclassPlaywrightContext` (`context.exposeBinding`): a name of
+  its own, because Playwright refuses a page-level function whose name the context already has (the fixture's is
+  `__genclassPlaywright`). Each page counts with the agent state it reported last, as the fixture's one page does:
+  a page whose agent entry did not connect is in the file even when it was closed before the context or another page
+  reported after it, and a page whose runtime did not start does not take away the mode of one whose did.
+- **Where the register entry starts.** Under the command, in every Playwright worker. Preloaded with
+  `NODE_OPTIONS="--import <path to dist/register.js>"` it works the same way without the command. A worker is a
+  child process with a channel to its parent, started by Playwright from its own package, with `TEST_WORKER_INDEX`
+  set; in any other process (Playwright's runner, a web server, a build tool, a helper a test forks) the import does
+  nothing and Playwright is not loaded.
+- **Options from the environment** for that mode: `GENCLASS_CHAOS`, `GENCLASS_SEED`, `GENCLASS_CHAOS_DELAY_MS`,
+  `GENCLASS_CHAOS_REORDER`, `GENCLASS_CHAOS_MATCH`, `GENCLASS_OUT_DIR`, `GENCLASS_MODEL`, `GENCLASS_MODEL_URL`,
+  `GENCLASS_RUNTIME_DIR`, and the off switch `GENCLASS_PLAYWRIGHT=off`. A value that cannot be read becomes its
+  default and one line in the summary.
+- **A workflow to copy**, `docs/github-app/workflows/genclass.yml`: on pull requests, `contents: read`, one job that
+  is allowed to fail; it installs the project's dependencies with the package manager its lockfile names (from the
+  repository root when the working directory has no lockfile, as in a workspace), installs this package and
+  `@genclass/runtime@beta` outside the project (the lockfile is untouched, and Playwright stays the project's only
+  copy), runs the command and uploads the race files as `genclass-races`. With chaos on, the app's API calls are held
+  for a seeded time, so a suite that passes normally can fail there: that is why the job is separate and
+  non-blocking.
+- **The fixture next to the register entry**: the fixture leaves a page alone when the register entry already covers
+  its browser context in the same process (nothing is installed twice; that test runs on the environment's
+  options). What a run is (options, names, the file) is one module, `session.ts`, which both entries use.
+- **Checked** for the mode without edits: unit tests on fakes of Playwright's objects; real Playwright runs without
+  a browser, through the command (with a config Playwright imports and one it requires), preloaded, switched off,
+  and interrupted with SIGINT in the middle of a test; a real process forked the way a test forks a helper, in which
+  the preloaded entry does nothing; a spec run on the installed Playwright that holds what the entry needs from it
+  to tell whose a context is (`test/hook-smoke`); and, in the workflow's Chromium job, the search page of the
+  fixture's end-to-end check under a suite that imports only `@playwright/test` (`test/e2e-unmodified`). That last
+  one has not run yet: its numbers are added when it has.
+- `package.json`: `exports["./register"]`, the `genclass-playwright-run` command, and `sideEffects` names
+  `dist/register.js` (importing it is what starts it).
 - **A web address in the files' text is not a link in the report**: `://` and `www.` get a zero-width space, like `#`
   and `@` before them, so GitHub links no address from a test name or an evidence line and leaves no "mentioned this"
   on another repository's issue. Operations stay as written, in code spans.
@@ -86,5 +149,4 @@ The first version on npm.
 - Docs: the README opens with what the package is and links `@genclass/runtime` on npm; the config example imports
   `defineConfig`; the measured double-submit list names all 14 data layers and the runtime build the matrix ran;
   the privacy note gives the versions that send diagnostics from local hosts (`0.1.0-beta.3` to `0.2.1`); links
-  outside the package are absolute, so they work on npm. `homepage` points at the README, and the package
-  description says the race files come from the GenClass Playwright fixture, which is not released yet.
+  outside the package are absolute, so they work on npm. `homepage` points at the README.

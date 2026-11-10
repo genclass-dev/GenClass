@@ -1,0 +1,49 @@
+# GenClass on your existing Playwright suite: no change to your tests or your playwright.config.
+# Copy to .github/workflows/genclass.yml.
+#
+# Assumes "npx playwright test" works on a fresh checkout with dependencies installed, which usually
+# means your config has a webServer that starts the app. Playwright in a subdirectory: set
+# defaults.run.working-directory and prefix the artifact path with it.
+#
+# The run holds your app's API calls for a seeded time, so tests that pass in your own e2e job can
+# fail here: this job is separate and allowed to fail, so it never blocks a pull request.
+name: genclass
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  genclass:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # With the package manager your lockfile names. A workspace's lockfile is at the root.
+      - name: Your dependencies
+        run: |
+          [ "$(ls pnpm-lock.yaml yarn.lock bun.lock* package-lock.json 2>/dev/null)" ] || cd "$GITHUB_WORKSPACE"
+          if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then corepack enable && yarn install --frozen-lockfile
+          elif [ -f bun.lock ] || [ -f bun.lockb ]; then npm install -g bun && bun install --frozen-lockfile
+          else npm ci; fi
+      # Outside your project: your lockfile is untouched. npm does not install Playwright with it (an
+      # optional peer dependency), so the run uses your project's own copy.
+      - name: GenClass
+        run: npm install --prefix "$RUNNER_TEMP/genclass" @genclass/playwright @genclass/runtime@beta
+      - name: Your Playwright's browsers
+        run: npx playwright install --with-deps
+      # Your suite under two seeds, with GenClass on the pages it opens. Arguments after the path go
+      # to "playwright test" (--project chromium, a file, ...). GENCLASS_CHAOS=off: no holds.
+      - name: Playwright with GenClass
+        run: node "$RUNNER_TEMP/genclass/node_modules/@genclass/playwright/bin/genclass-playwright-run.mjs"
+      # One small JSON file per test and seed. genclass-dev[bot] reads artifacts named genclass*.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: genclass-races
+          path: test-results/genclass
+          retention-days: 7
+          if-no-files-found: ignore

@@ -32,7 +32,7 @@ export interface PageScriptConfig {
   model: false | { baseUrl?: string };
   /** The loopback URL the agent link is pointed at (the fixture aborts requests to it). */
   agentUrl: string;
-  /** The name of the function Node exposed (page.exposeFunction) that receives every item. */
+  /** The name of the function Node exposed (page.exposeFunction; context.exposeBinding for the register entry) that receives every item. */
   binding: string;
 }
 

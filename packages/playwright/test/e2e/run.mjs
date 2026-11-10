@@ -11,16 +11,27 @@
 //   - (in search.spec.ts) no page logged a console error or had a failed request;
 //   - genclass-report.md names the buggy test under the witness group and lists the fixed test under "nothing
 //     flagged"; the command renders the same report from the same files.
-// Exit code 0 when all hold; the summary is printed as JSON.
+// Then the same page under a suite nobody edited (../e2e-unmodified, which imports only @playwright/test), run through
+// the command genclass-playwright-run: unmodified.mjs has what that half does and requires (the witness on the buggy
+// page in at least one of two seeds, nothing on the fixed page and nothing in the latency-only run).
+// Exit code 0 when all hold; the summary is printed as JSON, also when something does not (`failed` then says what
+// was expected and what was found).
+//
+// It cannot hang: Playwright runs as a child process with a time limit (child.mjs: RUN_LIMIT_MS, then SIGTERM, then
+// SIGKILL), and inside it the config sets a globalTimeout, a test timeout and a web server timeout.
 //
 //   npm run build -w @genclass/runtime && npm run build -w @genclass/playwright
 //   node packages/playwright/test/e2e/run.mjs
 
-import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseRaces, summarize } from "../../dist/summarize.js";
+import { ending, runNode } from "./child.mjs";
+import { runUnmodified } from "./unmodified.mjs";
+
+/** The longest the fixture's Playwright run may take, in ms (fifteen tests of a few seconds each). */
+const RUN_LIMIT_MS = 300_000;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const racesDir = join(here, "test-results", "genclass");
@@ -37,11 +48,11 @@ if (!existsSync(resolve(here, "../../../runtime/dist/genclass.global.js"))) fail
 if (!existsSync(resolve(here, "../../dist/fixture.js"))) fail("build @genclass/playwright first");
 
 const cli = resolve(here, "../../../../node_modules/@playwright/test/cli.js");
-const run = spawnSync(process.execPath, [cli, "test", "--config", join(here, "playwright.config.ts")], { cwd: here, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CI: "1" } });
-const out = `${run.stdout}${run.stderr}`;
-console.log(out.slice(-4000));
+const run = await runNode([cli, "test", "--config", join(here, "playwright.config.ts")], { cwd: here, env: { ...process.env, CI: "1" }, timeoutMs: RUN_LIMIT_MS });
+console.log(run.out.slice(-4000));
 summary.playwrightStatus = run.status;
-if (run.status !== 0) fail("the Playwright run failed");
+summary.playwrightMs = run.ms;
+if (run.error || run.timedOut || run.status !== 0) fail(`the Playwright run of the fixture's suite ended with ${ending(run, RUN_LIMIT_MS)}, expected exit code 0 (its output is above)`);
 
 // the files
 const names = existsSync(racesDir) ? readdirSync(racesDir).filter((n) => n.endsWith(".json")).sort() : [];
@@ -59,7 +70,7 @@ const fixed = files.filter((f) => f.file.test.includes("fixed page"));
 if (buggy.length !== 5 || fifo.length !== 5 || fixed.length !== 5) fail(`expected 5 files per test, found buggy ${buggy.length}, latency-only ${fifo.length}, fixed ${fixed.length}`);
 const seedsOf = (list) => list.map((f) => f.file.seed).sort((a, b) => a - b);
 summary.seeds = { buggy: seedsOf(buggy), latencyOnly: seedsOf(fifo), fixed: seedsOf(fixed) };
-for (const s of Object.values(summary.seeds)) if (s.join() !== "1,2,3,4,5") fail("expected seeds 1 to 5 for each test");
+for (const [test, s] of Object.entries(summary.seeds)) if (s.join() !== "1,2,3,4,5") fail(`expected seeds 1 to 5 for each test, found ${s.join(", ")} for ${test}`);
 for (const f of files) {
   const reorder = !fifo.includes(f);
   if (!f.file.chaos || !f.file.chaos.latencyMs || f.file.chaos.latencyMs[0] !== 0 || f.file.chaos.latencyMs[1] !== 600 || f.file.chaos.reorder !== reorder) fail(`${f.name}: chaos settings missing or wrong: ${JSON.stringify(f.file.chaos)}`);
@@ -74,7 +85,7 @@ const sigs = (list) => list.flatMap((f) => f.file.signatures.map((s) => `seed ${
 summary.buggy = { staleSeeds: buggy.filter(stale).map((f) => f.file.seed), otherSignatures: sigs(buggy).filter((s) => !s.endsWith(SIG)), evidence: buggy.filter(stale).map((f) => f.file.signatures.find((s) => s.sig === SIG).evidence) };
 summary.latencyOnly = { signatures: sigs(fifo) };
 summary.fixed = { signatures: sigs(fixed) };
-if (summary.buggy.staleSeeds.length === 0) fail("no overwrote-newer witness on the buggy page in any seed");
+if (summary.buggy.staleSeeds.length === 0) fail(`no overwrote-newer witness on the buggy page in any seed (expected ${SIG} in at least 1 of 5 seeds; the buggy page's files hold ${sigs(buggy).join(", ") || "no signature"})`);
 if (summary.buggy.otherSignatures.length !== 0) fail(`other signatures on the buggy page: ${summary.buggy.otherSignatures.join(", ")}`);
 if (summary.latencyOnly.signatures.length !== 0) fail(`signatures on the buggy page with reorder off (latency keeps the order, so nothing should overtake): ${summary.latencyOnly.signatures.join(", ")}`);
 if (summary.fixed.signatures.length !== 0) fail(`signatures on the fixed page (false reports): ${summary.fixed.signatures.join(", ")}`);
@@ -90,5 +101,9 @@ if (!/`GET \/api\/search` · `witness:overwrote-newer`/.test(report)) fail("the 
 if (!report.includes("2 tests with nothing flagged") || !report.includes("fixed page: results of the last query (5 seeds: 1, 2, 3, 4, 5)")) fail("the report does not list the fixed test under nothing flagged");
 if (report.includes("model was not ready")) fail("the report notes a model that was not ready (the model was off by choice)");
 summary.reportFirstLines = report.split("\n").slice(0, 4);
+
+// the same page, a suite nobody edited, through genclass-playwright-run
+await runUnmodified(summary, fail);
+
 summary.ok = true;
 console.log(JSON.stringify(summary, null, 2));

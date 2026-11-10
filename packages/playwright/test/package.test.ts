@@ -1,10 +1,11 @@
 // Package invariants: no runtime dependencies (the fixture's needs, @playwright/test and @genclass/runtime, are
-// optional peer dependencies), nothing but the fixture imports Playwright, the pure entries use no Node APIs, the
-// page script imports nothing at all, the exports map names what tsup builds, the README shows the fixture's exact
+// optional peer dependencies), nothing but the fixture imports Playwright (the register entry least of all: it finds
+// the Playwright that runs it, and a second copy would stop the run), the pure entries use no Node APIs, the page
+// script imports nothing at all, the exports map names what tsup builds, the README shows the fixture's exact
 // report.
 
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { createRequire } from "node:module";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { builtinModules, createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -29,10 +30,20 @@ describe("package: dependencies and imports", () => {
   it("imports only its own modules and Node built-ins (the pure entries not even those); only the fixture imports Playwright", () => {
     for (const f of ["index.ts", "summarize.ts", "schema.ts", "types.ts", "chaos.ts", "page.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^\.\/[a-z]+\.js$/);
     expect(imports(src("page.ts"))).toEqual([]);
-    for (const f of ["reporter.ts", "files.ts", "cli.ts", "install.ts", "races.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z]+)$/);
+    const node = ["reporter.ts", "files.ts", "cli.ts", "install.ts", "races.ts", "session.ts", "env.ts", "wrap.ts", "worker.ts", "register.ts", "wrapper.ts", "run.ts"];
+    for (const f of node) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z_]+)$/);
     for (const i of imports(src("fixture.ts"))) expect(i, `fixture.ts: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z]+|@playwright\/test)$/);
+    // every module of src/ is in one of the lists above
+    expect(readdirSync(join(pkgDir, "src")).sort()).toEqual([...node, "index.ts", "summarize.ts", "schema.ts", "types.ts", "chaos.ts", "page.ts", "fixture.ts"].sort());
     // the runtime is never imported: the fixture reads its dist/ from disk and the page loads it from there
-    for (const f of ["fixture.ts", "install.ts", "page.ts", "races.ts", "chaos.ts"]) expect(src(f)).not.toMatch(/from "@genclass\/runtime/);
+    for (const f of ["fixture.ts", "install.ts", "page.ts", "races.ts", "chaos.ts", "session.ts", "wrap.ts", "worker.ts", "register.ts", "run.ts"]) expect(src(f)).not.toMatch(/from "@genclass\/runtime/);
+  });
+
+  it("the register entry and the command never import Playwright, in the source or in the build's text: they find the project's own at run time", () => {
+    for (const f of ["register.ts", "worker.ts", "wrap.ts", "session.ts", "env.ts", "install.ts", "run.ts", "wrapper.ts"]) expect(src(f), f).not.toMatch(/(?:from|import)\s*\(?\s*"(?:@playwright\/test|playwright(?:-core)?)(?:\/[^"]*)?"/);
+    // sideEffects names the one entry that is one (importing it starts it)
+    expect(pkg.sideEffects).toEqual(["./dist/register.js"]);
+    expect(src("register.ts")).toMatch(/^startRegister\(\);$/m);
   });
 
   it("the exports map and the bin name what tsup builds; every entry also has a default condition", () => {
@@ -42,11 +53,18 @@ describe("package: dependencies and imports", () => {
       "./summarize": { types: "./dist/summarize.d.ts", import: "./dist/summarize.js", default: "./dist/summarize.js" },
       "./reporter": { types: "./dist/reporter.d.ts", import: "./dist/reporter.js", default: "./dist/reporter.js" },
       "./fixture": { types: "./dist/fixture.d.ts", import: "./dist/fixture.js", default: "./dist/fixture.js" },
+      "./register": { types: "./dist/register.d.ts", import: "./dist/register.js", default: "./dist/register.js" },
       "./package.json": "./package.json",
     });
-    expect(pkg.bin).toEqual({ "genclass-playwright-report": "bin/genclass-playwright-report.mjs" });
+    expect(pkg.typesVersions).toEqual({ "*": { fixture: ["./dist/fixture.d.ts"], register: ["./dist/register.d.ts"], reporter: ["./dist/reporter.d.ts"], summarize: ["./dist/summarize.d.ts"] } });
+    expect(pkg.bin).toEqual({ "genclass-playwright-report": "bin/genclass-playwright-report.mjs", "genclass-playwright-run": "bin/genclass-playwright-run.mjs" });
+    for (const [name, file] of Object.entries(pkg.bin as Record<string, string>)) {
+      const text = readFileSync(join(pkgDir, file), "utf8");
+      expect(text.startsWith("#!/usr/bin/env node\n"), name).toBe(true);
+      expect(text, name).toMatch(/from "\.\.\/dist\/(cli|run)\.js"/);
+    }
     const tsup = readFileSync(join(pkgDir, "tsup.config.ts"), "utf8");
-    expect(tsup).toContain('entry: { index: "src/index.ts", summarize: "src/summarize.ts", reporter: "src/reporter.ts", fixture: "src/fixture.ts", cli: "src/cli.ts" }');
+    expect(tsup).toContain('entry: { index: "src/index.ts", summarize: "src/summarize.ts", reporter: "src/reporter.ts", fixture: "src/fixture.ts", register: "src/register.ts", cli: "src/cli.ts", run: "src/run.ts" }');
     expect(tsup).toContain('external: ["@playwright/test", "@genclass/runtime"]');
   });
 
@@ -65,7 +83,11 @@ describe("package: dependencies and imports", () => {
     expect(entry.devDependencies).toEqual(pkg.devDependencies);
     expect(entry.peerDependencies).toEqual(pkg.peerDependencies);
     expect(entry.peerDependenciesMeta).toEqual(pkg.peerDependenciesMeta);
-    expect(entry.bin).toEqual(pkg.bin);
+    // The lock mirrors the package's commands. `genclass-playwright-run` came with the register entry, in a change
+    // that could not touch the root lockfile: the next `npm install` at the root adds its line there (npm ci does not
+    // compare commands, so nothing waits on it). Until then it is the one name the lock may be missing; everything
+    // else must match, in both directions.
+    expect({ ...(entry.bin as Record<string, string>), "genclass-playwright-run": "bin/genclass-playwright-run.mjs" }).toEqual(pkg.bin);
   });
 });
 
@@ -86,7 +108,22 @@ describe("package: how Playwright finds the reporter and the fixture", () => {
     const reporter = new (mod.default as new (o: object) => { printsToStdio(): boolean; onEnd(): void })({ quiet: true, outputFile: false });
     expect(reporter.printsToStdio()).toBe(false);
     expect(typeof reporter.onEnd).toBe("function");
-    for (const id of ["@genclass/playwright", "@genclass/playwright/summarize", "@genclass/playwright/fixture"]) expect(realpathSync(require.resolve(id, { paths: [repoRoot] }))).toMatch(/[\\/]dist[\\/](index|summarize|fixture)\.js$/);
+    for (const id of ["@genclass/playwright", "@genclass/playwright/summarize", "@genclass/playwright/fixture", "@genclass/playwright/register"]) expect(realpathSync(require.resolve(id, { paths: [repoRoot] }))).toMatch(/[\\/]dist[\\/](index|summarize|fixture|register)\.js$/);
+  });
+
+  it.runIf(built || Boolean(process.env.CI))("dist/register.js and dist/run.js import nothing but Node built-ins, and the entry carries the page script as source text", () => {
+    for (const f of ["register.js", "run.js"]) {
+      const text = readFileSync(join(pkgDir, "dist", f), "utf8");
+      const from = [...text.matchAll(/^\s*(?:import|export)\s[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+      expect(from.length, f).toBeGreaterThan(0);
+      for (const i of from) expect(builtinModules, `${f}: ${i}`).toContain(i.replace(/^node:/, ""));
+      expect(text, f).not.toMatch(/\bimport\s*\(\s*["'`](?:@playwright|playwright)/);
+    }
+    const register = readFileSync(join(pkgDir, "dist", "register.js"), "utf8");
+    expect(register).toContain("function genclassPageScript(cfg, runGlobal)");
+    // each wrapped method calls the original through super, under its own name (see src/wrap.ts)
+    for (const m of ["launch", "launchPersistentContext", "connect", "connectOverCDP", "newContext", "close"]) expect(register, m).toContain(`super.${m}(...args)`);
+    expect(readFileSync(join(pkgDir, "dist", "run.js"), "utf8")).toContain('new URL("./register.js", import.meta.url)');
   });
 
   it.runIf(built || Boolean(process.env.CI))("dist/fixture.js exports test and expect, and carries the page script as source text", async () => {

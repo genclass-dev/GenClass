@@ -217,6 +217,9 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
 ## Plans and private repositories
 
 - Public repositories are always reviewed. Nothing in the configuration can turn that off.
+- Production runs with `GITHUB_APP_PRIVATE_REPOS = "open"` since 2026-11-10 (the owner's decision): private
+  repositories are reviewed too, free, while the app is new. The rest of this section is what "plan" does, for a paid
+  plan later or a self-hosted collector.
 - `GITHUB_APP_PRIVATE_REPOS = "plan"` (the default) reviews a private repository only when the GenClass account
   managing the installation has a plan with `github_private` (`billing/plans.json`: Enterprise, so a grant by
   `comp_until` is how an agreement is switched on), or the GitHub account has a paid plan on GitHub Marketplace.
