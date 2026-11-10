@@ -1,4 +1,4 @@
-# genclass[bot]: design
+# genclass-dev[bot]: design
 
 How the GitHub App is built and why. Users' guide: [README.md](README.md). Operator's guide: [SETUP.md](SETUP.md).
 The code is the source of truth: [`telemetry-worker/src/github/`](../../telemetry-worker/src/github/).
@@ -56,7 +56,7 @@ person  ──browser──▶ /github, /github/setup        static
 | `settings.ts`, `yaml.ts` | `.github/genclass.yml`, in a small strict subset of YAML |
 | `routes.ts` | changed file paths to page routes, by framework convention |
 | `review.ts` | the findings a pull request keeps, and every sentence the app writes |
-| `commands.ts` | `@genclass <command>` |
+| `commands.ts` | `@genclass-dev <command>` |
 | `entitlement.ts` | public free, private by plan |
 | `store.ts` | the six tables of migration 0013 |
 | `pages.ts` | the three pages |
@@ -91,7 +91,7 @@ are worked out against the commit whose race files were read last.
 does not after, which the agent tools do on the developer's side.
 
 **State in D1, evidence nowhere.** A pull request's row holds ids, hashes and the short titles already in its public
-comment. Race files are read in memory per review; to answer `@genclass replay` later the app uses the stored titles,
+comment. Race files are read in memory per review; to answer `@genclass-dev replay` later the app uses the stored titles,
 not the files.
 
 **One review at a time per pull request.** A lease in the row (a minute) and a pending mark: an event that arrives

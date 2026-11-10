@@ -1,4 +1,4 @@
-# Listing genclass[bot] on GitHub Marketplace
+# Listing genclass-dev[bot] on GitHub Marketplace
 
 Research and steps, written 2026-11-09 from GitHub's documentation as read that day. Nothing is submitted from this
 repository, and the app is not registered yet ([docs/github-app/SETUP.md](../../github-app/SETUP.md)). Sources:
@@ -111,7 +111,7 @@ Later, once a paid plan is possible (no price is decided; these are the shapes G
 > - One check on each commit and one comment per pull request, edited in place. Nothing flagged, no comment.
 > - A finding flagged in two or more seeds of the same test is marked reproducible. From push to push it is new,
 >   still flagged, or not flagged at the new commit.
-> - `@genclass replay 1` gives the steps to reproduce a finding. `@genclass fix 1` writes a brief your coding agent
+> - `@genclass-dev replay 1` gives the steps to reproduce a finding. `@genclass-dev fix 1` writes a brief your coding agent
 >   can work from in your own CI.
 > - It has no access to repository contents: it cannot read or change your code.
 >
@@ -130,7 +130,7 @@ that shows `PRIVACY.md` (to do); Documentation
   background colour is chosen with it.
 - **Feature card:** "965 pixels x 482 pixels".
 - **Screenshots:** "up to five", "at least 1200px wide", one aspect ratio. Take them on a real pull request, after the
-  first run in SETUP.md: the comment with a reproducible finding; the check's page; a reply to `@genclass replay`; the
+  first run in SETUP.md: the comment with a reproducible finding; the check's page; a reply to `@genclass-dev replay`; the
   `/account/github` page. Not mock-ups.
 
 ## Steps

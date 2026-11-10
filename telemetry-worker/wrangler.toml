@@ -41,11 +41,11 @@ RUNTIME_ON_NPM = "0.3.0-beta.5"
 # Link, is the merchant of record, for 3.5% of each payment on top of Stripe's fees). No plan is marked today
 # (no plan is sold on the site today), so it stays "off"; README "Paid plans".
 MANAGED_PAYMENTS = "off"
-# The GitHub App, genclass[bot] (docs/github-app/SETUP.md). GITHUB_APP_SLUG is the app's URL name on GitHub
+# The GitHub App, genclass-dev[bot] (docs/github-app/SETUP.md). GITHUB_APP_SLUG is the app's URL name on GitHub
 # (github.com/apps/<slug>; its bot is <slug>[bot]). GITHUB_APP_PRIVATE_REPOS: "plan" reviews private repositories only
 # for an installation whose GenClass account or GitHub Marketplace plan includes them (billing/plans.json
 # github_private); "open" reviews every repository. Public repositories are always reviewed, free.
-GITHUB_APP_SLUG = "genclass"
+GITHUB_APP_SLUG = "genclass-dev"
 GITHUB_APP_PRIVATE_REPOS = "plan"
 
 # Paid plans (README "Paid plans"), Worker secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,

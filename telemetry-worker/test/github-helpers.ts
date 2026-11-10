@@ -13,7 +13,7 @@ import { now, ORIGIN, setup, type Fetch } from "./account-helpers.js";
 import { makeZip } from "./github-zip-helper.js";
 
 export const APP_ID = "424242";
-export const SLUG = "genclass";
+export const SLUG = "genclass-dev";
 export const WEBHOOK_SECRET = "gh_webhook_secret_0123456789abcdef";
 export const CLIENT_ID = "Iv23liTESTCLIENTID00";
 export const CLIENT_SECRET = "0123456789abcdef0123456789abcdef01234567";

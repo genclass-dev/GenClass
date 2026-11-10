@@ -192,7 +192,7 @@ describe("github app: reviewing a pull request", () => {
     expect(body).toContain("**2 findings** in this pull request's tests at `1111111` · 1 reproducible · 2 tests read");
     expect(body).toContain("| 1 | New | Duplicate submit · `POST /api/orders` |");
     expect(body).toContain("| 2 | New | Stale response · `GET /api/search` |");
-    expect(body).toContain("genclass[bot] read 4 race files from the artifact `genclass-races`");
+    expect(body).toContain("genclass-dev[bot] read 4 race files from the artifact `genclass-races`");
     // the same check run on that commit was updated, not a second one added
     const checks = gh.checksAt(SHA1);
     expect(checks).toHaveLength(1);
@@ -384,7 +384,7 @@ describe("github app: reviewing a pull request", () => {
     // a commit that starts no workflow at all: it waits, until someone asks
     expect(await result(await pullRequest(env, gh, "synchronize", 12, SHA2))).toBe("waiting for the test run");
     expect(gh.checksAt(SHA2)[0]).toMatchObject({ status: "in_progress" });
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass review"), { fetch: gh.fetch }))).toBe("no race files");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev review"), { fetch: gh.fetch }))).toBe("no race files");
     expect(gh.checksAt(SHA2)).toHaveLength(1);
     expect(gh.checksAt(SHA2)[0]).toMatchObject({ status: "completed", conclusion: "neutral" });
     expect(gh.checksAt(SHA2)[0].output.title).toBe("No race files for this commit");
@@ -476,7 +476,7 @@ describe("github app: reviewing a pull request", () => {
     advance(121_000);
     const patches = () => gh.calls.filter((c) => c.method === "PATCH" && c.path.includes("/check-runs/")).length;
     const was = patches();
-    await deliver(env, "issue_comment", commentEvent(12, "@genclass review"), { fetch: gh.fetch });
+    await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev review"), { fetch: gh.fetch });
     expect(gh.checksAt(SHA2)).toHaveLength(1);
     expect(gh.checksAt(SHA1)).toHaveLength(1);
     expect(patches()).toBe(was);
@@ -679,7 +679,7 @@ describe("github app: private repositories", () => {
     const run = gh.addRun(SHA1, undefined, {}, PRIVATE.full_name);
     const before = gh.calls.length;
     expect(await result(await deliver(env, "workflow_run", runEvent(run.id, SHA1, {}, PRIVATE), { fetch: gh.fetch }))).toBe("private repository without a plan");
-    expect(await result(await deliver(env, "issue_comment", commentEvent(3, "@genclass review", {}, PRIVATE), { fetch: gh.fetch }))).toBe("private repository without a plan");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(3, "@genclass-dev review", {}, PRIVATE), { fetch: gh.fetch }))).toBe("private repository without a plan");
     expect(gh.calls.length).toBe(before);
     // the same event again does not write the same check again
     await openPr(env, gh);
@@ -736,12 +736,12 @@ describe("github app: private repositories", () => {
 describe("github app: commands in pull-request comments", () => {
   it("help, replay and a finding that does not exist: one reply each, with a reaction to show the command was seen", async () => {
     const { env, gh } = await reviewed();
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass help", { id: 9001 }), { fetch: gh.fetch }))).toBe("help");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev help", { id: 9001 }), { fetch: gh.fetch }))).toBe("help");
     expect(gh.reactions).toEqual([{ comment: 9001, content: "eyes" }]);
-    expect(gh.posted(12)[1]).toContain("@genclass replay <n>");
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass replay 1"), { fetch: gh.fetch }))).toBe("replay");
+    expect(gh.posted(12)[1]).toContain("@genclass-dev replay <n>");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev replay 1"), { fetch: gh.fetch }))).toBe("replay");
     expect(gh.posted(12)[2]).toContain('`npx playwright test checkout.spec.ts -g "places one order" --repeat-each 2`');
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass replay 9"), { fetch: gh.fetch }))).toBe("no such finding");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev replay 9"), { fetch: gh.fetch }))).toBe("no such finding");
     expect(gh.posted(12)[3]).toContain("There is no finding 9 on this pull request. Its findings are numbered 1, 2");
     // none of the replies is the summary comment, which is still the first one
     expect(gh.posted(12)[0]).toContain("## GenClass runtime review");
@@ -752,33 +752,33 @@ describe("github app: commands in pull-request comments", () => {
     const { env, gh } = await reviewed();
     const count = () => gh.posted(12).length;
     const stranger = { user: { id: 666, login: "mallory", type: "User" }, association: "NONE" };
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass help", stranger), { fetch: gh.fetch }))).toBe("not allowed");
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass fix 1", { ...stranger, association: "CONTRIBUTOR" }), { fetch: gh.fetch }))).toBe("not allowed");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev help", stranger), { fetch: gh.fetch }))).toBe("not allowed");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev fix 1", { ...stranger, association: "CONTRIBUTOR" }), { fetch: gh.fetch }))).toBe("not allowed");
     // the pull request's author, without write access: help yes, fix and pause no
     const author = { user: { id: 77, login: "ada", type: "User" }, association: "CONTRIBUTOR" };
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass help", author), { fetch: gh.fetch }))).toBe("help");
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass pause", author), { fetch: gh.fetch }))).toBe("not allowed");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev help", author), { fetch: gh.fetch }))).toBe("help");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev pause", author), { fetch: gh.fetch }))).toBe("not allowed");
     // a member of the organization whose permission on this repository is read: GitHub is asked, and says no
     gh.permissions.set("bob", "read");
     const bob = { user: { id: 88, login: "bob", type: "User" }, association: "MEMBER" };
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass fix 1", bob), { fetch: gh.fetch }))).toBe("not allowed");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev fix 1", bob), { fetch: gh.fetch }))).toBe("not allowed");
     expect(gh.calls.some((c) => c.path === "/repos/acme/shop/collaborators/bob/permission")).toBe(true);
-    for (const bot of [{ id: 1, login: "genclass[bot]", type: "Bot" }, { id: 2, login: "dependabot[bot]", type: "Bot" }, { id: 3, login: "sneaky[bot]", type: "User" }]) {
-      expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass help", { user: bot, association: "COLLABORATOR" }), { fetch: gh.fetch })), bot.login).toBe("bot");
+    for (const bot of [{ id: 1, login: "genclass-dev[bot]", type: "Bot" }, { id: 2, login: "dependabot[bot]", type: "Bot" }, { id: 3, login: "sneaky[bot]", type: "User" }]) {
+      expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev help", { user: bot, association: "COLLABORATOR" }), { fetch: gh.fetch })), bot.login).toBe("bot");
     }
     expect(count()).toBe(2);
     // not a command, an edit, an issue that is not a pull request, a closed pull request
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "nice, could @genclass review this?"), { fetch: gh.fetch }))).toBe("no command");
-    expect(await result(await deliver(env, "issue_comment", { ...commentEvent(12, "@genclass help"), action: "edited" }, { fetch: gh.fetch }))).toBe("ignored");
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass help", { issue: { pull_request: undefined } }), { fetch: gh.fetch }))).toBe("not a pull request");
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass help", { issue: { state: "closed" } }), { fetch: gh.fetch }))).toBe("closed");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "nice, could @genclass-dev review this?"), { fetch: gh.fetch }))).toBe("no command");
+    expect(await result(await deliver(env, "issue_comment", { ...commentEvent(12, "@genclass-dev help"), action: "edited" }, { fetch: gh.fetch }))).toBe("ignored");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev help", { issue: { pull_request: undefined } }), { fetch: gh.fetch }))).toBe("not a pull request");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev help", { issue: { state: "closed" } }), { fetch: gh.fetch }))).toBe("closed");
     expect(count()).toBe(2);
   });
 
   it("fix: a brief for a branch of this repository, asked for by someone with write access; never for a fork", async () => {
     const { env, gh } = await reviewed();
     gh.pulls.set(`${REPO.full_name}#12`, pullEvent("opened", 12, SHA1).pull_request);
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass fix 1"), { fetch: gh.fetch }))).toBe("fix brief");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev fix 1"), { fetch: gh.fetch }))).toBe("fix brief");
     const brief = gh.posted(12)[1]!;
     expect(brief.startsWith("<!-- genclass-bot:fix-brief -->\n### Fix brief, finding 1\n")).toBe(true);
     expect(brief).toContain("Asked for by ada.");
@@ -786,34 +786,34 @@ describe("github app: commands in pull-request comments", () => {
     expect(json).toMatchObject({ schema: "genclass-brief/1", repository: "acme/shop", pull_request: 12, head_sha: SHA1, finding: { number: 1, operation: "POST /api/orders", reproducible: true } });
     // the same pull request, but its head is a fork's branch
     gh.pulls.set(`${REPO.full_name}#12`, pullEvent("opened", 12, SHA1, { head: { sha: SHA1, ref: "patch", repo: { id: 99001, full_name: "mallory/shop" } } }).pull_request);
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass fix 1"), { fetch: gh.fetch }))).toBe("fix refused for a fork");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev fix 1"), { fetch: gh.fetch }))).toBe("fix refused for a fork");
     expect(gh.posted(12)[2]).toContain("A fix brief is only written for branches of this repository.");
     expect(gh.posted(12)[2]).not.toContain("genclass-bot:fix-brief");
   });
 
   it("pause and resume a pull request; review on request; issue on request; commands off", async () => {
     const { env, gh, sql } = await reviewed();
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass pause"), { fetch: gh.fetch }))).toBe("paused");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev pause"), { fetch: gh.fetch }))).toBe("paused");
     expect(parseState(String(sql.rows("SELECT state FROM github_prs")[0]!.state)).paused).toBe(true);
     expect(await result(await pullRequest(env, gh, "synchronize", 12, SHA2))).toBe("paused on this pull request");
     // asked for by a person, a review runs even while paused
     expect(gh.checksAt(SHA2)).toEqual([]);
     gh.addRun(SHA2);
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass review"), { fetch: gh.fetch }))).toBe("findings");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev review"), { fetch: gh.fetch }))).toBe("findings");
     expect(gh.checksAt(SHA2)).toHaveLength(1);
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass resume"), { fetch: gh.fetch }))).toBe("resumed");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev resume"), { fetch: gh.fetch }))).toBe("resumed");
     expect(parseState(String(sql.rows("SELECT state FROM github_prs")[0]!.state)).paused).toBe(false);
     expect(await result(await pullRequest(env, gh, "synchronize", 12, SHA3))).toBe("no race files");
 
-    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass issue 2"), { fetch: gh.fetch }))).toBe("issue");
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev issue 2"), { fetch: gh.fetch }))).toBe("issue");
     expect(gh.issues).toHaveLength(1);
     expect(gh.issues[0]!.title).toBe("Stale response on GET /api/search (GenClass, from #12)");
     expect(gh.posted(12).at(-1)).toContain("Opened #301 for finding 2.");
 
     const off = await reviewed({}, "commands: false\n");
-    expect(await result(await deliver(off.env, "issue_comment", commentEvent(12, "@genclass help"), { fetch: off.gh.fetch }))).toBe("commands are off");
+    expect(await result(await deliver(off.env, "issue_comment", commentEvent(12, "@genclass-dev help"), { fetch: off.gh.fetch }))).toBe("commands are off");
     expect(off.gh.posted(12)).toHaveLength(1);
-    expect(off.gh.summary(12)).not.toContain("@genclass replay 1");
+    expect(off.gh.summary(12)).not.toContain("@genclass-dev replay 1");
   });
 });
 

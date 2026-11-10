@@ -41,7 +41,7 @@ const DAY = 86_400_000;
 export const GRACE_DAYS = 30;
 
 export type PlanId = "free" | "enterprise";
-/** `github_private`: genclass[bot] reviews the account's private repositories (src/github/entitlement.ts); public ones are free for everyone. */
+/** `github_private`: genclass-dev[bot] reviews the account's private repositories (src/github/entitlement.ts); public ones are free for everyone. */
 export type Entitlement = "dashboard" | "forwarding" | "export" | "analytics" | "custom_model" | "github_private";
 
 export interface Plan {

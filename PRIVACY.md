@@ -4,7 +4,7 @@ _Last updated: 2026-11-09._
 
 This policy covers the diagnostics that `@genclass/runtime` (from `0.1.0-beta.3`) sends to its maintainers. It does not
 cover the website or app that uses GenClass; that site has its own privacy policy. It also covers the
-GitHub App, genclass[bot], for the people and organizations who install it ("The GitHub App" below; the app is not
+GitHub App, genclass-dev[bot], for the people and organizations who install it ("The GitHub App" below; the app is not
 available yet).
 
 ## Who we are
@@ -164,7 +164,7 @@ own records of past payments as the law requires.
 
 ## The GitHub App
 
-genclass[bot] is a GitHub App that someone installs on their own account or organization, for all of its repositories
+genclass-dev[bot] is a GitHub App that someone installs on their own account or organization, for all of its repositories
 or the ones they pick. It comments on a pull request with what GenClass saw while that pull request's tests ran. It
 does nothing on a repository where it is not installed. Installing it needs no GenClass account.
 

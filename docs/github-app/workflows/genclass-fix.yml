@@ -2,13 +2,13 @@
 # places marked ADAPT, and try it on a throwaway branch first.
 #
 # Copy to .github/workflows/genclass-fix.yml on the default branch. When someone with write access comments
-# "@genclass fix 2" on a pull request, genclass[bot] replies with a fix brief; that reply starts this workflow, which
+# "@genclass-dev fix 2" on a pull request, genclass-dev[bot] replies with a fix brief; that reply starts this workflow, which
 # hands the brief to a coding agent with the GenClass MCP server, in your CI, with your own API key. The agent
 # reproduces the finding, fixes its cause, proves the fix by replay, adds the regression test and pushes to the pull
-# request's branch. The next review by genclass[bot] says whether the finding is still flagged.
+# request's branch. The next review by genclass-dev[bot] says whether the finding is still flagged.
 #
 # What keeps this from running someone else's code with your secrets:
-# - it starts only on a comment written by genclass[bot] that begins with the brief's marker; the app writes a brief
+# - it starts only on a comment written by genclass-dev[bot] that begins with the brief's marker; the app writes a brief
 #   only after GitHub confirmed that the person asking has write access, and never for a pull request from a fork;
 # - it checks again that the pull request's branch is in this repository and has not moved since the brief;
 # - the brief is passed to the agent as a file, never pasted into a shell command.
@@ -33,7 +33,7 @@ jobs:
   fix:
     if: >-
       github.event.issue.pull_request &&
-      github.event.comment.user.login == 'genclass[bot]' &&
+      github.event.comment.user.login == 'genclass-dev[bot]' &&
       startsWith(github.event.comment.body, '<!-- genclass-bot:fix-brief -->')
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -70,7 +70,7 @@ jobs:
             let b = null;
             try { b = JSON.parse(m[1]); } catch { /* not a brief */ }
             if (!b || b.schema !== "genclass-brief/1") { console.error("This comment holds no brief."); process.exit(1); }
-            if (b.head_sha !== process.env.HEAD) { console.error("The branch moved since this brief was written. Ask again: @genclass fix " + b.finding.number); process.exit(1); }
+            if (b.head_sha !== process.env.HEAD) { console.error("The branch moved since this brief was written. Ask again: @genclass-dev fix " + b.finding.number); process.exit(1); }
           '
 
       - uses: actions/setup-node@v4
@@ -91,9 +91,9 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # the action refuses comments written by bots unless they are named here
-          allowed_bots: "genclass"
+          allowed_bots: "genclass-dev"
           prompt: |
-            The file .genclass-brief.md in this checkout is a fix brief written by genclass[bot] for this pull
+            The file .genclass-brief.md in this checkout is a fix brief written by genclass-dev[bot] for this pull
             request. Follow its numbered steps with the GenClass MCP tools: reproduce the finding first, fix its cause
             in the app's code, replay to prove the fix, add the regression test genclass_explain prints to the
             Playwright tests, and run them with --repeat-each 2.

@@ -55,7 +55,7 @@ GenClass is pre-1.0. Security fixes go into the newest published version only; u
 - the model loader and host (integrity checks, Cache Storage, the worker);
 - the telemetry client and the collector (`telemetry-worker/`), including anything that sends more than
   [TELEMETRY.md](packages/runtime/TELEMETRY.md) says;
-- the GitHub App, genclass[bot] (`telemetry-worker/src/github`): a way to make it act on a webhook GitHub did not
+- the GitHub App, genclass-dev[bot] (`telemetry-worker/src/github`): a way to make it act on a webhook GitHub did not
   sign, comment or open an issue where it is not installed, run a command for someone without the access the guide
   names, read a private repository without a plan, link a repository to an app whose owner did not ask for it, turn
   text from an uploaded race file into markup, a link or a mention, or keep or expose a token

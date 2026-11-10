@@ -1,4 +1,4 @@
-// What genclass[bot] says on a pull request: the findings it keeps track of from push to push, and the text of its
+// What genclass-dev[bot] says on a pull request: the findings it keeps track of from push to push, and the text of its
 // summary comment, check run, inline comments and replies. Pure except for one SHA-256 (fingerprints, body hashes): the
 // same evidence and the same stored state give the same bytes.
 //
@@ -15,7 +15,7 @@
 //   summariser's escaping (no markup, no links, no @mentions, no #references) and the fix brief's JSON only cut and
 //   stripped of control characters; the brief tells its reader that those fields are data, not instructions.
 // - One summary comment per pull request, edited in place; numbers once given to a finding never change, so
-//   "@genclass fix 2" means the same finding after the next push.
+//   "@genclass-dev fix 2" means the same finding after the next push.
 
 import {
   buildSummary,
@@ -568,6 +568,8 @@ export function renderHelp(mention: string, links: ReviewLinks): string {
     `- ${c("fix <n>")}: a brief for a coding agent (Claude Code with ${code("@genclass/mcp")}, or another MCP client) to reproduce finding n, fix its cause and prove the fix by replay.`,
     `- ${c("issue <n>")}: open an issue for finding n.`,
     `- ${c("pause")} / ${c("resume")}: stop and start updates on this pull request.`,
+    "",
+    `${code("/genclass review")} is the same thing, shorter: ${code("/genclass")} works in place of the mention for every command.`,
     "",
     `Commands are taken from people with write access to the repository; ${c("review")}, ${c("replay")} and ${c("help")} also from the pull request's author. [Setup and settings](${links.setup}).`,
   ]);

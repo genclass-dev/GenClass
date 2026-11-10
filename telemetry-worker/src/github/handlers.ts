@@ -1,4 +1,4 @@
-// What genclass[bot] does when GitHub tells it something happened: the webhook events, one function each, and the
+// What genclass-dev[bot] does when GitHub tells it something happened: the webhook events, one function each, and the
 // review of one pull request (reviewPull).
 //
 // Invariants:

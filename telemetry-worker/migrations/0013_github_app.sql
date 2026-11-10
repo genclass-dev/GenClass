@@ -1,4 +1,4 @@
--- The GitHub App, genclass[bot] (src/github/*; docs/github-app/README.md): where it is installed, which repository is
+-- The GitHub App, genclass-dev[bot] (src/github/*; docs/github-app/README.md): where it is installed, which repository is
 -- linked to which GenClass app, what it posted on each pull request, and the GitHub Marketplace plan of an account.
 -- Additive only: six new tables; no existing row or column changes, and nothing here is read unless the worker has the
 -- app's secrets (GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_WEBHOOK_SECRET).
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS github_repos (
   project_id      TEXT,                        -- projects.id of the linked app, else NULL
   linked_by       TEXT,                        -- accounts.id
   linked          TEXT,
-  paused          INTEGER NOT NULL DEFAULT 0,  -- 1: no reviews until resumed (the account page, or @genclass pause)
+  paused          INTEGER NOT NULL DEFAULT 0,  -- 1: no reviews until resumed (the account page, or @genclass-dev pause)
   updated         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS github_repos_installation ON github_repos (installation_id);

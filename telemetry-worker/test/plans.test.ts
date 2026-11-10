@@ -51,7 +51,7 @@ describe("billing/plans.json: the one source of plans", () => {
     for (const p of PLANS) expect(p.stripe_lookup_keys, p.id).toEqual({ monthly: null, yearly: null });
     // the dashboard, analytics, export, forwarding and a classifier are free, with 90 days of history and no app limit
     expect(free!.limits).toEqual({ apps: null, history_days: 90 });
-    // github_private (genclass[bot] on private repositories, 2026-11-09): Enterprise only; public repositories need no entitlement
+    // github_private (genclass-dev[bot] on private repositories, 2026-11-09): Enterprise only; public repositories need no entitlement
     expect(free!.entitlements).toEqual({ dashboard: true, forwarding: true, export: true, analytics: true, custom_model: true, github_private: false });
     expect(free!.features).toContainEqual({
       text: "Your own classifier: we train a GenClass model on your app's traffic, bug reports or labelled examples and ship it as a private model your runtime loads",

@@ -21,7 +21,7 @@
 // Accounts (src/auth.ts, src/account-pages.ts; routed on genclass.dev/{login*,signup*,logout*,account*,auth/*} and
 // /api/{auth,device,me,account}*): passkeys, Google and GitHub sign-in, sessions, the CLI's device flow, owned apps.
 //
-// The GitHub App, genclass[bot] (src/github/*; routed on genclass.dev/github* and /api/github/*, /account/github):
+// The GitHub App, genclass-dev[bot] (src/github/*; routed on genclass.dev/github* and /api/github/*, /account/github):
 // its webhook, its pages and the link between a repository and an app. Off, and every route above unchanged, until
 // the app's secrets are set (src/github/config.ts).
 

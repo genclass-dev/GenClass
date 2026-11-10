@@ -1,8 +1,10 @@
-// "@genclass <command>" in a pull-request comment. Pure: a comment's text in, at most one command out.
+// "@genclass-dev <command>" or "/genclass <command>" in a pull-request comment. Pure: a comment's text in, at most one
+// command out.
 //
 // Invariants:
-// - A command is a line of its own that starts with the bot's mention ("@genclass", or "@genclass[bot]"), then one
-//   known word, then at most a finding number. Mentions in the middle of a sentence, inside a quote ("> ...") or
+// - A command is a line of its own that starts with the bot's mention ("@genclass-dev", or "@genclass-dev[bot]") or with
+//   "/genclass", then one known word, then at most a finding number. The short form mentions nobody: "@genclass" is
+//   another GitHub account, which a mention would notify, so that spelling is never a command. Mentions in the middle of a sentence, inside a quote ("> ...") or
 //   inside a fenced code block are not commands, so quoting the bot's own help text never runs anything.
 // - Only the first command of a comment counts, and only the first lines of a comment are looked at.
 // - Who may run what is decided by the caller from GitHub's own data (src/github/handlers.ts); nothing in the comment
@@ -22,6 +24,8 @@ export const NEEDS_FINDING: readonly CommandName[] = ["replay", "fix", "issue"];
 export const NEEDS_WRITE: readonly CommandName[] = ["fix", "issue", "pause", "resume"];
 
 const NAMES: Record<string, CommandName> = { review: "review", "re-review": "review", replay: "replay", reproduce: "replay", fix: "fix", issue: "issue", help: "help", pause: "pause", resume: "resume" };
+/** The short form: no mention, so it notifies nobody and cannot be taken over by an account of the same name. */
+export const SLASH = "/genclass";
 const MAX_LINES = 60;
 const MAX_CHARS = 8000;
 
@@ -38,10 +42,14 @@ export function parseCommand(body: unknown, mention: string): Command | null {
       continue;
     }
     if (fenced || line.startsWith(">")) continue;
-    if (line.slice(0, head.length).toLowerCase() !== head) continue;
-    let rest = line.slice(head.length);
-    if (rest.toLowerCase().startsWith("[bot]")) rest = rest.slice(5);
-    // "@genclass-dev fix 1" names someone else: the mention must end here
+    let rest: string;
+    if (line.slice(0, head.length).toLowerCase() === head) {
+      rest = line.slice(head.length);
+      if (rest.toLowerCase().startsWith("[bot]")) rest = rest.slice(5);
+    } else if (line.slice(0, SLASH.length).toLowerCase() === SLASH) {
+      rest = line.slice(SLASH.length);
+    } else continue;
+    // "@genclass-dev-x fix 1" names someone else and "/genclassy" is another word: the prefix must end here
     if (!/^[\s,:]/.test(rest)) continue;
     // the whole line is the command: a word, then at most "finding" and a number; anything more is a sentence
     const words = rest.replace(/^[\s,:]+/, "").replace(/[.!?]+$/, "").split(/\s+/).filter(Boolean);

@@ -302,7 +302,7 @@ interface GenClassRacesFile {
 
 `location` is relative to the checkout on GitHub Actions (`GITHUB_WORKSPACE`), else to the Playwright config's
 directory, and is left out when Playwright gives no line or the test file is outside that directory. The report does
-not use it; [genclass[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), the GitHub
+not use it; [genclass-dev[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), the GitHub
 App, puts a finding next to the test with it when that line is part of a pull request's diff.
 
 The type is exported as `GenClassRacesFile`. A file that does not validate is never half-read: the report lists it
@@ -474,10 +474,10 @@ The same with the GitHub CLI only (it updates the bot's comment that starts with
 
 ### With the GitHub App instead
 
-[genclass[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), GenClass's GitHub App
+[genclass-dev[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), GenClass's GitHub App
 (not installable yet), does the posting itself: the workflow only uploads the race files, with no write permission, so
 it is the same for pull requests from forks. The app keeps one comment per pull request, numbers the findings, says
-from push to push which are new, still flagged or not flagged at the new commit, and answers `@genclass replay 1`.
+from push to push which are new, still flagged or not flagged at the new commit, and answers `@genclass-dev replay 1`.
 
 ```yaml
       - run: npx playwright test --repeat-each 2

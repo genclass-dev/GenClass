@@ -1,4 +1,4 @@
-# genclass[bot]: the GitHub App
+# genclass-dev[bot]: the GitHub App
 
 GenClass's GitHub App puts what the GenClass runtime saw on the pull request it was seen in. While your Playwright
 tests run, the runtime watches the page under test: a request that left twice, an older response applied over a newer
@@ -7,7 +7,7 @@ posts one check and one comment with each finding's test, its seeds and the evid
 
 It reads the race files your workflow uploads, never your source code. It is free on public repositories.
 
-- Install: <https://genclass.dev/github> (or `https://github.com/apps/genclass/installations/new`)
+- Install: <https://genclass.dev/github> (or `https://github.com/apps/genclass-dev/installations/new`)
 - Code: [`telemetry-worker/src/github/`](../../telemetry-worker/src/github/)
 - For whoever runs the app: [SETUP.md](SETUP.md). How it is built and why: [DESIGN.md](DESIGN.md).
 
@@ -56,7 +56,7 @@ It reads the race files your workflow uploads, never your source code. It is fre
    appears, and later pushes edit it in place.
 
 Reviews start with the first push or comment after the app is installed; a pull request that was already open is
-picked up on its next push, or when someone comments `@genclass review`.
+picked up on its next push, or when someone comments `@genclass-dev review`.
 
 ## What a review looks like
 
@@ -73,7 +73,7 @@ in one), as the app writes it; the report inside the fold and the footer's links
 | 1 | New | Duplicate submit · `POST /api/orders` | checkout.spec.ts > checkout > places one order | 2 of 2 seeds, **reproducible** |
 | 2 | New | Stale response · `GET /api/search` | search.spec.ts > search > shows the results of the last query | 1 of 2 seeds |
 
-Reply `@genclass replay 1` for the steps to reproduce a finding, or `@genclass fix 1` for a brief a coding agent can work from.
+Reply `@genclass-dev replay 1` for the steps to reproduce a finding, or `@genclass-dev fix 1` for a brief a coding agent can work from.
 
 <details><summary>The race report, test by test</summary>
 ... the report `genclass-playwright-report` prints, with each evidence line ...
@@ -81,7 +81,7 @@ Reply `@genclass replay 1` for the steps to reproduce a finding, or `@genclass f
 
 ---
 
-<sub>genclass[bot] read 4 race files from the artifact `genclass-races` of this pull request's workflow run, never your source code. ...</sub>
+<sub>genclass-dev[bot] read 4 race files from the artifact `genclass-races` of this pull request's workflow run, never your source code. ...</sub>
 ```
 
 The check on the commit carries the same table as its summary and the whole race report on its page. By default it is
@@ -90,7 +90,7 @@ neutral with findings and green with none; it fails only if you ask it to (`chec
 ## What the lines mean
 
 - **A finding** is one signature in one test: a trigger, a diagnosis and an operation, such as `request:duplicate` on
-  `POST /api/orders`. Its number is given once and never changes, so `@genclass fix 2` means the same finding after
+  `POST /api/orders`. Its number is given once and never changes, so `@genclass-dev fix 2` means the same finding after
   the next push.
 - **Where it comes from.** With the fixture's default (`model: "skip"`) the files carry *witnesses*: happens-before
   facts the runtime measured without its model. `overwrote-newer`: a response wrote a field over what a newer request
@@ -115,12 +115,16 @@ Each on a line of its own, in a comment on the pull request:
 
 | Command | What it does | Who may use it |
 |---|---|---|
-| `@genclass review` | Reads this commit's race files again and updates the check and the comment. | write access, or the pull request's author |
-| `@genclass replay <n>` | Replies with the steps to reproduce finding n on your machine. | write access, or the author |
-| `@genclass fix <n>` | Replies with a brief a coding agent can work from ([below](#fix)). Never for a pull request from a fork. | write access |
-| `@genclass issue <n>` | Opens an issue for finding n. | write access |
-| `@genclass pause` / `resume` | Stops and starts updates on this pull request. | write access |
-| `@genclass help` | Lists the commands. | write access, or the author |
+| `@genclass-dev review` | Reads this commit's race files again and updates the check and the comment. | write access, or the pull request's author |
+| `@genclass-dev replay <n>` | Replies with the steps to reproduce finding n on your machine. | write access, or the author |
+| `@genclass-dev fix <n>` | Replies with a brief a coding agent can work from ([below](#fix)). Never for a pull request from a fork. | write access |
+| `@genclass-dev issue <n>` | Opens an issue for finding n. | write access |
+| `@genclass-dev pause` / `resume` | Stops and starts updates on this pull request. | write access |
+| `@genclass-dev help` | Lists the commands. | write access, or the author |
+
+`/genclass` works in place of the mention for every command (`/genclass review`, `/genclass fix 2`), and notifies
+nobody. The mention is `@genclass-dev`, the organization that owns the app; `@genclass` without `-dev` is another GitHub
+account and is never read as a command.
 
 "Write access" is what GitHub says about the commenter at that moment. The app adds an eyes reaction to a command it
 took.
@@ -148,7 +152,7 @@ artifact: genclass      # artifacts whose name starts with this are read
 production:
   enabled: true         # with a linked GenClass app: its findings on the pages this pull request touches
   days: 7               # 1, 7 or 30
-commands: true          # the @genclass commands
+commands: true          # the @genclass-dev commands
 issues: never           # never | merge: open an issue when a pull request merges with reproducible findings
 ```
 
@@ -158,7 +162,7 @@ strings, numbers, true and false; no anchors, tags or multi-line strings).
 
 With `check.fail_on` set, the check stays "in progress" on a new commit until its test run finishes, so a required
 check cannot pass before the race files arrive. A commit that starts no workflow at all keeps waiting;
-`@genclass review` ends the wait with what there is.
+`@genclass-dev review` ends the wait with what there is.
 
 ## Production findings
 
@@ -182,7 +186,7 @@ that it caused them.
 
 ## Fix with a coding agent
 
-`@genclass fix <n>` replies with a brief: what was seen, the command that runs the test under the same seeds, and the
+`@genclass-dev fix <n>` replies with a brief: what was seen, the command that runs the test under the same seeds, and the
 steps for an agent with [`@genclass/mcp`](../../packages/mcp/README.md): reproduce it (`genclass_explore`,
 `genclass_explain`), fix the cause, prove it by replay (`genclass_replay`: "not reproduced" after "reproduced"), add
 the regression test `genclass_explain` prints, push. The next review says whether the finding is still flagged.
@@ -192,7 +196,7 @@ Two ways to use it:
 - **On your machine.** Paste the brief into Claude Code (or another MCP client) in a checkout of the branch with your
   dev server running.
 - **In your CI.** [`workflows/genclass-fix.yml`](workflows/genclass-fix.yml) is a starting point: it runs when
-  genclass[bot] posts a brief and hands it to [`anthropics/claude-code-action`](https://github.com/anthropics/claude-code-action)
+  genclass-dev[bot] posts a brief and hands it to [`anthropics/claude-code-action`](https://github.com/anthropics/claude-code-action)
   with `@genclass/mcp` configured, with your own API key. The agent pushes to the pull request's branch. It has not
   been run against a real repository yet: read it, and adapt how it starts your app.
 
@@ -275,7 +279,7 @@ pull request up again at its next event.
   that commit. Check the upload step ran (`if: ${{ !cancelled() }}`) and that `test-results/genclass` has files:
   `npx genclass-playwright-report` prints the same report locally.
 - **The check stays "Waiting for this commit's test run".** A workflow run on the commit has not finished, or GitHub's
-  rate limit was hit. `@genclass review` reads again.
+  rate limit was hit. `@genclass-dev review` reads again.
 - **No comment.** The default posts one only when something is flagged (`comment: always` changes that).
 - **A private repository shows "Private repositories need a plan".** See [Plans](#plans).
 - **Settings do not apply.** The file must be on the default branch; the check lists any mistake in it. Changes are

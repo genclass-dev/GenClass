@@ -1,4 +1,4 @@
-// Which repositories genclass[bot] reviews: every public repository, free; a private one only for an installation
+// Which repositories genclass-dev[bot] reviews: every public repository, free; a private one only for an installation
 // with a plan that includes private repositories.
 //
 // Invariants:

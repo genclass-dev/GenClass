@@ -1,4 +1,4 @@
-# genclass[bot]: setup for whoever runs it
+# genclass-dev[bot]: setup for whoever runs it
 
 What has to happen, in order, before the GitHub App reviews its first pull request, and how to run it afterwards. The
 code is in [`telemetry-worker/src/github/`](../../telemetry-worker/src/github/); it is part of the collector worker and
@@ -11,12 +11,13 @@ owner, by hand.
 
 Three things decide whether the app can launch as described. None of them can be done from this repository.
 
-1. **The name.** The app is meant to be "GenClass", whose URL name is `genclass` and whose bot is `genclass[bot]`.
-   GitHub refuses an app name that matches an existing account's name unless that account is yours, and a user
-   account named `GenClass` exists (created 2024-06-01, no public repositories; checked 2026-11-09). If it is not
-   yours, the app needs another name. Whatever GitHub turns the name into is what people type: "GenClass Bot" gives
-   `genclass-bot`, `genclass-bot[bot]` and `@genclass-bot fix 1`. The worker reads the name from `GITHUB_APP_SLUG`; the
-   guide, the two workflow files and the pages say `genclass` and need the same change.
+1. **The name (settled 2026-11-09).** The app is registered as "GenClass.dev" for the organization `genclass-dev`
+   (app id 5691603): its URL name is `genclass-dev`, its page <https://github.com/apps/genclass-dev>, its bot
+   `genclass-dev[bot]`. "GenClass" alone was not possible: GitHub refuses an app name that matches an account that is
+   not yours, and `github.com/genclass` is someone else's (created 2024-06-01). `genclass-dev` is the organization's
+   own login, which GitHub allows for an app the organization owns, so nobody else can take the name people type.
+   Commands are `@genclass-dev review` or the short form `/genclass review`. Never document `@genclass`: that
+   mention notifies the other account. The worker reads the name from `GITHUB_APP_SLUG`.
 2. **`@genclass/playwright` on npm.** The app reads the files that package's fixture writes. Version 0.1.0 is not
    published. The fixture now also writes where each test is declared (`location`), which inline comments need; the
    first published version must include it.
@@ -81,7 +82,7 @@ rm .github-app.secrets.json
 | `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | optional: the Marketplace listing's own webhook secret (default: the app's) |
 
 These are not `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, which belong to the OAuth app behind "Sign in with
-GitHub". If the app's URL name is not `genclass`, set `GITHUB_APP_SLUG` in `wrangler.toml`.
+GitHub". If the app's URL name is not `genclass-dev`, set `GITHUB_APP_SLUG` in `wrangler.toml`.
 
 ## 4. The tables
 
@@ -117,7 +118,7 @@ npx --yes wrangler@4 deploy
    ([README.md](README.md), "Setup").
 4. Open a pull request there. Expect, in order: the GenClass check, neutral, "No race files for this commit"; when the
    test run finishes, the same check with the findings, and the comment if anything was flagged.
-5. Comment `@genclass help`. Expect an eyes reaction and one reply.
+5. Comment `@genclass-dev help`. Expect an eyes reaction and one reply.
 6. Sign in at `https://genclass.dev/account/github`, Connect GitHub, link the repository to an app, push again. Expect
    the "In production" section when the pull request changes a route file.
 7. Uninstall. `SELECT COUNT(*) FROM github_installations` is 0 again.
@@ -145,7 +146,7 @@ npx --yes wrangler@4 dev --local --local-upstream localhost:8787
 ```
 
 ```bash
-node scripts/github-app-setup.mjs --name "GenClass (test)" --private --origin https://<your tunnel host>
+node scripts/github-app-setup.mjs --name "GenClass.dev (test)" --private --origin https://<your tunnel host>
 ```
 
 Put the values from `.github-app.secrets.json` into `.dev.vars` (`.dev.vars.example` lists the names), with
@@ -157,7 +158,7 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
 
 - **Turn it off.** Delete the `GITHUB_APP_ID` secret (`wrangler secret delete GITHUB_APP_ID`): the webhook answers 503
   and the pages are gone, at once. Or suspend installations from the app's page on GitHub.
-- **Stop one repository.** Its owner can pause it on `/account/github` or with `@genclass pause` on a pull request. By
+- **Stop one repository.** Its owner can pause it on `/account/github` or with `@genclass-dev pause` on a pull request. By
   hand: `UPDATE github_repos SET paused = 1 WHERE full_name = '<owner/name>'` (insert the row if there is none).
 - **A delivery failed.** GitHub does not retry. The app forgets a delivery whose job failed, so Redeliver on the app's
   Advanced page runs it again; a delivery that succeeded is not run twice. The only thing logged is one line per

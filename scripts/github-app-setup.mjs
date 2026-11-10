@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Registers GenClass's GitHub App (genclass[bot]) from its manifest, for the owner to run (Node 20 or later, no
+// Registers GenClass's GitHub App (genclass-dev[bot]) from its manifest, for the owner to run (Node 20 or later, no
 // dependencies). GitHub's "manifest flow": this script serves one page on 127.0.0.1 that posts the manifest to
 // GitHub, you confirm the app's name there while signed in as the account or organization that will own it, GitHub
 // sends your browser back here with a code, and the script exchanges the code for the app's id, slug, client id and
@@ -23,7 +23,7 @@
 //   apply the migration and does not list it on GitHub Marketplace. docs/github-app/SETUP.md has those steps.
 // - It listens on 127.0.0.1 only, answers one request with a matching `state`, then stops (or after 10 minutes).
 //
-// Flags: --org <login> (owned by an organization; default: your own account), --name <text> (default "GenClass"),
+// Flags: --org <login> (owned by an organization; default: your own account), --name <text> (default "GenClass.dev"),
 // --origin <https origin of the collector> (default https://genclass.dev), --private (only the owner can install it),
 // --port <n> (default 8976), --print-manifest, --no-open (do not open the browser).
 
@@ -40,6 +40,10 @@ export const MANIFEST_FILE = join(WORKER, "github-app.manifest.json");
 export const SECRETS_FILE = join(WORKER, ".github-app.secrets.json");
 export const DEFAULT_ORIGIN = "https://genclass.dev";
 export const DEFAULT_PORT = 8976;
+// GitHub derives the app's URL name from this: "GenClass.dev" becomes genclass-dev, the organization's own login, which
+// GitHub allows for an app that organization owns. "GenClass" alone is refused: github.com/genclass is someone else.
+export const DEFAULT_NAME = "GenClass.dev";
+export const DEFAULT_SLUG = "genclass-dev";
 const GITHUB = "https://github.com";
 const API = "https://api.github.com";
 const API_VERSION = /export const API_VERSION = "([^"]+)"/.exec(readFileSync(join(WORKER, "src/github/api.ts"), "utf8"))?.[1] ?? "2022-11-28";
@@ -53,7 +57,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
 /** The flags, checked. Throws SetupError for anything it does not know. */
 export function parseArgs(argv) {
-  const o = { org: null, name: "GenClass", origin: DEFAULT_ORIGIN, public: true, port: DEFAULT_PORT, printManifest: false, open: true };
+  const o = { org: null, name: DEFAULT_NAME, origin: DEFAULT_ORIGIN, public: true, port: DEFAULT_PORT, printManifest: false, open: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const value = () => argv[++i] ?? fail(`${a} needs a value`);
@@ -227,7 +231,7 @@ function listen(handler, port, timeoutMs = 10 * 60_000) {
 
 /** What to do after the app exists. No secret appears in it. */
 export function nextSteps(app, o, secretsFile) {
-  const slugLine = app.slug === "genclass" ? "" : `\n   The app's URL name is "${app.slug}", not "genclass": set GITHUB_APP_SLUG = "${app.slug}" in telemetry-worker/wrangler.toml\n   (its bot is ${app.slug}[bot], and "@${app.slug}" is what people type).`;
+  const slugLine = app.slug === DEFAULT_SLUG ? "" : `\n   The app's URL name is "${app.slug}", not "${DEFAULT_SLUG}": set GITHUB_APP_SLUG = "${app.slug}" in telemetry-worker/wrangler.toml\n   (its bot is ${app.slug}[bot], and "@${app.slug}" is what people type).`;
   return `
 Registered "${app.name}" (id ${app.id})${app.owner ? ` for ${app.owner}` : ""}: ${app.url}
 Its secrets are in ${secretsFile} (mode 0600, ignored by git). They are shown by GitHub once.

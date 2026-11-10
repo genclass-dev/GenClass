@@ -50,7 +50,7 @@ describe("github app: its pages", () => {
     const html = await r.text();
     expect(html).toContain('<meta name="robots" content="index, follow">');
     expect(html).toContain('href="/github/install"');
-    expect(html).toContain("genclass[bot] is GenClass's GitHub App.");
+    expect(html).toContain("genclass-dev[bot] is GenClass's GitHub App.");
     expect(html).toContain("It reads the race files your workflow uploads, never your source code.");
     expect(html).toContain("Not asked for:</b> repository contents");
     expect(html).toContain("<b>Public repositories:</b> free");
@@ -60,7 +60,7 @@ describe("github app: its pages", () => {
     expect((await call(env, "GET", "/login", { origin: null })).headers.get("x-robots-tag")).toBe("noindex, nofollow");
     const install = await call(env, "GET", "/github/install", { origin: null });
     expect(install.status).toBe(302);
-    expect(install.headers.get("location")).toBe("https://github.com/apps/genclass/installations/new");
+    expect(install.headers.get("location")).toBe("https://github.com/apps/genclass-dev/installations/new");
     expect((await call(env, "POST", "/github", { body: {} })).status).toBe(405);
   });
 
@@ -81,7 +81,7 @@ describe("github app: its pages", () => {
     expect(claimed.headers.get("x-robots-tag")).toBe("noindex, nofollow");
     const strip = (h: string) => h.replace(/nonce="[^"]+"/g, "");
     expect(strip(await claimed.text())).toBe(strip(plain));
-    expect(plain).toContain("genclass[bot] is installed");
+    expect(plain).toContain("genclass-dev[bot] is installed");
     expect(plain).toContain("npm i -D @genclass/playwright @genclass/runtime@beta");
     expect(plain).not.toContain(String(INSTALLATION));
     expect(sql.rows("SELECT * FROM github_installations")).toEqual([]);

@@ -1,4 +1,4 @@
-// A repository's settings for genclass[bot]: `.github/genclass.yml` on the repository's DEFAULT branch.
+// A repository's settings for genclass-dev[bot]: `.github/genclass.yml` on the repository's DEFAULT branch.
 //
 // Invariants:
 // - The file is read from the default branch only, never from a pull request's head: a pull request (from a fork,
@@ -19,7 +19,7 @@ export type IssueMode = "never" | "merge";
 
 export interface RepoSettings {
   reviews: {
-    /** Review each pull request when it opens and on every push. Off: only `@genclass review` does. */
+    /** Review each pull request when it opens and on every push. Off: only `@genclass-dev review` does. */
     auto: boolean;
     /** Review draft pull requests too. */
     drafts: boolean;
@@ -46,7 +46,7 @@ export interface RepoSettings {
     enabled: boolean;
     days: 1 | 7 | 30;
   };
-  /** `@genclass ...` commands in pull-request comments. */
+  /** `@genclass-dev ...` commands in pull-request comments. */
   commands: boolean;
   /** Open an issue when a pull request merges with reproducible findings still flagged. */
   issues: IssueMode;

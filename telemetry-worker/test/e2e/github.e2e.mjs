@@ -290,8 +290,8 @@ try {
   check("a second review of the same evidence writes nothing", writes() === before && seen.comments.size === 1, `${writes()} vs ${before}`);
 
   // 4. a command
-  await deliver("issue_comment", { action: "created", issue: { number: 12, state: "open", user: { id: 77, login: "ada" }, pull_request: {} }, comment: { id: 555, body: "@genclass replay 1", user: { id: 77, login: "ada", type: "User" }, author_association: "MEMBER" }, repository: REPO, installation: { id: 9001 }, sender: { id: 77, login: "ada", type: "User" } });
-  check("@genclass replay 1 got a reaction and one reply", await until("the reply", () => seen.reactions.includes("eyes") && seen.comments.size === 2));
+  await deliver("issue_comment", { action: "created", issue: { number: 12, state: "open", user: { id: 77, login: "ada" }, pull_request: {} }, comment: { id: 555, body: "@genclass-dev replay 1", user: { id: 77, login: "ada", type: "User" }, author_association: "MEMBER" }, repository: REPO, installation: { id: 9001 }, sender: { id: 77, login: "ada", type: "User" } });
+  check("@genclass-dev replay 1 got a reaction and one reply", await until("the reply", () => seen.reactions.includes("eyes") && seen.comments.size === 2));
   check("the reply has the command to reproduce", [...seen.comments.values()].some((c) => c.includes('npx playwright test checkout.spec.ts -g "places one order" --repeat-each 2')));
 
   // 5. the pages

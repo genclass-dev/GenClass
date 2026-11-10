@@ -13,7 +13,7 @@ beforeAll(async () => {
 });
 
 const PEM = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n";
-const converted = (over: Record<string, unknown> = {}) => ({ id: 424242, slug: "genclass", name: "GenClass", html_url: "https://github.com/apps/genclass", owner: { login: "genclass-dev" }, client_id: "Iv23liABC", client_secret: "cs_secret_value", webhook_secret: "wh_secret_value", pem: PEM, ...over });
+const converted = (over: Record<string, unknown> = {}) => ({ id: 424242, slug: "genclass-dev", name: "GenClass.dev", html_url: "https://github.com/apps/genclass-dev", owner: { login: "genclass-dev" }, client_id: "Iv23liABC", client_secret: "cs_secret_value", webhook_secret: "wh_secret_value", pem: PEM, ...over });
 
 describe("the GitHub App's manifest (telemetry-worker/github-app.manifest.json)", () => {
   it("asks for the permissions the docs list and no others: no repository contents, no administration, no secrets", () => {
@@ -40,7 +40,7 @@ describe("the GitHub App's manifest (telemetry-worker/github-app.manifest.json)"
       expect(src, event).toContain(`case "${event}":`);
     }
     expect(await handleEvent(ctx, "push", {})).toBe("ignored");
-    const page = githubLandingPage("n", { slug: "genclass", privateRepos: "plan" });
+    const page = githubLandingPage("n", { slug: "genclass-dev", privateRepos: "plan" });
     for (const label of ["Pull requests, read and write", "Checks, write", "Actions, read", "Issues, read and write", "Metadata, read", "One file, read"]) expect(page, label).toContain(label);
     expect(page).toContain("Not asked for:</b> repository contents");
   });
@@ -48,7 +48,7 @@ describe("the GitHub App's manifest (telemetry-worker/github-app.manifest.json)"
 
 describe("scripts/github-app-setup.mjs", () => {
   it("parseArgs: the defaults, every flag, and what it refuses", () => {
-    expect(setup.parseArgs([])).toEqual({ org: null, name: "GenClass", origin: "https://genclass.dev", public: true, port: 8976, printManifest: false, open: true });
+    expect(setup.parseArgs([])).toEqual({ org: null, name: "GenClass.dev", origin: "https://genclass.dev", public: true, port: 8976, printManifest: false, open: true });
     expect(setup.parseArgs(["--org", "genclass-dev", "--name", " GenClass (test) ", "--origin", "https://tunnel.example/", "--private", "--port", "9000", "--no-open", "--print-manifest"])).toEqual({
       org: "genclass-dev",
       name: "GenClass (test)",
@@ -93,7 +93,7 @@ describe("scripts/github-app-setup.mjs", () => {
 
   it("readConversion: the app's facts and its secrets apart; an answer without them is refused", () => {
     const r = setup.readConversion(converted());
-    expect(r.app).toEqual({ id: 424242, slug: "genclass", name: "GenClass", url: "https://github.com/apps/genclass", owner: "genclass-dev" });
+    expect(r.app).toEqual({ id: 424242, slug: "genclass-dev", name: "GenClass.dev", url: "https://github.com/apps/genclass-dev", owner: "genclass-dev" });
     expect(r.secrets).toEqual({ GITHUB_APP_ID: "424242", GITHUB_APP_PRIVATE_KEY: PEM, GITHUB_APP_WEBHOOK_SECRET: "wh_secret_value", GITHUB_APP_CLIENT_ID: "Iv23liABC", GITHUB_APP_CLIENT_SECRET: "cs_secret_value" });
     for (const bad of [null, {}, converted({ id: "x" }), converted({ slug: "Bad Slug" }), converted({ pem: "" }), converted({ pem: "not a key" }), converted({ webhook_secret: undefined }), converted({ client_secret: 5 })]) {
       expect(() => setup.readConversion(bad)).toThrow(setup.SetupError);
@@ -116,7 +116,7 @@ describe("scripts/github-app-setup.mjs", () => {
     expect(calls).toHaveLength(0);
     const ok = await h("GET", "/created?code=abcdefgh1234&state=good");
     expect(ok.status).toBe(200);
-    expect(ok.result.app.slug).toBe("genclass");
+    expect(ok.result.app.slug).toBe("genclass-dev");
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe("https://api.github.com/app-manifests/abcdefgh1234/conversions");
     expect(calls[0]!.init.method).toBe("POST");

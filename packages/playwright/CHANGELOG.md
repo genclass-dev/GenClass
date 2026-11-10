@@ -10,7 +10,7 @@ everything below is unreleased.
   the test file's path relative to the repository root (`GITHUB_WORKSPACE` on GitHub Actions, else the Playwright
   config's directory) and the line Playwright gives for the test. It is left out when there is no line or the file is
   outside that directory, and a `location` that is not a relative path with a line from 1 rejects the file like any
-  other bad field. The report does not use it: it is for genclass[bot], the GitHub App
+  other bad field. The report does not use it: it is for genclass-dev[bot], the GitHub App
   (`docs/github-app/README.md`), which reads the uploaded race files and comments on the test's line when the pull
   request's diff shows it. `locationOf` and the `RacesLocation` type are exported with the fixture.
 - **The fixture**, `@genclass/playwright/fixture`: Playwright's `test` (`test.extend`) and `expect`, with a

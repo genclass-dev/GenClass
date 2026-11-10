@@ -71,7 +71,7 @@ export interface GenClassRacesFile {
   /**
    * Optional, written by the fixture: where the test is declared. `file` is a path with "/" separators relative to the
    * repository root (the directory in GITHUB_WORKSPACE on GitHub Actions, else the Playwright config's directory),
-   * `line` its 1-based line. It lets a pull-request review (genclass[bot]) put a finding next to the test when that
+   * `line` its 1-based line. It lets a pull-request review (genclass-dev[bot]) put a finding next to the test when that
    * line is part of the diff; the summariser and the report do not use it.
    */
   location?: RacesLocation;

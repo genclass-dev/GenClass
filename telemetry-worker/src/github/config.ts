@@ -23,7 +23,7 @@ export interface GithubEnv {
   /** The app's client id and one client secret, for "Connect GitHub" on the account page (optional). */
   GITHUB_APP_CLIENT_ID?: string;
   GITHUB_APP_CLIENT_SECRET?: string;
-  /** The app's URL name, github.com/apps/<slug> (default "genclass", whose bot is genclass[bot]). */
+  /** The app's URL name, github.com/apps/<slug> (default "genclass-dev", whose bot is genclass-dev[bot]). */
   GITHUB_APP_SLUG?: string;
   /**
    * Private repositories: "plan" (default) reviews them only for installations whose GenClass account or GitHub
@@ -73,7 +73,7 @@ function root(v: string | undefined, fallback: string): string {
   }
 }
 
-export const DEFAULT_SLUG = "genclass";
+export const DEFAULT_SLUG = "genclass-dev";
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 
 /** The app's configuration, or null while the app is not set up on this server. */
@@ -104,5 +104,5 @@ export const appUrl = (cfg: GithubAppConfig): string => `${cfg.web}/apps/${cfg.s
 /** Where a person installs it (GitHub asks which account and which repositories). */
 export const installUrl = (cfg: GithubAppConfig, state?: string): string =>
   `${cfg.web}/apps/${cfg.slug}/installations/new${state ? `?state=${encodeURIComponent(state)}` : ""}`;
-/** The login of the app's bot user, as it authors comments: "genclass[bot]". */
+/** The login of the app's bot user, as it authors comments: "genclass-dev[bot]". */
 export const botLogin = (cfg: GithubAppConfig): string => `${cfg.slug}[bot]`;

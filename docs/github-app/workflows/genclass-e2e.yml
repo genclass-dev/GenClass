@@ -1,7 +1,7 @@
 # Copy to .github/workflows/e2e.yml (or add the last step to the job that already runs your Playwright tests).
 #
 # It runs the tests with the GenClass fixture (docs/github-app/README.md, "Setup") under two seeds and uploads the race
-# files, which genclass[bot] reads when this run finishes. The job has no secret and no write permission, so it is
+# files, which genclass-dev[bot] reads when this run finishes. The job has no secret and no write permission, so it is
 # the same for pull requests from forks: the app, not this job, writes the comment.
 name: e2e
 on:
@@ -29,7 +29,7 @@ jobs:
       # test-results/genclass holds one small JSON file per test and seed, and nothing else. Any artifact whose name
       # starts with "genclass" is read (the `artifact` setting changes the prefix), so shards can upload
       # genclass-races-1, genclass-races-2, ...
-      - name: Race files for genclass[bot]
+      - name: Race files for genclass-dev[bot]
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

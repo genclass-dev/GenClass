@@ -66,7 +66,7 @@ genclass.dev/dashboard/<secret> --> dashboard page --GET /api/projects/<secret>?
 | `src/forward.ts`, `src/paid.ts` | forwarding to Sentry, PostHog, Datadog, Slack and webhooks (encrypted settings, dedupe, hourly cap); what runs after each stored batch |
 | `src/export.ts` | the batch index, export copies, JSONL/CSV export pages and their sweep |
 | `../scripts/stripe-setup.mjs` | for the owner: Stripe products, prices, webhook endpoint and Billing Portal from `plans.json` |
-| `src/github/*` | the GitHub App, genclass[bot] ([The GitHub App](#the-github-app)): `config.ts` (its secrets; off without them), `jwt.ts` and `api.ts` (authentication and the REST client), `http.ts` (the webhooks, the pages, Connect GitHub, linking), `handlers.ts` (the events and the review of a pull request), `evidence.ts`, `zip.ts` (race files from an artifact; the linked app's findings), `settings.ts`, `yaml.ts` (`.github/genclass.yml`), `routes.ts` (changed files to page routes), `review.ts` (every sentence it writes), `commands.ts`, `entitlement.ts`, `store.ts`, `pages.ts` |
+| `src/github/*` | the GitHub App, genclass-dev[bot] ([The GitHub App](#the-github-app)): `config.ts` (its secrets; off without them), `jwt.ts` and `api.ts` (authentication and the REST client), `http.ts` (the webhooks, the pages, Connect GitHub, linking), `handlers.ts` (the events and the review of a pull request), `evidence.ts`, `zip.ts` (race files from an artifact; the linked app's findings), `settings.ts`, `yaml.ts` (`.github/genclass.yml`), `routes.ts` (changed files to page routes), `review.ts` (every sentence it writes), `commands.ts`, `entitlement.ts`, `store.ts`, `pages.ts` |
 | `github-app.manifest.json`, `../scripts/github-app-setup.mjs` | the app's permissions, events and addresses as GitHub registers them, and the owner's one-time registration from that manifest |
 | `test/github.test.ts`, `test/github-link.test.ts`, `test/github-review.test.ts`, `test/github-zip.test.ts`, `test/github-yaml.test.ts`, `test/github-setup.test.ts` | the GitHub App: signed deliveries through the real handler against a fake GitHub (`test/github-helpers.ts`), the migrations as below |
 | `test/billing.test.ts`, `test/forward.test.ts`, `test/export.test.ts` | paid plans: Stripe mocked (`test/account-helpers.ts`), the rest as below |
@@ -967,7 +967,7 @@ test-mode and a live copy unless the dashboard says it is shared):
 
 ## The GitHub App
 
-genclass[bot] reviews a pull request from the race files its own test run uploaded (`@genclass/playwright`'s
+genclass-dev[bot] reviews a pull request from the race files its own test run uploaded (`@genclass/playwright`'s
 fixture), and, for a repository linked to an app, from that app's aggregates here. What it is for, every setting and
 what it reads and keeps: [`docs/github-app/README.md`](../docs/github-app/README.md). Why it is built this way and
 what it defends against: [`DESIGN.md`](../docs/github-app/DESIGN.md). Registering and running it:
@@ -990,7 +990,7 @@ what it defends against: [`DESIGN.md`](../docs/github-app/DESIGN.md). Registerin
 ### What a review does
 
 On `pull_request` (opened, reopened, synchronize, ready_for_review), on a `workflow_run` that completed on a pull
-request's head commit with an artifact whose name starts with the `artifact` setting, on `@genclass review` and on
+request's head commit with an artifact whose name starts with the `artifact` setting, on `@genclass-dev review` and on
 Re-run of its own check, `reviewPull` (src/github/handlers.ts): takes the pull request's lease (`github_prs.lease`,
 one minute; a second event sets `pending` and the holder goes round once more), counts the review against the
 installation's hour (`github_usage`, 120) and the pull request's total (400), reads the settings file from the default
