@@ -1,7 +1,7 @@
 // The summariser: genclass-races/1 files -> markdown, asserted byte for byte on the fixture in test/fixtures/races
 // (two tests, two seeds each; one signature flagged in both seeds of its test, one in a single seed).
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildSummary, categoryOf, escapeMarkdown, summarize, DEFAULT_MAX_CHARS, REPORT_MARKER, ZERO_WIDTH_SPACE } from "../src/summarize.js";
 import type { GenClassRacesFile, RaceSignature, RacesFileInput } from "../src/types.js";
 import { FIXTURE_REPORT, fixtureInputs, Z } from "./helpers.js";
@@ -187,11 +187,127 @@ describe("summarize: nothing in the comment links an issue or mentions anyone on
     expect(md).not.toMatch(/#\d|\bGH-\d|@[A-Za-z0-9]/i);
   });
 
-  it("leaves code spans alone (GitHub links nothing inside them) and a # or @ not followed by a digit or name", () => {
-    const md = summarize([{ name: "a.json", content: file("t # x @ y", 1, [sig({ trigger: "request", diagnosis: "duplicate", op: "POST /api/#1", seeds: [1] })]) }]);
-    expect(md).toContain("`POST /api/#1`");
-    expect(md).toContain("### t # x @ y\n");
+  it("leaves code spans alone (GitHub links nothing inside them) and a # not followed by a digit", () => {
+    const md = summarize([{ name: "a.json", content: file("t # x @ y", 1, [sig({ trigger: "request", diagnosis: "duplicate", op: "POST /api/#1 @x", seeds: [1] })]) }]);
+    expect(md).toContain("`POST /api/#1 @x`");
+    expect(md).toContain(`### t # x @${Z} y\n`);
     expect(escapeMarkdown("#12 and @x")).toBe(`\\#${Z}12 and @${Z}x`);
+  });
+
+  it("breaks every @, whatever follows it: an address whose host starts with - or _ is not linked either", () => {
+    // GitHub links "a@-b.example" as mail, and "a@_b.example" too: the backslash put before "_" is resolved first
+    expect(escapeMarkdown("mail a@-b.example or a@_b.example, a@b.co, @-team and x@")).toBe(`mail a@${Z}-b.example or a@${Z}\\_b.example, a@${Z}b.co, @${Z}-team and x@${Z}`);
+    const md = summarize([{ name: "a.json", content: file("t a@-b.example", 1, [sig({ trigger: "request", diagnosis: "duplicate", op: "POST /a", evidence: "sent to a@_b.example", seeds: [1] })]) }]);
+    expect(md).toContain(`### t a@${Z}-b.example\n`);
+    expect(md).toContain(`  > sent to a@${Z}\\_b.example\n`);
+    // no "@" is left with anything but the invisible break after it, outside code
+    expect(md.replace(/`[^`\n]*`/g, "")).not.toMatch(/@(?!\u200B)/);
+  });
+
+  it("puts a zero-width space in :// and in www., so no address in the files becomes a link or a reference on another repository", () => {
+    // GitHub links a scheme followed by "://" wherever it stands; the address of an issue also leaves a "mentioned this" there
+    expect(escapeMarkdown("see https://github.com/some-org/some-repo/issues/1")).toBe(`see https:${Z}//github.com/some-org/some-repo/issues/1`);
+    expect(escapeMarkdown("http://a.example ftp://b.example HTTPS://C.EXAMPLE")).toBe(`http:${Z}//a.example ftp:${Z}//b.example HTTPS:${Z}//C.EXAMPLE`);
+    // and "www." after a space, "(", "*", "_" or "~": every one is broken, whatever stands before it
+    expect(escapeMarkdown("www.a.example (www.b.example) _www.c.example ~www.d.example WWW.E.EXAMPLE xwww.f.example")).toBe(
+      `www${Z}.a.example (www${Z}.b.example) \\_www${Z}.c.example \\~www${Z}.d.example WWW${Z}.E.EXAMPLE xwww${Z}.f.example`,
+    );
+    // the bracket form is escaped as before, and what is left of it is no address either
+    expect(escapeMarkdown("[x](https://evil.example)")).toBe(`\\[x\\](https:${Z}//evil.example)`);
+    expect(escapeMarkdown("a :/ b :// c ://// www")).toBe(`a :/ b :${Z}// c :${Z}//// www`);
+    const md = summarize(
+      [
+        {
+          name: "a.json",
+          content: file(
+            "cart.spec.ts > regression https://github.com/vercel/next.js/issues/1 www.evil.example",
+            1,
+            [sig({ trigger: "request", diagnosis: "duplicate", op: "GET https://api.example/items", evidence: "(http://evil.example/login) and [x](https://evil.example) or www.evil.example/path", seeds: [1] })],
+            { mode: "observe http://evil.example" },
+          ),
+        },
+        { name: "b.json", content: file("quiet www.evil.example https://evil.example", 1, [], { fixture: { model: "skip", agent: "see https://evil.example/agent", chaosApplied: null, serviceWorker: false } }) },
+      ],
+      { title: "Races https://evil.example" },
+    );
+    expect(md).toContain(`## Races https:${Z}//evil.example\n`);
+    expect(md).toContain(`### cart.spec.ts > regression https:${Z}//github.com/vercel/next.js/issues/1 www${Z}.evil.example\n`);
+    expect(md).toContain(`  > (http:${Z}//evil.example/login) and \\[x\\](https:${Z}//evil.example) or www${Z}.evil.example/path\n`);
+    expect(md).toContain(` · mode observe http:${Z}//evil.example\n`);
+    expect(md).toContain(`(witnesses not recorded: see https:${Z}//evil.example/agent)`);
+    // the operation is shown as code, as it was written: GitHub links nothing inside a code span
+    expect(md).toContain("`GET https://api.example/items`");
+    // nowhere else in the report: a scheme followed by "://", or "www."
+    expect(md.replace(/`[^`\n]*`/g, "")).not.toMatch(/:\/\/|www\./i);
+  });
+});
+
+describe("summarize: many files of one test (a reader that takes files from anyone)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("600 files of distinct seeds for one test and signature: the seeds are merged in work that grows with the seeds, not with their square", () => {
+    const SEEDS = 64;
+    const FILES = 600;
+    const inputs: RacesFileInput[] = Array.from({ length: FILES }, (_, f) => ({
+      name: `f${String(f).padStart(3, "0")}.json`,
+      content: JSON.stringify(file("t.spec.ts > t", f * SEEDS, [sig({ trigger: "request", diagnosis: "duplicate", op: "POST /a", confidence: 0.5 + f / 2000, evidence: `file ${f}`, seeds: Array.from({ length: SEEDS }, (_, i) => f * SEEDS + i) })])),
+    }));
+    // every element put into any Set while the summary is built, through the constructor or add()
+    let added = 0;
+    class CountingSet<T> extends Set<T> {
+      add(v: T): this {
+        added++;
+        return super.add(v);
+      }
+    }
+    vi.stubGlobal("Set", CountingSet);
+    const s = buildSummary([...inputs].reverse());
+    vi.unstubAllGlobals();
+    expect(s.files).toBe(FILES);
+    expect(s.tests).toHaveLength(1);
+    const [only] = s.tests[0]!.signatures;
+    expect(s.tests[0]!.signatures).toHaveLength(1);
+    // all 38,400 seeds, once each, in order; the evidence is the most confident file's
+    expect(only!.seeds).toHaveLength(FILES * SEEDS);
+    expect(only!.seeds.every((n, i) => n === i)).toBe(true);
+    expect(s.tests[0]!.seeds).toHaveLength(FILES * SEEDS);
+    expect(only).toMatchObject({ reproducible: true, evidence: `file ${FILES - 1}`, confidence: 0.5 + (FILES - 1) / 2000 });
+    // A few sets see each seed once (the validator's, the test's, the signature's). Merging by building a new set
+    // from everything so far for every file would add each seed once per later file: over 11 million times.
+    expect(added).toBeGreaterThan(FILES * SEEDS);
+    expect(added).toBeLessThan(FILES * SEEDS * 6);
+  });
+
+  it("the same seeds in many files are one list, and a signature that lists no seeds takes its file's", () => {
+    const again = Array.from({ length: 50 }, (_, f) => ({ name: `g${f}.json`, content: file("t", 3, [sig({ trigger: "request", diagnosis: "stale", op: "GET /a", seeds: f % 2 ? [] : [9, 3, 9] })]) }));
+    const s = buildSummary(again);
+    expect(s.tests[0]!.signatures[0]!.seeds).toEqual([3, 9]);
+    expect(s.tests[0]!.seeds).toEqual([3, 9]);
+  });
+});
+
+describe("summarize: signatures the fixture left out of a file", () => {
+  it("says under the test that its list is not complete, and nothing for files without `dropped`", () => {
+    const one = (seed: number) => [sig({ trigger: "request", diagnosis: "duplicate", op: "POST /x", seeds: [seed] })];
+    const inputs = [
+      { name: "a.json", content: file("t", 1, one(1), { dropped: 12 }) },
+      { name: "b.json", content: file("t", 2, one(2)) },
+      // every signature of this file was left out: the test is not one where nothing was flagged
+      { name: "c.json", content: file("u", 1, [], { dropped: 3, model: { state: "loading" } }) },
+    ];
+    const s = buildSummary(inputs);
+    expect(s.tests.map((t) => [t.test, t.dropped])).toEqual([
+      ["t", { files: 1, signatures: 12 }],
+      ["u", { files: 1, signatures: 3 }],
+    ]);
+    expect(s.tests[1].modelNotReady.files).toBe(0);
+    const md = summarize(inputs);
+    expect(md).toContain("Note: in 1 of 2 files for this test the fixture left out 12 signatures, the least confident first, to keep the file within the format's limits, so this list is not complete.\n");
+    expect(md).toContain("- u (1 seed: 1; the fixture left out 3 signatures in 1 of 1 file)\n");
+    expect(summarize(fixtureInputs())).not.toContain("left out");
+    expect(buildSummary(fixtureInputs()).tests.every((t) => t.dropped.files === 0 && t.dropped.signatures === 0)).toBe(true);
   });
 });
 

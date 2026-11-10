@@ -122,6 +122,18 @@ jobs:
         shell: bash
         run: node packages/playwright/test/e2e/run.mjs | tee "$RUNNER_TEMP/e2e.log"
 
+      # The race files of this run, for genclass-dev[bot]: the GitHub App (docs/github-app/) reads artifacts whose name
+      # starts with "genclass" and reviews the pull request from them. The buggy page of the e2e app is flagged on
+      # purpose (it is what the check above requires), so a pull request that runs this job shows one finding.
+      - name: Upload the race files
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: genclass-races
+          path: packages/playwright/test/e2e/test-results/genclass
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Summary
         if: always()
         run: |

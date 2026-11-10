@@ -72,6 +72,8 @@ import {
 import { appExtrasData, appExtrasHtml } from "./billing-pages.js";
 import { linkUnlocked } from "./link-lock.js";
 import { forgetExports } from "./export.js";
+import { githubApp } from "./github/config.js";
+import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/store.js";
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
@@ -1636,6 +1638,8 @@ async function deleteProject(c: C, id: string): Promise<Response> {
   ]);
   forgetToken(p.token);
   await forgetExports(c.db, c.env.BUCKET, [p.token]).catch(() => undefined);
+  // a repository linked to it by the GitHub App is unlinked (on its own: its tables come with migration 0013)
+  await unlinkProject(c.db, id).catch(() => undefined);
   return noContent();
 }
 
@@ -1734,6 +1738,8 @@ async function deleteAccount(c: C): Promise<Response> {
   ]);
   for (const p of gone.results ?? []) forgetToken(p.token);
   await forgetExports(c.db, c.env.BUCKET, (gone.results ?? []).map((p) => p.token)).catch(() => undefined);
+  // the GitHub App: the account's repository links go, and installations it managed are managed by nobody
+  await forgetAccountGithub(c.db, id).catch(() => undefined);
   return withCookies(noContent(), [clearCookie(c, c.cfg.session)]);
 }
 
@@ -1784,6 +1790,7 @@ async function accountView(c: C, a: Auth): Promise<AccountView> {
     plan: access.plan.name,
     pick: { claim: c.url.searchParams.get("claim") === "1", save: c.url.searchParams.get("save") === "1" },
     recovery: RECOVERY_CONTACT,
+    githubApp: githubApp(c.env) !== null,
   };
 }
 

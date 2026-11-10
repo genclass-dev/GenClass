@@ -41,7 +41,8 @@ const DAY = 86_400_000;
 export const GRACE_DAYS = 30;
 
 export type PlanId = "free" | "enterprise";
-export type Entitlement = "dashboard" | "forwarding" | "export" | "analytics" | "custom_model";
+/** `github_private`: genclass-dev[bot] reviews the account's private repositories (src/github/entitlement.ts); public ones are free for everyone. */
+export type Entitlement = "dashboard" | "forwarding" | "export" | "analytics" | "custom_model" | "github_private";
 
 export interface Plan {
   id: PlanId;
@@ -55,7 +56,8 @@ export interface Plan {
   /** Sold through Stripe Managed Payments (src/stripe.ts managedPayments): none today. */
   managed_payments: boolean;
   limits: { apps: number | null; history_days: number };
-  entitlements: Record<Entitlement, boolean>;
+  /** A key a plan leaves out counts as false (entitled). */
+  entitlements: Partial<Record<Entitlement, boolean>> & Record<Exclude<Entitlement, "github_private">, boolean>;
   features: { text: string; available: boolean }[];
 }
 

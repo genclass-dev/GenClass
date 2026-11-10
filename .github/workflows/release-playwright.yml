@@ -1,0 +1,143 @@
+name: Release Playwright
+
+# Publishes @genclass/playwright to npm from a tag `playwright-v<version>` whose version equals
+# packages/playwright/package.json (e.g. playwright-v0.1.0), with npm provenance, the same way release-mcp.yml
+# publishes @genclass/mcp. Authentication: npm trusted publishing (OIDC, `id-token: write`); no npm token is stored in
+# the repository.
+#
+# Owner setup:
+# - First version only: npm configures trusted publishing from a package's own settings page, so the package must exist
+#   before this workflow can publish it. Push the tag once: the run builds, tests (unit, then the fixture end to end in
+#   Chromium) and uploads the tarball as the `playwright-tarball` artifact, and its publish step fails without a
+#   trusted publisher. Publish that exact tarball once from your own npm login
+#   (`npm publish genclass-playwright-<version>.tgz --access public`), then on npmjs.com: @genclass/playwright →
+#   Settings → Trusted publishing → GitHub Actions: organization genclass-dev, repository GenClass, workflow filename
+#   release-playwright.yml, environment npm-publish. Later versions publish from here.
+# - The npm-publish GitHub environment (shared with release.yml and release-mcp.yml) asks its reviewers to approve
+#   each run.
+#
+# The fixture needs a runtime with the agent entry (@genclass/runtime >= 0.3.0-beta.1, `dist/agent.js`); the run
+# checks that npm serves the runtime version this repository builds, with that file in it. The GitHub App
+# (docs/github-app/) reads the race files this package's fixture writes, so its guide names this package.
+
+on:
+  push:
+    tags: ["playwright-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-playwright-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: "@genclass/playwright: verify, build, test, publish with provenance"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing and the provenance attestation
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # trusted publishing needs npm >= 11.5.1 (Node 22 ships npm 10)
+      - name: npm 11
+        run: npm install -g npm@11 && npm --version
+
+      - name: The tag names the package version, and npm serves the runtime the fixture needs
+        run: |
+          TAG="${GITHUB_REF_NAME#playwright-v}"
+          PKG=$(node -p "require('./packages/playwright/package.json').version")
+          echo "tag $TAG, package.json $PKG"
+          test "$TAG" = "$PKG"
+          grep -qF "## $PKG" packages/playwright/CHANGELOG.md
+          # the runtime this repository builds is the one the end-to-end check below runs: npm must serve that version,
+          # with the script-tag build and the agent entry the fixture puts on the page
+          RT=$(node -p "require('./packages/runtime/package.json').version")
+          test "$(npm view "@genclass/runtime@$RT" version)" = "$RT"
+          mkdir -p "$RUNNER_TEMP/rt" && cd "$RUNNER_TEMP/rt"
+          FILE=$(npm pack "@genclass/runtime@$RT" --silent | tail -1)
+          tar -tzf "$FILE" > files.txt
+          grep -qx "package/dist/genclass.global.js" files.txt
+          grep -qx "package/dist/agent.js" files.txt
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck -w @genclass/playwright
+
+      - name: Build
+        run: |
+          npm run build -w @genclass/runtime
+          npm run build -w @genclass/playwright
+
+      - name: Unit tests
+        working-directory: packages/playwright
+        run: npx vitest run
+
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: The fixture end to end (buggy page flagged, fixed page and latency-only run clean, report rendered)
+        run: node packages/playwright/test/e2e/run.mjs
+
+      - name: Pack
+        id: pack
+        working-directory: packages/playwright
+        run: |
+          FILE=$(npm pack --silent | tail -1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          sha512sum "$FILE"
+          tar -tzf "$FILE" | sort > "$FILE.files.txt"
+          cat "$FILE.files.txt"
+          # the tarball holds the built fixture, reporter, summariser and the report command; no tests or sources
+          grep -qx "package/dist/index.js" "$FILE.files.txt"
+          grep -qx "package/dist/fixture.js" "$FILE.files.txt"
+          grep -qx "package/dist/reporter.js" "$FILE.files.txt"
+          grep -qx "package/dist/summarize.js" "$FILE.files.txt"
+          grep -qx "package/bin/genclass-playwright-report.mjs" "$FILE.files.txt"
+          ! grep -q "package/test/" "$FILE.files.txt"
+          ! grep -q "package/src/" "$FILE.files.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: playwright-tarball
+          path: |
+            packages/playwright/${{ steps.pack.outputs.file }}
+            packages/playwright/${{ steps.pack.outputs.file }}.files.txt
+          if-no-files-found: error
+
+      - name: Publish with provenance
+        working-directory: packages/playwright
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          case "$VERSION" in
+            *-*) DIST_TAG=$(echo "${VERSION#*-}" | cut -d. -f1) ;;
+            *) DIST_TAG=latest ;;
+          esac
+          npm publish "${{ steps.pack.outputs.file }}" --provenance --access public --tag "$DIST_TAG"
+
+      - name: Verify the registry signature and provenance
+        run: |
+          VERSION=$(node -p "require('./packages/playwright/package.json').version")
+          mkdir -p "$RUNNER_TEMP/verify" && cd "$RUNNER_TEMP/verify"
+          npm init -y > /dev/null
+          for i in $(seq 1 40); do npm view "@genclass/playwright@$VERSION" version --prefer-online && break; sleep 20; done
+          for i in $(seq 1 10); do npm install --no-audit --no-fund --ignore-scripts "@genclass/playwright@$VERSION" && break; sleep 30; done
+          for i in $(seq 1 20); do npm audit signatures && break; echo "attestations not served yet, retry $i"; sleep 30; done
+          # the published command renders a report from an empty folder without failing
+          mkdir -p empty && npx --no-install genclass-playwright-report empty --out - | head -5

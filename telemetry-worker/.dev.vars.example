@@ -13,3 +13,12 @@ DASHBOARD_ORIGIN=http://localhost:8787
 # GITHUB_CLIENT_SECRET=
 # Optional: the Connect panel without the "Not on npm yet" line (wrangler.toml sets the published version).
 # RUNTIME_ON_NPM=0.3.0
+# Optional: the GitHub App on your machine (docs/github-app/SETUP.md, "Try it locally"): a test app of your own whose
+# webhook points at a tunnel to this port. Without these three the app is off and nothing else changes.
+# GITHUB_APP_ID=
+# GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
+# GITHUB_APP_WEBHOOK_SECRET=
+# GITHUB_APP_SLUG=my-genclass-test
+# GITHUB_APP_CLIENT_ID=
+# GITHUB_APP_CLIENT_SECRET=
+# GITHUB_APP_PRIVATE_REPOS=open

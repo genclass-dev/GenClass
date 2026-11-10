@@ -20,6 +20,9 @@ routes = [
   { pattern = "genclass.dev/logout*", zone_name = "genclass.dev" },
   { pattern = "genclass.dev/account*", zone_name = "genclass.dev" },
   { pattern = "genclass.dev/auth/*", zone_name = "genclass.dev" },
+  # The GitHub App (src/github/*): its public page, the page GitHub sends people to after installing, and "Connect
+  # GitHub". Its webhook (/api/github/webhook) and the account page (/account/github) are under the routes above.
+  { pattern = "genclass.dev/github*", zone_name = "genclass.dev" },
 ]
 
 # Account settings. Production uses the defaults in src/auth.ts (AUTH_ORIGIN https://genclass.dev, AUTH_RP_ID
@@ -38,6 +41,12 @@ RUNTIME_ON_NPM = "0.3.0-beta.5"
 # Link, is the merchant of record, for 3.5% of each payment on top of Stripe's fees). No plan is marked today
 # (no plan is sold on the site today), so it stays "off"; README "Paid plans".
 MANAGED_PAYMENTS = "off"
+# The GitHub App, genclass-dev[bot] (docs/github-app/SETUP.md). GITHUB_APP_SLUG is the app's URL name on GitHub
+# (github.com/apps/<slug>; its bot is <slug>[bot]). GITHUB_APP_PRIVATE_REPOS: "plan" reviews private repositories only
+# for an installation whose GenClass account or GitHub Marketplace plan includes them (billing/plans.json
+# github_private); "open" reviews every repository. Public repositories are always reviewed, free.
+GITHUB_APP_SLUG = "genclass-dev"
+GITHUB_APP_PRIVATE_REPOS = "plan"
 
 # Paid plans (README "Paid plans"), Worker secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
 # STRIPE_WEBHOOK_SECRET_TEST, STRIPE_PORTAL_CONFIGURATION and STRIPE_PORTAL_CONFIGURATION_TEST (GenClass's Billing
@@ -47,6 +56,14 @@ MANAGED_PAYMENTS = "off"
 # anyway. GenClass has no trial.
 # The key is for GenClass's own Stripe account ("GenClass"); the worker and the setup script still touch only
 # GenClass's own objects there, as when the account was shared with another business (README "Stripe object ownership").
+
+# The GitHub App (README "The GitHub App"; docs/github-app/SETUP.md), Worker secrets: GITHUB_APP_ID (the app's numeric
+# id), GITHUB_APP_PRIVATE_KEY (the PEM GitHub generated, as it is), GITHUB_APP_WEBHOOK_SECRET (what the app's webhook
+# is signed with) and, for "Connect GitHub" on the account page, GITHUB_APP_CLIENT_ID and GITHUB_APP_CLIENT_SECRET;
+# optionally GITHUB_MARKETPLACE_WEBHOOK_SECRET (the Marketplace listing's own webhook; default: the app's secret).
+# Without the first three the app is off: /api/github/webhook answers 503, its pages are not found, and nothing else
+# on this worker changes. They are not the GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET above, which belong to the OAuth
+# app behind "Sign in with GitHub".
 
 [observability]
 enabled = false
@@ -99,7 +116,10 @@ simple = { limit = 120, period = 60 }
 binding = "SITE"
 service = "genclass-site"
 
-# Daily retention sweep of dashboard rows (03:17 UTC).
+# Two triggers, told apart in `scheduled` (src/index.ts) by their expression.
+# "17 3 * * *": the daily retention sweep of dashboard rows (03:17 UTC), followed by the GitHub App's owed reviews.
+# "*/20 * * * *": every 20 minutes, the GitHub App's owed reviews only (src/github/handlers.ts SWEEP_CRON and
+# githubSweep: at most 20 pull requests a run). Without it an owed review waits for the daily run.
 [triggers]
-crons = ["17 3 * * *"]
+crons = ["17 3 * * *", "*/20 * * * *"]
 

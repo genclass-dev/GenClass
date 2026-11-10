@@ -21,7 +21,7 @@ import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { DEFAULT_SEED, describeMatch, resolveChaos, type ChaosMatch, type ChaosMatchFn, type ChaosOptions } from "./chaos.js";
 import { install, type Collected, type PageLike } from "./install.js";
 import { buildRacesFile, racesFileName, writeRacesFile } from "./races.js";
-import type { GenClassRacesFile } from "./types.js";
+import type { GenClassRacesFile, RacesLocation } from "./types.js";
 
 export interface GenClassOptions {
   /** false: the fixture does nothing (no runtime on the page, no file). Default true. */
@@ -57,6 +57,8 @@ export interface GenClassFixtures {
 export interface TestInfoLike {
   titlePath: readonly string[];
   file: string;
+  /** The line the test is declared on (Playwright's TestInfo.line). */
+  line?: number;
   testId: string;
   repeatEachIndex: number;
   /** The attempt (0 for the first run); a retry writes a file of its own. */
@@ -90,6 +92,22 @@ export function outDirOf(info: TestInfoLike, outDir?: string): string {
   const base = info.config.configFile ? dirname(info.config.configFile) : info.config.rootDir;
   if (!outDir) return info.project.outputDir ? join(info.project.outputDir, "genclass") : join(base, "test-results", "genclass");
   return isAbsolute(outDir) ? outDir : join(base, outDir);
+}
+
+/**
+ * Where the test is declared, for the file's `location`: its path relative to the repository root and its line.
+ * `root` is the repository's checkout (GITHUB_WORKSPACE on GitHub Actions); without it, the Playwright config's
+ * directory, which is the repository root in the usual layout. Undefined when Playwright gave no line or the file is
+ * outside that directory, so a file never names a path above the repository.
+ */
+export function locationOf(info: TestInfoLike, root: string | undefined = process.env.GITHUB_WORKSPACE): RacesLocation | undefined {
+  const line = info.line;
+  if (typeof line !== "number" || !Number.isInteger(line) || line < 1) return undefined;
+  const base = root || (info.config.configFile ? dirname(info.config.configFile) : info.config.rootDir);
+  if (!base || !info.file) return undefined;
+  const rel = relative(base, info.file).split(sep).join("/");
+  if (!rel || rel === ".." || rel.startsWith("../") || isAbsolute(rel) || /^[A-Za-z]:/.test(rel)) return undefined;
+  return { file: rel, line };
 }
 
 export interface GenClassRun {
@@ -133,6 +151,7 @@ export async function startGenClass(page: Page | PageLike, options: GenClassOpti
           serviceWorker: collected.serviceWorker,
           ...(collected.modeOverridden ? { modeOverridden: collected.modeOverridden } : {}),
         },
+        location: locationOf(info),
       });
       const path = writeRacesFile(outDirOf(info, o.outDir), racesFileName(file.test, info.testId, seed, info.retry ?? 0), file);
       return { collected, file, path };
@@ -163,5 +182,5 @@ export const test: TestType<PlaywrightTestArgs & PlaywrightTestOptions & GenClas
 });
 
 export { expect };
-export type { ChaosMatch, ChaosMatchFn, ChaosOptions, Collected, PageLike };
+export type { ChaosMatch, ChaosMatchFn, ChaosOptions, Collected, PageLike, RacesLocation };
 export { RUNTIME_PATH } from "./chaos.js";

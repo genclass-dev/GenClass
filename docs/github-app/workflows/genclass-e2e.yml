@@ -1,0 +1,39 @@
+# Copy to .github/workflows/e2e.yml (or add the last step to the job that already runs your Playwright tests).
+#
+# It runs the tests with the GenClass fixture (docs/github-app/README.md, "Setup") under two seeds and uploads the race
+# files, which genclass-dev[bot] reads when this run finishes. The job has no secret and no write permission, so it is
+# the same for pull requests from forks: the app, not this job, writes the comment.
+name: e2e
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      # --repeat-each 2: every test under two seeds. A signature flagged in both is "reproducible".
+      - run: npx playwright test --repeat-each 2
+
+      # test-results/genclass holds one small JSON file per test and seed, and nothing else. Any artifact whose name
+      # starts with "genclass" is read (the `artifact` setting changes the prefix), so shards can upload
+      # genclass-races-1, genclass-races-2, ...
+      - name: Race files for genclass-dev[bot]
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: genclass-races
+          path: test-results/genclass
+          if-no-files-found: ignore
+          retention-days: 7

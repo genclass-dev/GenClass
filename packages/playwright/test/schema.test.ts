@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAX_ERRORS, parseRaces, validateRaces } from "../src/schema.js";
-import { RACES_SCHEMA } from "../src/types.js";
+import { RACES_LIMITS, RACES_SCHEMA } from "../src/types.js";
 import { racesDir } from "./helpers.js";
 
 const okSig = { sig: "request|duplicate|POST /api/orders", trigger: "request", diagnosis: "duplicate", op: "POST /api/orders", confidence: 0.9, evidence: "e", seeds: [1] };
@@ -109,6 +109,19 @@ describe("schema: rejected files and their messages", () => {
     expect(errors({ ...ok, signatures: [{ ...okSig, confidence: Number.NaN }] })).toEqual(["signatures[0].confidence: expected a number from 0 to 1, got NaN"]);
   });
 
+  it("location: a path inside the repository and a line are kept; anything else rejects the file", () => {
+    const r = validateRaces({ ...ok, location: { file: "tests/e2e/checkout.spec.ts", line: 12, column: 5 } });
+    expect(r.ok && r.file.location).toEqual({ file: "tests/e2e/checkout.spec.ts", line: 12 });
+    expect(validateRaces(ok).ok && "location" in (validateRaces(ok) as { file: object }).file).toBe(false);
+    for (const file of ["/abs/a.spec.ts", "../a.spec.ts", "a/../../b.ts", "a//b.ts", "./a.ts", "C:/a.ts", "a\\b.ts", "", 3, "a\u0000b"]) {
+      expect(errors({ ...ok, location: { file, line: 1 } }), String(file)).toEqual([expect.stringMatching(/^location\.file: expected a relative path with "\/" separators, got /)]);
+    }
+    expect(errors({ ...ok, location: { file: "a.ts", line: 0 } })).toEqual(["location.line: expected a line number from 1, got 0"]);
+    expect(errors({ ...ok, location: { file: "a.ts", line: 1.5 } })).toEqual(["location.line: expected a line number from 1, got 1.5"]);
+    expect(errors({ ...ok, location: "a.ts:1" })).toEqual(['location: expected an object when present, got "a.ts:1"']);
+    expect(errors({ ...ok, location: { file: `${"a/".repeat(250)}x.ts`, line: 1 } })).toHaveLength(1);
+  });
+
   it("checks the optional fields when present", () => {
     expect(errors({ ...ok, mode: 3, model: { state: 1 }, chaos: "fast" })).toEqual([
       "mode: expected a string when present, got 3",
@@ -127,5 +140,67 @@ describe("schema: rejected files and their messages", () => {
 
   it("cuts long values in messages", () => {
     expect(errors({ ...ok, schema: "x".repeat(60) })).toEqual([`schema: expected "genclass-races/1", got "${"x".repeat(39)}…"`]);
+  });
+});
+
+describe("schema: the format's limits (RACES_LIMITS)", () => {
+  const many = (n: number) => ({ ...ok, signatures: Array.from({ length: n }, (_, i) => ({ ...okSig, sig: `request|duplicate|POST /api/orders/${i}`, op: `POST /api/orders/${i}` })) });
+  const long = (n: number) => "x".repeat(n);
+
+  it("a file holds at most 200 signatures: one more rejects it on the count alone", () => {
+    expect(RACES_LIMITS).toEqual({ signatures: 200, seeds: 64, test: 1000, evidence: 2000, text: 600, bytes: 65536 });
+    expect(validateRaces(many(200)).ok).toBe(true);
+    expect(errors(many(201))).toEqual(["signatures: expected at most 200 signatures, got 201"]);
+    // over the limit the signatures are not looked at one by one: 100,000 that are no signatures give one message,
+    // not the seven bad fields of each
+    const junk = { ...ok, signatures: Array.from({ length: 100_000 }, () => ({})) };
+    expect(errors(junk)).toEqual(["signatures: expected at most 200 signatures, got 100000"]);
+    expect(parseRaces(JSON.stringify(junk))).toEqual({ ok: false, errors: ["signatures: expected at most 200 signatures, got 100000"] });
+  });
+
+  it("a signature lists at most 64 seeds: one more rejects the file on the count alone", () => {
+    const seeded = (n: number, of: (i: number) => unknown = (i) => i) => ({ ...ok, signatures: [{ ...okSig, seeds: Array.from({ length: n }, (_, i) => of(i)) }] });
+    const at = validateRaces(seeded(64));
+    expect(at.ok && at.file.signatures[0]!.seeds).toHaveLength(64);
+    expect(errors(seeded(65))).toEqual(["signatures[0].seeds: expected at most 64 seeds, got 65"]);
+    // over the limit the seeds are not looked at one by one: 100,000 that are no integers give one message, not
+    // one for each, and the same number repeated is over it too (the count is of what the file lists)
+    expect(errors(seeded(100_000, () => "x"))).toEqual(["signatures[0].seeds: expected at most 64 seeds, got 100000"]);
+    expect(errors(seeded(65, () => 7))).toEqual(["signatures[0].seeds: expected at most 64 seeds, got 65"]);
+    expect(parseRaces(JSON.stringify(seeded(960)))).toEqual({ ok: false, errors: ["signatures[0].seeds: expected at most 64 seeds, got 960"] });
+    // within it a bad seed is still named
+    expect(errors(seeded(3, (i) => (i === 1 ? 1.5 : i)))).toEqual(["signatures[0].seeds[1]: expected an integer, got 1.5"]);
+  });
+
+  it("a string longer than its limit rejects the file, like any other bad field", () => {
+    const fixture = { model: "skip", agent: long(600), chaosApplied: null, serviceWorker: false, modeOverridden: long(600) };
+    const atLimit = { ...ok, test: long(1000), signatures: [{ ...okSig, sig: long(600), trigger: long(600), diagnosis: long(600), op: long(600), evidence: long(2000) }], mode: long(600), model: { state: long(600), name: long(600), version: long(600), device: long(600) }, fixture };
+    expect(validateRaces(atLimit).ok).toBe(true);
+    expect(errors({ ...ok, test: long(1001) })).toEqual(["test: expected at most 1000 characters, got 1001"]);
+    expect(errors({ ...ok, signatures: [{ ...okSig, sig: long(601), trigger: long(601), diagnosis: long(601), op: long(601), evidence: long(2001) }] })).toEqual([
+      "signatures[0].sig: expected at most 600 characters, got 601",
+      "signatures[0].trigger: expected at most 600 characters, got 601",
+      "signatures[0].diagnosis: expected at most 600 characters, got 601",
+      "signatures[0].op: expected at most 600 characters, got 601",
+      "signatures[0].evidence: expected at most 2000 characters, got 2001",
+    ]);
+    expect(errors({ ...ok, mode: long(601), model: { state: long(601), device: long(700) }, fixture: { ...fixture, agent: long(601), modeOverridden: long(601) } })).toEqual([
+      "mode: expected at most 600 characters, got 601",
+      "model.state: expected at most 600 characters, got 601",
+      "model.device: expected at most 600 characters, got 700",
+      "fixture.agent: expected at most 600 characters, got 601",
+      "fixture.modeOverridden: expected at most 600 characters, got 601",
+    ]);
+    // a wrong type is still the type's message, once
+    expect(errors({ ...ok, test: 5 })).toEqual(["test: expected a non-empty string, got 5"]);
+  });
+
+  it("dropped: a whole number, kept when present", () => {
+    const r = validateRaces({ ...ok, dropped: 4 });
+    expect(r.ok && r.file.dropped).toBe(4);
+    expect(validateRaces(ok).ok && "dropped" in (validateRaces(ok) as { file: object }).file).toBe(false);
+    expect(errors({ ...ok, dropped: -1 })).toEqual(["dropped: expected a whole number when present, got -1"]);
+    expect(errors({ ...ok, dropped: 1.5 })).toEqual(["dropped: expected a whole number when present, got 1.5"]);
+    expect(errors({ ...ok, dropped: "3" })).toEqual(['dropped: expected a whole number when present, got "3"']);
   });
 });

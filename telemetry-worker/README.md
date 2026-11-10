@@ -29,7 +29,8 @@ includes the dashboard, analytics, export, forwarding and your own classifier, w
     Check it with `npx --yes wrangler@4 r2 bucket lifecycle list genclass-telemetry`.
   - D1: a daily Cron Trigger (`17 3 * * *`, `scheduled` in `src/index.ts`, `retention()` in `src/dashboard.ts`)
     deletes `daily` and `recent` rows older than 90 days, `hourly` rows older than 48 hours and `sessions` rows older
-    than 2 days. Projects themselves (token, name, hash of the secret) are kept until deleted.
+    than 2 days. Projects themselves (token, name, hash of the secret) are kept until deleted. (A second trigger,
+    `*/20 * * * *`, deletes nothing: it runs only the GitHub App's owed reviews, see [The GitHub App](#the-github-app).)
   - Paid plans keep an app's daily counters, recent rows and export copies for a year instead
     ([Paid plans](#paid-plans)); nothing is ever kept shorter than the 90 days above.
 
@@ -66,6 +67,9 @@ genclass.dev/dashboard/<secret> --> dashboard page --GET /api/projects/<secret>?
 | `src/forward.ts`, `src/paid.ts` | forwarding to Sentry, PostHog, Datadog, Slack and webhooks (encrypted settings, dedupe, hourly cap); what runs after each stored batch |
 | `src/export.ts` | the batch index, export copies, JSONL/CSV export pages and their sweep |
 | `../scripts/stripe-setup.mjs` | for the owner: Stripe products, prices, webhook endpoint and Billing Portal from `plans.json` |
+| `src/github/*` | the GitHub App, genclass-dev[bot] ([The GitHub App](#the-github-app)): `config.ts` (its secrets; off without them), `jwt.ts` and `api.ts` (authentication and the REST client), `http.ts` (the webhooks, the pages, Connect GitHub, linking), `handlers.ts` (the events and the review of a pull request), `evidence.ts`, `zip.ts` (race files from an artifact; the linked app's findings), `settings.ts`, `yaml.ts` (`.github/genclass.yml`), `routes.ts` (changed files to page routes), `review.ts` (every sentence it writes), `commands.ts`, `entitlement.ts`, `store.ts`, `pages.ts` |
+| `github-app.manifest.json`, `../scripts/github-app-setup.mjs` | the app's permissions, events and addresses as GitHub registers them, and the owner's one-time registration from that manifest |
+| `test/github.test.ts`, `test/github-link.test.ts`, `test/github-review.test.ts`, `test/github-zip.test.ts`, `test/github-yaml.test.ts`, `test/github-setup.test.ts` | the GitHub App: signed deliveries through the real handler against a fake GitHub (`test/github-helpers.ts`), the migrations as below |
 | `test/billing.test.ts`, `test/forward.test.ts`, `test/export.test.ts` | paid plans: Stripe mocked (`test/account-helpers.ts`), the rest as below |
 | `migrations/*.sql` | D1 schema |
 | `test/index.test.ts`, `test/dashboard.test.ts`, `test/auth.test.ts`, `test/locked.test.ts`, `test/plans.test.ts`, `test/pages.test.ts` | unit tests (R2 mocked; D1 = `node:sqlite` running the real migrations, `test/d1.ts`; passkeys from a software authenticator, `test/authenticator.mjs`; Google and GitHub mocked; the dashboard page's script rendered in happy-dom) |
@@ -961,6 +965,97 @@ test-mode and a live copy unless the dashboard says it is shared):
     `npx --yes wrangler@4 secret put STRIPE_SECRET_KEY` with the live key. Individual is on sale. Optionally remove `STRIPE_TEST_ACCOUNTS` (`npx --yes wrangler@4 secret delete STRIPE_TEST_ACCOUNTS`);
     events from the test endpoint are answered 200 and ignored, or delete GenClass's endpoint ("GenClass billing") in
     Stripe's test mode.
+
+## The GitHub App
+
+genclass-dev[bot] reviews a pull request from the race files its own test run uploaded (`@genclass/playwright`'s
+fixture), and, for a repository linked to an app, from that app's aggregates here. What it is for, every setting and
+what it reads and keeps: [`docs/github-app/README.md`](../docs/github-app/README.md). Why it is built this way and
+what it defends against: [`DESIGN.md`](../docs/github-app/DESIGN.md). Registering and running it:
+[`SETUP.md`](../docs/github-app/SETUP.md). It is off, and nothing else on the worker changes, until `GITHUB_APP_ID`,
+`GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_WEBHOOK_SECRET` are set.
+
+### Routes
+
+| route | behaviour |
+|---|---|
+| `POST /api/github/webhook` | GitHub only. `X-Hub-Signature-256` must be the HMAC-SHA256 of the exact body under the app's secret (401 otherwise, before anything is parsed); at most 3 MB; `X-GitHub-Delivery` is claimed in `github_deliveries` (a repeat answers `{ ok, duplicate: true }`). 202 `{ ok, queued: true }` at once, the work in `ctx.waitUntil`, with a deadline of 20 seconds from the moment the delivery arrived (the platform stops work 30 seconds after the response). A job that fails or runs out of time forgets its delivery, so Redeliver runs it; one that ended marks it done; one the platform stopped can be redelivered a minute later. Events: `installation`, `installation_repositories`, `pull_request`, `workflow_run`, `check_run`, `issue_comment`, `ping`; anything else is acknowledged and ignored. 503 while the app is not set up |
+| `POST /api/github/marketplace` | GitHub only: the Marketplace listing's webhook (`marketplace_purchase`), signed with `GITHUB_MARKETPLACE_WEBHOOK_SECRET` (default: the app's; set it to a value of its own once the listing exists). The app's webhook ignores plan events and this one ignores everything else. A delivery sent as `application/x-www-form-urlencoded` is taken after the same signature check, and only when the body is exactly one `payload` field (400 otherwise) |
+| `GET /github` | the app's public page (the one page of this worker that may be indexed): what it does, what it may read and write, what it keeps, the plans |
+| `GET /github/install` | 302 to `https://github.com/apps/<slug>/installations/new` |
+| `GET /github/setup` | where GitHub sends someone after installing. Static: its address is not trusted (GitHub warns that `installation_id` there can be made up) |
+| `GET /github/connect`, `GET /github/callback` | browser session: GitHub's OAuth for the app, with a state kept in `challenges` (kind `oauth:ghapp`, single use, bound to the session). The callback asks GitHub who the person is and which installations of this app and which repositories they can reach, records the installations, keeps the answer 30 minutes (kind `ghapp:grant`) and drops the token |
+| `GET /account/github`, `GET /api/account/github` | browser session: the installations, the repositories GitHub confirmed, and which of the account's apps each is linked to, and the links to the account's apps on repositories GitHub's answer does not list (`linked`: no answer in the last 30 minutes, or no access any more; a private one without its name) |
+| `POST /api/account/github/repos/<repo id>` | browser session + Origin; `{ project_id?: string \| null, paused?: boolean }`. 403 unless the 30-minute answer says the person can push to that repository, except `{ "project_id": null }` alone from the account that owns the linked app, which needs neither that answer nor push access (it takes the link away and changes nothing else); 404 unless the app is in their account |
+
+### What a review does
+
+On `pull_request` (opened, reopened, synchronize, ready_for_review), on a `workflow_run` that completed on a pull
+request's head commit with an artifact whose name starts with the `artifact` setting (or, for a pull request whose
+check or comment says it waits for the test run, as the last of the commit's runs to finish), on
+`@genclass-dev review`, on Re-run of its own check and from the sweep, `reviewPull` (src/github/handlers.ts):
+takes the pull request's lease (`github_prs.lease`, 35 seconds; a second event sets `pending` on the live lease and
+the holder goes round once more) and marks the row `due` until the review ends, counts the review against the pull
+request's hour (30), asks GitHub for the pull request (a webhook's copy is never trusted), reads the settings file
+from the default branch (cached two minutes per isolate; when it cannot be fetched the job fails, nothing is cached
+and the defaults are not used), and stops there for a pull request a setting leaves out.
+Until race files were read for the repository once (`github_repo_facts.evidence`), a pull request without them gets
+nothing: one request says whether a workflow run of the commit has finished, and if none has the review ends there,
+counted against no hour (on an installation for selected repositories the first such review writes one skipped check
+that says what the app reads, once per repository). Otherwise it counts the review against the installation's hour
+(`github_usage`, 120; 90 for reviews started by pushes, 60 for pull requests by authors from outside the repository),
+lists the head commit's workflow runs and their artifacts, downloads at most
+6 artifacts of 4 MB (GitHub's redirect is followed without credentials), unzips in memory under caps, validates each
+`.json` as `genclass-races/1`, summarises with the reporter's own code, folds the result into the pull request's
+findings (`github_prs.state`), and writes what changed: the check run on that commit, the summary comment (edited in
+place), a review with inline comments for new reproducible findings whose test line the diff shows. Body hashes in
+the state keep an unchanged result from being written again, and only a review that wrote something counts toward the
+pull request's total (400). It makes 5 requests to GitHub for a pull request with no test run yet (the token, the
+pull request, the settings file, the commit's runs, the check); with an artifact, the requests that read it come on
+top (src/github/evidence.ts).
+
+A check is never left in progress without something certain to finish it. Under `check.fail_on` the check waits in
+progress for the commit's test run, and the row records that before the check exists. A pause, a setting that leaves
+the pull request out, a newer commit, a closed pull request and the pull request's limit of 400 finish it at once
+with the reason; an hourly limit keeps it in progress with the reason, which names the limit that was reached (120
+for the installation, 90 for reviews pushes start, 60 for authors from outside the repository, 30 for the pull
+request). A first read that left some race files unread (`CiEvidence.incomplete`: an artifact that could not be
+downloaded, one that has expired) and does not fail the check keeps it in progress too, with the note. `githubSweep`
+reviews pull requests that have been `due` for more than an hour: one whose job failed or was stopped by the
+platform, one an hourly limit left out, and one whose wait no event ended. It runs on a cron trigger of its own,
+`*/20 * * * *` (`SWEEP_CRON`; `scheduled` in src/index.ts runs only the sweep for it), and with the daily trigger
+after the retention sweeps. One run looks at 20 pull requests at most and ends at the first failure that is not
+GitHub's answer.
+
+A private repository is reviewed only when `GITHUB_APP_PRIVATE_REPOS` is `open`, the managing account's plan has
+`github_private`, or the GitHub account has a paid Marketplace plan (src/github/entitlement.ts); otherwise nothing of
+it is read and the repository gets one neutral check that says so, once (`github_repo_facts.plan_notice`).
+
+### Tables (migration 0013)
+
+| table | columns | notes |
+|---|---|---|
+| `github_installations` | `id` PK (GitHub's), `account_id`, `account_login`, `account_type`, `selection` (`all`, `selected`, or `unknown` until GitHub was asked), `owner` (accounts.id or NULL), `suspended`, `created`, `updated` | deleted with everything below on uninstall |
+| `github_repos` | `repo_id` PK, `installation_id`, `full_name`, `private`, `project_id`, `linked_by`, `linked`, `paused`, `updated` | only repositories that are linked or paused |
+| `github_repo_facts` | `repo_id` PK, `installation_id`, `evidence`, `intro`, `plan_notice` (each the time it happened, or NULL), `issue_turn` (until when a pull request has the turn to open an issue there, a minute at most), `updated` | what was done once for a repository; not swept, deleted with the installation or the repository |
+| `github_prs` | (`repo_id`, `number`) PK, `installation_id`, `head_sha`, `comment_id`, `check_run_id`, `state` (JSON: findings' fingerprints, groups, titles, seeds, statuses; body hashes; the commit a check waits on), `paused`, `issue` (the issue `issues: merge` opened), `reviews`, `lease`, `pending`, `due`, `hour`, `hour_reviews`, `closed`, `updated` | 30 days after closing, 180 at most |
+| `github_deliveries` | `id` PK, `event`, `received`, `done` | 7 days |
+| `github_usage` | (`installation_id`, `hour`) PK, `reviews`, `outside` | 2 days |
+| `github_marketplace` | `account_id` PK (GitHub's), `login`, `plan_id`, `plan_name`, `monthly_cents`, `unit_count`, `free_trial_ends`, `pending`, `updated` | deleted on `cancelled` |
+
+Never stored: code, diffs, file contents, race files, tokens. Installation tokens are asked for one repository at a
+time and cached in memory until 5 minutes before they expire.
+
+### Settings
+
+| name | kind | what |
+|---|---|---|
+| `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | secrets | the app; all three or it is off |
+| `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET` | secrets | Connect GitHub; without them repositories cannot be linked |
+| `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | secret | the listing's webhook. Set it to a value of its own once the listing exists; unset, that endpoint accepts the app's webhook secret |
+| `GITHUB_APP_SLUG` | var | the app's URL name (`genclass`): its bot is `<slug>[bot]` and its commands start with `@<slug>` |
+| `GITHUB_APP_PRIVATE_REPOS` | var | `plan` (default) or `open` |
+| `GITHUB_API_URL`, `GITHUB_WEB_URL` | vars | a GitHub Enterprise Server (untested) |
 
 ## Self-host the collector (private mode)
 
