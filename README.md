@@ -172,7 +172,7 @@ showed it on the developer's fast backend, with no false report on the fixed pag
 GenClass's GitHub App puts what the runtime saw on the pull request it was seen in. Your Playwright tests run with
 the GenClass fixture, your workflow uploads the race files it writes, and the app posts one check and one comment:
 each finding with its test, the seeds it was flagged in and the evidence line. It reads those files and never your
-source code, it comments only where it is installed, and it is free on public repositories.
+source code, it comments only where it is installed, and it is free, on public and private repositories.
 
 > Not open to everyone yet (2026-11-10): the app is registered as GenClass.dev and reviews this repository's own pull
 > requests ([the first one](https://github.com/genclass-dev/GenClass/pull/177)); it stays private to this organization

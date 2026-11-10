@@ -45,8 +45,10 @@ MANAGED_PAYMENTS = "off"
 # (github.com/apps/<slug>; its bot is <slug>[bot]). GITHUB_APP_PRIVATE_REPOS: "plan" reviews private repositories only
 # for an installation whose GenClass account or GitHub Marketplace plan includes them (billing/plans.json
 # github_private); "open" reviews every repository. Public repositories are always reviewed, free.
+# "open" since 2026-11-10 (the owner): the app is free for every repository while it is new; a paid plan for private
+# repositories comes later, and "plan" is the switch for it.
 GITHUB_APP_SLUG = "genclass-dev"
-GITHUB_APP_PRIVATE_REPOS = "plan"
+GITHUB_APP_PRIVATE_REPOS = "open"
 
 # Paid plans (README "Paid plans"), Worker secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
 # STRIPE_WEBHOOK_SECRET_TEST, STRIPE_PORTAL_CONFIGURATION and STRIPE_PORTAL_CONFIGURATION_TEST (GenClass's Billing
