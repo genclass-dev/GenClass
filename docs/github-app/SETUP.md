@@ -21,7 +21,8 @@ Three things decide whether the app can launch as described. None of them can be
 2. **`@genclass/playwright` on npm (done 2026-11-10).** The app reads the files that package's fixture writes.
    0.1.0 was published once by the owner from the tarball the release run built (`release-playwright.yml`, tag
    `playwright-v0.1.0`; the `npm-publish` environment needed the tag rule `playwright-v*`). Later versions publish
-   from that workflow once trusted publishing is set for it on npmjs.com.
+   from that workflow: trusted publishing is set for it on npm since the same day (`npm trust github`, npm 11:
+   repository genclass-dev/GenClass, file `release-playwright.yml`, environment `npm-publish`).
 3. **The public commitment about automated reports** ([issue 173](https://github.com/genclass-dev/GenClass/issues/173)).
    The app only ever acts where someone installed it, so it is not what that issue is about. Announcing it is: see
    [the launch notes](#launch-notes).
@@ -152,6 +153,10 @@ no-traffic preview version of the worker (`wrangler versions upload --preview-al
   repository's own workflow run uploaded (15 race files): one check, neutral, "1 finding, 1 reproducible", and one
   comment with the witness on `GET /api/search` that the e2e app plants on purpose;
 - `/genclass replay 1` from someone with write access got the eyes reaction and one reply.
+
+Since then, on production (2026-11-10): the app was made public; pull request 178 was reviewed from two artifacts,
+one of them written by an unmodified suite through `genclass-playwright-run`; and the form on `/github/setup` opened
+GitHub's new-file editor with the workflow file filled in.
 
 Not yet run against GitHub: Connect GitHub, a pull request from a fork, a private repository, `issues: merge`, the
 fix workflow, a rate limit.
