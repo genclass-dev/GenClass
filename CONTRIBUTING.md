@@ -15,9 +15,9 @@ Thanks for looking. Issues and pull requests are welcome.
   `connect`, `whoami`, `logout`, `fetch-model`, `info`). Read `docs/runtime/CONTRACT.md` (binding design rules),
   `docs/runtime/API.md` and `packages/runtime/INTERCEPTION.md` before changing behaviour.
 - `packages/runtime-model/` is the data-only model package and its model card.
-- `packages/playwright/` is `@genclass/playwright` (0.1.0, not on npm yet), a Playwright reporter that turns the race
-  files the GenClass Playwright fixture writes into one markdown report for a pull request (the fixture is built
-  separately and has not shipped). `packages/genclass-runtime/` is `genclass-runtime`, the former short name for the
+- `packages/playwright/` is `@genclass/playwright` (0.1.0 on npm): the Playwright fixture that writes race files, the
+  command that gives an unmodified suite the same (`genclass-playwright-run`), and the reporter that turns the files
+  into one markdown report for a pull request. `packages/genclass-runtime/` is `genclass-runtime`, the former short name for the
   CLI: deprecated in this repository and not published by the release workflow, but not yet marked with
   `npm deprecate` on the registry, so `npx genclass-runtime init` still installs its newest npm version, 0.1.0-beta.3,
   with an unsupported runtime and no deprecation warning from npm. Marking it is a maintainer step:
