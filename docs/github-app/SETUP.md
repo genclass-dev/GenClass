@@ -18,9 +18,10 @@ Three things decide whether the app can launch as described. None of them can be
    own login, which GitHub allows for an app the organization owns, so nobody else can take the name people type.
    Commands are `@genclass-dev review` or the short form `/genclass review`. Never document `@genclass`: that
    mention notifies the other account. The worker reads the name from `GITHUB_APP_SLUG`.
-2. **`@genclass/playwright` on npm.** The app reads the files that package's fixture writes. Version 0.1.0 is not
-   published. The fixture now also writes where each test is declared (`location`), which inline comments need; the
-   first published version must include it.
+2. **`@genclass/playwright` on npm (done 2026-11-10).** The app reads the files that package's fixture writes.
+   0.1.0 was published once by the owner from the tarball the release run built (`release-playwright.yml`, tag
+   `playwright-v0.1.0`; the `npm-publish` environment needed the tag rule `playwright-v*`). Later versions publish
+   from that workflow once trusted publishing is set for it on npmjs.com.
 3. **The public commitment about automated reports** ([issue 173](https://github.com/genclass-dev/GenClass/issues/173)).
    The app only ever acts where someone installed it, so it is not what that issue is about. Announcing it is: see
    [the launch notes](#launch-notes).

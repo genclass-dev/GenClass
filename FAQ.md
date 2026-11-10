@@ -182,9 +182,11 @@ Details: [How GenClass compares](https://github.com/genclass-dev/GenClass#how-ge
 
 ## Can it explain flaky Playwright tests?
 
-Not as a packaged tool yet. `@genclass/playwright`, a reporter that turns what GenClass flagged in each test into
-one markdown report for the pull request, is in this repository but not on npm, and the fixture it reads has not
-shipped. Today you can load the runtime in the app under test and read its `[GenClass]` console lines.
+It can show what the page did while a test ran. `@genclass/playwright` (0.1.0 on npm) puts the runtime on every
+page your tests open, holds the app's API calls for a seeded time so that slow-network orders happen the same way
+every run, and writes what the runtime saw per test; its reporter turns that into one markdown report for the pull
+request. `npx genclass-playwright-run` does this for a suite as it is, with no change to its tests. What it reports
+is a response applied over newer data or a request sent twice, in which seeds, not why a test is flaky.
 
 Details: [packages/playwright](https://github.com/genclass-dev/GenClass/blob/main/packages/playwright/README.md).
 

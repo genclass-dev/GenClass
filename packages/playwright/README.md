@@ -691,8 +691,8 @@ The same with the GitHub CLI only (it updates the bot's comment that starts with
 
 ### With the GitHub App instead
 
-[genclass-dev[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), GenClass's GitHub App
-(not installable yet), does the posting itself: the workflow only uploads the race files, with no write permission, so
+[genclass-dev[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), GenClass's GitHub App,
+does the posting itself: the workflow only uploads the race files, with no write permission, so
 it is the same for pull requests from forks. The app keeps one comment per pull request, numbers the findings, says
 from push to push which are new, still flagged or not flagged at the new commit, and answers `@genclass-dev replay 1`.
 
