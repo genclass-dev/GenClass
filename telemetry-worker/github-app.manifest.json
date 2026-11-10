@@ -1,0 +1,19 @@
+{
+  "name": "GenClass",
+  "url": "https://genclass.dev/github",
+  "description": "Runtime evidence on your pull requests: what the GenClass runtime saw in the page while your Playwright tests ran (a request sent twice, an older response applied over a newer one), with the test, the seeds and the evidence line. It reads the race files your workflow uploads, never your source code. Free on public repositories.",
+  "hook_attributes": { "url": "https://genclass.dev/api/github/webhook", "active": true },
+  "callback_urls": ["https://genclass.dev/github/callback"],
+  "setup_url": "https://genclass.dev/github/setup",
+  "setup_on_update": false,
+  "request_oauth_on_install": false,
+  "public": true,
+  "default_permissions": {
+    "metadata": "read",
+    "pull_requests": "write",
+    "checks": "write",
+    "actions": "read",
+    "issues": "write"
+  },
+  "default_events": ["pull_request", "issue_comment", "workflow_run"]
+}

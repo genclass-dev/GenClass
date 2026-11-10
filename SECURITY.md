@@ -55,6 +55,11 @@ GenClass is pre-1.0. Security fixes go into the newest published version only; u
 - the model loader and host (integrity checks, Cache Storage, the worker);
 - the telemetry client and the collector (`telemetry-worker/`), including anything that sends more than
   [TELEMETRY.md](packages/runtime/TELEMETRY.md) says;
+- the GitHub App, genclass[bot] (`telemetry-worker/src/github`): a way to make it act on a webhook GitHub did not
+  sign, comment or open an issue where it is not installed, run a command for someone without the access the guide
+  names, read a private repository without a plan, link a repository to an app whose owner did not ask for it, turn
+  text from an uploaded race file into markup, a link or a mention, or keep or expose a token
+  ([docs/github-app/DESIGN.md](docs/github-app/DESIGN.md), "Threats");
 - a way to make GenClass act where its documentation says it never does (see
   [INTERCEPTION.md](packages/runtime/INTERCEPTION.md), "What it never does"): for example changing a request's body,
   retrying a non-idempotent request without an idempotency key, acting on a `requests.protect` endpoint, acting in
@@ -73,6 +78,8 @@ infrastructure we do not operate.
   each mode may change, the preconditions and undo of every action, and how `disable()` and `?genclass=off` restore
   the page. A unit test keeps it in sync with the code.
 - [packages/runtime/TELEMETRY.md](packages/runtime/TELEMETRY.md) and [PRIVACY.md](PRIVACY.md): what leaves the page.
+- [docs/github-app/DESIGN.md](docs/github-app/DESIGN.md): the GitHub App's permissions (no repository contents), how
+  it treats uploaded race files as untrusted, and what stops each threat it was built against.
 - [Verifying a published tarball](#verifying-a-published-tarball) (below): how to check that a published tarball was
   built from this repository.
 - Advisories: [docs/security/](docs/security/). Latest: [2026-10, a link could raise the mode](docs/security/2026-10-mode-raise.md),

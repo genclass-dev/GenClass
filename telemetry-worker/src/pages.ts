@@ -265,6 +265,11 @@ export interface ShellOptions {
   mesh?: boolean;
   /** A page with a lock form (/start, the unlock page): the passkey and password helpers (studio.ts LOCK_JS). */
   lock?: boolean;
+  /**
+   * A public page meant to be found by search engines (the GitHub App's page, /github): `index, follow` instead of
+   * the `noindex, nofollow` every other page of this worker carries. The response must send the same X-Robots-Tag.
+   */
+  index?: boolean;
 }
 
 /** genclass.dev's sign-in backdrop script; bump ?v= with site/public/signin-mesh.js (assets are cached immutably). */
@@ -286,7 +291,7 @@ export function shell(nonce: string, title: string, body: string, script: string
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
+<meta name="robots" content="${opts.index ? "index, follow" : "noindex, nofollow"}">
 <meta name="referrer" content="${opts.account ? "same-origin" : "no-referrer"}">
 <title>${esc(title)}</title>
 ${ICON_LINKS}

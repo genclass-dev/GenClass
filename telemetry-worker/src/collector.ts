@@ -20,6 +20,10 @@
 //
 // Accounts (src/auth.ts, src/account-pages.ts; routed on genclass.dev/{login*,signup*,logout*,account*,auth/*} and
 // /api/{auth,device,me,account}*): passkeys, Google and GitHub sign-in, sessions, the CLI's device flow, owned apps.
+//
+// The GitHub App, genclass[bot] (src/github/*; routed on genclass.dev/github* and /api/github/*, /account/github):
+// its webhook, its pages and the link between a repository and an app. Off, and every route above unchanged, until
+// the app's secrets are set (src/github/config.ts).
 
 import { lockedError, routeAuth, runtimeHasTokens } from "./auth.js";
 import {
@@ -41,6 +45,8 @@ import {
   type Range,
 } from "./dashboard.js";
 import { routeBilling } from "./billing.js";
+import type { GithubEnv } from "./github/config.js";
+import { routeGithub } from "./github/http.js";
 import { json, readCapped } from "./http.js";
 import { afterBatch } from "./paid.js";
 import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, setupCommand, setupPage, startPage } from "./pages.js";
@@ -65,7 +71,7 @@ export interface RateLimiterLike {
   limit(o: { key: string }): Promise<{ success: boolean }>;
 }
 
-export interface Env {
+export interface Env extends GithubEnv {
   BUCKET: BucketLike;
   /** D1 `genclass-dashboard` (projects and aggregates). Without it the worker is the plain R2 collector. */
   DB?: D1Like;
@@ -214,6 +220,9 @@ export async function handle(request: Request, env: Env, opts: HandleOptions = {
     opts.waitUntil?.(res.catch(() => undefined));
     return res;
   }
+  // the GitHub App's routes first: /account/github and /api/account/github sit under the account routes' prefixes
+  const github = await routeGithub(request, url, path, env, opts);
+  if (github) return github;
   const billing = await routeBilling(request, url, path, env, opts);
   if (billing) return billing;
   const account = await routeAuth(request, url, path, env, opts);

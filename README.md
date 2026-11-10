@@ -167,6 +167,39 @@ On a real page in headless Chromium, it found a stale-results race in 5 of 6 reo
 showed it on the developer's fast backend, with no false report on the fixed page ([AGENT.md](docs/runtime/AGENT.md),
 [RESULTS.md](docs/runtime/RESULTS.md) section 18).
 
+## On your pull requests: genclass[bot]
+
+GenClass's GitHub App puts what the runtime saw on the pull request it was seen in. Your Playwright tests run with
+the GenClass fixture, your workflow uploads the race files it writes, and the app posts one check and one comment:
+each finding with its test, the seeds it was flagged in and the evidence line. It reads those files and never your
+source code, it comments only where it is installed, and it is free on public repositories.
+
+> Not installable yet (2026-11-09): the code is in [`telemetry-worker/src/github`](telemetry-worker/src/github), the
+> app is not registered on GitHub and `@genclass/playwright` is not on npm. When it is: **Install** at
+> `https://genclass.dev/github`.
+
+```ts
+// playwright.config.ts
+use: { genclass: { chaos: { seed: 1, delayMs: [0, 600] } } },
+
+// in your specs
+import { test, expect } from "@genclass/playwright/fixture";
+```
+
+```yaml
+      - run: npx playwright test --repeat-each 2
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: genclass-races
+          path: test-results/genclass
+```
+
+On the pull request, `@genclass replay 1` gives the steps to reproduce a finding and `@genclass fix 1` writes a brief
+your coding agent can work from with `@genclass/mcp`, in your own CI or on your machine. A finding that stops being
+flagged is "not flagged now", never "fixed": a replay proves a fix. The guide, every setting and what the app may read
+and keep: [docs/github-app/README.md](docs/github-app/README.md).
+
 ## New in 0.3.0: app dashboards and `protect()`
 
 Since `0.3.0-beta.0` (the `beta` line on npm). `0.2.x` ignores `token`, has no `protect()` export (an import of it
@@ -455,7 +488,7 @@ a new tag and regenerated data (`training/curriculum/rt.py` mirrors the renderer
 | [`sim`](sim) | Training-data simulator: random apps run on the real runtime in a deterministic virtual world, labelled by counterfactual outcomes |
 | [`realapps`](realapps) | 158 real apps (144 written for the corpus, 14 open-source RealWorld front-ends) run with the real runtime in headless Chromium, labelled the same way; the never-worse sweep covered the first 66. [README](realapps/README.md) |
 | [`training`](training) | Vocabulary pruning, curriculum (`curriculum/rt.py` mirrors the runtime's renderer), multi-node CPU training on Azure, ONNX export, evaluation ([EVAL.md](training/EVAL.md)) |
-| [`telemetry-worker`](telemetry-worker) | The diagnostics collector, the dashboards and the accounts (Cloudflare Worker). The genclass.dev site and the page check are in a separate, private repository. |
+| [`telemetry-worker`](telemetry-worker) | The diagnostics collector, the dashboards, the accounts and the GitHub App, genclass[bot] ([`src/github`](telemetry-worker/src/github), [guide](docs/github-app/README.md)) (Cloudflare Worker). The genclass.dev site and the page check are in a separate, private repository. |
 | [`billing`](billing) | `plans.json`, the one place the genclass.dev plans are defined; the collector and the pricing page read it |
 | [`research`](research) | Earlier GenClass/Jev research (voice-control Chrome extension, the `jev_local` encoder and server, classifier benchmarks); the training scripts still use `jev_local` ([README](research/README.md)) |
 | [`scripts`](scripts) | Azure VM helpers for training runs |

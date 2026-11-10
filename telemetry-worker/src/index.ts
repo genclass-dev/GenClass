@@ -2,6 +2,7 @@
 // module as an entrypoint, so the collector and dashboard code (and their constants) live in collector.ts.
 import { authRetention } from "./auth.js";
 import { handle, reply, type Env } from "./collector.js";
+import { githubRetention } from "./github/store.js";
 import { planRetention, stripeMode } from "./plans.js";
 
 interface Ctx {
@@ -21,12 +22,13 @@ export default {
   /**
    * Daily cron: delete dashboard rows, export copies and their index past each plan's retention (src/plans.ts; R2's
    * lifecycle rules expire events/ after 90 days and export/ after a year), and expired sign-in challenges, device
-   * codes and sessions.
+   * codes and sessions, and what the GitHub App no longer needs (handled delivery ids, closed pull requests' rows).
    */
   async scheduled(_event: unknown, env: Env, ctx: Ctx): Promise<void> {
     const db = env.DB;
     if (!db) return;
     const now = new Date();
-    ctx.waitUntil(Promise.all([planRetention(db, now, env.BUCKET, stripeMode(env)), authRetention(db, now).catch(() => undefined)]));
+    // each sweep on its own: the GitHub App's tables may not exist yet on a database whose migration 0013 is not applied
+    ctx.waitUntil(Promise.all([planRetention(db, now, env.BUCKET, stripeMode(env)), authRetention(db, now).catch(() => undefined), githubRetention(db, now).catch(() => undefined)]));
   },
 };

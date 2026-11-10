@@ -1,9 +1,11 @@
 # GenClass Runtime: privacy policy
 
-_Last updated: 2026-10-27._
+_Last updated: 2026-11-09._
 
 This policy covers the diagnostics that `@genclass/runtime` (from `0.1.0-beta.3`) sends to its maintainers. It does not
-cover the website or app that uses GenClass; that site has its own privacy policy.
+cover the website or app that uses GenClass; that site has its own privacy policy. It also covers the
+GitHub App, genclass[bot], for the people and organizations who install it ("The GitHub App" below; the app is not
+available yet).
 
 ## Who we are
 
@@ -160,11 +162,54 @@ period ends; for Enterprise, until the agreement ends. Then they are deleted as 
 account cancels a paid plan at once and deletes the forwarding settings, export keys and stored copies made for your apps; Stripe keeps its
 own records of past payments as the law requires.
 
+## The GitHub App
+
+genclass[bot] is a GitHub App that someone installs on their own account or organization, for all of its repositories
+or the ones they pick. It comments on a pull request with what GenClass saw while that pull request's tests ran. It
+does nothing on a repository where it is not installed. Installing it needs no GenClass account.
+
+**What it can read on GitHub**, and only in the repositories it is installed on: pull requests and their comments;
+the list of files a pull request changes, with which lines changed; the workflow runs of a pull request's latest
+commit and the files those runs uploaded as artifacts; and one settings file, `.github/genclass.yml`. It has no
+permission to read the rest of a repository: it cannot read, copy or change source code.
+
+**What it reads for a review:** the artifact your workflow uploaded with GenClass's race files. These are small files
+the GenClass test fixture writes: the names of your tests, the requests the page made (their method and path, such as
+`POST /api/orders`, without query values), and one sentence per finding about what happened. We read them in memory
+to write the comment and do not store them. If the artifact holds other files, we do not read them.
+
+**What we store:**
+
+- For an installation: the GitHub account's id and name, whether it is a person or an organization, and whether the
+  app is on all or selected repositories.
+- For a pull request the app commented on: the repository's id, the pull request's number, the id of our comment and
+  of our check, the latest commit's id, and for each finding a one-way fingerprint, its kind, the request it is about,
+  the test's title and the seeds it was seen in. This is the same text that is in the comment on the pull request.
+- The ids of the messages GitHub sent us, for 7 days, so that we handle each one once.
+- If you buy or change a plan on GitHub Marketplace: your GitHub account's id and name and the plan. GitHub handles
+  the payment; we never see card details.
+
+**If you connect GitHub to a GenClass account** (optional, to show your app's production findings on your pull
+requests): we ask GitHub who you are and which repositories you can reach through the app. We use GitHub's token for
+that question and do not keep it. We keep the answer (the repositories' ids and names and whether you can write to
+them) for 30 minutes, and afterwards only the link you made between a repository and one of your apps. When a
+repository is linked, the kind, page path and count of that app's findings appear on its pull requests, where everyone
+who can see the pull request can see them.
+
+**How long:** a pull request's record is deleted 30 days after it is closed, and after 180 days in any case. When you
+uninstall the app, or remove a repository from it, everything we stored for it is deleted at once. Comments and checks
+the app wrote stay on GitHub, where you can delete them.
+
+**What it does not do:** it does not read your code, does not send anything from your repository to anyone else, does
+not use what it reads to train a model, and does not contact you. The only messages it writes are its check and its
+comments on your own pull requests.
+
 ## Where it goes and how long we keep it
 
 Data is sent to our collector on Cloudflare and stored in Cloudflare R2. It is deleted automatically after
 **90 days**; dashboard data is deleted after 90 days too (visit records 90 days after the visit started). Only GenClass maintainers can access the stored data, and
-the owner of a website's dashboard link can see that website's dashboard. Cloudflare processes it on our behalf.
+the owner of a website's dashboard link can see that website's dashboard. Cloudflare processes it on our behalf. What
+the GitHub App stores is kept in the same Cloudflare account, for the times given in its section above.
 
 ## How to turn it off
 

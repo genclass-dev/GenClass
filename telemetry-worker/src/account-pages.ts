@@ -611,6 +611,8 @@ export interface AccountView {
   recovery?: string;
   /** The plan's name (the organization's badge in the header); default Free. */
   plan?: string;
+  /** This server runs the GitHub App (src/github/config.ts): the projects view links to /account/github. */
+  githubApp?: boolean;
 }
 
 const TRANSPORT_WORDS: Record<string, string> = {
@@ -739,6 +741,9 @@ export function accountPage(nonce: string, v: AccountView): string {
 <li><a class="pnew" href="/account/new">${icon("plus", 18)}New project</a></li></ul>
 <p class="quiet hidden" id="pnone">No project matches your search.</p>`
     : `<div class="pgrid"><div class="empty-p"><h2>Create your first project</h2><a class="btn" href="/account/new">${icon("plus", 14)}<span>New project</span></a></div></div>`;
+  // with the GitHub App set up on this server, its page sits next to New project (src/github/pages.ts)
+  const newBtn = `<a class="btn sm" href="/account/new" id="newproj">${icon("plus", 14)}<span>New project</span></a>`;
+  const newProject = v.githubApp ? `<div class="row"><a class="btn sm ghost" href="/account/github" id="ghapp">${icon("bot", 14)}<span>GitHub</span></a>${newBtn}</div>` : newBtn;
 
   const keyRows = v.passkeys
     .map((k, i) => {
@@ -805,7 +810,7 @@ ${v.notice ? `<p class="notice n-${v.notice.kind}" role="status"><b>${v.notice.k
 <header class="sb-ph"><div><h1>Projects</h1></div></header>
 ${planBlock}
 <section id="apps">
-  <div class="ptool"><div class="psearch">${icon("search", 14)}<input type="search" id="psearch" placeholder="Search for a project" aria-label="Search for a project" autocomplete="off"></div><a class="btn sm" href="/account/new" id="newproj">${icon("plus", 14)}<span>New project</span></a></div>
+  <div class="ptool"><div class="psearch">${icon("search", 14)}<input type="search" id="psearch" placeholder="Search for a project" aria-label="Search for a project" autocomplete="off"></div>${newProject}</div>
   ${grid}
   <p class="err" id="linkerr" role="alert"></p>
 </section>
