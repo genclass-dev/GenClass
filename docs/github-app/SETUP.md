@@ -206,6 +206,10 @@ What to know before turning it on:
   browser. After turning it on, open the check on a pull request of a repository without race files, follow the
   link, and see that the editor opens with the file filled in. Do the same once from `/github/setup`.
 
+Checked on github.com on 2026-11-10, signed in: the address the worker builds for this repository (4,035 characters)
+opens the new-file editor at `.github/workflows/genclass.yml` on `main` with the whole file filled in
+([the screenshot](media/one-click-workflow.jpg)). Nothing was committed from it.
+
 ## Try it without touching production
 
 A second app, private to you, whose webhook points at a tunnel to `wrangler dev`:
