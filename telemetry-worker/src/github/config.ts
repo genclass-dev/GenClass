@@ -4,6 +4,9 @@
 // - Without all three of GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY and GITHUB_APP_WEBHOOK_SECRET the app is off: its
 //   routes answer 404 (the webhook 503), nothing calls GitHub and no other route changes. A self-hosted collector
 //   (wrangler.selfhost.toml) is therefore unaffected unless its owner registers an app of their own.
+// - GITHUB_APP_WORKFLOW_LINK is off unless it says "on". While it is off, nothing the app writes on GitHub carries
+//   the link to GitHub's new-file editor or differs in any character, and /github/setup has no form: it says where
+//   to copy the workflow file from.
 // - The client id and secret are only needed for linking a repository to a GenClass app (GitHub tells us who is
 //   asking); reviews work without them.
 // - Nothing here is logged or echoed: the key and the secrets leave this module only as arguments to WebCrypto.
@@ -34,6 +37,13 @@ export interface GithubEnv {
   /** GitHub Enterprise Server: its API root (https://HOST/api/v3) and web root. Default github.com. */
   GITHUB_API_URL?: string;
   GITHUB_WEB_URL?: string;
+  /**
+   * "on": the check that has no race files to read, and the page /github/setup, carry a link that opens GitHub's
+   * new-file editor with docs/github-app/workflows/genclass.yml filled in (src/github/workflow-file.ts). Unset, or
+   * anything else: off, and nothing the app writes on GitHub is different. It is turned on once
+   * @genclass/playwright, which that workflow installs, is on npm.
+   */
+  GITHUB_APP_WORKFLOW_LINK?: string;
 }
 
 export interface GithubAppConfig {
@@ -48,6 +58,8 @@ export interface GithubAppConfig {
   /** Web root without a trailing slash. */
   web: string;
   privateRepos: "plan" | "open";
+  /** The link that opens GitHub's new-file editor with the workflow file filled in is shown (GITHUB_APP_WORKFLOW_LINK is "on"). */
+  workflowLink: boolean;
   /** This server's own origin (where the app's pages and webhook live), without a trailing slash. */
   origin: string;
 }
@@ -95,6 +107,7 @@ export function githubApp(env: Env): GithubAppConfig | null {
     api: root(env.GITHUB_API_URL, "https://api.github.com"),
     web: root(env.GITHUB_WEB_URL, "https://github.com"),
     privateRepos: trimmed(env.GITHUB_APP_PRIVATE_REPOS).toLowerCase() === "open" ? "open" : "plan",
+    workflowLink: trimmed(env.GITHUB_APP_WORKFLOW_LINK).toLowerCase() === "on",
     origin: (env.AUTH_ORIGIN || env.DASHBOARD_ORIGIN || "https://genclass.dev").replace(/\/+$/, ""),
   };
 }

@@ -23,6 +23,11 @@
 //   a person who asks (a command, Re-run on the check), who always gets an answer. An artifact that could not be
 //   read is not race files read: it changes none of this. Only race files from inside a repository (a branch of it,
 //   or an author GitHub calls owner, member or collaborator) make it one whose every pull request gets the check.
+// - A check that says how to set the app up may carry a link that opens GitHub's new-file editor with the workflow
+//   file filled in (workflowLinkFor), only on a server that has the link on (GITHUB_APP_WORKFLOW_LINK). Its parts are
+//   the server's own GitHub web root, the repository's full name, its default branch as GitHub names it (in the pull
+//   request GitHub returns, else in the signed payload of the event) and the app's own text; no default branch, no
+//   link. The link goes to a check run and nowhere else: never into a comment, a reply or an issue.
 // - The pull request's state (its head commit, open or closed) is always asked of GitHub, never taken from a webhook
 //   payload: a payload may be old (a redelivery, deliveries out of order).
 // - A check run is never left "in progress" without something certain to finish it. One is left in progress only
@@ -110,6 +115,7 @@ import {
   type TestLocation,
 } from "./review.js";
 import { branchMatches, readSettings, SETTINGS_PATH, type RepoSettings } from "./settings.js";
+import { WORKFLOW_ARTIFACT, workflowLink } from "./workflow-file.js";
 import {
   claimPrHour,
   claimRepoFact,
@@ -239,7 +245,12 @@ interface RepoRef {
   path: string;
   private: boolean;
   owner: { id: number; login: string; type: string } | null;
+  /** The default branch's name as the event's payload (or GitHub's answer to a token request) gives it; null when it gives none. */
+  defaultBranch: string | null;
 }
+
+/** A branch's name from GitHub, whole or not at all: one that is too long is not cut down to another name. */
+const branchName = (v: unknown): string | null => (typeof v === "string" && v !== "" && v.length <= 255 ? v : null);
 
 function repoOf(p: Obj): RepoRef | null {
   const r = obj(p.repository);
@@ -249,7 +260,20 @@ function repoOf(p: Obj): RepoRef | null {
   const o = obj(r.owner);
   const ownerId = posInt(o.id);
   const login = str(o.login, 40);
-  return { id, fullName: String(r.full_name), path, private: r.private !== false, owner: ownerId && /^[A-Za-z0-9_-]{1,39}$/.test(login) ? { id: ownerId, login, type: str(o.type, 20) } : null };
+  const owner = ownerId && /^[A-Za-z0-9_-]{1,39}$/.test(login) ? { id: ownerId, login, type: str(o.type, 20) } : null;
+  return { id, fullName: String(r.full_name), path, private: r.private !== false, owner, defaultBranch: branchName(r.default_branch) };
+}
+
+/**
+ * The address that opens GitHub's new-file editor with the workflow file filled in, for a check that says how to set
+ * the app up (src/github/workflow-file.ts). Null, and the check's text is what it is without the link, when this
+ * server has the link off (GITHUB_APP_WORKFLOW_LINK), when the repository's default branch is not known, when the
+ * repository's settings read artifacts under another name than the one that file uploads, or when the name or the
+ * branch is not one a link can be built from.
+ */
+function workflowLinkFor(cfg: GithubAppConfig, repo: RepoRef, branch: string | null, settings: RepoSettings): string | null {
+  if (!cfg.workflowLink || !branch || !WORKFLOW_ARTIFACT.startsWith(settings.artifact)) return null;
+  return workflowLink(cfg.web, repo.fullName, branch);
 }
 
 const installationIdOf = (p: Obj): number | null => posInt(obj(p.installation).id);
@@ -479,6 +503,8 @@ interface Pull {
   association: string;
   /** The head branch lives in this repository (not a fork). */
   sameRepo: boolean;
+  /** The repository's default branch as the pull request names it (its base repository is this one); null when it does not. */
+  defaultBranch: string | null;
 }
 
 /** Authors GitHub counts as part of the repository. */
@@ -513,6 +539,7 @@ function pullOf(p: Obj, repo: RepoRef): Pull | null {
     author: str(obj(p.user).login, 60).toLowerCase(),
     association: str(p.author_association, 30),
     sameRepo: posInt(obj(head.repo).id) === repo.id,
+    defaultBranch: posInt(obj(base.repo).id) === repo.id ? branchName(obj(base.repo).default_branch) : null,
   };
 }
 
@@ -688,6 +715,9 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
 
   const { settings, warnings } = await settingsOf(ctx, gh, repo);
   commands = settings.commands;
+  // For the checks that say how to set the app up, and for nothing else. The default branch as GitHub names it now,
+  // in the pull request it just returned; the event's payload stands in when that names none.
+  const checkOptions = { entitled: true, workflowLink: workflowLinkFor(cfg, repo, pull.defaultBranch ?? repo.defaultBranch, settings) };
   if (!o.asked) {
     if (!settings.reviews.auto) return stop("automatic reviews are off", "auto-off");
     if (pull.draft && !settings.reviews.drafts) return stop("draft", "draft");
@@ -714,7 +744,7 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
   const quiet = async (): Promise<Pass> => {
     if (settings.check.enabled && settings.check.failOn === "never" && !facts?.intro && row.check_run_id === null && (await selectionOf(ctx, inst)) === "selected") {
       if (await claimRepoFact(db, repoKey, "intro", ctx.now())) {
-        const res = await publishCheck(gh, repo, row, state, pull.headSha, renderIntro({ links, settings }));
+        const res = await publishCheck(gh, repo, row, state, pull.headSha, renderIntro({ links, settings }, checkOptions));
         await save({ checkRunId: res.id, state: JSON.stringify(state), reviewed: count(res.wrote) });
       }
     }
@@ -762,7 +792,7 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
   // is a first read again; and the review stays owed. A person who asks, and the sweep, end it with what can be read
   // then. (A check that would stay in progress anyway, waiting for the test run, is left to say so.)
   if (settings.check.enabled && settings.check.failOn !== "never" && partial && !o.asked && !o.final && state.evidence !== pull.headSha) {
-    const verdict = renderCheck(base);
+    const verdict = renderCheck(base, checkOptions);
     if (verdict.status === "completed" && verdict.conclusion !== "failure") {
       if (!(state.held && state.waiting === pull.headSha)) {
         state.waiting = pull.headSha;
@@ -798,7 +828,7 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
   const production = wantProduction ? await productionEvidence(db, ctx.env, projectId, paths, settings, ctx.now()).catch(() => null) : null;
 
   const model: ReviewModel = { ...base, production };
-  const check = renderCheck(model);
+  const check = renderCheck(model, checkOptions);
   // the commit's runs have not all finished: its last run to finish reads again, and until then a review is owed
   const waiting = summary === null && ci.state === "pending";
   next.waiting = waiting ? pull.headSha : null;

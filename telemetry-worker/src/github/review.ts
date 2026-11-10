@@ -30,6 +30,11 @@
 // - A check says it waits only while its commit's test run can still report. When nothing more will be read for a
 //   commit, the check says why in one or two plain sentences (renderStopped), and when the app has nothing to read
 //   for a repository yet it says what it reads, once (renderIntro).
+// - Where a check says how to give the app something to read (renderIntro, and "No race files for this commit"), it
+//   may carry one link that opens GitHub's new-file editor with the workflow file filled in (workflow-file.ts). The
+//   link is given to the check renderers alone (CheckOptions): the renderers of comments, replies and issues are
+//   never handed it, so none of them can show it. The sentence around it says what the file does and that the
+//   person reviews and commits it; it claims nothing about what will be found.
 // - A sentence about an hourly limit names the limit that stopped the review (the installation's, the share of it
 //   for reviews pushes start, the share for authors from outside the repository, the pull request's own), and a check
 //   that stays in progress never tells anyone to re-run it: GitHub offers no Re-run on a check in progress.
@@ -510,8 +515,36 @@ export interface CheckOutput {
   text: string;
 }
 
+/** What only a check run is told. No renderer of a comment, a reply or an issue takes it. */
+export interface CheckOptions {
+  /** False: a private repository without a plan. Nothing was read, and the check says so. */
+  entitled: boolean;
+  plansUrl?: string;
+  /**
+   * The address that opens GitHub's new-file editor with the workflow file filled in (workflow-file.ts
+   * workflowLink), when this server shows that link and the repository's default branch is known. Absent or null:
+   * the text is what it is without the link.
+   */
+  workflowLink?: string | null;
+}
+
+/**
+ * How to give the app something to read, for a check that has nothing to read. Without a link: the two steps. With
+ * one: the one workflow file first, in plain words (what it does, and that the person reviews and commits it), and
+ * the two steps as the other way.
+ */
+function setupWays(setup: string, workflowLink?: string | null): string {
+  const steps = `in two steps: use the fixture in your Playwright tests, and upload ${code("test-results/genclass")} from the workflow.`;
+  if (!workflowLink) return `[Set it up](${setup}) ${steps}`;
+  return (
+    `No change to your tests: [add one workflow file](${workflowLink}). GitHub opens it filled in; you review it and commit it. ` +
+    `It runs your Playwright suite under GenClass in a job of its own that is allowed to fail, and uploads the race files. ` +
+    `The other way is to [set it up](${setup}) ${steps}`
+  );
+}
+
 /** The check run on the head commit: what the checks list shows, and the full report on its page. */
-export function renderCheck(m: ReviewModel, o: { entitled: boolean; plansUrl?: string } = { entitled: true }): CheckOutput {
+export function renderCheck(m: ReviewModel, o: CheckOptions = { entitled: true }): CheckOutput {
   if (!o.entitled) {
     return {
       status: "completed",
@@ -542,7 +575,7 @@ export function renderCheck(m: ReviewModel, o: { entitled: boolean; plansUrl?: s
   if (!m.summary && m.ci.state !== "pending") {
     S.push(
       "",
-      `This check reads the race files the [GenClass Playwright fixture](${m.links.docs}) writes while your end-to-end tests run, from an artifact whose name starts with ${code(m.settings.artifact)}. [Set it up](${m.links.setup}) in two steps: use the fixture in your Playwright tests, and upload ${code("test-results/genclass")} from the workflow.`,
+      `This check reads the race files the [GenClass Playwright fixture](${m.links.docs}) writes while your end-to-end tests run, from an artifact whose name starts with ${code(m.settings.artifact)}. ${setupWays(m.links.setup, o.workflowLink)}`,
     );
   }
   for (const note of m.ci.notes.slice(0, 5)) S.push("", `Note: ${escapeMarkdown(note)}`);
@@ -562,15 +595,16 @@ export function renderCheck(m: ReviewModel, o: { entitled: boolean; plansUrl?: s
 /**
  * The one check a repository gets before any race file was read for it (an installation on selected repositories,
  * once per repository): what the app reads and how to give it something. "skipped": nothing was reviewed.
+ * `o.workflowLink`: as in CheckOptions.
  */
-export function renderIntro(m: Pick<ReviewModel, "links" | "settings">): CheckOutput {
+export function renderIntro(m: Pick<ReviewModel, "links" | "settings">, o: Pick<CheckOptions, "workflowLink"> = {}): CheckOutput {
   return {
     status: "completed",
     conclusion: "skipped",
     title: "No race files to read yet",
     summary: [
       `This check reads the race files the [GenClass Playwright fixture](${m.links.docs}) writes while your end-to-end tests run, from an artifact whose name starts with ${code(m.settings.artifact)}; none has been read for this repository yet.`,
-      `[Set it up](${m.links.setup}) in two steps: use the fixture in your Playwright tests, and upload ${code("test-results/genclass")} from the workflow.`,
+      setupWays(m.links.setup, o.workflowLink),
       "This check is written once: the next one appears when a workflow run uploads race files.",
     ].join(" "),
     text: "",

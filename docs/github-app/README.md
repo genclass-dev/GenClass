@@ -24,6 +24,8 @@ It reads the race files your workflow uploads, never your source code. It is fre
    [`workflows/genclass.yml`](workflows/genclass.yml) to `.github/workflows/genclass.yml` and go to step 4. It runs
    your existing Playwright suite under GenClass in a job of its own that is allowed to fail, and uploads the race
    files ([how it works and what it does not cover](../../packages/playwright/README.md#without-changing-your-tests)).
+   When the server that runs the app has it turned on, the check on a repository's first pull request has a link that
+   opens GitHub's new-file editor with that file filled in, so you only review it and commit it.
    **Or in your own e2e job,** steps 2 and 3.
 
 2. **Use the fixture in your Playwright tests.** It puts `@genclass/runtime` on each page under test in observe mode:

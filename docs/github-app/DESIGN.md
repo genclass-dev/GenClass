@@ -56,6 +56,7 @@ person  ──browser──▶ /github, /github/setup        static
 | `settings.ts`, `yaml.ts` | `.github/genclass.yml`, in a small strict subset of YAML |
 | `routes.ts` | changed file paths to page routes, by framework convention |
 | `review.ts` | the findings a pull request keeps, and every sentence the app writes |
+| `workflow-file.ts` | the text of the one workflow file a repository adds, and the link that opens GitHub's new-file editor with it |
 | `commands.ts` | `@genclass-dev <command>` |
 | `entitlement.ts` | public free, private by plan |
 | `store.ts` | the seven tables of migration 0013 |
@@ -89,6 +90,19 @@ that says what the app reads; a private repository without a plan gets its one c
 from inside the repository (a branch of it, or an author GitHub calls owner, member or collaborator) switch the check
 on for the repository's other pull requests: a fork's workflow uploads what it likes. A person who asks is always
 answered.
+
+**A link to GitHub's editor, not a pull request.** The shortest way to give the app something to read is one workflow
+file ([`workflows/genclass.yml`](workflows/genclass.yml)). The app cannot add it: it has no contents permission and
+never opens a pull request. So the check that has nothing to read may carry a link to GitHub's own new-file editor,
+`<web root>/<owner>/<name>/new/<default branch>?filename=...&value=...`, with the file's name and text filled in. The
+person who follows it reads the file and commits it as themselves, or does not. The link is a setting of the server,
+`GITHUB_APP_WORKFLOW_LINK`, off by default: the workflow installs `@genclass/playwright` from npm, so the link waits
+for that package's first version. It appears where the app already says how to set itself up (the first-run check,
+"No race files for this commit", the page `/github/setup`) and nowhere else. The functions that render a comment, a
+reply or an issue are not given the link, so none of them can show it. The sentence around it says what the file
+does and that the person reviews and commits it. With the setting off, every text the app writes on GitHub is
+unchanged. On `/github/setup` the address is built in the browser from a repository and a branch that a person
+types, because that page knows nothing about any installation.
 
 **One comment, edited in place; no comment without findings.** Once race files were read for a repository, the check
 carries the status on every commit. The comment exists when there is something to read and is updated, never
@@ -202,6 +216,8 @@ nothing more. It refuses for forks, because a comment-started workflow runs with
 | A Marketplace purchase lost because the listing's webhook sends a form | A form delivery (the JSON in a field named `payload`) is checked against its signature over the bytes received, then handled as the JSON delivery it stands for |
 | A delivery GitHub signed for the app's webhook (a comment whose text holds `&payload=...`) sent to the listing's webhook as a form, to record a paid plan | A form is taken only when the body is exactly one `payload` field: it starts with `payload=` and holds no `&`. A JSON body is refused, never searched. The listing's webhook gets a secret of its own when the listing exists (SETUP.md) |
 | A made-up `installation_id` on the setup page | The setup page is static; nothing trusts its address |
+| A repository or branch name made to change where the workflow link points (another repository, another host, another file or text) or to put markup into the check | The link's parts are the server's own GitHub web root, the repository's full name and its default branch as GitHub gives them (the pull request GitHub returns, else the event's signed payload) and the app's own file text. Nothing in it comes from a race file, a pull request's title, a head or base branch, or a request. The full name must be `owner/name` in the characters GitHub allows, and the branch a name git allows: no `.` or `..` segment, no empty segment, none of the characters git refuses; otherwise there is no link. Each branch segment, the file's name and the text are percent-encoded down to letters, digits, `-`, `_` and `.`, so a `#`, `?`, `&`, `%`, a bracket or a quote in a branch name stays inside its path segment and cannot start a query, a fragment, a second link or markup. No address over 5,800 characters is built |
+| Input typed into the form on the setup page becoming markup, or an address somewhere else | The page's script, under the page's nonce and the same content security policy, checks the two inputs against the same two patterns, builds the same address with `encodeURIComponent`, and opens it in a new tab without an opener. Messages are set as text. The form has no action and no inline handler, and nothing typed is sent to the server |
 | Login CSRF on Connect | State kept server-side, single use, bound to the session that started it; the cookie holds only the row's id |
 | A leaked installation token | Asked per repository, kept in memory under an hour, never stored or logged |
 | The token reaching GitHub's storage host | A download's redirect is fetched without any credential |

@@ -102,7 +102,9 @@ The worker tolerates the other order too: with the tables missing, the app's own
 
 ## 5. Deploy
 
-`wrangler.toml` gained one route, `genclass.dev/github*`, two vars and a second cron trigger, `*/20 * * * *`.
+`wrangler.toml` gained one route, `genclass.dev/github*`, three vars (`GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_REPOS`
+and `GITHUB_APP_WORKFLOW_LINK`, which is [step 7](#7-the-link-that-adds-the-workflow-file)) and a second cron trigger,
+`*/20 * * * *`.
 
 The second trigger runs the app's sweep and nothing else: every 20 minutes it reviews the pull requests whose review
 has been owed for more than an hour (a job that failed or was stopped, an hourly limit, a check that waits), at most
@@ -164,6 +166,49 @@ Without GitHub:
 - the three pages, opened in a browser against that local worker at desktop and phone widths, with a repository
   linked and paused from `/account/github`.
 
+## 7. The link that adds the workflow file
+
+A repository can give the app something to read with one file, [`workflows/genclass.yml`](workflows/genclass.yml),
+and no change to its tests. The var `GITHUB_APP_WORKFLOW_LINK` in `wrangler.toml` makes adding that file a review and
+a commit.
+
+- `"on"`: the check that has no race files to read ("No race files to read yet" and "No race files for this commit")
+  carries one sentence with a link, and `/github/setup` has a small form (repository, branch) with a button. Both open
+  GitHub's own new-file editor with `.github/workflows/genclass.yml` and the file's text filled in. The person reads
+  it and commits it on GitHub, as themselves. The app writes nothing to the repository and asks for no new
+  permission.
+- Anything else, and unset: off. No check carries the link, every text the app writes on GitHub is what it is without
+  the setting, and `/github/setup` says to copy the file from this repository.
+
+It is `"off"` in `wrangler.toml` and stays off until the first version of `@genclass/playwright` is on npm. The
+workflow installs that package from npm, so before it is published the job fails at its install step. After
+publishing, set the var to `"on"` and deploy. The checks that have nothing to read then get the new text at the next
+review of their pull request.
+
+What to know before turning it on:
+
+- The address is `https://github.com/OWNER/REPO/new/BRANCH?filename=.github/workflows/genclass.yml&value=TEXT`, with
+  the text percent-encoded (checked on github.com on 2026-11-10, signed in). `BRANCH` must be a branch that exists:
+  the literal `HEAD` answers 404. The check uses the repository's default branch as GitHub names it, in the pull
+  request GitHub returns or else in the event's signed payload. When neither names one, the check has no link.
+- GitHub answers an address of about 6,000 characters with an error. The file is 2,495 characters and 3,935
+  percent-encoded, and the whole address for a short repository name is 4,023. The worker builds no address longer
+  than 5,800: if the file grows past that, the checks say what they say without the link.
+- The file's text is in two places: `docs/github-app/workflows/genclass.yml`, which is the source, and
+  `WORKFLOW_FILE` in `telemetry-worker/src/github/workflow-file.ts`. `test/github-workflow.test.ts` fails when they
+  differ and says how to bring them back in step. A change to the file reaches the link with the next deploy.
+- A repository whose settings read artifacts under another name gets no link (`artifact` is not the start of
+  `genclass-races`, the name the file uploads under): the file would upload something the app does not read there.
+- The link is in the check and on `/github/setup` only, never in a comment, a reply or an issue.
+- On a GitHub Enterprise Server the address starts with `GITHUB_WEB_URL`.
+- Tested against a fake GitHub only (`test/github-workflow.test.ts`). The address was opened by hand on github.com; a
+  check that carries it has not been written to GitHub yet, and the form on `/github/setup` has not been used in a
+  browser. After turning it on, open the check on a pull request of a repository without race files, follow the
+  link, and see that the editor opens with the file filled in. Do the same once from `/github/setup`.
+
+Checked on github.com on 2026-11-10, signed in: the address the worker builds for this repository (4,035 characters)
+opens the new-file editor at `.github/workflows/genclass.yml` on `main` with the whole file filled in
+([the screenshot](media/one-click-workflow.jpg)). Nothing was committed from it.
 
 ## Try it without touching production
 

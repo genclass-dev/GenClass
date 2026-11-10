@@ -4,6 +4,12 @@
 // Invariants:
 // - /github and /github/setup are static: they show nothing about any installation, account or repository, whatever
 //   their address carries, so they can be opened by anyone.
+// - On a server that has the workflow link on (config.ts GITHUB_APP_WORKFLOW_LINK), /github/setup has a small form: a
+//   repository and a branch a person types, and a button that opens GitHub's new-file editor with the workflow file
+//   filled in. The address is built by the page's script (workflow-file.ts WORKFLOW_LINK_JS), under the page's nonce,
+//   from the file's text in a JSON data block and the two inputs, each checked against a pattern first. Nothing typed
+//   there is sent to this server or put into the page as markup; the form has no action and no inline handler.
+//   Without the setting the page says to copy the file from the repository.
 // - Every value from GitHub or the account (logins, repository and app names) is escaped; the account page's script
 //   reads only numeric repository ids and app ids from data attributes and form values.
 // - The pages say only what the app does: every sentence about what it reads, writes and keeps is the same as in
@@ -14,9 +20,12 @@ import { DASH_CSS, esc, orgName, shell } from "../pages.js";
 import { PLANS_FILE } from "../plans.js";
 import { studioPage } from "../studio.js";
 import { SETTINGS_PATH } from "./settings.js";
+import { WORKFLOW_LINK_JS, WORKFLOW_PATH, workflowLinkData } from "./workflow-file.js";
 
 const DOCS = "https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md";
 const PRIVACY = "https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md#the-github-app";
+/** The workflow file in this repository, for someone who copies it by hand. */
+const WORKFLOW_SOURCE = "https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/workflows/genclass.yml";
 
 const GH_CSS = `
 ul.facts{list-style:none;display:grid;gap:8px;max-width:76ch;color:var(--ink2);font-size:14px}
@@ -33,6 +42,13 @@ ul.facts b{color:var(--ink);font-weight:500}
 .gh-cta{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .gh-cta .btn.xl{min-height:52px;font-size:16px;padding:0 24px}
 .gh-note{font-size:13px;color:var(--ink3);max-width:76ch}
+.gh-p{font-size:14px;color:var(--ink2);max-width:76ch}
+.gh-p code{font:13px var(--mono);color:var(--ink)}
+.gh-wf{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:10px;align-items:end;max-width:76ch}
+.gh-wf label{display:grid;gap:6px;min-width:0;font-size:14px;font-weight:500}
+.gh-wf-err{font-size:13px;color:var(--warn);max-width:76ch}
+.gh-wf-err:empty{display:none}
+@media (max-width:620px){.gh-wf{grid-template-columns:minmax(0,1fr)}}
 `;
 
 const snippet = (label: string, code: string): string =>
@@ -138,15 +154,87 @@ export function githubLandingPage(nonce: string, o: { slug: string; privateRepos
   return shell(nonce, `GenClass for GitHub: ${o.slug}[bot]`, body, "", { index: true });
 }
 
-/** /github/setup: after installing. Static: it says what to do next and shows nothing about any installation. */
-export function githubSetupPage(nonce: string, o: { slug: string; canConnect: boolean }): string {
+/**
+ * JSON for a data block (a script element of type application/json): "<", ">" and "&" are written as escapes, so
+ * nothing in the text can end the element or start markup, and the two line separators JSON leaves as they are.
+ */
+const dataBlock = (v: unknown): string =>
+  JSON.stringify(v).replace(/[<>&\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+
+/**
+ * The script of the setup page's form (after WORKFLOW_LINK_JS, which defines gcWorkflowLink): on submit, the two
+ * inputs are checked against the patterns of the data block, the address is built from them and the file's text, and
+ * it is opened in a new tab. What a person typed goes nowhere else; a message is set with textContent.
+ */
+const SETUP_FORM_JS = `
+(function(){
+  var form = document.getElementById("gh-wf"), block = document.getElementById("gh-wf-data");
+  if (!form || !block) return;
+  var d;
+  try { d = JSON.parse(block.textContent || ""); } catch (e) { return; }
+  var repo = document.getElementById("gh-wf-repo"), branch = document.getElementById("gh-wf-branch"), err = document.getElementById("gh-wf-err");
+  function say(t){ if (err) err.textContent = t; }
+  form.addEventListener("submit", function(ev){
+    ev.preventDefault();
+    var r = repo.value.trim(), b = branch.value.trim();
+    if (!new RegExp(d.repo).test(r)) { say("Write the repository as owner/name, for example acme/shop."); repo.focus(); return; }
+    if (!new RegExp(d.branch).test(b)) { say("That is not a branch name. The default branch of most repositories is main."); branch.focus(); return; }
+    var url = gcWorkflowLink(d, r, b);
+    if (!url) { say("No address could be built for that branch. Copy the file from the repository instead."); return; }
+    say("");
+    window.open(url, "_blank", "noopener,noreferrer");
+  });
+})();`;
+
+/** What the one workflow file does, in the words of docs/github-app/README.md ("Setup", step 1). */
+const WORKFLOW_DOES = "It runs your existing Playwright suite under GenClass in a job of its own that is allowed to fail, and uploads the race files.";
+
+/**
+ * The setup page's section about the workflow file. With the link on: a form (repository, branch) whose button opens
+ * GitHub's new-file editor with the file filled in, and the file's text and the patterns in a data block for the
+ * page's script. Without it: where to copy the file from.
+ */
+function workflowSection(link: { web: string } | null): string {
+  const path = `<code>${esc(WORKFLOW_PATH)}</code>`;
+  const source = `<a href="${WORKFLOW_SOURCE}"><code>workflows/genclass.yml</code></a>`;
+  if (!link) {
+    return `<section class="stack mt-l" id="workflow">
+  <h2 class="h2l">With no change to your tests</h2>
+  <p class="gh-p">Copy ${source} from the GenClass repository to ${path} in yours. ${WORKFLOW_DOES}</p>
+</section>`;
+  }
+  return `<section class="stack mt-l" id="workflow">
+  <h2 class="h2l">With no change to your tests</h2>
+  <p class="gh-p">Add one workflow file, ${path}. ${WORKFLOW_DOES} The button opens GitHub's new-file editor in a new tab with the file filled in; you review it and commit it there.</p>
+  <form class="gh-wf" id="gh-wf" novalidate>
+    <label for="gh-wf-repo">Repository<input type="text" id="gh-wf-repo" name="repo" placeholder="owner/name" maxlength="140" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>
+    <label for="gh-wf-branch">Branch<input type="text" id="gh-wf-branch" name="branch" value="main" maxlength="255" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>
+    <button class="btn" type="submit">Open the file on GitHub</button>
+  </form>
+  <p class="gh-wf-err" id="gh-wf-err" role="alert"></p>
+  <p class="gh-note">The address is built in this page: what you type here is not sent to GenClass. The same file is in the GenClass repository, ${source}.</p>
+  <script type="application/json" id="gh-wf-data">${dataBlock(workflowLinkData(link.web))}</script>
+</section>`;
+}
+
+/**
+ * /github/setup: after installing. Static: it says what to do next and shows nothing about any installation.
+ * `workflowLink`: this server shows the link that opens GitHub's new-file editor (config.ts `workflowLink`), with its
+ * GitHub web root; absent or null, the page says to copy the workflow file from the repository.
+ */
+export function githubSetupPage(nonce: string, o: { slug: string; canConnect: boolean; workflowLink?: { web: string } | null }): string {
+  const link = o.workflowLink ?? null;
   const body = `
 <style nonce="${nonce}">${GH_CSS}</style>
 <section class="stack mt-xl">
   <h1>${esc(o.slug)}[bot] is installed</h1>
-  <p class="lead">It reviews a pull request as soon as that pull request's workflow run uploads race files. Two steps in the repository, no account needed.</p>
+  <p class="lead">It reviews a pull request as soon as that pull request's workflow run uploads race files. One workflow file, or two steps in your own e2e job; no account needed.</p>
 </section>
-<section class="stack mt-l">${steps(o.slug)}</section>
+${workflowSection(link)}
+<section class="stack mt-l">
+  <h2 class="h2l">Or in your own e2e job</h2>
+  ${steps(o.slug)}
+</section>
 <section class="stack mt-l">
   <h2 class="h2l">Optional</h2>
   <ul class="facts">
@@ -157,7 +245,7 @@ export function githubSetupPage(nonce: string, o: { slug: string; canConnect: bo
   ${snippet("Settings file", SETTINGS)}
   <p class="gh-note"><a href="${DOCS}">The guide</a> has every setting and command. To remove the app, uninstall it in your GitHub settings: everything kept for the installation is deleted at once.</p>
 </section>`;
-  return shell(nonce, `${o.slug}[bot] is installed | GenClass`, body, "", {});
+  return shell(nonce, `${o.slug}[bot] is installed | GenClass`, body, link ? WORKFLOW_LINK_JS + SETUP_FORM_JS : "", {});
 }
 
 export interface GithubAccountView {
