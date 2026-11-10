@@ -485,7 +485,7 @@ export async function routeGithub(request: Request, url: URL, path: string, env:
   if (path === "/github/setup") {
     if (!get) return fail(405, "method not allowed");
     const nonce = randomBase62(22);
-    return html(200, githubSetupPage(nonce, { slug: cfg.slug, canConnect: !!cfg.clientId }), nonce);
+    return html(200, githubSetupPage(nonce, { slug: cfg.slug, canConnect: !!cfg.clientId, workflowLink: cfg.workflowLink ? { web: cfg.web } : null }), nonce);
   }
 
   const c = accountContext(request, url, env, opts);

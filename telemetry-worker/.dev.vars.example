@@ -22,3 +22,6 @@ DASHBOARD_ORIGIN=http://localhost:8787
 # GITHUB_APP_CLIENT_ID=
 # GITHUB_APP_CLIENT_SECRET=
 # GITHUB_APP_PRIVATE_REPOS=open
+# Optional, with the app: the link that opens GitHub's new-file editor with the workflow file filled in, on the check
+# that has no race files to read and on /github/setup (docs/github-app/SETUP.md). Off unless it says "on".
+# GITHUB_APP_WORKFLOW_LINK=on

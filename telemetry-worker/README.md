@@ -1055,6 +1055,7 @@ time and cached in memory until 5 minutes before they expire.
 | `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | secret | the listing's webhook. Set it to a value of its own once the listing exists; unset, that endpoint accepts the app's webhook secret |
 | `GITHUB_APP_SLUG` | var | the app's URL name (`genclass`): its bot is `<slug>[bot]` and its commands start with `@<slug>` |
 | `GITHUB_APP_PRIVATE_REPOS` | var | `plan` (default) or `open` |
+| `GITHUB_APP_WORKFLOW_LINK` | var | `on`: the check with no race files, and `/github/setup`, link to GitHub's new-file editor with `docs/github-app/workflows/genclass.yml` filled in. Anything else: off |
 | `GITHUB_API_URL`, `GITHUB_WEB_URL` | vars | a GitHub Enterprise Server (untested) |
 
 ## Self-host the collector (private mode)
