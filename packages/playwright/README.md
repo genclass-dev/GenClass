@@ -6,7 +6,7 @@
 [`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime) ([genclass.dev](https://genclass.dev)), the
 open-source (Apache-2.0) browser library that reports race conditions in web apps while they happen, on every page
 your tests open, and turns what it flagged into one pull-request report. This page covers `@genclass/playwright`
-0.1.0, which is not on npm yet, and the `genclass-races/1` file format. Two parts that share that file format:
+0.1.0 and the `genclass-races/1` file format. Two parts that share that file format:
 
 - **The fixture** (`@genclass/playwright/fixture`) puts [`@genclass/runtime`](../runtime) on every page your tests
   open, before the app's first script, in observe mode with telemetry off. With `chaos` it holds the app's API
@@ -29,8 +29,6 @@ outcome, and the fixture logs nothing to the page's console. No runtime dependen
 `@genclass/runtime` are peer dependencies (the reporter alone needs neither).
 
 ## Install
-
-Not on npm yet (version 0.1.0 is unreleased). Once published:
 
 ```bash
 npm install -D @genclass/playwright @genclass/runtime@beta

@@ -1,10 +1,11 @@
 # Changelog
 
 Changes to `@genclass/playwright`, the Playwright reporter for
-[`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime) race files. Version 0.1.0 is not on npm yet;
-everything below is unreleased.
+[`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime) race files.
 
-## Unreleased
+## 0.1.0 (2026-11-10)
+
+The first version on npm.
 
 - **Where the test is declared**: the fixture writes an optional `location` (`{ file, line }`) into each race file,
   the test file's path relative to the repository root (`GITHUB_WORKSPACE` on GitHub Actions, else the Playwright
