@@ -1,7 +1,8 @@
 # Listing genclass-dev[bot] on GitHub Marketplace
 
-Research and steps, written 2026-11-09 from GitHub's documentation as read that day. Nothing is submitted from this
-repository, and the app is not registered yet ([docs/github-app/SETUP.md](../../github-app/SETUP.md)). Sources:
+Research and steps, written 2026-11-09 from GitHub's documentation as read that day, and the listing as it was
+filled in on GitHub on 2026-11-10 ([The draft on GitHub](#the-draft-on-github)). The listing is a draft: it has not
+been submitted for review. Sources:
 [Requirements for listing an app](https://docs.github.com/en/apps/github-marketplace/creating-apps-for-github-marketplace/requirements-for-listing-an-app),
 [Writing a listing description](https://docs.github.com/en/apps/github-marketplace/listing-an-app-on-github-marketplace/writing-a-listing-description-for-your-app),
 [Setting pricing plans](https://docs.github.com/en/apps/github-marketplace/listing-an-app-on-github-marketplace/setting-pricing-plans-for-your-listing),
@@ -42,15 +43,15 @@ For every listing (quoted from the requirements page):
 | Requirement | Status |
 |---|---|
 | "Listings must not actively persuade users away from GitHub." | The listing links to the guide in this repository and to genclass.dev only for the privacy policy and the account page. |
-| "Listings must include valid contact information for the publisher." | mehar@daybot.ca |
+| "Listings must include valid contact information for the publisher." | mehar@genclass.dev, for all four contacts the form asks for (technical, marketing, finance, security). |
 | "Listings must have a relevant description of the application." | Draft below. |
-| "Listings must specify a pricing plan." | One free plan, below. |
-| "Listings must have a valid link to a privacy policy." | `PRIVACY.md` has "The GitHub App"; a page on genclass.dev that shows it is still to do (the site is in another repository). |
+| "Listings must specify a pricing plan." | One free plan, "Free", published inside the draft listing. |
+| "Listings must have a valid link to a privacy policy." | The listing links `PRIVACY.md` in this repository, which has "The GitHub App". genclass.dev/privacy does not show that section yet (the site is in another repository). |
 | "Listings must provide a method to receive support through a valid support link and/or a support email address." | The repository's issues, and the email above. |
 | "Apps must provide value to customers and integrate with the platform in some way beyond authentication." | Checks, comments, commands. |
 | "Apps must be publicly available in GitHub Marketplace and cannot be in public preview or available by invite only." | The manifest registers it as public. It must be past "nothing can be installed today" first: SETUP.md, "Before anything else". |
-| "Apps must have webhook events set up to notify the publisher of any plan changes or cancellations using the GitHub Marketplace API." | `POST /api/github/marketplace` takes `marketplace_purchase`: purchased, changed, cancelled, pending_change, pending_change_cancelled. The listing's webhook is set on the listing page with its own secret (`GITHUB_MARKETPLACE_WEBHOOK_SECRET`) and must be Active before review. |
-| "Apps must have a logo, feature card, and screenshots images that meet the recommendations" | To make: see Images. |
+| "Apps must have webhook events set up to notify the publisher of any plan changes or cancellations using the GitHub Marketplace API." | `POST /api/github/marketplace` takes `marketplace_purchase`: purchased, changed, cancelled, pending_change, pending_change_cancelled. The listing's webhook is set on the listing page with its own secret (`GITHUB_MARKETPLACE_WEBHOOK_SECRET`) and must be Active before review. **Not set yet**: the one item still open on the listing's checklist. |
+| "Apps must have a logo, feature card, and screenshots images that meet the recommendations" | Uploaded: see Images. |
 | For a GitHub App: "your app must identify users following the OAuth authorization flow"; the Setup URL "is a required field"; "Your app must provision a customer account for all new purchases." | Connect GitHub is the OAuth flow; the Setup URL is `/github/setup`; a purchase is recorded per GitHub account in `github_marketplace`. Whether a row per GitHub account, with no GenClass account until the person connects, satisfies "provision a customer account" is a question for the onboarding review. |
 
 Free and paid:
@@ -64,9 +65,9 @@ Free and paid:
 - "you can't list your app with a free pricing plan if you offer a paid service outside of GitHub Marketplace." The
   same page says that once a free listing meets the requirements for paid apps, a paid version sold elsewhere must
   also be offered in the Marketplace. Private repositories by agreement (the Enterprise plan) are a paid service
-  outside the Marketplace. **This needs a decision before submitting**: either private repositories are not sold at
-  all until the listing can carry a paid plan (`GITHUB_APP_PRIVATE_REPOS` stays `plan` and nobody is granted it for
-  the app), or ask the onboarding contact whether an agreement by email counts.
+  outside the Marketplace. Decided 2026-11-10: the app is free on private repositories too
+  (`GITHUB_APP_PRIVATE_REPOS = "open"`), and no plan sold anywhere includes it, so nothing about the app is sold
+  outside the Marketplace.
 - On `cancelled`, GitHub asks to "Remove all customer data within 30 days of receiving the cancelled event." The app
   deletes the plan row at once; an uninstall deletes everything else at once. A cancellation without an uninstall
   leaves the installation's rows, which the free tier needs to keep working: say so if asked.
@@ -78,11 +79,13 @@ price and may have a 14-day trial; a plan is for "Personal accounts and organiza
 Organizations only". The Marketplace has no notion of public and private repositories: the app enforces that itself
 (`src/github/entitlement.ts`: a plan whose monthly price is above 0 opens private repositories).
 
-To list now:
+Listed (2026-11-10):
 
 | Plan | Price | For | Description |
 |---|---|---|---|
-| Open source | Free | personal accounts and organizations | Every public repository. One check per commit, one comment per pull request, all commands. |
+| Free | Free | personal accounts and organizations | "Runtime reviews on public and private repositories". Bullets: "One check per commit, one comment per pull request"; "Public and private repositories"; "Every command: review, replay, fix, issue"; "No access to repository contents". |
+
+GitHub locks a published plan's name and pricing model; its description and bullets stay editable.
 
 Later, once a paid plan is possible (no price is decided; these are the shapes GitHub allows):
 
@@ -90,63 +93,105 @@ Later, once a paid plan is possible (no price is decided; these are the shapes G
 |---|---|---|
 | Team | flat rate, monthly and yearly | Private repositories. |
 
-## Listing text (draft)
+## Listing text
 
-**Name:** GenClass
+As entered on 2026-11-10. GitHub's form allows more than its guide recommends: 125 characters for the very short
+description, 500 for the introduction, 400 to 2,000 for the detailed description.
 
-**Very short description** (40 to 80 characters, no app name, no call to action, no full stop):
+**Name:** GenClass.dev ("GenClass" is refused: another account has that name)
 
-> Runtime evidence from your own tests, on the pull request
+**Very short description:**
 
-**Introductory description** (150 to 250 characters, starts with the app's name):
+> Runtime evidence from your own Playwright tests, on the pull request
 
-> GenClass shows what its runtime saw in the page while a pull request's Playwright tests ran: a request sent twice,
-> an older response applied over a newer one. Each finding names its test, its seeds and the evidence line.
+**Introductory description:**
 
-**Detailed description** (up to 1,000 characters):
+> GenClass.dev shows what the GenClass runtime saw in the page while a pull request's Playwright tests ran: a request
+> sent twice, an older response applied over a newer one. Each finding names its test, its seeds and the evidence line.
 
-> GenClass reviews a pull request from what ran, not from what the diff looks like.
+**Detailed description:**
+
+> GenClass.dev reviews a pull request from what happened in the page while its tests ran. Nothing is inferred from the
+> diff.
 >
-> - Add the GenClass fixture to your Playwright tests and upload its race files from your workflow. The app reads
->   them when the run finishes, also for pull requests from forks.
-> - One check on each commit and one comment per pull request, edited in place. Nothing flagged, no comment.
-> - A finding flagged in two or more seeds of the same test is marked reproducible. From push to push it is new,
->   still flagged, or not flagged at the new commit.
-> - `@genclass-dev replay 1` gives the steps to reproduce a finding. `@genclass-dev fix 1` writes a brief your coding agent
->   can work from in your own CI.
-> - It has no access to repository contents: it cannot read or change your code.
+> - **One file to set up.** Add one workflow file. It runs your existing Playwright suite under GenClass, in a job of
+>   its own that is allowed to fail, and uploads small race files. No change to your tests or your Playwright config.
+> - **One check, one comment.** A check on each commit and one comment per pull request, edited in place. With nothing
+>   flagged there is no comment.
+> - **Reproducible or not.** A finding flagged in two or more seeds of the same test is marked reproducible. From push
+>   to push it is new, still flagged, or not flagged at the new commit.
+> - **Commands.** `/genclass replay 1` replies with the steps to reproduce a finding. `/genclass fix 1` writes a brief
+>   your coding agent can work from.
+> - **No access to your code.** The app reads the race files your workflow uploads and the paths of the files a pull
+>   request changes. It has no permission to read or change repository contents.
 >
-> Each line is a diagnosis or a measured fact to check, not a verdict.
+> Free, on public and private repositories.
+>
+> Each line is a diagnosis or a fact the runtime measured. Whether it is a bug is for you to decide. What the app keeps
+> is in the [privacy policy](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md#the-github-app).
+
+It leaves out what has not been run against GitHub yet: pull requests from forks, and the fix workflow in CI.
 
 **Categories:** Code review (primary), Testing (secondary). **Languages:** JavaScript, TypeScript.
 
-**URLs:** Customer support `https://github.com/genclass-dev/GenClass/issues`; Privacy policy: the genclass.dev page
-that shows `PRIVACY.md` (to do); Documentation
-`https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md`; Company `https://genclass.dev`.
-"Installation URL" is for OAuth apps: skip it.
+**URLs:** Customer support `https://github.com/genclass-dev/GenClass/issues`; Documentation
+`https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md`; Company `https://genclass.dev`; Status:
+none.
+
+<a id="the-draft-on-github"></a>
+
+## The draft on GitHub
+
+`https://github.com/marketplace/genclass-dev/edit` (organization owners only; GitHub asks for sudo). State on
+2026-11-10: contact info, listing description, plans and pricing, and security and compliance are complete; the
+webhook is not. The Developer Agreement (v2.4) is signed by the owner.
+
+Security and compliance, as entered:
+
+- **EU Digital Services Act:** "I do not operate as a trader under EU regulations". This is the owner's declaration
+  (2026-11-10); the form says it concerns paid app publishers. It has to be looked at again before any paid plan.
+- **Privacy Policy URL:** `https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md`.
+- **Terms of Service URL:** empty. genclass.dev/terms covers the collector, dashboards, accounts and billing and
+  does not mention the app.
+- **Third-party services:** "Cloudflare: the app runs on Cloudflare Workers and keeps its records in Cloudflare D1. No
+  other service receives data from the app."
+- **Repository visibility:** Public, `https://github.com/genclass-dev/GenClass`.
+- **Transparency disclosures:** six short paragraphs from [the guide](../../github-app/README.md) and
+  [PRIVACY.md](../../../PRIVACY.md#the-github-app): the permissions; what is read and that race files are untrusted
+  input; what is stored and for how long; how webhooks, tokens and settings are checked; that the app's server runs
+  no model and nothing read is used for training; that no third-party certification is claimed, with the links to the
+  source and to private vulnerability reports. A change to what the app reads or keeps has to be made there too.
 
 ## Images
 
-- **Logo:** square, "at least 200 pixels x 200 pixels", no text. The mark at genclass.dev/brand is the source; a badge
-  background colour is chosen with it.
-- **Feature card:** "965 pixels x 482 pixels".
-- **Screenshots:** "up to five", "at least 1200px wide", one aspect ratio. Take them on a real pull request, after the
-  first run in SETUP.md: the comment with a reproducible finding; the check's page; a reply to `@genclass-dev replay`; the
-  `/account/github` page. Not mock-ups.
+In [`docs/github-app/media/`](../../github-app/media/), as uploaded on 2026-11-10:
+
+- **Logo:** `logo-512.png`, the mark on white; badge background colour `ffffff`.
+- **Feature card:** `listing/feature-card.png`, 965 by 482, drawn from `listing/feature-card.svg`: two requests in
+  flight at once, the one sent first coming back last, in the mark's two colours on black. GitHub puts the badge and
+  the name over the middle in light text, so the drawing stays in two corners.
+- **Screenshots:** four, each 1440 by 812, of this repository's own pull requests (not mock-ups), with captions:
+  `listing/1-review.jpg` "The review: one comment with the finding, its test and the seeds it was seen in";
+  `listing/2-replay.jpg` "/genclass replay 1 replies with the steps to reproduce the finding";
+  `listing/3-first-check.jpg` "The first check says what the app reads and links to the one workflow file";
+  `listing/4-one-file.jpg` "The link opens GitHub's editor with the workflow file filled in: read it and commit".
 
 ## Steps
 
-1. Everything in [SETUP.md](../../github-app/SETUP.md) up to "First run", on a real repository.
-2. A privacy page on genclass.dev that shows "The GitHub App" from `PRIVACY.md`.
-3. Decide the question under "Free and paid" about private repositories by agreement.
-4. Logo, feature card, screenshots.
-5. On the app's page: List in Marketplace. Fill the text above, add the Open source plan, set the listing's webhook to
-   `https://genclass.dev/api/github/marketplace` with **Content type: application/json** and a new secret of its own
-   (not the app's webhook secret), store that secret as `GITHUB_MARKETPLACE_WEBHOOK_SECRET`, tick Active. The form's
-   other content type, `application/x-www-form-urlencoded`, puts the JSON in a form field named `payload`; the worker
-   reads that too, when the body is exactly that one field, but JSON is what GitHub recommends. GitHub does not send a failed Marketplace delivery again, so open the listing's
-   delivery list and check that the first delivery, the ping, was answered with 202.
-6. Test the purchase flow as GitHub's "Testing your app" page describes (the stubbed Marketplace endpoints), then
-   submit.
-7. When the listing is live: set the two `available: false` lines in `billing/plans.json` to `true`, and add the
-   Marketplace link next to the install link in the README and on `/github`.
+Done: the app is public and reviewed real pull requests ([SETUP.md](../../github-app/SETUP.md)); the question under
+"Free and paid" is decided; logo, feature card and screenshots; the listing's text, plan and security information.
+
+Left:
+
+1. The listing's webhook: `https://genclass.dev/api/github/marketplace`, **Content type: application/json**, a new
+   secret of its own (not the app's webhook secret), Active. Store the same secret as
+   `GITHUB_MARKETPLACE_WEBHOOK_SECRET` on the worker first. The form's other content type,
+   `application/x-www-form-urlencoded`, puts the JSON in a form field named `payload`; the worker reads that too, when
+   the body is exactly that one field, but JSON is what GitHub recommends. GitHub does not send a failed Marketplace
+   delivery again, so open the listing's delivery list and check that the first delivery, the ping, was answered with
+   202.
+2. Test the purchase flow as GitHub's "Testing your app" page describes (the stubbed Marketplace endpoints), then
+   request publication. The owner does that.
+3. A privacy page on genclass.dev that shows "The GitHub App" from `PRIVACY.md`, and terms that mention the app; then
+   point the listing at them.
+4. When the listing is live: add the Marketplace link next to the install link in the README and on `/github`.

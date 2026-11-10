@@ -1,0 +1,61 @@
+<!-- GitHub Marketplace feature card background, 965 x 482. GitHub draws the logo badge and the listing's name over
+     the centre in light text, so the centre stays calm and the drawing sits in two corners.
+     The drawing: two requests in flight at once; the one sent first comes back last. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="965" height="482" viewBox="0 0 965 482">
+  <defs>
+    <radialGradient id="g" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(90 40) scale(520 380)">
+      <stop offset="0" stop-color="#2FD07F" stop-opacity=".34"/>
+      <stop offset=".55" stop-color="#2FD07F" stop-opacity=".07"/>
+      <stop offset="1" stop-color="#2FD07F" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="r" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(890 450) scale(520 380)">
+      <stop offset="0" stop-color="#FF5A36" stop-opacity=".30"/>
+      <stop offset=".55" stop-color="#FF5A36" stop-opacity=".06"/>
+      <stop offset="1" stop-color="#FF5A36" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="48.25" height="48.2" patternUnits="userSpaceOnUse">
+      <path d="M48.25 0H0V48.2" fill="none" stroke="#F0F1E9" stroke-opacity=".055" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="fade" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(482.5 241) scale(420 150)">
+      <stop offset="0" stop-color="#000" stop-opacity=".8"/>
+      <stop offset=".6" stop-color="#000" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="965" height="482" fill="#000000"/>
+  <rect width="965" height="482" fill="url(#grid)"/>
+  <rect width="965" height="482" fill="url(#g)"/>
+  <rect width="965" height="482" fill="url(#r)"/>
+
+  <!-- top left: request A leaves first and is still in flight when B has come back -->
+  <g fill="none" stroke-linecap="square">
+    <path d="M40 44H300" stroke="#F0F1E9" stroke-opacity=".16"/>
+    <path d="M40 84H300" stroke="#F0F1E9" stroke-opacity=".16"/>
+    <path d="M62 44H278" stroke="#2FD07F" stroke-width="3"/>
+    <path d="M118 84H206" stroke="#FF5A36" stroke-width="3"/>
+  </g>
+  <g>
+    <rect x="57" y="39" width="10" height="10" fill="#2FD07F"/>
+    <rect x="273" y="39" width="10" height="10" fill="#000" stroke="#2FD07F" stroke-width="2"/>
+    <rect x="113" y="79" width="10" height="10" fill="#FF5A36"/>
+    <rect x="201" y="79" width="10" height="10" fill="#000" stroke="#FF5A36" stroke-width="2"/>
+  </g>
+
+  <!-- bottom right: the same two, mirrored -->
+  <g fill="none" stroke-linecap="square">
+    <path d="M665 398H925" stroke="#F0F1E9" stroke-opacity=".16"/>
+    <path d="M665 438H925" stroke="#F0F1E9" stroke-opacity=".16"/>
+    <path d="M759 398H847" stroke="#2FD07F" stroke-width="3"/>
+    <path d="M687 438H903" stroke="#FF5A36" stroke-width="3"/>
+  </g>
+  <g>
+    <rect x="754" y="393" width="10" height="10" fill="#2FD07F"/>
+    <rect x="842" y="393" width="10" height="10" fill="#000" stroke="#2FD07F" stroke-width="2"/>
+    <rect x="682" y="433" width="10" height="10" fill="#FF5A36"/>
+    <rect x="898" y="433" width="10" height="10" fill="#000" stroke="#FF5A36" stroke-width="2"/>
+  </g>
+
+  <!-- keep the middle band dark for the badge and the name -->
+  <rect width="965" height="482" fill="url(#fade)"/>
+</svg>
