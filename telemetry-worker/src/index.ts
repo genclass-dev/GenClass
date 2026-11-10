@@ -2,7 +2,7 @@
 // module as an entrypoint, so the collector and dashboard code (and their constants) live in collector.ts.
 import { authRetention } from "./auth.js";
 import { handle, reply, type Env } from "./collector.js";
-import { githubSweep } from "./github/handlers.js";
+import { githubSweep, SWEEP_CRON } from "./github/handlers.js";
 import { githubRetention } from "./github/store.js";
 import { planRetention, stripeMode } from "./plans.js";
 
@@ -21,15 +21,24 @@ export default {
     );
   },
   /**
-   * Daily cron: delete dashboard rows, export copies and their index past each plan's retention (src/plans.ts; R2's
-   * lifecycle rules expire events/ after 90 days and export/ after a year), and expired sign-in challenges, device
-   * codes and sessions, and what the GitHub App no longer needs (handled delivery ids, closed pull requests' rows).
-   * Then the GitHub App's owed reviews (src/github/handlers.ts githubSweep), which is what finishes a check that an
-   * unfinished job left in progress.
+   * Two cron triggers (wrangler.toml `crons`), told apart by the trigger's own expression (`event.cron`).
+   *
+   * Every 20 minutes (SWEEP_CRON): the GitHub App's owed reviews and nothing else (src/github/handlers.ts
+   * githubSweep), which is what finishes a check that an unfinished job left in progress.
+   *
+   * Daily, and for any other trigger (a collector whose configuration has only the daily one): delete dashboard rows,
+   * export copies and their index past each plan's retention (src/plans.ts; R2's lifecycle rules expire events/ after
+   * 90 days and export/ after a year), and expired sign-in challenges, device codes and sessions, and what the GitHub
+   * App no longer needs (handled delivery ids, closed pull requests' rows). Then the GitHub App's owed reviews, as
+   * above.
    */
-  async scheduled(_event: unknown, env: Env, ctx: Ctx): Promise<void> {
+  async scheduled(event: { cron?: string } | null | undefined, env: Env, ctx: Ctx): Promise<void> {
     const db = env.DB;
     if (!db) return;
+    if (event?.cron === SWEEP_CRON) {
+      ctx.waitUntil(githubSweep(env).catch(() => undefined));
+      return;
+    }
     const now = new Date();
     // each sweep on its own: the GitHub App's tables may not exist yet on a database whose migration 0013 is not applied
     ctx.waitUntil(Promise.all([planRetention(db, now, env.BUCKET, stripeMode(env)), authRetention(db, now).catch(() => undefined), githubRetention(db, now).catch(() => undefined), githubSweep(env).catch(() => undefined)]));

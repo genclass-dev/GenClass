@@ -3,6 +3,7 @@
 import { createPublicKey, createVerify, generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { ZERO_WIDTH_SPACE as Z } from "../../packages/playwright/src/summarize.js";
 import { parseCommand } from "../src/github/commands.js";
 import { githubApp, installUrl } from "../src/github/config.js";
 import type { CiEvidence, ProductionEvidence } from "../src/github/evidence.js";
@@ -20,6 +21,7 @@ import {
   mergeFindings,
   parseState,
   patchLines,
+  plainText,
   renderCheck,
   renderFixBrief,
   renderHelp,
@@ -29,6 +31,7 @@ import {
   renderReplay,
   renderStopped,
   renderSummary,
+  renderUnsettled,
   reproduceCommand,
   summaryOf,
   SUMMARY_MARKER,
@@ -48,7 +51,7 @@ const INPUTS = ["checkout-1.json", "checkout-2.json", "search-1.json", "search-2
 const SHA1 = "a".repeat(40);
 const SHA2 = "b".repeat(40);
 const LINKS = { docs: "https://example.test/docs", setup: "https://example.test/setup", app: "https://genclass.dev/github", origin: "https://genclass.dev" };
-const ci = (over: Partial<CiEvidence> = {}): CiEvidence => ({ state: "ready", runs: [], artifacts: [{ name: "genclass-races", runId: 1, files: 4 }], inputs: INPUTS, notes: [], ...over });
+const ci = (over: Partial<CiEvidence> = {}): CiEvidence => ({ state: "ready", incomplete: false, unfinished: false, runs: [], artifacts: [{ name: "genclass-races", runId: 1, files: 4 }], inputs: INPUTS, notes: [], ...over });
 
 function race(test: string, seed: number, sigs: { d: string; op: string; t?: string; ev?: string }[], extra: Record<string, unknown> = {}) {
   return {
@@ -386,13 +389,29 @@ describe("github app: the summary comment and the check run", () => {
     for (const why of ["plan", "repo-paused", "paused", "draft", "auto-off", "branch", "author", "check-off"] as const) {
       for (const held of [true, false]) expect(at(why, held), why).toMatchObject({ status: "completed", conclusion: "neutral", text: "" });
     }
-    for (const why of ["hour", "pr-hour"] as const) {
+    for (const why of ["hour", "hour-push", "hour-outside", "pr-hour"] as const) {
       // still owed: a check that was in progress stays so, with the reason, and does not pass meanwhile
       expect(at(why, true), why).toMatchObject({ status: "in_progress", conclusion: null, title: "Hourly review limit reached" });
       expect(at(why, false), why).toMatchObject({ status: "completed", conclusion: "neutral" });
-      expect(at(why, true).summary).toContain("limit of 120 reviews an hour");
-      expect(at(why, true).summary).toContain("They are read when someone re-runs this check or replies `@genclass-dev review` after 14:00 UTC, and within a day otherwise.");
+      expect(at(why, true).summary, why).toContain("so this commit's race files have not been read yet.");
     }
+    for (const why of ["hour", "hour-outside", "pr-hour"] as const) {
+      // GitHub offers no Re-run on a check in progress: one that stays in progress does not tell anyone to use it
+      expect(at(why, true).summary, why).toContain("They are read when someone replies `@genclass-dev review` after 14:00 UTC, and within a day otherwise.");
+      expect(at(why, true).summary, why).not.toContain("re-run");
+      // a completed check has the button, and says so
+      expect(at(why, false).summary, why).toContain("They are read when someone re-runs this check or replies `@genclass-dev review` after 14:00 UTC, and within a day otherwise.");
+    }
+    // the share of the hour that pushes have does not hold a test run's review or a person's: no waiting for the hour
+    expect(at("hour-push", true).summary).toContain("They are read when this commit's test run finishes with race files, or when someone replies `@genclass-dev review`, and within a day otherwise.");
+    expect(at("hour-push", true).summary).not.toContain("re-run");
+    expect(at("hour-push", false).summary).toContain("or when someone re-runs this check or replies `@genclass-dev review`, and within a day otherwise.");
+    // each sentence names the limit that stopped the review, with the number that is that limit's
+    const limit = (why: StopReason, n: number) => renderStopped(why, { mention: "genclass-dev", held: true, limit: n, after: "14:00" }).summary;
+    expect(limit("hour", 120)).toMatch(/^This installation reached the app's limit of 120 reviews an hour, /);
+    expect(limit("hour-push", 90)).toMatch(/^In this installation, reviews started by pushes reached the app's limit of 90 an hour, /);
+    expect(limit("hour-outside", 60)).toMatch(/^In this installation, pull requests by authors from outside the repository reached the app's limit of 60 reviews an hour, /);
+    expect(limit("pr-hour", 30)).toMatch(/^This pull request reached the app's limit of 30 reviews an hour, /);
     for (const why of ["pr-total", "closed", "superseded"] as const) {
       // nothing will read this commit any more, and a required check must not pass because of that
       expect(at(why, true), why).toMatchObject({ status: "completed", conclusion: "cancelled" });
@@ -403,7 +422,28 @@ describe("github app: the summary comment and the check run", () => {
     // where commands are off, no sentence names one
     expect(renderStopped("auto-off", { mention: "genclass-dev", held: true, commands: false }).summary).not.toContain("@genclass-dev");
     expect(renderStopped("hour", { mention: "genclass-dev", held: true, commands: false, limit: 120, after: "14:00" }).summary).not.toContain("@genclass-dev");
+    // in progress and commands off: there is nothing a person can do but wait, and the sentence says only that
+    expect(renderStopped("hour", { mention: "genclass-dev", held: true, commands: false, limit: 120, after: "14:00" }).summary).toBe("This installation reached the app's limit of 120 reviews an hour, so this commit's race files have not been read yet. They are read within a day.");
+    expect(renderStopped("hour", { mention: "genclass-dev", held: false, commands: false, limit: 120, after: "14:00" }).summary).toContain("They are read when someone re-runs this check after 14:00 UTC, and within a day otherwise.");
     expect(renderOverLimit({ scope: "pull request", limit: 30, after: "14:00" })).toBe("<!-- genclass-bot:reply -->\nThis pull request reached the app's limit of 30 reviews an hour, so this commit's race files were not read. Ask again after 14:00 UTC.\n");
+    expect(renderOverLimit({ scope: "installation", limit: 120, after: "14:00" })).toContain("This installation reached the app's limit of 120 reviews an hour, so");
+    expect(renderOverLimit({ scope: "outside", limit: 60, after: "14:00" })).toBe("<!-- genclass-bot:reply -->\nIn this installation, pull requests by authors from outside the repository reached the app's limit of 60 reviews an hour, so this commit's race files were not read. Ask again after 14:00 UTC.\n");
+    expect(renderOverLimit({ scope: "push", limit: 90, after: "14:00" })).toContain("In this installation, reviews started by pushes reached the app's limit of 90 an hour, so");
+  });
+
+  it("fail_on and a first read that is not whole: the check that gives no result yet is in progress, says what could not be read, and names no Re-run", async () => {
+    const { m } = await model([fixture("search-1.json")]);
+    const notes = ['The artifact "genclass-2" could not be downloaded.', 'The artifact "genclass-3 https://evil.example @team" has expired, so its race files could not be read.'];
+    const c = renderUnsettled({ ...m, ci: ci({ incomplete: true, notes }) });
+    expect(c).toMatchObject({ status: "in_progress", conclusion: null, title: "Not all race files could be read yet", text: "" });
+    expect(c.summary).toContain("Not all race files of `aaaaaaa` could be read, so this check has no result yet: with `check.fail_on` set, it gives one only from race files that were all read.");
+    expect(c.summary).toContain("They are read again within a day, or at once when someone replies `@genclass-dev review`, and the check then ends with what could be read.");
+    expect(c.summary).toContain('Note: The artifact "genclass-2" could not be downloaded.');
+    // an artifact's name is a fork's text: escaped like every note
+    expect(c.summary).toContain(`Note: The artifact "genclass-3 https:${Z}//evil.example @${Z}team" has expired, so its race files could not be read.`);
+    expect(c.summary.toLowerCase()).not.toMatch(/re-run|\bbug|\bfixed|nothing flagged/);
+    // where commands are off, none is named
+    expect(renderUnsettled({ ...m, settings: { ...m.settings, commands: false }, ci: ci({ incomplete: true, notes }) }).summary).not.toContain("@genclass-dev");
   });
 
   it("the check carries the settings file's problems, and a private repository without a plan gets one sentence", async () => {
@@ -500,6 +540,25 @@ describe("github app: replies", () => {
     expect(renderIssue([state.findings[0]!], { repo: "acme/shop", number: 12, headSha: SHA1, mention: "genclass-dev", links: LINKS, merged: false }).title).toBe("Duplicate submit on POST /api/orders (GenClass, from #12)");
   });
 
+  it("an issue's title is plain text GitHub still resolves: what a race file put in the operation or the kind refers to nothing and mentions nobody", async () => {
+    const at = { repo: "acme/shop", number: 12, headSha: SHA1, mention: "genclass-dev", links: LINKS, merged: false };
+    const hostile = "POST vercel/next.js#1 @octocat GH-7 https://github.com/a/b/issues/3 www.evil.example a@-b.example";
+    const { state } = await model([race("t.spec.ts > t", 1, [{ d: "duplicate", op: hostile }]), race("t.spec.ts > t", 2, [{ d: "duplicate", op: hostile }])]);
+    const title = renderIssue([state.findings[0]!], at).title;
+    expect(title).toBe(`Duplicate submit on POST vercel/next.js#${Z}1 @${Z}octocat GH-${Z}7 https:${Z}//github.com/a/b/issues/3 www${Z}.evil.example a@${Z}-b.example (GenClass, from #12)`);
+    // nothing GitHub would turn into a reference, a mention or a link is left in what came from the file; no backslash is added
+    const fromFile = title.replace(" (GenClass, from #12)", "");
+    expect(fromFile).not.toMatch(/#\d|\bGH-\d|@(?!\u200B)|:\/\/|www\./i);
+    expect(title).not.toContain("\\");
+    // the kind of a detection or a witness is the file's text too
+    const odd = await model([race("t.spec.ts > t", 1, [{ d: "odd @octocat #9", op: "GET /x" }]), race("t.spec.ts > t", 2, [{ d: "see owner/repo#4 www.x.example", op: "GET /y", t: "witness" }])]);
+    for (const f of odd.state.findings) expect(renderIssue([f], at).title.replace(" (GenClass, from #12)", ""), f.kind).not.toMatch(/#\d|@(?!\u200B)|www\./);
+    expect(odd.state.findings.map((f) => renderIssue([f], at).title).sort()[0]).toBe(`Detection, odd @${Z}octocat #${Z}9 on GET /x (GenClass, from #12)`);
+    // the neutraliser by itself: one space for a run of whitespace, every "@", and plain text is left as it is
+    expect(plainText("  a\n@x  #1 #a gh-2 ftp://h WWW.h  ")).toBe(`a @${Z}x #${Z}1 #a gh-${Z}2 ftp:${Z}//h WWW${Z}.h`);
+    expect(plainText("POST /api/orders *not* _markdown_ [x](y)")).toBe("POST /api/orders *not* _markdown_ [x](y)");
+  });
+
   it("an issue carries the fingerprint of each finding it lists, hidden, so that the same finding is not filed twice", async () => {
     const { state } = await model();
     const at = { repo: "acme/shop", number: 12, headSha: SHA1, mention: "genclass-dev", links: LINKS };
@@ -514,8 +573,33 @@ describe("github app: replies", () => {
     expect(issueFingerprints(renderIssue(many, { ...at, merged: true }).body)).toEqual(many.slice(0, MAX_ISSUE_FINDINGS).map((f) => f.fp));
     // anything that is not exactly a marker is not one
     expect(issueFingerprints("<!-- genclass-bot:finding XYZ --> <!-- genclass-bot:finding 0123 --> genclass-bot:finding 0123456789abcdef")).toEqual([]);
+    // a marker is a line of its own: one inside a line is text, wherever in the line it stands
+    const other = "0123456789abcdef";
+    expect(issueFingerprints(`x <!-- genclass-bot:finding ${other} -->`)).toEqual([]);
+    expect(issueFingerprints(`<!-- genclass-bot:finding ${other} --> x`)).toEqual([]);
+    expect(issueFingerprints(`- Test: <!-- genclass-bot:finding ${other} -->\n<!-- genclass-bot:finding ${"a".repeat(16)} -->\n`)).toEqual(["a".repeat(16)]);
+    // a body saved from GitHub's editor ends its lines with a carriage return
+    expect(issueFingerprints(`<!-- genclass-bot:issue -->\r\n<!-- genclass-bot:finding ${other} -->\r\n### x\r\n`)).toEqual([other]);
     expect(issueFingerprints(null)).toEqual([]);
     expect(issueFingerprints(undefined)).toEqual([]);
+  });
+
+  it("a race file whose operation or test name holds another finding's marker does not make that finding count as filed", async () => {
+    // the fingerprint of a finding is a hash of public text (its test and signature): anyone can write its marker
+    const victim = await fingerprint("checkout.spec.ts > checkout > places one order", "request|duplicate|POST /api/orders");
+    const marker = `<!-- genclass-bot:finding ${victim} -->`;
+    const test = `evil.spec.ts > t ${marker}`;
+    const inputs = [1, 2].map((seed) => race(test, seed, [{ d: "duplicate", op: `POST /x ${marker}` }, { d: "stale", op: `${marker}\n${marker}`, t: "delivery" }]));
+    const { state } = await model(inputs);
+    expect(state.findings).toHaveLength(2);
+    const at = { repo: "acme/shop", number: 12, headSha: SHA1, mention: "genclass-dev", links: LINKS };
+    for (const merged of [true, false]) {
+      const body = renderIssue(state.findings, { ...at, merged }).body;
+      // the text is in the body, inside its lines; the only markers are the issue's own two
+      expect(body.split(victim).length - 1).toBeGreaterThanOrEqual(3);
+      expect(issueFingerprints(body)).toEqual(state.findings.map((f) => f.fp));
+      expect(issueFingerprints(body)).not.toContain(victim);
+    }
   });
 });
 

@@ -13,23 +13,32 @@
 // - Usual fixes are named per group, as things to check, in the words the agent skill uses.
 // - Text from race files (test titles, evidence lines, operations) is untrusted. It reaches markdown only through the
 //   summariser's escaping (no markup, no links, no @mentions, no #references) and the fix brief's JSON only cut and
-//   stripped of control characters; the brief tells its reader that those fields are data, not instructions.
+//   stripped of control characters; the brief tells its reader that those fields are data, not instructions. An
+//   issue's title is plain text, not markdown: race-file text reaches it only through plainText, which puts the same
+//   invisible breaks into what GitHub would resolve there (a mention, a reference, an address) and adds no backslash.
 // - One summary comment per pull request, edited in place; numbers once given to a finding never change, so
 //   "@genclass-dev fix 2" means the same finding after the next push. A finding that is flagged is never dropped to
 //   make room for another: over MAX_FINDINGS, the ones that do not fit get no number and are counted ("N more findings
 //   flagged at this commit are not listed"), so nothing comes back as new with another number.
 // - An issue carries the fingerprint of each finding it lists in a hidden marker, so that the same finding is not
-//   filed a second time from another pull request (issueFingerprints).
+//   filed a second time from another pull request (issueFingerprints). A marker counts only on a line of its own, as
+//   renderIssue writes it: text from a race file is always put inside a line, so it cannot pass for one.
 // - "Nothing flagged" and a green check are said only of race files that were read: files that could not be read are
-//   "No race file could be read", and a commit whose evidence was read only in part is never a success.
+//   "No race file could be read", and a commit whose evidence was read only in part is never a success. Where the
+//   check may fail a pull request (`check.fail_on`), a first read that is not whole and does not fail gives no result
+//   at all: the check stays in progress and says what could not be read (renderUnsettled).
 // - A check says it waits only while its commit's test run can still report. When nothing more will be read for a
 //   commit, the check says why in one or two plain sentences (renderStopped), and when the app has nothing to read
 //   for a repository yet it says what it reads, once (renderIntro).
+// - A sentence about an hourly limit names the limit that stopped the review (the installation's, the share of it
+//   for reviews pushes start, the share for authors from outside the repository, the pull request's own), and a check
+//   that stays in progress never tells anyone to re-run it: GitHub offers no Re-run on a check in progress.
 
 import {
   buildSummary,
   escapeMarkdown,
   renderMarkdown,
+  ZERO_WIDTH_SPACE,
   type RaceCategory,
   type RaceSummary,
   type SignatureSummary,
@@ -334,6 +343,23 @@ export function findingTitle(f: Pick<StoredFinding, "c" | "kind">): string {
   }
 }
 
+/**
+ * Text from a race file for a place GitHub shows as plain text and still resolves (an issue's title): whitespace
+ * runs become one space, and a zero-width space goes after every "@", after "#" before a digit, after "GH-" before a
+ * digit, between ":" and "//" and between "www" and ".", as in the summariser's escapeMarkdown. No backslash is
+ * added: a title is not markdown, and would show it.
+ */
+export function plainText(s: string): string {
+  return s
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/@/g, `@${ZERO_WIDTH_SPACE}`)
+    .replace(/#(?=\d)/g, `#${ZERO_WIDTH_SPACE}`)
+    .replace(/\b(GH)-(?=\d)/gi, `$1-${ZERO_WIDTH_SPACE}`)
+    .replace(/:\/\//g, `:${ZERO_WIDTH_SPACE}//`)
+    .replace(/(www)\./gi, `$1${ZERO_WIDTH_SPACE}.`);
+}
+
 /** The finding's name for a line of markdown (its kind comes from a race file, so it is escaped). */
 const title = (f: Pick<StoredFinding, "c" | "kind">): string => escapeMarkdown(findingTitle(f));
 /** Inline code for a table cell: a pipe would end the cell even inside a code span, so it is escaped. */
@@ -552,13 +578,45 @@ export function renderIntro(m: Pick<ReviewModel, "links" | "settings">): CheckOu
 }
 
 /**
+ * The check on a commit whose race files could not all be read, where the check may fail a pull request
+ * (`check.fail_on`) and what was read does not fail it. No result is given from a read that is not whole: the check
+ * stays in progress and says what could not be read. The review is owed; the sweep, or a person who asks, ends the
+ * check with what can be read then.
+ */
+export function renderUnsettled(m: Pick<ReviewModel, "ci" | "headSha" | "mention" | "settings">): CheckOutput {
+  const S = [
+    `Not all race files of ${code(shortSha(m.headSha))} could be read, so this check has no result yet: with ${code("check.fail_on")} set, it gives one only from race files that were all read. ` +
+      `They are read again within a day${m.settings.commands ? `, or at once when someone replies ${code(`@${m.mention} review`)}` : ""}, and the check then ends with what could be read.`,
+  ];
+  for (const note of m.ci.notes.slice(0, 5)) S.push("", `Note: ${escapeMarkdown(note)}`);
+  return { status: "in_progress", conclusion: null, title: "Not all race files could be read yet", summary: S.join("\n").slice(0, MAX_CHECK_CHARS), text: "" };
+}
+
+/**
  * Why a commit's test run is not read (any more):
  * - plan, repo-paused, paused, draft, auto-off, branch, author, check-off: a setting or a person stopped reviews;
- * - hour, pr-hour: a limit for this hour was reached, and the review is still owed;
+ * - hour, hour-push, hour-outside, pr-hour: a limit for this hour was reached, and the review is still owed (the
+ *   installation's limit, the share of it for reviews that pushes start, the share for pull requests by authors from
+ *   outside the repository, the pull request's own);
  * - pr-total: the pull request reached its limit for good;
  * - closed, superseded: the commit is no longer what the pull request is about.
  */
-export type StopReason = "plan" | "repo-paused" | "paused" | "draft" | "auto-off" | "branch" | "author" | "check-off" | "hour" | "pr-hour" | "pr-total" | "closed" | "superseded";
+export type StopReason = "plan" | "repo-paused" | "paused" | "draft" | "auto-off" | "branch" | "author" | "check-off" | "hour" | "hour-push" | "hour-outside" | "pr-hour" | "pr-total" | "closed" | "superseded";
+
+/** The hourly limits a review can stop at: whose limit it is. */
+export type HourLimit = "installation" | "push" | "outside" | "pull request";
+
+/** "<whose limit> reached the app's limit of <n> ... an hour", for the limit that stopped the review. */
+function reached(scope: HourLimit, limit: number): string {
+  switch (scope) {
+    case "push":
+      return `In this installation, reviews started by pushes reached the app's limit of ${limit} an hour`;
+    case "outside":
+      return `In this installation, pull requests by authors from outside the repository reached the app's limit of ${limit} reviews an hour`;
+    default:
+      return `This ${scope} reached the app's limit of ${limit} reviews an hour`;
+  }
+}
 
 /**
  * The check on a commit whose test run the app was waiting for, when the wait ends without a review. `held`: the
@@ -566,11 +624,17 @@ export type StopReason = "plan" | "repo-paused" | "paused" | "draft" | "auto-off
  * person that stops reviews ends it neutral; an hourly limit leaves a held check in progress, because the review is
  * still owed and will be run; a limit reached for good, a closed pull request and a newer commit end a held check as
  * cancelled, which does not pass. `limit`: the number the limit is; `after`: when the hour ends ("14:00");
- * `head`: the newer commit.
+ * `head`: the newer commit. What the sentence about an hourly limit tells people to do is what they can do: Re-run is
+ * named only for a check that is completed (GitHub offers none on a check in progress), and a command only where
+ * commands are on.
  */
 export function renderStopped(why: StopReason, m: { mention: string; held: boolean; commands?: boolean; limit?: number; after?: string; head?: string }): CheckOutput {
   const cmd = (c: string): string => code(`@${m.mention} ${c}`);
-  const later = `They are read when someone re-runs this check${m.commands === false ? "" : ` or replies ${cmd("review")}`} after ${m.after ?? "the hour"} UTC, and within a day otherwise.`;
+  const ask = [m.held ? "" : "re-runs this check", m.commands === false ? "" : `replies ${cmd("review")}`].filter((x) => x !== "").join(" or ");
+  const later = ask ? `They are read when someone ${ask} after ${m.after ?? "the hour"} UTC, and within a day otherwise.` : "They are read within a day.";
+  // the share for pushes does not hold a review that a test run or a person starts: those need not wait for the hour
+  const laterPush = `They are read when this commit's test run finishes with race files${ask ? `, or when someone ${ask}` : ""}, and within a day otherwise.`;
+  const unreadYet = "so this commit's race files have not been read yet.";
   let title: string;
   let summary: string;
   let conclusion: CheckOutput["conclusion"] = "neutral";
@@ -609,12 +673,22 @@ export function renderStopped(why: StopReason, m: { mention: string; held: boole
       break;
     case "hour":
       title = "Hourly review limit reached";
-      summary = `This installation reached the app's limit of ${m.limit ?? 0} reviews an hour, so this commit's race files have not been read yet. ${later}`;
+      summary = `${reached("installation", m.limit ?? 0)}, ${unreadYet} ${later}`;
+      conclusion = m.held ? null : "neutral";
+      break;
+    case "hour-push":
+      title = "Hourly review limit reached";
+      summary = `${reached("push", m.limit ?? 0)}, ${unreadYet} ${laterPush}`;
+      conclusion = m.held ? null : "neutral";
+      break;
+    case "hour-outside":
+      title = "Hourly review limit reached";
+      summary = `${reached("outside", m.limit ?? 0)}, ${unreadYet} ${later}`;
       conclusion = m.held ? null : "neutral";
       break;
     case "pr-hour":
       title = "Hourly review limit reached";
-      summary = `This pull request reached the app's limit of ${m.limit ?? 0} reviews an hour, so this commit's race files have not been read yet. ${later}`;
+      summary = `${reached("pull request", m.limit ?? 0)}, ${unreadYet} ${later}`;
       conclusion = m.held ? null : "neutral";
       break;
     case "pr-total":
@@ -635,9 +709,9 @@ export function renderStopped(why: StopReason, m: { mention: string; held: boole
   return { status: conclusion === null ? "in_progress" : "completed", conclusion, title, summary, text: "" };
 }
 
-/** The reply to a `review` command that could not run because a limit for this hour was reached. */
-export function renderOverLimit(m: { scope: "installation" | "pull request"; limit: number; after: string }): string {
-  return `${REPLY_MARKER}\nThis ${m.scope} reached the app's limit of ${m.limit} reviews an hour, so this commit's race files were not read. Ask again after ${m.after} UTC.\n`;
+/** The reply to a `review` command that could not run because a limit for this hour was reached: the limit that stopped it, by name and number. */
+export function renderOverLimit(m: { scope: HourLimit; limit: number; after: string }): string {
+  return `${REPLY_MARKER}\n${reached(m.scope, m.limit)}, so this commit's race files were not read. Ask again after ${m.after} UTC.\n`;
 }
 
 // --------------------------------------------------------------------------------------------- inline comments
@@ -818,11 +892,14 @@ const findingMarker = (fp: string): string => `<!-- genclass-bot:finding ${fp} -
 /**
  * The fingerprints of the findings an issue's body lists (the markers renderIssue writes). A fingerprint is the same
  * in every pull request of a repository, so a finding that has an issue is not filed again when another pull request
- * merges with it.
+ * merges with it. A marker counts only when it is a whole line, as renderIssue writes it: an operation or a test's
+ * name from a race file may hold the text of a marker (a fingerprint is a hash of public text), and it is always
+ * written inside a line, with its line breaks taken out. (A body saved from GitHub's own editor ends its lines with a
+ * carriage return, which is allowed for.)
  */
 export function issueFingerprints(body: unknown): string[] {
   if (typeof body !== "string") return [];
-  return [...body.slice(0, 70_000).matchAll(/<!-- genclass-bot:finding ([0-9a-f]{16}) -->/g)].map((x) => x[1]!);
+  return [...body.slice(0, 70_000).matchAll(/^<!-- genclass-bot:finding ([0-9a-f]{16}) -->\r?$/gm)].map((x) => x[1]!);
 }
 
 /**
@@ -833,7 +910,8 @@ export function issueFingerprints(body: unknown): string[] {
  */
 export function renderIssue(findings: readonly StoredFinding[], m: { repo: string; number: number; headSha: string; mention: string; links: ReviewLinks; merged: boolean }): { title: string; body: string } {
   const first = findings[0]!;
-  const heading = findings.length === 1 ? `${findingTitle(first)} on ${first.op} (GenClass, from #${m.number})`.slice(0, 200) : `${findings.length} runtime findings from #${m.number} (GenClass)`;
+  // a title is plain text that GitHub still resolves: what comes from the race file (the kind, the operation) is neutralised
+  const heading = findings.length === 1 ? `${plainText(findingTitle(first))} on ${plainText(first.op)} (GenClass, from #${m.number})`.slice(0, 200) : `${findings.length} runtime findings from #${m.number} (GenClass)`;
   const L = [
     ISSUE_MARKER,
     `Pull request #${m.number}${m.merged ? " was merged" : ""} with ${plural(findings.length, "finding")} that GenClass's Playwright fixture flagged in its tests at ${code(shortSha(m.headSha))}.`,

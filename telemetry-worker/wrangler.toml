@@ -116,7 +116,10 @@ simple = { limit = 120, period = 60 }
 binding = "SITE"
 service = "genclass-site"
 
-# Daily retention sweep of dashboard rows (03:17 UTC).
+# Two triggers, told apart in `scheduled` (src/index.ts) by their expression.
+# "17 3 * * *": the daily retention sweep of dashboard rows (03:17 UTC), followed by the GitHub App's owed reviews.
+# "*/20 * * * *": every 20 minutes, the GitHub App's owed reviews only (src/github/handlers.ts SWEEP_CRON and
+# githubSweep: at most 20 pull requests a run). Without it an owed review waits for the daily run.
 [triggers]
-crons = ["17 3 * * *"]
+crons = ["17 3 * * *", "*/20 * * * *"]
 

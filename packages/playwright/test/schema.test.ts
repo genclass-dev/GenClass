@@ -148,7 +148,7 @@ describe("schema: the format's limits (RACES_LIMITS)", () => {
   const long = (n: number) => "x".repeat(n);
 
   it("a file holds at most 200 signatures: one more rejects it on the count alone", () => {
-    expect(RACES_LIMITS).toEqual({ signatures: 200, test: 1000, evidence: 2000, text: 600, bytes: 65536 });
+    expect(RACES_LIMITS).toEqual({ signatures: 200, seeds: 64, test: 1000, evidence: 2000, text: 600, bytes: 65536 });
     expect(validateRaces(many(200)).ok).toBe(true);
     expect(errors(many(201))).toEqual(["signatures: expected at most 200 signatures, got 201"]);
     // over the limit the signatures are not looked at one by one: 100,000 that are no signatures give one message,
@@ -156,6 +156,20 @@ describe("schema: the format's limits (RACES_LIMITS)", () => {
     const junk = { ...ok, signatures: Array.from({ length: 100_000 }, () => ({})) };
     expect(errors(junk)).toEqual(["signatures: expected at most 200 signatures, got 100000"]);
     expect(parseRaces(JSON.stringify(junk))).toEqual({ ok: false, errors: ["signatures: expected at most 200 signatures, got 100000"] });
+  });
+
+  it("a signature lists at most 64 seeds: one more rejects the file on the count alone", () => {
+    const seeded = (n: number, of: (i: number) => unknown = (i) => i) => ({ ...ok, signatures: [{ ...okSig, seeds: Array.from({ length: n }, (_, i) => of(i)) }] });
+    const at = validateRaces(seeded(64));
+    expect(at.ok && at.file.signatures[0]!.seeds).toHaveLength(64);
+    expect(errors(seeded(65))).toEqual(["signatures[0].seeds: expected at most 64 seeds, got 65"]);
+    // over the limit the seeds are not looked at one by one: 100,000 that are no integers give one message, not
+    // one for each, and the same number repeated is over it too (the count is of what the file lists)
+    expect(errors(seeded(100_000, () => "x"))).toEqual(["signatures[0].seeds: expected at most 64 seeds, got 100000"]);
+    expect(errors(seeded(65, () => 7))).toEqual(["signatures[0].seeds: expected at most 64 seeds, got 65"]);
+    expect(parseRaces(JSON.stringify(seeded(960)))).toEqual({ ok: false, errors: ["signatures[0].seeds: expected at most 64 seeds, got 960"] });
+    // within it a bad seed is still named
+    expect(errors(seeded(3, (i) => (i === 1 ? 1.5 : i)))).toEqual(["signatures[0].seeds[1]: expected an integer, got 1.5"]);
   });
 
   it("a string longer than its limit rejects the file, like any other bad field", () => {

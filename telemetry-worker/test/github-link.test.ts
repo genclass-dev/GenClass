@@ -192,6 +192,34 @@ describe("github app: Connect GitHub", () => {
     expect(sql.rows("SELECT * FROM challenges WHERE kind = 'oauth:ghapp'")).toEqual([]);
   });
 
+  it("a person whose login has an underscore (an Enterprise Managed User) can connect; a login that is no login still cannot", async () => {
+    const s = githubSetup();
+    const gh = fakeGithub();
+    person(gh);
+    gh.user.login = "mona-cat_octo";
+    const { env, sql, me, back } = await connected("mona@example.com", s, gh);
+    expect(back.status).toBe(302);
+    expect(back.headers.get("location")).toBe("/account/github?connected=1");
+    const grant = JSON.parse(String(sql.rows("SELECT data FROM challenges WHERE kind = 'ghapp:grant'")[0]!.data));
+    expect(grant.github).toEqual({ id: 77, login: "mona-cat_octo" });
+    expect(grant.repos.map((r: { name: string }) => r.name)).toEqual(["acme/shop", "acme/docs"]);
+    // the account page says who is connected, and the repository can be linked as for anyone else
+    const page = await (await call(env, "GET", "/account/github", { cookie: me.cookie, origin: null })).text();
+    expect(page).toContain("Connected as <b>mona-cat_octo</b>");
+    const app = await createApp(env, me.cookie, "Shop");
+    expect((await call(env, "POST", `/api/account/github/repos/${REPO.id}`, { cookie: me.cookie, body: { project_id: app.id } })).status).toBe(200);
+    // what cannot be a login is refused as before, and nothing is kept
+    for (const login of ["a/b", "x y", "", "<b>", "a".repeat(40), "dependabot[bot]"]) {
+      const bad = githubSetup();
+      const g2 = fakeGithub();
+      person(g2);
+      g2.user.login = login;
+      const r = await connected("eve@example.com", bad, g2);
+      expect(r.back.status, JSON.stringify(login)).toBe(502);
+      expect(bad.sql.rows("SELECT * FROM challenges WHERE kind = 'ghapp:grant'"), JSON.stringify(login)).toEqual([]);
+    }
+  });
+
   it("the callback does nothing without the state this browser was given, in another session, or twice", async () => {
     const s = githubSetup();
     const gh = fakeGithub();
@@ -373,6 +401,31 @@ describe("github app: the Marketplace listing's webhook sent as a form (src/gith
     // the app's own webhook still takes no plan event, in either form
     expect(await result(await deliver(env, "marketplace_purchase", purchase("Free"), { fetch: gh.fetch, form: true }))).toBe("ignored");
     expect(sql.rows("SELECT plan_name FROM github_marketplace")).toEqual([{ plan_name: "Team & Co + 1 = é" }]);
+  });
+
+  it("a form is exactly one `payload` field: a delivery GitHub signed as JSON for the app's webhook, sent here as a form, sets no plan", async () => {
+    // no secret of its own: the listing's endpoint takes the app's, so a body GitHub signed for the app's webhook passes the signature check here
+    const { env, sql } = githubSetup();
+    const gh = fakeGithub();
+    const hidden = `payload=${encodeURIComponent(JSON.stringify(purchase("Enterprise")))}`;
+    // an issue comment whose text holds a form field: as GitHub sent it to the app's webhook, signed with the app's secret
+    const comment = JSON.stringify({ action: "created", issue: { number: 1 }, comment: { id: 1, body: `nice &${hidden}& thanks`, user: { id: 5, login: "mallory", type: "User" } }, repository: REPO, installation: { id: INSTALLATION } });
+    expect(new URLSearchParams(comment).get("payload")).toBe(JSON.stringify(purchase("Enterprise")));
+    const o = { fetch: gh.fetch, path: "/api/github/marketplace", form: comment };
+    // the signature is right for these bytes (the same bytes, the same secret), and the body is still not read as a form
+    const replay = await deliver(env, "marketplace_purchase", comment, o);
+    expect(replay.status).toBe(400);
+    expect(sql.rows("SELECT * FROM github_marketplace")).toEqual([]);
+    expect(sql.rows("SELECT * FROM github_deliveries")).toEqual([]);
+    // a second field after the payload, a field before it, and the field under another name: none is the form GitHub sends
+    const real = `payload=${encodeURIComponent(JSON.stringify(purchase()))}`;
+    for (const body of [`${real}&x=1`, `x=1&${real}`, `${real}&${hidden}`, `Payload=${real.slice(8)}`, ` ${real}`, "payload", ""]) {
+      expect((await deliver(env, "marketplace_purchase", purchase(), { ...o, form: body })).status, body.slice(0, 20)).toBe(400);
+    }
+    expect(sql.rows("SELECT * FROM github_marketplace")).toEqual([]);
+    // the form as GitHub sends it is taken as before
+    expect(await result(await deliver(env, "marketplace_purchase", purchase(), { ...o, form: real }))).toBe("purchased");
+    expect(sql.rows("SELECT plan_name FROM github_marketplace")).toEqual([{ plan_name: "Team" }]);
   });
 
   it("without a secret of its own the listing's form is checked against the app's, and a body over the cap is refused unread", async () => {

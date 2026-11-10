@@ -69,6 +69,8 @@ name = "EXPORT_LIMIT"
 namespace_id = "7303"
 simple = { limit = 120, period = 60 }
 
-# Daily retention sweep of dashboard rows (03:17 UTC).
+# Daily retention sweep of dashboard rows (03:17 UTC). A collector that runs a GitHub App of its own
+# (docs/github-app/SETUP.md) also runs that app's owed reviews then; adding "*/20 * * * *" to the list runs them every
+# 20 minutes as well, as the hosted collector does.
 [triggers]
 crons = ["17 3 * * *"]

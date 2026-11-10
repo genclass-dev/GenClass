@@ -192,7 +192,8 @@ to write the comment and do not store them. If the artifact holds other files, w
 **If you connect GitHub to a GenClass account** (optional, to show your app's production findings on your pull
 requests): we ask GitHub who you are and which repositories you can reach through the app. We use GitHub's token for
 that question and do not keep it. We keep the answer (the repositories' ids and names and whether you can write to
-them) for 30 minutes, and afterwards only the link you made between a repository and one of your apps. When a
+them) for 30 minutes. Afterwards we keep only the link you made between a repository and one of your apps and, when the
+app is installed on your own GitHub account, that your GenClass account manages that installation. When a
 repository is linked, the kind, page path and count of that app's findings appear on its pull requests, where everyone
 who can see the pull request can see them.
 

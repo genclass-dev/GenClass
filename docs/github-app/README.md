@@ -181,23 +181,37 @@ strings, numbers, true and false; no anchors, tags or multi-line strings).
 
 The defaults apply when the repository has no settings file. When GitHub cannot give the app the file (an outage, a
 timeout), the app does not fall back to the defaults: it writes nothing for that event and reads the file again at
-the next one, or at the daily sweep.
+the next one, or at the sweep (below).
 
 With `issues: merge`, a pull request that merges gets one issue for the reproducible findings flagged in the race
 files of the commit that merged. If that commit's test run was not read before the merge, it is read first; when it
-uploaded no race files, no issue is opened. A finding that an issue from the app already lists, open or closed, is
-not filed again: one finding gets one issue, however many pull requests merge with it. When two pull requests merge
-at the same moment, one is decided at once and the other by the daily sweep. A paused pull request or repository gets
-none. `@genclass-dev issue <n>` opens one on request.
+uploaded no race files, no issue is opened. That read follows the `reviews` settings: for a pull request that
+`reviews.auto`, `reviews.branches` or `reviews.ignore_authors` leave out, nothing is read at the merge and no issue is
+opened. When a pull request merges before the commit's workflow runs exist, or while one of them is still going,
+nothing is decided at the merge: the sweep (below) decides, about an hour later, with the race files there are then.
+A finding that an issue from the app already lists, open or closed, is not filed again: one finding gets one issue,
+however many pull requests merge with it. When two pull requests merge at the same moment, one is decided at once and
+the other by the sweep. A paused pull request or repository gets none. `@genclass-dev issue <n>` opens one on request.
 
 With `check.fail_on` set, and once race files were read for the repository, the check stays "in progress" on a new
 commit until its test run finishes, so a required check cannot pass before the race files arrive. A check in progress
-is always finished. The commit's last workflow run to finish ends the wait. So do `@genclass-dev review` and Re-run,
-with what there is. When the pull request is paused or converted to a draft, the check ends neutral at once and says
-why, and a setting that leaves the pull request out does the same at its next event; when it is closed, or a newer
-commit is pushed, the old commit's check ends cancelled. When an hourly limit is reached the check stays in progress
-and says so. A commit that starts no workflow at all, and a review that failed, are picked up by a sweep that runs
-once a day and ends the wait with what there is.
+is always finished. The commit's last workflow run to finish ends the wait. `@genclass-dev review` and the sweep end
+it with what there is only when no workflow run of the commit is still going (a commit that started no workflow at
+all); while a run is still going, the check waits for it. GitHub offers no Re-run on a check that is in progress, so
+Re-run is for a check that is completed. When the pull request is paused or converted to a draft, the check ends
+neutral at once and says why, and a setting that leaves the pull request out does the same at its next event; when it
+is closed, or a newer commit is pushed, the old commit's check ends cancelled. When an hourly limit is reached the
+check stays in progress and says which limit.
+
+Also with `check.fail_on` set: when some of a commit's race files could not be read the first time (an artifact that
+could not be downloaded, or one that has expired) and what was read does not fail the check, the check gives no
+result from the part. It stays in progress as "Not all race files could be read yet" and says what was not read.
+`@genclass-dev review`, or the sweep, then ends it with what can be read: a failure if that fails the check, neutral
+otherwise, never a success.
+
+The sweep runs every 20 minutes. It reviews the pull requests whose review has been owed for more than an hour: a
+commit that starts no workflow at all, a review that failed or that an hourly limit stopped, a check that waits. It
+ends such a wait with what there is.
 
 ## Production findings
 
@@ -302,12 +316,12 @@ Uninstalling the app, or taking a repository out of it, deletes what was kept fo
 |---|---|
 | Reviews per installation | 120 an hour. Only a review that reads a commit's race files counts. Of them, at most 90 are started by pushes, and at most 60 are for pull requests whose author is not an owner, member or collaborator of the repository |
 | Reviews per pull request | 30 an hour; 400 that wrote something, in all |
-| One webhook's work | 20 seconds; what is left is picked up at the next event, a redelivery or the daily sweep |
+| One webhook's work | 20 seconds; what is left is picked up at the next event, a redelivery or the sweep |
 | Artifacts read per review | 6, each at most 4 MB as a zip (12 MB in all) |
 | Race files read per review | 600, each at most 64 KB, and 4 MB in all, unzipped. A file that is started and cannot be read counts too |
-| Signatures | 200 in one race file; 2,000 in the race files of one review |
+| Signatures | 200 in one race file, each listing at most 64 seeds; 2,000 in the race files of one review |
 | Text in a race file | 1,000 characters for a test's name, 2,000 for an evidence line, 600 for any other string |
-| Workflow runs per commit | The first 100 GitHub lists are looked at. The artifacts of at most 30 finished runs are asked for: the most recently finished first, and one run of every workflow before a second run of any |
+| Workflow runs per commit | The first 100 GitHub lists are looked at. The artifacts of at most 30 finished runs are asked for: the most recently finished first, and one run of every workflow before a second run of any. The workflow of the run whose end started the review is asked first, also when that run is not among the 100. Of two runs of one workflow that uploaded the same artifact name, the one that finished last is read |
 | Findings remembered per pull request | 100. A finding that is flagged keeps its number. With more than 100 flagged at once, the rest are counted in the comment and the check ("N more findings flagged at this commit are not listed") and count for `check.fail_on` |
 | Comment and check size | 60,000 characters; a longer report is shortened and says so |
 | Settings file | 16 KB |
@@ -317,10 +331,18 @@ and a note in the check and the comment says what was left out. The limits count
 many artifacts the race files come in. `@genclass/playwright`'s fixture writes within the limits for one race file (of
 a test with more signatures than fit it leaves out the least confident, and the report says how many), so those stop
 only files something else wrote. With more than 30 finished workflow runs on a commit, a note says how many had their
-artifacts looked at, when no race file was read or when a workflow had none of its runs looked at.
+artifacts looked at, when no race file was read or when a workflow had none of its runs looked at. In that second
+case the check is neutral, never a success, also when the race files that were read flag nothing: race files may be
+in a run that was not asked. On a commit with more than 30 workflows the check therefore cannot be a success.
+
+Whatever was left unread keeps the check from being a success: it is then neutral, or a failure when what was read
+fails it. One thing is listed without that effect: a `.json` file over 64 KB whose name is not one the fixture gives
+its race files (`<test>-<id>-s<seed>.json`, with `-r<n>` before `.json` for a retry). A repository that uploads more
+than `test-results/genclass` under the artifact's name, a reporter's JSON output for instance, sees that file under
+"Files skipped" and keeps its green check.
 
 When GitHub's own rate limit for the installation is used up, the app stops until the time GitHub names and picks the
-pull request up again at its next event, or at the daily sweep.
+pull request up again at its next event, or at the sweep.
 
 ## Security
 
@@ -329,10 +351,11 @@ pull request up again at its next event, or at the daily sweep.
   each through the format's validator; nothing in them is executed or fetched. An artifact is unzipped by the app's
   own code, which stops at the size an entry claims, so an archive made to unpack into gigabytes costs what it claims
   and no more. Text from race files is escaped before it is shown, so it cannot become markup, an `@mention`, an issue
-  or pull request reference, or a link to a web address: an invisible zero-width space breaks `#` before a number, `@`
-  before a name, `://` and `www.`. An address in a test's name or an evidence line is shown as text, and the address
+  or pull request reference, or a link to a web address: an invisible zero-width space breaks `#` before a number,
+  every `@`, `://` and `www.`. An address in a test's name or an evidence line is shown as text, and the address
   of another repository's issue leaves no "mentioned this" there. Operations are shown as code, where GitHub links
-  nothing.
+  nothing. The title of an issue the app opens is plain text, not markdown: what comes from a race file gets the
+  same invisible breaks there.
 - The installation token is asked for one repository at a time, and the address GitHub gives for an artifact is
   fetched without any credential.
 - Report a vulnerability privately: [SECURITY.md](../../SECURITY.md).
@@ -345,12 +368,17 @@ pull request up again at its next event, or at the daily sweep.
 - **No check at all.** No race file was read for the repository yet, so a pull request without them gets none
   ([Setup](#setup), step 4). That includes an artifact that was uploaded and could not be read. `@genclass-dev review`
   answers with what there is, and says what was wrong with an artifact.
-- **The check stays "Waiting for this commit's test run".** A workflow run on the commit has not finished. When the
-  last one finishes without race files, the check says "No race files for this commit". `@genclass-dev review` reads
-  at once; a wait that nothing ended is ended by the daily sweep.
-- **"Hourly review limit reached".** The installation or the pull request used its reviews for this hour
-  ([Limits](#limits)). Re-run the check or comment `@genclass-dev review` after the hour; the daily sweep reads the
-  commit otherwise.
+- **The check stays "Waiting for this commit's test run".** A workflow run on the commit has not finished (one that
+  waits for an approval or for a runner counts). When the last one finishes without race files, the check says "No
+  race files for this commit". While a run is still going, `@genclass-dev review` does not end the wait; on a commit
+  that started no workflow at all it does, and so does the sweep.
+- **"Hourly review limit reached".** The check names the limit that was reached ([Limits](#limits)): the
+  installation's 120 reviews, the 90 of them that pushes may start, the 60 for pull requests by authors from outside
+  the repository, or the pull request's 30. Comment `@genclass-dev review` after the hour, or Re-run the check if it
+  is completed (a check in progress has no Re-run); the sweep reads the commit otherwise.
+- **"Not all race files could be read yet".** `check.fail_on` is set and an artifact of the commit could not be
+  downloaded or has expired; the check names it. `@genclass-dev review` ends the check with what can be read, and so
+  does the sweep, about an hour later.
 - **No comment.** The default posts one only when something is flagged (`comment: always` changes that).
 - **A private repository shows "Private repositories need a plan".** See [Plans](#plans).
 - **Settings do not apply.** The file must be on the default branch; the check lists any mistake in it. Changes are

@@ -6,8 +6,9 @@
 //
 // The format's limits (RACES_LIMITS in types.ts) are checked here too, so that whoever reads a file after this
 // validator knows how much it can hold: a file with more signatures than the limit is rejected on that count alone
-// (its signatures are not looked at one by one), and a string longer than its limit rejects the file like any other
-// bad field. The fixture writes within them (src/races.ts).
+// (its signatures are not looked at one by one), so is a signature with more seeds than the limit (its seeds are not
+// looked at one by one), and a string longer than its limit rejects the file like any other bad field. The fixture
+// writes within them (src/races.ts).
 
 import { RACES_LIMITS, RACES_SCHEMA, type GenClassRacesFile, type RaceSignature, type RacesParseResult } from "./types.js";
 
@@ -71,6 +72,8 @@ function signature(v: unknown, at: string, errors: string[]): RaceSignature | nu
   for (const k of ["sig", "trigger", "diagnosis", "op"] as const) within(v[k], RACES_LIMITS.text, `${at}.${k}`, errors);
   within(v.evidence, RACES_LIMITS.evidence, `${at}.evidence`, errors);
   if (!Array.isArray(v.seeds)) errors.push(`${at}.seeds: expected an array of integers, got ${describe(v.seeds)}`);
+  // over the limit, the count is the whole answer: the seeds are not looked at one by one
+  else if (v.seeds.length > RACES_LIMITS.seeds) errors.push(`${at}.seeds: expected at most ${RACES_LIMITS.seeds} seeds, got ${v.seeds.length}`);
   else
     v.seeds.forEach((s, i) => {
       if (!isInt(s)) errors.push(`${at}.seeds[${i}]: expected an integer, got ${describe(s)}`);

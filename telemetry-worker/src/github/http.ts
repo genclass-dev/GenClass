@@ -41,7 +41,9 @@
 // - The Marketplace listing's webhook may be set to send a form (application/x-www-form-urlencoded: the JSON in a
 //   field named `payload`, signed over the form's bytes). Such a delivery is checked against its signature over the
 //   exact bytes received before anything is parsed, like every other; only then is the field taken out and handed
-//   to the webhook handler as the JSON delivery it stands for (formDelivery).
+//   to the webhook handler as the JSON delivery it stands for (formDelivery). Only what GitHub sends is taken as a
+//   form: a body that is exactly one `payload` field. Anything else is refused (400), so that bytes GitHub signed as
+//   JSON for the app's webhook (a comment's text may hold "&payload=...") can never be read as a form that sets a plan.
 // - The OAuth state is single use, kept server-side and named by a cookie that holds only its row id; the callback
 //   must arrive in the session that started it.
 
@@ -156,6 +158,10 @@ async function githubSignature(body: Uint8Array, secret: string): Promise<string
  * JSON from the `payload` field as an ordinary JSON delivery with the same event and delivery headers. Its
  * signature header is computed here for those JSON bytes under the same secret, because the handler checks every
  * body it parses; that value is made only for a body GitHub's own signature covered and never leaves this worker.
+ * A form is taken only in the shape GitHub sends it: the body starts with `payload=` and holds no `&`, so it is that
+ * one field and nothing else. Any other body is refused with 400 and no field is looked for in it: a JSON delivery
+ * that GitHub signed for the app's own webhook, sent here as a form with its signature (the two endpoints share a
+ * secret until the listing has its own), starts with `{` and is not searched for a `payload` inside its text.
  * Any other request (JSON, another method, an app that is not set up) is returned untouched, its body unread.
  */
 async function formDelivery(request: Request, env: Env, cfg: GithubAppConfig | null): Promise<Request | Response> {
@@ -166,7 +172,10 @@ async function formDelivery(request: Request, env: Env, cfg: GithubAppConfig | n
   // the same secret the webhook handler expects on this endpoint: the listing's own, else the app's
   const secret = (env.GITHUB_MARKETPLACE_WEBHOOK_SECRET ?? "").trim() || cfg.webhookSecret;
   if (!(await verifyGithubSignature(raw, request.headers.get("x-hub-signature-256"), secret))) return fail(401, "signature check failed");
-  const payload = new URLSearchParams(new TextDecoder().decode(raw)).get("payload");
+  const form = new TextDecoder().decode(raw);
+  // exactly one field, named payload: what GitHub sends, and nothing that merely holds such a field somewhere
+  if (!form.startsWith("payload=") || form.includes("&")) return fail(400, "invalid JSON");
+  const payload = new URLSearchParams(form).get("payload");
   if (payload === null) return fail(400, "invalid JSON");
   const body = new TextEncoder().encode(payload);
   const headers = new Headers(request.headers);
@@ -280,7 +289,9 @@ async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string, ac
   const gh = userClient(cfg, f, () => c.now, token, 4 + MAX_INSTALLATIONS * 3);
   const me = (await gh.get<Record<string, unknown>>("/user")) ?? {};
   const id = posInt(me.id);
-  const login = typeof me.login === "string" && /^[A-Za-z0-9-]{1,39}$/.test(me.login) ? me.login : null;
+  // the person's own login: letters, digits, hyphens and, for an Enterprise Managed User, an underscore before the
+  // short code ("mona-cat_octo"). It is only shown on the account page, through the page's escaping.
+  const login = typeof me.login === "string" && /^[A-Za-z0-9_-]{1,39}$/.test(me.login) ? me.login : null;
   if (!id || !login) throw new GithubError("unexpected", 200, "GitHub did not say who this is");
   const installs = await gh.list<Record<string, unknown>>("/user/installations", { max: 100, key: "installations" });
   const repos: GrantRepo[] = [];
@@ -296,7 +307,7 @@ async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string, ac
     }
     const acct = (i.account ?? {}) as Record<string, unknown>;
     const acctId = posInt(acct.id);
-    const acctLogin = typeof acct.login === "string" && /^[A-Za-z0-9-]{1,39}$/.test(acct.login) ? acct.login : null;
+    const acctLogin = typeof acct.login === "string" && /^[A-Za-z0-9_-]{1,39}$/.test(acct.login) ? acct.login : null;
     if (!acctId || !acctLogin) continue;
     const mine = await gh.list<Record<string, unknown>>(`/user/installations/${iid}/repositories`, { max: MAX_GRANT_REPOS, key: "repositories" });
     for (const r of mine) {

@@ -115,6 +115,13 @@ cannot post two comments. The findings and hashes in the row are written only by
 What a command changes while a review may be running (a pause) is a column of its own, written in one statement: the
 review does not undo it, and the command does not write back findings it read earlier.
 
+**A request holds for one pass.** What a person asked for (a `review` from someone with write access lifts a pause
+and `reviews.ignore_authors`) holds for the pass it was asked for. A pass that follows in the same job runs as what
+arrived meanwhile: an event as an event, another request as a request. A pause set after a request stops that
+request's pass before it writes and the passes after it, and a request that was waiting on a running review when the
+pause was set becomes a plain event, so it cannot lift a pause it was made before. A pass that runs as a request is
+counted as one, not under the share of the hour that pushes have.
+
 **The pull request's state comes from GitHub, never from a payload.** Each pass asks for the pull request. A
 redelivered or late `synchronize` cannot move the row back to an older commit, and an old `closed` cannot close a pull
 request that was reopened.
@@ -127,17 +134,45 @@ redelivery runs; one that ended is marked done and cannot be replayed for a week
 and can be redelivered a minute later.
 
 **A review that is owed is run.** A pull request's row is marked due when a review of it starts and unmarked when it
-ends, unless it ended waiting for the commit's test run or could not run (a limit, no time left). A sweep on the
-worker's daily cron reviews what has been due for more than an hour. That is what makes one rule hold: a check is
-never left "in progress" without something certain to finish it. Everything that ends a wait early finishes the check
-at once and says why; the sweep is for what no event ended.
+ends, unless it ended waiting for the commit's test run or could not run (a limit, no time left). A sweep reviews
+what has been due for more than an hour. That is what makes one rule hold: a check is never left "in progress"
+without something certain to finish it. Everything that ends a wait early finishes the check at once and says why;
+the sweep is for what no event ended.
+
+**The sweep has its own cron trigger, and a small run.** A second trigger, every 20 minutes, runs the sweep and
+nothing else; the daily trigger runs it too, after the retention sweeps. One run looks at 20 pull requests at most,
+the longest owed first. A review is some 15 statements on the database and up to 40 requests to GitHub, and the
+platform caps both for one invocation; 20 reviews stay under a thousand of each. A run ends at the first failure that
+is not GitHub's answer: if the database refuses a statement straight after a check run or a comment was created, its
+id is lost and the next review would write a second one, and every row after it would fail the same way. The
+20-minute trigger also shortens how long an hourly limit or a failed job keeps a check in progress, from up to a day
+to about an hour and a half.
+
+**No verdict from a read that is not whole, where the check can fail a pull request.** Under `check.fail_on`, neutral
+passes a required check. A first read of a commit in which an artifact could not be downloaded, or had expired, would
+give "neutral" or "No race files" for race files nobody read. So that read gives no verdict unless what was read
+already fails the check: the check stays in progress, says what could not be read, nothing of the part is kept, and
+the review is owed. A person who asks, and the sweep, end it with what can be read then. Whether a read was whole is a
+flag the evidence carries (`incomplete`), set where something goes unread; it is never worked out from the wording of
+a note. One thing is listed without setting it: a `.json` file over 64 KB that is not named as the fixture names its
+race files, so that a repository that uploads a reporter's output next to them keeps its green check.
+
+**Which artifact is read does not depend on which event started the review.** Of two runs of one workflow that
+uploaded the same artifact name, the one that finished last is read. The run whose end started a review only makes
+sure that its workflow is asked first; it does not win over a later run of that workflow. When GitHub's list of a
+commit's runs (100) does not show that run, it is asked about by itself, so its workflow is known and the same rule
+applies to it.
 
 **Rate limits are obeyed, not waited out.** A limit from GitHub marks the installation until the time GitHub names;
 calls before then fail without reaching GitHub. Writes are never retried, so a comment cannot be posted twice.
 
 **An issue only from the merged commit's evidence, and one per finding.** `issues: merge` is decided by the review
 pass that finds the pull request merged, under the lease, whichever event got there first. When the stored findings
-are an older commit's, the merged commit's race files are read first, and with none to read there is no issue. Each
+are an older commit's, the merged commit's race files are read first, and with none to read there is no issue. That
+read follows the review settings: a pull request that `reviews.auto`, `reviews.branches` or `reviews.ignore_authors`
+leave out is not read or counted at the merge either. While the merged commit's workflow runs do not exist yet or
+have not all finished, nothing is decided, because the events of the runs still to end will find the pull request
+closed: the review stays owed, and the sweep reads the commit again and decides with what there is. Each
 issue carries its findings' fingerprints in hidden markers. Before opening one, the app lists the issues it opened in
 the repository, open and closed, and leaves out what they already list: the same finding is in every pull request's
 race files until someone fixes it, and an issue someone closed must not come back at the next merge. One pull request
@@ -156,7 +191,8 @@ nothing more. It refuses for forks, because a comment-started workflow runs with
 | A forged webhook | HMAC-SHA256 over the exact bytes with the app's secret, verified with WebCrypto before parsing |
 | A replayed webhook | Delivery ids claimed for a week; handlers are idempotent beyond that (body hashes) |
 | A hostile artifact from a fork | Byte cap on download. The zip reader inflates an entry itself, into a buffer of the size the entry claims, so a zip bomb costs its claim and no more (the runtime's `DecompressionStream` is not used: workerd inflates a whole write before any output can be counted). Every entry it starts counts against the caps, kept or not, and many records cannot share one stream. The caps are for the review as a whole, however many artifacts there are: 600 race files, 64 KB a file, 4 MB unzipped, 2,000 signatures. Only `.json`, through the format's validator, which caps a file's signatures (200) and the length of each string; nothing executed or fetched |
-| Text in race files becoming markup, links, mentions or issue references | Everything from a race file goes through the summariser's escaping, which also puts a zero-width space into `://` and `www.`, so no address is linked and the address of another repository's issue leaves no reference there; operations are shown as code, and in tables also escape `|` |
+| Text in race files becoming markup, links, mentions or issue references | Everything from a race file goes through the summariser's escaping, which also puts a zero-width space after every `@` and into `://` and `www.`, so nobody is mentioned, no address is linked and the address of another repository's issue leaves no reference there; operations are shown as code, and in tables also escape `|`. An issue's title is plain text: what comes from a race file gets the same breaks there, without backslashes |
+| Text in a race file passing for the marker of a finding that has an issue, so that the finding is never filed | A marker counts only as a whole line of an issue's body, and race-file text is always written inside a line, with its line breaks taken out |
 | Text in race files steering a coding agent | The brief's JSON carries it cut to one line with backticks and `<` written as escapes; the brief and the workflow prompt say it is data; `fix` only for people with write access and never for forks |
 | A pull request changing its own review | Settings are read from the default branch |
 | Someone linking their app to a repository they do not control, to post their text there | A link needs GitHub's answer, at most 30 minutes old, that the person can push to that repository |
@@ -164,11 +200,13 @@ nothing more. It refuses for forks, because a comment-started workflow runs with
 | An app's findings staying on a repository's pull requests after the app's owner lost access to it | The account that owns a linked app can always take the link away, with or without access to the repository; its account page lists such links, a private repository without its name |
 | An account with access to one repository deciding whether an organization's private repositories are read (getting them read under its own plan, or keeping the organization's plan from counting) | Only the plan of the account that manages the installation counts. That account is the GenClass account of the person whose own GitHub account the installation is on (GitHub's answer to who they are), or, for an organization, the account the operator set by hand. What an account can reach or push to never counts, and connecting never takes an installation from an account whose plan includes private repositories for one whose plan does not |
 | A Marketplace purchase lost because the listing's webhook sends a form | A form delivery (the JSON in a field named `payload`) is checked against its signature over the bytes received, then handled as the JSON delivery it stands for |
+| A delivery GitHub signed for the app's webhook (a comment whose text holds `&payload=...`) sent to the listing's webhook as a form, to record a paid plan | A form is taken only when the body is exactly one `payload` field: it starts with `payload=` and holds no `&`. A JSON body is refused, never searched. The listing's webhook gets a secret of its own when the listing exists (SETUP.md) |
 | A made-up `installation_id` on the setup page | The setup page is static; nothing trusts its address |
 | Login CSRF on Connect | State kept server-side, single use, bound to the session that started it; the cookie holds only the row's id |
 | A leaked installation token | Asked per repository, kept in memory under an hour, never stored or logged |
 | The token reaching GitHub's storage host | A download's redirect is fetched without any credential |
-| One busy installation starving the rest | 120 reviews an hour per installation, 400 per pull request, a call budget per job |
+| One busy installation starving the rest | 120 reviews an hour per installation, 400 per pull request, a call budget per job; the sweep looks at 20 pull requests a run |
+| A race file with thousands of seeds, in hundreds of files, holding the shared isolate for seconds | A signature lists at most 64 seeds (the validator refuses the file on the count alone), and the summariser merges seeds in work that grows with their number, not its square |
 | One pull request, or pull requests from outside, using up an installation's hour | 30 reviews an hour per pull request, counted before GitHub is asked anything; the hour is charged only for a review that reads a commit's evidence; at most half of it for authors who are not owner, member or collaborator, and at most 90 of the 120 for reviews started by pushes |
 | A webhook delivered late, twice or out of order | The pull request is asked of GitHub at every pass; delivery ids are claimed once |
 | A loop between bots | The app never answers a bot or its own replies; commands are read only from `created` comments |

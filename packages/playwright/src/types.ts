@@ -16,7 +16,8 @@ export const RACES_SCHEMA = "genclass-races/1";
 /**
  * The format's limits. A real file is a few KB with a handful of signatures; the limits are what lets a reader that
  * takes files from anyone (genclass-dev[bot] reads a pull request's artifacts, also from forks) bound its work.
- * - `signatures`: signatures in one file. `test`, `evidence`, `text`: characters (JavaScript string length) of the
+ * - `signatures`: signatures in one file. `seeds`: seeds in one signature's `seeds` list (the fixture writes one
+ *   file per seed, so it writes one). `test`, `evidence`, `text`: characters (JavaScript string length) of the
  *   test's name, of an evidence line, and of any other string (`sig`, `trigger`, `diagnosis`, `op`, `mode`, the
  *   `model` and `fixture` strings). The validator refuses a file over any of these, like any other bad field.
  * - `bytes`: the file's size as UTF-8. The validator sees parsed values, so it cannot check this one: the fixture
@@ -25,7 +26,7 @@ export const RACES_SCHEMA = "genclass-races/1";
  * The fixture (src/races.ts) writes within them: it cuts strings, and when a test has more signatures than fit, by
  * count or by size, it leaves out the least confident and says how many in `dropped`.
  */
-export const RACES_LIMITS = { signatures: 200, test: 1000, evidence: 2000, text: 600, bytes: 64 * 1024 } as const;
+export const RACES_LIMITS = { signatures: 200, seeds: 64, test: 1000, evidence: 2000, text: 600, bytes: 64 * 1024 } as const;
 
 /** One distinct race signature seen in a test: `sig` is "trigger|diagnosis|op" with ids normalised by the fixture. */
 export interface RaceSignature {
@@ -44,7 +45,7 @@ export interface RaceSignature {
   confidence: number;
   /** The evidence line the runtime printed for this decision (one line, query values already replaced by "…"). */
   evidence: string;
-  /** The seeds in which the fixture saw this signature for this test. */
+  /** The seeds in which the fixture saw this signature for this test (at most RACES_LIMITS.seeds). */
   seeds: number[];
 }
 

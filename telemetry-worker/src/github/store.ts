@@ -22,9 +22,10 @@
 // - A pull request's `state` (its findings and hashes) is written only by the review that holds the lease. What a
 //   command or a setting changes while a review may be running has a column of its own and is written by one
 //   statement (`paused`, `issue`): a pause is never lost to a review that ends after it, and a command never writes
-//   back findings it read before a review saved.
+//   back findings it read before a review saved. A request for a review that waits on the row when a pause is set
+//   becomes a plain event in that statement: it was made before the pause and does not lift it.
 // - A review that started and did not end leaves its row `due` (takeLease sets it, releaseLease settles it), and so
-//   does one that ended waiting or could not run. The daily sweep reviews what has been due for DUE_AFTER_MS (duePrs).
+//   does one that ended waiting or could not run. The sweep reviews what has been due for DUE_AFTER_MS (duePrs).
 // - What is done once per repository is claimed in one statement before it is done (claimRepoFact): two pull requests
 //   opened together cannot both get the one check.
 // - One pull request at a time opens issues in a repository (takeIssueTurn): two that merge together with the same
@@ -133,7 +134,7 @@ export const REVIEWS_PER_PR = 400;
 export const LEASE_MS = 35_000;
 /** A delivery taken this long ago whose job never ended may be taken again: no job lives that long. */
 export const DELIVERY_STALE_MS = 60_000;
-/** How long a pull request is due before the daily sweep reviews it (a test run that takes longer is simply looked at again). */
+/** How long a pull request is due before the sweep reviews it (a test run that takes longer is simply looked at again). */
 export const DUE_AFTER_MS = 3_600_000;
 export const DELIVERY_KEEP_DAYS = 7;
 export const CLOSED_PR_KEEP_DAYS = 30;
@@ -477,7 +478,7 @@ export async function releaseLease(db: D1Like, repoId: number, number: number, o
   return row?.pending ?? 0;
 }
 
-/** Mark a pull request as owed a review since `due` (the daily sweep runs it), or with null as owed nothing. `updated` is left alone. */
+/** Mark a pull request as owed a review since `due` (the sweep runs it), or with null as owed nothing. `updated` is left alone. */
 export async function setDue(db: D1Like, repoId: number, number: number, due: string | null): Promise<void> {
   await db.prepare("UPDATE github_prs SET due = ? WHERE repo_id = ? AND number = ?").bind(due, repoId, number).run();
 }
@@ -510,7 +511,10 @@ export async function claimPrHour(db: D1Like, repoId: number, number: number, no
  * Store what a review posted, or what a command changed. Only the given fields change, in one statement. `state` is
  * for the review that holds the lease, and nobody else; `paused` and `issue` are columns of their own, so that a
  * command and a review never write over each other. `reviewed`: something was written on the pull request, which
- * counts toward REVIEWS_PER_PR.
+ * counts toward REVIEWS_PER_PR. A pause also turns a request for a review that is waiting on the row (`pending`,
+ * PENDING_ASKED or PENDING_AUTHOR) into a plain event, in the same statement: that request was made before the pause,
+ * so the pass it would have started must stop at the pause, not lift it. A request made after the pause marks the row
+ * again.
  */
 export async function savePr(
   db: D1Like,
@@ -526,6 +530,7 @@ export async function savePr(
   if (v.checkRunId !== undefined) { sets.push("check_run_id = ?"); params.push(v.checkRunId); }
   if (v.state !== undefined) { sets.push("state = ?"); params.push(v.state); }
   if (v.paused !== undefined) { sets.push("paused = ?"); params.push(v.paused ? 1 : 0); }
+  if (v.paused === true) sets.push(`pending = MIN(pending, ${PENDING_EVENT})`);
   if (v.issue !== undefined) { sets.push("issue = ?"); params.push(v.issue); }
   if (v.closed !== undefined) { sets.push("closed = ?"); params.push(v.closed); }
   if (v.reviewed) sets.push("reviews = reviews + 1");
@@ -572,20 +577,36 @@ export async function forgetDelivery(db: D1Like, id: string): Promise<void> {
 }
 
 /**
- * Count one review against the installation's hourly cap. False when `cap` is used up, or, for a pull request whose
- * author is from outside the repository (`outside`), when such pull requests have had OUTSIDE_REVIEWS_PER_HOUR.
+ * What claimReview answered: "ok" when the review was counted, else the limit that refused it. "hour": the
+ * installation has had REVIEWS_PER_HOUR. "share": it has had `cap`, a smaller share of the hour that the caller asked
+ * under (PUSH_REVIEWS_PER_HOUR), and not yet the whole hour. "outside": pull requests by authors from outside the
+ * repository have had OUTSIDE_REVIEWS_PER_HOUR.
  */
-export async function claimReview(db: D1Like, installationId: number, now: Date, cap = REVIEWS_PER_HOUR, outside = false): Promise<boolean> {
+export type ReviewClaim = "ok" | "hour" | "share" | "outside";
+
+/**
+ * Count one review against the installation's hourly cap. Refused when `cap` is used up, or, for a pull request whose
+ * author is from outside the repository (`outside`), when such pull requests have had OUTSIDE_REVIEWS_PER_HOUR. The
+ * claim is one statement. Only a refusal reads the hour's counts, to say which limit it was (what is written on the
+ * repository names that limit): the widest one that applies, so the installation's hour before a share of it.
+ */
+export async function claimReview(db: D1Like, installationId: number, now: Date, cap = REVIEWS_PER_HOUR, outside = false): Promise<ReviewClaim> {
   const hour = now.toISOString().slice(0, 13);
+  const limit = Math.max(1, cap);
   const row = await db
     .prepare(
       "INSERT INTO github_usage (installation_id, hour, reviews, outside) VALUES (?1, ?2, 1, ?4) " +
         "ON CONFLICT (installation_id, hour) DO UPDATE SET reviews = reviews + 1, outside = outside + ?4 " +
         "WHERE github_usage.reviews < ?3 AND (?4 = 0 OR github_usage.outside < ?5) RETURNING reviews",
     )
-    .bind(installationId, hour, Math.max(1, cap), outside ? 1 : 0, OUTSIDE_REVIEWS_PER_HOUR)
+    .bind(installationId, hour, limit, outside ? 1 : 0, OUTSIDE_REVIEWS_PER_HOUR)
     .first();
-  return !!row;
+  if (row) return "ok";
+  const used = await db.prepare("SELECT reviews FROM github_usage WHERE installation_id = ? AND hour = ?").bind(installationId, hour).first<{ reviews: number }>();
+  const reviews = used?.reviews ?? 0;
+  if (reviews >= REVIEWS_PER_HOUR) return "hour";
+  if (reviews >= limit) return limit < REVIEWS_PER_HOUR ? "share" : "hour";
+  return "outside";
 }
 
 // --------------------------------------------------------------------------------------------- Marketplace

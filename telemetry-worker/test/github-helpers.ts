@@ -197,6 +197,8 @@ export interface FakeRun {
   name?: string;
   workflow_id?: number;
   created_at?: string;
+  /** When it ended (GitHub's `updated_at` of a completed run). */
+  updated_at?: string;
   /** Artifacts by name: the zip bytes. */
   artifacts?: Record<string, Uint8Array>;
   /** Names of artifacts GitHub lists as expired (their retention ran out). */
@@ -244,6 +246,18 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
   let minted = 0;
   const ok = (j: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(j), { status, headers: { "content-type": "application/json", ...headers } });
   const notFound = () => ok({ message: "Not Found" }, 404);
+  /** A workflow run as GitHub describes it, in a list or by itself. */
+  const runJson = (full: string, r: FakeRun) => ({
+    id: r.id,
+    name: r.name ?? "e2e",
+    head_sha: r.head_sha,
+    status: r.status ?? "completed",
+    conclusion: r.conclusion === undefined ? "success" : r.conclusion,
+    html_url: `https://github.com/${full}/actions/runs/${r.id}`,
+    workflow_id: r.workflow_id ?? 1,
+    created_at: r.created_at ?? "2026-10-13T11:00:00Z",
+    ...(r.updated_at ? { updated_at: r.updated_at } : {}),
+  });
 
   const fetch: Fetch = async (input, init = {}) => {
     const url = new URL(input);
@@ -346,7 +360,12 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
     if (rest === "/actions/runs" && method === "GET") {
       const sha = url.searchParams.get("head_sha");
       const list = (runs.get(full) ?? []).filter((r) => r.head_sha === sha);
-      return ok({ total_count: list.length, workflow_runs: list.map((r) => ({ id: r.id, name: r.name ?? "e2e", head_sha: r.head_sha, status: r.status ?? "completed", conclusion: r.conclusion === undefined ? "success" : r.conclusion, html_url: `https://github.com/${full}/actions/runs/${r.id}`, workflow_id: r.workflow_id ?? 1, created_at: r.created_at ?? "2026-10-13T11:00:00Z" })) });
+      return ok({ total_count: list.length, workflow_runs: list.map((r) => runJson(full, r)) });
+    }
+    if ((x = /^\/actions\/runs\/(\d+)$/.exec(rest)) && method === "GET") {
+      // one run by its id, whether or not a list shows it
+      const run = (runs.get(full) ?? []).find((r) => r.id === Number(x![1]));
+      return run ? ok(runJson(full, run)) : notFound();
     }
     if ((x = /^\/actions\/runs\/(\d+)\/artifacts$/.exec(rest)) && method === "GET") {
       const run = (runs.get(full) ?? []).find((r) => r.id === Number(x![1]));

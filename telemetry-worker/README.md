@@ -29,7 +29,8 @@ includes the dashboard, analytics, export, forwarding and your own classifier, w
     Check it with `npx --yes wrangler@4 r2 bucket lifecycle list genclass-telemetry`.
   - D1: a daily Cron Trigger (`17 3 * * *`, `scheduled` in `src/index.ts`, `retention()` in `src/dashboard.ts`)
     deletes `daily` and `recent` rows older than 90 days, `hourly` rows older than 48 hours and `sessions` rows older
-    than 2 days. Projects themselves (token, name, hash of the secret) are kept until deleted.
+    than 2 days. Projects themselves (token, name, hash of the secret) are kept until deleted. (A second trigger,
+    `*/20 * * * *`, deletes nothing: it runs only the GitHub App's owed reviews, see [The GitHub App](#the-github-app).)
   - Paid plans keep an app's daily counters, recent rows and export copies for a year instead
     ([Paid plans](#paid-plans)); nothing is ever kept shorter than the 90 days above.
 
@@ -979,20 +980,20 @@ what it defends against: [`DESIGN.md`](../docs/github-app/DESIGN.md). Registerin
 | route | behaviour |
 |---|---|
 | `POST /api/github/webhook` | GitHub only. `X-Hub-Signature-256` must be the HMAC-SHA256 of the exact body under the app's secret (401 otherwise, before anything is parsed); at most 3 MB; `X-GitHub-Delivery` is claimed in `github_deliveries` (a repeat answers `{ ok, duplicate: true }`). 202 `{ ok, queued: true }` at once, the work in `ctx.waitUntil`, with a deadline of 20 seconds from the moment the delivery arrived (the platform stops work 30 seconds after the response). A job that fails or runs out of time forgets its delivery, so Redeliver runs it; one that ended marks it done; one the platform stopped can be redelivered a minute later. Events: `installation`, `installation_repositories`, `pull_request`, `workflow_run`, `check_run`, `issue_comment`, `ping`; anything else is acknowledged and ignored. 503 while the app is not set up |
-| `POST /api/github/marketplace` | GitHub only: the Marketplace listing's webhook (`marketplace_purchase`), signed with `GITHUB_MARKETPLACE_WEBHOOK_SECRET` (default: the app's). The app's webhook ignores plan events and this one ignores everything else |
+| `POST /api/github/marketplace` | GitHub only: the Marketplace listing's webhook (`marketplace_purchase`), signed with `GITHUB_MARKETPLACE_WEBHOOK_SECRET` (default: the app's; set it to a value of its own once the listing exists). The app's webhook ignores plan events and this one ignores everything else. A delivery sent as `application/x-www-form-urlencoded` is taken after the same signature check, and only when the body is exactly one `payload` field (400 otherwise) |
 | `GET /github` | the app's public page (the one page of this worker that may be indexed): what it does, what it may read and write, what it keeps, the plans |
 | `GET /github/install` | 302 to `https://github.com/apps/<slug>/installations/new` |
 | `GET /github/setup` | where GitHub sends someone after installing. Static: its address is not trusted (GitHub warns that `installation_id` there can be made up) |
 | `GET /github/connect`, `GET /github/callback` | browser session: GitHub's OAuth for the app, with a state kept in `challenges` (kind `oauth:ghapp`, single use, bound to the session). The callback asks GitHub who the person is and which installations of this app and which repositories they can reach, records the installations, keeps the answer 30 minutes (kind `ghapp:grant`) and drops the token |
-| `GET /account/github`, `GET /api/account/github` | browser session: the installations, the repositories GitHub confirmed, and which of the account's apps each is linked to |
-| `POST /api/account/github/repos/<repo id>` | browser session + Origin; `{ project_id?: string \| null, paused?: boolean }`. 403 unless the 30-minute answer says the person can push to that repository; 404 unless the app is in their account |
+| `GET /account/github`, `GET /api/account/github` | browser session: the installations, the repositories GitHub confirmed, and which of the account's apps each is linked to, and the links to the account's apps on repositories GitHub's answer does not list (`linked`: no answer in the last 30 minutes, or no access any more; a private one without its name) |
+| `POST /api/account/github/repos/<repo id>` | browser session + Origin; `{ project_id?: string \| null, paused?: boolean }`. 403 unless the 30-minute answer says the person can push to that repository, except `{ "project_id": null }` alone from the account that owns the linked app, which needs neither that answer nor push access (it takes the link away and changes nothing else); 404 unless the app is in their account |
 
 ### What a review does
 
 On `pull_request` (opened, reopened, synchronize, ready_for_review), on a `workflow_run` that completed on a pull
 request's head commit with an artifact whose name starts with the `artifact` setting (or, for a pull request whose
 check or comment says it waits for the test run, as the last of the commit's runs to finish), on
-`@genclass-dev review`, on Re-run of its own check and from the daily sweep, `reviewPull` (src/github/handlers.ts):
+`@genclass-dev review`, on Re-run of its own check and from the sweep, `reviewPull` (src/github/handlers.ts):
 takes the pull request's lease (`github_prs.lease`, 35 seconds; a second event sets `pending` on the live lease and
 the holder goes round once more) and marks the row `due` until the review ends, counts the review against the pull
 request's hour (30), asks GitHub for the pull request (a webhook's copy is never trusted), reads the settings file
@@ -1016,9 +1017,15 @@ top (src/github/evidence.ts).
 A check is never left in progress without something certain to finish it. Under `check.fail_on` the check waits in
 progress for the commit's test run, and the row records that before the check exists. A pause, a setting that leaves
 the pull request out, a newer commit, a closed pull request and the pull request's limit of 400 finish it at once
-with the reason; an hourly limit keeps it in progress with the reason. `githubSweep` (the worker's daily cron,
-src/index.ts) reviews every pull request that has been `due` for more than an hour: one whose job failed or was
-stopped by the platform, one an hourly limit left out, and one whose wait no event ended.
+with the reason; an hourly limit keeps it in progress with the reason, which names the limit that was reached (120
+for the installation, 90 for reviews pushes start, 60 for authors from outside the repository, 30 for the pull
+request). A first read that left some race files unread (`CiEvidence.incomplete`: an artifact that could not be
+downloaded, one that has expired) and does not fail the check keeps it in progress too, with the note. `githubSweep`
+reviews pull requests that have been `due` for more than an hour: one whose job failed or was stopped by the
+platform, one an hourly limit left out, and one whose wait no event ended. It runs on a cron trigger of its own,
+`*/20 * * * *` (`SWEEP_CRON`; `scheduled` in src/index.ts runs only the sweep for it), and with the daily trigger
+after the retention sweeps. One run looks at 20 pull requests at most and ends at the first failure that is not
+GitHub's answer.
 
 A private repository is reviewed only when `GITHUB_APP_PRIVATE_REPOS` is `open`, the managing account's plan has
 `github_private`, or the GitHub account has a paid Marketplace plan (src/github/entitlement.ts); otherwise nothing of
@@ -1045,7 +1052,7 @@ time and cached in memory until 5 minutes before they expire.
 |---|---|---|
 | `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | secrets | the app; all three or it is off |
 | `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET` | secrets | Connect GitHub; without them repositories cannot be linked |
-| `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | secret | the listing's webhook, when it has its own secret |
+| `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | secret | the listing's webhook. Set it to a value of its own once the listing exists; unset, that endpoint accepts the app's webhook secret |
 | `GITHUB_APP_SLUG` | var | the app's URL name (`genclass`): its bot is `<slug>[bot]` and its commands start with `@<slug>` |
 | `GITHUB_APP_PRIVATE_REPOS` | var | `plan` (default) or `open` |
 | `GITHUB_API_URL`, `GITHUB_WEB_URL` | vars | a GitHub Enterprise Server (untested) |

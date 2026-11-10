@@ -79,7 +79,7 @@ rm .github-app.secrets.json
 | `GITHUB_APP_PRIVATE_KEY` | the PEM GitHub generated, as it is (PKCS#1; a PKCS#8 key works too) |
 | `GITHUB_APP_WEBHOOK_SECRET` | what the app's webhook is signed with |
 | `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET` | for Connect GitHub on `/account/github`; reviews work without them |
-| `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | optional: the Marketplace listing's own webhook secret (default: the app's) |
+| `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | the Marketplace listing's own webhook secret. Not needed before the listing exists; once it does, set it to a value of its own (unset, the listing's endpoint accepts the app's secret) |
 
 These are not `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, which belong to the OAuth app behind "Sign in with
 GitHub". If the app's URL name is not `genclass-dev`, set `GITHUB_APP_SLUG` in `wrangler.toml`.
@@ -102,7 +102,15 @@ The worker tolerates the other order too: with the tables missing, the app's own
 
 ## 5. Deploy
 
-`wrangler.toml` gained one route, `genclass.dev/github*`, and two vars.
+`wrangler.toml` gained one route, `genclass.dev/github*`, two vars and a second cron trigger, `*/20 * * * *`.
+
+The second trigger runs the app's sweep and nothing else: every 20 minutes it reviews the pull requests whose review
+has been owed for more than an hour (a job that failed or was stopped, an hourly limit, a check that waits), at most
+20 in one run, the longest owed first. A run ends at the first failure that is not GitHub's answer (the database, a
+limit of the platform on one invocation); what it did not look at stays owed for the next run. The daily trigger
+(`17 3 * * *`) does everything it did before, the same sweep included, so a worker deployed without the second
+trigger still finishes every check, within a day instead of within about an hour and a half. `scheduled` in
+`src/index.ts` tells the two apart by the trigger's expression.
 
 The checks the app writes link to `docs/github-app/README.md` on the `main` branch of this repository. Merge this
 branch to `main` before deploying: until the file is there, those links answer 404.
@@ -172,9 +180,10 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
   Advanced page runs it again; a delivery whose job ended is not run twice. A job stops itself 20 seconds after its
   delivery arrived (the platform stops work 30 seconds after the response): that is logged as `deadline`, and the
   delivery can be redelivered. A delivery whose job the platform stopped anyway, with no log line, can be redelivered
-  a minute after it arrived. Without a redelivery, the pull request is reviewed at its next event, or by the daily
-  sweep (the worker's cron), which reviews every pull request whose review has been owed for more than an hour; that
-  is also what finishes a check left in progress. The only thing logged is one line per failed delivery: the event's
+  a minute after it arrived. Without a redelivery, the pull request is reviewed at its next event, or by the sweep
+  (the worker's 20-minute cron trigger, and the daily one), which reviews pull requests whose review has been owed
+  for more than an hour, at most 20 in one run; that is also what finishes a check left in progress. The only thing
+  logged is one line per failed delivery: the event's
   name and one word for the reason (`npx --yes wrangler@4 tail` shows it live; for a private key the worker cannot
   use, the line also says what is wrong with it, never the key).
 - **Rotate the private key.** Generate a new key on the app's page, `wrangler secret put GITHUB_APP_PRIVATE_KEY`, then
@@ -184,7 +193,8 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
 - **Rate limits.** The app stops calling GitHub for an installation until the time GitHub names. Its own caps
   (`src/github/store.ts`): 120 reviews an hour per installation that read a commit's race files (90 of them started by
   pushes, 60 for pull requests by authors from outside the repository), 30 reviews an hour per pull request, and 400
-  reviews or replies written per pull request in all.
+  reviews or replies written per pull request in all. A check or a reply about an hourly cap names the cap that
+  stopped the review, with its own number.
 - **A request to delete data.** Uninstalling deletes everything kept for an installation. For one repository:
   `DELETE FROM github_prs WHERE repo_id = ?`, `DELETE FROM github_repos WHERE repo_id = ?` and
   `DELETE FROM github_repo_facts WHERE repo_id = ?`.
@@ -219,15 +229,22 @@ needs the app to be public, a logo and screenshots, links to a privacy policy an
 
 In the listing's webhook form, choose **Content type: application/json**. The form's other choice,
 `application/x-www-form-urlencoded`, sends the same JSON in a form field named `payload`; the worker reads that too,
-after the same signature check. GitHub does not send a Marketplace delivery again, so look at the listing's first
-delivery (the ping) in its delivery list: the answer must be 202. A 401 means the secret differs, a 400 that the body
-could not be read.
+after the same signature check, and only when the body is exactly that one field (anything else answers 400). GitHub
+does not send a Marketplace delivery again, so look at the listing's first delivery (the ping) in its delivery list:
+the answer must be 202. A 401 means the secret differs, a 400 that the body could not be read.
+
+Set `GITHUB_MARKETPLACE_WEBHOOK_SECRET` to a value of its own when the listing exists: a new secret in the listing's
+webhook form, and the same value with `wrangler secret put GITHUB_MARKETPLACE_WEBHOOK_SECRET`. While it is unset, the
+listing's endpoint accepts deliveries signed with the app's own webhook secret. That endpoint is the one that records
+a paid plan, so it should not share a secret with the webhook that carries text written by anyone who can comment.
 
 ## A self-hosted collector, GitHub Enterprise Server
 
 The same worker on someone's own Cloudflare account (`wrangler.selfhost.toml`) can run an app of its own: register it
-with `--origin https://<their worker>` and set the same secrets there. `GITHUB_API_URL` and `GITHUB_WEB_URL` point the
-app at a GitHub Enterprise Server (`https://HOST/api/v3` and `https://HOST`). Neither has been run.
+with `--origin https://<their worker>` and set the same secrets there. Its configuration has the daily cron trigger
+only, which runs the app's sweep once a day; adding `"*/20 * * * *"` to `crons` there runs it every 20 minutes.
+`GITHUB_API_URL` and `GITHUB_WEB_URL` point the app at a GitHub Enterprise Server (`https://HOST/api/v3` and
+`https://HOST`). Neither has been run.
 
 <a id="launch-notes"></a>
 

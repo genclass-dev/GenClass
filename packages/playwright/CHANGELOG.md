@@ -13,6 +13,7 @@ The first version on npm.
 - **The format has limits** (`RACES_LIMITS`): the validator refuses a file with more than 200 signatures, or with a
   string over its length (1,000 characters for `test`, 2,000 for `evidence`, 600 for any other), like any other bad
   field.
+- **A signature lists at most 64 seeds** (`RACES_LIMITS.seeds`): the validator refuses a file over it, on the count alone.
 - **The fixture writes within them**, and keeps a file to 64 KB: it cuts a longer string (it then ends with `…`), and
   of a test with more signatures than fit it writes the most confident and puts the number left out in a new optional
   field, `dropped`. The report says under that test that its list is not complete.

@@ -310,6 +310,7 @@ The format has limits, exported as `RACES_LIMITS`, so that a reader that takes f
 | | |
 |---|---|
 | Signatures in one file | 200 |
+| Seeds in one signature's `seeds` list | 64 (the fixture writes one); over it the file is refused, on the count alone |
 | A test's name (`test`) | 1,000 characters |
 | An evidence line (`evidence`) | 2,000 characters |
 | Any other string (`sig`, `trigger`, `diagnosis`, `op`, `mode`, the `model` and `fixture` strings) | 600 characters |

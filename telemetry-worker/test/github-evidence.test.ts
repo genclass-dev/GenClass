@@ -283,7 +283,7 @@ describe("github app: the workflow runs of a commit (docs/github-app/README.md, 
     expect(ci.notes).toEqual(["Of the 40 completed workflow runs listed for this commit, the artifacts of 30 were looked at, the most recently finished first; the other 10 were not."]);
   });
 
-  it("the order: the most recently finished run of each workflow, then their other runs, then runs in which no job ran; a run named by the caller before all", async () => {
+  it("the order: the most recently finished run of each workflow, then their other runs, then runs in which no job ran; the workflow of a run named by the caller before all", async () => {
     const rows = [
       listedRun(1, 100, 5),
       listedRun(2, 100, 20),
@@ -298,9 +298,14 @@ describe("github app: the workflow runs of a commit (docs/github-app/README.md, 
     expect(asked(gh)).toEqual([2, 3, 1, 5, 4, 7]);
     // a run is still going and nothing was read: the review waits
     expect(ci.state).toBe("pending");
+    // run 5's workflow (200) goes first, and of that workflow the most recently finished run (3) before run 5 itself
     const named = githubListing(rows);
     await collector(named.fetch, { firstRun: 5 }).read();
-    expect(asked(named)).toEqual([5, 2, 3, 1, 4, 7]);
+    expect(asked(named)).toEqual([3, 5, 2, 1, 4, 7]);
+    // a run that is its workflow's most recently finished one is simply first
+    const newest = githubListing(rows);
+    await collector(newest.fetch, { firstRun: 3 }).read();
+    expect(asked(newest)).toEqual([3, 2, 1, 5, 4, 7]);
     // a run that is not one of the commit's completed runs changes nothing
     const other = githubListing(rows);
     await collector(other.fetch, { firstRun: 6 }).read();
@@ -317,13 +322,130 @@ describe("github app: the workflow runs of a commit (docs/github-app/README.md, 
     expect(asked(gh)[0]).toBe(5001);
   });
 
+  it("two runs of one workflow that both uploaded the artifact: the later run's is read, whichever run's end started the review", async () => {
+    // `on: [push, pull_request]` on a branch of the repository: run 1 finished at 11:05 with two findings, run 2 at 11:09 with none
+    const rows = [listedRun(1, 100, 5), listedRun(2, 100, 9)];
+    const artifacts = { 1: { "genclass-races": racesZip() }, 2: { "genclass-races": racesZip({ "c.json": races("checkout.spec.ts > checkout > places one order", 1, []) }) } };
+    for (const firstRun of [undefined, 2, 1]) {
+      const gh = githubListing(rows, artifacts);
+      const ci = await collector(gh.fetch, firstRun === undefined ? undefined : { firstRun }).read();
+      expect(ci.artifacts, String(firstRun)).toEqual([{ name: "genclass-races", runId: 2, files: 1 }]);
+      expect(buildSummary(ci.inputs).totals.signatures, String(firstRun)).toBe(0);
+      // run 1's artifact is never downloaded: one download in all, of run 2's (the fake numbers artifacts run id * 100)
+      expect(gh.storage.map((x) => x.url), String(firstRun)).toEqual([`${STORAGE}/a/200`]);
+      expect(asked(gh), String(firstRun)).toEqual([2, 1]);
+      expect(ci.incomplete).toBe(false);
+    }
+    // the same when run 1's event is handled late, among other workflows that finished since
+    const later = [...rows, listedRun(3, 300, 12), listedRun(4, 400, 14)];
+    const gh = githubListing(later, artifacts);
+    const ci = await collector(gh.fetch, { firstRun: 1 }).read();
+    expect(asked(gh)).toEqual([2, 1, 4, 3]);
+    expect(ci.artifacts).toEqual([{ name: "genclass-races", runId: 2, files: 1 }]);
+  });
+
+  it("a commit with more runs than GitHub lists: the run that started the review is asked about by itself and read, inside the request budget", async () => {
+    // 100 runs listed of 140; run 4000, which uploaded the race files, is not among them
+    const rows = Array.from({ length: 100 }, (_, i) => listedRun(5001 + i, 1 + (i % 40), i % 50));
+    const hidden = { id: 4000, head_sha: SHA1, workflow_id: 77, updated_at: minute(1), artifacts: { "genclass-races": racesZip() } };
+    const listing = () => {
+      const gh = githubListing(rows, {}, 140);
+      gh.runs.get(REPO.full_name)!.push(hidden);
+      return gh;
+    };
+    // without the run's name nothing says where the race files are: they are not found
+    const without = listing();
+    expect((await collector(without.fetch).read()).state).toBe("none");
+    expect(asked(without)).not.toContain(4000);
+    // with it: one request for the run, then its artifacts first
+    const gh = listing();
+    const { client, read: collect } = collector(gh.fetch, { firstRun: 4000 });
+    const ci = await collect();
+    expect(gh.apiCalls()[1]!.path).toBe("/repos/acme/shop/actions/runs/4000");
+    expect(asked(gh)[0]).toBe(4000);
+    expect(ci.state).toBe("ready");
+    expect(ci.artifacts).toEqual([{ name: "genclass-races", runId: 4000, files: 4 }]);
+    // 1 list of runs, 1 run, 30 lists of artifacts (the named run's among them), 1 download
+    expect(asked(gh)).toHaveLength(MAX_ASKED_RUNS);
+    expect(client.calls()).toBe(33);
+    expect(client.calls()).toBeLessThanOrEqual(MAX_EVIDENCE_CALLS);
+    // the commit has more runs than were listed, and workflows none of whose runs was asked: the read is not whole
+    expect(ci.incomplete).toBe(true);
+    expect(ci.notes.at(-1)).toBe("This commit has 140 workflow runs; the 100 GitHub lists first were looked at.");
+  });
+
+  it("a run the list does not show is ordered like any other: a listed, later run of its workflow goes before it; one GitHub does not know, or of another commit, changes nothing", async () => {
+    const rows = [listedRun(5001, 77, 9), listedRun(5002, 2, 3)];
+    const artifacts = { 5001: { "genclass-races": racesZip({ "c.json": races("checkout.spec.ts > checkout > places one order", 1, []) }) } };
+    const gh = githubListing(rows, artifacts);
+    gh.runs.get(REPO.full_name)!.push({ id: 4000, head_sha: SHA1, workflow_id: 77, updated_at: minute(1), artifacts: { "genclass-races": racesZip() } });
+    const ci = await collector(gh.fetch, { firstRun: 4000 }).read();
+    expect(asked(gh)).toEqual([5001, 4000, 5002]);
+    expect(ci.artifacts).toEqual([{ name: "genclass-races", runId: 5001, files: 1 }]);
+    expect(gh.storage).toHaveLength(1);
+    // a run GitHub has no more: one request, and the review is what it is without the name
+    const gone = githubListing(rows, artifacts);
+    const plain = await collector(gone.fetch, { firstRun: 4001 }).read();
+    expect(asked(gone)).toEqual([5001, 5002]);
+    expect(plain.notes).toEqual([]);
+    expect(plain.incomplete).toBe(false);
+    // a run of another commit is not this commit's evidence
+    const other = githubListing(rows, artifacts);
+    other.runs.get(REPO.full_name)!.push({ id: 4002, head_sha: "f".repeat(40), workflow_id: 77, artifacts: { "genclass-races": racesZip() } });
+    await collector(other.fetch, { firstRun: 4002 }).read();
+    expect(asked(other)).toEqual([5001, 5002]);
+    // GitHub fails to answer about the run: what was read is not known to be whole, and a note says so
+    const down = fakeGithub({
+      answer: (c) =>
+        c.method === "GET" && c.path === "/repos/acme/shop/actions/runs" ? json({ total_count: 2, workflow_runs: rows }) : c.path === "/repos/acme/shop/actions/runs/4000" ? new Response("{}", { status: 502 }) : undefined,
+    });
+    down.runs.set(REPO.full_name, rows.map((r) => ({ id: Number(r.id), head_sha: SHA1, artifacts: {} })));
+    const unsure = await collector(down.fetch, { firstRun: 4000 }).read();
+    expect(unsure.incomplete).toBe(true);
+    expect(unsure.notes).toContain("The workflow run that started this review could not be looked up, so its artifacts were not read.");
+  });
+
+  it("through the webhook: among 41 workflows, the run whose end starts the review is read though 40 finished after it; with workflows left unasked the check is neutral, never a success", async () => {
+    const { env } = githubSetup();
+    const gh = fakeGithub();
+    await deliver(env, "installation", installationCreated(), { fetch: gh.fetch });
+    await pullRequest(env, gh, "opened", 12, SHA1);
+    // the test run finished first and uploaded race files in which nothing is flagged; 40 other workflows finished after it
+    const clean = racesZip({ "a.json": races("checkout.spec.ts > checkout > places one order", 1, []), "b.json": races("checkout.spec.ts > checkout > places one order", 2, []) });
+    const uploader = gh.addRun(SHA1, { "genclass-races": clean }, { workflow_id: 1, updated_at: minute(0) });
+    for (let i = 0; i < 40; i++) gh.addRun(SHA1, {}, { name: `job ${i}`, workflow_id: 10 + i, updated_at: minute(1 + i) });
+    // asked in the order of the list alone, the test run is the 41st and is not reached
+    expect((await collector(gh.fetch).read()).state).toBe("none");
+    expect(await result(await deliver(env, "workflow_run", runEvent(uploader.id, SHA1), { fetch: gh.fetch }))).toBe("nothing flagged");
+    const check = gh.checksAt(SHA1).at(-1);
+    expect(check.output.title).toBe("Nothing flagged in 1 test");
+    // 11 workflows had none of their runs looked at: race files may be in them, so this is not a success
+    expect(check).toMatchObject({ status: "completed", conclusion: "neutral" });
+    expect(check.output.summary).toContain("Note: Of the 41 completed workflow runs listed for this commit, the artifacts of 30 were looked at, the most recently finished first; the other 11 were not.");
+    // the same race files on a commit whose workflows were all asked: a success
+    const few = githubSetup();
+    const g2 = fakeGithub();
+    await deliver(few.env, "installation", installationCreated(), { fetch: g2.fetch });
+    await pullRequest(few.env, g2, "opened", 12, SHA1);
+    const r2 = g2.addRun(SHA1, { "genclass-races": clean }, { workflow_id: 1, updated_at: minute(0) });
+    for (let i = 0; i < 20; i++) g2.addRun(SHA1, {}, { name: `job ${i}`, workflow_id: 10 + i, updated_at: minute(1 + i) });
+    expect(await result(await deliver(few.env, "workflow_run", runEvent(r2.id, SHA1), { fetch: g2.fetch }))).toBe("nothing flagged");
+    expect(g2.checksAt(SHA1).at(-1)).toMatchObject({ status: "completed", conclusion: "success" });
+  });
+
   it("whether the commit's runs are still going is worked out from every run listed, not from the newest eight", async () => {
     const gh = fakeGithub();
     gh.runs.set(REPO.full_name, [{ id: 5001, head_sha: SHA1, status: "in_progress", conclusion: null }, ...Array.from({ length: 12 }, (_, i) => ({ id: 5002 + i, head_sha: SHA1, name: `job ${i}`, workflow_id: 10 + i }))]);
     const ci = await collector(gh.fetch).read();
     expect(ci.state).toBe("pending");
+    expect(ci.unfinished).toBe(true);
     expect(asked(gh)).toHaveLength(12);
     expect(ci.notes).toEqual([]);
+    // with every run completed nothing is unfinished, and a commit without runs has none unfinished either
+    const done = fakeGithub();
+    done.addRun(SHA1);
+    expect((await collector(done.fetch).read()).unfinished).toBe(false);
+    expect(await collector(fakeGithub().fetch).read()).toMatchObject({ state: "none", unfinished: false, incomplete: false, runs: [] });
   });
 
   it("60 runs and none with race files: 30 are asked, in 31 requests, and the commit's count is said when GitHub lists fewer runs than it has", async () => {
@@ -357,6 +479,132 @@ describe("github app: the workflow runs of a commit (docs/github-app/README.md, 
     expect(client.calls()).toBe(33);
     expect(new Set(asked(gh)).size).toBe(15);
     expect(ci.notes).toEqual(["Of the 60 completed workflow runs listed for this commit, the artifacts of 15 were looked at, the most recently finished first; the other 45 were not."]);
+  });
+});
+
+describe("github app: whether a commit's race files were all read (src/github/evidence.ts `incomplete`)", () => {
+  const one = (n: number) => racesZip({ "a.json": races(`t${n}.spec.ts > t`, 1, []) });
+  const reading = async (gh: Fake) => collector(gh.fetch).read();
+
+  it("is set where something went unread, and not by the notes that mean nothing did", async () => {
+    // everything read
+    const whole = fakeGithub();
+    whole.addRun(SHA1);
+    expect(await reading(whole)).toMatchObject({ incomplete: false, notes: [] });
+    // no artifact with the name, and an artifact without a .json file: a note each, and nothing unread
+    const none = fakeGithub();
+    none.addRun(SHA1, { coverage: racesZip() });
+    expect(await reading(none)).toMatchObject({ incomplete: false, notes: ['No artifact whose name starts with "genclass" in 1 completed workflow run on this commit.'] });
+    const report = fakeGithub();
+    report.addRun(SHA1, { "genclass-report": racesZip({ "report.md": "# report" }), "genclass-races": one(1) });
+    expect(await reading(report)).toMatchObject({ incomplete: false, notes: ['The artifact "genclass-report" holds no .json file.'] });
+    // a file that is not a race file is read and listed by the report: nothing went unread
+    const other = fakeGithub();
+    other.addRun(SHA1, { "genclass-races": racesZip({ "a.json": races("t.spec.ts > t", 1, []), "package.json": '{"name":"x"}' }) });
+    expect(await reading(other)).toMatchObject({ incomplete: false, notes: [] });
+
+    // an artifact that could not be downloaded, opened, or is too large; a run whose artifacts could not be listed
+    const failing = fakeGithub({ answer: (c) => (/\/actions\/artifacts\/\d+\/zip$/.test(c.path) ? new Response("{}", { status: 500 }) : undefined) });
+    failing.addRun(SHA1);
+    expect(await reading(failing)).toMatchObject({ state: "none", incomplete: true, notes: ['The artifact "genclass-races" could not be downloaded.'] });
+    const corrupt = fakeGithub();
+    corrupt.addRun(SHA1, { "genclass-races": new TextEncoder().encode("not a zip archive at all, whatever it says") });
+    expect((await reading(corrupt)).incomplete).toBe(true);
+    const unlisted = fakeGithub({ answer: (c) => (c.path.endsWith("/artifacts") ? new Response("{}", { status: 500 }) : undefined) });
+    unlisted.addRun(SHA1);
+    expect(await reading(unlisted)).toMatchObject({ incomplete: true, notes: ['The artifacts of the workflow run "e2e" could not be listed.'] });
+    // a limit of the review that left something out
+    const many = fakeGithub();
+    many.addRun(SHA1, Object.fromEntries(Array.from({ length: MAX_ARTIFACTS + 1 }, (_, i) => [`genclass-${i + 1}`, one(i + 1)])));
+    expect(await reading(many)).toMatchObject({ incomplete: true, notes: ['Only the first 6 artifacts whose name starts with "genclass" were read.'] });
+    // a file in an artifact that the zip reader left out (here: its checksum is wrong)
+    const bad = fakeGithub();
+    bad.addRun(SHA1, { "genclass-races": makeZip([{ name: "a.json", data: races("t.spec.ts > t", 1, []) }, { name: "b.json", data: races("t.spec.ts > t", 2, []), crc: 1 }]) });
+    const partly = await reading(bad);
+    expect(partly.inputs.filter((i) => i.error !== undefined)).toHaveLength(1);
+    expect(partly.incomplete).toBe(true);
+  });
+
+  it("an artifact with the name that has expired went unread: a note says so, and an older one does not stand in for it", async () => {
+    // two shards; the second one's retention ran out
+    const gh = fakeGithub();
+    const run = gh.addRun(SHA1, { "genclass-1": one(1), "genclass-2": one(2) });
+    run.expired = ["genclass-2"];
+    const ci = await reading(gh);
+    expect(ci.state).toBe("ready");
+    expect(ci.artifacts).toEqual([{ name: "genclass-1", runId: run.id, files: 1 }]);
+    expect(ci.incomplete).toBe(true);
+    expect(ci.notes).toEqual(['The artifact "genclass-2" has expired, so its race files could not be read.']);
+    expect(gh.storage).toHaveLength(1);
+    // every artifact with the name expired: that is what the note says, not that the commit uploaded none
+    const all = fakeGithub();
+    all.addRun(SHA1).expired = ["genclass-races"];
+    expect(await reading(all)).toMatchObject({ state: "none", incomplete: true, notes: ['The artifact "genclass-races" has expired, so its race files could not be read.'] });
+    expect(all.storage).toHaveLength(0);
+    // an expired artifact whose name is not the one asked for is nothing to this review
+    const unrelated = fakeGithub();
+    unrelated.addRun(SHA1, { coverage: one(1), "genclass-races": one(2) }).expired = ["coverage"];
+    expect(await reading(unrelated)).toMatchObject({ incomplete: false, notes: [] });
+    // the newest of a workflow's artifacts with the name has expired: an older run's is not read in its place
+    const rows = [listedRun(1, 100, 5), listedRun(2, 100, 9)];
+    const two = githubListing(rows, { 1: { "genclass-races": racesZip() }, 2: { "genclass-races": one(2) } });
+    two.runs.get(REPO.full_name)!.find((r) => r.id === 2)!.expired = ["genclass-races"];
+    const stood = await reading(two);
+    expect(stood.inputs).toEqual([]);
+    expect(two.storage).toHaveLength(0);
+    expect(stood.incomplete).toBe(true);
+  });
+
+  it("a .json file over 64 KB is a race file left unread only under a name the fixture gives its files; any other is listed and takes nothing from what was read", async () => {
+    const big = JSON.stringify({ suites: [], pad: "x".repeat(120 * 1024) });
+    const small = races("t.spec.ts > t", 1, []);
+    const read1 = async (name: string) => {
+      const gh = fakeGithub();
+      gh.addRun(SHA1, { "genclass-races": makeZip([{ name: "t-abc-s1.json", data: small }, { name, data: big }]) });
+      return reading(gh);
+    };
+    // a reporter's output uploaded with the race files (the whole of test-results under the artifact's name)
+    for (const name of ["results.json", "report/results.json", "trace-s.json", "s1.json", "lighthouse-s1x.json"]) {
+      const ci = await read1(name);
+      expect(ci.inputs.find((i) => i.name === `genclass-races/${name}`), name).toMatchObject({ content: "", error: "not read: larger than 64 KB" });
+      expect(ci.incomplete, name).toBe(false);
+      expect(ci.notes, name).toEqual([]);
+      expect(buildSummary(ci.inputs).files, name).toBe(1);
+    }
+    // The zip reader lists 200 of the entries it left out. With that list full, more may have been left out than it
+    // names, a race file among them: the read is then not known to be whole.
+    const many = async (n: number) => {
+      const gh = fakeGithub();
+      gh.addRun(SHA1, { "genclass-races": makeZip([{ name: "t-abc-s1.json", data: small }, ...Array.from({ length: n }, (_, i) => ({ name: `report-${i}.json`, data: big }))]) });
+      return reading(gh);
+    };
+    expect((await many(199)).incomplete).toBe(false);
+    expect((await many(200)).incomplete).toBe(true);
+    // named as the fixture names a race file (a test's slug, its id, the seed, and the attempt of a retry)
+    for (const name of ["checkout-places-one-order-0a1b2c-s2.json", "genclass/checkout-places-one-order-0a1b2c-s12-r1.json", "T-ABC-S3.JSON"]) {
+      const ci = await read1(name);
+      expect(ci.inputs.find((i) => i.name === `genclass-races/${name}`), name).toMatchObject({ error: "not read: larger than 64 KB" });
+      expect(ci.incomplete, name).toBe(true);
+    }
+  });
+
+  it("through the webhook: a large reporter file next to race files in which nothing is flagged leaves the check a success; an oversized race file does not", async () => {
+    const big = JSON.stringify({ suites: [], pad: "x".repeat(120 * 1024) });
+    const clean = [{ name: "checkout-0a1b2c-s1.json", data: races("checkout.spec.ts > checkout > places one order", 1, []) }, { name: "checkout-0a1b2c-s2.json", data: races("checkout.spec.ts > checkout > places one order", 2, []) }];
+    for (const [name, conclusion] of [["results.json", "success"], ["search-9f8e7d-s1.json", "neutral"]] as const) {
+      const { env } = githubSetup();
+      const gh = fakeGithub();
+      await deliver(env, "installation", installationCreated(), { fetch: gh.fetch });
+      await pullRequest(env, gh, "opened", 12, SHA1);
+      const run = gh.addRun(SHA1, { "genclass-races": makeZip([...clean, { name, data: big }]) });
+      expect(await result(await deliver(env, "workflow_run", runEvent(run.id, SHA1), { fetch: gh.fetch })), name).toBe("nothing flagged");
+      const check = gh.checksAt(SHA1).at(-1);
+      expect(check.output.title, name).toBe("Nothing flagged in 1 test");
+      expect(check, name).toMatchObject({ status: "completed", conclusion });
+      // either way the report lists the file with why it was not read
+      expect(check.output.text, name).toContain(`\`genclass-races/${name}\``);
+      expect(check.output.text, name).toContain("not read: larger than 64 KB");
+    }
   });
 });
 
@@ -455,7 +703,7 @@ describe("github app: no address in a race file's text reaches GitHub as a link 
     const merged = await mergeFindings(emptyState(), summary, SHA);
     // a note carries a workflow's name, which a fork chooses
     const notes = ['The artifacts of the workflow run "e2e https://evil.example www.evil.example" could not be listed.'];
-    const m: ReviewModel = { repo: "acme/shop", number: 12, headSha: SHA, mention: "genclass-dev", ci: { state: "ready", runs: [], artifacts: [{ name: "genclass-races", runId: 1, files: 2 }], inputs, notes }, summary, findings: merged.view, production: null, settings: DEFAULT_SETTINGS, warnings: [], links: LINKS };
+    const m: ReviewModel = { repo: "acme/shop", number: 12, headSha: SHA, mention: "genclass-dev", ci: { state: "ready", incomplete: true, unfinished: false, runs: [], artifacts: [{ name: "genclass-races", runId: 1, files: 2 }], inputs, notes }, summary, findings: merged.view, production: null, settings: DEFAULT_SETTINGS, warnings: [], links: LINKS };
     return { m, state: merged.state, inputs };
   }
 

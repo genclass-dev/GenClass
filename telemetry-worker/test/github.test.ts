@@ -1,13 +1,16 @@
 // The GitHub App end to end, through the worker's real handler: signed webhook deliveries in, calls to a fake GitHub
 // out, with the D1 migrations under node:sqlite (docs/github-app/README.md; src/github/*).
-import { beforeEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handle } from "../src/collector.js";
+import worker from "../src/index.js";
 import { limitedFor, publicDownloadUrl } from "../src/github/api.js";
 import { verifyGithubSignature } from "../src/github/http.js";
 import { parseState } from "../src/github/review.js";
-import { githubLogin, githubSweep, JOB_MS } from "../src/github/handlers.js";
+import { githubLogin, githubSweep, JOB_MS, SWEEP_CRON, SWEEP_ROWS } from "../src/github/handlers.js";
 import {
   claimDelivery,
+  claimReview,
   githubRetention,
   OUTSIDE_REVIEWS_PER_HOUR,
   PENDING_ASKED,
@@ -19,6 +22,7 @@ import {
   releaseLease,
   REVIEWS_PER_HOUR,
   REVIEWS_PER_PR,
+  savePr,
   takeLease,
 } from "../src/github/store.js";
 import { advance, call, createApp, detection, now, ORIGIN, resetClock, sendBatch, setPlan, signedIn } from "./account-helpers.js";
@@ -853,7 +857,9 @@ describe("github app: a check that waits is always finished (src/github/handlers
     expect(gh.checksAt(SHA2)[0].conclusion).toBeUndefined();
     expect(gh.checksAt(SHA2)[0].output.title).toBe("Hourly review limit reached");
     expect(gh.checksAt(SHA2)[0].output.summary).toContain("limit of 120 reviews an hour");
-    expect(gh.checksAt(SHA2)[0].output.summary).toContain("after 13:00 UTC");
+    expect(gh.checksAt(SHA2)[0].output.summary).toContain("They are read when someone replies `@genclass-dev review` after 13:00 UTC, and within a day otherwise.");
+    // GitHub offers no Re-run on a check in progress, so this one does not tell anyone to use it
+    expect(gh.checksAt(SHA2)[0].output.summary).not.toContain("re-run");
     expect(stateOf(sql)).toMatchObject({ waiting: SHA2, held: true });
     expect(sql.rows("SELECT due FROM github_prs")[0]!.due).not.toBeNull();
     // the same event again: the check already says it, nothing is written twice
@@ -1241,7 +1247,7 @@ describe("github app: review budgets (docs/github-app/README.md, \"Limits\")", (
     expect(usage(sql)).toEqual({ reviews: 2, outside: 1 });
     // outsiders' pull requests have had their half
     sql.db.prepare("UPDATE github_usage SET reviews = ?, outside = ?").run(OUTSIDE_REVIEWS_PER_HOUR, OUTSIDE_REVIEWS_PER_HOUR);
-    expect(await result(await pullRequest(env, gh, "synchronize", 20, SHA3, fork(SHA3)))).toBe("over the hourly budget");
+    expect(await result(await pullRequest(env, gh, "synchronize", 20, SHA3, fork(SHA3)))).toBe("over the hourly budget for outside authors");
     expect(gh.checksAt(SHA3)).toEqual([]);
     // a member's pull request is reviewed all the same
     expect(await result(await pullRequest(env, gh, "opened", 13, SHA3))).toBe("no race files");
@@ -1250,11 +1256,112 @@ describe("github app: review budgets (docs/github-app/README.md, \"Limits\")", (
 
     // pushes stop at their share; a test run that uploaded race files and a person who asks do not
     sql.db.prepare("UPDATE github_usage SET reviews = ?, outside = 0").run(PUSH_REVIEWS_PER_HOUR);
-    expect(await result(await pullRequest(env, gh, "synchronize", 13, SHA2))).toBe("over the hourly budget");
+    expect(await result(await pullRequest(env, gh, "synchronize", 13, SHA2))).toBe("over the hourly budget for pushes");
     const run = gh.addRun(SHA2);
     expect(await result(await deliver(env, "workflow_run", runEvent(run.id, SHA2), { fetch: gh.fetch }))).toBe("findings");
     expect(await result(await deliver(env, "issue_comment", commentEvent(13, "/genclass review"), { fetch: gh.fetch }))).toBe("findings");
     expect(Number(usage(sql).reviews)).toBeGreaterThan(PUSH_REVIEWS_PER_HOUR);
+  });
+
+  it("claimReview says which limit refused: the installation's hour before a share of it, and outsiders' share last", async () => {
+    const { env, sql } = githubSetup();
+    const db = env.DB!;
+    const set = (reviews: number, outside: number) => sql.db.prepare("UPDATE github_usage SET reviews = ?, outside = ?").run(reviews, outside);
+    expect(await claimReview(db, INSTALLATION, now())).toBe("ok");
+    expect(await claimReview(db, INSTALLATION, now(), PUSH_REVIEWS_PER_HOUR, true)).toBe("ok");
+    expect(sql.rows("SELECT reviews, outside FROM github_usage")).toEqual([{ reviews: 2, outside: 1 }]);
+    set(OUTSIDE_REVIEWS_PER_HOUR, OUTSIDE_REVIEWS_PER_HOUR);
+    expect(await claimReview(db, INSTALLATION, now(), REVIEWS_PER_HOUR, true)).toBe("outside");
+    expect(await claimReview(db, INSTALLATION, now(), PUSH_REVIEWS_PER_HOUR, true)).toBe("outside");
+    expect(await claimReview(db, INSTALLATION, now(), REVIEWS_PER_HOUR, false)).toBe("ok");
+    set(PUSH_REVIEWS_PER_HOUR, 0);
+    expect(await claimReview(db, INSTALLATION, now(), PUSH_REVIEWS_PER_HOUR)).toBe("share");
+    expect(await claimReview(db, INSTALLATION, now(), REVIEWS_PER_HOUR)).toBe("ok");
+    set(REVIEWS_PER_HOUR, OUTSIDE_REVIEWS_PER_HOUR);
+    // the whole hour is used up: that is the limit named, whatever share the caller asked under
+    expect(await claimReview(db, INSTALLATION, now(), REVIEWS_PER_HOUR)).toBe("hour");
+    expect(await claimReview(db, INSTALLATION, now(), PUSH_REVIEWS_PER_HOUR)).toBe("hour");
+    expect(await claimReview(db, INSTALLATION, now(), REVIEWS_PER_HOUR, true)).toBe("hour");
+    // a refusal counts nothing
+    expect(sql.rows("SELECT reviews, outside FROM github_usage")).toEqual([{ reviews: REVIEWS_PER_HOUR, outside: OUTSIDE_REVIEWS_PER_HOUR }]);
+  });
+
+  it("what is written about an hourly limit names the limit that stopped the review: 60 for outside authors and 90 for pushes are not called 120", async () => {
+    const FAIL_ON = "check:\n  fail_on: reproducible\n";
+    // an outsider's pull request, its check in progress while its test run is going
+    const out = await reviewed({}, FAIL_ON);
+    const mallory = { id: 666, login: "mallory", type: "User" };
+    const fork = { author_association: "NONE", user: mallory, head: { sha: SHA2, ref: "p", repo: { id: 99001, full_name: "mallory/shop" } } };
+    out.gh.runs.get(REPO.full_name)!.push({ id: 6001, head_sha: SHA2, status: "in_progress", conclusion: null });
+    expect(await result(await pullRequest(out.env, out.gh, "opened", 20, SHA2, fork))).toBe("waiting for the test run");
+    expect(out.gh.checksAt(SHA2)[0]).toMatchObject({ status: "in_progress" });
+    // pull requests by outside authors have had their 60 this hour; the installation has had 60 of its 120
+    out.sql.db.prepare("UPDATE github_usage SET reviews = ?, outside = ?").run(OUTSIDE_REVIEWS_PER_HOUR, OUTSIDE_REVIEWS_PER_HOUR);
+    const run = out.gh.runs.get(REPO.full_name)!.find((r) => r.id === 6001)!;
+    run.status = "completed";
+    run.conclusion = "success";
+    run.artifacts = { "genclass-races": racesZip() };
+    expect(await result(await deliver(out.env, "workflow_run", runEvent(6001, SHA2), { fetch: out.gh.fetch }))).toBe("over the hourly budget for outside authors");
+    const check = out.gh.checksAt(SHA2)[0];
+    expect(check).toMatchObject({ status: "in_progress" });
+    expect(check.output.title).toBe("Hourly review limit reached");
+    expect(check.output.summary).toContain("In this installation, pull requests by authors from outside the repository reached the app's limit of 60 reviews an hour, so this commit's race files have not been read yet.");
+    expect(check.output.summary).not.toContain("120");
+    expect(check.output.summary).not.toContain("re-run");
+    // the author asks: the reply names the same limit
+    const said = out.gh.posted(20).length;
+    const ask = commentEvent(20, "@genclass-dev review", { user: mallory, association: "NONE", issue: { user: { id: 666, login: "mallory" } } });
+    expect(await result(await deliver(out.env, "issue_comment", ask, { fetch: out.gh.fetch }))).toBe("over the hourly budget for outside authors");
+    expect(out.gh.posted(20)).toHaveLength(said + 1);
+    expect(out.gh.posted(20).at(-1)).toContain("In this installation, pull requests by authors from outside the repository reached the app's limit of 60 reviews an hour, so this commit's race files were not read. Ask again after 13:00 UTC.");
+    expect(out.gh.posted(20).at(-1)).not.toContain("120");
+    // a member's pull request is still reviewed in the same hour: the installation had not reached anything
+    expect(await result(await pullRequest(out.env, out.gh, "opened", 13, SHA3))).toBe("waiting for the test run");
+
+    // a pull_request event refused at the share pushes have, while a check waits on the same commit
+    const push = await reviewed({}, FAIL_ON);
+    push.gh.runs.get(REPO.full_name)!.push({ id: 6001, head_sha: SHA2, status: "in_progress", conclusion: null });
+    expect(await result(await pullRequest(push.env, push.gh, "synchronize", 12, SHA2))).toBe("waiting for the test run");
+    push.sql.db.prepare("UPDATE github_usage SET reviews = ?, outside = 0").run(PUSH_REVIEWS_PER_HOUR);
+    expect(await result(await pullRequest(push.env, push.gh, "ready_for_review", 12, SHA2))).toBe("over the hourly budget for pushes");
+    const held = push.gh.checksAt(SHA2)[0];
+    expect(held).toMatchObject({ status: "in_progress" });
+    expect(held.output.summary).toContain("In this installation, reviews started by pushes reached the app's limit of 90 an hour, so this commit's race files have not been read yet.");
+    expect(held.output.summary).toContain("They are read when this commit's test run finishes with race files, or when someone replies `@genclass-dev review`, and within a day otherwise.");
+    expect(held.output.summary).not.toContain("120");
+    // and that is what happens: the test run's own review is not under that share
+    const r2 = push.gh.runs.get(REPO.full_name)!.find((r) => r.id === 6001)!;
+    r2.status = "completed";
+    r2.conclusion = "success";
+    r2.artifacts = { "genclass-races": racesZip() };
+    expect(await result(await deliver(push.env, "workflow_run", runEvent(6001, SHA2), { fetch: push.gh.fetch }))).toBe("findings");
+    expect(push.gh.checksAt(SHA2)).toHaveLength(1);
+    expect(push.gh.checksAt(SHA2)[0]).toMatchObject({ status: "completed", conclusion: "failure" });
+  });
+
+  it("a person's request that arrives while a push is being reviewed is counted as a request, not under the share pushes have", async () => {
+    const { env, gh, sql } = await reviewed();
+    const key = { repoId: REPO.id, number: 12, installationId: INSTALLATION };
+    gh.addRun(SHA2);
+    // the installation has had 95 of its 120 reviews this hour: over what pushes may start, under what a person may ask for
+    sql.db.prepare("UPDATE github_usage SET reviews = 95").run();
+    let asked = false;
+    const fetch: typeof gh.fetch = async (u, i) => {
+      // while the push's pass asks for the pull request, someone with write access comments `review`: the lease is taken, so it is marked
+      if (!asked && u.endsWith("/pulls/12")) {
+        asked = true;
+        expect(await takeLease(env.DB!, { ...key, asked: true }, now())).toBeNull();
+      }
+      return gh.fetch(u, i);
+    };
+    // the push's own pass is refused at 90; the pass that runs for the person is reviewed, as it would have been by itself
+    expect(await result(await pullRequest(env, { ...gh, fetch }, "synchronize", 12, SHA2))).toBe("findings");
+    expect(asked).toBe(true);
+    expect(gh.checksAt(SHA2)).toHaveLength(1);
+    expect(gh.checksAt(SHA2)[0].output.title).toBe("2 findings, 1 reproducible");
+    expect(sql.rows("SELECT reviews FROM github_usage")).toEqual([{ reviews: 96 }]);
+    // without a request the push stays refused
+    expect(await result(await pullRequest(env, gh, "synchronize", 12, SHA3))).toBe("over the hourly budget for pushes");
   });
 });
 
@@ -1304,6 +1411,166 @@ describe("github app: evidence that cannot be read (src/github/review.ts header)
     expect(gh.checksAt(SHA1)[0].output.summary).toContain('Note: The artifact "genclass-1" could not be downloaded.');
     expect(gh.summary(12)).toContain("| 1 | New | Duplicate submit · `POST /api/orders` |");
     expect(gh.summary(12)).not.toContain("Test not in this run");
+  });
+
+  it("fail_on: a first read in which an artifact could not be downloaded gives no result: the check stays in progress with the note, nothing of the read is kept, and the review is owed", async () => {
+    const { env, sql } = githubSetup();
+    let failing = true;
+    // the second artifact of a run (the fake numbers a run's artifacts run id * 100, + 1, ...)
+    const gh = fakeGithub({ answer: (c) => (failing && /\/actions\/artifacts\/\d+01\/zip$/.test(c.path) ? new Response("{}", { status: 500 }) : undefined) });
+    gh.settings.set(REPO.full_name, FAIL_ON);
+    await deliver(env, "installation", installationCreated(), { fetch: gh.fetch });
+    await pullRequest(env, gh, "opened", 12, SHA1);
+    // two shards: the reproducible finding is in the second, the one that cannot be downloaded
+    const run = gh.addRun(SHA1, {
+      "genclass-1": racesZip({ "c.json": raceFile("search-1.json"), "d.json": raceFile("search-2.json") }),
+      "genclass-2": racesZip({ "a.json": raceFile("checkout-1.json"), "b.json": raceFile("checkout-2.json") }),
+    });
+    const state = () => parseState(String(sql.rows("SELECT state FROM github_prs")[0]!.state));
+    expect(await result(await deliver(env, "workflow_run", runEvent(run.id, SHA1), { fetch: gh.fetch }))).toBe("race files not all read");
+    // not "1 finding, 0 reproducible", neutral, which would pass a required check on a shard nobody read
+    expect(gh.checksAt(SHA1)).toHaveLength(1);
+    expect(gh.checksAt(SHA1)[0]).toMatchObject({ status: "in_progress" });
+    expect(gh.checksAt(SHA1)[0].conclusion).toBeUndefined();
+    expect(gh.checksAt(SHA1)[0].output.title).toBe("Not all race files could be read yet");
+    expect(gh.checksAt(SHA1)[0].output.summary).toContain('Note: The artifact "genclass-2" could not be downloaded.');
+    expect(gh.checksAt(SHA1)[0].output.summary).toContain("They are read again within a day, or at once when someone replies `@genclass-dev review`");
+    // nothing of the part that was read is kept or commented: the next read is a first read again
+    expect(gh.posted(12)).toEqual([]);
+    expect(state()).toMatchObject({ evidence: null, findings: [], waiting: SHA1, held: true });
+    expect(sql.rows("SELECT due IS NOT NULL AS due, lease FROM github_prs")).toEqual([{ due: 1, lease: null }]);
+    expect(sql.rows("SELECT * FROM github_repo_facts WHERE evidence IS NOT NULL")).toEqual([]);
+    // the same again (another run of the commit ends, a redelivery): still no result, and nothing written twice
+    const mark = gh.calls.length;
+    expect(await result(await deliver(env, "workflow_run", runEvent(run.id, SHA1), { fetch: gh.fetch }))).toBe("race files not all read");
+    expect(gh.calls.slice(mark).filter((c) => c.method !== "GET" && !c.path.includes("access_tokens"))).toEqual([]);
+    expect(gh.checksAt(SHA1)[0]).toMatchObject({ status: "in_progress" });
+    // the sweep reads again an hour later. The artifact can be downloaded now: the result is the commit's, and it fails
+    failing = false;
+    advance(3_700_000);
+    expect(await githubSweep(env, { now, fetch: gh.fetch })).toBe(1);
+    expect(gh.checksAt(SHA1)).toHaveLength(1);
+    expect(gh.checksAt(SHA1)[0]).toMatchObject({ status: "completed", conclusion: "failure" });
+    expect(gh.checksAt(SHA1)[0].output.title).toBe("2 findings, 1 reproducible");
+    expect(state()).toMatchObject({ evidence: SHA1, waiting: null, held: false });
+    expect(sql.rows("SELECT due FROM github_prs")[0]!.due).toBeNull();
+  });
+
+  it("fail_on: a read that is not whole ends neutral, with the note, for a person who asks and for the sweep; one whose part already fails the check fails it at once", async () => {
+    // a person asks while the artifact still cannot be downloaded
+    const asked = githubSetup();
+    const gh = fakeGithub({ answer: (c) => (/\/actions\/artifacts\/\d+01\/zip$/.test(c.path) ? new Response("{}", { status: 500 }) : undefined) });
+    gh.settings.set(REPO.full_name, FAIL_ON);
+    await deliver(asked.env, "installation", installationCreated(), { fetch: gh.fetch });
+    await pullRequest(asked.env, gh, "opened", 12, SHA1);
+    const shards = () => ({
+      "genclass-1": racesZip({ "c.json": raceFile("search-1.json"), "d.json": raceFile("search-2.json") }),
+      "genclass-2": racesZip({ "a.json": raceFile("checkout-1.json"), "b.json": raceFile("checkout-2.json") }),
+    });
+    const run = gh.addRun(SHA1, shards());
+    expect(await result(await deliver(asked.env, "workflow_run", runEvent(run.id, SHA1), { fetch: gh.fetch }))).toBe("race files not all read");
+    expect(await result(await deliver(asked.env, "issue_comment", commentEvent(12, "@genclass-dev review"), { fetch: gh.fetch }))).toBe("findings");
+    expect(gh.checksAt(SHA1)).toHaveLength(1);
+    expect(gh.checksAt(SHA1)[0]).toMatchObject({ status: "completed", conclusion: "neutral" });
+    expect(gh.checksAt(SHA1)[0].output.title).toBe("1 finding, 0 reproducible");
+    expect(gh.checksAt(SHA1)[0].output.summary).toContain('Note: The artifact "genclass-2" could not be downloaded.');
+    expect(asked.sql.rows("SELECT due FROM github_prs")[0]!.due).toBeNull();
+    expect(parseState(String(asked.sql.rows("SELECT state FROM github_prs")[0]!.state))).toMatchObject({ evidence: SHA1, waiting: null, held: false });
+
+    // nothing at all could be downloaded, on a commit whose check was waiting for its test run
+    let down = false;
+    const none = githubSetup();
+    const g2 = fakeGithub({ answer: (c) => (down && /\/actions\/artifacts\/\d+\/zip$/.test(c.path) ? new Response("{}", { status: 500 }) : undefined) });
+    g2.settings.set(REPO.full_name, FAIL_ON);
+    await deliver(none.env, "installation", installationCreated(), { fetch: g2.fetch });
+    await pullRequest(none.env, g2, "opened", 12, SHA1);
+    const first = g2.addRun(SHA1);
+    expect(await result(await deliver(none.env, "workflow_run", runEvent(first.id, SHA1), { fetch: g2.fetch }))).toBe("findings");
+    down = true;
+    g2.runs.get(REPO.full_name)!.push({ id: 6001, head_sha: SHA2, status: "in_progress", conclusion: null });
+    expect(await result(await pullRequest(none.env, g2, "synchronize", 12, SHA2))).toBe("waiting for the test run");
+    const r2 = g2.runs.get(REPO.full_name)!.find((r) => r.id === 6001)!;
+    r2.status = "completed";
+    r2.conclusion = "success";
+    r2.artifacts = { "genclass-races": racesZip() };
+    expect(await result(await deliver(none.env, "workflow_run", runEvent(6001, SHA2), { fetch: g2.fetch }))).toBe("race files not all read");
+    // not "No race files for this commit", neutral: the commit has race files, and they were not read
+    expect(g2.checksAt(SHA2)).toHaveLength(1);
+    expect(g2.checksAt(SHA2)[0]).toMatchObject({ status: "in_progress" });
+    expect(g2.checksAt(SHA2)[0].output.title).toBe("Not all race files could be read yet");
+    expect(none.sql.rows("SELECT due IS NOT NULL AS due FROM github_prs")).toEqual([{ due: 1 }]);
+    // the sweep ends the wait with what there is: still nothing, so neutral, and the note says why
+    advance(3_700_000);
+    expect(await githubSweep(none.env, { now, fetch: g2.fetch })).toBe(1);
+    expect(g2.checksAt(SHA2)).toHaveLength(1);
+    expect(g2.checksAt(SHA2)[0]).toMatchObject({ status: "completed", conclusion: "neutral" });
+    expect(g2.checksAt(SHA2)[0].output.title).toBe("No race files for this commit");
+    expect(g2.checksAt(SHA2)[0].output.summary).toContain('Note: The artifact "genclass-races" could not be downloaded.');
+    expect(none.sql.rows("SELECT due FROM github_prs")[0]!.due).toBeNull();
+
+    // the part that was read holds a reproducible finding: that is a result, and it is given at once
+    const fails = githubSetup();
+    const g3 = fakeGithub({ answer: (c) => (/\/actions\/artifacts\/\d+00\/zip$/.test(c.path) ? new Response("{}", { status: 500 }) : undefined) });
+    g3.settings.set(REPO.full_name, FAIL_ON);
+    await deliver(fails.env, "installation", installationCreated(), { fetch: g3.fetch });
+    await pullRequest(fails.env, g3, "opened", 12, SHA1);
+    const r3 = g3.addRun(SHA1, shards());
+    expect(await result(await deliver(fails.env, "workflow_run", runEvent(r3.id, SHA1), { fetch: g3.fetch }))).toBe("findings");
+    expect(g3.checksAt(SHA1)[0]).toMatchObject({ status: "completed", conclusion: "failure" });
+    expect(g3.checksAt(SHA1)[0].output.title).toBe("1 finding, 1 reproducible");
+    expect(fails.sql.rows("SELECT due FROM github_prs")[0]!.due).toBeNull();
+
+    // without fail_on nothing is held up: the read in part is neutral at once, as before
+    const plain = githubSetup();
+    const g4 = fakeGithub({ answer: (c) => (/\/actions\/artifacts\/\d+01\/zip$/.test(c.path) ? new Response("{}", { status: 500 }) : undefined) });
+    await deliver(plain.env, "installation", installationCreated(), { fetch: g4.fetch });
+    await pullRequest(plain.env, g4, "opened", 12, SHA1);
+    const r4 = g4.addRun(SHA1, shards());
+    expect(await result(await deliver(plain.env, "workflow_run", runEvent(r4.id, SHA1), { fetch: g4.fetch }))).toBe("findings");
+    expect(g4.checksAt(SHA1).at(-1)).toMatchObject({ status: "completed", conclusion: "neutral" });
+  });
+
+  it("an artifact with the name that has expired is race files that were not read: under fail_on a first read gives no result, and on a second read its findings stay as they were", async () => {
+    // first read, one of two shards already expired
+    const { env, sql } = githubSetup();
+    const gh = fakeGithub();
+    gh.settings.set(REPO.full_name, FAIL_ON);
+    await deliver(env, "installation", installationCreated(), { fetch: gh.fetch });
+    await pullRequest(env, gh, "opened", 12, SHA1);
+    const run = gh.addRun(SHA1, {
+      "genclass-1": racesZip({ "c.json": raceFile("search-1.json"), "d.json": raceFile("search-2.json") }),
+      "genclass-2": racesZip({ "a.json": raceFile("checkout-1.json"), "b.json": raceFile("checkout-2.json") }),
+    });
+    run.expired = ["genclass-2"];
+    expect(await result(await deliver(env, "workflow_run", runEvent(run.id, SHA1), { fetch: gh.fetch }))).toBe("race files not all read");
+    expect(gh.checksAt(SHA1)[0]).toMatchObject({ status: "in_progress" });
+    expect(gh.checksAt(SHA1)[0].output.summary).toContain('Note: The artifact "genclass-2" has expired, so its race files could not be read.');
+    expect(sql.rows("SELECT due IS NOT NULL AS due FROM github_prs")).toEqual([{ due: 1 }]);
+    // a person who asks gets the result of what can be read, neutral, with the note
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev review"), { fetch: gh.fetch }))).toBe("findings");
+    expect(gh.checksAt(SHA1)[0]).toMatchObject({ status: "completed", conclusion: "neutral" });
+    expect(gh.checksAt(SHA1)[0].output.summary).toContain('Note: The artifact "genclass-2" has expired, so its race files could not be read.');
+
+    // both shards read and the check fails; later the shard with the reproducible finding expires and the check is run again
+    const again = githubSetup();
+    const g2 = fakeGithub();
+    g2.settings.set(REPO.full_name, FAIL_ON);
+    await deliver(again.env, "installation", installationCreated(), { fetch: g2.fetch });
+    await pullRequest(again.env, g2, "opened", 12, SHA1);
+    const r2 = g2.addRun(SHA1, {
+      "genclass-1": racesZip({ "c.json": raceFile("search-1.json"), "d.json": raceFile("search-2.json") }),
+      "genclass-2": racesZip({ "a.json": raceFile("checkout-1.json"), "b.json": raceFile("checkout-2.json") }),
+    });
+    expect(await result(await deliver(again.env, "workflow_run", runEvent(r2.id, SHA1), { fetch: g2.fetch }))).toBe("findings");
+    expect(g2.checksAt(SHA1)[0]).toMatchObject({ conclusion: "failure" });
+    r2.expired = ["genclass-2"];
+    expect(await result(await deliver(again.env, "check_run", rerun(SHA1), { fetch: g2.fetch }))).toBe("findings");
+    // the expired shard's finding is not "Test not in this run", and the check that failed still fails
+    expect(g2.checksAt(SHA1)).toHaveLength(1);
+    expect(g2.checksAt(SHA1)[0]).toMatchObject({ status: "completed", conclusion: "failure" });
+    expect(g2.checksAt(SHA1)[0].output.title).toBe("2 findings, 1 reproducible");
+    expect(g2.summary(12)).toContain("| New | Duplicate submit · `POST /api/orders` |");
+    expect(g2.summary(12)).not.toContain("Test not in this run");
   });
 
   it("a commit whose artifacts could be read only in part is never a success", async () => {
@@ -1532,6 +1799,122 @@ describe("github app: limits", () => {
     expect(await prRow(env.DB!, REPO.id, 12)).toBeNull();
     // what was done once for the repository is not swept: it is not done again a month later
     expect(sql.rows("SELECT repo_id, evidence IS NOT NULL AS evidence, intro IS NOT NULL AS intro FROM github_repo_facts")).toEqual([{ repo_id: REPO.id, evidence: 1, intro: 1 }]);
+  });
+});
+
+describe("github app: the sweep's own limits and its cron triggers (docs/github-app/SETUP.md, \"Running it\")", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  /** `n` pull requests of the repository that have been owed a review for hours, number 1 the longest. GitHub knows none of them. */
+  async function owed(n: number) {
+    const s = githubSetup();
+    const gh = fakeGithub();
+    await deliver(s.env, "installation", installationCreated(), { fetch: gh.fetch });
+    const t0 = now().getTime();
+    for (let i = 1; i <= n; i++) {
+      s.sql.db.prepare("INSERT INTO github_prs (repo_id, number, installation_id, due, updated) VALUES (?, ?, ?, ?, ?)").run(REPO.id, i, INSTALLATION, new Date(t0 + i * 1000).toISOString(), now().toISOString());
+    }
+    advance(5 * 3_600_000);
+    const due = () => s.sql.rows("SELECT number FROM github_prs WHERE due IS NOT NULL AND due < ? ORDER BY number", new Date(now().getTime() - 3_600_000).toISOString()).map((r) => r.number);
+    return { ...s, gh, due };
+  }
+
+  it("one run looks at 20 pull requests at most, the longest owed first; the rest wait for the next run", async () => {
+    const { env, gh, due } = await owed(25);
+    expect(SWEEP_ROWS).toBe(20);
+    expect(await githubSweep(env, { now, fetch: gh.fetch })).toBe(20);
+    // (GitHub has no such pull request: nothing is owed for the ones looked at)
+    expect(due()).toEqual([21, 22, 23, 24, 25]);
+    expect(new Set(gh.calls.map((c) => /\/pulls\/(\d+)$/.exec(c.path)?.[1]).filter((x) => x !== undefined)).size).toBe(20);
+    expect(await githubSweep(env, { now, fetch: gh.fetch })).toBe(5);
+    expect(due()).toEqual([]);
+    expect(await githubSweep(env, { now, fetch: gh.fetch })).toBe(0);
+  });
+
+  it("a run ends at the first failure that is not GitHub's answer, and what it did not look at stays owed as it was; a failure of GitHub's does not end it", async () => {
+    const { env, sql, gh, due } = await owed(5);
+    const before = sql.rows("SELECT number, due FROM github_prs ORDER BY number");
+    // the database refuses the second pull request's lease, as it does once an invocation has used up its statements
+    let leases = 0;
+    const db = env.DB!;
+    const failing: typeof db = {
+      ...db,
+      prepare: (q) => {
+        if (/^INSERT INTO github_prs/.test(q) && ++leases === 2) throw new Error("D1_ERROR: Too many API requests by single worker invocation.");
+        return db.prepare(q);
+      },
+    };
+    expect(await githubSweep({ ...env, DB: failing }, { now, fetch: gh.fetch })).toBe(2);
+    expect(leases).toBe(2);
+    // the first was dealt with; the second goes to the back of the line; the third, fourth and fifth were not touched
+    const after = sql.rows("SELECT number, due FROM github_prs ORDER BY number");
+    expect(after[0]).toEqual({ number: 1, due: null });
+    expect(after[1]).toEqual({ number: 2, due: now().toISOString() });
+    expect(after.slice(2)).toEqual(before.slice(2));
+    expect(gh.calls.some((c) => /\/pulls\/[345]$/.test(c.path))).toBe(false);
+    // the next run goes on with what is left
+    expect(await githubSweep(env, { now, fetch: gh.fetch })).toBe(3);
+    expect(due()).toEqual([]);
+
+    // GitHub failing for one pull request is that pull request's failure: the run goes on to the others
+    const other = await owed(5);
+    const flaky = fakeGithub({ answer: (c) => (c.path.endsWith("/pulls/2") ? new Response("{}", { status: 502 }) : undefined) });
+    expect(await githubSweep(other.env, { now, fetch: flaky.fetch })).toBe(5);
+    expect(other.sql.rows("SELECT number FROM github_prs WHERE due IS NOT NULL").map((r) => r.number)).toEqual([2]);
+  });
+
+  it("two cron triggers: the one every 20 minutes runs the owed reviews and nothing else; the daily one, and any other, runs the retention sweeps and the owed reviews", async () => {
+    // production's configuration names both; a self-hosted collector's keeps the daily one, which runs everything
+    const prod = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+    expect(SWEEP_CRON).toBe("*/20 * * * *");
+    expect(prod).toMatch(/^crons = \["17 3 \* \* \*", "\*\/20 \* \* \* \*"\]$/m);
+    expect(prod).toContain(`"${SWEEP_CRON}"`);
+    expect(readFileSync(new URL("../wrangler.selfhost.toml", import.meta.url), "utf8")).toMatch(/^crons = \["17 3 \* \* \*"\]$/m);
+
+    /** A pull request whose check is in progress on a commit that starts no workflow (only the sweep ends that), and rows the daily retention deletes. */
+    const scene = async () => {
+      const s = await reviewed({}, "check:\n  fail_on: any\n");
+      expect(await result(await pullRequest(s.env, s.gh, "synchronize", 12, SHA2))).toBe("waiting for the test run");
+      s.sql.db.prepare("INSERT INTO daily (token, day, metric, key, count) VALUES ('gc_x', '2020-01-01', 'sessions', '', 1)").run();
+      s.sql.db.prepare("INSERT INTO github_deliveries (id, event, received, done) VALUES ('old-delivery', 'ping', '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:01.000Z')").run();
+      advance(3_700_000);
+      // the handler works with the real clock and the real fetch: both stand in here
+      vi.useFakeTimers({ toFake: ["Date"], now: now() });
+      vi.stubGlobal("fetch", (u: unknown, i?: RequestInit) => s.gh.fetch(String(u), i));
+      const old = () => [Number(s.sql.rows("SELECT COUNT(*) AS n FROM daily")[0]!.n), Number(s.sql.rows("SELECT COUNT(*) AS n FROM github_deliveries WHERE id = 'old-delivery'")[0]!.n)];
+      const run = async (event: unknown) => {
+        const waits: Promise<unknown>[] = [];
+        await worker.scheduled(event as { cron?: string }, s.env, { waitUntil: (p) => waits.push(p) });
+        await Promise.all(waits);
+      };
+      return { ...s, old, run };
+    };
+
+    const sweep = await scene();
+    expect(sweep.gh.checksAt(SHA2)[0]).toMatchObject({ status: "in_progress" });
+    await sweep.run({ cron: SWEEP_CRON, scheduledTime: now().getTime() });
+    // the owed review ran: the check that was in progress is finished
+    expect(sweep.gh.checksAt(SHA2)).toHaveLength(1);
+    expect(sweep.gh.checksAt(SHA2)[0]).toMatchObject({ status: "completed", conclusion: "neutral" });
+    expect(sweep.sql.rows("SELECT due FROM github_prs")[0]!.due).toBeNull();
+    // and nothing else did: what the daily retention deletes is still there
+    expect(sweep.old()).toEqual([1, 1]);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+
+    for (const event of [{ cron: "17 3 * * *" }, {}, null]) {
+      const daily = await scene();
+      await daily.run(event);
+      // (the dashboard's retention is the one looked at: this test's database runs one batch at a time, the sweeps start together)
+      expect(daily.old()[0], JSON.stringify(event)).toBe(0);
+      expect(daily.gh.checksAt(SHA2)[0], JSON.stringify(event)).toMatchObject({ status: "completed", conclusion: "neutral" });
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+      resetClock();
+    }
   });
 });
 
@@ -2034,6 +2417,108 @@ describe("github app: a pause and a review at the same moment (src/github/store.
     expect(state.commentHash).not.toBeNull();
   });
 
+  it("what a person asked for holds for the pass it was asked for: a pass that follows it in the same job runs as the event that arrived meanwhile", async () => {
+    const { env } = githubSetup();
+    const gh = fakeGithub();
+    gh.settings.set(REPO.full_name, "reviews: false\n");
+    await deliver(env, "installation", installationCreated(), { fetch: gh.fetch });
+    expect(await result(await pullRequest(env, gh, "opened", 12, SHA1))).toBe("automatic reviews are off");
+    gh.addRun(SHA1);
+    let marked = false;
+    const fetch: typeof gh.fetch = async (u, i) => {
+      // while the review someone asked for downloads the artifact, an event for the pull request arrives
+      if (!marked && u.endsWith("/zip")) {
+        marked = true;
+        expect(await takeLease(env.DB!, key, now())).toBeNull();
+      }
+      return gh.fetch(u, i);
+    };
+    // the request's pass reviews, though automatic reviews are off; the pass for the event stops at that setting
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev review"), { fetch }))).toBe("automatic reviews are off");
+    expect(marked).toBe(true);
+    expect(gh.checksAt(SHA1)).toHaveLength(1);
+    expect(gh.checksAt(SHA1)[0].output.title).toBe("2 findings, 1 reproducible");
+    // the commit's runs were read once: the second pass did not read them again as if it had been asked for
+    expect(gh.calls.filter((c) => c.method === "GET" && c.path === "/repos/acme/shop/actions/runs")).toHaveLength(1);
+  });
+
+  it("a pause set after someone asked for a review stops that review before it writes", async () => {
+    const { env, gh, sql } = await reviewed();
+    expect(await result(await pullRequest(env, gh, "synchronize", 12, SHA2))).toBe("no race files");
+    gh.addRun(SHA2, { "genclass-races": racesZip({ "n1.json": races("new.spec.ts > n", 1, [{ diagnosis: "stale", op: "GET /api/new" }]), "n2.json": races("new.spec.ts > n", 2, [{ diagnosis: "stale", op: "GET /api/new" }]) }) });
+    gh.permissions.set("grace", "write");
+    const grace = { user: { id: 90, login: "grace", type: "User" }, association: "MEMBER" };
+    const summary = gh.summary(12);
+    let paused = "";
+    const fetch: typeof gh.fetch = async (u, i) => {
+      // while the review grace asked for downloads the artifact, ada pauses the pull request
+      if (!paused && u.endsWith("/zip")) {
+        paused = "…";
+        paused = await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev pause"), { fetch: gh.fetch }));
+      }
+      return gh.fetch(u, i);
+    };
+    // not paused when she asked, so nothing was lifted by asking: the pause holds for her review too
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev review", grace), { fetch }))).toBe("paused on this pull request");
+    expect(paused).toBe("paused");
+    expect(gh.posted(12).at(-1)).toContain("Paused: this pull request is not updated");
+    expect(gh.summary(12)).toBe(summary);
+    expect(gh.checksAt(SHA2)[0].output.title).toBe("No race files for this commit");
+    expect(parseState(String(sql.rows("SELECT state FROM github_prs")[0]!.state)).findings.map((f) => f.n)).toEqual([1, 2]);
+    expect(sql.rows("SELECT paused, lease, pending FROM github_prs")).toEqual([{ paused: 1, lease: null, pending: 0 }]);
+    // asked for while it is paused, by someone with write access: that lifts it, as before
+    expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev review", grace), { fetch: gh.fetch }))).toBe("findings");
+    expect(gh.summary(12)).toContain("GET /api/new");
+  });
+
+  it("a request that was waiting for a running review when the pause was set does not lift the pause: the pass it would have started stops at it", async () => {
+    const { env, gh, sql } = await reviewed();
+    expect(await result(await pullRequest(env, gh, "synchronize", 12, SHA2))).toBe("no race files");
+    const run = gh.addRun(SHA2, { "genclass-races": racesZip({ "n1.json": races("new.spec.ts > n", 1, [{ diagnosis: "stale", op: "GET /api/new" }]), "n2.json": races("new.spec.ts > n", 2, [{ diagnosis: "stale", op: "GET /api/new" }]) }) });
+    const summary = gh.summary(12);
+    const seen: unknown[] = [];
+    let done = false;
+    const fetch: typeof gh.fetch = async (u, i) => {
+      // While the test run's review asks for the pull request: someone with write access asks for a review (the lease
+      // is taken, so the request is marked on it), and then the pull request is paused.
+      if (!done && u.endsWith("/pulls/12")) {
+        done = true;
+        expect(await takeLease(env.DB!, { ...key, asked: true }, now())).toBeNull();
+        seen.push(sql.rows("SELECT pending FROM github_prs")[0]!.pending);
+        expect(await result(await deliver(env, "issue_comment", commentEvent(12, "@genclass-dev pause"), { fetch: gh.fetch }))).toBe("paused");
+        seen.push(sql.rows("SELECT pending FROM github_prs")[0]!.pending);
+      }
+      return gh.fetch(u, i);
+    };
+    expect(await result(await deliver(env, "workflow_run", runEvent(run.id, SHA2), { fetch }))).toBe("paused on this pull request");
+    // the request's mark became an event's when the pause was set
+    expect(seen).toEqual([PENDING_ASKED, PENDING_EVENT]);
+    expect(gh.posted(12).at(-1)).toContain("Paused: this pull request is not updated");
+    expect(gh.summary(12)).toBe(summary);
+    expect(gh.checksAt(SHA2)[0].output.title).toBe("No race files for this commit");
+    expect(sql.rows("SELECT paused, lease, pending FROM github_prs")).toEqual([{ paused: 1, lease: null, pending: 0 }]);
+
+    // in the store: a pause turns a waiting request into an event; a resume, and a request made after the pause, change nothing of that
+    const s = githubSetup();
+    const db = s.env.DB!;
+    const pending = () => s.sql.rows("SELECT pending FROM github_prs")[0]!.pending;
+    await takeLease(db, key, now());
+    expect(await takeLease(db, { ...key, asked: "author" }, now())).toBeNull();
+    expect(pending()).toBe(PENDING_AUTHOR);
+    await savePr(db, REPO.id, 12, { paused: false }, now());
+    expect(pending()).toBe(PENDING_AUTHOR);
+    await savePr(db, REPO.id, 12, { paused: true }, now());
+    expect(pending()).toBe(PENDING_EVENT);
+    expect(await takeLease(db, { ...key, asked: true }, now())).toBeNull();
+    expect(pending()).toBe(PENDING_ASKED);
+    // with nothing waiting a pause marks nothing
+    const idle = githubSetup();
+    const held = await takeLease(idle.env.DB!, key, now());
+    await releaseLease(idle.env.DB!, REPO.id, 12, { lease: held!.lease, due: null });
+    await savePr(idle.env.DB!, REPO.id, 12, { paused: true }, now());
+    expect(idle.sql.rows("SELECT pending, paused FROM github_prs")).toEqual([{ pending: 0, paused: 1 }]);
+  });
+
   it("of two marks on a live lease the stronger stays: a request by someone with write access, then the author's, then an event", async () => {
     const { env, sql } = githubSetup();
     const db = env.DB!;
@@ -2162,6 +2647,144 @@ describe("github app: `issues: merge` (docs/github-app/README.md, \"Settings\")"
     expect(await merge(none.env, none.gh, 12, SHA2)).toBe("closed");
     expect(none.gh.issues).toEqual([]);
     expect(none.sql.rows("SELECT due FROM github_prs")[0]!.due).toBeNull();
+  });
+
+  it("a pull request the review settings leave out is not read at the merge either: nothing is asked about its runs, nothing is counted, and no issue is opened", async () => {
+    const left = [
+      ["issues: merge\nreviews:\n  ignore_authors: [ada]\n", {}, "author not reviewed"],
+      ["issues: merge\nreviews: false\n", {}, "automatic reviews are off"],
+      ["issues: merge\nreviews:\n  branches: [main]\n", { base: { ref: "experiment", repo: { id: REPO.id, full_name: REPO.full_name } } }, "base branch not reviewed"],
+    ] as const;
+    for (const [settings, over, word] of left) {
+      const { env, sql } = githubSetup();
+      const gh = fakeGithub();
+      gh.settings.set(REPO.full_name, settings);
+      await deliver(env, "installation", installationCreated(), { fetch: gh.fetch });
+      // never reviewed while it was open; its test run uploaded race files with a reproducible finding
+      expect(await result(await pullRequest(env, gh, "opened", 12, SHA1, over)), word).toBe(word);
+      gh.addRun(SHA1);
+      const mark = gh.calls.length;
+      const e = pullEvent("closed", 12, SHA1, { state: "closed", merged: true, ...over });
+      gh.pulls.set(`${REPO.full_name}#12`, e.pull_request);
+      expect(await result(await deliver(env, "pull_request", e, { fetch: gh.fetch })), word).toBe("closed");
+      // the pull request and the settings were asked for, and that is all: no run, no artifact, no issue list, no issue
+      expect(gh.calls.slice(mark).filter((c) => c.path.includes("/actions/") || c.path.endsWith("/issues")).map((c) => `${c.method} ${c.path}`), word).toEqual([]);
+      expect(gh.issues, word).toEqual([]);
+      expect(sql.rows("SELECT * FROM github_usage"), word).toEqual([]);
+      expect(sql.rows("SELECT issue, due, closed IS NOT NULL AS closed FROM github_prs"), word).toEqual([{ issue: null, due: null, closed: 1 }]);
+      expect(parseState(String(sql.rows("SELECT state FROM github_prs")[0]!.state)).evidence, word).toBeNull();
+    }
+    // the same pull request under settings that do not leave it out: its race files are read at the merge, and the issue is opened
+    const { env } = githubSetup();
+    const gh = fakeGithub();
+    gh.settings.set(REPO.full_name, "issues: merge\nreviews:\n  ignore_authors: [mallory]\n  branches: [main]\n");
+    await deliver(env, "installation", installationCreated(), { fetch: gh.fetch });
+    expect(await result(await pullRequest(env, gh, "opened", 12, SHA1))).toBe("no race files");
+    gh.addRun(SHA1);
+    expect(await merge(env, gh, 12, SHA1)).toBe("issue opened");
+    expect(gh.issues).toHaveLength(1);
+  });
+
+  it("merged before the last push's workflow runs exist: nothing is decided, the review stays owed, and the sweep opens the issue from the runs that came", async () => {
+    const { env, gh, sql } = await reviewed({}, "issues: merge\n");
+    // the push is reviewed before GitHub has created its runs, and the pull request merges straight away
+    expect(await result(await pullRequest(env, gh, "synchronize", 12, SHA2))).toBe("no race files");
+    expect(await merge(env, gh, 12, SHA2)).toBe("closed");
+    expect(gh.issues).toEqual([]);
+    expect(sql.rows("SELECT due IS NOT NULL AS due, closed IS NOT NULL AS closed FROM github_prs")).toEqual([{ due: 1, closed: 1 }]);
+    expect(stateOf(sql).evidence).toBe(SHA1);
+    // the run comes and finishes with the reproducible finding; its own event finds the pull request closed
+    const run = gh.addRun(SHA2);
+    expect(await result(await deliver(env, "workflow_run", runEvent(run.id, SHA2), { fetch: gh.fetch }))).toBe("no pull request at this commit");
+    expect(gh.issues).toEqual([]);
+    advance(3_700_000);
+    expect(await githubSweep(env, { now, fetch: gh.fetch })).toBe(1);
+    expect(gh.issues).toHaveLength(1);
+    expect(gh.issues[0]!.body).toContain("flagged in its tests at `2222222`");
+    expect(sql.rows("SELECT issue, due FROM github_prs")).toEqual([{ issue: 301, due: null }]);
+
+    // a commit that never gets a run: the sweep decides with what there is, which is nothing, and nothing stays owed
+    const none = await reviewed({}, "issues: merge\n");
+    await pullRequest(none.env, none.gh, "synchronize", 12, SHA2);
+    expect(await merge(none.env, none.gh, 12, SHA2)).toBe("closed");
+    expect(none.sql.rows("SELECT due IS NOT NULL AS due FROM github_prs")).toEqual([{ due: 1 }]);
+    advance(3_700_000);
+    expect(await githubSweep(none.env, { now, fetch: none.gh.fetch })).toBe(1);
+    expect(none.gh.issues).toEqual([]);
+    expect(none.sql.rows("SELECT due FROM github_prs")[0]!.due).toBeNull();
+    expect(await githubSweep(none.env, { now, fetch: none.gh.fetch })).toBe(0);
+  });
+
+  it("merged while one run's race files can be read and another run is still going: nothing is decided or kept from the part, and the sweep decides from all of it", async () => {
+    const clean = () => racesZip({ "a.json": races("other.spec.ts > other", 1, []), "b.json": races("other.spec.ts > other", 2, []) });
+    const finish = (gh: ReturnType<typeof fakeGithub>, id: number, artifacts: Record<string, Uint8Array>) => {
+      const run = gh.runs.get(REPO.full_name)!.find((r) => r.id === id)!;
+      run.status = "completed";
+      run.conclusion = "success";
+      run.artifacts = artifacts;
+    };
+    /** Two workflows upload race files on the new commit. The unit tests' has finished with nothing flagged; the end-to-end one is still going. */
+    const two = async () => {
+      const s = await reviewed({}, "issues: merge\n");
+      s.gh.runs.get(REPO.full_name)!.push({ id: 6001, head_sha: SHA2, status: "in_progress", conclusion: null }, { id: 6002, head_sha: SHA2, status: "in_progress", conclusion: null, name: "unit", workflow_id: 2 });
+      expect(await result(await pullRequest(s.env, s.gh, "synchronize", 12, SHA2))).toBe("waiting for the test run");
+      finish(s.gh, 6002, { "genclass-unit": clean() });
+      return s;
+    };
+    // the merge lands before the finished run's event is handled: the stored findings are the older commit's
+    const { env, gh, sql } = await two();
+    expect(await merge(env, gh, 12, SHA2)).toBe("closed");
+    expect(gh.issues).toEqual([]);
+    expect(sql.rows("SELECT due IS NOT NULL AS due FROM github_prs")).toEqual([{ due: 1 }]);
+    // the part that could be read was not folded into the row
+    expect(stateOf(sql).evidence).toBe(SHA1);
+    // the other run finishes with the reproducible finding; its event finds the pull request closed
+    finish(gh, 6001, { "genclass-races": racesZip() });
+    expect(await result(await deliver(env, "workflow_run", runEvent(6001, SHA2), { fetch: gh.fetch }))).toBe("no pull request at this commit");
+    advance(3_700_000);
+    expect(await githubSweep(env, { now, fetch: gh.fetch })).toBe(1);
+    expect(gh.issues).toHaveLength(1);
+    expect(gh.issues[0]!.title).toBe("Duplicate submit on POST /api/orders (GenClass, from #12)");
+    expect(sql.rows("SELECT issue, due FROM github_prs")).toEqual([{ issue: 301, due: null }]);
+
+    // the finished run's event is handled first: the stored findings are the merged commit's, read in part
+    const part = await two();
+    expect(await result(await deliver(part.env, "workflow_run", runEvent(6002, SHA2), { fetch: part.gh.fetch }))).toBe("nothing flagged");
+    expect(stateOf(part.sql).evidence).toBe(SHA2);
+    const usage = () => Number(part.sql.rows("SELECT reviews FROM github_usage")[0]!.reviews);
+    const used = usage();
+    expect(await merge(part.env, part.gh, 12, SHA2)).toBe("closed");
+    expect(part.gh.issues).toEqual([]);
+    expect(part.sql.rows("SELECT due IS NOT NULL AS due FROM github_prs")).toEqual([{ due: 1 }]);
+    // one question was asked about the commit's runs, and no review was counted for it
+    expect(usage()).toBe(used);
+    finish(part.gh, 6001, { "genclass-races": racesZip() });
+    advance(3_700_000);
+    expect(await githubSweep(part.env, { now, fetch: part.gh.fetch })).toBe(1);
+    expect(part.gh.issues).toHaveLength(1);
+    expect(part.gh.issues[0]!.body).toContain("flagged in its tests at `2222222`");
+    expect(part.sql.rows("SELECT issue, due FROM github_prs")).toEqual([{ issue: 301, due: null }]);
+
+    // a run that never finishes (it waits for an approval): the sweep decides with what there is, and nothing stays owed
+    const stuck = await two();
+    expect(await merge(stuck.env, stuck.gh, 12, SHA2)).toBe("closed");
+    advance(3_700_000);
+    expect(await githubSweep(stuck.env, { now, fetch: stuck.gh.fetch })).toBe(1);
+    expect(stuck.gh.issues).toEqual([]);
+    expect(stuck.sql.rows("SELECT due FROM github_prs")[0]!.due).toBeNull();
+    expect(stateOf(stuck.sql).evidence).toBe(SHA2);
+    expect(await githubSweep(stuck.env, { now, fetch: stuck.gh.fetch })).toBe(0);
+
+    // the sweep finds that the commit's race files cannot be read any more: what was read before the merge stands
+    const kept = await reviewed({}, "issues: merge\n");
+    kept.gh.runs.get(REPO.full_name)!.push({ id: 6009, head_sha: SHA1, status: "in_progress", conclusion: null, name: "deploy", workflow_id: 9 });
+    expect(await merge(kept.env, kept.gh, 12, SHA1)).toBe("closed");
+    expect(kept.gh.issues).toEqual([]);
+    kept.run.expired = ["genclass-races"];
+    advance(3_700_000);
+    expect(await githubSweep(kept.env, { now, fetch: kept.gh.fetch })).toBe(1);
+    expect(kept.gh.issues).toHaveLength(1);
+    expect(kept.gh.issues[0]!.body).toContain("flagged in its tests at `1111111`");
   });
 
   it("a paused pull request and a paused repository get no issue when they merge", async () => {

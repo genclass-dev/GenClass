@@ -23,8 +23,18 @@
 //   MAX_ASKED_RUNS completed ones are asked for, in an order that reaches the run with the race files early on a
 //   commit with dozens of runs: the most recently finished first, one run of every workflow before a second run of
 //   any. When runs are left unasked and race files may be in them (nothing was read, or a workflow had none of its
-//   runs asked), a note says how many were asked and how many were not. Of two artifacts with one name in a run (a
-//   re-run uploads the name again) the one created last is read, and an older one never stands in for it.
+//   runs asked), a note says how many were asked and how many were not.
+// - Which artifact is read does not depend on which event started the review. Of two artifacts with one name in a run
+//   (a re-run uploads the name again) the one created last is read, and of two runs of one workflow the most recently
+//   finished one's; an older one never stands in for it, also when the newest could not be read or has expired. The
+//   run the caller names (the one whose end started the review) only makes sure that its workflow is asked first,
+//   that workflow's most recently finished run before it. When GitHub's list does not show that run (a commit with
+//   more runs than one request lists), it is asked about by itself, inside the request budget.
+// - `incomplete` says whether some of the commit's race files may have gone unread: an artifact that could not be
+//   listed, downloaded or opened, was too large, was left out by a limit or has expired; a file in one that was
+//   skipped; runs that were not asked. It is set where that happens. The notes are sentences for people: nothing is
+//   decided from their wording. One thing is listed without setting it: a .json file over the size of a race file
+//   whose name is not one the fixture gives its files (a repository that uploads more than `test-results/genclass`).
 // - It spends at most MAX_EVIDENCE_CALLS of the client's request budget, so the review's own reads and writes always
 //   have theirs.
 // - No source code is read: not the diff's contents, not the repository's files. The changed files' PATHS are used.
@@ -38,7 +48,7 @@ import { hasDashboard, projectAccess } from "../plans.js";
 import { GithubError, posInt, type GithubClient } from "./api.js";
 import { matchesRoute, routesOfFiles } from "./routes.js";
 import type { RepoSettings } from "./settings.js";
-import { readZip, ZipError } from "./zip.js";
+import { MAX_SKIPPED, readZip, ZipError } from "./zip.js";
 
 /** Workflow runs of the head commit that are listed: one request, the most GitHub gives in one. */
 export const MAX_LISTED_RUNS = 100;
@@ -47,8 +57,8 @@ export const MAX_ASKED_RUNS = 30;
 const ASKED_AT_ONCE = 4;
 /**
  * GitHub requests the evidence of one review may make, of the 60 a client has (src/github/api.ts): the list of runs,
- * a list of artifacts for each run asked and a download for each artifact read come to 37. The rest of the client's
- * budget is the review's own reads and writes.
+ * a list of artifacts for each run asked and a download for each artifact read come to 37, and the one question about
+ * a run the list does not show makes 38. The rest of the client's budget is the review's own reads and writes.
  */
 export const MAX_EVIDENCE_CALLS = 38;
 /** Workflow runs kept in CiEvidence.runs, newest first. */
@@ -78,6 +88,13 @@ export interface WorkflowRunInfo {
 export interface CiEvidence {
   /** none: no run or no artifact; pending: runs still going and no artifact yet; ready: race files were read. */
   state: "none" | "pending" | "ready";
+  /**
+   * Some of the commit's race files may have gone unread this time (see the header): what was read is then not the
+   * whole of the commit's evidence, and a review of it is never a success.
+   */
+  incomplete: boolean;
+  /** A workflow run GitHub lists for the commit has not completed: more race files may still be uploaded. */
+  unfinished: boolean;
   runs: WorkflowRunInfo[];
   /** Artifacts read, with how many race files each gave. */
   artifacts: { name: string; runId: number; files: number }[];
@@ -88,9 +105,12 @@ export interface CiEvidence {
    * carries `error` and no content, and the report lists it as skipped with that reason.
    */
   inputs: RacesFileInput[];
-  /** Sentences for the report about what could not be read. */
+  /** Sentences for the report about what could not be read. For people: `incomplete` is what a review goes by. */
   notes: string[];
 }
+
+/** No evidence: nothing was asked of GitHub. */
+export const noEvidence = (): CiEvidence => ({ state: "none", incomplete: false, unfinished: false, runs: [], artifacts: [], inputs: [], notes: [] });
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {});
@@ -106,6 +126,12 @@ const later = (a: string, b: string): number => (a < b ? 1 : a > b ? -1 : 0);
 /** A failure that ends the whole job, not the reading of one run or one artifact. */
 const fatal = (e: unknown): boolean => e instanceof GithubError && (e.kind === "rate_limited" || e.kind === "unauthorized" || e.kind === "budget");
 const megabytes = (bytes: number): number => Math.round(bytes / 1024 / 1024);
+/**
+ * The names the fixture gives its files (packages/playwright src/races.ts racesFileName): "<test>-<id>-s<seed>.json",
+ * and "-s<seed>-r<n>.json" for a retry. A .json file over the size of a race file counts as a race file left unread
+ * only under such a name.
+ */
+const FIXTURE_FILE = /-s-?\d+(?:-r\d+)?\.json$/i;
 
 /**
  * What a review keeps of a race file that validates: the validator's copy without the two fields that may hold
@@ -130,14 +156,20 @@ function whyNot(reason: string): string {
 }
 
 /**
- * The race files of the workflow runs on `headSha`. `repo` is "/repos/<owner>/<name>". `o.firstRun`: a run to ask
- * before every other (the run whose end started the review, when the caller knows it). Throws GithubError when the
- * commit's runs cannot be listed, and anywhere for a rate limit, a refused token or a used-up request budget (the
- * caller reports those); anything else wrong with one run or artifact is a note.
+ * The race files of the workflow runs on `headSha`. `repo` is "/repos/<owner>/<name>". `o.firstRun`: the run whose
+ * end started the review, when the caller knows it: its workflow is asked before every other, and the run is asked
+ * about by itself when the list of the commit's runs does not show it. Throws GithubError when the commit's runs
+ * cannot be listed, and anywhere for a rate limit, a refused token or a used-up request budget (the caller reports
+ * those); anything else wrong with one run or artifact is a note, and `incomplete`.
  */
 export async function ciEvidence(gh: GithubClient, repo: string, headSha: string, settings: RepoSettings, o: { firstRun?: number } = {}): Promise<CiEvidence> {
-  const out: CiEvidence = { state: "none", runs: [], artifacts: [], inputs: [], notes: [] };
+  const out = noEvidence();
   if (!/^[0-9a-f]{40,64}$/.test(headSha)) return out;
+  /** Something of the commit's race files may have gone unread, with the sentence that says what. */
+  const unread = (note: string): void => {
+    out.incomplete = true;
+    out.notes.push(note);
+  };
   const before = gh.calls();
   // requests this function made; the client counts more than one for each when GitHub redirects them (a renamed repository)
   let made = 1;
@@ -146,12 +178,12 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
   const all = Array.isArray(listed.workflow_runs) ? listed.workflow_runs : [];
   const runs: Run[] = [];
   const ids = new Set<number>();
-  for (const r0 of all) {
+  /** A workflow run of this commit as GitHub describes it (in the list, or by itself); null for anything else. */
+  const runOf = (r0: unknown): Run | null => {
     const r = obj(r0);
     const id = posInt(r.id);
-    if (!id || r.head_sha !== headSha || ids.has(id)) continue;
-    ids.add(id);
-    runs.push({
+    if (!id || r.head_sha !== headSha) return null;
+    return {
       id,
       name: text(r.name, 80) || "workflow",
       status: text(r.status, 20),
@@ -160,22 +192,51 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
       workflow: posInt(r.workflow_id) ?? 0,
       at: text(r.created_at, 30),
       ended: text(r.updated_at, 30),
-    });
+    };
+  };
+  for (const r0 of all) {
+    const r = runOf(r0);
+    if (!r || ids.has(r.id)) continue;
+    ids.add(r.id);
+    runs.push(r);
+  }
+  // The run that started the review is not in the list (GitHub lists MAX_LISTED_RUNS of a commit's runs, the newest
+  // first): it is asked about by itself. Its workflow and its times are then known, so it is ordered, and its artifacts
+  // are told from those of the workflow's other runs, like any listed run's. A run GitHub does not know any more, or
+  // one of another commit, changes nothing.
+  if (o.firstRun !== undefined && !ids.has(o.firstRun)) {
+    made++;
+    try {
+      const r = runOf(await gh.get(`${repo}/actions/runs/${o.firstRun}`, { query: { exclude_pull_requests: true } }));
+      if (r && r.id === o.firstRun) {
+        ids.add(r.id);
+        runs.push(r);
+      }
+    } catch (e) {
+      if (fatal(e)) throw e;
+      if (!(e instanceof GithubError && e.kind === "not_found")) unread("The workflow run that started this review could not be looked up, so its artifacts were not read.");
+    }
   }
   runs.sort((a, b) => later(a.at, b.at) || b.id - a.id);
   out.runs = runs.slice(0, MAX_RUNS).map(({ id, name, status, conclusion, url }) => ({ id, name, status, conclusion, url }));
+  out.unfinished = runs.some((r) => r.status !== "completed");
 
   // The order runs are asked in. The most recently finished first: the run whose end started this review is then
   // first or close to it, and a test run, which ends after lint and build, comes before them. Then one run of every
   // workflow before a second run of any, so runs started again by a label or a review cannot use up the asking.
   const byEnd = runs.filter((r) => r.status === "completed").sort((a, b) => later(a.ended, b.ended) || later(a.at, b.at) || b.id - a.id);
+  // The run the caller named makes sure that its workflow is asked first. It does not make that run win: the
+  // workflow's most recently finished run goes before it, as it would without the name, so that of two runs of one
+  // workflow the same one's artifact is read whichever run's event started the review.
   const first = o.firstRun === undefined ? undefined : byEnd.find((r) => r.id === o.firstRun);
+  const newest = first ? (byEnd.find((r) => r.workflow === first.workflow && !NO_JOBS.includes(r.conclusion ?? "")) ?? first) : undefined;
+  const named: Run[] = first && newest ? (newest === first ? [first] : [newest, first]) : [];
   const workflows = new Set<number>(first ? [first.workflow] : []);
   const lead: Run[] = [];
   const again: Run[] = [];
   const idle: Run[] = [];
   for (const r of byEnd) {
-    if (r === first) continue;
+    if (named.includes(r)) continue;
     if (NO_JOBS.includes(r.conclusion ?? "")) idle.push(r);
     else if (workflows.has(r.workflow)) again.push(r);
     else {
@@ -183,7 +244,7 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
       lead.push(r);
     }
   }
-  const order = [...(first ? [first] : []), ...lead, ...again, ...idle];
+  const order = [...named, ...lead, ...again, ...idle];
 
   const seen = new Set<string>();
   const limits = {
@@ -196,7 +257,7 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
   const say = (limit: keyof typeof limits): void => {
     if (said.has(limit)) return;
     said.add(limit);
-    out.notes.push(limits[limit]);
+    unread(limits[limit]);
   };
   const dec = new TextDecoder();
   let downloaded = 0;
@@ -233,19 +294,25 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
     for (const a of arts) {
       const id = posInt(a.id);
       const name = text(a.name, 100);
-      if (!id || !name || !name.startsWith(settings.artifact) || a.expired === true) continue;
+      if (!id || !name || !name.startsWith(settings.artifact)) continue;
       matched++;
-      // the same name again, from an earlier attempt of this run or from another run of the same workflow: the first
-      // one met is the newest, and it counts even when it could not be read (an older one must not stand in for it)
+      // The same name again, from an earlier attempt of this run or from another run of the same workflow. The first
+      // one met is the one that counts (in a run the one created last; of a workflow's runs the most recently finished
+      // one's, which the order above asks first), also when it could not be read: an older one must not stand in for it.
       const key = `${run.workflow}:${name}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      // its retention ran out: GitHub lists it and has nothing to download. Its race files went unread
+      if (a.expired === true) {
+        unread(`The artifact "${name}" has expired, so its race files could not be read.`);
+        continue;
+      }
       if (tried >= MAX_ARTIFACTS) return say("artifacts");
       if (out.inputs.length >= MAX_RACE_FILES || said.has("files")) return say("files");
       if (inflated >= MAX_INFLATED_BYTES || said.has("bytes")) return say("bytes");
       const size = typeof a.size_in_bytes === "number" ? a.size_in_bytes : 0;
       if (size > MAX_ARTIFACT_BYTES || downloaded + size > MAX_DOWNLOAD_BYTES) {
-        out.notes.push(`The artifact "${name}" is larger than this review reads (${megabytes(MAX_ARTIFACT_BYTES)} MB); upload only the race files (test-results/genclass).`);
+        unread(`The artifact "${name}" is larger than this review reads (${megabytes(MAX_ARTIFACT_BYTES)} MB); upload only the race files (test-results/genclass).`);
         continue;
       }
       let bytes: Uint8Array;
@@ -255,7 +322,7 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
         bytes = await gh.download(`${repo}/actions/artifacts/${id}/zip`, MAX_ARTIFACT_BYTES);
       } catch (e) {
         if (fatal(e)) throw e;
-        out.notes.push(`The artifact "${name}" could not be downloaded${e instanceof GithubError && e.kind === "too_large" ? " (it is too large)" : ""}.`);
+        unread(`The artifact "${name}" could not be downloaded${e instanceof GithubError && e.kind === "too_large" ? " (it is too large)" : ""}.`);
         continue;
       }
       downloaded += bytes.length;
@@ -276,6 +343,7 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
           if (!parsed.ok) out.inputs.push({ name: label, content: raw });
           else if (signatures + parsed.file.signatures.length > MAX_REVIEW_SIGNATURES) {
             overSignatures++;
+            out.incomplete = true;
             out.inputs.push({ name: label, content: "", error: `not read: over ${MAX_REVIEW_SIGNATURES} signatures in one review` });
           } else {
             signatures += parsed.file.signatures.length;
@@ -286,11 +354,18 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
         for (const s of zip.skipped) {
           if (s.reason === "too many files") say("files");
           if (s.reason === "archive too large") say("bytes");
+          // A file that was left out is a race file left unread. One exception: a .json file over the size of a race
+          // file that is not named as the fixture names its files (a reporter's output uploaded with the race files)
+          // is listed as skipped and takes nothing from what was read.
+          if (s.reason !== "too large" || FIXTURE_FILE.test(s.name)) out.incomplete = true;
           out.inputs.push({ name: `${name}/${s.name}`, content: "", error: `not read: ${whyNot(s.reason)}` });
         }
+        // the zip reader lists only so many of the entries it left out: with the list full, more may have been
+        if (zip.skipped.length >= MAX_SKIPPED) out.incomplete = true;
+        // (an artifact without a .json file is not one whose race files went unread: a plain note)
         if (!zip.entries.length && !zip.skipped.length) out.notes.push(`The artifact "${name}" holds no .json file.`);
       } catch (e) {
-        out.notes.push(`The artifact "${name}" could not be opened${e instanceof ZipError ? ` (${e.message})` : ""}.`);
+        unread(`The artifact "${name}" could not be opened${e instanceof ZipError ? ` (${e.message})` : ""}.`);
       }
       out.artifacts.push({ name, runId: run.id, files });
     }
@@ -312,29 +387,31 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
     for (const [i, run] of batch.entries()) {
       const list = lists[i];
       if (!list) {
-        out.notes.push(`The artifacts of the workflow run "${run.name}" could not be listed.`);
+        unread(`The artifacts of the workflow run "${run.name}" could not be listed.`);
         continue;
       }
       answered++;
-      if (list.total > list.arts.length && list.arts.length) out.notes.push(`The workflow run "${run.name}" has ${list.total} artifacts; the ${list.arts.length} GitHub lists first were looked at.`);
+      if (list.total > list.arts.length && list.arts.length) unread(`The workflow run "${run.name}" has ${list.total} artifacts; the ${list.arts.length} GitHub lists first were looked at.`);
       await readRun(run, list.arts);
     }
   }
 
   if (out.inputs.length) out.state = "ready";
-  else if (runs.some((r) => r.status !== "completed")) out.state = "pending";
+  else if (out.unfinished) out.state = "pending";
+  // (no artifact with the name is nothing left unread: a plain note)
   else if (answered && !matched) out.notes.push(`No artifact whose name starts with "${settings.artifact}" in ${answered} completed workflow run${answered === 1 ? "" : "s"} on this commit.`);
   if (overSignatures) out.notes.push(`Race files are read up to ${MAX_REVIEW_SIGNATURES} signatures for one review; ${overSignatures} file${overSignatures === 1 ? " over that was" : "s over that were"} not read.`);
   // The asking stopped at its own limit, not at one of the review's that a note already tells. That is said when race
   // files may be in a run that was not asked: nothing was read, or a workflow had none of its runs asked. Older runs
-  // of workflows that were asked, and runs in which no job ran, are left out without a word.
+  // of workflows that were asked, and runs in which no job ran, are left out without a word. With it the evidence is
+  // incomplete, also when race files were read: a commit with more workflows than are asked is never a success.
   const unasked = order.slice(asked).filter((r) => !NO_JOBS.includes(r.conclusion ?? ""));
   if (unasked.length && !stopped() && (out.state !== "ready" || unasked.some((r) => lead.includes(r)))) {
     const left = order.length - asked;
-    out.notes.push(`Of the ${order.length} completed workflow runs listed for this commit, the artifacts of ${asked} were looked at, the most recently finished first; the other ${left} ${left === 1 ? "was" : "were"} not.`);
+    unread(`Of the ${order.length} completed workflow runs listed for this commit, the artifacts of ${asked} were looked at, the most recently finished first; the other ${left} ${left === 1 ? "was" : "were"} not.`);
   }
   const total = typeof listed.total_count === "number" ? listed.total_count : 0;
-  if (all.length && total > all.length) out.notes.push(`This commit has ${total} workflow runs; the ${all.length} GitHub lists first were looked at.`);
+  if (all.length && total > all.length) unread(`This commit has ${total} workflow runs; the ${all.length} GitHub lists first were looked at.`);
   return out;
 }
 

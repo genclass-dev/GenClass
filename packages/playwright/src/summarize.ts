@@ -161,6 +161,8 @@ interface Acc {
   seeds: Set<number>;
   files: number;
   sigs: Map<string, SignatureSummary>;
+  /** The seeds of each signature, by `sig`, while the files are read: added to, and made a sorted list once at the end. */
+  sigSeeds: Map<string, Set<number>>;
   modes: Set<string>;
   notReady: number;
   states: Set<string>;
@@ -195,7 +197,7 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
     }
     files++;
     const f = r.file;
-    const t: Acc = tests.get(f.test) ?? { test: f.test, seeds: new Set(), files: 0, sigs: new Map(), modes: new Set(), notReady: 0, states: new Set(), unchecked: 0, reasons: new Set(), chaosIdle: 0, dropFiles: 0, dropped: 0 };
+    const t: Acc = tests.get(f.test) ?? { test: f.test, seeds: new Set(), files: 0, sigs: new Map(), sigSeeds: new Map(), modes: new Set(), notReady: 0, states: new Set(), unchecked: 0, reasons: new Set(), chaosIdle: 0, dropFiles: 0, dropped: 0 };
     tests.set(f.test, t);
     t.files++;
     t.seeds.add(f.seed);
@@ -233,10 +235,13 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
       for (const n of seeds) t.seeds.add(n);
       const prev = t.sigs.get(s.sig);
       if (!prev) {
-        t.sigs.set(s.sig, { sig: s.sig, trigger: s.trigger, diagnosis: s.diagnosis, op: s.op, category: categoryOf(s.diagnosis, s.trigger), confidence: s.confidence, evidence: s.evidence, seeds: [...seeds], reproducible: false });
+        t.sigs.set(s.sig, { sig: s.sig, trigger: s.trigger, diagnosis: s.diagnosis, op: s.op, category: categoryOf(s.diagnosis, s.trigger), confidence: s.confidence, evidence: s.evidence, seeds: [], reproducible: false });
+        t.sigSeeds.set(s.sig, new Set(seeds));
         continue;
       }
-      prev.seeds = [...new Set([...prev.seeds, ...seeds])];
+      // one set per signature, added to: the work is the number of seeds read, however many files they come in
+      const all = t.sigSeeds.get(s.sig)!;
+      for (const n of seeds) all.add(n);
       if (s.confidence > prev.confidence) {
         prev.confidence = s.confidence;
         prev.evidence = s.evidence;
@@ -251,7 +256,7 @@ export function buildSummary(inputs: readonly RacesFileInput[], options: Summari
   for (const t of tests.values()) {
     const sigs = [...t.sigs.values()];
     for (const s of sigs) {
-      s.seeds.sort((a, b) => a - b);
+      s.seeds = [...(t.sigSeeds.get(s.sig) ?? [])].sort((a, b) => a - b);
       s.reproducible = s.seeds.length >= minSeeds;
       byCategory[s.category].signatures++;
       signatures++;
@@ -308,8 +313,9 @@ export const ZERO_WIDTH_SPACE = "\u200B";
  * references, and what would start a block at the beginning of the line (# + - = > and "1." / "1)"). Whitespace runs
  * become one space. Then, so that a pull-request comment neither cross-links nor notifies anyone, a zero-width space
  * goes after "#" before a digit (the runtime's request ids, "#15", would link issue #15, and "owner/repo#15" another
- * repository's), after "GH-" before a digit, and after "@" before a letter or digit (a Playwright tag in a test
- * title, "@smoke", would mention a user or team). The same goes between ":" and "//" and between "www" and "."
+ * repository's), after "GH-" before a digit, and after every "@" (a Playwright tag in a test title, "@smoke", would
+ * mention a user or team, and "a@-b.example" or "a@_b.example" is an address GitHub links, the second after it has
+ * resolved this function's own backslash before "_"). The same goes between ":" and "//" and between "www" and "."
  * (every one, whatever stands before it): GitHub's autolinks need "://" after a scheme or the letters "www.", so no
  * address in the text becomes a link, and the address of another repository's issue or pull request leaves no
  * reference there. The text reads the same; copied, it carries the invisible character.
@@ -324,7 +330,7 @@ export function escapeMarkdown(s: string): string {
     .replace(/^(\d+)([.)])/, "$1\\$2")
     .replace(/#(?=\d)/g, `#${ZERO_WIDTH_SPACE}`)
     .replace(/\b(GH)-(?=\d)/gi, `$1-${ZERO_WIDTH_SPACE}`)
-    .replace(/@(?=[A-Za-z0-9])/g, `@${ZERO_WIDTH_SPACE}`)
+    .replace(/@/g, `@${ZERO_WIDTH_SPACE}`)
     .replace(/:\/\//g, `:${ZERO_WIDTH_SPACE}//`)
     .replace(/(www)\./gi, `$1${ZERO_WIDTH_SPACE}.`);
 }
