@@ -38,7 +38,9 @@ describe("env: the options", () => {
       seed: "GENCLASS_SEED",
       delayMs: "GENCLASS_CHAOS_DELAY_MS",
       reorder: "GENCLASS_CHAOS_REORDER",
+      mirror: "GENCLASS_CHAOS_MIRROR",
       match: "GENCLASS_CHAOS_MATCH",
+      wait: "GENCLASS_WAIT_FOR_RESPONSES_MS",
       outDir: "GENCLASS_OUT_DIR",
       model: "GENCLASS_MODEL",
       modelUrl: "GENCLASS_MODEL_URL",
@@ -59,6 +61,25 @@ describe("env: the options", () => {
     const r = optionsFromEnv({ GENCLASS_CHAOS: "on", GENCLASS_SEED: "7", GENCLASS_CHAOS_DELAY_MS: "50, 300", GENCLASS_CHAOS_REORDER: "off", GENCLASS_CHAOS_MATCH: "/api, /graphql ,https://api.example.com/," }, cwd);
     expect(r).toEqual({ off: false, options: { chaos: { seed: 7, delayMs: [50, 300], reorder: false, match: ["/api", "/graphql", "https://api.example.com/"] }, outDir: join(cwd, DEFAULT_OUT_DIR) }, notes: [] });
     expect(optionsFromEnv({ GENCLASS_CHAOS: "on", GENCLASS_SEED: "0", GENCLASS_CHAOS_REORDER: "on" }, cwd).options.chaos).toEqual({ seed: 0 });
+  });
+
+  it("mirrored seeds are on unless GENCLASS_CHAOS_MIRROR says off", () => {
+    expect(optionsFromEnv({ GENCLASS_CHAOS: "on", GENCLASS_CHAOS_MIRROR: "on" }, cwd).options.chaos).toBe(true);
+    expect(optionsFromEnv({ GENCLASS_CHAOS: "on", GENCLASS_CHAOS_MIRROR: "off" }, cwd).options.chaos).toEqual({ mirror: false });
+    const bad = optionsFromEnv({ GENCLASS_CHAOS: "on", GENCLASS_CHAOS_MIRROR: "sometimes" }, cwd);
+    expect(bad.options.chaos).toBe(true);
+    expect(bad.notes).toEqual(['GENCLASS_CHAOS_MIRROR="sometimes" is not on or off; using on']);
+  });
+
+  it("the end-of-test wait: a whole number of ms from 0, with or without chaos; anything else is the default and one line", () => {
+    expect(optionsFromEnv({ GENCLASS_WAIT_FOR_RESPONSES_MS: "0" }, cwd).options.waitForResponsesMs).toBe(0);
+    expect(optionsFromEnv({ GENCLASS_CHAOS: "on", GENCLASS_WAIT_FOR_RESPONSES_MS: " 2500 " }, cwd).options.waitForResponsesMs).toBe(2500);
+    expect(optionsFromEnv({}, cwd).options.waitForResponsesMs).toBeUndefined();
+    for (const v of ["soon", "-1", "1.5", "30001"]) {
+      const r = optionsFromEnv({ GENCLASS_WAIT_FOR_RESPONSES_MS: v }, cwd);
+      expect(r.options.waitForResponsesMs).toBeUndefined();
+      expect(r.notes).toEqual([`GENCLASS_WAIT_FOR_RESPONSES_MS=${JSON.stringify(v)} is not a whole number of ms from 0 to 30000; using the default`]);
+    }
   });
 
   it("the seed and the rest of chaos are read only when chaos is on", () => {

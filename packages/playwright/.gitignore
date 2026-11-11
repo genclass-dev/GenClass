@@ -3,3 +3,4 @@ test/e2e/genclass-report.md
 # the end-to-end check of the unmodified suite: its latency-only race files, and a generated config a killed run left
 test/e2e-unmodified/races-latency-only/
 test/**/*.genclass-*.mjs
+test/e2e-early/races-no-wait/

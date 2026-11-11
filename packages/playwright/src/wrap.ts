@@ -43,7 +43,7 @@
 //     shape-checked read of rule 1, which nothing depends on.
 
 import { CONTEXT_BINDING, install, type Collected, type PageLike, type RequestLike, type RouteLike, type Session } from "./install.js";
-import { mergeAgent, mergeCollected, planRun, writeRun, type GenClassOptions, type RunPlan, type TestInfoLike } from "./session.js";
+import { mergeAgent, mergeCollected, planRun, waitBudget, writeRun, type GenClassOptions, type RunPlan, type TestInfoLike } from "./session.js";
 
 /** Marks a function this module put on a prototype (a registered symbol: the same in every copy of the module). */
 export const WRAPPED = Symbol.for("@genclass/playwright/wrapped");
@@ -120,6 +120,8 @@ interface TestRun {
   attaching: number;
   /** Where its file was written last (null: not yet, or the test was skipped). */
   path: string | null;
+  /** When the run's first context was made (Date.now()): what the end-of-test wait counts the test's time from. */
+  startedAt: number;
 }
 
 interface BrowserTypeMethods {
@@ -316,6 +318,24 @@ function pageLikeOf(context: ContextLike, live: () => boolean, sticky: Sticky): 
     route: async (url, handler) => void (await context.route(url, handler)),
     addInitScript: async (script) => void (await context.addInitScript(script)),
     exposeFunction: async (name, fn) => void (await context.exposeBinding(name, (source, item) => take(fn, source, item))),
+    // the same, one answer per page (install.ts asks each page which of its requests are still unanswered)
+    async evaluateEach(expression: string): Promise<unknown[]> {
+      let pages: ContextPageLike[] = [];
+      try {
+        pages = context.pages();
+      } catch {
+        /* the context is gone */
+      }
+      return Promise.all(
+        pages.map(async (page) => {
+          try {
+            return page.isClosed?.() ? null : await page.evaluate(expression);
+          } catch {
+            return null;
+          }
+        }),
+      );
+    },
     // every open page is asked; one that is closed, crashed or mid-navigation answers nothing
     async evaluate(expression: string): Promise<unknown> {
       let pages: ContextPageLike[] = [];
@@ -412,7 +432,15 @@ export class Wrapper {
           if (session) this.outlive(session);
           return false;
         };
-        const installed = await install(pageLikeOf(context, live, sticky), { runtimeDir: o.runtimeDir, model: run.plan.model, modelUrl: o.modelUrl, chaos: run.plan.chaos, binding: CONTEXT_BINDING, live });
+        const installed = await install(pageLikeOf(context, live, sticky), {
+          runtimeDir: o.runtimeDir,
+          model: run.plan.model,
+          modelUrl: o.modelUrl,
+          chaos: run.plan.chaos,
+          waitForResponsesMs: run.plan.waitMs,
+          binding: CONTEXT_BINDING,
+          live,
+        });
         session = { run, install: installed, sticky, collected: null, done: null };
         this.sessions.set(context, session);
         run.sessions.push(session);
@@ -601,7 +629,7 @@ export class Wrapper {
         for (const s of r.sessions) this.outlive(s);
         if (r.sessions.every((s) => s.collected !== null)) this.runs.delete(k);
       }
-      run = { key, info, plan: planRun(this.deps.options, info), sessions: [], attaching: 0, path: null };
+      run = { key, info, plan: planRun(this.deps.options, info), sessions: [], attaching: 0, path: null, startedAt: Date.now() };
       this.runs.set(key, run);
     }
     return run;
@@ -612,7 +640,8 @@ export class Wrapper {
     session.done ??= (async () => {
       let collected: Collected;
       try {
-        collected = await session.install.finish();
+        // the test's own TestInfo, read now: its timeout and status as they stand at the end of the test
+        collected = await session.install.finish(waitBudget(session.run.info, session.run.startedAt));
       } catch {
         collected = session.install.snapshot();
       }

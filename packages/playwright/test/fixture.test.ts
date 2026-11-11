@@ -184,7 +184,7 @@ describe("fixture: startGenClass", () => {
     const page = new FakePage();
     const run = await startGenClass(page, { runtimeDir, chaos: true }, info());
     const r = await run.finish();
-    expect(r.file).toMatchObject({ seed: 1, chaos: { latencyMs: [0, 600], reorder: true, routes: ["same-origin /api* or Accept: json"] }, model: null, signatures: [], fixture: { model: "skip", agent: "not-loaded", chaosApplied: 0, serviceWorker: false } });
+    expect(r.file).toMatchObject({ seed: 1, chaos: { latencyMs: [0, 600], reorder: true, routes: ["same host /api* or Accept: json"] }, model: null, signatures: [], fixture: { model: "skip", agent: "not-loaded", chaosApplied: 0, serviceWorker: false } });
   });
 });
 

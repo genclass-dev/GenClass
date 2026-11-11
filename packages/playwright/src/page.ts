@@ -18,7 +18,11 @@
 //      sends nothing, no console error, no failed request, no CSP report) and passes every other call to the real one;
 //   6. reports the runtime's mode and model status, at start, on every status change, when the page goes away, and
 //      on request (window.__GENCLASS_PLAYWRIGHT__.collect(), which the fixture calls at the end of the test), with
-//      whether a service worker controls the page (page.route does not see what it handles).
+//      whether a service worker controls the page (page.route does not see what it handles);
+//   7. answers which requests of this page load are still unanswered (window.__GENCLASS_PLAYWRIGHT__.open()), read from
+//      the agent entry's record. The fixture asks at the end of a test and waits, on its own side and for a bounded
+//      time, for the ones sent a moment ago: a response that lands after the test's last assertion is still seen;
+//   8. says when the page goes offline and comes back online (the fixture's chaos holds nothing while it is offline).
 //
 // Observe only: nothing here holds, delays or changes anything in the page; the agent link is connected with
 // `hold: false` and never reaches a bridge. Top frame only, and only on http(s) pages (about:blank and
@@ -40,6 +44,8 @@ export interface PageScriptConfig {
 interface AgentConnection {
   reason: string | null;
   witnesses(): unknown[];
+  /** The record of this page load: each request's send, and its delivery or its end without one, by key. */
+  recorded?(): { steps?: { k?: string; key?: string; t?: number }[] };
 }
 
 /**
@@ -119,13 +125,49 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
       /* ignore */
     }
   };
+  // when the agent entry connected, on this page's own clock: its record counts every step's time from then
+  let connectedAt = 0;
   const api = {
     collect(): Record<string, unknown> {
       drain();
       return { mode: rt ? String(rt.mode) : null, model: status(), agent: conn ? conn.reason : "not-loaded", serviceWorker: serviceWorker() };
     },
+    /**
+     * The requests this page load sent that were neither answered nor ended yet, each with how long ago it was sent
+     * (ms), from the agent entry's record. `id` names the page load, so a caller that asks again can tell a later
+     * document's requests from this one's. Null when there is no record to read. Reads only: nothing is held or waited
+     * for here (the fixture does the waiting, on Node's clock, so a test that controls the page's clock is not stuck).
+     */
+    open(): { id: string; open: [string, number][] } | null {
+      try {
+        if (!conn || typeof conn.recorded !== "function") return null;
+        const steps = conn.recorded().steps ?? [];
+        const sent = new Map<string, number>();
+        for (const s of steps) {
+          if (typeof s.key !== "string") continue;
+          if (s.k === "send") sent.set(s.key, typeof s.t === "number" ? s.t : 0);
+          else if (s.k === "recv" || s.k === "end") sent.delete(s.key);
+        }
+        const now = performance.now() - connectedAt;
+        const open: [string, number][] = [];
+        sent.forEach((t, key) => open.push([key, Math.max(0, Math.round(now - t))]));
+        return { id: String(performance.timeOrigin), open };
+      } catch {
+        return null;
+      }
+    },
   };
   w.__GENCLASS_PLAYWRIGHT__ = api;
+  // 8. says when the page loses the network and gets it back: chaos holds no request meanwhile (a request sent offline
+  //    fails at once; held until the network is back it would get through)
+  try {
+    const net = (): void => push({ t: "net", online: navigator.onLine !== false });
+    addEventListener("offline", net);
+    addEventListener("online", net);
+    if (navigator.onLine === false) net();
+  } catch {
+    /* ignore */
+  }
   if (!rt) {
     report();
     return;
@@ -196,6 +238,7 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
         try {
           if (typeof realFetch === "function") w.fetch = standIn;
           conn = typeof m.connectAgent === "function" ? m.connectAgent(rt, { url: cfg.agentUrl, hold: false, anyHost: true, dom: false }) : null;
+          connectedAt = performance.now();
           push({ t: "agent", ok: !!conn && conn.reason === null, reason: conn ? conn.reason : "no-connectAgent" });
           drain();
         } catch (e) {

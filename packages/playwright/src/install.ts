@@ -13,6 +13,7 @@
 //   - with chaos, routes every request through the seeded scheduler (chaos.ts): a matched fetch/XHR request is held
 //     for its planned time and then passed on with route.fallback(), so it still reaches the user's own routes
 //     (context.route, routeFromHAR), the browser's network stack and its cache. Anything else is passed on at once.
+//     An identical read, and a write to the same path, leave in the order the page sent them, whatever their delays.
 // The page's agent link never sends a request (page.ts gives it a stand-in fetch); requests to its URL are aborted
 // anyway as a safety net. Observe only: no hold on the page's side, no change to any request or response (chaos
 // changes when a request leaves, never what it says). Every handler catches its own errors: a page that closes
@@ -26,7 +27,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, extname, join, resolve, sep } from "node:path";
-import { ChaosScheduler, RUNTIME_PATH, isCandidate, isRuntimeUrl, type ResolvedChaos } from "./chaos.js";
+import { ChaosScheduler, RUNTIME_PATH, isCandidate, isRuntimeUrl, orderKey, type ResolvedChaos } from "./chaos.js";
 import { genclassPageScript, type PageScriptConfig } from "./page.js";
 
 /** The page methods the installer uses (a subset of Playwright's Page, by shape). */
@@ -35,6 +36,11 @@ export interface PageLike {
   addInitScript(script: { content: string }): Promise<void>;
   exposeFunction(name: string, fn: (item: unknown) => unknown): Promise<void>;
   evaluate(expression: string): Promise<unknown>;
+  /**
+   * The same expression in every page there is, one answer per page (null for a page that could not answer). A browser
+   * context has it (wrap.ts); for a single page `evaluate` is asked instead.
+   */
+  evaluateEach?(expression: string): Promise<unknown[]>;
   isClosed?(): boolean;
 }
 
@@ -50,6 +56,8 @@ export interface RequestLike {
   resourceType(): string;
   headers(): Record<string, string>;
   frame(): { url(): string };
+  /** The request's body as text, when it has one (Playwright's Request.postData). */
+  postData?(): string | null;
 }
 
 export interface InstallOptions {
@@ -61,6 +69,11 @@ export interface InstallOptions {
   modelUrl?: string;
   /** Resolved chaos, or null for none. */
   chaos: ResolvedChaos | null;
+  /**
+   * At the end of the test: how long, at most, to wait for the responses to requests the page had already sent, in
+   * ms (see `finish`). 0 or unset: no wait.
+   */
+  waitForResponsesMs?: number;
   /** The name of the function exposed for the page to hand items over through. Default BINDING. */
   binding?: string;
   /**
@@ -100,8 +113,16 @@ export interface Collected {
 }
 
 export interface Session {
-  /** Collect what the page still holds, release every chaos hold, and return everything seen. */
-  finish(): Promise<Collected>;
+  /**
+   * Collect what the page still holds, release every chaos hold, and return everything seen. Before it collects it
+   * waits for the responses to requests the page had sent a moment ago and not seen answered (a held request counts:
+   * it leaves when its planned delay is over, as during the test), so that a response landing after the test's last
+   * assertion is still observed. The wait ends when they have all been answered, and at the latest after
+   * `waitForResponsesMs`, or after `budgetMs` when that is less (what the test has left of its own timeout). Requests
+   * sent longer ago than `waitForResponsesMs` are long-running (a stream, a long poll) and are not waited for; neither
+   * are requests the page sends during the wait. Nothing is waited for when the option is 0 or the page is gone.
+   */
+  finish(budgetMs?: number): Promise<Collected>;
   /**
    * What the page handed over so far, without asking it and without releasing anything: for a caller that cannot
    * wait (the process is exiting with the page still open). A copy; `finish()` stays the complete answer.
@@ -126,6 +147,24 @@ export const BINDING = "__genclassPlaywright";
 export const CONTEXT_BINDING = "__genclassPlaywrightContext";
 /** The loopback URL the page's agent link is pointed at; the fixture aborts every request to it. */
 export const AGENT_URL = "http://127.0.0.1:9";
+/** How often the fixture asks the page which of the awaited requests are still unanswered, in ms. */
+export const WAIT_POLL_MS = 40;
+/** After the last awaited response: time for its handler to run and the app to write its state before collecting, in ms. */
+export const WAIT_GRACE_MS = 120;
+/** How long one question to the page may take before it counts as unanswered, in ms. */
+const ASK_MS = 1000;
+const OPEN_EXPRESSION = `(function () { var a = window.__GENCLASS_PLAYWRIGHT__; return a && a.open ? a.open() : null; })()`;
+
+/** What window.__GENCLASS_PLAYWRIGHT__.open() answers (page.ts): the page load, and its unanswered requests with their age. */
+function openOf(v: unknown): { id: string; open: [string, number][] } | null {
+  if (!v || typeof v !== "object") return null;
+  const x = v as { id?: unknown; open?: unknown };
+  if (typeof x.id !== "string" || !Array.isArray(x.open)) return null;
+  const open = x.open.filter((e): e is [string, number] => Array.isArray(e) && typeof e[0] === "string" && typeof e[1] === "number");
+  return { id: x.id, open };
+}
+
+const sleep = (ms: number): Promise<void> => new Promise<void>((res) => void setTimeout(res, Math.max(0, ms)).unref?.());
 
 const require = createRequire(import.meta.url);
 const CONTENT_TYPES: Record<string, string> = {
@@ -202,6 +241,14 @@ function originOf(url: string): string | null {
   }
 }
 
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
 /** The file inside dist/ a request for RUNTIME_PATH names, or null when it is not a plain file path inside it. */
 export function runtimeFile(runtimeDir: string, url: string): string | null {
   let pathname: string;
@@ -250,6 +297,11 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
       collected.model = x.model && typeof x.model === "object" ? (x.model as ModelInfo) : null;
       if (typeof x.overridden === "string") collected.modeOverridden = x.overridden;
     } else if (x.t === "agent") collected.agent = x.ok === true ? null : String(x.reason ?? "unknown");
+    else if (x.t === "net") {
+      // offline: nothing is held (page.ts, chaos.ts pause)
+      if (x.online === false) scheduler?.pause();
+      else scheduler?.resume();
+    }
   };
   await page.exposeFunction(binding, take);
 
@@ -275,9 +327,19 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
         } catch {
           /* no headers */
         }
-        const req = { url, method: request.method(), resourceType: request.resourceType(), sameOrigin: origin !== null && origin === originOf(frameUrl), accept };
+        const host = hostOf(url);
+        const req = { url, method: request.method(), resourceType: request.resourceType(), sameOrigin: origin !== null && origin === originOf(frameUrl), sameHost: host !== null && host === hostOf(frameUrl), accept };
         // planned now, in the order the page sent its requests; the request itself is only held, never fetched here
-        if (isCandidate(req, chaos.match)) await scheduler.hold(scheduler.plan(req.method, req.url, req.sameOrigin));
+        if (isCandidate(req, chaos.match)) {
+          let body: string | null = null;
+          try {
+            body = request.postData?.() ?? null;
+          } catch {
+            /* a body that cannot be read as text: requests are then told apart by method and URL alone */
+          }
+          // an identical read, and a write to the same path, leave in the order the page sent them (chaos.ts)
+          await scheduler.hold(scheduler.plan(req.method, req.url, req.sameOrigin), orderKey(req.method, req.url, body));
+        }
         await route.fallback();
       } catch {
         /* the page closed while the request was held */
@@ -307,8 +369,48 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
   };
   await page.addInitScript({ content: initScriptContent(runtimeDir, cfg) });
 
+  // every page there is, asked once; a page that does not answer in time, or is gone, answers nothing
+  const askOpen = async (): Promise<{ id: string; open: [string, number][] }[]> => {
+    const all = page.evaluateEach ? page.evaluateEach(OPEN_EXPRESSION) : page.evaluate(OPEN_EXPRESSION).then((r) => [r]);
+    const answers = await Promise.race([all.catch(() => [] as unknown[]), sleep(ASK_MS).then(() => [] as unknown[])]);
+    return answers.map(openOf).filter((a): a is { id: string; open: [string, number][] } => a !== null);
+  };
+  const waitForResponses = async (budgetMs?: number): Promise<void> => {
+    const most = Math.max(0, Math.floor(o.waitForResponsesMs ?? 0));
+    const limit = typeof budgetMs === "number" && Number.isFinite(budgetMs) ? Math.min(most, Math.floor(budgetMs)) : most;
+    if (!(limit > 0)) return;
+    const started = Date.now();
+    // the requests to wait for: unanswered now, and sent no longer ago than the wait itself (older ones are streams
+    // and long polls, which a test's end says nothing about), by page load
+    const awaited = new Map<string, Set<string>>();
+    for (const a of await askOpen()) {
+      const keys = a.open.filter(([, age]) => age <= most).map(([key]) => key);
+      if (keys.length) awaited.set(a.id, new Set(keys));
+    }
+    if (awaited.size === 0) return;
+    while (Date.now() - started < limit) {
+      await sleep(Math.min(WAIT_POLL_MS, limit - (Date.now() - started)));
+      if (released || !live() || page.isClosed?.()) return;
+      let left = 0;
+      for (const a of await askOpen()) {
+        const keys = awaited.get(a.id);
+        if (keys) for (const [key] of a.open) if (keys.has(key)) left++;
+      }
+      if (left === 0) {
+        // answered: its handler and the write it makes come a moment later
+        await sleep(Math.min(WAIT_GRACE_MS, Math.max(0, limit - (Date.now() - started))));
+        return;
+      }
+    }
+  };
+
   return {
-    async finish(): Promise<Collected> {
+    async finish(budgetMs?: number): Promise<Collected> {
+      try {
+        if (!released && !page.isClosed?.()) await waitForResponses(budgetMs);
+      } catch {
+        /* the page is gone: nothing to wait for */
+      }
       try {
         if (!released && !page.isClosed?.()) {
           const r = await Promise.race([

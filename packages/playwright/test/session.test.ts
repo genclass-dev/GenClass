@@ -8,7 +8,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Collected } from "../src/install.js";
 import { parseRaces } from "../src/schema.js";
-import { mergeAgent, mergeCollected, planRun, racesFileOf, writeRun } from "../src/session.js";
+import { resolveChaos } from "../src/chaos.js";
+import { MAX_DEFAULT_WAIT_MS, MAX_WAIT_MS, WAIT_TIMEOUT_MARGIN_MS, mergeAgent, mergeCollected, planRun, racesFileOf, waitBudget, waitOf, writeRun } from "../src/session.js";
 import { fakeTestInfo } from "./helpers.js";
 
 let root = "";
@@ -23,13 +24,38 @@ const collected = (over: Partial<Collected> = {}): Collected => ({ records: [], 
 
 describe("session: the plan of a run", () => {
   it("no chaos: seed 1 plus the repeat index, the model skipped", () => {
-    expect(planRun({}, fakeTestInfo(root))).toEqual({ chaos: null, seed: 1, model: "skip" });
-    expect(planRun({ chaos: false, model: "load" }, fakeTestInfo(root, { repeatEachIndex: 3 }))).toEqual({ chaos: null, seed: 4, model: "load" });
+    expect(planRun({}, fakeTestInfo(root))).toEqual({ chaos: null, seed: 1, model: "skip", waitMs: 1000 });
+    expect(planRun({ chaos: false, model: "load" }, fakeTestInfo(root, { repeatEachIndex: 3 }))).toEqual({ chaos: null, seed: 4, model: "load", waitMs: 1000 });
   });
 
   it("chaos: its seed plus the repeat index is the run's seed", () => {
-    expect(planRun({ chaos: true }, fakeTestInfo(root, { repeatEachIndex: 1 }))).toEqual({ chaos: { seed: 2, delayMs: [0, 600], reorder: true, match: undefined }, seed: 2, model: "skip" });
+    expect(planRun({ chaos: true }, fakeTestInfo(root, { repeatEachIndex: 1 }))).toEqual({ chaos: { seed: 2, delayMs: [0, 600], reorder: true, match: undefined, mirror: true }, seed: 2, model: "skip", waitMs: 1600 });
     expect(planRun({ chaos: { seed: 40, reorder: false } }, fakeTestInfo(root, { repeatEachIndex: 2 }))).toMatchObject({ chaos: { seed: 42, reorder: false }, seed: 42 });
+  });
+
+  it("the end-of-test wait: 1000 ms more than the chaos delay's upper bound, at most 5000; a number given is taken, to 30000", () => {
+    expect(waitOf({}, null)).toBe(1000);
+    expect(waitOf({}, resolveChaos(true))).toBe(1600);
+    expect(waitOf({}, resolveChaos({ delayMs: [0, 2500] }))).toBe(3500);
+    expect(waitOf({}, resolveChaos({ delayMs: [0, 10_000] }))).toBe(MAX_DEFAULT_WAIT_MS);
+    expect(waitOf({ waitForResponsesMs: 0 }, resolveChaos(true))).toBe(0);
+    expect(waitOf({ waitForResponsesMs: 250.9 }, null)).toBe(250);
+    expect(waitOf({ waitForResponsesMs: 99_999 }, null)).toBe(MAX_WAIT_MS);
+    for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY, "600" as unknown as number]) expect(waitOf({ waitForResponsesMs: bad }, resolveChaos(true))).toBe(1600);
+    expect(planRun({ chaos: { delayMs: [0, 200] }, waitForResponsesMs: 300 }, fakeTestInfo(root)).waitMs).toBe(300);
+  });
+
+  it("the wait's budget: what the test has left of its timeout after a margin; none without a timeout; nothing for a test that timed out", () => {
+    const at = 1_000_000;
+    const info = (over: Record<string, unknown>) => fakeTestInfo(root, over);
+    expect(waitBudget(info({ timeout: 30_000 }), at, at + 5_000)).toBe(30_000 - 5_000 - WAIT_TIMEOUT_MARGIN_MS);
+    expect(waitBudget(info({ timeout: 30_000 }), at, at + 29_000)).toBe(0);
+    expect(waitBudget(info({ timeout: 30_000 }), at, at + 60_000)).toBe(0);
+    expect(waitBudget(info({ timeout: 0 }), at, at + 5_000)).toBeUndefined();
+    expect(waitBudget(info({}), at, at + 5_000)).toBeUndefined();
+    expect(waitBudget(info({ timeout: 30_000, status: "timedOut" }), at, at + 1_000)).toBe(0);
+    expect(waitBudget(info({ timeout: 0, status: "interrupted" }), at, at + 1_000)).toBe(0);
+    expect(waitBudget(info({ timeout: 30_000, status: "failed" }), at, at + 1_000)).toBe(27_000);
   });
 
   it("refuses a mode other than observe and a model it does not know", () => {
@@ -87,7 +113,7 @@ describe("session: the file of a test", () => {
       signatures: [{ sig: "witness|identical-in-flight|POST /api/orders", trigger: "witness", diagnosis: "identical-in-flight", op: "POST /api/orders", confidence: 1, evidence: "POST /api/orders#2 was sent while the identical POST /api/orders#1 was still in flight (0.03s earlier), from a separate user action.", seeds: [3] }],
       mode: "observe",
       model: { state: "off" },
-      chaos: { latencyMs: [10, 20], reorder: true, routes: ["same-origin /api* or Accept: json"] },
+      chaos: { latencyMs: [10, 20], reorder: true, routes: ["same host /api* or Accept: json"] },
       fixture: { model: "skip", agent: null, chaosApplied: 1, serviceWorker: false },
     });
     const written = writeRun(info, join(root, "races"), plan, one);

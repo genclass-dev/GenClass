@@ -1,0 +1,91 @@
+{
+ "date": "2026-11-11",
+ "seeds": 6,
+ "grep": null,
+ "node": "v25.6.0",
+ "settings": [
+  {
+   "setting": "npm",
+   "seconds": 137.1,
+   "passed": 52,
+   "failed": 8,
+   "files": 60,
+   "planted": {
+    "search": {
+     "runs": 6,
+     "flagged": 5,
+     "seeds": [
+      1,
+      2,
+      4,
+      5,
+      6
+     ],
+     "pairs": 3,
+     "pairsAny": 3,
+     "pairsBoth": 2
+    },
+    "checkout": {
+     "runs": 6,
+     "flagged": 6,
+     "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+     ],
+     "pairs": 3,
+     "pairsAny": 3,
+     "pairsBoth": 3
+    },
+    "profile": {
+     "runs": 6,
+     "flagged": 6,
+     "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+     ],
+     "pairs": 3,
+     "pairsAny": 3,
+     "pairsBoth": 3
+    },
+    "detail": {
+     "runs": 6,
+     "flagged": 0,
+     "seeds": [],
+     "pairs": 3,
+     "pairsAny": 0,
+     "pairsBoth": 0
+    }
+   },
+   "fixed": {
+    "runs": 24,
+    "flagged": [
+     {
+      "test": "fixed > search",
+      "seed": 6,
+      "sigs": [
+       "witness|overwrote-newer|GET /api/notifications"
+      ]
+     }
+    ]
+   },
+   "other": {
+    "buggy > cart | identical-in-flight|POST /api/cart": 6,
+    "buggy > cart | overwrote-newer|POST /api/cart": 4,
+    "buggy > cart | overwrote-newer|GET /api/notifications": 1,
+    "buggy > profile | overwrote-newer|GET /api/notifications": 3,
+    "buggy > search | overwrote-newer|GET /api/notifications": 2,
+    "fixed > cart | identical-in-flight|POST /api/cart": 6,
+    "fixed > cart | overwrote-newer|POST /api/cart": 4,
+    "fixed > search | overwrote-newer|GET /api/notifications": 1
+   }
+  }
+ ]
+}

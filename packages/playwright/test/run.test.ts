@@ -9,10 +9,10 @@ import { fork, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_REPEAT_EACH, MAX_SUMMARY_SIGNATURES, RUN_USAGE, findPlaywrightCli, parseRunArgs, planCommand, removeRaceFiles, runCommand, runSummary, type RunIo, type SpawnResult } from "../src/run.js";
+import { DEFAULT_REPEAT_EACH, MAX_SUMMARY_SIGNATURES, RUN_USAGE, findPlaywrightCli, parseRunArgs, planCommand, removeRaceFiles, runCommand, runSummary, type RunIo, type SpawnResult, localBinsPath } from "../src/run.js";
 import { isWrapperConfigName, wrapperConfigSource } from "../src/wrapper.js";
 import { fakeRuntimeDir, fixtureInputs, here } from "./helpers.js";
 
@@ -158,6 +158,28 @@ describe("run: what the command prints at the end", () => {
     const ten = runSummary({ inputs: [file("a.spec.ts > a", 1, 10)], dir: "races", notes: [], report });
     expect(ten).not.toContain("more signature");
     expect(runSummary({ inputs: [file("a.spec.ts > a", 1, 11)], dir: "races", notes: [], report })).toContain("\n  and 1 more signature\n");
+  });
+
+  it("says when chaos held no request, with the variable to set; says nothing of it when chaos was off or held some", () => {
+    const file = (test: string, seed: number, chaosApplied: number | null): { name: string; content: string } => ({
+      name: `${test}-s${seed}.json`,
+      content: JSON.stringify({
+        schema: "genclass-races/1",
+        test,
+        seed,
+        signatures: [],
+        mode: "observe",
+        model: { state: "off" },
+        chaos: chaosApplied === null ? null : { latencyMs: [0, 600], reorder: true, routes: ["same host /api* or Accept: json"] },
+        fixture: { model: "skip", agent: null, chaosApplied, serviceWorker: false },
+      }),
+    });
+    const idle = runSummary({ inputs: [file("a.spec.ts > a", 1, 0), file("a.spec.ts > a", 2, 0), file("b.spec.ts > b", 1, 7)], dir: "races", notes: [], report });
+    expect(idle).toContain("\n  Chaos held no request in 2 of 3 race files: ");
+    expect(idle).toContain("GENCLASS_CHAOS_MATCH=/graphql,https://api.example.com/");
+    expect(idle.split("\n").filter((l) => l.includes("Chaos held no request"))).toHaveLength(1);
+    expect(runSummary({ inputs: [file("a.spec.ts > a", 1, 4), file("b.spec.ts > b", 1, 7)], dir: "races", notes: [], report })).not.toContain("Chaos held no request");
+    expect(runSummary({ inputs: [file("a.spec.ts > a", 1, null)], dir: "races", notes: [], report })).not.toContain("Chaos held no request");
   });
 
   it("nothing written, what the workers remembered, and files that are not race files", () => {
@@ -306,11 +328,36 @@ describe("run: the command, on a fake process", () => {
     expect(dying.exits).toHaveLength(1);
   });
 
+  it("Playwright gets the project's node_modules/.bin on PATH, as npx gives it: a webServer command that names a local bin starts", async () => {
+    // the workflow file starts this command with `node <path>`, which adds no .bin: on a public Next.js starter the
+    // web server's command was "pglite-server ..." and the run ended with exit 127 before any test
+    const bin = (d: string) => join(d, "node_modules", ".bin");
+    const added = localBinsPath({ PATH: ["/usr/bin", bin("/repo")].join(delimiter) }, "/repo/apps/web", ["/repo/apps/web/e2e", "/repo/apps/web"]);
+    // nearest first: the config's directory, its parents, then the working directory's (already listed, so once);
+    // one already on PATH stays where it was; what was there stays last
+    const parts = added.PATH.split(delimiter);
+    expect(parts.slice(0, 3)).toEqual([bin(join("/repo", "apps", "web", "e2e")), bin(join("/repo", "apps", "web")), bin(join("/repo", "apps"))]);
+    expect(parts.slice(-2)).toEqual(["/usr/bin", bin("/repo")]);
+    expect(parts.filter((p) => p === bin("/repo"))).toHaveLength(1);
+    expect(new Set(parts).size).toBe(parts.length);
+    // Windows names it "Path": the same name is kept, and no second variable appears
+    expect(Object.keys(localBinsPath({ Path: "C:\\Windows" }, "/p", ["/p"]))).toEqual(["Path"]);
+    // a relative directory counts from the working directory; with no PATH at all there are only the bins
+    expect(localBinsPath({}, "/repo", ["e2e"]).PATH.split(delimiter)[0]).toBe(bin(join("/repo", "e2e")));
+
+    const io = fakeIo({ PATH: "/usr/bin" });
+    expect(await runCommand([], io)).toBe(0);
+    const path = String(io.spawned[0].env.PATH).split(delimiter);
+    expect(path[0]).toBe(bin(project));
+    expect(path[path.length - 1]).toBe("/usr/bin");
+  });
+
   it("the off switch, and a --config that is not there: Playwright as it is, with the arguments as given", async () => {
     const off = fakeIo({ GENCLASS_PLAYWRIGHT: "off" });
     off.during = () => ({ code: 3, signal: null });
     expect(await runCommand(["-c", "playwright.config.ts", "--grep", "x"], off)).toBe(3);
-    expect(off.spawned).toEqual([{ argv: [CLI, "test", "-c", "playwright.config.ts", "--grep", "x"], env: off.env, wrapper: null }]);
+    // the environment as it is, plus the project's local bins on PATH, as `npx playwright test` has them
+    expect(off.spawned).toEqual([{ argv: [CLI, "test", "-c", "playwright.config.ts", "--grep", "x"], env: { ...off.env, ...localBinsPath(off.env, project, [project]) }, wrapper: null }]);
     expect(off.stderr).toBe("GenClass is off (GENCLASS_PLAYWRIGHT=off): running Playwright as it is.\n");
     expect(leftovers(project)).toEqual([]);
 

@@ -14,6 +14,8 @@
 // Then the same page under a suite nobody edited (../e2e-unmodified, which imports only @playwright/test), run through
 // the command genclass-playwright-run: unmodified.mjs has what that half does and requires (the witness on the buggy
 // page in at least one of two seeds, nothing on the fixed page and nothing in the latency-only run).
+// Then tests that stop at their first matching assertion (../e2e-early): early.mjs has what that part requires (with the
+// fixture's end-of-test wait, the witness on the buggy page in at least one of six seeds and nothing on the fixed page).
 // Exit code 0 when all hold; the summary is printed as JSON, also when something does not (`failed` then says what
 // was expected and what was found).
 //
@@ -28,6 +30,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseRaces, summarize } from "../../dist/summarize.js";
 import { ending, runNode } from "./child.mjs";
+import { runEarly } from "./early.mjs";
 import { runUnmodified } from "./unmodified.mjs";
 
 /** The longest the fixture's Playwright run may take, in ms (fifteen tests of a few seconds each). */
@@ -104,6 +107,9 @@ summary.reportFirstLines = report.split("\n").slice(0, 4);
 
 // the same page, a suite nobody edited, through genclass-playwright-run
 await runUnmodified(summary, fail);
+
+// tests that stop at their first matching assertion: the fixture's wait at the end of a test
+await runEarly(summary, fail);
 
 summary.ok = true;
 console.log(JSON.stringify(summary, null, 2));
