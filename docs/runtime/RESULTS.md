@@ -1718,6 +1718,29 @@ flagged (not tested). The default chaos filter matched none of React Router's `.
 payloads; the command's summary says so and names the variable. A choice made with Playwright's `selectOption` is not
 recorded as a user action (the events it dispatches are untrusted, and `observe.untrustedEvents` is off).
 
+**A fifth public project, where the path attached to almost nothing** (payloadcms/payload at `7fdf644`, a React and
+Next.js admin; its `form-state` suite, 19 tests, and the 13 tests of `locked-documents` that open a page of their own;
+the same packed build, a separate agent session, nothing edited and nothing filed):
+
+- `form-state`: 38 of 38 passed through the command with the defaults, with delays off and with a wider match, as
+  plain. **No race file was written.** The suite makes its browser context in a `beforeAll` hook, which the fixture
+  leaves alone (what a shared context sees is no single test's); the command's notes say so, the report does not
+  repeat the reason. By a regex count, 83 of the project's 106 `e2e.spec.ts` files make their context that way.
+- `locked-documents`, the 13 covered tests, one run per seed (`--repeat-each 2` breaks the suite: every `beforeEach`
+  re-initialises one database): 26 race files, 0 signatures, 118 requests held. One test that throttles the CPU 50
+  times and uses 63 to 94% of its 60 s timeout plain timed out in all three runs through the command (delays off
+  included) and passed in both plain runs; alone it passed 5 of 5 plain and 5 of 5 through the command. The machine's
+  load was 8 to 31 on 10 cores and where the extra time went was not isolated.
+- With a context made inside the test (probe specs kept outside the project, repeating the steps of three
+  `form-state` tests), the app's state is visible: 113 to 156 state writes across 20 to 36 discovered React stores in
+  a test. Default chaos held the REST calls (45 in six files) and none of the 41 server-action POSTs that carry the
+  form state. Under default chaos one `overwrote-newer` line (1 of 2 seeds) pointed at a real race in the app, which a
+  deterministic probe then reproduced without GenClass on the page (the agent 4 of 4, a second run of the same probe 3
+  of 7, controls 7 of 7 fine). What it is stays out of this file until the project has been told by the owner.
+- Two more lines in those probes were noise: one marked reproducible whose two seeds were two different fields under
+  one signature (a signature is the witness kind and the operation, not the field), and one on Next's own development
+  indicator, which the discovery reads as a store of the app.
+
 **One workflow run on GitHub, outside this repository** (a private repository with the development set's app and the
 one workflow file as published, `docs/github-app/workflows/genclass.yml`): the job ran in 1 min 56 s, uploaded 20
 race files (agent connected in 20, 215 requests held) with the signatures the same commands give locally. The step
