@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **`@genclass/runtime/agent`: an `overwrote-newer` witness needs newer data, not merely a later timer** (AGENT.md
+  section 2). The newer write must be the user's, in the response chain of a request that started after the
+  overwriting one, or started by a later user action. Before, any operation that ran after the request started
+  counted, so a query library's mutation was a witness every time: TanStack Query sets `isPending` through a 0 ms
+  timer the click schedules, a few ms after the request left, and the response clearing it was recorded as old over
+  new (every `useMutation` of a real suite, RESULTS.md section 29). A timer no user action started (a page's own
+  ticker) is no longer newer data either. Nor is what the user's own action wrote when that action began before the
+  request was sent: React Router's `useFetcher` marks a form "submitting" in the submit handler, React commits that
+  a few ms after the request has left, and the response clearing it was a witness on every fetcher form (4 lines on a
+  public starter's 26 tests, 3 of them reproducible; none after). What the user does after the request left still
+  counts. The runtime's own facts, situations and decisions are unchanged: this is the agent entry's record only,
+  which the coding-agent tools and `@genclass/playwright` read. No model-visible text changed.
+
 ## 0.3.0-beta.6 (2026-11-11)
 
 One fix in the user-action observer, found by running a public app's own test suite with the runtime on its pages,
@@ -14,18 +29,6 @@ and a quieter `init`. No model-visible text changed (`situation-v2.3`) and the d
   listeners (click, input, change, submit, keydown) never let an exception reach the page: an element they cannot
   describe is not recorded and its event goes on to the app as it was. No model-visible text changed
   (`situation-v2.3`): a form that was described before is described the same way.
-- **`@genclass/runtime/agent`: an `overwrote-newer` witness needs newer data, not merely a later timer** (AGENT.md
-  section 2). The newer write must be the user's, in the response chain of a request that started after the
-  overwriting one, or started by a later user action. Before, any operation that ran after the request started
-  counted, so a query library's mutation was a witness every time: TanStack Query sets `isPending` through a 0 ms
-  timer the click schedules, a few ms after the request left, and the response clearing it was recorded as old over
-  new (every `useMutation` of a real suite, RESULTS.md section 29). A timer no user action started (a page's own
-  ticker) is no longer newer data either. Nor is what the user's own action wrote when that action began before the
-  request was sent: React Router's `useFetcher` marks a form "submitting" in the submit handler, React commits that
-  a few ms after the request has left, and the response clearing it was a witness on every fetcher form (4 lines on a
-  public starter's 26 tests, 3 of them reproducible; none after). What the user does after the request left still
-  counts. The runtime's own facts, situations and decisions are unchanged: this is the agent entry's record only,
-  which the coding-agent tools and `@genclass/playwright` read. No model-visible text changed.
 - `init` prints much less after it applies: the telemetry note is two lines (still what is sent, how to turn it off and
   the link), the next steps name the overlay first, and the optional upgrades are one line pointing at `init --dry-run`,
   which still lists them.
