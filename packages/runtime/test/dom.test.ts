@@ -129,6 +129,71 @@ describe("DOM user-action observer", () => {
     await clock.flush();
   });
 
+  it("a form with a control named id: the submit is recorded and nothing is thrown into the page", async () => {
+    // A form's named controls shadow its own properties: with <input name="id">, form.id is that input and not a
+    // string. An edit form's hidden id field does this (seen on a public React Router app, where the submit listener
+    // threw a TypeError into the page on every save).
+    page(`<form><legend>Edit note</legend><input type="hidden" name="id" value="42"><button>Save</button></form>`);
+    const form = document.querySelector("form")!;
+    const idInput = form.querySelector('[name="id"]')!;
+    // as a browser does it, where this DOM does not
+    if (typeof (form as unknown as { id: unknown }).id === "string") Object.defineProperty(form, "id", { configurable: true, get: () => idInput });
+    expect(typeof (form as unknown as { id: unknown }).id).toBe("object");
+    const errors: unknown[] = [];
+    const onError = (e: Event) => errors.push((e as ErrorEvent).error ?? e);
+    window.addEventListener("error", onError);
+    const clock = new FakeClock();
+    rt = createRuntime({ clock, global: window, decider: new ScriptedDecider(), report: "silent", observe: { ...OFF, user: true } }) as RuntimeImpl;
+    let threw: unknown = null;
+    try {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    } catch (e) {
+      threw = e;
+    }
+    window.removeEventListener("error", onError);
+    expect(threw).toBeNull();
+    expect(errors).toEqual([]);
+    expect(rt.history().filter((e) => e.kind === "user").map((e) => e.name)).toEqual(['submit form "Edit note"']);
+    // a form whose id attribute is set keeps it as its name, with or without such a control
+    form.setAttribute("id", "note-editor");
+    form.querySelector("legend")!.remove();
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    expect(rt.history().filter((e) => e.kind === "user").map((e) => e.name)).toEqual(['submit form "Edit note"', 'submit form "note-editor"']);
+    expect(describeElement(form)).toBe('form "note-editor"');
+    await clock.flush();
+  });
+
+  it("an element the observer cannot describe is not recorded, and its event reaches the app as it was", async () => {
+    page(`<button id="odd">Go</button>`);
+    const b = document.getElementById("odd")!;
+    // only the observer reads a button's rendered text when it names it
+    Object.defineProperty(b, "innerText", {
+      configurable: true,
+      get() {
+        throw new Error("boom");
+      },
+    });
+    const errors: unknown[] = [];
+    const onError = (e: Event) => errors.push((e as ErrorEvent).error ?? e);
+    window.addEventListener("error", onError);
+    const clock = new FakeClock();
+    rt = createRuntime({ clock, global: window, decider: new ScriptedDecider(), report: "silent", observe: { ...OFF, user: true } }) as RuntimeImpl;
+    let handled = 0;
+    b.addEventListener("click", () => handled++);
+    let threw: unknown = null;
+    try {
+      (b as HTMLButtonElement).click();
+    } catch (e) {
+      threw = e;
+    }
+    window.removeEventListener("error", onError);
+    expect(threw).toBeNull();
+    expect(errors).toEqual([]);
+    expect(handled).toBe(1);
+    expect(rt.history().filter((e) => e.kind === "user")).toEqual([]);
+    await clock.flush();
+  });
+
   it("ignores events from inside [data-genclass-ignore] (devtools overlay, app debug UI)", async () => {
     page(`<div data-genclass-ignore><button id="dbg">Debug</button></div><button id="app">App</button>`);
     const host = document.createElement("genclass-devtools");
