@@ -3,6 +3,46 @@
 Changes to `@genclass/playwright`, the Playwright reporter for
 [`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime) race files.
 
+## Unreleased
+
+- **The end of a test waits for responses in flight.** Before it collects, the fixture (and the register entry)
+  waits for the responses to requests the page had sent a moment ago and not seen answered, so an older response that
+  lands after the test's last assertion is recorded. Bounded: at most `waitForResponsesMs` (default: the chaos
+  delay's upper bound plus 1000 ms, so 1600 ms; 1000 ms without chaos), never into the last 2 seconds of the test's own
+  timeout, nothing for a test that ends with no request in flight or that timed out, and no change to any test's
+  outcome. Requests open for longer than the wait (streams, long polls) and requests sent during it are not waited
+  for. New option `waitForResponsesMs` and variable `GENCLASS_WAIT_FOR_RESPONSES_MS`; `0` turns it off. When a
+  context closes, each page is now asked with `page.evaluate` more than once. Measured in `bench/pr-evidence` and
+  [docs/runtime/RESULTS.md](../../docs/runtime/RESULTS.md).
+- **Identical requests, and writes to one path, keep their order under chaos.** Two requests with the same method,
+  URL and body, and two writes (any method but GET, HEAD, OPTIONS) to the same path whatever their bodies, are still
+  delayed, but the one sent second no longer leaves before the first. Swapped writes changed what the server stored
+  (two notes in the other order; the older save of a form kept), which no slow answer does: on the bench's autosave
+  form the server ended with an older name and the test failed on a value no response order alone gives. Before, a poll or a "+1" held longer than the
+  identical request sent after it reached the server second and came back with the newer answer, and its response
+  landing last was recorded as `overwrote-newer` although nothing older had replaced anything newer. Requests that
+  differ are reordered as before.
+- **Chaos reaches an API on the same host and another port.** The default filter was same-origin only, so an app
+  whose page is on `localhost:3000` and whose API is on `localhost:8080` (the usual local and CI setup) had no request
+  held and no order tried, and only the full report said so. The default is now the page's own host, any port, with
+  the same path and Accept conditions; an API on another host name still needs `chaos.match` /
+  `GENCLASS_CHAOS_MATCH`. The command's summary now says when chaos held no request, with the variable to set.
+- **Chaos holds nothing while the page is offline.** A request sent with no network fails at once; held past the
+  moment the network came back, it was sent and answered, so an app that queues what failed offline and sends it
+  again saw the later note arrive first (compat's "offline, then sync" scenario: a correct app showed a bug in 4 of
+  36 trials with nothing flagged, 8 of 36 once seeds were mirrored). The page now tells the fixture when it goes
+  offline and comes back; what was held leaves at that moment.
+- **A request's key no longer carries the ids in its path.** Delays are derived from the seed and the request's key
+  (method, path, occurrence). A path segment that is an id (digits, a UUID, a long hex string, a generated token) is
+  now keyed as `:id`: a record the test created a moment ago has another id in every run, so its requests got another
+  delay in every run of the same seed, which the README said could not happen. Found on a real suite, where 5 of 14
+  requests of one test changed their delay between two runs of one seed.
+- **Seeds come in mirrored pairs.** An even seed gives each request the mirror image of the delay the odd seed before
+  it gives (`min + max - delay`), so the default two seeds try each pair of requests in both orders. Seed 1 and every
+  odd seed are what they were; even seeds' delays change from 0.1.0. A two-request overwrite then shows in one seed of
+  a pair, never both: it needs `--repeat-each 4` to be marked reproducible. `chaos.mirror: false` or
+  `GENCLASS_CHAOS_MIRROR=off` gives every seed delays of its own, as before.
+
 ## 0.1.0 (2026-11-10)
 
 The first version on npm: the fixture, the reporter, and the same without editing a suite (the command

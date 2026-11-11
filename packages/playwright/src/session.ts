@@ -11,7 +11,7 @@
 // requests before they leave (that is its job), never changes what they say. A finding never changes a test's outcome.
 
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
-import { DEFAULT_SEED, describeMatch, resolveChaos, type ChaosOptions, type ResolvedChaos } from "./chaos.js";
+import { DEFAULT_SEED, MAX_WAIT_MS, describeMatch, resolveChaos, type ChaosOptions, type ResolvedChaos } from "./chaos.js";
 import { install, type Collected, type PageLike } from "./install.js";
 import { buildRacesFile, racesFileName, writeRacesFile } from "./races.js";
 import type { GenClassRacesFile, RacesLocation } from "./types.js";
@@ -40,7 +40,23 @@ export interface GenClassOptions {
   outDir?: string;
   /** @genclass/runtime's dist/ directory. Default: the installed package's. */
   runtimeDir?: string;
+  /**
+   * At the end of a test: how long, at most, to wait for the responses to requests the page had already sent, in ms,
+   * so that a response which lands after the test's last assertion is still seen. Default: 1000 more than the chaos
+   * delay's upper bound (1600 with the default chaos, 1000 without chaos), at most 5000. 0 turns the wait off. The
+   * wait ends as soon as those requests are answered, never runs past what the test has left of its own timeout, and
+   * adds nothing to a test that ends with no request in flight.
+   */
+  waitForResponsesMs?: number;
 }
+
+/** The largest end-of-test wait a default gives, and the largest that may be asked for, in ms. */
+export const MAX_DEFAULT_WAIT_MS = 5000;
+export { MAX_WAIT_MS };
+/** What the default wait adds to the chaos delay's upper bound: time for the server to answer, in ms. */
+export const WAIT_AFTER_CHAOS_MS = 1000;
+/** What a test must have left of its timeout after the wait, in ms: its own fixtures still have to tear down. */
+export const WAIT_TIMEOUT_MARGIN_MS = 2000;
 
 /** The parts of Playwright's TestInfo the fixture reads. */
 export interface TestInfoLike {
@@ -54,6 +70,8 @@ export interface TestInfoLike {
   retry?: number;
   /** The test's status when the fixture finishes ("skipped": no file is written). */
   status?: string;
+  /** The test's timeout in ms as it stands (Playwright's TestInfo.timeout; 0: none). */
+  timeout?: number;
   project: { name: string; testDir: string; outputDir?: string };
   config: { configFile?: string; rootDir: string };
 }
@@ -113,6 +131,31 @@ export interface RunPlan {
   /** The seed the file is named and labelled with: the chaos seed, or without chaos 1 plus the repeat index. */
   seed: number;
   model: "skip" | "load";
+  /** The end-of-test wait for responses, in ms (0: none). */
+  waitMs: number;
+}
+
+/**
+ * The end-of-test wait of one run: the option when it is a number from 0 (at most MAX_WAIT_MS), else 1000 ms more than
+ * the chaos delay's upper bound, at most MAX_DEFAULT_WAIT_MS.
+ */
+export function waitOf(o: GenClassOptions, chaos: ResolvedChaos | null): number {
+  const given = o.waitForResponsesMs;
+  if (typeof given === "number" && Number.isFinite(given) && given >= 0) return Math.min(MAX_WAIT_MS, Math.floor(given));
+  return Math.min(MAX_DEFAULT_WAIT_MS, (chaos ? chaos.delayMs[1] : 0) + WAIT_AFTER_CHAOS_MS);
+}
+
+/**
+ * How long the end-of-test wait may take for this test now, in ms: what is left of the test's timeout after
+ * WAIT_TIMEOUT_MARGIN_MS, counted from `startedAt` (when GenClass was put on the test's page or context). Undefined
+ * (no limit beyond the wait's own) for a test without a timeout; 0 for a test that already timed out or was
+ * interrupted, whose teardown must not be made longer.
+ */
+export function waitBudget(info: TestInfoLike, startedAt: number, now: number = Date.now()): number | undefined {
+  if (info.status === "timedOut" || info.status === "interrupted") return 0;
+  const timeout = info.timeout;
+  if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0) return undefined;
+  return Math.max(0, Math.floor(timeout - (now - startedAt) - WAIT_TIMEOUT_MARGIN_MS));
 }
 
 /** Checks the options and decides the chaos, seed and model of one test. Throws on a mode or model it does not know. */
@@ -121,7 +164,7 @@ export function planRun(o: GenClassOptions, info: TestInfoLike): RunPlan {
   if (o.model !== undefined && o.model !== "skip" && o.model !== "load") throw new Error(`@genclass/playwright: genclass.model must be "skip" or "load" (got ${JSON.stringify(o.model)})`);
   const chaos = o.chaos ? resolveChaos(o.chaos, info.repeatEachIndex) : null;
   const seed = chaos ? chaos.seed : DEFAULT_SEED + Math.max(0, Math.floor(info.repeatEachIndex) || 0);
-  return { chaos, seed, model: o.model ?? "skip" };
+  return { chaos, seed, model: o.model ?? "skip", waitMs: waitOf(o, chaos) };
 }
 
 /** The "genclass-races/1" file of one test: what was collected, under the plan it ran with. */
@@ -219,10 +262,11 @@ export async function startGenClass(page: PageLike, options: GenClassOptions | u
   if (o.enabled === false) return { finish: async () => empty };
   const plan = planRun(o, info);
   if (coveredByRegister(page)) return { finish: async () => empty };
-  const session = await install(page, { runtimeDir: o.runtimeDir, model: plan.model, modelUrl: o.modelUrl, chaos: plan.chaos });
+  const startedAt = Date.now();
+  const session = await install(page, { runtimeDir: o.runtimeDir, model: plan.model, modelUrl: o.modelUrl, chaos: plan.chaos, waitForResponsesMs: plan.waitMs });
   return {
     async finish(): Promise<GenClassRun> {
-      const collected = await session.finish();
+      const collected = await session.finish(waitBudget(info, startedAt));
       return { collected, ...writeRun(info, o.outDir, plan, collected) };
     },
   };

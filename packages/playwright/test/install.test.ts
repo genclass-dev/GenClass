@@ -4,8 +4,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AGENT_URL, BINDING, initScriptContent, install, isAgentUrl, resolveRuntimeDir, runtimeFile, type PageLike, type RequestLike, type RouteLike } from "../src/install.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AGENT_URL, BINDING, WAIT_GRACE_MS, WAIT_POLL_MS, initScriptContent, install, isAgentUrl, resolveRuntimeDir, runtimeFile, type PageLike, type RequestLike, type RouteLike, type Session } from "../src/install.js";
 import { RUNTIME_PATH, resolveChaos } from "../src/chaos.js";
 import { here } from "./helpers.js";
 
@@ -61,12 +61,13 @@ class FakeRoute implements RouteLike {
   }
 }
 
-const request = (url: string, o: { method?: string; resourceType?: string; frameUrl?: string; accept?: string } = {}): RequestLike => ({
+const request = (url: string, o: { method?: string; resourceType?: string; frameUrl?: string; accept?: string; body?: string | null } = {}): RequestLike => ({
   url: () => url,
   method: () => o.method ?? "GET",
   resourceType: () => o.resourceType ?? "fetch",
   headers: () => (o.accept ? { accept: o.accept } : {}),
   frame: () => ({ url: () => o.frameUrl ?? "http://app.test/page" }),
+  ...(o.body !== undefined ? { postData: () => o.body ?? null } : {}),
 });
 
 let runtimeDir = "";
@@ -227,6 +228,85 @@ describe("install: chaos routes", () => {
     expect(c.plans.every((p) => p.delayMs === 40)).toBe(true);
   });
 
+  it("holds nothing while the page says it is offline, and holds again when it is back", async () => {
+    const page = new FakePage();
+    await install(page, { runtimeDir, model: "skip", chaos: resolveChaos({ seed: 1, delayMs: [40, 40] }) });
+    const chaos = page.handler("**/*");
+    const timed = async (): Promise<number> => {
+      const t0 = Date.now();
+      const route = new FakeRoute();
+      await chaos(route, request("http://app.test/api/notes", { method: "POST", body: "{}" }));
+      expect(route.calls).toEqual(["fallback"]);
+      return route.at - t0;
+    };
+    expect(await timed()).toBeGreaterThanOrEqual(35);
+    page.push({ t: "net", online: false });
+    expect(await timed()).toBeLessThan(30);
+    expect(await timed()).toBeLessThan(30);
+    page.push({ t: "net", online: true });
+    expect(await timed()).toBeGreaterThanOrEqual(35);
+  });
+
+  it("holds a request to the page's own host on another port, and leaves another host alone", async () => {
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: resolveChaos({ seed: 1, delayMs: [30, 30] }) });
+    const chaos = page.handler("**/*");
+    const t0 = Date.now();
+    const api = new FakeRoute();
+    await chaos(api, request("http://localhost:8080/api/discussions", { frameUrl: "http://localhost:3000/app" }));
+    expect(api.calls).toEqual(["fallback"]);
+    expect(api.at - t0).toBeGreaterThanOrEqual(25);
+    const t1 = Date.now();
+    const other = new FakeRoute();
+    await chaos(other, request("https://api.example.com/api/discussions", { frameUrl: "http://localhost:3000/app" }));
+    expect(other.calls).toEqual(["fallback"]);
+    expect(other.at - t1).toBeLessThan(25);
+    // a cross-origin request is keyed by host name and path, without the port
+    expect((await session.finish()).plans.map((p) => p.key)).toEqual(["GET localhost/api/discussions#1"]);
+  });
+
+  it("an identical read and a write to the same path leave in the order the page sent them; a read with another query does not wait", async () => {
+    const page = new FakePage();
+    // seed 1 gives these keys different delays; whatever they are, the twin sent second must not leave first
+    await install(page, { runtimeDir, model: "skip", chaos: resolveChaos({ seed: 1, delayMs: [0, 120] }) });
+    const chaos = page.handler("**/*");
+    const order: string[] = [];
+    const send = async (name: string, url: string, o: Parameters<typeof request>[1]): Promise<void> => {
+      const route = new FakeRoute();
+      await chaos(route, request(url, o));
+      order.push(name);
+    };
+    for (let round = 0; round < 6; round++) {
+      order.length = 0;
+      await Promise.all([
+        send("plus 1", "http://app.test/api/counter/increment", { method: "POST", body: "{}" }),
+        send("plus 2", "http://app.test/api/counter/increment", { method: "POST", body: "{}" }),
+        send("plus 3", "http://app.test/api/counter/increment", { method: "POST", body: "{}" }),
+        send("poll 1", "http://app.test/api/notifications", {}),
+        send("poll 2", "http://app.test/api/notifications", {}),
+      ]);
+      const at = (n: string): number => order.indexOf(n);
+      expect(at("plus 1")).toBeLessThan(at("plus 2"));
+      expect(at("plus 2")).toBeLessThan(at("plus 3"));
+      expect(at("poll 1")).toBeLessThan(at("poll 2"));
+    }
+    // two writes to one path keep their order whatever their bodies; two different reads are not tied to each other:
+    // over a few rounds the second leaves first at least once
+    let swapped = 0;
+    for (let round = 0; round < 8; round++) {
+      order.length = 0;
+      await Promise.all([
+        send("a", "http://app.test/api/search?q=r", {}),
+        send("b", "http://app.test/api/search?q=re", {}),
+        send("c", "http://app.test/api/notes", { method: "POST", body: '{"text":"offline-1"}' }),
+        send("d", "http://app.test/api/notes", { method: "POST", body: '{"text":"offline-2"}' }),
+      ]);
+      expect(order.indexOf("c")).toBeLessThan(order.indexOf("d"));
+      if (order.indexOf("a") > order.indexOf("b")) swapped++;
+    }
+    expect(swapped).toBeGreaterThan(0);
+  });
+
   it("keys requests in the order the page sent them, whatever order they are released in", async () => {
     const page = new FakePage();
     const session = await install(page, { runtimeDir, model: "skip", chaos: resolveChaos({ seed: 7, delayMs: [0, 80] }) });
@@ -289,5 +369,155 @@ describe("install: collecting", () => {
       throw new Error("Execution context was destroyed");
     };
     await expect(s2.finish()).resolves.toMatchObject({ agent: "not-loaded" });
+  });
+});
+
+describe("install: waiting for responses at the end of a test", () => {
+  /** A page whose open() answers are scripted, one per question; the last one repeats. */
+  class OpenPage extends FakePage {
+    opens: unknown[] = [];
+    asked = 0;
+    override async evaluate(expression: string): Promise<unknown> {
+      this.evaluated.push(expression);
+      if (expression.includes(".open()")) {
+        const answer = this.opens.length ? this.opens[Math.min(this.asked, this.opens.length - 1)] : null;
+        this.asked++;
+        return answer;
+      }
+      return this.evaluateResult;
+    }
+    count(what: ".open()" | ".collect()"): number {
+      return this.evaluated.filter((e) => e.includes(what)).length;
+    }
+  }
+  const open = (keys: [string, number][], id = "load-1"): unknown => ({ id, open: keys });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** finish(), with the clock moved on in 10 ms steps until it answers: how long it took, in ms of that clock. */
+  async function finishIn(session: Session, budgetMs?: number): Promise<number> {
+    const t0 = Date.now();
+    let done = false;
+    const p = session.finish(budgetMs).then(() => void (done = true));
+    for (let i = 0; i < 2000 && !done; i++) await vi.advanceTimersByTimeAsync(10);
+    await p;
+    return Date.now() - t0;
+  }
+
+  it("asks nothing when the wait is off, and collects at once when nothing is in flight", async () => {
+    const off = new OpenPage();
+    off.opens = [open([["GET /api/a#1", 10]])];
+    expect(await finishIn(await install(off, { runtimeDir, model: "skip", chaos: null }))).toBeLessThan(WAIT_POLL_MS);
+    expect(await finishIn(await install(off, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 0 }))).toBeLessThan(WAIT_POLL_MS);
+    expect(off.count(".open()")).toBe(0);
+    expect(off.count(".collect()")).toBe(2);
+
+    const quiet = new OpenPage();
+    quiet.opens = [open([])];
+    expect(await finishIn(await install(quiet, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 1600 }))).toBeLessThan(WAIT_POLL_MS);
+    expect(quiet.count(".open()")).toBe(1);
+    expect(quiet.count(".collect()")).toBe(1);
+  });
+
+  it("waits until the requests in flight at the end are answered, then a moment for their handlers, then collects", async () => {
+    const page = new OpenPage();
+    page.opens = [open([["GET /api/items/lamp#1", 80], ["GET /api/items/desk#1", 40]]), open([["GET /api/items/lamp#1", 120]]), open([["GET /api/items/lamp#1", 160]]), open([])];
+    const session = await install(page, { runtimeDir, model: "skip", chaos: resolveChaos(true), waitForResponsesMs: 1600 });
+    page.evaluateResult = { mode: "observe", model: { state: "off" }, agent: null };
+    const ms = await finishIn(session);
+    // three more questions 40 ms apart, then the grace
+    expect(page.count(".open()")).toBe(4);
+    expect(ms).toBeGreaterThanOrEqual(3 * WAIT_POLL_MS + WAIT_GRACE_MS);
+    expect(ms).toBeLessThan(3 * WAIT_POLL_MS + WAIT_GRACE_MS + 60);
+    // collected once, after the wait
+    expect(page.count(".collect()")).toBe(1);
+    expect(page.evaluated[page.evaluated.length - 1]).toContain(".collect()");
+  });
+
+  it("does not wait for requests the page sends during the wait, nor for another page load's", async () => {
+    const page = new OpenPage();
+    // the awaited request is answered; a poll sent meanwhile is still open
+    page.opens = [open([["GET /api/search#5", 30]]), open([["GET /api/notifications#9", 5]])];
+    const ms = await finishIn(await install(page, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 1000 }));
+    expect(ms).toBeLessThan(WAIT_POLL_MS + WAIT_GRACE_MS + 60);
+
+    const navigated = new OpenPage();
+    // the page navigated: the same key in a new page load is not the request that was awaited
+    navigated.opens = [open([["GET /api/search#1", 30]], "load-1"), open([["GET /api/search#1", 10]], "load-2")];
+    expect(await finishIn(await install(navigated, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 1000 }))).toBeLessThan(WAIT_POLL_MS + WAIT_GRACE_MS + 60);
+  });
+
+  it("does not wait for a request sent longer ago than the wait itself (a stream, a long poll)", async () => {
+    const page = new OpenPage();
+    page.opens = [open([["GET /api/events#1", 45_000], ["GET /api/long-poll#3", 1601]])];
+    expect(await finishIn(await install(page, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 1600 }))).toBeLessThan(WAIT_POLL_MS);
+    expect(page.count(".open()")).toBe(1);
+  });
+
+  it("gives up at the limit, and at the test's budget when that is less; a spent budget means no wait at all", async () => {
+    const stuck = (): OpenPage => {
+      const page = new OpenPage();
+      page.opens = [open([["POST /api/orders#1", 20]])];
+      return page;
+    };
+    const a = stuck();
+    const whole = await finishIn(await install(a, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 600 }));
+    expect(whole).toBeGreaterThanOrEqual(600);
+    expect(whole).toBeLessThan(700);
+    expect(a.count(".collect()")).toBe(1);
+
+    const b = stuck();
+    const capped = await finishIn(await install(b, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 600 }), 200);
+    expect(capped).toBeGreaterThanOrEqual(200);
+    expect(capped).toBeLessThan(300);
+
+    const c = stuck();
+    expect(await finishIn(await install(c, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 600 }), 0)).toBeLessThan(WAIT_POLL_MS);
+    expect(c.count(".open()")).toBe(0);
+    expect(c.count(".collect()")).toBe(1);
+  });
+
+  it("a page that does not answer, answers nonsense, or closes during the wait ends the wait without an error", async () => {
+    const mute = new OpenPage();
+    mute.opens = [null];
+    expect(await finishIn(await install(mute, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 1600 }))).toBeLessThan(WAIT_POLL_MS);
+
+    const odd = new OpenPage();
+    odd.opens = [{ id: 7, open: "yes" }];
+    expect(await finishIn(await install(odd, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 1600 }))).toBeLessThan(WAIT_POLL_MS);
+
+    const closing = new OpenPage();
+    closing.opens = [open([["GET /api/a#1", 10]])];
+    const session = await install(closing, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 1600 });
+    let done = false;
+    const p = session.finish().then(() => void (done = true));
+    await vi.advanceTimersByTimeAsync(20);
+    closing.closed = true;
+    for (let i = 0; i < 20 && !done; i++) await vi.advanceTimersByTimeAsync(10);
+    await p;
+    expect(done).toBe(true);
+    // a closed page is not asked what it collected
+    expect(closing.count(".collect()")).toBe(0);
+  });
+
+  it("a browser context is asked page by page", async () => {
+    const page = new OpenPage();
+    const answers: unknown[][] = [[open([["GET /api/a#1", 10]], "p1"), open([["GET /api/b#1", 10]], "p2"), null], [open([], "p1"), open([["GET /api/b#1", 50]], "p2"), null], [open([], "p1"), open([], "p2")]];
+    let asked = 0;
+    const context = Object.assign(page, {
+      evaluateEach: async (expression: string): Promise<unknown[]> => {
+        page.evaluated.push(expression);
+        return answers[Math.min(asked++, answers.length - 1)];
+      },
+    });
+    const ms = await finishIn(await install(context, { runtimeDir, model: "skip", chaos: null, waitForResponsesMs: 1600 }));
+    expect(asked).toBe(3);
+    expect(ms).toBeGreaterThanOrEqual(2 * WAIT_POLL_MS + WAIT_GRACE_MS);
+    expect(ms).toBeLessThan(2 * WAIT_POLL_MS + WAIT_GRACE_MS + 60);
   });
 });

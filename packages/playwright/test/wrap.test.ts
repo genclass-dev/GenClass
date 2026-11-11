@@ -16,6 +16,12 @@ import { REGISTER_KEY, startGenClass, type GenClassOptions, type TestInfoLike } 
 import { ATTACH_CAP_MS, hookOf, HOOK_NOTE, mergePageStates, OUTLIVED_NOTE, WRAPPED, Wrapper } from "../src/wrap.js";
 import { fakePlaywright, fakeRuntimeDir, fakeTestInfo, PAGE_OK, type FakeContext, type FakePlaywright } from "./helpers.js";
 
+/**
+ * What a question to a page was: at the end of a test each page is asked which of its requests are still unanswered
+ * (the end-of-test wait, src/install.ts) and then, once, what it collected.
+ */
+const question = (expression: string): string => (expression.includes(".open()") ? "open" : expression.includes(".collect()") ? "collect" : "other");
+
 let root = "";
 let runtimeDir = "";
 let outDir = "";
@@ -277,7 +283,7 @@ describe("wrap: a context created while a test runs", () => {
     const context = await (await pw.chromium.launch()).newContext();
     expect(context.initScripts[0]).toContain('"model":{"baseUrl":"/models/"}');
     await context.close();
-    expect(read(FILE)).toMatchObject({ seed: 1, chaos: { latencyMs: [0, 600], reorder: true, routes: ["same-origin /api* or Accept: json"] }, fixture: { model: "load", chaosApplied: 0 } });
+    expect(read(FILE)).toMatchObject({ seed: 1, chaos: { latencyMs: [0, 600], reorder: true, routes: ["same host /api* or Accept: json"] }, fixture: { model: "load", chaosApplied: 0 } });
   });
 
   it("launchPersistentContext: the context it returns is instrumented, and its browser wrapped", async () => {
@@ -299,7 +305,7 @@ describe("wrap: a context created while a test runs", () => {
     const page = await browser.newPage();
     expect(page.context().exposed.has(CONTEXT_BINDING)).toBe(true);
     await page.close();
-    expect(page.evaluated).toHaveLength(1);
+    expect(page.evaluated.map(question)).toEqual(["open", "collect"]);
     expect(files()).toEqual([FILE]);
   });
 });
@@ -317,7 +323,7 @@ describe("wrap: one file per test, written before the context closes", () => {
     context.push({ t: "witness", witness: witness(1) });
     pw.log.length = 0;
     await context.close({ reason: "Test ended." });
-    expect(pw.log).toEqual(["page.evaluate", "page.evaluate", "context.close"]);
+    expect(pw.log).toEqual(["page.evaluate", "page.evaluate", "page.evaluate", "page.evaluate", "context.close"]);
     expect(page.evaluated[0]).toContain("__GENCLASS_PLAYWRIGHT__");
     expect(context.closeCalls).toEqual([[{ reason: "Test ended." }]]);
     expect(context.closed).toBe(true);
@@ -368,7 +374,7 @@ describe("wrap: one file per test, written before the context closes", () => {
     expect(files()).toEqual([FILE]);
     expect((read(FILE).signatures as { sig: string }[]).map((s) => s.sig)).toEqual(["request|duplicate|POST /api/orders", "witness|identical-in-flight|POST /api/orders", "witness|overwrote-newer|GET /api/search"]);
     expect(read(FILE).fixture).toEqual({ model: "skip", agent: null, chaosApplied: null, serviceWorker: true });
-    expect(pw.log.filter((l) => l === "page.evaluate")).toHaveLength(3);
+    expect(pw.log.filter((l) => l === "page.evaluate")).toHaveLength(6);
   });
 
   it("each test, each repeat and each retry has its own file; a test skipped in its body has none", async () => {
@@ -430,13 +436,13 @@ describe("wrap: one file per test, written before the context closes", () => {
     const page = await context.newPage();
     pw.log.length = 0;
     await Promise.all([context.close("first"), context.close("second")]);
-    expect(page.evaluated).toHaveLength(1);
+    expect(page.evaluated.map(question)).toEqual(["open", "collect"]);
     // both waited for the one collection, and reached the original in the order they were made
-    expect(pw.log).toEqual(["page.evaluate", "context.close", "context.close"]);
+    expect(pw.log).toEqual(["page.evaluate", "page.evaluate", "context.close", "context.close"]);
     expect(context.closeCalls).toEqual([["first"], ["second"]]);
     await context.close("third");
     await browser.close();
-    expect(page.evaluated).toHaveLength(1);
+    expect(page.evaluated.map(question)).toEqual(["open", "collect"]);
     expect(context.closeCalls).toEqual([["first"], ["second"], ["third"]]);
     expect(files()).toEqual([FILE]);
   });
@@ -450,8 +456,8 @@ describe("wrap: one file per test, written before the context closes", () => {
     context.push({ t: "witness", witness: witness(1) });
     pw.log.length = 0;
     await Promise.all([context.close(), browser.close()]);
-    expect(pw.log).toEqual(["page.evaluate", "context.close", "browser.close"]);
-    expect(page.evaluated).toHaveLength(1);
+    expect(pw.log).toEqual(["page.evaluate", "page.evaluate", "context.close", "browser.close"]);
+    expect(page.evaluated.map(question)).toEqual(["open", "collect"]);
     expect(read(FILE)).toMatchObject({ mode: "observe", fixture: { agent: null }, signatures: [{ sig: "witness|overwrote-newer|GET /api/search" }] });
   });
 
@@ -467,8 +473,8 @@ describe("wrap: one file per test, written before the context closes", () => {
     left.push({ t: "witness", witness: witness(3) });
     pw.log.length = 0;
     expect(await browser.close({ reason: "Test ended." })).toBe('closed:[{"reason":"Test ended."}]');
-    expect(pw.log).toEqual(["page.evaluate", "browser.close"]);
-    expect(page.evaluated).toHaveLength(1);
+    expect(pw.log).toEqual(["page.evaluate", "page.evaluate", "browser.close"]);
+    expect(page.evaluated.map(question)).toEqual(["open", "collect"]);
     expect(left.closeCalls).toEqual([]);
     expect(read(FILE).signatures).toHaveLength(1);
     expect(notes).toEqual([]);
@@ -870,7 +876,7 @@ describe("wrap: the pages of a context share one binding", () => {
     expect(context.pages()).toEqual([main]);
     await context.close(); // only the main page answers, with agent null
     expect(popup.evaluated).toEqual([]);
-    expect(main.evaluated).toHaveLength(1);
+    expect(main.evaluated.map(question)).toEqual(["open", "collect"]);
     expect(read(FILE)).toMatchObject({ mode: "observe", fixture: { agent: "Failed to fetch dynamically imported module" } });
 
     // no page left to answer at the close: the same

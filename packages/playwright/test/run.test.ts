@@ -160,6 +160,28 @@ describe("run: what the command prints at the end", () => {
     expect(runSummary({ inputs: [file("a.spec.ts > a", 1, 11)], dir: "races", notes: [], report })).toContain("\n  and 1 more signature\n");
   });
 
+  it("says when chaos held no request, with the variable to set; says nothing of it when chaos was off or held some", () => {
+    const file = (test: string, seed: number, chaosApplied: number | null): { name: string; content: string } => ({
+      name: `${test}-s${seed}.json`,
+      content: JSON.stringify({
+        schema: "genclass-races/1",
+        test,
+        seed,
+        signatures: [],
+        mode: "observe",
+        model: { state: "off" },
+        chaos: chaosApplied === null ? null : { latencyMs: [0, 600], reorder: true, routes: ["same host /api* or Accept: json"] },
+        fixture: { model: "skip", agent: null, chaosApplied, serviceWorker: false },
+      }),
+    });
+    const idle = runSummary({ inputs: [file("a.spec.ts > a", 1, 0), file("a.spec.ts > a", 2, 0), file("b.spec.ts > b", 1, 7)], dir: "races", notes: [], report });
+    expect(idle).toContain("\n  Chaos held no request in 2 of 3 race files: ");
+    expect(idle).toContain("GENCLASS_CHAOS_MATCH=/graphql,https://api.example.com/");
+    expect(idle.split("\n").filter((l) => l.includes("Chaos held no request"))).toHaveLength(1);
+    expect(runSummary({ inputs: [file("a.spec.ts > a", 1, 4), file("b.spec.ts > b", 1, 7)], dir: "races", notes: [], report })).not.toContain("Chaos held no request");
+    expect(runSummary({ inputs: [file("a.spec.ts > a", 1, null)], dir: "races", notes: [], report })).not.toContain("Chaos held no request");
+  });
+
   it("nothing written, what the workers remembered, and files that are not race files", () => {
     expect(runSummary({ inputs: [], dir: "test-results/genclass", notes: [], report })).toBe("GenClass: no race file in test-results/genclass. One is written for each test that opens a browser context while GenClass is on.\n");
     expect(runSummary({ inputs: [], dir: "out", notes: ["could not put GenClass on a browser context: Target closed", "", "could not put GenClass on a browser context: Target closed", " GENCLASS_SEED=\"x\" is not a whole number from 0; using 1 "], report })).toBe(

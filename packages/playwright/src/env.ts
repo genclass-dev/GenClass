@@ -9,8 +9,12 @@
 //   GENCLASS_SEED             the chaos seed, a whole number from 0 (default 1); Playwright's repeat index is added
 //   GENCLASS_CHAOS_DELAY_MS   "min,max": extra latency per matched request in ms (default 0,600; at most 10000)
 //   GENCLASS_CHAOS_REORDER    on | off (default on); off: matched requests leave in order, latency only
+//   GENCLASS_CHAOS_MIRROR     on | off (default on); off: every seed has delays of its own (an even seed is otherwise
+//                             the mirror image of the odd seed before it)
 //   GENCLASS_CHAOS_MATCH      comma-separated path prefixes ("/api") or URL prefixes ("https://api.example.com/")
-//                             (default: same-origin /api* or an Accept header asking for JSON)
+//                             (default: the page's own host, any port: /api* or an Accept header asking for JSON)
+//   GENCLASS_WAIT_FOR_RESPONSES_MS  at the end of a test: how long at most to wait for the responses to requests the
+//                             page had already sent, in ms (default: 1000 more than the chaos delay's upper bound; 0: no wait)
 //   GENCLASS_OUT_DIR          where the race files go, against the working directory (default test-results/genclass)
 //   GENCLASS_MODEL            skip (default) | load
 //   GENCLASS_MODEL_URL        with GENCLASS_MODEL=load: a model directory URL
@@ -18,7 +22,7 @@
 //   GENCLASS_NOTES_FILE       set by the command: where the register entry appends the lines it remembers
 
 import { isAbsolute, join, resolve } from "node:path";
-import { DEFAULT_SEED, type ChaosOptions } from "./chaos.js";
+import { DEFAULT_SEED, MAX_WAIT_MS, type ChaosOptions } from "./chaos.js";
 import type { GenClassOptions } from "./session.js";
 
 /** The variables' names. */
@@ -28,7 +32,9 @@ export const ENV = {
   seed: "GENCLASS_SEED",
   delayMs: "GENCLASS_CHAOS_DELAY_MS",
   reorder: "GENCLASS_CHAOS_REORDER",
+  mirror: "GENCLASS_CHAOS_MIRROR",
   match: "GENCLASS_CHAOS_MATCH",
+  wait: "GENCLASS_WAIT_FOR_RESPONSES_MS",
   outDir: "GENCLASS_OUT_DIR",
   model: "GENCLASS_MODEL",
   modelUrl: "GENCLASS_MODEL_URL",
@@ -103,12 +109,19 @@ export function optionsFromEnv(env: Env, cwd: string, chaosDefault = false): Env
       else bad(ENV.delayMs, '"min,max" in ms with min not above max', "0,600");
     }
     if (!flag(ENV.reorder, true)) chaos.reorder = false;
+    if (!flag(ENV.mirror, true)) chaos.mirror = false;
     const match = text(env, ENV.match);
     if (match !== undefined) {
       const list = match.split(",").map((s) => s.trim()).filter(Boolean);
       if (list.length) chaos.match = list;
     }
     options.chaos = Object.keys(chaos).length ? chaos : true;
+  }
+
+  const wait = text(env, ENV.wait);
+  if (wait !== undefined) {
+    if (/^\d+$/.test(wait) && Number(wait) <= MAX_WAIT_MS) options.waitForResponsesMs = Number(wait);
+    else bad(ENV.wait, `a whole number of ms from 0 to ${MAX_WAIT_MS}`, "the default");
   }
 
   const model = text(env, ENV.model);

@@ -76,7 +76,8 @@ spec stays as it was. The run ends with `test-results/genclass/<test>-<id>-s<see
 
 Two seeds, so the report can mark what reproduced: `repeatEach: 2` in the config (or `npx playwright test
 --repeat-each 2`). The fixture adds the repeat index to the seed, so the repeats run under seeds 1 and 2, and a
-signature flagged in both is **Reproducible** in the report.
+signature flagged in both is **Reproducible** in the report. Seeds 1 and 2 are a pair: seed 2 holds each request for
+the mirror image of seed 1's delay, so the two runs try each pair of requests in both orders ([Chaos](#chaos)).
 
 ### The `genclass` option
 
@@ -91,6 +92,7 @@ Set in `use` in the config, or `test.use({ genclass: {...} })` in a spec or a `d
 | `chaos` | off | Seeded network chaos (below): an object, or `true` for the defaults. Off unless given. |
 | `outDir` | `genclass` in the project's `outputDir` | Where the files go, relative to the config's directory. The default (test-results/genclass) is emptied by Playwright at the start of each run, so files of an earlier run are never read as more seeds. The reporter reads it by default. |
 | `runtimeDir` | the installed package's `dist/` | `@genclass/runtime`'s `dist/` directory, when it is not resolvable from your project. |
+| `waitForResponsesMs` | chaos `delayMs` upper bound + 1000 (1600 by default; 1000 without chaos; at most 5000) | At the end of a test: how long, at most, the fixture waits for the responses to requests the page had already sent, so a response that lands after the test's last assertion is still seen ([At the end of a test](#at-the-end-of-a-test)). `0`: no wait. |
 
 ### Chaos
 
@@ -101,9 +103,10 @@ use: { genclass: { chaos: { seed: 1, delayMs: [0, 600], reorder: true, match: ["
 | key | default | what |
 |---|---|---|
 | `seed` | `1` | Every delay is derived from it. With `repeatEach`, the fixture adds the repeat index. |
+| `mirror` | `true` | An even seed gives each request the mirror image of the delay the odd seed before it gives (`min + max - delay`), so seeds 1 and 2, 3 and 4, ... are pairs. `false`: every seed has delays of its own, as in 0.1.0. |
 | `delayMs` | `[0, 600]` | Extra latency per matched response, uniform in `[min, max]` ms, at most 10000. |
 | `reorder` | `true` | `false`: matched requests leave in the order the page sent them, at least 30 ms apart (latency only: with a server that answers in order, nothing overtakes). |
-| `match` | same-origin `/api*` or `Accept: json` | Which requests: a path prefix (`"/api"`), a URL prefix (`"https://api.example.com/"`), a RegExp tested against the full URL, a function of `{ url, method, resourceType, sameOrigin, accept }`, or a list of those. Without it: same-origin requests whose path starts with `/api` or whose Accept header asks for JSON. |
+| `match` | the page's own host, `/api*` or `Accept: json` | Which requests: a path prefix (`"/api"`), a URL prefix (`"https://api.example.com/"`), a RegExp tested against the full URL, a function of `{ url, method, resourceType, sameOrigin, accept }`, or a list of those. Without it: requests to the page's own host (its origin, or the same host name on another port, as `localhost:8080` beside `localhost:3000`) whose path starts with `/api` or whose Accept header asks for JSON. An API on another host name needs a `match`. |
 
 How it works: with `page.route`, the fixture holds each matched request for its planned time and then passes it on
 (`route.fallback()`), the way a slow uplink would. The request then takes its normal path: your own routes
@@ -112,14 +115,56 @@ streaming as they are. Each matched request is keyed when the page sends it, by 
 the test (`GET /api/search#3`; a cross-origin one by host name without the port); its delay comes from a small PRNG
 seeded by `seed` and that key, so the same test under the same seed gets the same delays whatever the wall clock or
 the server does, and a finding comes with the seed that produced it. Nothing is dropped, changed, buffered or
-invented. Only fetch and XHR requests are ever held, never documents, scripts, styles, images, WebSockets or the
+invented.
+
+Requests that say the same thing keep their order. Holding a request back changes which of two requests the server
+answers first. For two requests with the same method, URL and body (two polls, two clicks on "+1") that would bring
+the one sent first back with the newer answer, and the runtime would record newer data landing over older as an
+`overwrote-newer`. So identical requests are delayed and never swapped: one leaves only after the identical one sent
+before it has left. The same holds for two writes to one path (any method but GET, HEAD and OPTIONS; the query and
+the body do not matter): swapped on the way out, two notes would be stored in the other order and an older save of a
+form would be the one the server keeps, which is the test changing the server's data, not a slow answer. Reads that
+differ (another query, another id) still overtake each other, which is what a held request models faithfully: the
+answer to the older question arriving last. A GraphQL API, where every operation is a POST to one path, therefore
+gets latency and no reordering. One limit follows from
+holding requests and not answers: a response whose content depends on the server's state at the time (a total, a
+count) cannot be made stale by this chaos, only one whose content depends on what was asked.
+
+Seeds come in pairs. An older response landing over a newer one needs the request sent first to be held longer than
+the one sent after it. Two unrelated seeds give two requests sent 40 ms apart that order in at least one seed 69% of
+the time; a mirrored pair (the one held longer under seed 1 is held shorter under seed 2) does in 87%, and each seed's
+delays are still uniform in `[min, max]`. The price: such a two-request overwrite shows in one seed of the pair, not
+both, so it is **Reproducible** only from four seeds (`--repeat-each 4`: two pairs). Overwrites among three or more
+requests (a typeahead, an autosave) and identical requests in flight show in both seeds as before. Only fetch and XHR requests are ever held, never documents, scripts, styles, images, WebSockets or the
 runtime's own files; a request outside `match` is passed on at once.
 
-Two things to know. A route of yours registered after the fixture's (Playwright tries the last one first) that
+Three things to know. While the page is offline (`context.setOffline(true)`), chaos holds nothing: a request sent
+with no network fails at once, and held until the network is back it would be sent and answered, in an order the app
+never made. What was held when the page went offline leaves at that moment. A route of yours registered after the fixture's (Playwright tries the last one first) that
 fulfils a request answers before chaos sees it, so that request gets no delay; call `route.fallback()` in it to let
 chaos run. And `page.route` does not see requests a service worker handles; with a service worker controlling the
 page, set `serviceWorkers: "block"` in `use`. The race file records how many requests chaos held and whether a
 service worker was in control, and the report notes a test where chaos held nothing.
+
+### At the end of a test
+
+A test usually ends at its last assertion, and a response that would have landed a moment later is exactly what an
+older-over-newer overwrite looks like: the request for the item the user left answers after the one for the item they
+are on. So before it collects, the fixture asks the page which of its requests are still unanswered and waits for
+them, on its own side of the browser:
+
+- only requests the page had sent when the test ended, and only ones sent no longer ago than the wait itself (a
+  stream or a long poll that has been open for a minute is not waited for; neither is anything the page sends during
+  the wait);
+- a held request leaves when its planned delay is over, as it would have during the test;
+- the wait ends 120 ms after the last of them is answered, and at the latest after `waitForResponsesMs`;
+- it never runs into the test's own timeout (it keeps 2 seconds of it clear), and a test that already timed out is
+  not made longer;
+- a test that ends with nothing in flight waits for nothing, and no test's outcome changes: the wait happens after the
+  test's status is set.
+
+The page is asked with `page.evaluate` every 40 ms while it waits, from Node, so a test that controls the page's clock
+(`page.clock`) is not stuck. `waitForResponsesMs: 0` (or `GENCLASS_WAIT_FOR_RESPONSES_MS=0`) turns the wait off.
 
 ### The model trade-off
 
@@ -257,7 +302,7 @@ left alone:
 
 A wrapped call is the original call: the same receiver and arguments, the same result, the same error under the same
 API name (`browserType.launch: ...`). It adds one stack frame of this package to those seven calls, and the entry's
-own calls (`browserContext.exposeBinding`, `route`, `addInitScript`, and a `page.evaluate` when a context closes)
+own calls (`browserContext.exposeBinding`, `route`, `addInitScript`, and `page.evaluate` calls when a context closes)
 are ordinary Playwright calls, so a trace lists them. If anything inside the entry fails, the context is handed back
 as Playwright made it, the test goes on, and one line is remembered for the command's summary (`GenClass notes:`).
 
@@ -272,7 +317,9 @@ replaced by its default and reported in the summary; it never fails a run.
 | `GENCLASS_SEED` | `1` | The chaos seed, a whole number from 0. Playwright's repeat index is added, so `--repeat-each 2` runs seeds 1 and 2. |
 | `GENCLASS_CHAOS_DELAY_MS` | `0,600` | `min,max`: extra latency per matched request in ms, at most 10000. |
 | `GENCLASS_CHAOS_REORDER` | `on` | `off`: matched requests leave in the order the page sent them (latency only). |
-| `GENCLASS_CHAOS_MATCH` | same-origin `/api*` or `Accept: json` | Which requests, as comma-separated path prefixes (`/api,/graphql`) or URL prefixes (`https://api.example.com/`). |
+| `GENCLASS_CHAOS_MIRROR` | `on` | `off`: every seed has delays of its own (an even seed is otherwise the mirror image of the odd seed before it). |
+| `GENCLASS_CHAOS_MATCH` | the page's own host, `/api*` or `Accept: json` | Which requests, as comma-separated path prefixes (`/api,/graphql`) or URL prefixes (`https://api.example.com/`). |
+| `GENCLASS_WAIT_FOR_RESPONSES_MS` | chaos delay's upper bound + 1000 | At the end of a test: how long at most to wait for the responses to requests the page had already sent, in ms. `0`: no wait. |
 | `GENCLASS_OUT_DIR` | `test-results/genclass` | Where the race files go, against the working directory. |
 | `GENCLASS_MODEL` | `skip` | `load`: the runtime loads its model in the page, as with the fixture's `model: "load"`; `GENCLASS_MODEL_URL` names a model directory URL. |
 | `GENCLASS_RUNTIME_DIR` | the `@genclass/runtime` installed next to `@genclass/playwright`, else your project's | `@genclass/runtime`'s `dist/` directory, when it is somewhere else. |
@@ -296,6 +343,34 @@ the seed decides). A suite that passes normally can fail there: an assertion tha
 in the order they were sent, a short timeout. That is what the run is for, and it is why the workflow's job is
 separate from your own e2e job and allowed to fail (`continue-on-error: true`): it never blocks a pull request.
 `GENCLASS_CHAOS=off` keeps the runtime and its witnesses without the holds.
+
+**A suite whose tests cannot run twice in one run.** `--repeat-each 2` runs every test twice inside one Playwright
+run, and a setup project (a saved login, seeded data) runs once for both. Tests that share an account or delete what
+they created can then fail on the repeat with or without GenClass: on a public React starter's suite the same two
+tests failed under plain `playwright test --repeat-each 2` (RESULTS.md section 29). Give each seed a run of its own
+instead: every run is then an ordinary run of your suite. Upload each run's race files as an artifact of its own;
+genclass-dev[bot] reads every artifact whose name starts with `genclass` and puts the seeds of a test together.
+
+```yaml
+      - name: Playwright with GenClass, seed 1
+        run: node "$RUNNER_TEMP/genclass/node_modules/@genclass/playwright/bin/genclass-playwright-run.mjs" --repeat-each 1
+        env: { GENCLASS_SEED: "1", GENCLASS_OUT_DIR: genclass-races/seed-1 }
+      - name: Playwright with GenClass, seed 2
+        if: ${{ !cancelled() }}
+        run: node "$RUNNER_TEMP/genclass/node_modules/@genclass/playwright/bin/genclass-playwright-run.mjs" --repeat-each 1
+        env: { GENCLASS_SEED: "2", GENCLASS_OUT_DIR: genclass-races/seed-2 }
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with: { name: genclass-races-seed-1, path: genclass-races/seed-1, retention-days: 7, if-no-files-found: ignore }
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with: { name: genclass-races-seed-2, path: genclass-races/seed-2, retention-days: 7, if-no-files-found: ignore }
+```
+
+A directory outside Playwright's `outputDir` matters here: Playwright empties its own output directory when a run
+starts, and the second run would take the first run's race files with it. Locally, name both directories to the
+report command: `npx genclass-playwright-report genclass-races/seed-1 genclass-races/seed-2`. Checked on this
+repository's bench app (ten race files, the two seeds of each test put together); not yet run on GitHub.
 
 Installed outside the project, `@playwright/test` stays your project's only copy: it is an optional peer dependency
 of this package, and npm does not install optional peer dependencies on its own (read from npm 10.9's installer, not
