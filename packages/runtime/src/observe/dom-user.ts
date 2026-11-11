@@ -29,6 +29,19 @@ function clean(s: string | null | undefined, n = 40): string {
   return truncate((s ?? "").replace(/\s+/g, " ").trim(), n);
 }
 
+/**
+ * An element's own id. A form's named controls shadow its properties (with <input name="id">, form.id is that input),
+ * so the property is trusted only when it is a string; otherwise the attribute is read.
+ */
+function idOf(el: Element): string {
+  const id = (el as { id?: unknown }).id;
+  if (typeof id === "string") return id;
+  const get = (el as { getAttribute?: unknown }).getAttribute;
+  if (typeof get !== "function") return "";
+  const attr = (get as (name: string) => unknown).call(el, "id");
+  return typeof attr === "string" ? attr : "";
+}
+
 function roleOf(el: Element): string {
   const role = el.getAttribute("role");
   if (role) return role;
@@ -144,9 +157,10 @@ export function describeElement(el: Element | null): string {
   if (!name && isField) {
     const labels = (el as HTMLInputElement).labels;
     if (labels && labels.length) name = labelText(labels[0]);
-    if (!name && el.id && scope) {
+    const id = idOf(el);
+    if (!name && id && scope) {
       try {
-        name = labelText(scope.querySelector(`label[for="${CSS && CSS.escape ? CSS.escape(el.id) : el.id}"]`));
+        name = labelText(scope.querySelector(`label[for="${CSS && CSS.escape ? CSS.escape(id) : id}"]`));
       } catch {
         /* ignore */
       }
@@ -164,7 +178,7 @@ export function describeElement(el: Element | null): string {
     const host = shadowRootOf(el)?.host;
     if (host) name = clean(host.getAttribute("aria-label")) || clean(host.getAttribute("label")) || clean(host.getAttribute("title")) || clean(host.getAttribute("placeholder"));
   }
-  if (!name) name = clean(el.id);
+  if (!name) name = clean(idOf(el));
   const role = roleOf(el);
   return name ? `${role} "${name}"` : role;
 }
@@ -297,7 +311,7 @@ export function installDomUser(g: Record<string, unknown>, sink: UserSink): (() 
     const form = originOf(e) as HTMLFormElement | null;
     let target = "form";
     if (form && form.tagName) {
-      const name = clean(form.getAttribute("aria-label")) || clean(form.getAttribute("name")) || clean(form.id) || clean(form.querySelector("h1,h2,h3,legend")?.textContent);
+      const name = clean(form.getAttribute("aria-label")) || clean(form.getAttribute("name")) || clean(idOf(form)) || clean(form.querySelector("h1,h2,h3,legend")?.textContent);
       target = name ? `form "${name}"` : "form";
     }
     sink.user({ kind: "submit", target });
@@ -330,7 +344,22 @@ export function installDomUser(g: Record<string, unknown>, sink: UserSink): (() 
     return k !== null && k !== "user";
   };
   let stopped = false;
-  const guarded = pairs.map(([t, fn]) => [t, (e: Event) => (stopped || ignoredEvent(e) || programmatic(e) ? undefined : fn(e))] as [string, (e: Event) => void]);
+  // Nothing here may reach the page. A capture listener that throws is an uncaught error of the app's own page (its
+  // console, its error tracker), and the errors observer would then record the runtime's own failure as the app's. An
+  // element this code cannot describe is not recorded, and its event goes on to the app's handlers as it was.
+  const guarded = pairs.map(
+    ([t, fn]) =>
+      [
+        t,
+        (e: Event) => {
+          try {
+            if (!(stopped || ignoredEvent(e) || programmatic(e))) fn(e);
+          } catch {
+            /* not recorded */
+          }
+        },
+      ] as [string, (e: Event) => void],
+  );
   // change and submit do not leave a shadow root: listen on each open shadow root a composed event came from
   const LOCAL = new Set(["change", "submit"]);
   // (a synthetic composed one also reaches the window listener: handled there only)
@@ -346,12 +375,16 @@ export function installDomUser(g: Record<string, unknown>, sink: UserSink): (() 
     } catch {
       return;
     }
-    for (const n of path) {
-      const sr = n as unknown as ShadowRoot;
-      if (!sr || sr.nodeType !== FRAGMENT_NODE || !sr.host || seenRoots.has(sr)) continue;
-      seenRoots.add(sr);
-      for (const [t, fn] of local) sr.addEventListener(t, fn, opts);
-      if (WR) shadowRoots.push(new WR(sr));
+    try {
+      for (const n of path) {
+        const sr = n as unknown as ShadowRoot;
+        if (!sr || sr.nodeType !== FRAGMENT_NODE || !sr.host || seenRoots.has(sr)) continue;
+        seenRoots.add(sr);
+        for (const [t, fn] of local) sr.addEventListener(t, fn, opts);
+        if (WR) shadowRoots.push(new WR(sr));
+      }
+    } catch {
+      /* a root that cannot be listened on is not observed */
     }
   };
   const ADOPT_ON = ["focusin", "pointerdown", "mousedown", "click", "input", "keydown"];
