@@ -1,8 +1,8 @@
 # GenClass documentation
 
 This is the index of the GenClass Runtime documentation: which document answers which question, how current each one
-is, and where genclass.dev shows it. It covers `@genclass/runtime` on `main` (version string 0.3.0-beta.5;
-`npm i @genclass/runtime@beta` installs 0.3.0-beta.5, `npm i @genclass/runtime` installs 0.2.3) and the model
+is, and where genclass.dev shows it. It covers `@genclass/runtime` on `main` (version string 0.3.0-beta.6;
+`npm i @genclass/runtime@beta` installs 0.3.0-beta.6, `npm i @genclass/runtime` installs 0.2.3) and the model
 `@genclass/runtime-model` 0.2.0. Items marked 0.3.0 are in
 the 0.3.0 line (0.3.0-beta.0 and later) and not in 0.2.x. The [glossary](#glossary) at the end defines the terms the
 other documents use.

@@ -3,8 +3,8 @@
 GenClass Runtime (`@genclass/runtime`) is a browser library. It watches what a web app does (requests, pushed
 messages, user actions, timers, state writes, errors) and, for the few situations that look risky, asks a small
 on-device model whether something is going wrong and what to do. This page explains how the parts fit together and
-why they are built this way, for `@genclass/runtime` on `main` (version string 0.3.0-beta.5; npm `latest` is 0.2.3, `beta` is
-0.3.0-beta.5) with model
+why they are built this way, for `@genclass/runtime` on `main` (version string 0.3.0-beta.6; npm `latest` is 0.2.3, `beta` is
+0.3.0-beta.6) with model
 `@genclass/runtime-model` 0.2.0. Items marked 0.3.0 are in the 0.3.0 line (0.3.0-beta.0 and later) and not in
 0.2.x. How to use it: [API.md](API.md). Binding rules: [CONTRACT.md](CONTRACT.md). Every measured number:
 [RESULTS.md](RESULTS.md). Terms: the [glossary](README.md#glossary).

@@ -1,7 +1,7 @@
 # GenClass Runtime API reference (@genclass/runtime)
 
 This page describes every export, option, event, action and type of `@genclass/runtime` on `main`.
-`npm i @genclass/runtime` installs 0.2.3 (`latest`); `npm i @genclass/runtime@beta` installs 0.3.0-beta.5. Items
+`npm i @genclass/runtime` installs 0.2.3 (`latest`); `npm i @genclass/runtime@beta` installs 0.3.0-beta.6. Items
 marked 0.3.0 are not in 0.2.x; items marked 0.3.0-beta.1 (interaction analytics, the devtools redesign) and later
 are on npm's `beta` dist-tag since 2026-10-22.
 

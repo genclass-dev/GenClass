@@ -15,12 +15,12 @@ failures, and `heal` is experimental.
 ## What should I run instead?
 
 ```bash
-npx @genclass/runtime@beta init                  # the newest line: 0.3.0-beta.5 on 2026-11-03
+npx @genclass/runtime@beta init                  # the newest line: 0.3.0-beta.6 on 2026-11-11
 npx @genclass/runtime@beta init --token gc_...   # use a token you already have (no call to genclass.dev)
 npx @genclass/runtime@beta init --no-token       # no token, no call to genclass.dev
 ```
 
-`@beta` is the newest line of `@genclass/runtime` (`0.3.0-beta.5` on 2026-11-03); the stable line, `0.2.3` (npm's
+`@beta` is the newest line of `@genclass/runtime` (`0.3.0-beta.6` on 2026-11-11); the stable line, `0.2.3` (npm's
 `latest`, `npx @genclass/runtime init`), is the exception. npm's `genclass-runtime` is still at `0.1.0-beta.3`, so
 `npx genclass-runtime init` runs that old CLI unless the project already has `@genclass/runtime` installed (see
 below).
@@ -59,7 +59,7 @@ sending Global Privacy Control are never collected. Details:
 <!-- Maintainers: npmjs.com shows the README and package.json fields of the published version. On 2026-10-27 npm has
 genclass-runtime 0.1.0-beta.3 (latest, published 2026-10-09) with its older README and description ("Short alias for
 the @genclass/runtime CLI ...") and no deprecation flag; release.yml packs and publishes only packages/runtime
-(@genclass/runtime, 0.3.0-beta.5 on main), so this README and the description here do not reach npm. The notice
+(@genclass/runtime, 0.3.0-beta.6 on main), so this README and the description here do not reach npm. The notice
 reaches npm users only through
 `npm deprecate genclass-runtime "Deprecated: use @genclass/runtime (npx @genclass/runtime@beta init)"`, which
 npmjs.com shows and npm prints when it installs the package; that is the owner's call. genclass-runtime@0.3.0-beta.1,
