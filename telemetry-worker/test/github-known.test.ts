@@ -222,6 +222,69 @@ describe("github app: one finding per kind and operation (docs/github-app/README
     expect(clean.state.findings.map((f) => f.status)).toEqual(["gone"]);
   });
 
+  it("rows that list three tests still fit one comment: the longest a review can write is under GitHub's 65,536 characters", async () => {
+    // every character of a name needs an escape, every name is as long as a race file may hold, every operation too
+    const hostile = (i: number, j: number) => `${`*_[<|@#${i}.${j}`.padEnd(40, "*")}${"<*_|[@".repeat(160)}`;
+    const op = (i: number) => `POST /${"|`*".repeat(90)}${i}`;
+    const head: Input[] = [];
+    const baseInputs: Input[] = [];
+    for (let i = 0; i < 40; i++) {
+      for (let j = 0; j < 4; j++) {
+        // reproducible in four tests here; on the default branch one of them flags it and another runs clean
+        head.push(...seeds(hostile(i, j), 2, [{ d: `odd*_<${i}`, op: op(i), ev: "<e>*_|".repeat(300) }]));
+        if (j === 0) baseInputs.push(race(hostile(i, j), 1, [{ d: `odd*_<${i}`, op: op(i) }]));
+        if (j === 1) baseInputs.push(race(hostile(i, j), 1, []));
+      }
+    }
+    const notes = Array.from({ length: 5 }, (_, i) => `The artifact "${"<*_|@".repeat(20)}${i}" could not be downloaded.`);
+    const { m } = await review(head, { base: { sha: BASE1, inputs: baseInputs, incomplete: true } });
+    const model: ReviewModel = { ...m, ci: { ...m.ci, notes, artifacts: Array.from({ length: 6 }, (_, i) => ({ name: `genclass-${"x".repeat(90)}${i}`, runId: i, files: 1 })) }, ignored: 7 };
+    // every one of the forty is the pull request's own (reproducible in a test that ran clean there), and the review says so of three
+    expect(model.findings.every((f) => !f.base && f.now?.beyond)).toBe(true);
+    const body = renderSummary(model)!;
+    expect(body).toContain("Finding 1 is flagged there too, but here also in ");
+    expect(body.length).toBeLessThan(65_536);
+    // and with every one already on the default branch instead, and rows from before the grouping
+    const known = await review(head, { base: { sha: BASE1, inputs: head } });
+    const aliased: ReviewModel = { ...known.m, ci: model.ci, ignored: 7, findings: known.m.findings.map((f, i) => (i < 5 ? { ...f, also: Array.from({ length: 30 }, (_, k) => 1000 + i * 30 + k) } : f)) };
+    expect(aliased.findings.every((f) => f.base)).toBe(true);
+    expect(renderSummary(aliased)!.length).toBeLessThan(65_536);
+    expect(renderCheck(aliased).summary.length).toBeLessThanOrEqual(60_000);
+    // (measured the day this was written: 59,053 and 58,923 characters, of which the table and the sentences are 47,773)
+  });
+
+  it("names are kept as they are compared: a cut that falls after a space, a count of tests beyond the names kept", async () => {
+    // a test's name whose 240th character is a space, and an operation whose 160th is: what is stored reads back the same
+    const long = `${"t".repeat(239)} tail of the name`;
+    const op = `GET /${"p".repeat(154)} rest`;
+    const first = await review([...seeds(long, 2, [{ d: "duplicate", op }]), ...seeds("b.spec.ts > two", 2, [])]);
+    expect(first.state.findings[0]!.test).toBe("t".repeat(239));
+    expect(first.state.findings[0]!.op).toBe(`GET /${"p".repeat(154)}`);
+    const back = parseState(JSON.stringify(first.state));
+    expect(back).toEqual(first.state);
+    // so the same files read again change nothing, with or without files unread
+    for (const partial of [false, true]) {
+      const again = await review([...seeds(long, 2, [{ d: "duplicate", op }]), ...seeds("b.spec.ts > two", 2, [])], { prev: back, partial });
+      expect(again.state, String(partial)).toEqual(first.state);
+    }
+    // and its test running clean is seen as that
+    const clean = await review([...seeds(long, 2, []), ...seeds("b.spec.ts > two", 2, [])], { prev: back, sha: SHA_B });
+    expect(clean.state.findings.map((f) => f.status)).toEqual(["gone"]);
+    // a row stored the earlier way with such an operation regroups under the fingerprint a review gives it
+    const stored = v1State([await v1Row(1, "a.spec.ts > one", { d: "duplicate", op: `GET /${"p".repeat(154)} ` })]);
+    expect((await loadState(stored)).findings[0]!.fp).toBe(first.state.findings[0]!.fp);
+
+    // twelve tests flag it; five names are kept, and with files of the same commit unread the count does not shrink
+    const tests = Array.from({ length: 12 }, (_, i) => `t${String(i).padStart(2, "0")}.spec.ts > flags it`);
+    const all = tests.flatMap((t) => seeds(t, 1, [DUPLICATE]));
+    const whole = await review(all);
+    expect(whole.state.findings.map((f) => [f.nt, f.tests.length])).toEqual([[12, MAX_FINDING_TESTS]]);
+    const part = await review(all.slice(0, 2), { prev: whole.state, partial: true });
+    expect(part.state.findings.map((f) => [f.nt, f.tests.length])).toEqual([[12, MAX_FINDING_TESTS]]);
+    // a read that is whole says what it read
+    expect((await review(all.slice(0, 2), { prev: whole.state })).state.findings.map((f) => f.nt)).toEqual([2]);
+  });
+
   it("an inline comment goes on one of the finding's tests: the first that is reproducible there and on a line of the diff", async () => {
     const at = (file: string, line: number) => ({ location: { file, line } });
     const inputs = [...seeds(T_SEARCH, 5, [OVERWROTE], at("tests/search.spec.ts", 40)), ...seeds(T_CHROMIUM, 2, [OVERWROTE], at("tests/search.chromium.spec.ts", 7)), race("flaky.spec.ts > once", 1, [OVERWROTE], at("tests/flaky.spec.ts", 3)), race("flaky.spec.ts > once", 2, [], at("tests/flaky.spec.ts", 3))];
@@ -469,9 +532,12 @@ describe("github app: what the default branch has too (src/github/review.ts head
       [2, false],
     ]);
     expect(off.state.base).toBeNull();
-    // while a commit has no race files yet, nothing is compared and everything stays as it was
+    // also while a commit has no race files yet: a review that says nothing of the default branch shows no mark of it
     const waiting = await mergeFindings(first.state, null, SHA_B, { baseline: "off" });
-    expect(waiting.state).toEqual(first.state);
+    expect(waiting.state.findings.map((f) => [f.n, f.status, f.base])).toEqual([[1, "new", false]]);
+    expect(waiting.state.base).toBeNull();
+    // and with the comparison on, a commit without race files changes nothing
+    expect((await mergeFindings(first.state, null, SHA_B)).state).toEqual(first.state);
   });
 
   it("pull request 180's two \"New\" rows, with a default branch whose race files show the same witness in the same tests: one row, already there", async () => {
@@ -640,10 +706,17 @@ describe("github app: signatures the settings leave out (docs/github-app/README.
       "  fail_on_baseline: 1",
     ].join("\n");
     const r = readSettings(text);
+    // the one entry that is used is the last but one: the entry before it says the same and names a test too
     expect(r.settings).toEqual({ ...DEFAULT_SETTINGS, ignore: [rule("witness:overwrote-newer", "GET /api/search")] });
     const KIND = "ignore: a kind is written as a race report writes it, like witness:identical-in-flight; one entry was left out.";
     const OPERATION = 'ignore: an operation is written as a review shows it, like "POST /api/cart", with at most one "*" for any run of characters; one entry was left out.';
-    expect(r.warnings).toEqual(["check.fail_on_baseline must be true or false; using false.", "baseline must be true or false; using true.", "ignore takes entries with a kind and an operation; one entry was left out.", KIND, OPERATION, OPERATION, "ignore.test is not a setting; it was ignored.", KIND]);
+    const EXTRA = "ignore: an entry takes a kind and an operation and nothing else (test is not read); one entry was left out.";
+    expect(r.warnings).toEqual(["check.fail_on_baseline must be true or false; using false.", "baseline must be true or false; using true.", "ignore takes entries with a kind and an operation; one entry was left out.", KIND, OPERATION, OPERATION, EXTRA, KIND]);
+    // An entry that names a test as well is not read as an entry for every test: with nothing else in the file,
+    // nothing is left out. (A key is repeated in the message only when it is a plain word.)
+    const narrower = readSettings('ignore:\n  - kind: witness:overwrote-newer\n    operation: "*"\n    test: checkout.spec.ts\n');
+    expect(narrower).toEqual({ settings: DEFAULT_SETTINGS, warnings: [EXTRA] });
+    expect(readSettings('ignore:\n  - kind: witness:overwrote-newer\n    operation: "*"\n    "a b <c>": 1\n').warnings).toEqual(["ignore: an entry takes a kind and an operation and nothing else (another key is not read); one entry was left out."]);
     expect(readSettings("ignore: witness:overwrote-newer\n")).toEqual({ settings: DEFAULT_SETTINGS, warnings: ["ignore must be a list of entries, each with a kind and an operation."] });
     // thirty entries are kept
     const many = `ignore:\n${Array.from({ length: 35 }, (_, i) => `  - kind: request:duplicate\n    operation: POST /api/x${i}\n`).join("")}`;
@@ -1266,28 +1339,87 @@ describe("github app: reviews against the default branch's race files (src/githu
     expect(stateOf(s).base).toBe(BASE1);
   });
 
-  it("GitHub fails while the default branch's runs are listed: the pass fails like any read that failed and writes nothing from a guess; GitHub's own no is no baseline", async () => {
-    let answer: number | null = 502;
-    const gh = fakeGithub({ answer: (c) => (answer !== null && c.method === "GET" && c.query.get("branch") === "main" ? new Response(JSON.stringify({ message: "x" }), { status: answer }) : undefined) });
-    const s = await installed(undefined, gh);
+  it("GitHub cannot say what the default branch has: the review is written without the comparison and says so, nothing is kept of the failure, and a rate limit still ends the pass", async () => {
+    const NOT_THIS_TIME = "No baseline was read: the default branch's race files could not be read this time, so a finding that is already there is listed like any other.";
+    let answer: (() => Response) | null = () => new Response(JSON.stringify({ message: "x" }), { status: 502 });
+    const gh = fakeGithub({ answer: (c) => (answer !== null && c.method === "GET" && c.query.get("branch") === "main" ? answer() : undefined) });
+    const s = await installed("comment: always\n", gh);
+    gh.addBaseRun(BASE1);
     await pullRequest(s.env, gh, "opened", 12, SHA1);
     const run = gh.addRun(SHA1);
-    const before = gh.calls.filter((c) => c.method !== "GET" && !c.path.includes("/access_tokens")).length;
-    expect(await finished(s, run.id, SHA1)).toBe("failed: server");
-    expect(gh.calls.filter((c) => c.method !== "GET" && !c.path.includes("/access_tokens"))).toHaveLength(before);
-    expect(gh.posted(12)).toEqual([]);
-    // the review is owed, and the lease was let go
-    expect(s.sql.rows("SELECT lease, due IS NOT NULL AS due FROM github_prs")).toEqual([{ lease: null, due: 1 }]);
-    // Actions is turned off for the repository, say: GitHub's answer, and there is no baseline
-    answer = 403;
+    // 5xx for the list of the default branch's runs (asked twice, as the client asks any read): a review all the same
     expect(await finished(s, run.id, SHA1)).toBe("findings");
-    expect(gh.summary(12)).toContain(NO_BASELINE);
-    // GitHub answers again
+    expect(baseLists(gh)).toBe(2);
+    expect(gh.summary(12)).toContain(NOT_THIS_TIME);
+    expect(rows(gh.summary(12)!).map((l) => l.split(" | ")[1])).toEqual(["New", "New"]);
+    expect(s.sql.rows("SELECT lease, due FROM github_prs")).toEqual([{ lease: null, due: null }]);
+    // not kept as an answer: GitHub is well again, and the next review compares at once
     answer = null;
-    gh.addBaseRun(BASE1);
-    advance(121_000);
     expect(await finished(s, run.id, SHA1)).toBe("findings");
+    expect(baseLists(gh)).toBe(3);
     expect(rows(gh.summary(12)!).map((l) => l.split(" | ")[1])).toEqual(["Already on the default branch", "Already on the default branch"]);
+
+    // GitHub's own no (Actions is turned off for the repository, say) is an answer: there is no baseline, for two minutes
+    const off = fakeGithub({ answer: (c) => (c.method === "GET" && c.query.get("branch") === "main" ? new Response(JSON.stringify({ message: "x" }), { status: 403 }) : undefined) });
+    const t = await installed("comment: always\n", off);
+    expect(await pushed(t, 12, SHA1)).toBe("findings");
+    expect(off.summary(12)).toContain(NO_BASELINE);
+    expect(await finished(t, lastRun(t, SHA1).id, SHA1)).toBe("findings");
+    expect(baseLists(off)).toBe(1);
+
+    // a rate limit is the installation's: the review's own next request would be refused too, so the pass ends
+    let limited = true;
+    const busy = fakeGithub({
+      answer: (c) => (limited && c.method === "GET" && c.query.get("branch") === "main" ? new Response(JSON.stringify({ message: "API rate limit exceeded" }), { status: 403, headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(Math.floor(now().getTime() / 1000) + 600) } }) : undefined),
+    });
+    const u = await installed("comment: always\n", busy);
+    busy.addBaseRun(BASE1);
+    await pullRequest(u.env, busy, "opened", 12, SHA1);
+    const limitedRun = busy.addRun(SHA1);
+    expect(await finished(u, limitedRun.id, SHA1)).toBe("failed: rate_limited");
+    expect(busy.posted(12)).toEqual([]);
+    expect(u.sql.rows("SELECT lease, due IS NOT NULL AS due FROM github_prs")).toEqual([{ lease: null, due: 1 }]);
+    limited = false;
+  });
+
+  it("a request for the default branch that hangs does not cost the review its result: it is not tried again, and the review is written", async () => {
+    // the REST client gives a request ten seconds and tries a read once more: two such waits are the whole job
+    for (const before of [0, 3_000, 5_000]) {
+      let on = false;
+      let first = true;
+      let attempts = 0;
+      const gh = fakeGithub({
+        answer: (c) => {
+          if (!on) return undefined;
+          // the pull request's own read took `before` ms in all
+          if (first) {
+            first = false;
+            advance(before);
+          }
+          if (c.method === "GET" && c.query.get("branch") === "main") {
+            attempts++;
+            advance(10_000);
+            throw new Error("timeout");
+          }
+          return undefined;
+        },
+      });
+      const s = await installed("comment: always\n", gh);
+      gh.addBaseRun(BASE1);
+      await pullRequest(s.env, gh, "opened", 12, SHA1);
+      const run = gh.addRun(SHA1);
+      on = true;
+      expect(await finished(s, run.id, SHA1), String(before)).toBe("findings");
+      on = false;
+      expect(attempts, String(before)).toBe(1);
+      expect(gh.checksAt(SHA1).at(-1).output.title, String(before)).toBe("2 findings, 1 reproducible");
+      expect(gh.summary(12), String(before)).toContain("No baseline was read: the default branch's race files could not be read this time");
+      expect(s.sql.rows("SELECT lease, due FROM github_prs"), String(before)).toEqual([{ lease: null, due: null }]);
+      // nothing was kept of it: the next review asks again, and compares
+      resetClock();
+      expect(await finished(s, run.id, SHA1)).toBe("findings");
+      expect(rows(gh.summary(12)!).map((l) => l.split(" | ")[1])).toEqual(["Already on the default branch", "Already on the default branch"]);
+    }
   });
 });
 

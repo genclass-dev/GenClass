@@ -164,11 +164,17 @@ default, for a failing check. It still keeps a check from being green: something
   choice between two artifacts of one name. A baseline is as untrusted as a pull request's artifact.
 - *Read only to compare.* Not at all when nothing is flagged, so a clean pull request costs nothing more. A client
   of its own, 20 requests at most, so the review's own budget is untouched.
-- *Never at the review's expense.* Not started in the last 9 seconds of a job, no request in the last 6, and a read
-  that was cut short is dropped whole. A review without a comparison is still a review.
+- *Never at the review's expense.* Not started in the last 9 seconds of a job; no request in the last 6, and one that
+  is running then is given up; a request that got no answer is not tried again (the client's own retry of a read
+  would wait as long again). A read that was cut short is dropped whole. When GitHub does not answer for the default
+  branch, or answers 5xx, the review is written without the comparison and says so: a slow endpoint must not keep
+  every review of a repository from being written, least of all the sweep's, which is what finishes a check left in
+  progress. Only a rate limit or a refused token ends the pass, as it would at the review's next request.
 - *What stands.* The marks are stored per finding with the commit they came from. When the default branch cannot be
   read later (the artifact expired, no time), they stand and the review says which commit they are of: the same
-  rule as for a commit's own result that cannot be read again.
+  rule as for a commit's own result that cannot be read again. Findings over the hundred a row keeps have no row and
+  so no mark: they are compared only in a review that reads the default branch, and count as the pull request's own
+  in one that cannot.
 - *Kept two minutes, in memory.* A push brings several reviews of one pull request within minutes; the commit, the
   fingerprints and the names of the tests that flagged and that ran are remembered per isolate that long, for at
   most 200 repositories, and dropped when a run of the default branch ends.
@@ -284,9 +290,10 @@ nothing more. It refuses for forks, because a comment-started workflow runs with
 | A pull request changing its own review | Settings are read from the default branch, `ignore` like the rest |
 | A pull request supplying its own baseline, so that its finding is "already on the default branch" and does not fail the check | A baseline is read only from workflow runs that a push to the default branch or its schedule started, in the repository itself, under the branch's name. Each run says so itself (`event`, `head_branch`, `head_repository`), and GitHub's `branch` filter is not taken at its word: a run a pull request started is never read, whatever branch name it carries, nor a run of a fork, nor a dispatched one |
 | A hostile artifact on the default branch, or text in it | It is read by the reader a pull request's artifact goes through, under the same caps. Nothing of its text is shown: what is kept of it is the commit and a set of fingerprints |
-| The comparison using up a review's requests or its time, or a slow GitHub turning it into a failed job | A client of its own with 20 requests; not started with less than 9 seconds of the job left, no request with less than 6, and a read that was cut short is dropped whole and not remembered |
+| The comparison using up a review's requests or its time, or a slow GitHub turning it into a failed job | A client of its own with 20 requests; not started with less than 9 seconds of the job left; no request with less than 6, and a running one is given up then; no second try of a request that got no answer; a read that was cut short is dropped whole and not remembered. No answer and a 5xx for the default branch give a review without the comparison, never a failed job |
+| Someone with write access pushing a tag named like the default branch, so that a workflow that runs on every push uploads their commit's race files under that name | Not stopped, if GitHub files a tag push's run under the tag's name (its run object has a `head_branch` and nothing that says branch or tag; not tried against GitHub): telling them apart needs the contents permission. It takes write access and a workflow without a branch filter, it changes one thing (their findings read "already on the default branch" and do not fail the check), and `check.fail_on_baseline: true` takes that away. The workflow files here run on pushes to named branches only |
 | Race files with thousands of operations made to match slowly against an `ignore` entry | An entry's operation holds at most one `*`, so a match is one pass over at most 160 characters; at most 30 entries |
-| A settings entry that leaves out more than its author meant | A kind must be written whole and matches exactly; an entry without a kind and an operation is not used and is reported in the check; every review counts what was left out |
+| A settings entry that leaves out more than its author meant | A kind must be written whole and matches exactly; an entry without a kind and an operation, or with any other key (a `test`, say, which is not read), is not used and is reported in the check; every review counts what was left out |
 | Someone linking their app to a repository they do not control, to post their text there | A link needs GitHub's answer, at most 30 minutes old, that the person can push to that repository |
 | Someone reading another account's app through a repository | A link needs the app to be in the linker's own account; the page never names another account's app |
 | An app's findings staying on a repository's pull requests after the app's owner lost access to it | The account that owns a linked app can always take the link away, with or without access to the repository; its account page lists such links, a private repository without its name |

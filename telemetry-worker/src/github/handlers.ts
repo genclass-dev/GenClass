@@ -401,7 +401,8 @@ const BASELINE_RESERVE_MS = 6_000;
 /**
  * What the default branch's race files gave a review. read: the commit they are of and their index, what they flag
  * in which tests and which tests ran. none: GitHub lists no workflow run of the branch with race files that can be
- * read. unread: nothing was asked, or the asking was cut short (no branch name from GitHub, no time left in the job).
+ * read. unread: nothing was asked, or the asking was cut short or got no answer (no branch name from GitHub, no time
+ * left in the job, GitHub did not answer).
  */
 interface Baseline {
   state: "read" | "none" | "unread";
@@ -424,11 +425,15 @@ export const resetBaselineCache = (): void => baselineCache.clear();
  * The race files of the default branch's most recent commit that has them, as an index to compare a pull request's
  * findings with (src/github/evidence.ts baselineEvidence). Asked with a client of its own, so its requests are not
  * taken from the review's, and kept for two minutes per isolate: only the commit, the index (fingerprints and test
- * names) and two counts are kept, never a file. It never costs a review its result: with too little of the job's
- * time left nothing is asked, and no request starts once the time kept for the review's own writes is reached; what
- * was read until then is dropped, not used in part. When GitHub cannot be reached, or limits the installation, the
- * pass fails like any other read that failed and is run again. GitHub's own answer that there is nothing to list is
- * "none".
+ * names) and two counts are kept, never a file.
+ *
+ * It never costs a review its result. With too little of the job's time left nothing is asked. No request starts
+ * once the time kept for the review's own writes is reached, and one that is running then is given up (the REST
+ * client would wait its own ten seconds for it). A request that got no answer is not tried again: the client's one
+ * retry of a read would take as long again. What was read until any of that is dropped, not used in part and not
+ * kept. When GitHub does not answer, or answers that it cannot now (5xx), the review is written without the
+ * comparison and says so. Only what would stop the review's own next request ends the pass: a rate limit, a refused
+ * token. GitHub's own answer that there is nothing to list is "none".
  * `workflows`: the workflows whose runs uploaded the pull request's own race files; their runs of the default branch
  * are asked first (what is kept is kept for those workflows).
  */
@@ -442,11 +447,18 @@ async function baselineOf(ctx: Ctx, t: ReviewTarget, branch: string | null, sett
   const hit = baselineCache.get(repo.id);
   if (hit && hit.exp > nowMs && hit.key === key) return hit.value;
   if (timeLeft(ctx) < BASELINE_MIN_MS) return NOT_READ;
+  // cut short: by the clock, or by a request that got no answer
   let short = false;
   const f: Fetch = (input, init) => {
-    if (timeLeft(ctx) >= BASELINE_RESERVE_MS) return ctx.f(input, init);
-    short = true;
-    return Promise.reject(new Error("no time left for the default branch's race files"));
+    const spare = timeLeft(ctx) - BASELINE_RESERVE_MS;
+    if (short || spare <= 0) {
+      short = true;
+      return Promise.reject(new Error("no time left for the default branch's race files"));
+    }
+    return ctx.f(input, { ...init, signal: AbortSignal.timeout(Math.min(FETCH_MS, spare)) }).catch((e: unknown) => {
+      short = true;
+      throw e;
+    });
   };
   const gh = installationClient(ctx.cfg, f, ctx.now, t.installationId, repo.id, MAX_BASELINE_CALLS + 4);
   let value: Baseline;
@@ -457,12 +469,15 @@ async function baselineOf(ctx: Ctx, t: ReviewTarget, branch: string | null, sett
       value = { state: "read", sha: found.sha, index: await baselineIndex(summary), files: summary?.files ?? 0, incomplete: found.incomplete };
     } else value = { state: "none", sha: null, index: NO_INDEX, files: 0, incomplete: found.incomplete };
   } catch (e) {
-    if (short) return NOT_READ;
-    if (retryable(e) && !(e instanceof GithubError && e.kind === "budget")) throw e;
+    const kind = e instanceof GithubError ? e.kind : null;
+    // the installation is limited or its token refused: the review's own next request would fail the same way
+    if (!short && (kind === "rate_limited" || kind === "unauthorized")) throw e;
+    // GitHub did not answer, or answered that it cannot now: nothing is known of the default branch, and nothing is kept
+    if (short || kind === "network" || kind === "server" || kind === null) return NOT_READ;
     // GitHub's answer that there is nothing to list here (Actions is off, the branch is gone), or more requests than a baseline may cost
     value = { state: "none", sha: null, index: NO_INDEX, files: 0, incomplete: true };
   }
-  // cut short by the clock: a part is not a baseline, and is not kept
+  // cut short: a part is not a baseline, and is not kept
   if (short) return NOT_READ;
   if (baselineCache.size >= MAX_KEPT_BASELINES) baselineCache.clear();
   baselineCache.set(repo.id, { exp: nowMs + BASELINE_TTL_MS, key, value });

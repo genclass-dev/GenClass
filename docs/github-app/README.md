@@ -300,7 +300,8 @@ ignore:
   listed is the better choice: with a [baseline](#baseline) it is "already on the default branch", and it becomes
   the pull request's own again when another test starts to show it.
 - Like every setting it is read from the default branch, so a pull request cannot leave anything out for itself.
-- At most 30 entries. An entry without a kind and an operation is not used, and the check says so.
+- At most 30 entries. An entry without a kind and an operation, or with any other key, is not used, and the check
+  says so: an entry is never read as wider than it was written.
 
 With `issues: merge`, a pull request that merges gets one issue for the reproducible findings flagged in the race
 files of the commit that merged. If that commit's test run was not read before the merge, it is read first; when it
@@ -516,8 +517,9 @@ pull request up again at its next event, or at the sweep.
 - **A finding is "New" though the default branch has it.** The comparison is by kind and operation with the default
   branch's most recent commit that has race files: check that commit's race report for the same line. A finding seen
   in one seed may simply not have shown there.
-- **"The default branch's race files were not read this time".** GitHub was slow and the review kept its time for
-  its own writes, or the artifact is gone. What was compared before stands; the next review compares again.
+- **"The default branch's race files were not read this time".** GitHub was slow or did not answer and the review
+  kept its time for its own writes, or the artifact is gone. What was compared before stands; the next review
+  compares again.
 - **A row I want gone.** If the finding is intended, list its kind and operation under [`ignore`](#ignore).
 - **A private repository shows "Private repositories need a plan".** See [Plans](#plans).
 - **Settings do not apply.** The file must be on the default branch; the check lists any mistake in it. Changes are

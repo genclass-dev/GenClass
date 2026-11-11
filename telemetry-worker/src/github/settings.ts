@@ -199,7 +199,13 @@ export function readSettings(text: string | null): { settings: RepoSettings; war
           warn("ignore takes entries with a kind and an operation; one entry was left out.");
           continue;
         }
-        known(x, "ignore", ["kind", "operation"]);
+        // An entry with a key this reader does not know is not used: its author meant something narrower by that key
+        // (one test, say), and the entry without it would leave out more than they wrote.
+        const extra = Object.keys(x).find((k) => k !== "kind" && k !== "operation");
+        if (extra !== undefined) {
+          warn(`ignore: an entry takes a kind and an operation and nothing else (${/^[A-Za-z0-9_.-]{1,40}$/.test(extra) ? extra : "another key"} is not read); one entry was left out.`);
+          continue;
+        }
         const kind = typeof x.kind === "string" ? oneLine(x.kind) : "";
         const operation = typeof x.operation === "string" ? oneLine(x.operation) : "";
         // a kind is "trigger:diagnosis", both parts there; an operation is some text with at most one "*"

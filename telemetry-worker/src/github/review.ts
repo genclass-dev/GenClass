@@ -176,8 +176,10 @@ export const emptyState = (): PrState => ({ v: 2, next: 1, findings: [], evidenc
 
 const CATS: readonly RaceCategory[] = ["duplicate", "stale", "failing", "other", "witness"];
 const STATUSES: readonly FindingStatus[] = ["new", "still", "gone", "not-run"];
+// One line of at most `max` characters. Applied twice it gives what it gives once (a cut that falls after a space
+// leaves none at the end): what is stored is read back through it, and names are compared by what it gives.
 // eslint-disable-next-line no-control-regex
-const plain = (v: unknown, max: number): string => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "");
+const plain =(v: unknown, max: number): string => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").replace(/\s+/g, " ").trim().slice(0, max).trimEnd() : "");
 const shortSha = (sha: string): string => sha.slice(0, 7);
 const unique = <T>(list: readonly T[]): T[] => [...new Set(list)];
 
@@ -506,7 +508,20 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
   const from = await regroup(prev);
   const state: PrState = { ...from, findings: from.findings.map((f) => ({ ...f, ...(f.also ? { also: [...f.also] } : {}), tests: [...f.tests], seeds: [...f.seeds] })), inline: [...from.inline] };
   const unlisted: Unlisted = { n: 0, rep: 0 };
-  if (!summary) return { state, view: state.findings.map((f) => ({ ...f, now: null })), unlisted, ignored: 0 };
+  /** The comparison is turned off: no finding keeps a mark, and one that had one is the pull request's own from here on. */
+  const forget = (): void => {
+    for (const f of state.findings) {
+      if (f.base && open(f)) f.status = "new";
+      f.base = false;
+    }
+    state.base = null;
+  };
+  if (!summary) {
+    // No race files for this commit yet: the findings stay as they were. (A signature the settings have come to
+    // leave out stays listed until files are read, when it is counted as left out: it is not dropped without a word.)
+    if (o.baseline === "off") forget();
+    return { state, view: state.findings.map((f) => ({ ...f, now: null })), unlisted, ignored: 0 };
+  }
 
   const sameCommit = prev.evidence === headSha;
   const short = shortSha(headSha);
@@ -525,7 +540,7 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
   const beyond = (fp: string, g: Live | undefined): string | null => {
     const there = compared?.flagged.get(fp);
     if (!compared || !there || !g) return null;
-    return g.hits.find((h) => h.sig.reproducible && compared.ran.has(h.name) && !there.has(h.name))?.test.test ?? null;
+    return g.hits.find((h) => h.sig.reproducible && compared.ran.has(h.name) && !there.has(h.name))?.name ?? null;
   };
   /** Whether the default branch has it too, by the files read for this review. */
   const there = (fp: string, g: Live | undefined): boolean => !!compared && compared.flagged.has(fp) && beyond(fp, g) === null;
@@ -561,7 +576,8 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
       f.seeds = first.seeds;
       f.of = first.of;
       f.tests = names.slice(0, MAX_FINDING_TESTS);
-      f.nt = names.length;
+      // (with files of this commit unread, the tests counted before and not named may be in them: the count does not shrink)
+      f.nt = unreadCount ? Math.max(f.nt, names.length) : names.length;
       f.last = short;
     } else if (f.tests.length > 0 && f.tests.every((t) => ran.has(t))) f.status = "gone";
     else if (!(unreadCount && open(f))) f.status = "not-run";
@@ -616,10 +632,7 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
     // because its files went unread this time is compared by its kind and operation alone.)
     for (const f of state.findings) f.base = open(f) && (live.has(f.fp) ? there(f.fp, live.get(f.fp)) : compared.flagged.has(f.fp));
     state.base = compared.sha;
-  } else if (o.baseline === "off") {
-    for (const f of state.findings) f.base = false;
-    state.base = null;
-  }
+  } else if (o.baseline === "off") forget();
   // A finding that was the default branch's too and is the pull request's own now (it reached a test that was clean
   // there, the default branch no longer flags it, or the comparison was turned off) was never listed as this pull
   // request's: it is new, as a finding first flagged at this commit is.
