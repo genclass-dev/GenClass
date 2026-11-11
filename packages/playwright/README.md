@@ -593,11 +593,15 @@ same seeds did not repeat).
   `fetch` and XHR; a WebSocket message, a timer or a render is not a step. A test's own assertions are not steps
   either: where its code ended is known, not what it was waiting for.
 - **Failing runs that differ among themselves** (five requests, any of which can be the stale one) each have an
-  order only some of the failing runs share, and it takes more runs before one is told apart from chance: on the
-  bench's search test one batch of 30 runs was not enough, and 60 runs gave three lines that every failing run has
-  one of. A failure that is several orders at once ("the 1st answer landed after all four others") is no single pair
-  or between, and is mostly declined: 2 of 12 such tests were explained on the held-out apps, against 16 of 16 where
-  the failure is one order (RESULTS.md section 30).
+  order only some of the failing runs share, and most of those orders are in passing runs too, landing after the
+  test had finished. On the bench's search test two of four batches of 30 runs got a stale-search line (4 and 5
+  failing runs), one was not told apart from chance, and one got the wrong line mentioned above. A failure that is
+  several orders at once ("the 1st answer landed after all four others") is no single pair or between, and is mostly
+  declined: 2 of 8 such tests were explained on the held-out apps recorded after the review, against 8 of 8 where the
+  failure is one order (RESULTS.md section 30).
+- **A test whose last check passes before the stale response lands** has the failing runs' order in many passing runs
+  too. That is the second kind of difference, and the weaker one: it says "every failing run, and 8 of 23 passing
+  runs", not "only the failing runs".
 - **A label that changes from run to run.** A user action is named by the runtime's description of its target; a
   button whose text counts down, or names a record created in that run, is a different step in every run and is not
   compared. Request paths have their ids written `:id`.
