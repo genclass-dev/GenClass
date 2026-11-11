@@ -17,6 +17,12 @@ that day; GitHub answers by email. Sources:
 
 - The app reads race files a workflow uploads and the names and line ranges of changed files. It does not read
   source code and has no contents permission.
+- Not yet on the listing: since the change that compares a pull request's findings with the default branch's, the
+  race files read are a pull request's and, when those flag something, the ones the default branch's own workflow
+  runs uploaded; and a pull request's record also holds the default branch's commit it was compared with and one
+  mark per finding. The transparency disclosures on GitHub ([as entered](#the-draft-on-github)) say "what is read"
+  and "what is stored" as they were on 2026-11-10: the owner updates those two paragraphs there when that change is
+  deployed, from [PRIVACY.md](../../../PRIVACY.md#the-github-app).
 - Findings are diagnoses by the runtime's on-device model, or facts it measured without the model. The listing says
   "flagged" and "reproducible in N seeds", never "finds every race" and never "fixes".
 - No number about how often it is right belongs in the listing unless

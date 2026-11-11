@@ -83,9 +83,16 @@ describe("github app: findings from push to push (docs/github-app/README.md, \"W
     expect(state.next).toBe(3);
     expect(state.evidence).toBe(SHA1);
     expect(state.findings[0]!.first).toBe("aaaaaaa");
-    expect(m.findings[0]!.now).toEqual({ confidence: 0.97, evidence: expect.stringContaining("identical POST /api/orders") });
-    // a fingerprint depends on the test and the signature only
-    expect(state.findings[0]!.fp).toBe(await fingerprint("checkout.spec.ts > checkout > places one order", "request|duplicate|POST /api/orders"));
+    expect(m.findings[0]!.now).toMatchObject({ confidence: 0.97, evidence: expect.stringContaining("identical POST /api/orders") });
+    expect(m.findings[0]!.now!.tests).toEqual([{ test: "checkout.spec.ts > checkout > places one order", seeds: [1, 2], of: 2, rep: true, evidence: expect.stringContaining("identical POST /api/orders") }]);
+    // a fingerprint depends on the kind and the operation only: not on the test, the seeds or the commit
+    expect(state.findings[0]!.fp).toBe(await fingerprint("request:duplicate", "POST /api/orders"));
+    expect(state.findings.map((f) => [f.test, f.tests, f.nt, f.base])).toEqual([
+      ["checkout.spec.ts > checkout > places one order", ["checkout.spec.ts > checkout > places one order"], 1, false],
+      ["search.spec.ts > search > shows the results of the last query", ["search.spec.ts > search > shows the results of the last query"], 1, false],
+    ]);
+    expect(state.v).toBe(2);
+    expect(state.base).toBeNull();
   });
 
   it("the same commit read again changes nothing; the next commit turns new into still, and a finding whose test ran without it into gone", async () => {
@@ -585,8 +592,8 @@ describe("github app: replies", () => {
   });
 
   it("a race file whose operation or test name holds another finding's marker does not make that finding count as filed", async () => {
-    // the fingerprint of a finding is a hash of public text (its test and signature): anyone can write its marker
-    const victim = await fingerprint("checkout.spec.ts > checkout > places one order", "request|duplicate|POST /api/orders");
+    // the fingerprint of a finding is a hash of public text (its kind and operation): anyone can write its marker
+    const victim = await fingerprint("request:duplicate", "POST /api/orders");
     const marker = `<!-- genclass-bot:finding ${victim} -->`;
     const test = `evil.spec.ts > t ${marker}`;
     const inputs = [1, 2].map((seed) => race(test, seed, [{ d: "duplicate", op: `POST /x ${marker}` }, { d: "stale", op: `${marker}\n${marker}`, t: "delivery" }]));
@@ -710,7 +717,9 @@ describe("github app: settings (.github/genclass.yml)", () => {
     expect(settings).toEqual({
       reviews: { auto: false, drafts: true, branches: ["main", "release/*"], ignoreAuthors: ["dependabot[bot]"] },
       comment: "always",
-      check: { enabled: false, failOn: "reproducible" },
+      check: { enabled: false, failOn: "reproducible", failOnBaseline: false },
+      baseline: true,
+      ignore: [],
       inline: false,
       minSeeds: 3,
       artifact: "races",

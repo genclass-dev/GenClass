@@ -20,6 +20,16 @@ export type CommentMode = "findings" | "always" | "never";
 export type FailOn = "never" | "reproducible" | "any";
 export type IssueMode = "never" | "merge";
 
+/**
+ * One signature the repository leaves out of its reviews: a kind as a race report writes it ("trigger:diagnosis",
+ * for example "witness:identical-in-flight") and an operation ("POST /api/cart"). The operation may hold one "*",
+ * which stands for any run of characters ("GET /api/items/*", "*" for every operation of the kind).
+ */
+export interface IgnoreRule {
+  kind: string;
+  operation: string;
+}
+
 export interface RepoSettings {
   reviews: {
     /** Review each pull request when it opens and on every push. Off: only `@genclass-dev review` does. */
@@ -37,7 +47,16 @@ export interface RepoSettings {
     enabled: boolean;
     /** When the check fails instead of staying neutral: never, on a reproducible finding, or on any finding. */
     failOn: FailOn;
+    /** Under `failOn`: a finding that the default branch's race files flag too fails the check like any other. Off: it does not. */
+    failOnBaseline: boolean;
   };
+  /**
+   * Compare a pull request's findings with the race files of the default branch's most recent commit that has them,
+   * so that a finding that is already there is told apart. Off: those files are not read.
+   */
+  baseline: boolean;
+  /** Signatures left out of reviews: not listed, numbered or counted, and never a reason for the check to fail. */
+  ignore: IgnoreRule[];
   /** Inline comments on a test's line when that line is part of the pull request's diff. */
   inline: boolean;
   /** Seeds of the same test a signature must be flagged in to count as reproducible. */
@@ -58,7 +77,9 @@ export interface RepoSettings {
 export const DEFAULT_SETTINGS: RepoSettings = {
   reviews: { auto: true, drafts: false, branches: [], ignoreAuthors: [] },
   comment: "findings",
-  check: { enabled: true, failOn: "never" },
+  check: { enabled: true, failOn: "never", failOnBaseline: false },
+  baseline: true,
+  ignore: [],
   inline: true,
   minSeeds: 2,
   artifact: "genclass",
@@ -70,6 +91,12 @@ export const DEFAULT_SETTINGS: RepoSettings = {
 const MAX_LIST = 30;
 const MAX_ITEM = 100;
 const MAX_WARNINGS = 12;
+/** The longest kind and operation a rule may name: what a finding keeps of each (review.ts MAX_KIND_CHARS, MAX_OP_CHARS). */
+const MAX_RULE_KIND = 80;
+const MAX_RULE_OPERATION = 160;
+/** One line of text as a finding keeps it: control characters and runs of white space are one space. */
+// eslint-disable-next-line no-control-regex
+const oneLine = (s: string): string => s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").replace(/\s+/g, " ").trim();
 
 const isMap = (v: YamlValue | undefined): v is { [key: string]: YamlValue } => v !== null && typeof v === "object" && !Array.isArray(v);
 
@@ -130,7 +157,7 @@ export function readSettings(text: string | null): { settings: RepoSettings; war
     for (const k of Object.keys(m)) if (!keys.includes(k)) warn(`${at ? `${at}.` : ""}${k.slice(0, 40)} is not a setting; it was ignored.`);
   };
 
-  known(doc, "", ["reviews", "comment", "check", "inline", "min_seeds", "artifact", "production", "commands", "issues"]);
+  known(doc, "", ["reviews", "comment", "check", "baseline", "ignore", "inline", "min_seeds", "artifact", "production", "commands", "issues"]);
 
   const r = doc.reviews;
   if (isMap(r)) {
@@ -147,12 +174,47 @@ export function readSettings(text: string | null): { settings: RepoSettings; war
 
   const c = doc.check;
   if (isMap(c)) {
-    known(c, "check", ["enabled", "fail_on"]);
+    known(c, "check", ["enabled", "fail_on", "fail_on_baseline"]);
     s.check.enabled = bool(c.enabled, "check.enabled", s.check.enabled);
     s.check.failOn = oneOf(c.fail_on, "check.fail_on", ["never", "reproducible", "any"] as const, s.check.failOn);
+    s.check.failOnBaseline = bool(c.fail_on_baseline, "check.fail_on_baseline", s.check.failOnBaseline);
   } else if (typeof c === "boolean") {
     s.check.enabled = c;
-  } else if (c !== undefined) warn("check must be a mapping (enabled, fail_on) or true/false.");
+  } else if (c !== undefined) warn("check must be a mapping (enabled, fail_on, fail_on_baseline) or true/false.");
+
+  s.baseline = bool(doc.baseline, "baseline", s.baseline);
+
+  // Signatures left out of reviews. Each entry names a kind and an operation; one that does not is left out with a
+  // warning, so that a typo never leaves out more, or something else, than was meant.
+  const ig = doc.ignore;
+  if (ig !== undefined && ig !== null) {
+    if (!Array.isArray(ig)) warn("ignore must be a list of entries, each with a kind and an operation.");
+    else {
+      for (const x of ig) {
+        if (s.ignore.length >= MAX_LIST) {
+          warn(`ignore keeps its first ${MAX_LIST} entries.`);
+          break;
+        }
+        if (!isMap(x)) {
+          warn("ignore takes entries with a kind and an operation; one entry was left out.");
+          continue;
+        }
+        known(x, "ignore", ["kind", "operation"]);
+        const kind = typeof x.kind === "string" ? oneLine(x.kind) : "";
+        const operation = typeof x.operation === "string" ? oneLine(x.operation) : "";
+        // a kind is "trigger:diagnosis", both parts there; an operation is some text with at most one "*"
+        if (!/^[^:]+:.+$/.test(kind) || kind.length > MAX_RULE_KIND) {
+          warn("ignore: a kind is written as a race report writes it, like witness:identical-in-flight; one entry was left out.");
+          continue;
+        }
+        if (!operation || operation.length > MAX_RULE_OPERATION || operation.indexOf("*") !== operation.lastIndexOf("*")) {
+          warn('ignore: an operation is written as a review shows it, like "POST /api/cart", with at most one "*" for any run of characters; one entry was left out.');
+          continue;
+        }
+        if (!s.ignore.some((r) => r.kind === kind && r.operation === operation)) s.ignore.push({ kind, operation });
+      }
+    }
+  }
 
   s.inline = bool(doc.inline, "inline", s.inline);
 

@@ -38,7 +38,12 @@ export const WORKFLOW_FILE = `# GenClass on your existing Playwright suite: no c
 # The run holds your app's API calls for a seeded time, so tests that pass in your own e2e job can
 # fail here: this job is separate and allowed to fail, so it never blocks a pull request.
 name: genclass
-on: pull_request
+# Pull requests, and pushes to the default branch: a review tells a pull request's findings from the
+# ones already there. Under another name than main or master, put your default branch in the list.
+on:
+  pull_request:
+  push:
+    branches: [main, master]
 permissions:
   contents: read
 jobs:
@@ -75,7 +80,7 @@ jobs:
         with:
           name: genclass-races
           path: test-results/genclass
-          retention-days: 7
+          retention-days: 30
           if-no-files-found: ignore
 `;
 

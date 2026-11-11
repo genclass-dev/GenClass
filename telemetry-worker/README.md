@@ -69,7 +69,7 @@ genclass.dev/dashboard/<secret> --> dashboard page --GET /api/projects/<secret>?
 | `../scripts/stripe-setup.mjs` | for the owner: Stripe products, prices, webhook endpoint and Billing Portal from `plans.json` |
 | `src/github/*` | the GitHub App, genclass-dev[bot] ([The GitHub App](#the-github-app)): `config.ts` (its secrets; off without them), `jwt.ts` and `api.ts` (authentication and the REST client), `http.ts` (the webhooks, the pages, Connect GitHub, linking), `handlers.ts` (the events and the review of a pull request), `evidence.ts`, `zip.ts` (race files from an artifact; the linked app's findings), `settings.ts`, `yaml.ts` (`.github/genclass.yml`), `routes.ts` (changed files to page routes), `review.ts` (every sentence it writes), `commands.ts`, `entitlement.ts`, `store.ts`, `pages.ts` |
 | `github-app.manifest.json`, `../scripts/github-app-setup.mjs` | the app's permissions, events and addresses as GitHub registers them, and the owner's one-time registration from that manifest |
-| `test/github.test.ts`, `test/github-link.test.ts`, `test/github-review.test.ts`, `test/github-zip.test.ts`, `test/github-yaml.test.ts`, `test/github-setup.test.ts` | the GitHub App: signed deliveries through the real handler against a fake GitHub (`test/github-helpers.ts`), the migrations as below |
+| `test/github.test.ts`, `test/github-link.test.ts`, `test/github-review.test.ts`, `test/github-known.test.ts` (findings grouped by kind and operation, rows stored before that, the default branch's race files, `ignore`), `test/github-zip.test.ts`, `test/github-yaml.test.ts`, `test/github-setup.test.ts` | the GitHub App: signed deliveries through the real handler against a fake GitHub (`test/github-helpers.ts`), the migrations as below |
 | `test/billing.test.ts`, `test/forward.test.ts`, `test/export.test.ts` | paid plans: Stripe mocked (`test/account-helpers.ts`), the rest as below |
 | `migrations/*.sql` | D1 schema |
 | `test/index.test.ts`, `test/dashboard.test.ts`, `test/auth.test.ts`, `test/locked.test.ts`, `test/plans.test.ts`, `test/pages.test.ts` | unit tests (R2 mocked; D1 = `node:sqlite` running the real migrations, `test/d1.ts`; passkeys from a software authenticator, `test/authenticator.mjs`; Google and GitHub mocked; the dashboard page's script rendered in happy-dom) |
@@ -1007,8 +1007,17 @@ that says what the app reads, once per repository). Otherwise it counts the revi
 lists the head commit's workflow runs and their artifacts, downloads at most
 6 artifacts of 4 MB (GitHub's redirect is followed without credentials), unzips in memory under caps, validates each
 `.json` as `genclass-races/1`, summarises with the reporter's own code, folds the result into the pull request's
-findings (`github_prs.state`), and writes what changed: the check run on that commit, the summary comment (edited in
-place), a review with inline comments for new reproducible findings whose test line the diff shows. Body hashes in
+findings (`github_prs.state`: one finding per kind and operation, with the tests that reach it; a signature the
+settings' `ignore` names is left out and counted), and writes what changed: the check run on that commit, the summary
+comment (edited in place), a review with inline comments for new reproducible findings whose test line the diff shows.
+When the commit's race files flag anything, the fold is given the default branch's too (`baselineOf` in
+src/github/handlers.ts, `baselineEvidence` in src/github/evidence.ts): one list of the branch's finished workflow
+runs, of which only those a push to the branch or its schedule started count, and the race files of the most recent
+commit that has them, read by the same code under the same caps, with a client of its own (20 requests at most) and
+kept two minutes per isolate as a commit and a set of fingerprints. A finding flagged there too is listed as already
+on the default branch: not new, no inline comment, no comment by itself, and no failing check unless
+`check.fail_on_baseline` is set. A row stored before findings were grouped (state `v: 1`, a finding per test and
+signature) is regrouped when it is read (`loadState` in src/github/review.ts) and rewritten by the next review. Body hashes in
 the state keep an unchanged result from being written again, and only a review that wrote something counts toward the
 pull request's total (400). It makes 5 requests to GitHub for a pull request with no test run yet (the token, the
 pull request, the settings file, the commit's runs, the check); with an artifact, the requests that read it come on

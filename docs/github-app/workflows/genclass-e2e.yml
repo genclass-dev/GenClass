@@ -4,8 +4,13 @@
 # files, which genclass-dev[bot] reads when this run finishes. The job has no secret and no write permission, so it is
 # the same for pull requests from forks: the app, not this job, writes the comment.
 name: e2e
+# Pull requests, and pushes to the default branch: genclass-dev[bot] compares a pull request's findings with the race
+# files of the default branch's latest commit that has them, and lists what is already there as that, not as new.
+# Under another name than main or master, put your default branch in the list.
 on:
   pull_request:
+  push:
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -36,4 +41,5 @@ jobs:
           name: genclass-races
           path: test-results/genclass
           if-no-files-found: ignore
-          retention-days: 7
+          # (30 days: the default branch's files are what later pull requests are compared with)
+          retention-days: 30

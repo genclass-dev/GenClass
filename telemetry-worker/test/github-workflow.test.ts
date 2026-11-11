@@ -61,9 +61,12 @@ describe("github app: the workflow file a repository adds (docs/github-app/workf
     expect(WORKFLOW_FILE).toContain("    continue-on-error: true\n");
     // why the link is off until the owner turns it on: the workflow installs this package from npm
     expect(WORKFLOW_FILE).toContain("@genclass/playwright @genclass/runtime@beta");
+    // it runs for pull requests and for pushes to the default branch: the default branch's race files are what a
+    // review compares a pull request's findings with (src/github/evidence.ts baselineEvidence takes push runs)
+    expect(WORKFLOW_FILE).toContain("on:\n  pull_request:\n  push:\n    branches: [main, master]\n");
     // the measured sizes the cap was chosen against
-    expect(WORKFLOW_FILE).toHaveLength(2495);
-    expect(LINK).toHaveLength(4023);
+    expect(WORKFLOW_FILE).toHaveLength(2736);
+    expect(LINK).toHaveLength(4384);
   });
 });
 
@@ -333,7 +336,7 @@ describe("github app: the link on a pull request's checks, through the webhook (
       const [check] = s.gh.checksAt(SHA2);
       expect(check.output.title).toBe("No race files for this commit");
       expect(check.output.summary.endsWith(want)).toBe(true);
-      expect(check.output.summary.startsWith("No race files for `2222222`.\n\n| # | Status | Finding | Test | Seen |")).toBe(true);
+      expect(check.output.summary.startsWith("No race files for `2222222`.\n\n| # | Status | Finding | Tests | Seen |")).toBe(true);
       expect(s.gh.summary(12)).toContain("No race files for `2222222`.");
       expect(s.gh.summary(12)).not.toMatch(SHOWS_LINK);
     }

@@ -25,6 +25,8 @@ It reads the race files your workflow uploads, never your source code. It is fre
    [`workflows/genclass.yml`](workflows/genclass.yml) to `.github/workflows/genclass.yml` and go to step 4. It runs
    your existing Playwright suite under GenClass in a job of its own that is allowed to fail, and uploads the race
    files ([how it works and what it does not cover](../../packages/playwright/README.md#without-changing-your-tests)).
+   It runs for pull requests and for pushes to `main` or `master`: the race files of your default branch are what a
+   review compares a pull request's findings with ([the baseline](#baseline)).
    When the server that runs the app has it turned on, the check on a repository's first pull request has a link that
    opens GitHub's new-file editor with that file filled in, so you only review it and commit it.
    **Or in your own e2e job,** steps 2 and 3.
@@ -55,15 +57,18 @@ It reads the race files your workflow uploads, never your source code. It is fre
            with:
              name: genclass-races
              path: test-results/genclass
-             retention-days: 7
+             retention-days: 30
    ```
 
    A whole workflow file is in [`workflows/genclass-e2e.yml`](workflows/genclass-e2e.yml). The job needs no secret and
-   no write permission, so it works the same for pull requests from forks.
+   no write permission, so it works the same for pull requests from forks. Run it on pushes to your default branch
+   too (`on: push` with that branch, as the file does): without race files from there a review has no
+   [baseline](#baseline), and lists a finding that is already on the default branch like any other.
 
 4. **Open a pull request.** When its test run has uploaded race files, the GenClass check appears on the commit. When
-   something is flagged, the comment below appears, and later pushes edit it in place. Once race files were read for
-   a repository, the check is on every commit of every pull request there, with or without race files.
+   something is flagged that your default branch's race files do not flag too, the comment below appears, and later
+   pushes edit it in place. Once race files were read for a repository, the check is on every commit of every pull
+   request there, with or without race files.
 
 Nothing is written when the app is installed. Reviews start with the first push or comment after that; a pull request
 that was already open is picked up on its next push, or when someone comments `@genclass-dev review`.
@@ -89,7 +94,7 @@ in one), as the app writes it; the report inside the fold and the footer's links
 
 **2 findings** in this pull request's tests at `4f2a9c1` · 1 reproducible · 2 tests read
 
-| # | Status | Finding | Test | Seen |
+| # | Status | Finding | Tests | Seen |
 |---:|---|---|---|---|
 | 1 | New | Duplicate submit · `POST /api/orders` | checkout.spec.ts > checkout > places one order | 2 of 2 seeds, **reproducible** |
 | 2 | New | Stale response · `GET /api/search` | search.spec.ts > search > shows the results of the last query | 1 of 2 seeds |
@@ -111,11 +116,41 @@ every race file of the commit was read: files that are not race files give "No r
 a commit whose artifacts could be read only in part is neutral too. A result a commit already has is kept when its
 race files cannot be read again (an expired artifact, a failed download).
 
+A later review of a busier pull request, with everything a team already knows told apart: a failing endpoint that is
+new here, a double submit that two tests reach and that the default branch has too, and one signature the settings
+leave out.
+
+<!-- example: known findings -->
+```markdown
+## GenClass runtime review
+
+**3 findings** in this pull request's tests at `4f2a9c1` · 2 reproducible · 1 new · 2 already on the default branch · 4 tests read
+
+| # | Status | Finding | Tests | Seen |
+|---:|---|---|---|---|
+| 1 | New | Failing endpoint · `GET /api/cart` | cart.spec.ts > cart > adds | 2 of 2 seeds, **reproducible** |
+| 2 | Already on the default branch | Duplicate submit · `POST /api/orders` | 2 tests: \[mobile\] checkout.spec.ts > checkout > places one order; checkout.spec.ts > checkout > places one order | 2 of 2 seeds in the first, **reproducible** |
+| 3 | Already on the default branch | Stale response · `GET /api/search` | search.spec.ts > search > shows the results of the last query | 1 of 2 seeds |
+
+2 of the 3 findings are already on the default branch: its race files at `8c1d2e7` flag the same kind and operation. They are not counted as new and get no inline comment.
+
+1 finding flagged at this commit is left out by `ignore` in `.github/genclass.yml`: not listed and not counted, here or in the check. The race report still shows it.
+
+Reply `@genclass-dev replay 1` for the steps to reproduce a finding, or `@genclass-dev fix 1` for a brief a coding agent can work from.
+```
+
 ## What the lines mean
 
-- **A finding** is one signature in one test: a trigger, a diagnosis and an operation, such as `request:duplicate` on
-  `POST /api/orders`. Its number is given once and never changes, so `@genclass-dev fix 2` means the same finding after
-  the next push.
+- **A finding** is one signature: a kind (a trigger and a diagnosis, such as `request:duplicate`) and an operation
+  (`POST /api/orders`). However many tests reach it, it is one finding and one row, which names the tests: the one
+  that flags it in most seeds first, up to three by name, the rest counted. The same test run in two Playwright
+  projects (`[chromium] search.spec.ts > ...` and `search.spec.ts > ...`) is two tests of one finding, not two
+  findings. The seeds in the row are those of the first test named. Its number is given once and never changes, so
+  `@genclass-dev fix 2` means the same finding after the next push.
+- **Rows from before findings were grouped.** Until November 2026 a finding was one signature in one test, so one
+  race could be several rows. On a pull request that was open then, such rows become one at its next review: the
+  finding keeps the lowest of their numbers, the comment says which other numbers it was listed under, and those
+  still name it in a command.
 - **Where it comes from.** With the fixture's default (`model: "skip"`) the files carry *witnesses*: happens-before
   facts the runtime measured without its model. `overwrote-newer`: a response wrote a field over what a newer request
   or the user had written since. `identical-in-flight`: two identical requests in flight together from separate user
@@ -124,7 +159,14 @@ race files cannot be read again (an expired artifact, a failed download).
 - **Reproducible** means flagged in `min_seeds` or more seeds of the same test (2 by default). A signature seen in
   fewer seeds may depend on that seed's timing: run more seeds before acting on it.
 - **Status**, from push to push: *New* (seen for the first time at this commit, or flagged again after a run in which
-  it was not), *Still flagged*, *Not flagged now* (its test ran at this commit without it), *Test not in this run*.
+  it was not), *Still flagged*, *Not flagged now* (every test it was flagged in ran at this commit without it), *Test
+  not in this run* (one of those tests did not run, so nothing is said about absence).
+- **Already on the default branch** is the status of a finding that your default branch's race files flag too: the
+  same kind and operation, in any test, at the commit the review names ([the baseline](#baseline)). It is listed
+  after the pull request's own findings, is not counted as new, gets no inline comment, and does not by itself start
+  a comment: a pull request whose only findings are already on the default branch gets the check, which lists them,
+  and no comment (`comment: always` writes one). It says that two sets of race files show the same thing, not what
+  the pull request caused.
 - **"Not flagged now" is not "fixed".** The app never says fixed. A replay that reproduced the finding before your
   change and does not after it is the evidence of a fix, and that happens on your machine or in your CI
   ([Fix with a coding agent](#fix)).
@@ -170,10 +212,13 @@ reviews:
   drafts: false         # also review drafts
   branches: []          # only pull requests into these base branches ("release/*"); empty: all
   ignore_authors: []    # logins whose pull requests are not reviewed, e.g. "dependabot[bot]"
-comment: findings       # findings: one comment, only when something is flagged | always | never
+comment: findings       # findings: one comment, when something is flagged that the default branch does not have too | always | never
 check:
   enabled: true
   fail_on: never        # never | reproducible | any
+  fail_on_baseline: false   # with fail_on: findings that are already on the default branch fail the check too
+baseline: true          # compare with the race files of the default branch's latest commit that has them
+ignore: []              # signatures left out of reviews, each a kind and an operation (see below)
 inline: true            # a comment on the test's line when the diff shows that line
 min_seeds: 2            # seeds a signature must be flagged in to count as reproducible (1 to 10)
 artifact: genclass      # artifacts whose name starts with this are read
@@ -192,6 +237,59 @@ The defaults apply when the repository has no settings file. When GitHub cannot 
 timeout), the app does not fall back to the defaults: it writes nothing for that event and reads the file again at
 the next one, or at the sweep (below).
 
+<a id="baseline"></a>
+
+### The baseline: what is already on the default branch
+
+When a pull request's race files flag something, the app also reads the race files of your default branch: those of
+its most recent commit that has any, uploaded by the same kind of workflow run under the same artifact name. A
+finding that those files flag too, by kind and operation, is listed as *Already on the default branch*
+([What the lines mean](#what-the-lines-mean)), and the review names the commit it was compared with, so anyone can
+check it. With `check.fail_on` set such a finding does not fail a pull request's check; it still keeps the check from
+being green, and `check.fail_on_baseline: true` makes it count like any other.
+
+- **What gives a repository a baseline.** A workflow run on the default branch that uploads race files. Both
+  workflow files here run on pushes to `main` or `master` for that; name your default branch there if it is called
+  something else. Only runs that are the branch's own count: started by a push to it or by its schedule, in your
+  repository. A run that a pull request started is never a baseline, also when GitHub lists it under the branch's
+  name (a fork's branch called `main`), so a pull request cannot supply its own.
+- **No baseline.** Without such a run, or when its artifact has expired (the workflow files keep artifacts 30 days),
+  a review is what it was before there were baselines: every finding is listed as the pull request's, and the comment
+  and the check say "No baseline was read". When a comparison was made earlier and cannot be made again, its result
+  stands and the review says which commit it was with; a finding first flagged since is listed like any other.
+- **What it costs.** Nothing for a pull request with nothing flagged: the default branch is only read to compare.
+  Otherwise one list of the branch's last finished runs and the artifacts of at most four commits, under the same
+  limits as a pull request's own ([Limits](#limits)). What comes of it is remembered for two minutes.
+- **It compares with the default branch**, also for a pull request into another branch.
+- `baseline: false` turns the comparison off: nothing is read of the default branch, and reviews say nothing of it.
+
+<a id="ignore"></a>
+
+### `ignore`: signatures your team has settled
+
+Some findings are known and wanted: a search box that sends the same request twice on purpose, an overwrite that is
+repaired a moment later. List them, and reviews leave them out:
+
+```yaml
+ignore:
+  - kind: witness:identical-in-flight
+    operation: POST /api/cart
+  - kind: witness:overwrote-newer
+    operation: "GET /api/search*"
+```
+
+- `kind` is the signature's kind as the race report writes it, a trigger and a diagnosis with a colon between:
+  `witness:overwrote-newer`, `request:duplicate`. It is the second code span of a finding's line in the report inside
+  the comment's fold, and `@genclass-dev replay <n>` names it too. It must match exactly.
+- `operation` is the operation as the finding's row shows it. One `*` in it stands for any run of characters:
+  `"GET /api/items/*"`, or `"*"` for every operation of that kind (quote a value that holds a `*`).
+- A signature that is left out is not listed, numbered or counted, never fails the check, and gets no issue. It is
+  never dropped silently: the comment and the check say how many findings were left out at that commit, and the race
+  report in the fold still shows every one. A finding that was listed before an entry named it leaves the table at
+  the pull request's next review, with its number.
+- Like every setting it is read from the default branch, so a pull request cannot leave anything out for itself.
+- At most 30 entries. An entry without a kind and an operation is not used, and the check says so.
+
 With `issues: merge`, a pull request that merges gets one issue for the reproducible findings flagged in the race
 files of the commit that merged. If that commit's test run was not read before the merge, it is read first; when it
 uploaded no race files, no issue is opened. That read follows the `reviews` settings: for a pull request that
@@ -199,7 +297,8 @@ uploaded no race files, no issue is opened. That read follows the `reviews` sett
 opened. When a pull request merges before the commit's workflow runs exist, or while one of them is still going,
 nothing is decided at the merge: the sweep (below) decides, about an hour later, with the race files there are then.
 A finding that an issue from the app already lists, open or closed, is not filed again: one finding gets one issue,
-however many pull requests merge with it. When two pull requests merge at the same moment, one is decided at once and
+however many pull requests merge with it and however many tests reach it. A signature that `ignore` leaves out gets
+none. When two pull requests merge at the same moment, one is decided at once and
 the other by the sweep. A paused pull request or repository gets none. `@genclass-dev issue <n>` opens one on request.
 
 With `check.fail_on` set, and once race files were read for the repository, the check stays "in progress" on a new
@@ -278,7 +377,7 @@ The app itself never writes code: it has no access to repository contents. What 
 |---|---|
 | Pull requests: read and write | The list of files a pull request changes (their paths and which lines the diff shows), and its own comments. |
 | Checks: write | The GenClass check on each commit. |
-| Actions: read | The workflow runs of a pull request's head commit, and the artifact with the race files. |
+| Actions: read | The workflow runs of a pull request's head commit, and the artifact with the race files. When those flag something: the default branch's own workflow runs and the race files of its most recent commit that has them, for [the baseline](#baseline). |
 | Issues: read and write | GitHub delivers pull-request comments (the commands) under this permission. The app reacts to a command, and opens an issue only when a setting or a person with write access asks. Before it opens one for `issues: merge` it lists the issues it opened itself, so that no finding is filed twice. |
 | Single file: read, `.github/genclass.yml` | Your settings. |
 | Metadata: read | Required by GitHub for every app. With it the app asks what permission a commenter has on the repository before it takes a command. |
@@ -296,11 +395,15 @@ workflow runs, check runs (its own "Re-run"), and installs and uninstalls.
   that says what the app reads was written, the one check that says a private repository needs a plan was written.
   And for a minute at most, that a pull request has the repository's turn to open an issue.
 - For a pull request: the ids of the app's comment and check, the head commit, whether it is paused, the number of
-  the issue opened for it, and per finding a fingerprint (a hash), its group, operation, test title and seeds: what
-  is in the comment already. 30 days after it closes, the row is deleted.
+  the issue opened for it, the commit of the default branch its findings were last compared with, and per finding a
+  fingerprint (a hash of its kind and operation), its group, operation, the titles of up to five tests, the seeds of
+  the first of them, and whether the default branch's race files flag it too: what is in the comment already. 30
+  days after it closes, the row is deleted.
 - Webhook delivery ids, for a week, so that one delivery is handled once.
-- Never: source code, diffs, file contents, race files or tokens. An artifact is read in memory and dropped; the
-  installation token lives in memory for under an hour; your GitHub token from Connect is used once.
+- Never: source code, diffs, file contents, race files or tokens. An artifact is read in memory and dropped, the
+  default branch's like a pull request's: of the default branch's race files the app remembers the commit and the
+  fingerprints of what they flag, in memory, for two minutes, and stores the commit and one mark per finding as
+  above. The installation token lives in memory for under an hour; your GitHub token from Connect is used once.
 
 Uninstalling the app, or taking a repository out of it, deletes what was kept for it at once.
 [PRIVACY.md](../../PRIVACY.md#the-github-app) is the policy.
@@ -334,6 +437,9 @@ Uninstalling the app, or taking a repository out of it, deletes what was kept fo
 | Text in a race file | 1,000 characters for a test's name, 2,000 for an evidence line, 600 for any other string |
 | Workflow runs per commit | The first 100 GitHub lists are looked at. The artifacts of at most 30 finished runs are asked for: the most recently finished first, and one run of every workflow before a second run of any. The workflow of the run whose end started the review is asked first, also when that run is not among the 100. Of two runs of one workflow that uploaded the same artifact name, the one that finished last is read |
 | Findings remembered per pull request | 100. A finding that is flagged keeps its number. With more than 100 flagged at once, the rest are counted in the comment and the check ("N more findings flagged at this commit are not listed") and count for `check.fail_on` |
+| Tests named per finding | 5 kept, the first 3 in its row; the rest are counted. The race report in the fold lists every test |
+| The baseline | One list of the default branch's last 100 finished workflow runs. The 4 most recent commits among them that a push or a schedule ran are tried, and the first with race files that can be read is used. At most 20 requests, and for the commit that is read the same limits as above on artifacts, race files and signatures. Kept in memory for 2 minutes. Not read in the last 9 seconds of a webhook's 20 |
+| `ignore` | 30 entries; a kind of at most 80 characters and an operation of at most 160, with at most one `*` |
 | Comment and check size | 60,000 characters; a longer report is shortened and says so |
 | Settings file | 16 KB |
 
@@ -390,7 +496,17 @@ pull request up again at its next event, or at the sweep.
 - **"Not all race files could be read yet".** `check.fail_on` is set and an artifact of the commit could not be
   downloaded or has expired; the check names it. `@genclass-dev review` ends the check with what can be read, and so
   does the sweep, about an hour later.
-- **No comment.** The default posts one only when something is flagged (`comment: always` changes that).
+- **No comment.** The default posts one only when something is flagged that the default branch's race files do not
+  flag too (`comment: always` changes that). The check lists every finding either way.
+- **"No baseline was read".** No workflow run that a push to your default branch or its schedule started has an
+  artifact whose name starts with `genclass` and that can still be downloaded: the workflow does not run there
+  ([the baseline](#baseline)), or its artifact has expired. Every finding is then listed as the pull request's own.
+- **A finding is "New" though the default branch has it.** The comparison is by kind and operation with the default
+  branch's most recent commit that has race files: check that commit's race report for the same line. A finding seen
+  in one seed may simply not have shown there.
+- **"The default branch's race files were not read this time".** GitHub was slow and the review kept its time for
+  its own writes, or the artifact is gone. What was compared before stands; the next review compares again.
+- **A row I want gone.** If the finding is intended, list its kind and operation under [`ignore`](#ignore).
 - **A private repository shows "Private repositories need a plan".** See [Plans](#plans).
 - **Settings do not apply.** The file must be on the default branch; the check lists any mistake in it. Changes are
   picked up within two minutes.

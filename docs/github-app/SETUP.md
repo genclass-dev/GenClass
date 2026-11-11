@@ -265,6 +265,29 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
   `DELETE FROM github_prs WHERE repo_id = ?`, `DELETE FROM github_repos WHERE repo_id = ?` and
   `DELETE FROM github_repo_facts WHERE repo_id = ?`.
 
+## Upgrading to grouped findings, the baseline and `ignore`
+
+The version that groups findings by kind and operation, compares them with the default branch's race files and reads
+`ignore` needs no migration and no new permission, secret or variable. Before deploying it:
+
+- **Stored rows change form by themselves.** A pull request's findings (`github_prs.state`) are written as version 2
+  by its next review; version 1 rows are read and regrouped until then ([DESIGN.md](DESIGN.md), "Numbers for life").
+  A rollback to the earlier worker reads a version 2 row as empty: that pull request's findings are numbered from 1
+  again in its existing comment. Nothing else is lost, and nothing has to be repaired by hand.
+- **What the app reads changes**, within the Actions permission it already has: the default branch's workflow runs
+  and the race files of its latest commit that has them. [PRIVACY.md](../../PRIVACY.md#the-github-app), the guide and
+  the app's page say so from the same change. The Marketplace listing's transparency disclosures on GitHub were
+  entered before it and have to be brought in line by hand
+  ([the listing](../adoption/listings/github-marketplace.md)).
+- **Requests.** A review that finds something makes up to 20 more requests to GitHub for the comparison, usually 3
+  (the branch's runs, one run's artifacts, one download), at most once in two minutes per repository and isolate.
+  The hourly caps on reviews are unchanged.
+- **Repositories get a baseline only when their workflow runs on the default branch.** The two workflow files in
+  [`workflows/`](workflows/) do since this change (pushes to `main` or `master`); a repository that copied the earlier
+  file sees "No baseline was read" in its reviews until it adds that trigger. This repository's own
+  `playwright-reporter.yml` runs on pushes already, with path filters and seven days of retention, so its baseline
+  exists only for a week after a push that touched those paths.
+
 ## Plans and private repositories
 
 - Public repositories are always reviewed. Nothing in the configuration can turn that off.

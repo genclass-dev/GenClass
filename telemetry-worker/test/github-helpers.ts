@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { expect } from "vitest";
 import { handle, type Env } from "../src/collector.js";
 import { resetGithubCaches } from "../src/github/api.js";
-import { resetSettingsCache } from "../src/github/handlers.js";
+import { resetBaselineCache, resetSettingsCache } from "../src/github/handlers.js";
 import { resetJwtCache } from "../src/github/jwt.js";
 import { now, ORIGIN, setup, type Fetch } from "./account-helpers.js";
 import { makeZip } from "./github-zip-helper.js";
@@ -30,6 +30,7 @@ const PUBLIC_KEY = createPublicKey(pair.publicKey.export({ type: "spki", format:
 export function githubSetup(over: Partial<Env> = {}) {
   resetGithubCaches();
   resetSettingsCache();
+  resetBaselineCache();
   resetJwtCache();
   return setup({ GITHUB_APP_ID: APP_ID, GITHUB_APP_PRIVATE_KEY: PRIVATE_KEY_PKCS1, GITHUB_APP_WEBHOOK_SECRET: WEBHOOK_SECRET, GITHUB_APP_CLIENT_ID: CLIENT_ID, GITHUB_APP_CLIENT_SECRET: CLIENT_SECRET, ...over });
 }
@@ -199,6 +200,12 @@ export interface FakeRun {
   created_at?: string;
   /** When it ended (GitHub's `updated_at` of a completed run). */
   updated_at?: string;
+  /** The branch GitHub files the run under (a pull request's head branch, or the branch pushed to). Default "feature". */
+  head_branch?: string;
+  /** What started it. Default "pull_request". */
+  event?: string;
+  /** The repository its head commit is in (a fork's id for a pull request from a fork). Default: the repository itself. */
+  head_repository_id?: number;
   /** Artifacts by name: the zip bytes. */
   artifacts?: Record<string, Uint8Array>;
   /** Names of artifacts GitHub lists as expired (their retention ran out). */
@@ -257,6 +264,9 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
     workflow_id: r.workflow_id ?? 1,
     created_at: r.created_at ?? "2026-10-13T11:00:00Z",
     ...(r.updated_at ? { updated_at: r.updated_at } : {}),
+    head_branch: r.head_branch ?? "feature",
+    event: r.event ?? "pull_request",
+    head_repository: { id: r.head_repository_id ?? repos.get(full) },
   });
 
   const fetch: Fetch = async (input, init = {}) => {
@@ -358,8 +368,15 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
     }
     if (rest.startsWith("/contents/")) return ok({ message: "Resource not accessible by integration" }, 403);
     if (rest === "/actions/runs" && method === "GET") {
+      // as GitHub lists a repository's runs: by commit, or by the branch they are filed under and their status, the
+      // most recently created first (a pull request from a fork whose branch has the same name is listed with them)
       const sha = url.searchParams.get("head_sha");
-      const list = (runs.get(full) ?? []).filter((r) => r.head_sha === sha);
+      const branch = url.searchParams.get("branch");
+      const status = url.searchParams.get("status");
+      const list = (runs.get(full) ?? [])
+        .filter((r) => (branch === null ? r.head_sha === sha : (r.head_branch ?? "feature") === branch && (sha === null || r.head_sha === sha)))
+        .filter((r) => status === null || (r.status ?? "completed") === status);
+      if (branch !== null) list.sort((a, b) => (b.created_at ?? "2026-10-13T11:00:00Z").localeCompare(a.created_at ?? "2026-10-13T11:00:00Z"));
       return ok({ total_count: list.length, workflow_runs: list.map((r) => runJson(full, r)) });
     }
     if ((x = /^\/actions\/runs\/(\d+)$/.exec(rest)) && method === "GET") {
@@ -458,6 +475,15 @@ export function fakeGithub(o: { answer?: (call: FakeCall, url: URL) => Response 
     /** A completed workflow run on a commit that uploaded the reporter's fixtures as the artifact `genclass-races`. */
     addRun(sha: string, artifacts: Record<string, Uint8Array> = { "genclass-races": racesZip() }, over: Partial<FakeRun> = {}, full = REPO.full_name): FakeRun {
       const run: FakeRun = { id: 5000 + (runs.get(full)?.length ?? 0) + 1, head_sha: sha, artifacts, ...over };
+      runs.set(full, [...(runs.get(full) ?? []), run]);
+      return run;
+    },
+    /**
+     * A completed workflow run that a push to the default branch ("main") started, with these artifacts (default: the
+     * reporter's fixtures as `genclass-races`): what a review compares a pull request's findings with.
+     */
+    addBaseRun(sha: string, artifacts: Record<string, Uint8Array> = { "genclass-races": racesZip() }, over: Partial<FakeRun> = {}, full = REPO.full_name): FakeRun {
+      const run: FakeRun = { id: 5000 + (runs.get(full)?.length ?? 0) + 1, head_sha: sha, artifacts, head_branch: "main", event: "push", ...over };
       runs.set(full, [...(runs.get(full) ?? []), run]);
       return run;
     },

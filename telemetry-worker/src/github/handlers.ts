@@ -10,6 +10,11 @@
 //   runs and artifacts of the head commit and, only when needed, the list of changed files. It never reads file
 //   contents, and of a file's patch it keeps the line ranges only. Before an issue is opened at a merge, the issues
 //   the app itself opened in the repository are listed, so that no finding is filed twice.
+// - When the head commit's race files flag something, and only then, a review also reads the default branch's: the
+//   workflow runs of that branch that a push to it or its schedule started, and the race files of the most recent
+//   commit that has them (baselineOf). They tell which findings are already there, and nothing else is done with
+//   them: no check or comment is written about the default branch, and nothing of them is stored but the commit they
+//   are of and, per finding, whether they flag it too. `baseline: false` in the settings turns the read off.
 // - It writes at most: one check run per head commit (a second only to take the place of one in progress whose id
 //   was lost with the job that created it), one summary comment per pull request (edited in place), one review with
 //   inline comments per new reproducible finding, and one reply per command. An unchanged result is not written again
@@ -82,11 +87,16 @@ import { appClient, forgetInstallation, GithubError, installationClient, posInt,
 import { NEEDS_FINDING, NEEDS_WRITE, parseCommand } from "./commands.js";
 import { githubApp, type GithubAppConfig } from "./config.js";
 import { repoEntitled } from "./entitlement.js";
-import { ciEvidence, noEvidence, productionEvidence } from "./evidence.js";
+import { baselineEvidence, ciEvidence, MAX_BASELINE_CALLS, noEvidence, productionEvidence } from "./evidence.js";
 import {
   CHECK_NAME,
+  hasFindings,
   inlineComments,
+  inlineWanted,
   issueFingerprints,
+  leftOut,
+  legacyFingerprints,
+  loadState,
   mergeFindings,
   parseState,
   patchLines,
@@ -102,9 +112,11 @@ import {
   renderUnsettled,
   REPLY_MARKER,
   sha256Hex,
+  signatureKeys,
   summaryOf,
   testLocations,
   unread,
+  type BaselineView,
   type CheckOutput,
   type HourLimit,
   type PrState,
@@ -115,7 +127,7 @@ import {
   type TestLocation,
 } from "./review.js";
 import { branchMatches, readSettings, SETTINGS_PATH, type RepoSettings } from "./settings.js";
-import { WORKFLOW_ARTIFACT, workflowLink } from "./workflow-file.js";
+import { BRANCH_RE, WORKFLOW_ARTIFACT, workflowLink } from "./workflow-file.js";
 import {
   claimPrHour,
   claimRepoFact,
@@ -376,6 +388,88 @@ function retryable(e: unknown): boolean {
   return e instanceof GithubError && (e.kind === "rate_limited" || e.kind === "unauthorized" || e.kind === "budget" || e.kind === "network" || e.kind === "server");
 }
 
+// --------------------------------------------------------------------------------------------- the default branch
+
+/** How long what the default branch's race files gave is kept in this isolate: a push brings several reviews within minutes. */
+const BASELINE_TTL_MS = 120_000;
+/** The least time a job must have left for the default branch's race files to be read at all. */
+const BASELINE_MIN_MS = 9_000;
+/** No request for them starts with less than this left: the review's own writes come after, and they come first. */
+const BASELINE_RESERVE_MS = 6_000;
+
+/**
+ * What the default branch's race files gave a review. read: the commit they are of and the fingerprints of what they
+ * flag. none: GitHub lists no workflow run of the branch with race files that can be read. unread: nothing was asked,
+ * or the asking was cut short (no branch name from GitHub, no time left in the job).
+ */
+interface Baseline {
+  state: "read" | "none" | "unread";
+  sha: string | null;
+  keys: ReadonlySet<string>;
+  files: number;
+  /** Some of the branch's race files may have gone unread. */
+  incomplete: boolean;
+}
+
+const NOT_READ: Baseline = { state: "unread", sha: null, keys: new Set(), files: 0, incomplete: false };
+const baselineCache = new Map<number, { exp: number; key: string; value: Baseline }>();
+/** Drops what was kept of default branches' race files (tests). */
+export const resetBaselineCache = (): void => baselineCache.clear();
+
+/**
+ * The race files of the default branch's most recent commit that has them, as fingerprints to compare a pull
+ * request's findings with (src/github/evidence.ts baselineEvidence). Asked with a client of its own, so its requests
+ * are not taken from the review's, and kept for two minutes per isolate: only the commit, the fingerprints and two
+ * counts are kept, never a file. It never costs a review its result: with too little of the job's time left nothing
+ * is asked, and no request starts once the time kept for the review's own writes is reached; what was read until
+ * then is dropped, not used in part. When GitHub cannot be reached, or limits the installation, the pass fails like
+ * any other read that failed and is run again. GitHub's own answer that there is nothing to list is "none".
+ */
+async function baselineOf(ctx: Ctx, t: ReviewTarget, branch: string | null, settings: RepoSettings): Promise<Baseline> {
+  const { repo } = t;
+  // the name goes into a request whole: one that could not name a branch is not asked about
+  if (!branch || !BRANCH_RE.test(branch)) return NOT_READ;
+  const nowMs = ctx.now().getTime();
+  const key = `${branch}\n${settings.artifact}`;
+  const hit = baselineCache.get(repo.id);
+  if (hit && hit.exp > nowMs && hit.key === key) return hit.value;
+  if (timeLeft(ctx) < BASELINE_MIN_MS) return NOT_READ;
+  let short = false;
+  const f: Fetch = (input, init) => {
+    if (timeLeft(ctx) >= BASELINE_RESERVE_MS) return ctx.f(input, init);
+    short = true;
+    return Promise.reject(new Error("no time left for the default branch's race files"));
+  };
+  const gh = installationClient(ctx.cfg, f, ctx.now, t.installationId, repo.id, MAX_BASELINE_CALLS + 4);
+  let value: Baseline;
+  try {
+    const found = await baselineEvidence(gh, repo.path, { branch, repoId: repo.id }, settings);
+    if (found.sha && found.ci) {
+      const summary = summaryOf(found.ci.inputs, settings);
+      value = { state: "read", sha: found.sha, keys: await signatureKeys(summary), files: summary?.files ?? 0, incomplete: found.incomplete };
+    } else value = { state: "none", sha: null, keys: new Set(), files: 0, incomplete: found.incomplete };
+  } catch (e) {
+    if (short) return NOT_READ;
+    if (retryable(e) && !(e instanceof GithubError && e.kind === "budget")) throw e;
+    // GitHub's answer that there is nothing to list here (Actions is off, the branch is gone), or more requests than a baseline may cost
+    value = { state: "none", sha: null, keys: new Set(), files: 0, incomplete: true };
+  }
+  // cut short by the clock: a part is not a baseline, and is not kept
+  if (short) return NOT_READ;
+  if (baselineCache.size > 2000) baselineCache.clear();
+  baselineCache.set(repo.id, { exp: nowMs + BASELINE_TTL_MS, key, value });
+  return value;
+}
+
+/**
+ * The comparison as a review tells it. When nothing could be read now and the findings carry marks from an earlier
+ * comparison, those stand, and the review names the commit they are of.
+ */
+function baselineView(b: Baseline, stored: string | null): BaselineView {
+  if (b.state === "read") return { state: "read", sha: b.sha, files: b.files, incomplete: b.incomplete };
+  return { state: stored ? "unread" : b.state, sha: stored, files: 0, incomplete: b.incomplete };
+}
+
 /** The pull request's row as a pass sees it: kept current as the pass saves. */
 type RowView = Pick<PrRow, "head_sha" | "check_run_id" | "comment_id">;
 
@@ -617,7 +711,8 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
   const { db, cfg } = ctx;
   const { repo, number } = t;
   const row: RowView = { head_sha: leased.head_sha, check_run_id: leased.check_run_id, comment_id: leased.comment_id };
-  const state = parseState(leased.state);
+  // (a row stored before findings were one per kind and operation is regrouped here, and saved that way from now on)
+  const state = await loadState(leased.state);
   const links = linksOf(cfg);
   const gh = installationClient(cfg, ctx.f, ctx.now, t.installationId, repo.id);
   const repoKey = { repoId: repo.id, installationId: t.installationId };
@@ -764,7 +859,8 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
   const ci = await ciEvidence(gh, repo.path, pull.headSha, settings, { firstRun: o.run });
   // A pause that arrived while the commit's files were read holds from here on: nothing more is written for this
   // pass. Someone with write access lifts a pause that was there when their pass began; one set since stops it too.
-  if ((o.asked !== true || !leased.paused) && (await prRow(db, repo.id, number))?.paused) return stop("paused on this pull request", "paused");
+  const pausedMeanwhile = async (): Promise<boolean> => (o.asked !== true || !leased.paused) && !!(await prRow(db, repo.id, number))?.paused;
+  if (await pausedMeanwhile()) return stop("paused on this pull request", "paused");
   // GitHub often tells us about a push before it has created the commit's workflow runs. Where the check may fail a
   // pull request (fail_on), "no run yet" must not read as "nothing to wait for": the check waits, and the run's own
   // event finishes it. A person asking for a review gets the answer as it stands, and so does the sweep, so a
@@ -781,9 +877,31 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
   if (nothingRead && state.evidence === pull.headSha) return { word: "race files not read again", due: false };
   // some of the commit's race files may have gone unread this time: what was read is not the whole of its evidence
   const partial = ci.incomplete;
-  const merged = await mergeFindings(state, nothingRead ? null : summary, pull.headSha, { partial });
+  // The default branch's race files are read only when this commit's files flag something that can be compared with
+  // them (what the settings leave out is not compared): a pull request with nothing flagged costs no request for them.
+  const compare = !nothingRead && hasFindings(summary, settings.ignore);
+  const baseline = compare && settings.baseline ? await baselineOf(ctx, t, pull.defaultBranch ?? repo.defaultBranch, settings) : null;
+  // (the default branch's files took time to read too: a pause set meanwhile holds, as after the commit's own)
+  if (baseline && (await pausedMeanwhile())) return stop("paused on this pull request", "paused");
+  const merged = await mergeFindings(state, nothingRead ? null : summary, pull.headSha, {
+    partial,
+    ignore: settings.ignore,
+    // read now: every flagged finding is marked from it. Turned off in the settings: no mark is kept. Else (nothing
+    // to compare, or nothing could be read): the marks of the last comparison stand.
+    baseline: !settings.baseline ? "off" : baseline?.state === "read" && baseline.sha ? { sha: baseline.sha, keys: baseline.keys } : null,
+  });
   const next = merged.state;
-  const base: ReviewModel = { repo: repo.fullName, number, headSha: pull.headSha, mention: cfg.slug, ci, summary, findings: merged.view, production: null, settings, warnings, links, partial, unlisted: merged.unlisted };
+  // What the review tells of the comparison: the one just made; that the settings turn it off; or, when none was
+  // made now and the findings carry marks of an earlier one (a commit that waits for its test run shows those), the
+  // commit those marks are of.
+  const compared: BaselineView | undefined = baseline
+    ? baselineView(baseline, next.base)
+    : !settings.baseline
+      ? { state: "off", sha: null, files: 0, incomplete: false }
+      : next.base
+        ? { state: "unread", sha: next.base, files: 0, incomplete: false }
+        : undefined;
+  const base: ReviewModel = { repo: repo.fullName, number, headSha: pull.headSha, mention: cfg.slug, ci, summary, findings: merged.view, production: null, settings, warnings, links, partial, unlisted: merged.unlisted, baseline: compared, ignored: merged.ignored };
 
   // Where the check may fail a pull request, a first read of a commit that is not whole gives no verdict, unless what
   // was read already fails the check: "neutral" passes a required check, and it would pass on race files nobody read
@@ -808,7 +926,7 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
 
   // the changed files are listed only when something needs their paths: a linked app's pages, or an inline comment
   const locations = settings.inline ? testLocations(ci.inputs) : new Map<string, TestLocation>();
-  const wantInline = settings.inline && merged.view.some((f) => f.status === "new" && f.rep && f.now && !next.inline.includes(f.fp) && locations.has(f.test));
+  const wantInline = settings.inline && inlineWanted(merged.view, next, locations);
   const paths: string[] = [];
   const diff = new Map<string, [number, number][]>();
   if (wantInline || wantProduction) {
@@ -856,11 +974,16 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
   }
 
   const openNow = merged.view.some((f) => f.status === "new" || f.status === "still");
+  // Flagged here and, as far as the default branch's race files were compared, not there: what a comment is for. A
+  // pull request whose only findings are already on the default branch gets the check, which lists them, and no
+  // comment of its own (one that exists is kept current).
+  const ownNow = merged.view.some((f) => (f.status === "new" || f.status === "still") && !f.base) || merged.unlisted.n > (merged.unlisted.base ?? 0);
   // new to the people in the pull request: a finding it has never listed. One that was listed before and is flagged
   // again (its test was not in a run, or ran once without it) is not: a deleted comment does not come back for it.
+  // Nor is one the default branch has too.
   const was = new Set(state.findings.map((f) => f.fp));
-  const hasNew = merged.view.some((f) => f.status === "new" && !was.has(f.fp));
-  const news = openNow || (production?.touched.length ?? 0) > 0;
+  const hasNew = merged.view.some((f) => f.status === "new" && !f.base && !was.has(f.fp));
+  const news = ownNow || (production?.touched.length ?? 0) > 0;
   const wanted = settings.comment === "always" || (settings.comment === "findings" && (news || row.comment_id !== null));
   // the row is saved as soon as the comment exists, so a failure after it cannot lead to a second comment
   const comment = await publishComment(gh, repo, number, row, next, renderSummary(model), wanted, hasNew);
@@ -935,7 +1058,10 @@ async function onInstallationRepositories(ctx: Ctx, p: Obj): Promise<string> {
   const removed = (Array.isArray(p.repositories_removed) ? p.repositories_removed : []).map((r) => posInt(obj(r).id)).filter((x): x is number => x !== null);
   if (removed.length) {
     await removeRepos(ctx.db, id, removed);
-    for (const r of removed) settingsCache.delete(r);
+    for (const r of removed) {
+      settingsCache.delete(r);
+      baselineCache.delete(r);
+    }
   }
   return removed.length ? "repositories removed" : "ok";
 }
@@ -1024,7 +1150,11 @@ async function filedFindings(gh: GithubClient, repo: RepoRef, slug: string): Pro
  *   then: it reads the commit's race files again, and when none can be read, what was read before stands.
  * - A finding that an issue the app opened here already lists is left out: the same finding is in every pull
  *   request's race files until someone fixes it, and one issue is enough. When those issues cannot be listed, none is
- *   opened.
+ *   opened. An issue from before findings were one per kind and operation lists a finding under the fingerprint of
+ *   one of its tests, and counts for it too.
+ * - A signature the settings leave out (`ignore`) gets no issue. What the default branch's race files flag too is
+ *   treated like any other finding here: nothing is read of the default branch at a merge, and one issue per finding
+ *   already keeps a finding that every pull request merges with from being filed again.
  * - One pull request at a time lists and opens in a repository (takeIssueTurn). Two that merge together with the same
  *   finding would each find no issue for it. The one that has to wait is owed its review, and the sweep decides
  *   it when the list shows what the first one opened.
@@ -1059,7 +1189,9 @@ async function issueOnMerge(ctx: Ctx, t: ReviewTarget, gh: GithubClient, leased:
     if (!o.final && (ci.unfinished || ci.runs.length === 0)) return owed;
     const summary = summaryOf(ci.inputs, settings);
     if (summary !== null && !unread(summary)) {
-      current = (await mergeFindings(state, summary, pull.headSha, { partial: ci.incomplete })).state;
+      // (what the settings leave out is not kept here either, so no issue is opened for it; the marks of the last
+      // comparison with the default branch stand: nothing is read of it at a merge)
+      current = (await mergeFindings(state, summary, pull.headSha, { partial: ci.incomplete, ignore: settings.ignore })).state;
       await savePr(db, repo.id, number, { state: JSON.stringify(current) }, ctx.now());
     } else if (!stored) return closed;
     // (no race file can be read now, and the commit's were read before: what they said stands)
@@ -1068,7 +1200,8 @@ async function issueOnMerge(ctx: Ctx, t: ReviewTarget, gh: GithubClient, leased:
     // was read may be a part (one workflow's files, while another's test run has not ended).
     return owed;
   }
-  const left = flagged(current);
+  // (a finding the settings have come to leave out since it was read gets no issue either)
+  const left = flagged(current).filter((f) => !leftOut(settings.ignore, f.kind, f.op));
   if (!left.length) return closed;
   const turn = await takeIssueTurn(db, { repoId: repo.id, installationId: t.installationId }, ctx.now());
   if (!turn) return { word: "closed", due: true };
@@ -1076,7 +1209,12 @@ async function issueOnMerge(ctx: Ctx, t: ReviewTarget, gh: GithubClient, leased:
   let made: number | null = null;
   try {
     const filed = await filedFindings(gh, repo, cfg.slug);
-    const fresh = left.filter((f) => !filed.has(f.fp));
+    const fresh: StoredFinding[] = [];
+    for (const f of left) {
+      // an issue opened before findings were one per kind and operation lists it under the fingerprint of one of its tests
+      if (filed.has(f.fp) || (filed.size > 0 && (await legacyFingerprints(f)).some((fp) => filed.has(fp)))) continue;
+      fresh.push(f);
+    }
     if (fresh.length) {
       const issue = renderIssue(fresh, { repo: repo.fullName, number, headSha: pull.headSha, mention: cfg.slug, links: linksOf(cfg), merged: true });
       sent = true;
@@ -1104,6 +1242,8 @@ async function onWorkflowRun(ctx: Ctx, p: Obj): Promise<string> {
   const sha = str(run.head_sha, 64);
   const runId = posInt(run.id);
   if (!repo || !installationId || !runId || !/^[0-9a-f]{40,64}$/.test(sha)) return "ignored";
+  // a run of the default branch ended: what this isolate kept of that branch's race files may be a commit behind now
+  if (repo.defaultBranch !== null && run.head_branch === repo.defaultBranch) baselineCache.delete(repo.id);
   // the pull requests this commit is the head of: the ones already seen (stored when they opened or were pushed to)
   const rows = await prsAtSha(ctx.db, repo.id, sha);
   const numbers = new Set(rows.map((r) => r.number));
@@ -1208,7 +1348,7 @@ async function onComment(ctx: Ctx, p: Obj): Promise<string> {
     await gh.post(`${repo.path}/issues/${number}/comments`, { body });
     if (row) await savePr(ctx.db, repo.id, number, { reviewed: true }, ctx.now());
   };
-  const state = parseState(row?.state);
+  const state = await loadState(row?.state);
 
   if (cmd.name === "help") {
     await say(renderHelp(ctx.cfg.slug, links));
@@ -1242,7 +1382,8 @@ async function onComment(ctx: Ctx, p: Obj): Promise<string> {
 
   if (NEEDS_FINDING.includes(cmd.name)) {
     const numbers = state.findings.map((f) => f.n).sort((a, b) => a - b);
-    const f = cmd.n === null && numbers.length === 1 ? state.findings[0] : state.findings.find((x) => x.n === cmd.n);
+    // a number a finding was listed under before its rows became one (`also`) still names it
+    const f = cmd.n === null && numbers.length === 1 ? state.findings[0] : state.findings.find((x) => x.n === cmd.n || (cmd.n !== null && x.also?.includes(cmd.n)));
     if (!f) {
       await say(`${REPLY_MARKER}\n${numbers.length ? `There is no finding ${cmd.n ?? "with that number"} on this pull request. Its findings are numbered ${numbers.slice(0, 30).join(", ")}: name one, as in \`@${ctx.cfg.slug} ${cmd.name} ${numbers[0]}\`.` : "No finding is recorded for this pull request yet. Findings come from the race files its test run uploads."}\n`);
       return "no such finding";
