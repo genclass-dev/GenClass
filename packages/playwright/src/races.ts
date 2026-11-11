@@ -17,12 +17,17 @@
 // would refuse is left out, and when a test has more signatures than a file holds, by count or by size, the least
 // confident are left out and counted in `dropped`, which the report shows under the test. Leaving signatures out is
 // the only way a file is made smaller: one that is over the size limit without any signature is written as it is.
+//
+// The order of things on the page (`steps`, steps.ts) goes in last, into the room the signatures leave: as many steps
+// from the beginning as fit the option's count and bytes and the file's own limit, the rest counted in `steps.cut`.
+// No signature is ever left out to make room for a step.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { stablePath } from "./chaos.js";
 import { isRepoPath } from "./schema.js";
-import { RACES_LIMITS, RACES_SCHEMA, type GenClassRacesFile, type RaceSignature, type RacesFixtureInfo, type RacesLocation } from "./types.js";
+import { encodeSteps, type StepSequence } from "./steps.js";
+import { RACES_LIMITS, RACES_SCHEMA, RETRY_LIMIT, type GenClassRacesFile, type RaceSignature, type RacesFixtureInfo, type RacesLocation, type RacesStatus } from "./types.js";
 
 /** The `trigger` of a witness signature. */
 export const WITNESS_TRIGGER = "witness";
@@ -73,6 +78,15 @@ export interface RacesInput {
   fixture?: RacesFixtureInfo;
   /** Where the test is declared (written as the file's `location`), when the fixture could tell. */
   location?: RacesLocation;
+  /** The test's status when the file is written (written as the file's `status`). */
+  status?: RacesStatus;
+  /** The attempt, for a retried one (written as the file's `retry` when it is from 1 to RETRY_LIMIT). */
+  retry?: number;
+  /**
+   * The order of things on the page (written as the file's `steps`): at most `max` steps and `bytes` bytes of them,
+   * with `more` steps the fixture did not keep counted as left out.
+   */
+  steps?: { sequence: StepSequence; max: number; bytes: number; more?: number };
 }
 
 const METHOD_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+([^\s()?#]+)/;
@@ -167,7 +181,8 @@ const MODEL_KEYS = ["state", "name", "version", "device"] as const;
  * reader with those limits reads it: the test's name, the mode and the model and fixture strings are cut to their
  * limit, a `location` the validator would refuse is left out, and when the test has more signatures than a file
  * holds (RACES_LIMITS.signatures of them, or RACES_LIMITS.bytes of text) the least confident are left out, the rest
- * stay sorted by `sig`, and `dropped` says how many were left out. Pure: the same input gives the same file.
+ * stay sorted by `sig`, and `dropped` says how many were left out. The page's steps, when given, go into the room that
+ * is left (see the header). Pure: the same input gives the same file.
  */
 export function buildRacesFile(i: RacesInput): GenClassRacesFile {
   const all = signaturesOf(i.records, i.witnesses, i.seed);
@@ -192,6 +207,8 @@ export function buildRacesFile(i: RacesInput): GenClassRacesFile {
       if (typeof file.fixture.modeOverridden === "string") file.fixture.modeOverridden = cut(file.fixture.modeOverridden, RACES_LIMITS.text);
     }
     if (i.location && isRepoPath(i.location.file) && Number.isInteger(i.location.line) && i.location.line >= 1) file.location = { file: i.location.file, line: i.location.line };
+    if (i.status) file.status = i.status;
+    if (typeof i.retry === "number" && Number.isInteger(i.retry) && i.retry >= 1 && i.retry <= RETRY_LIMIT) file.retry = i.retry;
     return file;
   };
   const fits = (file: GenClassRacesFile): boolean => new TextEncoder().encode(racesFileText(file)).length <= RACES_LIMITS.bytes;
@@ -208,6 +225,15 @@ export function buildRacesFile(i: RacesInput): GenClassRacesFile {
     }
     keep = lo;
     file = make(keep);
+  }
+  if (i.steps && i.steps.max > 0) {
+    // into the room that is left, and never over the file's own limit
+    const room = RACES_LIMITS.bytes - new TextEncoder().encode(racesFileText(file)).length;
+    const steps = encodeSteps(i.steps.sequence, { max: i.steps.max, bytes: Math.min(i.steps.bytes, room), more: i.steps.more });
+    if (steps) {
+      file.steps = steps;
+      if (!fits(file)) delete file.steps;
+    }
   }
   return file;
 }

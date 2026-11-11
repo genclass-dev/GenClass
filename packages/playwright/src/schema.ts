@@ -9,11 +9,54 @@
 // (its signatures are not looked at one by one), so is a signature with more seeds than the limit (its seeds are not
 // looked at one by one), and a string longer than its limit rejects the file like any other bad field. The fixture
 // writes within them (src/races.ts).
+//
+// Three optional fields are read leniently, the one exception to "never half-read": `status` (the test's own status),
+// `retry` (which attempt, for a retried one) and `steps` (the order of things on the page, steps.ts). They serve one optional comparison (order.ts) and no finding
+// depends on them, so a value this version cannot read is left out of the copy and the file's signatures are kept.
+// A reader older than these fields drops them like any field it does not know. Their format is checked here
+// (readSteps) and not in steps.ts, so that this module still imports nothing but the types: whoever bundles the
+// validator from source (genclass-dev[bot]) gets the validator alone.
 
-import { RACES_LIMITS, RACES_SCHEMA, type GenClassRacesFile, type RaceSignature, type RacesParseResult } from "./types.js";
+import { RACES_LIMITS, RACES_SCHEMA, RACES_STATUSES, RETRY_LIMIT, STEPS_LIMITS, type GenClassRacesFile, type RaceSignature, type RacesParseResult, type RacesStatus, type RacesSteps } from "./types.js";
 
 /** At most this many messages per file; the rest are counted. */
 export const MAX_ERRORS = 8;
+
+/** One step in a file's `steps.order`: kind, label index, which one, ms since the step before ("r1.2+38"). */
+export const STEP_TOKEN = /^([asrx])(\d{1,4})\.(\d{1,7})\+(\d{1,9})$/;
+
+function isCount(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0;
+}
+
+/**
+ * A file's `steps` when this version can read it, as a copy with only the format's fields; null for anything else
+ * (another shape, a token it does not know, more than STEPS_LIMITS allows). The validator then leaves the field out:
+ * the order of steps serves one optional comparison, and a file's signatures are never lost over it.
+ */
+export function readSteps(v: unknown): RacesSteps | null {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return null;
+  const x = v as Record<string, unknown>;
+  if (!Array.isArray(x.labels) || x.labels.length > STEPS_LIMITS.labels || typeof x.order !== "string") return null;
+  for (const l of x.labels) if (typeof l !== "string" || l.length === 0 || l.length > STEPS_LIMITS.label) return null;
+  if (x.order.length === 0 || x.order.length > STEPS_LIMITS.steps * 28) return null;
+  const parts = x.order.split(" ");
+  if (parts.length > STEPS_LIMITS.steps) return null;
+  for (const p of parts) {
+    const m = STEP_TOKEN.exec(p);
+    if (!m || Number(m[2]) >= x.labels.length || Number(m[3]) < 1) return null;
+  }
+  const out: RacesSteps = { labels: (x.labels as string[]).slice(), order: x.order };
+  if (x.body !== undefined) {
+    if (!isCount(x.body) || x.body > parts.length) return null;
+    out.body = x.body;
+  }
+  if (x.cut !== undefined) {
+    if (!isCount(x.cut)) return null;
+    if (x.cut > 0) out.cut = x.cut;
+  }
+  return out;
+}
 
 function describe(v: unknown): string {
   if (v === undefined) return "nothing";
@@ -176,6 +219,10 @@ export function validateRaces(value: unknown): RacesParseResult {
     if (typeof x.modeOverridden === "string") file.fixture.modeOverridden = x.modeOverridden;
   }
   if (isObject(value.location)) file.location = { file: value.location.file as string, line: value.location.line as number };
+  if (typeof value.status === "string" && (RACES_STATUSES as readonly string[]).includes(value.status)) file.status = value.status as RacesStatus;
+  const steps = readSteps(value.steps);
+  if (steps) file.steps = steps;
+  if (typeof value.retry === "number" && Number.isInteger(value.retry) && value.retry >= 1 && value.retry <= RETRY_LIMIT) file.retry = value.retry;
   return { ok: true, file };
 }
 

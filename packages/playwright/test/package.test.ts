@@ -28,13 +28,18 @@ describe("package: dependencies and imports", () => {
   });
 
   it("imports only its own modules and Node built-ins (the pure entries not even those); only the fixture imports Playwright", () => {
-    for (const f of ["index.ts", "summarize.ts", "schema.ts", "types.ts", "chaos.ts", "page.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^\.\/[a-z]+\.js$/);
+    for (const f of ["index.ts", "summarize.ts", "schema.ts", "types.ts", "chaos.ts", "page.ts", "steps.ts", "order.ts", "explain.ts"]) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^\.\/[a-z]+\.js$/);
     expect(imports(src("page.ts"))).toEqual([]);
     const node = ["reporter.ts", "files.ts", "cli.ts", "install.ts", "races.ts", "session.ts", "env.ts", "wrap.ts", "worker.ts", "register.ts", "wrapper.ts", "run.ts"];
     for (const f of node) for (const i of imports(src(f))) expect(i, `${f}: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z_]+)$/);
     for (const i of imports(src("fixture.ts"))) expect(i, `fixture.ts: ${i}`).toMatch(/^(\.\/[a-z]+\.js|node:[a-z]+|@playwright\/test)$/);
     // every module of src/ is in one of the lists above
-    expect(readdirSync(join(pkgDir, "src")).sort()).toEqual([...node, "index.ts", "summarize.ts", "schema.ts", "types.ts", "chaos.ts", "page.ts", "fixture.ts"].sort());
+    expect(readdirSync(join(pkgDir, "src")).sort()).toEqual([...node, "index.ts", "summarize.ts", "schema.ts", "types.ts", "chaos.ts", "page.ts", "steps.ts", "order.ts", "explain.ts", "fixture.ts"].sort());
+    // the two modules a reader bundles from source to summarise race files (genclass-dev[bot] does) import nothing of
+    // the comparison of failing and passing runs: the summariser nothing but the validator and the types, the
+    // validator nothing but the types
+    expect([...new Set(imports(src("summarize.ts")))].sort()).toEqual(["./schema.js", "./types.js"]);
+    expect([...new Set(imports(src("schema.ts")))]).toEqual(["./types.js"]);
     // the runtime is never imported: the fixture reads its dist/ from disk and the page loads it from there
     for (const f of ["fixture.ts", "install.ts", "page.ts", "races.ts", "chaos.ts", "session.ts", "wrap.ts", "worker.ts", "register.ts", "run.ts"]) expect(src(f)).not.toMatch(/from "@genclass\/runtime/);
   });
@@ -64,7 +69,8 @@ describe("package: dependencies and imports", () => {
       expect(text, name).toMatch(/from "\.\.\/dist\/(cli|run)\.js"/);
     }
     const tsup = readFileSync(join(pkgDir, "tsup.config.ts"), "utf8");
-    expect(tsup).toContain('entry: { index: "src/index.ts", summarize: "src/summarize.ts", reporter: "src/reporter.ts", fixture: "src/fixture.ts", register: "src/register.ts", cli: "src/cli.ts", run: "src/run.ts" }');
+    // dist/explain.js is built for the end-to-end check and the bench, and is no public entry: the exports map above has none for it
+    expect(tsup).toContain('entry: { index: "src/index.ts", summarize: "src/summarize.ts", reporter: "src/reporter.ts", fixture: "src/fixture.ts", register: "src/register.ts", cli: "src/cli.ts", run: "src/run.ts", explain: "src/explain.ts" }');
     expect(tsup).toContain('external: ["@playwright/test", "@genclass/runtime"]');
   });
 

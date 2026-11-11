@@ -342,13 +342,13 @@ describe("worker: the installed Playwright", () => {
     expect(playwrightRoot(join(root, "no", "such", "script.js"))).toBeNull();
   });
 
-  it("says which hook is running and which test is the one running, as the entry's rules for a context need (a real run, no browser)", () => {
+  it("says which hook is running and which test is the one running, as the entry's rules for a context need, and sets a test's duration when its function returns (a real run, no browser)", () => {
     // test/hook-smoke holds the facts as a spec; it fails when the installed Playwright no longer has them
     const env: Record<string, string | undefined> = {};
     for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GENCLASS_") && !k.startsWith("VITEST") && k !== "NODE_OPTIONS" && k !== "TEST_WORKER_INDEX" && k !== "TEST_PARALLEL_INDEX") env[k] = v;
     const r = spawnSync(process.execPath, [require.resolve("@playwright/test/cli"), "test"], { cwd: join(here, "hook-smoke"), encoding: "utf8", timeout: 120_000, env: { ...env, CI: "1" } });
     const out = `${r.stdout ?? ""}${r.stderr ?? ""}`;
-    expect(out).toContain("2 passed");
+    expect(out).toContain("3 passed");
     expect(r.status, out).toBe(0);
   }, 150_000);
 

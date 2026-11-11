@@ -42,8 +42,8 @@
 //   - only public Playwright API, by shape: no import of Playwright, and no private member apart from the one
 //     shape-checked read of rule 1, which nothing depends on.
 
-import { CONTEXT_BINDING, install, type Collected, type PageLike, type RequestLike, type RouteLike, type Session } from "./install.js";
-import { mergeAgent, mergeCollected, planRun, waitBudget, writeRun, type GenClassOptions, type RunPlan, type TestInfoLike } from "./session.js";
+import { CONTEXT_BINDING, emptyCollected, install, type Collected, type PageLike, type RequestLike, type RouteLike, type Session } from "./install.js";
+import { mergeAgent, mergeCollected, planRun, waitBudget, watchEnd, writeRun, type GenClassOptions, type RunPlan, type TestInfoLike } from "./session.js";
 
 /** Marks a function this module put on a prototype (a registered symbol: the same in every copy of the module). */
 export const WRAPPED = Symbol.for("@genclass/playwright/wrapped");
@@ -122,6 +122,10 @@ interface TestRun {
   path: string | null;
   /** When the run's first context was made (Date.now()): what the end-of-test wait counts the test's time from. */
   startedAt: number;
+  /** The test's status the file was written with last (a test that closes a context itself is not over yet). */
+  status: string | undefined;
+  /** When the test's own code finished (session.ts watchEnd), or undefined while it has not or cannot be told. */
+  ended: () => number | undefined;
 }
 
 interface BrowserTypeMethods {
@@ -466,6 +470,7 @@ export class Wrapper {
         if (!this.isCurrent(run)) for (const s of run.sessions) this.outlive(s);
         // the test still running as the process ends, or a context whose collection had started
         if (run.sessions.some((s) => s.collected === null)) this.write(run);
+        else this.restate(run);
       }
     } catch (e) {
       this.note(`could not write the race files left at the end: ${message(e)}`);
@@ -610,7 +615,7 @@ export class Wrapper {
       session.install.release();
       session.collected = withSticky(session.install.snapshot(), session.sticky);
     } catch {
-      session.collected = { records: [], witnesses: [], mode: null, model: null, agent: "not-loaded", plans: [], serviceWorker: false, modeOverridden: null };
+      session.collected = emptyCollected();
     }
     this.note(OUTLIVED_NOTE);
     this.write(session.run);
@@ -627,9 +632,10 @@ export class Wrapper {
       for (const [k, r] of this.runs) {
         if (r.attaching !== 0) continue;
         for (const s of r.sessions) this.outlive(s);
+        this.restate(r);
         if (r.sessions.every((s) => s.collected !== null)) this.runs.delete(k);
       }
-      run = { key, info, plan: planRun(this.deps.options, info), sessions: [], attaching: 0, path: null, startedAt: Date.now() };
+      run = { key, info, plan: planRun(this.deps.options, info), sessions: [], attaching: 0, path: null, startedAt: Date.now(), status: undefined, ended: watchEnd(info) };
       this.runs.set(key, run);
     }
     return run;
@@ -641,7 +647,7 @@ export class Wrapper {
       let collected: Collected;
       try {
         // the test's own TestInfo, read now: its timeout and status as they stand at the end of the test
-        collected = await session.install.finish(waitBudget(session.run.info, session.run.startedAt));
+        collected = await session.install.finish(waitBudget(session.run.info, session.run.startedAt), session.run.ended());
       } catch {
         collected = session.install.snapshot();
       }
@@ -651,10 +657,21 @@ export class Wrapper {
     return session.done;
   }
 
+  /**
+   * The file again when the test's status is no longer the one it was written with: a test that closed its last
+   * context itself was still running then, and may have failed since. Only for a test that is over. Never throws.
+   */
+  private restate(run: TestRun): void {
+    if (run.path !== null && run.info.status !== run.status && !this.isCurrent(run)) this.write(run);
+  }
+
   /** One file per test: its contexts merged (one still open gives what it handed over so far). Never throws. */
   private write(run: TestRun): void {
     try {
       const collected = mergeCollected(run.sessions.map((s) => s.collected ?? withSticky(s.install.snapshot(), s.sticky)));
+      // a context released after its test, or still open, was never told when the test's code ended
+      collected.endedAt ??= run.ended();
+      run.status = run.info.status;
       run.path = writeRun(run.info, this.deps.options.outDir, run.plan, collected).path ?? run.path;
     } catch (e) {
       this.note(`could not write the race file: ${message(e)}`);

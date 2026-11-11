@@ -1,0 +1,170 @@
+{
+ "date": "2026-11-11",
+ "node": "v25.6.0",
+ "trials": 300,
+ "shuffles": 300,
+ "comparison": "packages/playwright/dist/explain.js",
+ "summary": {
+  "failing runs last longer": {
+   "compared": 1800,
+   "explained": 2
+  },
+  "runs equally long": {
+   "compared": 1172,
+   "explained": 29
+  },
+  "failing runs stop early": {
+   "compared": 868,
+   "explained": 5
+  }
+ },
+ "rows": [
+  {
+   "family": "longer",
+   "runs": 40,
+   "fail": 0.3,
+   "after": "late",
+   "bFast": false,
+   "trials": 300,
+   "compared": 300,
+   "explained": 0,
+   "chance": 0,
+   "noDifference": 300
+  },
+  {
+   "family": "longer",
+   "runs": 40,
+   "fail": 0.3,
+   "after": "late",
+   "bFast": true,
+   "trials": 300,
+   "compared": 300,
+   "explained": 1,
+   "chance": 0,
+   "noDifference": 299
+  },
+  {
+   "family": "longer",
+   "runs": 40,
+   "fail": 0.3,
+   "after": "open",
+   "bFast": false,
+   "trials": 300,
+   "compared": 300,
+   "explained": 1,
+   "chance": 0,
+   "noDifference": 299
+  },
+  {
+   "family": "longer",
+   "runs": 40,
+   "fail": 0.3,
+   "after": "open",
+   "bFast": true,
+   "trials": 300,
+   "compared": 300,
+   "explained": 0,
+   "chance": 0,
+   "noDifference": 300
+  },
+  {
+   "family": "longer-cut",
+   "runs": 40,
+   "fail": 0.3,
+   "bFast": false,
+   "trials": 300,
+   "compared": 300,
+   "explained": 0,
+   "chance": 0,
+   "noDifference": 300
+  },
+  {
+   "family": "longer-cut",
+   "runs": 40,
+   "fail": 0.3,
+   "bFast": true,
+   "trials": 300,
+   "compared": 300,
+   "explained": 0,
+   "chance": 0,
+   "noDifference": 300
+  },
+  {
+   "family": "equal",
+   "runs": 12,
+   "fail": 0.4,
+   "requests": 12,
+   "trials": 300,
+   "compared": 279,
+   "explained": 9,
+   "chance": 255,
+   "noDifference": 15
+  },
+  {
+   "family": "equal",
+   "runs": 20,
+   "fail": 0.35,
+   "requests": 12,
+   "trials": 300,
+   "compared": 298,
+   "explained": 13,
+   "chance": 121,
+   "noDifference": 164
+  },
+  {
+   "family": "equal",
+   "runs": 30,
+   "fail": 0.25,
+   "requests": 12,
+   "trials": 300,
+   "compared": 295,
+   "explained": 7,
+   "chance": 106,
+   "noDifference": 182
+  },
+  {
+   "family": "equal",
+   "runs": 40,
+   "fail": 0.3,
+   "requests": 2,
+   "trials": 300,
+   "compared": 300,
+   "explained": 0,
+   "chance": 1,
+   "noDifference": 299
+  },
+  {
+   "family": "stop-early",
+   "runs": 12,
+   "fail": 0.4,
+   "requests": 12,
+   "trials": 300,
+   "compared": 271,
+   "explained": 5,
+   "chance": 70,
+   "noDifference": 196
+  },
+  {
+   "family": "stop-early",
+   "runs": 20,
+   "fail": 0.35,
+   "requests": 12,
+   "trials": 300,
+   "compared": 299,
+   "explained": 0,
+   "chance": 15,
+   "noDifference": 284
+  },
+  {
+   "family": "stop-early",
+   "runs": 30,
+   "fail": 0.25,
+   "requests": 12,
+   "trials": 300,
+   "compared": 298,
+   "explained": 0,
+   "chance": 5,
+   "noDifference": 293
+  }
+ ]
+}

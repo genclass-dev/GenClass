@@ -1,0 +1,684 @@
+{
+ "date": "2026-11-11",
+ "node": "v25.6.0",
+ "mode": "held",
+ "apps": [
+  "plain-html"
+ ],
+ "scenarios": "a,h",
+ "data": [
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30
+ ],
+ "firstSeed": 61,
+ "seeds": 30,
+ "batch": 30,
+ "rounds": 20,
+ "workers": 3,
+ "runs": [
+  {
+   "app": "plain-html",
+   "seconds": 622.4,
+   "exit": 0
+  }
+ ],
+ "summary": {
+  "investigations": 20,
+  "askable": 3,
+  "explained": 2,
+  "hits": 1,
+  "shuffledRounds": 60,
+  "shuffledExplained": 3
+ },
+ "rows": [
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 21,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 30,
+   "failing": 30,
+   "passing": 0,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 30 failing runs and 0 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 22,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 29,
+   "failing": 29,
+   "passing": 1,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 29 failing runs and 1 passing run with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 23,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 29,
+   "failing": 29,
+   "passing": 1,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 29 failing runs and 1 passing run with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 24,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 30,
+   "failing": 30,
+   "passing": 0,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 30 failing runs and 0 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 25,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 27,
+   "failing": 27,
+   "passing": 3,
+   "verdict": "explained",
+   "strongest": 24,
+   "strength": 2.307,
+   "covered": 24,
+   "lines": 1,
+   "more": 0,
+   "first": {
+    "kind": "alone",
+    "form": "between",
+    "steps": [
+     "r:GET /api/search#5",
+     "r:GET /api/search#3",
+     "r:GET /api/search#1"
+    ],
+    "failing": {
+     "with": 24,
+     "recorded": 27
+    },
+    "passing": {
+     "with": 0,
+     "recorded": 3,
+     "late": 0,
+     "before": 1,
+     "after": 2
+    },
+    "ms": [
+     370,
+     164
+    ]
+   },
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 23,
+    "share": 0.023976023976023976,
+    "separating": 0,
+    "needed": 1.529
+   },
+   "text": [
+    "Compared 27 failing runs with 3 passing runs: 24 of the 27 failing runs have this order of steps, and no passing run does.",
+    "1. In 24 of 27 failing runs and in none of the 3 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came between the response to the 5th `GET /api/search` and the response to the 1st `GET /api/search` (median 370 ms after the first and 164 ms before the second; there it came before the first of the two in 1 and after the second in 2).",
+    "With the outcomes shuffled 1000 times, 23 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 0
+   },
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 26,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 28,
+   "failing": 28,
+   "passing": 2,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 28 failing runs and 2 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 27,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 28,
+   "failing": 28,
+   "passing": 2,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 28 failing runs and 2 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 28,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 17,
+   "failing": 17,
+   "passing": 13,
+   "verdict": "explained",
+   "strongest": 17,
+   "strength": 5.845,
+   "covered": 17,
+   "lines": 1,
+   "more": 0,
+   "first": {
+    "kind": "every",
+    "form": "pair",
+    "steps": [
+     "r:GET /api/search#2",
+     "r:GET /api/search#1"
+    ],
+    "failing": {
+     "with": 17,
+     "recorded": 17
+    },
+    "passing": {
+     "with": 2,
+     "recorded": 13,
+     "late": 0
+    },
+    "ms": [
+     154
+    ]
+   },
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 0,
+    "share": 0.000999000999000999,
+    "separating": 0,
+    "needed": 1.061
+   },
+   "text": [
+    "Compared 17 failing runs with 13 passing runs: every failing run has this order of steps, and so do only 2 of the 13 passing runs.",
+    "1. In 17 of 17 failing runs and in 2 of the 13 passing runs that recorded these steps, the response to the 2nd `GET /api/search` came before the response to the 1st `GET /api/search` (median 154 ms apart; in the other passing runs the order was the other way round).",
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 2
+   },
+   "hit": true
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 29,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 28,
+   "failing": 28,
+   "passing": 2,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 28 failing runs and 2 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "a",
+   "data": 30,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 27,
+   "failing": 27,
+   "passing": 3,
+   "verdict": "chance",
+   "strongest": 21,
+   "strength": 1.684,
+   "covered": 0,
+   "lines": 0,
+   "more": 3,
+   "first": null,
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 63,
+    "share": 0.06393606393606394,
+    "separating": 0,
+    "needed": 1.684
+   },
+   "text": [
+    "Compared 27 failing runs with 3 passing runs: 3 orders of steps set the failing runs apart, the strongest in 21 of 27, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 63 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 1
+   },
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 21,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 2,
+   "failing": 2,
+   "passing": 28,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 2 failing runs and 28 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 22,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 2,
+   "failing": 2,
+   "passing": 28,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 2 failing runs and 28 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 23,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 2,
+   "failing": 2,
+   "passing": 28,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 2 failing runs and 28 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 24,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 25,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 2,
+   "failing": 2,
+   "passing": 28,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 2 failing runs and 28 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 26,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 2,
+   "failing": 2,
+   "passing": 28,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 2 failing runs and 28 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 27,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 2,
+   "failing": 2,
+   "passing": 28,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 2 failing runs and 28 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 28,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 29,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 2,
+   "failing": 2,
+   "passing": 28,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 2 failing runs and 28 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "plain-html",
+   "layer": "fetch",
+   "scenario": "h",
+   "data": 30,
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 2,
+   "failing": 2,
+   "passing": 28,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "strength": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 2 failing runs and 28 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  }
+ ],
+ "recompared": "2026-11-11"
+}

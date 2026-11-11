@@ -16,6 +16,9 @@
 // page in at least one of two seeds, nothing on the fixed page and nothing in the latency-only run).
 // Then tests that stop at their first matching assertion (../e2e-early): early.mjs has what that part requires (with the
 // fixture's end-of-test wait, the witness on the buggy page in at least one of six seeds and nothing on the fixed page).
+// Then a test that fails in some runs (../e2e-flaky), through `genclass-playwright-run --explain-flaky`: flaky.mjs has
+// what that part requires (the comparison of its failing and passing runs names the two answers that came in the
+// wrong order).
 // Exit code 0 when all hold; the summary is printed as JSON, also when something does not (`failed` then says what
 // was expected and what was found).
 //
@@ -28,9 +31,11 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { decodeSteps } from "../../dist/explain.js";
 import { parseRaces, summarize } from "../../dist/summarize.js";
 import { ending, runNode } from "./child.mjs";
 import { runEarly } from "./early.mjs";
+import { runFlaky } from "./flaky.mjs";
 import { runUnmodified } from "./unmodified.mjs";
 
 /** The longest the fixture's Playwright run may take, in ms (fifteen tests of a few seconds each). */
@@ -81,7 +86,15 @@ for (const f of files) {
   if (!f.file.model || f.file.model.state !== "off") fail(`${f.name}: model ${JSON.stringify(f.file.model)}, expected state "off" (model skipped)`);
   const fx = f.file.fixture;
   if (!fx || fx.model !== "skip" || fx.agent !== null || fx.serviceWorker !== false || !(fx.chaosApplied > 0)) fail(`${f.name}: fixture record ${JSON.stringify(fx)}, expected the agent connected and chaos applied`);
+  // the test's own status, and the page's steps in order: one typing burst, five searches sent, their answers
+  if (f.file.status !== "passed") fail(`${f.name}: status ${JSON.stringify(f.file.status)}, expected "passed"`);
+  const steps = f.file.steps ? decodeSteps(f.file.steps) : [];
+  const of = (kind) => steps.filter((e) => e.kind === kind && (kind === "a" || e.label === "GET /api/search"));
+  if (of("a").length < 1 || of("s").length !== 5 || of("r").length !== 5 || of("s").map((e) => e.n).join() !== "1,2,3,4,5")
+    fail(`${f.name}: expected the typing, five searches sent (numbered 1 to 5) and their five answers in the file's steps, found ${JSON.stringify(f.file.steps)}`);
+  if (f.file.steps.body === undefined || f.file.steps.cut !== undefined) fail(`${f.name}: steps without the end of the test's code, or cut: ${JSON.stringify({ body: f.file.steps.body, cut: f.file.steps.cut })}`);
 }
+summary.steps = { perFile: files.map((f) => decodeSteps(f.file.steps).length).sort((a, b) => a - b), bytes: Math.max(...files.map((f) => JSON.stringify(f.file.steps).length)) };
 const SIG = "witness|overwrote-newer|GET /api/search";
 const stale = (f) => f.file.signatures.some((s) => s.sig === SIG);
 const sigs = (list) => list.flatMap((f) => f.file.signatures.map((s) => `seed ${f.file.seed}: ${s.sig}`));
@@ -110,6 +123,9 @@ await runUnmodified(summary, fail);
 
 // tests that stop at their first matching assertion: the fixture's wait at the end of a test
 await runEarly(summary, fail);
+
+// a test that fails in some runs: its failing runs against its passing ones, through --explain-flaky
+await runFlaky(summary, fail);
 
 summary.ok = true;
 console.log(JSON.stringify(summary, null, 2));

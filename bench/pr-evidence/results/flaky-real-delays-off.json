@@ -1,0 +1,67 @@
+{
+ "date": "2026-11-11",
+ "node": "v25.6.0",
+ "mode": "files",
+ "dir": "races",
+ "label": "paperless-ngx d05e96c, bulk edit, genclass-playwright-run --explain-flaky=64, GENCLASS_CHAOS=off, 2026-11-11",
+ "rounds": 100,
+ "rows": [
+  {
+   "test": "[chromium] document-list/document-list.spec.ts > bulk edit",
+   "seeds": [
+    1,
+    64
+   ],
+   "files": 64,
+   "failed": 3,
+   "passed": 61,
+   "withoutSteps": 0,
+   "failing": 3,
+   "passing": 61,
+   "verdict": "explained",
+   "strongest": 3,
+   "strength": 4.62,
+   "covered": 3,
+   "lines": 1,
+   "more": 2,
+   "first": {
+    "kind": "alone",
+    "form": "pair",
+    "steps": [
+     "a:click menuitem \"TagWithPartial 0\"#1",
+     "r:POST localhost/api/documents/selection_data/#1"
+    ],
+    "failing": {
+     "with": 3,
+     "recorded": 3
+    },
+    "passing": {
+     "with": 0,
+     "recorded": 61,
+     "late": 0
+    },
+    "ms": [
+     32
+    ]
+   },
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 0,
+    "share": 0.000999000999000999,
+    "separating": 0,
+    "needed": 1.842
+   },
+   "text": [
+    "Compared 3 failing runs with 61 passing runs: every failing run has this order of steps, and no passing run does.",
+    "1. In 3 of 3 failing runs and in none of the 61 passing runs that recorded these steps, the action `click menuitem \"TagWithPartial 0\"` came before the response to `POST localhost/api/documents/selection_data/` (median 32 ms apart; there the order was the other way round).",
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 100,
+    "explained": 7
+   }
+  }
+ ],
+ "recompared": "2026-11-11"
+}

@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AGENT_URL, BINDING, WAIT_GRACE_MS, WAIT_POLL_MS, initScriptContent, install, isAgentUrl, resolveRuntimeDir, runtimeFile, type PageLike, type RequestLike, type RouteLike, type Session } from "../src/install.js";
+import { AGENT_URL, BINDING, MAX_KEPT_STEPS, MAX_STREAMS, PAGE_CLOCK_SLACK_MS, WAIT_GRACE_MS, WAIT_POLL_MS, initScriptContent, install, isAgentUrl, resolveRuntimeDir, runtimeFile, type PageLike, type RequestLike, type RouteLike, type Session } from "../src/install.js";
 import { RUNTIME_PATH, resolveChaos } from "../src/chaos.js";
 import { here } from "./helpers.js";
 
@@ -343,7 +343,7 @@ describe("install: collecting", () => {
     page.evaluateResult = { mode: "observe", model: { state: "off", name: "none", version: "0" }, agent: null, serviceWorker: true };
     const c = await session.finish();
     expect(page.evaluated).toHaveLength(1);
-    expect(c).toEqual({ records: [{ kind: "detection", diagnosis: "stale" }], witnesses: [{ kind: "overwrote-newer" }], mode: "observe", model: { state: "off", name: "none", version: "0" }, agent: null, plans: [], serviceWorker: true, modeOverridden: "heal" });
+    expect(c).toEqual({ records: [{ kind: "detection", diagnosis: "stale" }], witnesses: [{ kind: "overwrote-newer" }], mode: "observe", model: { state: "off", name: "none", version: "0" }, agent: null, plans: [], serviceWorker: true, modeOverridden: "heal", streams: [], stepsOver: 0 });
   });
 
   it("keeps a specific reason the page pushed over collect()'s generic not-loaded", async () => {
@@ -519,5 +519,124 @@ describe("install: waiting for responses at the end of a test", () => {
     expect(asked).toBe(3);
     expect(ms).toBeGreaterThanOrEqual(2 * WAIT_POLL_MS + WAIT_GRACE_MS);
     expect(ms).toBeLessThan(2 * WAIT_POLL_MS + WAIT_GRACE_MS + 60);
+  });
+});
+
+describe("install: the order of things on the page", () => {
+  const steps = (id: unknown, from: number, ...raw: unknown[]) => ({ t: "steps", id, from, steps: raw });
+
+  it("keeps the steps the page hands over, each at its place in its page load, whatever order the batches arrive in", async () => {
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: null });
+    page.push(steps("load-1", 2, ["r", 1040, "GET /api/a#1"]));
+    page.push(steps("load-1", 0, ["a", 1000, "click", 'button "Go"', ""], ["s", 1001, "GET /api/a#1"]));
+    // handed over a second time: what is there stands
+    page.push(steps("load-1", 0, ["a", 9, "click", "again", ""]));
+    // another page load, with two things that are no steps
+    page.push(steps("load-2", 0, ["s", 2000, "GET /api/b#1"], ["nonsense"], ["s", "soon", "GET /api/c#1"]));
+    // no page load to file them under: counted, not kept
+    page.push(steps(7, 0, ["s", 1, "GET /x#1"]));
+    page.push(steps("load-1", -1, ["s", 1, "GET /x#1"], ["r", 2, "GET /x#1"]));
+    page.push({ t: "steps", id: "load-1", from: 0, steps: "none" });
+    page.push({ t: "body", id: "load-1", n: 3 });
+    page.push({ t: "body", id: "load-1", n: 1 });
+    page.push({ t: "body", id: "load-2", n: "all" });
+    const c = await session.finish(undefined, 5000);
+    expect(c.streams).toEqual([
+      { id: "load-1", steps: [{ kind: "a", at: 1000, name: 'click button "Go"' }, { kind: "s", at: 1001, name: "GET /api/a#1" }, { kind: "r", at: 1040, name: "GET /api/a#1" }], body: 3 },
+      { id: "load-2", steps: [{ kind: "s", at: 2000, name: "GET /api/b#1" }] },
+    ]);
+    expect(c.stepsOver).toBe(3);
+    expect(c.endedAt).toBe(5000);
+    // asking again changes nothing, and the end is the one first given
+    expect((await session.finish(undefined, 9000)).endedAt).toBe(5000);
+  });
+
+  it("a batch that says steps were lost before it marks the page load, at the earliest such place", async () => {
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: null });
+    page.push(steps("load-1", 0, ["s", 1000, "GET /api/a#1"]));
+    page.push({ ...steps("load-1", 3, ["r", 1300, "GET /api/c#1"]), gap: true });
+    page.push({ ...steps("load-1", 1, ["s", 1100, "GET /api/b#1"], ["s", 1200, "GET /api/c#1"]), gap: true });
+    page.push({ ...steps("load-1", 4), gap: "yes" });
+    page.push(steps("load-2", 0, ["s", 2000, "GET /api/d#1"]));
+    const c = await session.finish();
+    expect(c.streams.map((x) => [x.id, x.gap, x.steps.length])).toEqual([
+      ["load-1", 1, 4],
+      ["load-2", undefined, 1],
+    ]);
+  });
+
+  it("a page whose clock is not this side's: its steps are timed by when they arrived", async () => {
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: null });
+    const before = Date.now();
+    // a test that set the page's clock to 2030: the page's times are years away from this side's
+    const far = Date.UTC(2030, 0, 1);
+    page.push({ ...steps("load-1", 0, ["a", far, "click", 'button "Go"', ""], ["s", far + 5, "GET /api/a#1"]), now: far + 6 });
+    // a page on this side's clock, within the slack: its own times stand
+    page.push({ ...steps("load-2", 0, ["s", before - 40, "GET /api/b#1"]), now: before - 30 });
+    // no word about the page's clock (an older page script): its times stand
+    page.push(steps("load-3", 0, ["s", 123, "GET /api/c#1"]));
+    const c = await session.finish();
+    const after = Date.now();
+    expect(PAGE_CLOCK_SLACK_MS).toBe(2000);
+    for (const step of c.streams[0].steps) {
+      expect(step!.at).toBeGreaterThanOrEqual(before);
+      expect(step!.at).toBeLessThanOrEqual(after);
+    }
+    expect(c.streams[1].steps[0]!.at).toBe(before - 40);
+    expect(c.streams[2].steps[0]!.at).toBe(123);
+  });
+
+  it("without a time for the end of the test's code none is made up", async () => {
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: null });
+    page.push(steps("load-1", 0, ["s", 1, "GET /api/a#1"]));
+    const c = await session.finish();
+    expect("endedAt" in c).toBe(false);
+    expect((await session.finish(undefined, NaN)).endedAt).toBeUndefined();
+  });
+
+  it("a page load first heard of once the test's code is over began after it, unless the page says otherwise", async () => {
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: null });
+    page.push(steps("before", 0, ["s", 1, "GET /api/a#1"]));
+    const done = session.finish();
+    page.push(steps("after", 0, ["s", 50, "GET /api/b#1"]));
+    page.push(steps("quiet", 0, ["s", 2, "GET /api/c#1"], ["r", 60, "GET /api/c#1"]));
+    page.push({ t: "body", id: "quiet", n: 1 });
+    const c = await done;
+    expect(c.streams.map((x) => [x.id, x.body])).toEqual([
+      ["before", undefined],
+      ["after", 0],
+      ["quiet", 1],
+    ]);
+  });
+
+  it("keeps a bounded number of steps and of page loads, and counts the rest", async () => {
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: null });
+    for (let from = 0; from < MAX_KEPT_STEPS + 100; from += 50) page.push(steps("load-1", from, ...Array.from({ length: 50 }, (_, i) => ["s", from + i, `GET /api/r#${from + i + 1}`])));
+    for (let i = 0; i < MAX_STREAMS + 5; i++) page.push(steps(`extra-${i}`, 0, ["s", 1, "GET /api/a#1"]));
+    const c = await session.finish();
+    expect(c.streams).toHaveLength(MAX_STREAMS);
+    expect(c.streams[0].steps).toHaveLength(MAX_KEPT_STEPS);
+    // 100 past the limit in the first page load, every step of the others (the limit was reached), six page loads too many
+    expect(c.stepsOver).toBe(100 + MAX_STREAMS + 5);
+  });
+
+  it("nothing is kept once the test is no longer the one running; a snapshot is a copy", async () => {
+    let live = true;
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: null, live: () => live });
+    page.push(steps("load-1", 0, ["s", 1, "GET /api/a#1"]));
+    const snap = session.snapshot();
+    live = false;
+    page.push(steps("load-1", 1, ["r", 2, "GET /api/a#1"]));
+    page.push({ t: "body", id: "load-1", n: 2 });
+    expect(session.snapshot().streams).toEqual([{ id: "load-1", steps: [{ kind: "s", at: 1, name: "GET /api/a#1" }] }]);
+    snap.streams[0].steps.length = 0;
+    expect(session.snapshot().streams[0].steps).toHaveLength(1);
   });
 });

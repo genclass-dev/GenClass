@@ -14,6 +14,9 @@
 //     for its planned time and then passed on with route.fallback(), so it still reaches the user's own routes
 //     (context.route, routeFromHAR), the browser's network stack and its cache. Anything else is passed on at once.
 //     An identical read, and a write to the same path, leave in the order the page sent them, whatever their delays.
+// It also keeps the order of things on the page as the page hands it over (user actions, each request's send and the
+// delivery of its response), by page load and bounded (MAX_KEPT_STEPS), and where in it the test's own code ended:
+// what a race file's `steps` are made from (steps.ts).
 // The page's agent link never sends a request (page.ts gives it a stand-in fetch); requests to its URL are aborted
 // anyway as a safety net. Observe only: no hold on the page's side, no change to any request or response (chaos
 // changes when a request leaves, never what it says). Every handler catches its own errors: a page that closes
@@ -29,6 +32,7 @@ import { createRequire } from "node:module";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { ChaosScheduler, RUNTIME_PATH, isCandidate, isRuntimeUrl, orderKey, type ResolvedChaos } from "./chaos.js";
 import { genclassPageScript, type PageScriptConfig } from "./page.js";
+import { pageStepOf, type PageStream } from "./steps.js";
 
 /** The page methods the installer uses (a subset of Playwright's Page, by shape). */
 export interface PageLike {
@@ -110,6 +114,17 @@ export interface Collected {
   serviceWorker: boolean;
   /** The URL or localStorage switch had put the runtime in another mode; the fixture set it back to observe. */
   modeOverridden: string | null;
+  /** The order of things on the page, as handed over: one list per page load (steps.ts). */
+  streams: PageStream[];
+  /** Steps handed over and not kept (past MAX_KEPT_STEPS or MAX_STREAMS). */
+  stepsOver: number;
+  /** When the test's own code finished, in ms on the wall clock, when whoever finished the install could tell. */
+  endedAt?: number;
+}
+
+/** Nothing collected: what a test starts from. */
+export function emptyCollected(): Collected {
+  return { records: [], witnesses: [], mode: null, model: null, agent: "not-loaded", plans: [], serviceWorker: false, modeOverridden: null, streams: [], stepsOver: 0 };
 }
 
 export interface Session {
@@ -121,8 +136,9 @@ export interface Session {
    * `waitForResponsesMs`, or after `budgetMs` when that is less (what the test has left of its own timeout). Requests
    * sent longer ago than `waitForResponsesMs` are long-running (a stream, a long poll) and are not waited for; neither
    * are requests the page sends during the wait. Nothing is waited for when the option is 0 or the page is gone.
+   * `endedAt`: when the test's own code finished (Date.now()), when the caller knows: it goes into what is returned.
    */
-  finish(budgetMs?: number): Promise<Collected>;
+  finish(budgetMs?: number, endedAt?: number): Promise<Collected>;
   /**
    * What the page handed over so far, without asking it and without releasing anything: for a caller that cannot
    * wait (the process is exiting with the page still open). A copy; `finish()` stays the complete answer.
@@ -153,6 +169,14 @@ export const WAIT_POLL_MS = 40;
 export const WAIT_GRACE_MS = 120;
 /** How long one question to the page may take before it counts as unanswered, in ms. */
 const ASK_MS = 1000;
+/** The most steps of the page's order kept for one test, over all its page loads, and the most page loads. */
+export const MAX_KEPT_STEPS = 4000;
+export const MAX_STREAMS = 64;
+/**
+ * How far a page's clock may be from this side's before its times are not used (ms). A batch of steps reaches this
+ * side within milliseconds on one machine; a page that is seconds away has a clock of its own.
+ */
+export const PAGE_CLOCK_SLACK_MS = 2000;
 const OPEN_EXPRESSION = `(function () { var a = window.__GENCLASS_PLAYWRIGHT__; return a && a.open ? a.open() : null; })()`;
 
 /** What window.__GENCLASS_PLAYWRIGHT__.open() answers (page.ts): the page load, and its unanswered requests with their age. */
@@ -271,10 +295,58 @@ export function runtimeFile(runtimeDir: string, url: string): string | null {
  */
 export async function install(page: PageLike, o: InstallOptions): Promise<Session> {
   const runtimeDir = resolveRuntimeDir(o.runtimeDir);
-  const collected: Collected = { records: [], witnesses: [], mode: null, model: null, agent: "not-loaded", plans: [], serviceWorker: false, modeOverridden: null };
+  const collected: Collected = emptyCollected();
   const scheduler = o.chaos ? new ChaosScheduler(o.chaos) : null;
   const binding = o.binding ?? BINDING;
   let released = false;
+  // the test's own code has finished (finish() was called): a page load first heard of from here on began after it
+  let finishing = false;
+  let keptSteps = 0;
+  // page loads whose end-of-body count is this side's guess (0), until the page says its own
+  const guessed = new Set<PageStream>();
+  const streamOf = (id: unknown): PageStream | null => {
+    if (typeof id !== "string" || id.length === 0 || id.length > 64) return null;
+    let stream = collected.streams.find((s) => s.id === id);
+    if (!stream) {
+      if (collected.streams.length >= MAX_STREAMS) return null;
+      stream = { id, steps: [] };
+      if (finishing) {
+        stream.body = 0;
+        guessed.add(stream);
+      }
+      collected.streams.push(stream);
+    }
+    return stream;
+  };
+  // the page's steps, each put at the place the page gave it (a batch that arrives twice or late changes nothing)
+  const takeSteps = (x: Record<string, unknown>): void => {
+    if (!Array.isArray(x.steps)) return;
+    const from = typeof x.from === "number" && Number.isInteger(x.from) && x.from >= 0 ? x.from : -1;
+    const stream = from < 0 ? null : streamOf(x.id);
+    if (!stream) {
+      collected.stepsOver += x.steps.length;
+      return;
+    }
+    // the page recorded more than its record keeps since its last batch: what is lost comes before this batch
+    if (x.gap === true) stream.gap = Math.min(stream.gap ?? Infinity, from);
+    // a page whose clock is not this side's (a test that sets the page's clock, a browser on another machine): its
+    // steps are timed by when they arrived here, which is the same clock the end of the test is read on
+    const here = Date.now();
+    const away = typeof x.now === "number" && Number.isFinite(x.now) && Math.abs(here - x.now) > PAGE_CLOCK_SLACK_MS;
+    x.steps.forEach((raw, i) => {
+      const at = from + i;
+      if (stream.steps[at] !== undefined) return;
+      const step = pageStepOf(raw);
+      if (!step) return;
+      if (away) step.at = here;
+      if (keptSteps >= MAX_KEPT_STEPS || at >= MAX_KEPT_STEPS) {
+        collected.stepsOver++;
+        return;
+      }
+      stream.steps[at] = step;
+      keptSteps++;
+    });
+  };
   // the test this install belongs to is still the one running (a `live` that throws counts as over: never misfile)
   const live = (): boolean => {
     if (released) return false;
@@ -301,6 +373,14 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
       // offline: nothing is held (page.ts, chaos.ts pause)
       if (x.online === false) scheduler?.pause();
       else scheduler?.resume();
+    } else if (x.t === "steps") takeSteps(x);
+    else if (x.t === "body") {
+      // how many of that page load's steps happened while the test's own code ran (the first word stands)
+      const stream = streamOf(x.id);
+      if (stream && (stream.body === undefined || guessed.has(stream)) && typeof x.n === "number" && Number.isInteger(x.n) && x.n >= 0) {
+        stream.body = x.n;
+        guessed.delete(stream);
+      }
     }
   };
   await page.exposeFunction(binding, take);
@@ -405,7 +485,9 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
   };
 
   return {
-    async finish(budgetMs?: number): Promise<Collected> {
+    async finish(budgetMs?: number, endedAt?: number): Promise<Collected> {
+      finishing = true;
+      if (typeof endedAt === "number" && Number.isFinite(endedAt) && collected.endedAt === undefined) collected.endedAt = endedAt;
       try {
         if (!released && !page.isClosed?.()) await waitForResponses(budgetMs);
       } catch {
@@ -435,7 +517,13 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
       return collected;
     },
     snapshot(): Collected {
-      return { ...collected, records: collected.records.slice(), witnesses: collected.witnesses.slice(), plans: scheduler ? scheduler.plans.slice() : [] };
+      return {
+        ...collected,
+        records: collected.records.slice(),
+        witnesses: collected.witnesses.slice(),
+        plans: scheduler ? scheduler.plans.slice() : [],
+        streams: collected.streams.map((s) => ({ ...s, steps: s.steps.slice() })),
+      };
     },
     release(): void {
       released = true;

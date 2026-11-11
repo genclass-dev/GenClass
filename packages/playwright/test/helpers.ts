@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONTEXT_BINDING, type RequestLike, type RouteLike } from "../src/install.js";
 import type { TestInfoLike } from "../src/session.js";
+import { encodeSteps, type StepEvent } from "../src/steps.js";
 import type { RacesFileInput } from "../src/types.js";
 
 export const here = dirname(fileURLToPath(import.meta.url));
@@ -366,4 +367,32 @@ export function fakePlaywright(): FakePlaywright {
     },
     log,
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Runs of a test whose order of steps differs between failing and passing ones (order.ts), for the tests of what the
+// report and the command say about them.
+
+/** Steps from short names, 10 ms apart: "a:click Go", "s:GET /x", "r:GET /x#2" (the number is 1 unless given). */
+export function stepsFrom(...items: string[]): StepEvent[] {
+  return items.map((item, i) => {
+    const m = /^([asrx]):(.*?)(?:#(\d+))?$/.exec(item)!;
+    return { kind: m[1] as StepEvent["kind"], label: m[2], n: Number(m[3] ?? 1), t: i * 10 };
+  });
+}
+
+/**
+ * A bulk edit in which one response lands before the click on a tag, between that click and the click on Apply, or
+ * after it. The test fails when it lands between; a failing run stops at Apply.
+ */
+export function bulkEditSteps(where: "before" | "between" | "after", failed = where === "between"): StepEvent[] {
+  const items = ['a:click button "Tags"', "s:POST /api/selection", 'a:type input "Filter tags"', 'a:click menuitem "Urgent"', 'a:click button "Apply"'];
+  items.splice(where === "before" ? 3 : where === "between" ? 4 : 5, 0, "r:POST /api/selection");
+  if (!failed) items.push('a:click button "Confirm"', "s:POST /api/bulk_edit", "r:POST /api/bulk_edit");
+  return stepsFrom(...items);
+}
+
+/** The text of one race file as the fixture writes one: a test, a seed, the test's status and its steps. */
+export function raceFileWithSteps(test: string, seed: number, status: string | undefined, steps: StepEvent[] | null, extra: Record<string, unknown> = {}): string {
+  return JSON.stringify({ schema: "genclass-races/1", test, seed, signatures: [], ...(status ? { status } : {}), ...(steps ? { steps: encodeSteps({ events: steps, bodyKnown: true }, { max: 300, bytes: 5000 }) } : {}), ...extra });
 }

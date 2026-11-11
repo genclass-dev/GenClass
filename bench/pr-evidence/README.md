@@ -46,6 +46,52 @@ node bench/pr-evidence/dev.mjs --seeds 40 --grep detail --settings wait,wait+mir
 published packages, every run's race files and verdicts) is ignored by git. A full `run.mjs` at 6 seeds is 288 trials
 a mode, about 17 minutes for the three modes on a 10-core laptop with 3 workers.
 
+## A test that fails in some runs (`flaky.mjs`, RESULTS.md section 30)
+
+`@genclass/playwright` compares the order of steps in a test's failing runs with the order in its passing runs
+(`packages/playwright/src/order.ts`: a measured comparison with counts and shuffled outcomes, never a diagnosis).
+`flaky.mjs` measures whether its first line agrees with what is known, and how often it says anything when the
+outcomes say nothing:
+
+```bash
+node bench/pr-evidence/flaky.mjs dev --seeds 60 --batch 30      # development set: every tiny-desk test under each seed
+node bench/pr-evidence/setup.mjs vue-vite && node bench/pr-evidence/setup.mjs plain-html
+node bench/pr-evidence/flaky.mjs held --apps vue-vite,plain-html --scenarios a,h --data 1,2,3,4,5,6,7,8,9,10 --seeds 30
+node bench/pr-evidence/flaky.mjs files <a directory of race files>   # a real suite's runs, each test's comparison in full
+node bench/pr-evidence/flaky-null.mjs --out bench/pr-evidence/results/flaky-null.json   # tests with no order to find (no browser)
+```
+
+- **Development set:** a buggy tiny-desk test that fails under some seeds and passes under others is one the
+  comparison can be asked about. Counted: whether its first line names the two requests that the `overwrote-newer`
+  witness of a failing run names (the witness needs React's state; the comparison does not), and that a test which
+  never fails gets no line. It was run twice: `results/flaky-dev.json` and `flaky-dev-60.json` (the same runs as one
+  batch of 60), then `flaky-dev-rebased.json` and `flaky-dev-60-rebased.json` after the branch was rebased onto the
+  narrowed witness rule. The counts are the same.
+- **Held-out set:** compat's apps whose state the runtime does not see (Vue with Pinia, plain HTML; Solid's
+  `createResource` never shows the bug), the two typeahead scenarios (a: the backend answers shorter prefixes later;
+  h: it answers in order and only the delays reorder), compat's oracle as the outcome. With `--data`, a test is one
+  data seed: the word typed and the backend's own delays are the same in every run of it and only GenClass's delays
+  change, which is what "one test, run many times" means. Without `--data` the data changes with the seed, as in
+  compat's matrix; that was the first measurement, and its result is kept (`results/flaky-held-data-varies.json`):
+  with ten different words in one batch, whether a stale answer shows depends on the word, not only on the order.
+  A hit is a first line that says a newer search's response came before an older one's.
+- **Shuffled outcomes:** every batch is also compared `--rounds` times (20) with its outcomes dealt at random; the
+  share of those that are called explained is the false-explanation rate, printed next to every hit rate.
+- **Tests with no order to find** (`flaky-null.mjs`): shuffling the outcomes of real runs keeps each run as long as
+  it was, so it cannot show a comparison that mistakes a run's length for an order. This script makes the runs
+  itself, seeded: the outcome is a coin, and failing runs last longer than passing ones (an assertion waiting for its
+  timeout), or stop early, or are as long. An independent review found the first version of the comparison calling
+  a third of the "failing runs last longer" tests explained; `--order <module>` runs another build's comparison, which
+  is how that number was made again with this generator (RESULTS.md section 30).
+
+The comparison was chosen on the development set and on one real suite whose cause was already known by hand
+(RESULTS.md section 30 says which part came from where). It was then changed once more, after an independent review:
+every result file made before that was compared again from the same recorded race files (`--no-run`; a file keeps
+when its runs were made and says `recompared`), and because the held-out results were known by then, one more
+held-out sample was recorded afterwards under data seeds and delay seeds not used before
+(`results/flaky-held-after-review-*.json`: `--data 11,...,20 --first-seed 31` and `--data 21,...,30 --first-seed 61`,
+each with `--from` naming a directory of its own).
+
 ## What a trial is (held-out set)
 
 One test per data layer and scenario (`specs/compat.spec.mjs`), repeated once per seed. As in `compat/run.mjs`: the

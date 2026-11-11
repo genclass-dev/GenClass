@@ -41,6 +41,7 @@ describe("env: the options", () => {
       mirror: "GENCLASS_CHAOS_MIRROR",
       match: "GENCLASS_CHAOS_MATCH",
       wait: "GENCLASS_WAIT_FOR_RESPONSES_MS",
+      steps: "GENCLASS_STEPS",
       outDir: "GENCLASS_OUT_DIR",
       model: "GENCLASS_MODEL",
       modelUrl: "GENCLASS_MODEL_URL",
@@ -82,8 +83,25 @@ describe("env: the options", () => {
     }
   });
 
-  it("the seed and the rest of chaos are read only when chaos is on", () => {
-    expect(optionsFromEnv({ GENCLASS_SEED: "7", GENCLASS_CHAOS_REORDER: "off", GENCLASS_CHAOS_DELAY_MS: "nonsense" }, cwd)).toEqual({ off: false, options: { outDir: join(cwd, DEFAULT_OUT_DIR) }, notes: [] });
+  it("the rest of chaos is read only when chaos is on; without chaos the seed is only what a run's file is named with", () => {
+    expect(optionsFromEnv({ GENCLASS_SEED: "7", GENCLASS_CHAOS_REORDER: "off", GENCLASS_CHAOS_DELAY_MS: "nonsense" }, cwd)).toEqual({ off: false, options: { seed: 7, outDir: join(cwd, DEFAULT_OUT_DIR) }, notes: [] });
+    // with chaos it is the chaos seed, and nothing else
+    expect(optionsFromEnv({ GENCLASS_CHAOS: "on", GENCLASS_SEED: "7" }, cwd).options).toEqual({ chaos: { seed: 7 }, outDir: join(cwd, DEFAULT_OUT_DIR) });
+    const bad = optionsFromEnv({ GENCLASS_SEED: "seven" }, cwd);
+    expect(bad.options.seed).toBeUndefined();
+    expect(bad.notes).toEqual(['GENCLASS_SEED="seven" is not a whole number from 0; using 1']);
+  });
+
+  it("the steps a race file keeps: a number up to what the format holds, or off", () => {
+    expect(optionsFromEnv({}, cwd).options.steps).toBeUndefined();
+    expect(optionsFromEnv({ GENCLASS_STEPS: "1000" }, cwd).options.steps).toBe(1000);
+    expect(optionsFromEnv({ GENCLASS_STEPS: "2000" }, cwd).options.steps).toBe(2000);
+    for (const off of ["0", "off", "false", "no"]) expect(optionsFromEnv({ GENCLASS_STEPS: off }, cwd).options.steps, off).toBe(false);
+    for (const bad of ["2001", "many", "-5", "1.5"]) {
+      const r = optionsFromEnv({ GENCLASS_STEPS: bad }, cwd);
+      expect(r.options.steps, bad).toBeUndefined();
+      expect(r.notes, bad).toEqual([`GENCLASS_STEPS=${JSON.stringify(bad)} is not a whole number from 0 to 2000, or off; using the default`]);
+    }
   });
 
   it("the model, its URL, the output directory and the runtime's directory (relative ones against the working directory)", () => {
