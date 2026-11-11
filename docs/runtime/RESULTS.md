@@ -45,6 +45,7 @@ round 1, `r17-v2a` to `r17-v2c` and model 0.1.0 (`r17-v2b`) are superseded and k
 | Flow expectations (opt-in) | false-report rate not measured yet | §5 |
 | Coding agents: `genclass_explore` and `genclass_replay` on one real page (train VM, headless Chromium, 2026-10-20; one page, one bug class, not a recall figure) | explore found the stale-results race in 5 of 6 reordered runs of the buggy page and reported nothing on the fixed page (0 of 6 differ: no false report); replay reproduced it before the fix and not after; the generated Playwright test failed before and passed after | §18 |
 | The pull-request check's evidence path (`genclass-playwright-run`, no test edited, witnesses only; changes of 2026-11-11, not released) | held-out React app, 6 data layers: the two bug scenarios flagged in 60 of 60 trials where the bug showed (56 of 56 with delays). Correct flows other than a deliberate five-fold "+1": 1 of 180 trials flagged without delays (7 before), with delays 4 of 180 plus 6 where the delays surfaced an unguarded typeahead; the "+1" scenario is flagged in 36 of 36, before and after. Two public suites, nothing edited: 0 signatures after (7 lines before, all one false fact), and no real race found on either | §29 |
+| A test that fails in some runs, its failing runs against its passing ones by the order of steps (`genclass-playwright-run --explain-flaky`, no app state; 2026-11-11, not released; a measured comparison, not a diagnosis) | one real Angular suite, a test whose cause was known by hand: named in both runs of 64 (3 of 3 failing and 0 of 61 passing without delays; 4 of 4 and 0 of 48 with them). Held-out apps whose state the runtime does not see (Vue, plain HTML), each test's data fixed: 18 of 28 comparable tests explained, all 18 naming the stale search, none naming anything else (16 of 16 where the failure is one order, 2 of 12 where it is several at once); a first measurement that let the data change with the seed: 1 of 6. False explanations with shuffled outcomes: 10 of 560 and 0 of 120 held-out, 1 of 80 on the bench, 4 of 200 on the real runs | §30 |
 
 ## 1. Model stages compared (held-out simulated apps)
 
@@ -1758,3 +1759,151 @@ recorded, not how often delays make one happen. Changes 4 and 5 were derived fro
 delaying an answer, but the held-out scenario e is where the offline case was seen, so e's after-number is not an
 independent test of change 5. No real race was found on either public suite: these numbers say the path records the
 races that happen in front of it and stays quiet on correct code, not how often a real suite has one to find.
+
+## 30. A test that fails in some runs: its failing runs against its passing ones, by the order of steps (development Mac, Chromium through Playwright 1.63.0, 2026-11-11, branch `feat/flaky-order`)
+
+Section 29 ended on a real flaky test that no line explained, because both witnesses need state the runtime can see.
+This section measures what was built for it in `@genclass/playwright`: each race file now carries the test's own
+status and the page's steps in order (user actions, each request's send, the delivery of its response;
+`src/steps.ts`), and `src/order.ts` compares the steps of a test's failing runs with those of its passing runs. It
+reads no app state. The reporter and the two commands print it (`src/explain.ts`); the summariser that
+genclass-dev[bot] bundles does not import it, so the pull-request comment is what it was. `genclass-playwright-run --explain-flaky[=N]` makes the runs, each seed a Playwright run of its
+own. The bench is `bench/pr-evidence/flaky.mjs` ([README](../../bench/pr-evidence/README.md)).
+
+**What it says, and when it says nothing.** A statement is "X came before Y" for two steps, or "X came between A and
+B" for three. A difference is a statement true in at least one failing run and in at most one in twenty of the
+passing runs that recorded its steps (none below twenty). It is a measured comparison with counts, never a diagnosis.
+Three things keep it from explaining noise: nothing is compared below three failing and three passing runs; the same
+search is run with the outcomes shuffled (every way when there are at most 2000, else 1000 seeded shuffles) and the
+verdict is "not told apart from chance" when more than 5% of them find as much; and a line is listed only when its
+own count of failing runs is one that at most 5% of the shuffles reach. Next to every hit rate below is the
+**false-explanation rate**: the same runs with their outcomes dealt at random (20 times per batch, 100 for the real
+case), and how often the comparison then calls anything explained.
+
+**Development set** (`flaky.mjs dev`: the ten tiny-desk tests under seeds 1 to 60, default delays, 600 test runs in
+1,677 s on a machine doing other work; a batch is 30 seeds in a row, what one `--explain-flaky` makes):
+
+| test | failed, of 60 | batches of 30: verdicts | the 60 as one batch |
+|---|---:|---|---|
+| buggy detail (two requests, the older answer lands last) | 13 | explained, explained (7 of 7 and 6 of 6 failing runs, 0 of 15 and 0 of 16 passing) | explained: 13 of 13 failing, 0 of 31 passing |
+| buggy search (five requests, any older one can land last) | 16 | not told apart from chance (best order in 5 of 9), explained (two lines, 6 of 7 failing runs) | explained: three lines, 16 of 16 failing runs have one, no passing run does |
+| buggy profile | 60 | not compared: no passing run | not compared |
+| buggy checkout, buggy cart, the five fixed tests | 0 | not compared: no failing run | not compared |
+
+- **Agreement with the witness.** The witness needs React's state; the comparison does not use it. In the test-batches
+  that could be compared (at least three failing and three passing runs: 4 of 20), 3 were explained, and in all 3 the
+  first line names the two requests that the `overwrote-newer` witness of a failing run names: 3 of 4 askable
+  batches, 3 of 3 explanations. For the detail test the witness of every failing run names those two requests (13 of
+  13). For the search test a file keeps one witness line per operation, the first overwrite of the run, so its two
+  requests are the comparison's in 2 of 16 failing runs, and its two operations in 16 of 16.
+- **False explanations.** Shuffled outcomes were called explained in 1 of 80 rounds (batches of 30) and 0 of 40
+  (batches of 60). The 14 test-batches that never failed, and the 2 that never passed, got no explanation.
+- **The search test needed more runs than the detail test.** Its failing runs differ among themselves: the 5th
+  answer is followed by the 4th in some, the 3rd or the 2nd in others, so each order is in only part of them (10, 6
+  and 7 of 16). One batch of 30 was not told apart from chance; 60 runs were.
+
+**Held-out set, first measurement** (`flaky.mjs held` without `--data`, the method fixed beforehand: compat's Vue 3 +
+Pinia and Solid apps with the GenClass import taken out, scenarios a and h, seeds 1 to 120 in batches of 30, compat's
+oracle as the outcome; 240 trials an app in 290 s and 330 s). A hit is a first line that says a newer search's
+response came before an older one's.
+
+| | batches | could be compared | explained, first line the stale search | shuffled outcomes explained |
+|---|---:|---:|---:|---:|
+| Vue, scenario a | 4 | 3 | **0** | 0 of 60 |
+| Vue, scenario h | 4 | 3 | **1** | 0 of 60 |
+| Solid, a and h (`createResource` keeps the latest answer: the oracle saw the bug in 0 of 240 trials) | 8 | 0 | | |
+| all | 16 | 6 | **1 of 6 (17%)** | **0 of 120** |
+
+That number stands as measured. Read against the trials, it says more about the experiment than about the
+comparison: compat changes a scenario's data with the seed (ten words in turn), so the thirty runs of a batch were
+runs of ten different tests. In scenario a an older search was answered last in 120 of 120 Vue trials (the backend
+answers shorter prefixes later), and whether that showed depended on the word (104 visible, 16 not: for some words
+the stale list equals the right one); no order separates those, and the comparison said so three times out of three.
+In scenario h every one of the 19 trials with the bug had an older search answered last, and so had 4 of the 101
+without it (the same list again), which in two batches was more passing runs with the order than the rule allows.
+
+**Held-out set, each test's data held fixed** (`--data 1,...,10`: one test per data seed, so the word typed and the
+backend's own delays are the same in every run of a test and only GenClass's delays change; 30 seeds each; Vue 3 +
+Pinia, and compat's plain HTML app, which had not been run before; 600 trials an app in 629 s and 627 s). The
+comparison was not changed between the two measurements, or after this one.
+
+| | tests | could be compared | explained, first line the stale search | explained, another first line | shuffled outcomes explained |
+|---|---:|---:|---:|---:|---:|
+| scenario h (the backend answers in order; only the delays reorder), Vue | 10 | 8 | **8** | 0 | 2 of 160 |
+| scenario h, plain HTML | 10 | 8 | **8** | 0 | 2 of 160 |
+| scenario a (the backend answers shorter prefixes later), Vue | 10 | 6 | **1** | 0 | 2 of 120 |
+| scenario a, plain HTML | 10 | 6 | **1** | 0 | 4 of 120 |
+| all | 40 | 28 | **18 of 28 (64%)** | **0** | **10 of 560 (1.8%)** |
+
+- **Scenario h: 16 of 16.** Every test that could be compared was explained by one line, "the response to the 3rd
+  `GET /api/search` came before the response to the 2nd", in every failing run or all but one (6 of 6 to 8 of 9) and
+  in no passing run (0 of 21 to 0 of 24). The four that could not be compared are the two words whose stale list
+  equals the right one (the bug in 0 or 1 of 30 runs).
+- **Scenario a: 2 of 12.** There the test fails when the answer that lands last is one whose list differs, and
+  nearly every run has some older answer last. That is not one order but several at once ("the 1st answer after the
+  2nd, the 3rd, the 4th and the 5th"), which no pair states. In 2 tests one pair still covered most failing runs (the
+  4th answer before the 1st, 21 of 26) and was listed with a second line; in 10 the verdict was "not told apart from
+  chance" (8) or "no order is the failing runs' alone" (2). No test got a first line that was not the stale search.
+- **The two apps are one set of timings.** Under the same seeds they got the same delays from the same backend, and
+  their verdicts agree test for test. They show that the steps are recorded the same on Vue and on a page with no
+  framework; they are not 28 independent investigations (14, twice).
+
+**The real case** (paperless-ngx at `d05e96c`, Angular 22 with a real Django back end on another port; its test
+`bulk edit`, `src-ui/e2e/document-list/document-list.spec.ts:140`; nothing in that project edited, nothing sent to
+it). The cause found by hand in section 29: the response of `POST /api/documents/selection_data/` replaces the tag
+toggle when it lands between the click on the tag and the click on Apply. `genclass-playwright-run --explain-flaky=64
+e2e/document-list/document-list.spec.ts -g "bulk edit" --project=chromium --workers=1`, twice:
+
+| | runs | wall clock | failed | the first line | shuffled outcomes explained |
+|---|---:|---:|---:|---|---:|
+| `GENCLASS_CHAOS=off` (the test's own timing) | 64 | 1,094 s | 3 | In 3 of 3 failing runs and in none of the 61 passing runs, the action `click menuitem "TagWithPartial 0"` came before the response to `POST localhost/api/documents/selection_data/` (median 32 ms apart; in the passing runs the other way round) | 1 of 100 |
+| default delays | 64 | 1,081 s | 4 | In 4 of 4 failing runs and in none of the 48 passing runs that recorded these steps, the response to `POST localhost/api/documents/selection_data/` came between the action `click menuitem "TagWithPartial 0"` and the action `click button "Apply"` (median 18 ms after the first and 16 ms before the second; in the passing runs before the first in 6 and after the second in 42) | 3 of 100 |
+
+- **It names the `selection_data` response against the clicks, in both runs.** Without delays the response lands
+  before the click on the tag in every passing run, so one pair says it (after that click, in the failing runs).
+  With delays most passing runs have it after Apply and a few before the tag, so no pair is the failing runs' alone
+  and the line is the between: both clicks, as found by hand. In the 64 files of each run the response was between
+  the two clicks in every failing run and in no passing run (3 and 61; 4 and 60), read from the files directly.
+- **A second sample under delays**, 64 separate runs made earlier the same day while the recording was still being
+  changed (so not counted above): 5 failed, and the line was the same between (5 of 5 failing, 0 of 50 passing).
+- **The delays made this test fail less, not more often**, in runs of their own: 3 and 4 of 64 here, against 13 and
+  19 of 60 in section 29, which repeated the test twenty times inside one Playwright run with two workers. The
+  response is the slower the busier the machine, and with the default delays it is mostly pushed past both clicks.
+- A race file of this test is 1.5 to 1.8 KB with 35 to 44 steps.
+
+**In a real browser, in CI** (`packages/playwright/test/e2e-flaky`, the fourth part of the package's end-to-end
+check): a test on the buggy search page that types two letters and expects the second query's results, run through
+`--explain-flaky=16`. The first request is held at least 80 ms longer than the second under six of the sixteen
+seeds, and the test failed in exactly those (1, 6, 9, 11, 14, 16) in all three runs of the check made here (33 s
+each for the sixteen runs); the command printed "In 6 of 6 failing runs and in none of the 10 passing runs that recorded
+these steps, the response to the 2nd `GET /api/search` came before the response to the 1st `GET /api/search`", and
+exited 0. The check requires that
+line, sixteen race files with status and steps, and no passing run with that order. Writing it found one fault in
+the mode before any measurement depended on it: Playwright empties its output directory at the start of every run,
+so with the race files in their default place each run removed the run before; the command now sets each run's files
+aside and puts them back at the end (the measurements above had their files outside that directory).
+
+**What it costs.** One Playwright run per seed starts the suite's web servers every time: 17 s a run on the real
+suite (64 runs in 18 minutes), against about 2 s a test when the same test is repeated inside one run. The comparison
+itself took 4 to 13 ms for 60 to 64 runs of 44 to 164 steps. A race file grows by its steps: at most 300 steps and about 5 KB by
+default (1000 steps under `--explain-flaky`), and the file's 64 KB limit holds.
+
+**Where each part of the comparison came from**, so the numbers can be read for what they are:
+
+- pairs, the minimum of runs and the shuffled outcomes: the brief this was built from;
+- the between form: the real case, whose cause was known by hand before a line of this was written. It is not an
+  independent test of that form;
+- when a test's own code ends (the moment Playwright assigns `testInfo.duration`, and 10 ms before it), cutting a
+  passing run at the first action no failing run reached, and one passing run in twenty: the development set. With
+  the end taken at the fixture's first question instead (later by the test's teardown), an earlier sample of 29 runs
+  of the detail test had the failing order in 1 of 15 passing runs, and under the rule above nothing was listed;
+- holding a test's data fixed across its runs: the first held-out measurement. That is a change to the experiment,
+  not to the comparison, and both results are above.
+
+**What this does not show.** One bench app, two held-out apps that share their timings, one real test, one machine
+that was doing other work, Chromium only. The held-out scenarios are both typeaheads. Only order is compared: two
+runs with the same order and another timing look the same, and a failure that is several orders at once (scenario a)
+is mostly declined. A step is a `fetch` or XHR request or a user action; a WebSocket message, a timer or a render is
+not one. An action is named by the runtime's description of its target, so a control whose text changes from run to
+run is a different step each time. The comparison says which order the failing runs have and the passing runs do
+not: it may be the cause, a consequence of it, or neither, and on the real case the cause was already known.

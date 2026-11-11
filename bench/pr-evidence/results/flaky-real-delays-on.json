@@ -1,0 +1,67 @@
+{
+ "date": "2026-11-11",
+ "node": "v25.6.0",
+ "mode": "files",
+ "dir": "races",
+ "label": "paperless-ngx d05e96c, bulk edit, genclass-playwright-run --explain-flaky=64, default delays, 2026-11-11",
+ "rounds": 100,
+ "rows": [
+  {
+   "test": "[chromium] document-list/document-list.spec.ts > bulk edit",
+   "seeds": [
+    1,
+    64
+   ],
+   "files": 64,
+   "failed": 4,
+   "passed": 60,
+   "withoutSteps": 0,
+   "failing": 4,
+   "passing": 60,
+   "verdict": "explained",
+   "strongest": 4,
+   "covered": 4,
+   "lines": 1,
+   "more": 0,
+   "first": {
+    "form": "between",
+    "steps": [
+     "a:click menuitem \"TagWithPartial 0\"#1",
+     "r:POST localhost/api/documents/selection_data/#1",
+     "a:click button \"Apply\"#1"
+    ],
+    "failing": {
+     "with": 4,
+     "recorded": 4
+    },
+    "passing": {
+     "with": 0,
+     "recorded": 48,
+     "before": 6,
+     "after": 42
+    },
+    "ms": [
+     18,
+     16
+    ]
+   },
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 0,
+    "share": 0.000999000999000999,
+    "separating": 0,
+    "needed": 3
+   },
+   "text": [
+    "Compared 4 failing runs with 60 passing runs: every failing run has this order of steps, and no passing run does.",
+    "1. In 4 of 4 failing runs and in none of the 48 passing runs that recorded these steps, the response to `POST localhost/api/documents/selection_data/` came between the action `click menuitem \"TagWithPartial 0\"` and the action `click button \"Apply\"` (median 18 ms after the first and 16 ms before the second; there it came before the first of the two in 6 and after the second in 42; 12 passing runs left out, where one of these steps came after the point the failing runs reach, or not at all).",
+    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 100,
+    "explained": 3
+   }
+  }
+ ]
+}

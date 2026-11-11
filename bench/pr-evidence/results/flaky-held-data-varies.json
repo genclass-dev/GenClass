@@ -1,0 +1,543 @@
+{
+ "date": "2026-11-11",
+ "node": "v25.6.0",
+ "mode": "held",
+ "apps": [
+  "vue-vite",
+  "solid-vite"
+ ],
+ "scenarios": "a,h",
+ "data": null,
+ "seeds": 120,
+ "batch": 30,
+ "rounds": 20,
+ "workers": 3,
+ "runs": [
+  {
+   "app": "vue-vite",
+   "seconds": 290.3,
+   "exit": 0
+  },
+  {
+   "app": "solid-vite",
+   "seconds": 330.1,
+   "exit": 0
+  }
+ ],
+ "summary": {
+  "investigations": 16,
+  "askable": 6,
+  "explained": 1,
+  "hits": 1,
+  "shuffledRounds": 120,
+  "shuffledExplained": 0
+ },
+ "rows": [
+  {
+   "app": "vue-vite",
+   "layer": "pinia",
+   "scenario": "a",
+   "seeds": [
+    1,
+    30
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 22,
+   "failing": 22,
+   "passing": 8,
+   "verdict": "chance",
+   "strongest": 3,
+   "covered": 0,
+   "lines": 0,
+   "more": 2,
+   "first": null,
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 648,
+    "share": 0.6483516483516484,
+    "separating": 0,
+    "needed": 10
+   },
+   "text": [
+    "Compared 22 failing runs with 8 passing runs: 2 orders of steps are the failing runs' alone, the most frequent in 3 of 22, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 648 gave an order that at least 3 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 0
+   },
+   "hit": false
+  },
+  {
+   "app": "vue-vite",
+   "layer": "pinia",
+   "scenario": "a",
+   "seeds": [
+    31,
+    60
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 26,
+   "failing": 26,
+   "passing": 4,
+   "verdict": "chance",
+   "strongest": 6,
+   "covered": 0,
+   "lines": 0,
+   "more": 2,
+   "first": null,
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 803,
+    "share": 0.8031968031968032,
+    "separating": 0,
+    "needed": 19
+   },
+   "text": [
+    "Compared 26 failing runs with 4 passing runs: 2 orders of steps are the failing runs' alone, the most frequent in 6 of 26, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 803 gave an order that at least 6 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 0
+   },
+   "hit": false
+  },
+  {
+   "app": "vue-vite",
+   "layer": "pinia",
+   "scenario": "a",
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 30,
+   "failing": 30,
+   "passing": 0,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 30 failing runs and 0 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "vue-vite",
+   "layer": "pinia",
+   "scenario": "a",
+   "seeds": [
+    91,
+    120
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 26,
+   "failing": 26,
+   "passing": 4,
+   "verdict": "chance",
+   "strongest": 10,
+   "covered": 0,
+   "lines": 0,
+   "more": 3,
+   "first": null,
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 390,
+    "share": 0.3906093906093906,
+    "separating": 0,
+    "needed": 14
+   },
+   "text": [
+    "Compared 26 failing runs with 4 passing runs: 3 orders of steps are the failing runs' alone, the most frequent in 10 of 26, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 390 gave an order that at least 10 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 0
+   },
+   "hit": false
+  },
+  {
+   "app": "vue-vite",
+   "layer": "pinia",
+   "scenario": "h",
+   "seeds": [
+    1,
+    30
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 4,
+   "failing": 4,
+   "passing": 26,
+   "verdict": "chance",
+   "strongest": 1,
+   "covered": 0,
+   "lines": 0,
+   "more": 2,
+   "first": null,
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 269,
+    "share": 0.26973026973026976,
+    "separating": 0,
+    "needed": 2
+   },
+   "text": [
+    "Compared 4 failing runs with 26 passing runs: 2 orders of steps are the failing runs' alone, the most frequent in 1 of 4, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 269 gave an order that at least 1 failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 0
+   },
+   "hit": false
+  },
+  {
+   "app": "vue-vite",
+   "layer": "pinia",
+   "scenario": "h",
+   "seeds": [
+    31,
+    60
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 5,
+   "failing": 5,
+   "passing": 25,
+   "verdict": "explained",
+   "strongest": 5,
+   "covered": 5,
+   "lines": 1,
+   "more": 0,
+   "first": {
+    "form": "pair",
+    "steps": [
+     "r:GET /api/search#3",
+     "r:GET /api/search#2"
+    ],
+    "failing": {
+     "with": 5,
+     "recorded": 5
+    },
+    "passing": {
+     "with": 0,
+     "recorded": 25
+    },
+    "ms": [
+     96
+    ]
+   },
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 0,
+    "share": 0.000999000999000999,
+    "separating": 0,
+    "needed": 3
+   },
+   "text": [
+    "Compared 5 failing runs with 25 passing runs: every failing run has this order of steps, and no passing run does.",
+    "1. In 5 of 5 failing runs and in none of the 25 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 96 ms apart; there the order was the other way round).",
+    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 0
+   },
+   "hit": true
+  },
+  {
+   "app": "vue-vite",
+   "layer": "pinia",
+   "scenario": "h",
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 2,
+   "failing": 2,
+   "passing": 28,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 2 failing runs and 28 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "vue-vite",
+   "layer": "pinia",
+   "scenario": "h",
+   "seeds": [
+    91,
+    120
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 8,
+   "failing": 8,
+   "passing": 22,
+   "verdict": "chance",
+   "strongest": 1,
+   "covered": 0,
+   "lines": 0,
+   "more": 1,
+   "first": null,
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 420,
+    "share": 0.4205794205794206,
+    "separating": 0,
+    "needed": 3
+   },
+   "text": [
+    "Compared 8 failing runs with 22 passing runs: 1 order of steps is the failing runs' alone, the most frequent in 1 of 8, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 420 gave an order that at least 1 failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 0
+   },
+   "hit": false
+  },
+  {
+   "app": "solid-vite",
+   "layer": "signals",
+   "scenario": "a",
+   "seeds": [
+    1,
+    30
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "solid-vite",
+   "layer": "signals",
+   "scenario": "a",
+   "seeds": [
+    31,
+    60
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "solid-vite",
+   "layer": "signals",
+   "scenario": "a",
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "solid-vite",
+   "layer": "signals",
+   "scenario": "a",
+   "seeds": [
+    91,
+    120
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "solid-vite",
+   "layer": "signals",
+   "scenario": "h",
+   "seeds": [
+    1,
+    30
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "solid-vite",
+   "layer": "signals",
+   "scenario": "h",
+   "seeds": [
+    31,
+    60
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "solid-vite",
+   "layer": "signals",
+   "scenario": "h",
+   "seeds": [
+    61,
+    90
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  },
+  {
+   "app": "solid-vite",
+   "layer": "signals",
+   "scenario": "h",
+   "seeds": [
+    91,
+    120
+   ],
+   "trials": 30,
+   "errors": 0,
+   "noSteps": 0,
+   "bug": 0,
+   "failing": 0,
+   "passing": 30,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 30 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "hit": false
+  }
+ ]
+}
