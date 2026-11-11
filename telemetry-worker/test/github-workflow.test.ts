@@ -59,14 +59,21 @@ describe("github app: the workflow file a repository adds (docs/github-app/workf
     expect(WORKFLOW_ARTIFACT.startsWith(DEFAULT_SETTINGS.artifact)).toBe(true);
     // a job of its own that is allowed to fail, as the check's sentence says
     expect(WORKFLOW_FILE).toContain("    continue-on-error: true\n");
+    // The step that runs the suite is allowed to fail too. On the job alone, `continue-on-error` keeps the workflow
+    // run green while the job's own check on the commit is a failure (seen on a pull request of a trial repository,
+    // 2026-11-11): every test that fails under the holds was a red check there, and with the push trigger it would
+    // be one on the default branch's commits. With no race file to upload the job is red: nothing ran under GenClass.
+    expect(WORKFLOW_FILE).toContain('      - name: Playwright with GenClass\n        continue-on-error: true\n        run: node "$RUNNER_TEMP/genclass/');
+    expect(WORKFLOW_FILE).toContain("          if-no-files-found: error\n");
+    expect(WORKFLOW_FILE.match(/continue-on-error: true\n/g)).toHaveLength(2);
     // why the link is off until the owner turns it on: the workflow installs this package from npm
     expect(WORKFLOW_FILE).toContain("@genclass/playwright @genclass/runtime@beta");
     // it runs for pull requests and for pushes to the default branch: the default branch's race files are what a
     // review compares a pull request's findings with (src/github/evidence.ts baselineEvidence takes push runs)
     expect(WORKFLOW_FILE).toContain("on:\n  pull_request:\n  push:\n    branches: [main, master]\n");
     // the measured sizes the cap was chosen against
-    expect(WORKFLOW_FILE).toHaveLength(2736);
-    expect(LINK).toHaveLength(4384);
+    expect(WORKFLOW_FILE).toHaveLength(2990);
+    expect(LINK).toHaveLength(4776);
   });
 });
 

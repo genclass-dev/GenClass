@@ -25,6 +25,8 @@ It reads the race files your workflow uploads, never your source code. It is fre
    [`workflows/genclass.yml`](workflows/genclass.yml) to `.github/workflows/genclass.yml` and go to step 4. It runs
    your existing Playwright suite under GenClass in a job of its own that is allowed to fail, and uploads the race
    files ([how it works and what it does not cover](../../packages/playwright/README.md#without-changing-your-tests)).
+   A test that fails under its delays leaves that job green: what the run showed is in the race files, and the job is
+   red when it wrote none ([Troubleshooting](#troubleshooting)).
    It runs for pull requests and for pushes to `main` or `master`: the race files of your default branch are what a
    review compares a pull request's findings with ([the baseline](#baseline)).
    When the server that runs the app has it turned on, the check on a repository's first pull request has a link that
@@ -495,6 +497,12 @@ pull request up again at its next event, or at the sweep.
 - **"No race files for this commit".** No artifact whose name starts with `genclass` was uploaded by a workflow run on
   that commit. Check the upload step ran (`if: ${{ !cancelled() }}`) and that `test-results/genclass` has files:
   `npx genclass-playwright-report` prints the same report locally.
+- **The `genclass` job is red.** With [`workflows/genclass.yml`](workflows/genclass.yml) that means no race file was
+  written, so there was nothing to upload: a step before the tests failed (your dependencies, the browsers), or
+  Playwright did not get as far as a test. The log of the step "Playwright with GenClass" has the reason; that step is
+  allowed to fail, so GitHub reports it as passed and keeps its error as an annotation on the run. A test that fails
+  under the delays does not turn the job red. A copy of the file without `continue-on-error: true` on that step is
+  red whenever a test fails there: copy the file again, or add the line.
 - **No check at all.** No race file was read for the repository yet, so a pull request without them gets none
   ([Setup](#setup), step 4). That includes an artifact that was uploaded and could not be read. `@genclass-dev review`
   answers with what there is, and says what was wrong with an artifact.

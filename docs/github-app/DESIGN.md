@@ -106,6 +106,14 @@ does and that the person reviews and commits it. With the setting off, every tex
 unchanged. On `/github/setup` the address is built in the browser from a repository and a branch that a person
 types, because that page knows nothing about any installation.
 
+**The workflow's job says whether there was something to read, not what was found.** In the one-file workflow the
+step that runs the suite is allowed to fail, and the upload fails without a race file: the job's own check on a
+commit is red when nothing ran under GenClass and green otherwise. What a run found has one place, the app's check,
+and one setting that can make it fail (`check.fail_on`). With `continue-on-error` on the job alone, the workflow run
+stayed green and the job's check was a failure whenever a test failed under the delays: a red mark on every such
+pull request that no setting of the app could turn off, and on every commit of the default branch once the file ran
+there for the baseline. The job stays allowed to fail as well, so a red job never fails the workflow run.
+
 **One comment, edited in place; no comment without findings.** Once race files were read for a repository, the check
 carries the status on every commit. The comment exists when there is something to read and is updated, never
 repeated. A comment someone deletes comes back only for a finding they have not been told about. The footer is one

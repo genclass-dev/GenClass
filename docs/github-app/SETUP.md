@@ -197,8 +197,8 @@ What to know before turning it on:
   the text percent-encoded (checked on github.com on 2026-11-10, signed in). `BRANCH` must be a branch that exists:
   the literal `HEAD` answers 404. The check uses the repository's default branch as GitHub names it, in the pull
   request GitHub returns or else in the event's signed payload. When neither names one, the check has no link.
-- GitHub answers an address of about 6,000 characters with an error. The file is 2,495 characters and 3,935
-  percent-encoded, and the whole address for a short repository name is 4,023. The worker builds no address longer
+- GitHub answers an address of about 6,000 characters with an error. The file is 2,990 characters and 4,688
+  percent-encoded, and the whole address for a short repository name is 4,776. The worker builds no address longer
   than 5,800: if the file grows past that, the checks say what they say without the link.
 - The file's text is in two places: `docs/github-app/workflows/genclass.yml`, which is the source, and
   `WORKFLOW_FILE` in `telemetry-worker/src/github/workflow-file.ts`. `test/github-workflow.test.ts` fails when they
@@ -214,7 +214,9 @@ What to know before turning it on:
 
 Checked on github.com on 2026-11-10, signed in: the address the worker builds for this repository (4,035 characters)
 opens the new-file editor at `.github/workflows/genclass.yml` on `main` with the whole file filled in
-([the screenshot](media/one-click-workflow.jpg)). Nothing was committed from it.
+([the screenshot](media/one-click-workflow.jpg)). Nothing was committed from it. That was the file of that day
+(2,495 characters). The file is longer now (the sizes above), and the longer address has not been opened on
+github.com: do it once before turning the link on.
 
 ## Try it without touching production
 
@@ -287,6 +289,17 @@ The version that groups findings by kind and operation, compares them with the d
   file sees "No baseline was read" in its reviews until it adds that trigger. This repository's own
   `playwright-reporter.yml` runs on pushes already, with path filters and seven days of retention, so its baseline
   exists only for a week after a push that touched those paths.
+- **The one-file workflow's job is green when a test fails under the delays.** In
+  [`workflows/genclass.yml`](workflows/genclass.yml) the step "Playwright with GenClass" is allowed to fail, and the
+  upload fails when there is no race file: the job's own check is red when nothing ran under GenClass, and green
+  otherwise. Before, `continue-on-error` was on the job only. That keeps the workflow run green, and the job's check
+  on the commit is a failure all the same (seen on a pull request of a trial repository on 2026-11-11: run
+  "success", job and check run "failure"), so every test that failed under the delays was a red check, and with the
+  push trigger it would have been one on the default branch's commits. A repository that copied the earlier file
+  keeps the red check until it copies the file again. The changed file has not been run on GitHub. What it rests on:
+  a failed step with `continue-on-error` leaves its job's check a success in this repository's own CI (`ci.yml`,
+  the step "Perf budgets", run 42051447382), and `if-no-files-found: error` fails the step according to
+  `actions/upload-artifact`'s own description of the option.
 
 ## Plans and private repositories
 
