@@ -37,13 +37,11 @@ Changes to `@genclass/playwright`, the Playwright reporter for
   now keyed as `:id`: a record the test created a moment ago has another id in every run, so its requests got another
   delay in every run of the same seed, which the README said could not happen. Found on a real suite, where 5 of 14
   requests of one test changed their delay between two runs of one seed.
-- **A finding's operation no longer carries the ids in its path either.** The operation a finding is known by (`op`,
-  and so its `sig`) writes an id segment as `:id`, by the same rule: `GET /api/items/7` and `GET /api/items/1042` are
-  both `GET /api/items/:id`. A record a test creates has another id in every run and in every repeat of one run, so
-  one race on it was a different signature in each seed, never reproducible, and a new finding on every push to
-  whoever compares two runs (genclass-dev[bot] knows a finding by its operation). The evidence line keeps the requests
-  as they were. A signature of a 0.1.0 file with an id in its path changes once. Not measured on a real suite: no
-  finding left on the two public suites carries an id.
+- **A finding's operation is guarded against ids in its path.** The operation a finding is known by (`op`, and so its
+  `sig`) has to be the same from seed to seed and from push to push (genclass-dev[bot] knows a finding by it), so an
+  id a test created must not be in it. The runtime's request keys already write the ids they recognise as `:id`
+  (seen on a public suite: `PATCH /api/autosave-posts/:id`), so this fixes nothing that was measured: `opOf` now
+  applies the fixture's own id rule as well, to whatever text it is given. No signature in the measurements changed.
 - **The command gives Playwright the project's local bins on `PATH`.** `npx playwright test` puts
   `node_modules/.bin` on `PATH`; this command, started with `node <path>` as the workflow file does, did not. A
   project whose `webServer.command` names a local bin then never started: on a public Next.js starter the web server

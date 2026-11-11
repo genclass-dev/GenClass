@@ -573,9 +573,9 @@ interface GenClassRacesFile {
 
 An operation (`op`) is the request's method and path without its query, with the ids in the path written as `:id`
 (a segment of digits, a UUID, a long hex string or a generated token, the same rule the chaos keys use):
-`GET /api/items/7` and `GET /api/items/1042` are both `GET /api/items/:id`. A record a test creates has another id in
-every run, so with the id left in, one race on it was a different signature in every seed and a new finding on every
-push. The evidence line keeps the requests as they were.
+`GET /api/items/7` and `GET /api/items/1042` are both `GET /api/items/:id`. So a race on a record a test creates is
+the same signature in every seed and the same finding on every push. The runtime's request keys already write ids
+this way; the fixture applies its own rule on top.
 
 `location` is relative to the checkout on GitHub Actions (`GITHUB_WORKSPACE`), else to the Playwright config's
 directory, and is left out when Playwright gives no line or the test file is outside that directory. The report does

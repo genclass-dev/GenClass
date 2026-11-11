@@ -80,11 +80,11 @@ const METHOD_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+([^\s()?#]+)/;
 /**
  * "GET /api/search?q=… (#21)" or "GET /api/search#3~retry2" -> "GET /api/search", with the ids in the path written
  * as ":id" ("GET /api/items/7#1" -> "GET /api/items/:id", chaos.ts stablePath). The operation is what a finding is
- * known by: from seed to seed here, and from run to run for whoever compares two runs. A record a test creates has
- * another id in every run, so with the id left in, one race was a new finding each time. The evidence line keeps the
- * requests as they were. Anything else is kept with the runtime's per-run op ids ("#12", "(#12)") taken out, so the
- * same detection gives one signature in every seed. At most 300 characters (a longer path is cut the same way in
- * every seed).
+ * known by: from seed to seed here, and from run to run for whoever compares two runs, so an id a test created must
+ * not be in it. The runtime's own request keys already write the ids it recognises that way (util.ts normalizePath),
+ * so for a witness this is a guard that changes nothing; it is applied here to whatever text arrives. Anything else
+ * is kept with the runtime's per-run op ids ("#12", "(#12)") taken out, so the same detection gives one signature in
+ * every seed. At most 300 characters (a longer path is cut the same way in every seed).
  */
 export function opOf(text: string | undefined): string {
   const t = (text ?? "").replace(/\s+/g, " ").trim();
