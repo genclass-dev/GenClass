@@ -29,7 +29,9 @@
 // - A finding that the default branch's race files flag too (the same kind and operation, at the commit named in the
 //   review) is "already on the default branch": it is listed with that status, is not counted as new, gets no inline
 //   comment, does not by itself start a comment, and fails the check only when `check.fail_on_baseline` asks. That is
-//   a statement about two sets of race files, never about what a pull request caused. The marks are worked out when
+//   a statement about two sets of race files, never about what a pull request caused. It is not made of a finding
+//   that a test flags here in enough seeds to be reproducible when that test ran on the default branch without it: a
+//   known race that reaches a test it did not reach there is the pull request's own. The marks are worked out when
 //   the default branch's files were read for the review; when they could not be read, the marks from the last
 //   comparison stand and the review says which commit that was. With nothing to compare with, a review is what it
 //   was before there were baselines, and says that none was read.
@@ -362,8 +364,12 @@ export interface LiveTest {
 
 /** A finding as a review shows it: what is stored, plus the details of this commit's race files when it is in them. */
 export interface ViewFinding extends StoredFinding {
-  /** Present in this commit's race files: the evidence of the test it is flagged in most, and every test it is flagged in. */
-  now: { confidence: number; evidence: string; tests: LiveTest[] } | null;
+  /**
+   * Present in this commit's race files: the evidence of the test it is flagged in most, and every test it is flagged
+   * in. `beyond`: the default branch's race files flag its kind and operation too, but this test flags it here in
+   * enough seeds to be reproducible and ran there without it, so the finding is the pull request's own (null otherwise).
+   */
+  now: { confidence: number; evidence: string; tests: LiveTest[]; beyond: string | null } | null;
 }
 
 /** Findings flagged in a commit's race files that are over MAX_FINDINGS: counted, never numbered or listed. */
@@ -415,11 +421,24 @@ export function hasFindings(summary: RaceSummary | null, rules?: readonly Ignore
   return summary !== null && liveGroups(summary, rules).groups.size > 0;
 }
 
-/** The fingerprints of everything a summary flags: what a baseline is compared by. */
-export async function signatureKeys(summary: RaceSummary | null): Promise<Set<string>> {
-  const keys = new Set<string>();
-  if (summary) for (const g of liveGroups(summary).groups.values()) keys.add(await fingerprint(g.kind, g.op));
-  return keys;
+/**
+ * What a set of race files gives a comparison: per fingerprint the tests that flag it, and every test that ran
+ * (names as a finding keeps them). Nothing else of the files is kept for it.
+ */
+export interface BaselineIndex {
+  flagged: ReadonlyMap<string, ReadonlySet<string>>;
+  ran: ReadonlySet<string>;
+}
+
+/** The index of the default branch's race files: what a pull request's findings are compared with. */
+export async function baselineIndex(summary: RaceSummary | null): Promise<BaselineIndex> {
+  const flagged = new Map<string, Set<string>>();
+  const ran = new Set<string>();
+  if (summary) {
+    for (const t of summary.tests) ran.add(plain(t.test, MAX_TEST_CHARS));
+    for (const g of liveGroups(summary).groups.values()) flagged.set(await fingerprint(g.kind, g.op), new Set(g.hits.map((h) => h.name)));
+  }
+  return { flagged, ran };
 }
 
 /**
@@ -443,11 +462,11 @@ export interface MergeOptions {
   /** The signatures the repository's settings leave out (`ignore`). */
   ignore?: readonly IgnoreRule[];
   /**
-   * The default branch's race files, when they were read for this review: the commit they are of, and the
-   * fingerprints of what they flag. Absent or null: they were not read, and the marks of the last comparison stand.
-   * "off": the repository's settings turn the comparison off, and no mark is kept.
+   * The default branch's race files, when they were read for this review: the commit they are of, what they flag and
+   * in which tests, and which tests ran. Absent or null: they were not read, and the marks of the last comparison
+   * stand. "off": the repository's settings turn the comparison off, and no mark is kept.
    */
-  baseline?: { sha: string; keys: ReadonlySet<string> } | "off" | null;
+  baseline?: ({ sha: string } & BaselineIndex) | "off" | null;
 }
 
 export interface Merged {
@@ -469,9 +488,14 @@ export interface Merged {
  * tests that are not: an unread file is not a run without the finding.
  * `o.ignore`: a signature the settings leave out is not folded in and is counted in `ignored`; a finding stored
  * before the setting named it is taken out of the state, with its number (which is not given out again).
- * `o.baseline`: every flagged finding is marked by whether the default branch's files flag it too, and the state
- * names the commit; without it the marks stay as they were, and a finding that is new to the state has none; with
- * "off" (the settings turn the comparison off) no finding keeps a mark.
+ * `o.baseline`: every flagged finding is marked by whether the default branch has it too, and the state names the
+ * commit. It has it when its race files flag the same kind and operation, unless a test flags it here in enough
+ * seeds to be reproducible that ran there without it: a known race that a pull request brings into a test that was
+ * clean on the default branch is the pull request's own (`now.beyond` names that test). Without a baseline the marks
+ * stay as they were, a finding that is new to the state has none, and a mark is dropped when the finding is now
+ * reproducible in a test it was not flagged in when it was compared: that cannot be checked against files that were
+ * not read. With "off" (the settings turn the comparison off) no finding keeps a mark. A flagged finding that had a
+ * mark and has none now is "new" at this commit: it was never listed as the pull request's own.
  * At most MAX_FINDINGS are kept. A finding that is flagged is never dropped: room for a new one is made only by the
  * oldest that are no longer flagged, and when the flagged ones alone are more than fit, the rest are not taken in
  * (no number is given, `next` does not move) and are counted in `unlisted`. Which ones are taken does not depend on
@@ -493,6 +517,18 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
   const repOf = (g: Live): boolean => g.hits[0]!.sig.reproducible;
   /** The default branch's race files, when they were read for this review. */
   const compared = o.baseline && o.baseline !== "off" ? o.baseline : null;
+  /**
+   * The test that makes a finding the pull request's own although the default branch's files flag its kind and
+   * operation: one that flags it here in enough seeds to be reproducible and ran there without it. Null when there
+   * is none (or nothing was compared, or the default branch does not flag it at all).
+   */
+  const beyond = (fp: string, g: Live | undefined): string | null => {
+    const there = compared?.flagged.get(fp);
+    if (!compared || !there || !g) return null;
+    return g.hits.find((h) => h.sig.reproducible && compared.ran.has(h.name) && !there.has(h.name))?.test.test ?? null;
+  };
+  /** Whether the default branch has it too, by the files read for this review. */
+  const there = (fp: string, g: Live | undefined): boolean => !!compared && compared.flagged.has(fp) && beyond(fp, g) === null;
 
   // a finding the settings have come to leave out since it was listed goes, and is counted with the others left out
   const gone = new Set(state.findings.filter((f) => leftOut(o.ignore, f.kind, f.op)).map((f) => f.fp));
@@ -501,12 +537,17 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
     state.inline = state.inline.filter((fp) => !gone.has(fp));
   }
 
+  // the findings the default branch had too, by the last comparison: one that stops being that is news here (below)
+  const wasThere = new Set(state.findings.filter((f) => f.base).map((f) => f.fp));
   // files of this same commit that were read before and not now still count for what they showed
   const unreadCount = !!o.partial && sameCommit;
   for (const f of state.findings) {
     const g = live.get(f.fp);
     if (g) {
       if (!(sameCommit && f.status === "new")) f.status = f.status === "gone" || f.status === "not-run" ? "new" : "still";
+      // Nothing is compared now. A mark stands for the tests it was made for: reproducible in a test the finding was
+      // not flagged in then, it may be new there, and that cannot be checked against files that were not read.
+      if (!compared && f.base && f.nt <= f.tests.length && g.hits.some((h) => h.sig.reproducible && !f.tests.includes(h.name))) f.base = false;
       const lead = g.hits[0]!;
       let names = unique(g.hits.map((h) => h.name));
       let first = { test: lead.name, rep: lead.sig.reproducible, seeds: lead.sig.seeds.slice(0, 20), of: lead.test.seeds.length };
@@ -535,9 +576,9 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
     unlisted.n = rest.length;
     unlisted.rep = rest.filter(([, g]) => repOf(g)).length;
     if (compared) {
-      const there = rest.filter(([fp]) => compared.keys.has(fp));
-      unlisted.base = there.length;
-      unlisted.baseRep = there.filter(([, g]) => repOf(g)).length;
+      const known = rest.filter(([fp, g]) => there(fp, g));
+      unlisted.base = known.length;
+      unlisted.baseRep = known.filter(([, g]) => repOf(g)).length;
     }
     fresh = fresh.slice(0, room);
   }
@@ -571,13 +612,18 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
   }
   state.evidence = headSha;
   if (compared) {
-    // a mark is of this comparison or of none: a finding that is not flagged now has none
-    for (const f of state.findings) f.base = open(f) && compared.keys.has(f.fp);
+    // A mark is of this comparison or of none: a finding that is not flagged now has none. (One that stays flagged
+    // because its files went unread this time is compared by its kind and operation alone.)
+    for (const f of state.findings) f.base = open(f) && (live.has(f.fp) ? there(f.fp, live.get(f.fp)) : compared.flagged.has(f.fp));
     state.base = compared.sha;
   } else if (o.baseline === "off") {
     for (const f of state.findings) f.base = false;
     state.base = null;
   }
+  // A finding that was the default branch's too and is the pull request's own now (it reached a test that was clean
+  // there, the default branch no longer flags it, or the comparison was turned off) was never listed as this pull
+  // request's: it is new, as a finding first flagged at this commit is.
+  for (const f of state.findings) if (open(f) && wasThere.has(f.fp) && !f.base) f.status = "new";
   const view = state.findings.map((f) => {
     const g = live.get(f.fp);
     if (!g) return { ...f, now: null };
@@ -585,7 +631,7 @@ export async function mergeFindings(prev: PrState, summary: RaceSummary | null, 
     // one line per test: the same test may flag a kind and operation under two signatures, and its first one leads
     const tests = new Map<string, LiveTest>();
     for (const h of g.hits) if (!tests.has(h.test.test)) tests.set(h.test.test, { test: h.test.test, seeds: h.sig.seeds.slice(0, 20), of: h.test.seeds.length, rep: h.sig.reproducible, evidence: h.sig.evidence });
-    return { ...f, now: { confidence: lead.sig.confidence, evidence: lead.sig.evidence, tests: [...tests.values()] } };
+    return { ...f, now: { confidence: lead.sig.confidence, evidence: lead.sig.evidence, tests: [...tests.values()], beyond: beyond(f.fp, g) } };
   });
   return { state, view, unlisted, ignored };
 }
@@ -813,7 +859,16 @@ function baselineLine(m: Pick<ReviewModel, "findings" | "unlisted" | "baseline" 
       : `No baseline was read: the default branch's race files could not be read this time, so ${alike}.`;
   }
   const part = b.incomplete ? " Not all of the default branch's race files could be read, so a finding that is there may be listed as new." : "";
-  if (!known) return `Compared with the default branch's race files at ${at}: ${flagged === 1 ? "this finding is not" : "none of these findings is"} flagged there.${part}`;
+  // flagged there too, and still the pull request's own: reproducible here in a test that ran there without it
+  const spread = m.findings
+    .filter((f) => open(f) && f.now?.beyond)
+    .slice(0, 3)
+    .map((f) => ` Finding ${f.n} is flagged there too, but here also in ${cell(f.now!.beyond!)}, a test that ran there without it: it is listed as this pull request's.`)
+    .join("");
+  if (!known) {
+    const none = spread ? "nothing here is listed as already there" : flagged === 1 ? "this finding is not flagged there" : "none of these findings is flagged there";
+    return `Compared with the default branch's race files at ${at}: ${none}.${spread}${part}`;
+  }
   const one = known === 1;
   const which = known === flagged ? (one ? "This finding is" : `All ${flagged} findings are`) : `${known} of the ${flagged} findings ${one ? "is" : "are"}`;
   const check =
@@ -822,7 +877,7 @@ function baselineLine(m: Pick<ReviewModel, "findings" | "unlisted" | "baseline" 
       : m.settings.check.failOnBaseline
         ? ` ${one ? "It counts" : "They count"} for ${code("check.fail_on")}, as ${code("check.fail_on_baseline")} asks.`
         : ` ${one ? "It does" : "They do"} not fail the check; ${code("check.fail_on_baseline: true")} makes ${one ? "it" : "them"} count.`;
-  return `${which} already on the default branch: its race files at ${at} flag the same kind and operation. ${one ? "It is" : "They are"} not counted as new and ${one ? "gets" : "get"} no inline comment.${check}${part}`;
+  return `${which} already on the default branch: its race files at ${at} flag the same kind and operation. ${one ? "It is" : "They are"} not counted as new and ${one ? "gets" : "get"} no inline comment.${check}${spread}${part}`;
 }
 
 /** The first line of a review: counts, in the summariser's words. */

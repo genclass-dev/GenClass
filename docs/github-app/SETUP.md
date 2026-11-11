@@ -279,9 +279,9 @@ The version that groups findings by kind and operation, compares them with the d
   the app's page say so from the same change. The Marketplace listing's transparency disclosures on GitHub were
   entered before it and have to be brought in line by hand
   ([the listing](../adoption/listings/github-marketplace.md)).
-- **Requests.** A review that finds something makes up to 20 more requests to GitHub for the comparison, usually 3
-  (the branch's runs, one run's artifacts, one download), at most once in two minutes per repository and isolate.
-  The hourly caps on reviews are unchanged.
+- **Requests.** A review that finds something makes up to 20 more requests to GitHub for the comparison, usually 4
+  (the branch's runs, one run's artifacts twice, one download), at most once in two minutes per repository and
+  isolate. The hourly caps on reviews are unchanged.
 - **Repositories get a baseline only when their workflow runs on the default branch.** The two workflow files in
   [`workflows/`](workflows/) do since this change (pushes to `main` or `master`); a repository that copied the earlier
   file sees "No baseline was read" in its reviews until it adds that trigger. This repository's own

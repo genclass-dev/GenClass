@@ -89,6 +89,7 @@ import { githubApp, type GithubAppConfig } from "./config.js";
 import { repoEntitled } from "./entitlement.js";
 import { baselineEvidence, ciEvidence, MAX_BASELINE_CALLS, noEvidence, productionEvidence } from "./evidence.js";
 import {
+  baselineIndex,
   CHECK_NAME,
   hasFindings,
   inlineComments,
@@ -112,10 +113,10 @@ import {
   renderUnsettled,
   REPLY_MARKER,
   sha256Hex,
-  signatureKeys,
   summaryOf,
   testLocations,
   unread,
+  type BaselineIndex,
   type BaselineView,
   type CheckOutput,
   type HourLimit,
@@ -398,39 +399,46 @@ const BASELINE_MIN_MS = 9_000;
 const BASELINE_RESERVE_MS = 6_000;
 
 /**
- * What the default branch's race files gave a review. read: the commit they are of and the fingerprints of what they
- * flag. none: GitHub lists no workflow run of the branch with race files that can be read. unread: nothing was asked,
- * or the asking was cut short (no branch name from GitHub, no time left in the job).
+ * What the default branch's race files gave a review. read: the commit they are of and their index, what they flag
+ * in which tests and which tests ran. none: GitHub lists no workflow run of the branch with race files that can be
+ * read. unread: nothing was asked, or the asking was cut short (no branch name from GitHub, no time left in the job).
  */
 interface Baseline {
   state: "read" | "none" | "unread";
   sha: string | null;
-  keys: ReadonlySet<string>;
+  index: BaselineIndex;
   files: number;
   /** Some of the branch's race files may have gone unread. */
   incomplete: boolean;
 }
 
-const NOT_READ: Baseline = { state: "unread", sha: null, keys: new Set(), files: 0, incomplete: false };
+const NO_INDEX: BaselineIndex = { flagged: new Map(), ran: new Set() };
+const NOT_READ: Baseline = { state: "unread", sha: null, index: NO_INDEX, files: 0, incomplete: false };
+/** Repositories whose default branch's index is kept at once: an index is at most a review's race files' test names. */
+const MAX_KEPT_BASELINES = 200;
 const baselineCache = new Map<number, { exp: number; key: string; value: Baseline }>();
 /** Drops what was kept of default branches' race files (tests). */
 export const resetBaselineCache = (): void => baselineCache.clear();
 
 /**
- * The race files of the default branch's most recent commit that has them, as fingerprints to compare a pull
- * request's findings with (src/github/evidence.ts baselineEvidence). Asked with a client of its own, so its requests
- * are not taken from the review's, and kept for two minutes per isolate: only the commit, the fingerprints and two
- * counts are kept, never a file. It never costs a review its result: with too little of the job's time left nothing
- * is asked, and no request starts once the time kept for the review's own writes is reached; what was read until
- * then is dropped, not used in part. When GitHub cannot be reached, or limits the installation, the pass fails like
- * any other read that failed and is run again. GitHub's own answer that there is nothing to list is "none".
+ * The race files of the default branch's most recent commit that has them, as an index to compare a pull request's
+ * findings with (src/github/evidence.ts baselineEvidence). Asked with a client of its own, so its requests are not
+ * taken from the review's, and kept for two minutes per isolate: only the commit, the index (fingerprints and test
+ * names) and two counts are kept, never a file. It never costs a review its result: with too little of the job's
+ * time left nothing is asked, and no request starts once the time kept for the review's own writes is reached; what
+ * was read until then is dropped, not used in part. When GitHub cannot be reached, or limits the installation, the
+ * pass fails like any other read that failed and is run again. GitHub's own answer that there is nothing to list is
+ * "none".
+ * `workflows`: the workflows whose runs uploaded the pull request's own race files; their runs of the default branch
+ * are asked first (what is kept is kept for those workflows).
  */
-async function baselineOf(ctx: Ctx, t: ReviewTarget, branch: string | null, settings: RepoSettings): Promise<Baseline> {
+async function baselineOf(ctx: Ctx, t: ReviewTarget, branch: string | null, settings: RepoSettings, workflows: ReadonlySet<number>): Promise<Baseline> {
   const { repo } = t;
   // the name goes into a request whole: one that could not name a branch is not asked about
   if (!branch || !BRANCH_RE.test(branch)) return NOT_READ;
   const nowMs = ctx.now().getTime();
-  const key = `${branch}\n${settings.artifact}`;
+  const prefer = [...workflows].sort((a, b) => a - b);
+  const key = `${branch}\n${settings.artifact}\n${prefer.join(",")}`;
   const hit = baselineCache.get(repo.id);
   if (hit && hit.exp > nowMs && hit.key === key) return hit.value;
   if (timeLeft(ctx) < BASELINE_MIN_MS) return NOT_READ;
@@ -443,20 +451,20 @@ async function baselineOf(ctx: Ctx, t: ReviewTarget, branch: string | null, sett
   const gh = installationClient(ctx.cfg, f, ctx.now, t.installationId, repo.id, MAX_BASELINE_CALLS + 4);
   let value: Baseline;
   try {
-    const found = await baselineEvidence(gh, repo.path, { branch, repoId: repo.id }, settings);
+    const found = await baselineEvidence(gh, repo.path, { branch, repoId: repo.id }, settings, { prefer });
     if (found.sha && found.ci) {
       const summary = summaryOf(found.ci.inputs, settings);
-      value = { state: "read", sha: found.sha, keys: await signatureKeys(summary), files: summary?.files ?? 0, incomplete: found.incomplete };
-    } else value = { state: "none", sha: null, keys: new Set(), files: 0, incomplete: found.incomplete };
+      value = { state: "read", sha: found.sha, index: await baselineIndex(summary), files: summary?.files ?? 0, incomplete: found.incomplete };
+    } else value = { state: "none", sha: null, index: NO_INDEX, files: 0, incomplete: found.incomplete };
   } catch (e) {
     if (short) return NOT_READ;
     if (retryable(e) && !(e instanceof GithubError && e.kind === "budget")) throw e;
     // GitHub's answer that there is nothing to list here (Actions is off, the branch is gone), or more requests than a baseline may cost
-    value = { state: "none", sha: null, keys: new Set(), files: 0, incomplete: true };
+    value = { state: "none", sha: null, index: NO_INDEX, files: 0, incomplete: true };
   }
   // cut short by the clock: a part is not a baseline, and is not kept
   if (short) return NOT_READ;
-  if (baselineCache.size > 2000) baselineCache.clear();
+  if (baselineCache.size >= MAX_KEPT_BASELINES) baselineCache.clear();
   baselineCache.set(repo.id, { exp: nowMs + BASELINE_TTL_MS, key, value });
   return value;
 }
@@ -856,7 +864,9 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
   if (claim === "share") return stop(OVER_PUSH, "hour-push");
   if (claim === "outside") return stop(OVER_OUTSIDE, "hour-outside");
 
-  const ci = await ciEvidence(gh, repo.path, pull.headSha, settings, { firstRun: o.run });
+  // (the workflows whose runs gave the commit's race files: where the default branch's are looked for first)
+  const workflows = new Set<number>();
+  const ci = await ciEvidence(gh, repo.path, pull.headSha, settings, { firstRun: o.run, workflows });
   // A pause that arrived while the commit's files were read holds from here on: nothing more is written for this
   // pass. Someone with write access lifts a pause that was there when their pass began; one set since stops it too.
   const pausedMeanwhile = async (): Promise<boolean> => (o.asked !== true || !leased.paused) && !!(await prRow(db, repo.id, number))?.paused;
@@ -880,7 +890,7 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
   // The default branch's race files are read only when this commit's files flag something that can be compared with
   // them (what the settings leave out is not compared): a pull request with nothing flagged costs no request for them.
   const compare = !nothingRead && hasFindings(summary, settings.ignore);
-  const baseline = compare && settings.baseline ? await baselineOf(ctx, t, pull.defaultBranch ?? repo.defaultBranch, settings) : null;
+  const baseline = compare && settings.baseline ? await baselineOf(ctx, t, pull.defaultBranch ?? repo.defaultBranch, settings, workflows) : null;
   // (the default branch's files took time to read too: a pause set meanwhile holds, as after the commit's own)
   if (baseline && (await pausedMeanwhile())) return stop("paused on this pull request", "paused");
   const merged = await mergeFindings(state, nothingRead ? null : summary, pull.headSha, {
@@ -888,7 +898,7 @@ async function reviewOnce(ctx: Ctx, t: ReviewTarget, inst: Installation, stored:
     ignore: settings.ignore,
     // read now: every flagged finding is marked from it. Turned off in the settings: no mark is kept. Else (nothing
     // to compare, or nothing could be read): the marks of the last comparison stand.
-    baseline: !settings.baseline ? "off" : baseline?.state === "read" && baseline.sha ? { sha: baseline.sha, keys: baseline.keys } : null,
+    baseline: !settings.baseline ? "off" : baseline?.state === "read" && baseline.sha ? { sha: baseline.sha, ...baseline.index } : null,
   });
   const next = merged.state;
   // What the review tells of the comparison: the one just made; that the settings turn it off; or, when none was

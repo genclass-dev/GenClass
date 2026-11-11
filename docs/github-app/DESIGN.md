@@ -139,13 +139,27 @@ branch": listed, with the commit named, not counted as new, not commented inline
 default, for a failing check. It still keeps a check from being green: something is flagged.
 - *The claim is small.* Two sets of race files flag the same kind and operation. Nothing says the pull request did
   not cause it, or that it is harmless; the commit is named so that the reader can look.
+- *Not when a clean test turns.* Kind and operation alone would hide the one change that matters most: a pull request
+  that brings a known race into a test that passed without it on the default branch (the debounce breaks, and the
+  plain checkout test now double-submits like the test that double-clicks on purpose). So a finding is not "already
+  there" when a test flags it here in enough seeds to be reproducible and that test ran on the default branch without
+  it; the review names the test, and the finding counts for the comment and the check as the pull request's own. One
+  seed in such a test is not enough (a race that shows by chance wanders between tests), and a test the default
+  branch did not run is not a test that was clean there. A mark that stands without a comparison (below) is dropped
+  the same way when the finding becomes reproducible in a test it was not flagged in when it was compared. A finding
+  that stops being the default branch's (this way, or because the default branch no longer flags it) is "New" at
+  that commit: nobody was told it was the pull request's.
 - *Which runs.* Only runs a push to the default branch or its schedule started, filed under the branch's name, in
   the repository itself. GitHub's `branch` filter is not trusted for that: a fork's branch can be called `main`, and
   a `pull_request_target` run carries the base branch's name and commit while testing a pull request's code. A
   dispatched run is left out too, because its inputs can point it at any code.
-- *Which commit.* The most recent of the last 100 finished runs' commits that gives a race file that validates, of
-  at most four. A commit whose artifact has expired is not a commit without findings: an older one may stand in,
-  and the review says the comparison may be incomplete.
+- *Which commit.* The most recent one, among the branch's last 100 finished runs, that gives a race file that
+  validates. Most commits of a default branch have none (a docs-only merge, a workflow with path filters: on this
+  repository the race files were five commits back the day this was written), so counting commits back does not find
+  it. The looking follows workflows instead: runs are asked for their artifacts by recency, at most ten, those of the
+  workflow that uploaded the pull request's own race files first, and a workflow whose two most recent runs showed
+  none is passed over. A commit whose artifact has expired is not a commit without findings: an older one may stand
+  in, and the review says the comparison may be incomplete.
 - *Same reader.* The commit's files go through `ciEvidence` itself: the same caps, the same validator, the same
   choice between two artifacts of one name. A baseline is as untrusted as a pull request's artifact.
 - *Read only to compare.* Not at all when nothing is flagged, so a clean pull request costs nothing more. A client
@@ -155,8 +169,9 @@ default, for a failing check. It still keeps a check from being green: something
 - *What stands.* The marks are stored per finding with the commit they came from. When the default branch cannot be
   read later (the artifact expired, no time), they stand and the review says which commit they are of: the same
   rule as for a commit's own result that cannot be read again.
-- *Kept two minutes, in memory.* A push brings several reviews of one pull request within minutes; the commit and
-  the fingerprints are remembered per isolate that long, and dropped when a run of the default branch ends.
+- *Kept two minutes, in memory.* A push brings several reviews of one pull request within minutes; the commit, the
+  fingerprints and the names of the tests that flagged and that ran are remembered per isolate that long, for at
+  most 200 repositories, and dropped when a run of the default branch ends.
 - *Not the base branch.* A pull request into a release branch is compared with the default branch too. Its own base
   would be the better comparison there; one rule for every pull request was chosen first.
 

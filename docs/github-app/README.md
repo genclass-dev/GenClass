@@ -158,15 +158,18 @@ Reply `@genclass-dev replay 1` for the steps to reproduce a finding, or `@gencla
   others) with its confidence.
 - **Reproducible** means flagged in `min_seeds` or more seeds of the same test (2 by default). A signature seen in
   fewer seeds may depend on that seed's timing: run more seeds before acting on it.
-- **Status**, from push to push: *New* (seen for the first time at this commit, or flagged again after a run in which
-  it was not), *Still flagged*, *Not flagged now* (every test it was flagged in ran at this commit without it), *Test
-  not in this run* (one of those tests did not run, so nothing is said about absence).
+- **Status**, from push to push: *New* (seen for the first time at this commit, flagged again after a run in which
+  it was not, or the pull request's own from this commit on after it was "already on the default branch"), *Still
+  flagged*, *Not flagged now* (every test it was flagged in ran at this commit without it), *Test not in this run*
+  (one of those tests did not run, so nothing is said about absence).
 - **Already on the default branch** is the status of a finding that your default branch's race files flag too: the
   same kind and operation, in any test, at the commit the review names ([the baseline](#baseline)). It is listed
   after the pull request's own findings, is not counted as new, gets no inline comment, and does not by itself start
   a comment: a pull request whose only findings are already on the default branch gets the check, which lists them,
   and no comment (`comment: always` writes one). It says that two sets of race files show the same thing, not what
-  the pull request caused.
+  the pull request caused. One case is not "already there": a test that ran on the default branch without the
+  finding flags it here in enough seeds to be reproducible. A known race that reaches a test it did not reach before
+  is listed as the pull request's own, and the review names the test.
 - **"Not flagged now" is not "fixed".** The app never says fixed. A replay that reproduced the finding before your
   change and does not after it is the evidence of a fix, and that happens on your machine or in your CI
   ([Fix with a coding agent](#fix)).
@@ -257,9 +260,14 @@ being green, and `check.fail_on_baseline: true` makes it count like any other.
   a review is what it was before there were baselines: every finding is listed as the pull request's, and the comment
   and the check say "No baseline was read". When a comparison was made earlier and cannot be made again, its result
   stands and the review says which commit it was with; a finding first flagged since is listed like any other.
+- **Which commit.** Most commits of a default branch have no race files: a docs-only merge runs no end-to-end job,
+  and a workflow with path filters does not run at all. So the app looks run by run, the most recent first, starting
+  with the workflow that uploaded the pull request's own race files, and takes the first commit whose race files it
+  can read. A workflow whose two most recent runs uploaded none is not asked further back.
 - **What it costs.** Nothing for a pull request with nothing flagged: the default branch is only read to compare.
-  Otherwise one list of the branch's last finished runs and the artifacts of at most four commits, under the same
-  limits as a pull request's own ([Limits](#limits)). What comes of it is remembered for two minutes.
+  Otherwise one list of the branch's last finished runs, at most ten of them asked for their artifacts, and the race
+  files of one commit under the same limits as a pull request's own ([Limits](#limits)). What comes of it is
+  remembered for two minutes.
 - **It compares with the default branch**, also for a pull request into another branch.
 - `baseline: false` turns the comparison off: nothing is read of the default branch, and reviews say nothing of it.
 
@@ -287,6 +295,10 @@ ignore:
   never dropped silently: the comment and the check say how many findings were left out at that commit, and the race
   report in the fold still shows every one. A finding that was listed before an entry named it leaves the table at
   the pull request's next review, with its number.
+- An entry names a kind and an operation, not a test: the signature is left out wherever it shows, also in a test
+  where it would be news. For a race that one test shows on purpose (a page built to reproduce it), leaving it
+  listed is the better choice: with a [baseline](#baseline) it is "already on the default branch", and it becomes
+  the pull request's own again when another test starts to show it.
 - Like every setting it is read from the default branch, so a pull request cannot leave anything out for itself.
 - At most 30 entries. An entry without a kind and an operation is not used, and the check says so.
 
@@ -401,9 +413,9 @@ workflow runs, check runs (its own "Re-run"), and installs and uninstalls.
   days after it closes, the row is deleted.
 - Webhook delivery ids, for a week, so that one delivery is handled once.
 - Never: source code, diffs, file contents, race files or tokens. An artifact is read in memory and dropped, the
-  default branch's like a pull request's: of the default branch's race files the app remembers the commit and the
-  fingerprints of what they flag, in memory, for two minutes, and stores the commit and one mark per finding as
-  above. The installation token lives in memory for under an hour; your GitHub token from Connect is used once.
+  default branch's like a pull request's: of the default branch's race files the app remembers the commit, the
+  fingerprints of what they flag and the names of their tests, in memory, for two minutes, and stores the commit and
+  one mark per finding as above. The installation token lives in memory for under an hour; your GitHub token from Connect is used once.
 
 Uninstalling the app, or taking a repository out of it, deletes what was kept for it at once.
 [PRIVACY.md](../../PRIVACY.md#the-github-app) is the policy.
@@ -438,7 +450,7 @@ Uninstalling the app, or taking a repository out of it, deletes what was kept fo
 | Workflow runs per commit | The first 100 GitHub lists are looked at. The artifacts of at most 30 finished runs are asked for: the most recently finished first, and one run of every workflow before a second run of any. The workflow of the run whose end started the review is asked first, also when that run is not among the 100. Of two runs of one workflow that uploaded the same artifact name, the one that finished last is read |
 | Findings remembered per pull request | 100. A finding that is flagged keeps its number. With more than 100 flagged at once, the rest are counted in the comment and the check ("N more findings flagged at this commit are not listed") and count for `check.fail_on` |
 | Tests named per finding | 5 kept, the first 3 in its row; the rest are counted. The race report in the fold lists every test |
-| The baseline | One list of the default branch's last 100 finished workflow runs. The 4 most recent commits among them that a push or a schedule ran are tried, and the first with race files that can be read is used. At most 20 requests, and for the commit that is read the same limits as above on artifacts, race files and signatures. Kept in memory for 2 minutes. Not read in the last 9 seconds of a webhook's 20 |
+| The baseline | One list of the default branch's last 100 finished workflow runs. Of those a push or a schedule started, at most 10 are asked for their artifacts, the most recent first and the workflow of the pull request's own race files before the others; a workflow is passed over after two of its runs showed none. The first commit with race files that can be read is used. At most 20 requests, and for the commit that is read the same limits as above on artifacts, race files and signatures. Kept in memory for 2 minutes. Not read in the last 9 seconds of a webhook's 20 |
 | `ignore` | 30 entries; a kind of at most 80 characters and an operation of at most 160, with at most one `*` |
 | Comment and check size | 60,000 characters; a longer report is shortened and says so |
 | Settings file | 16 KB |

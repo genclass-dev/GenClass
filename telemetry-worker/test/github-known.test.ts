@@ -10,8 +10,9 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import { installationClient } from "../src/github/api.js";
 import { githubApp } from "../src/github/config.js";
-import { baselineEvidence, MAX_ARTIFACTS, MAX_BASELINE_CALLS, MAX_BASELINE_COMMITS, type CiEvidence } from "../src/github/evidence.js";
+import { BASELINE_WORKFLOW_MISSES, baselineEvidence, MAX_BASELINE_CALLS, MAX_BASELINE_PROBES, type CiEvidence } from "../src/github/evidence.js";
 import {
+  baselineIndex,
   emptyState,
   fingerprint,
   hasFindings,
@@ -30,7 +31,6 @@ import {
   renderIssue,
   renderReplay,
   renderSummary,
-  signatureKeys,
   summaryOf,
   testLocations,
   type BaselineView,
@@ -103,7 +103,7 @@ async function review(inputs: Input[], o: ReviewOf = {}) {
   const sha = o.sha ?? SHA_A;
   const summary = summaryOf(inputs, settings);
   const options: MergeOptions = { partial: o.partial, ignore: settings.ignore };
-  if (o.base) options.baseline = { sha: o.base.sha, keys: await signatureKeys(summaryOf(o.base.inputs, DEFAULT_SETTINGS)) };
+  if (o.base) options.baseline = { sha: o.base.sha, ...(await baselineIndex(summaryOf(o.base.inputs, DEFAULT_SETTINGS))) };
   const merged = await mergeFindings(o.prev ?? emptyState(), summary, sha, options);
   const baseline: BaselineView | undefined = o.base ? { state: "read", sha: o.base.sha, files: o.base.inputs.length, incomplete: !!o.base.incomplete } : o.view;
   const m: ReviewModel = { repo: "acme/shop", number: 12, headSha: sha, mention: "genclass-dev", ci: ci(inputs), summary, findings: merged.view, production: null, settings, warnings: [], links: LINKS, partial: o.partial, unlisted: merged.unlisted, baseline, ignored: merged.ignored };
@@ -445,15 +445,20 @@ describe("github app: what the default branch has too (src/github/review.ts head
     expect(rows(body)[1]).toContain("| 1 | Already on the default branch |");
     expect(body).toContain("The default branch's race files were not read this time: what was compared with them at `ddddddd` stands, and a finding first flagged since then is listed like any other.");
     expect(body).not.toContain("race files of the default branch at");
-    // a later commit of the default branch no longer flags it: it is this pull request's again
+    // A later commit of the default branch no longer flags it. It is this pull request's own now, and it was never
+    // listed as that: it is new, as a finding first flagged at this commit would be
     const third = await review(head2, { prev: second.state, sha: SHA_C, base: { sha: BASE2, inputs: [race("legacy/list.spec.ts > lists", 1, [STALE])] } });
     expect(third.state.findings.map((f) => [f.n, f.status, f.base])).toEqual([
-      [1, "still", false],
+      [1, "new", false],
       [2, "still", false],
     ]);
     expect(third.state.base).toBe(BASE2);
     expect(renderSummary(third.m)).toContain("Compared with the default branch's race files at `eeeeeee`: none of these findings is flagged there.");
-    expect(rows(renderSummary(third.m)!).every((l) => l.includes("| Still flagged |"))).toBe(true);
+    expect(rows(renderSummary(third.m)!).map((l) => l.split(" | ").slice(0, 2).join(" | "))).toEqual(["| 1 | New", "| 2 | Still flagged"]);
+    expect(renderSummary(third.m)).toContain("**2 findings** in this pull request's tests at `ccccccc` · 2 reproducible · 1 new · 2 tests read");
+    // read again at the same commit, nothing changes
+    const again = await review(head2, { prev: third.state, sha: SHA_C, base: { sha: BASE2, inputs: [race("legacy/list.spec.ts > lists", 1, [STALE])] } });
+    expect(again.state).toEqual(third.state);
     // a finding that is not flagged now carries no mark from a comparison it was not part of
     const gone = await review(seeds(T_CHECKOUT, 2, []), { prev: first.state, sha: SHA_B, base: { sha: BASE2, inputs: ON_BASE } });
     expect(gone.state.findings.map((f) => [f.status, f.base])).toEqual([["gone", false]]);
@@ -467,6 +472,76 @@ describe("github app: what the default branch has too (src/github/review.ts head
     // while a commit has no race files yet, nothing is compared and everything stays as it was
     const waiting = await mergeFindings(first.state, null, SHA_B, { baseline: "off" });
     expect(waiting.state).toEqual(first.state);
+  });
+
+  it("pull request 180's two \"New\" rows, with a default branch whose race files show the same witness in the same tests: one row, already there", async () => {
+    const files = [...seeds(T_CHROMIUM, 2, [OVERWROTE]), ...seeds(T_SEARCH, 5, [OVERWROTE]), ...seeds("search.spec.ts > search > fixed page: results of the last query", 5, [])];
+    const { m, state } = await review(files, { base: { sha: `d49a0b3${"0".repeat(33)}`, inputs: files } });
+    const body = renderSummary(m)!;
+    expect(rows(body)).toEqual([
+      "| 1 | Already on the default branch | Witness, overwrote-newer · `GET /api/search` | 2 tests: search.spec.ts > search > buggy page: results of the last query; \\[chromium\\] search.spec.ts > search > buggy page: results of the last query | 5 of 5 seeds in the first, **reproducible** |",
+    ]);
+    expect(body).toContain("This finding is already on the default branch: its race files at `d49a0b3` flag the same kind and operation. It is not counted as new and gets no inline comment.");
+    expect(body).toContain("**1 finding** in this pull request's tests at `aaaaaaa` · 1 reproducible · 1 already on the default branch · 3 tests read");
+    expect(state.findings.map((f) => [f.n, f.base])).toEqual([[1, true]]);
+    // and were the fixed page to show it here in every seed, that would be this pull request's, whatever the buggy page does
+    const broken = [...files.slice(0, 7), ...seeds("search.spec.ts > search > fixed page: results of the last query", 5, [OVERWROTE])];
+    const regressed = await review(broken, { base: { sha: `d49a0b3${"0".repeat(33)}`, inputs: files } });
+    expect(regressed.state.findings.map((f) => [f.n, f.base, f.nt])).toEqual([[1, false, 3]]);
+    expect(rows(renderSummary(regressed.m)!)[0]).toContain("| 1 | New | Witness, overwrote-newer · `GET /api/search` | 3 tests: ");
+    expect(renderSummary(regressed.m)).toContain("Finding 1 is flagged there too, but here also in search.spec.ts > search > fixed page: results of the last query, a test that ran there without it: it is listed as this pull request's.");
+  });
+
+  it("a known race that the pull request brings into a test that ran clean on the default branch is the pull request's own", async () => {
+    const A = "a.spec.ts > one";
+    const B = "b.spec.ts > two";
+    const C = "c.spec.ts > three";
+    // on the default branch: A flags the double submit in both seeds, and B runs without it
+    const base = { sha: BASE1, inputs: [...seeds(A, 2, [DUPLICATE]), ...seeds(B, 2, [])] };
+    // here B flags it in both seeds too: reproducible in a test that was clean there
+    const spread = await review([...seeds(A, 2, [DUPLICATE]), ...seeds(B, 2, [DUPLICATE])], { base, settings: failing("reproducible") });
+    expect(spread.state.findings.map((f) => [f.n, f.status, f.base, f.tests])).toEqual([[1, "new", false, [A, B]]]);
+    expect(spread.m.findings[0]!.now!.beyond).toBe(B);
+    const body = renderSummary(spread.m)!;
+    expect(rows(body)).toEqual(["| 1 | New | Duplicate submit · `POST /api/orders` | 2 tests: a.spec.ts > one; b.spec.ts > two | 2 of 2 seeds in the first, **reproducible** |"]);
+    expect(body).toContain("**1 finding** in this pull request's tests at `aaaaaaa` · 1 reproducible · 2 tests read");
+    expect(body).toContain("Compared with the default branch's race files at `ddddddd`: nothing here is listed as already there. Finding 1 is flagged there too, but here also in b.spec.ts > two, a test that ran there without it: it is listed as this pull request's.");
+    // and it fails a check that fails on reproducible findings: the default branch's own would not
+    expect(renderCheck(spread.m)).toMatchObject({ title: "1 finding, 1 reproducible", conclusion: "failure" });
+    // in that test alone, with A clean here: the same
+    const moved = await review([...seeds(A, 2, []), ...seeds(B, 2, [DUPLICATE])], { base });
+    expect(moved.state.findings.map((f) => [f.base, f.tests])).toEqual([[false, [B]]]);
+    // one seed in a test that was clean there is not enough to tell it from the default branch's own
+    const once = await review([...seeds(A, 2, [DUPLICATE]), race(B, 1, [DUPLICATE]), race(B, 2, [])], { base, settings: failing("reproducible") });
+    expect(once.state.findings.map((f) => [f.base, f.tests])).toEqual([[true, [A, B]]]);
+    expect(once.m.findings[0]!.now!.beyond).toBeNull();
+    expect(renderCheck(once.m).conclusion).toBe("neutral");
+    // a test the default branch did not run (a new test) is not a test that was clean there
+    const added = await review([...seeds(A, 2, [DUPLICATE]), ...seeds(C, 2, [DUPLICATE])], { base });
+    expect(added.state.findings.map((f) => [f.base, f.tests])).toEqual([[true, [A, C]]]);
+    // beside one that the default branch has: each is told for itself
+    const two = await review([...seeds(A, 2, [DUPLICATE, STALE]), ...seeds(B, 2, [DUPLICATE])], { base: { sha: BASE1, inputs: [...seeds(A, 2, [DUPLICATE, STALE]), ...seeds(B, 2, [])] } });
+    expect(two.state.findings.map((f) => [f.op, f.base])).toEqual([
+      ["POST /api/orders", false],
+      ["GET /api/items", true],
+    ]);
+    expect(renderSummary(two.m)).toContain("1 of the 2 findings is already on the default branch: its race files at `ddddddd` flag the same kind and operation. It is not counted as new and gets no inline comment. Finding 1 is flagged there too, but here also in b.spec.ts > two, a test that ran there without it: it is listed as this pull request's.");
+
+    // A mark that stands without a comparison stands for the tests it was made for
+    const first = await review(seeds(A, 2, [DUPLICATE]), { base });
+    expect(first.state.findings[0]!.base).toBe(true);
+    const unread: BaselineView = { state: "unread", sha: BASE1, files: 0, incomplete: false };
+    const same = await review(seeds(A, 2, [DUPLICATE]), { prev: first.state, sha: SHA_B, view: unread });
+    expect(same.state.findings[0]!.base).toBe(true);
+    const single = await review([...seeds(A, 2, [DUPLICATE]), race(B, 1, [DUPLICATE]), race(B, 2, [])], { prev: first.state, sha: SHA_B, view: unread });
+    expect(single.state.findings[0]!.base).toBe(true);
+    // reproducible in another test, and nothing to check that against: the mark goes, and the finding is news here
+    const wider = await review([...seeds(A, 2, [DUPLICATE]), ...seeds(B, 2, [DUPLICATE])], { prev: first.state, sha: SHA_B, view: unread });
+    expect(wider.state.findings.map((f) => [f.status, f.base])).toEqual([["new", false]]);
+    expect(rows(renderSummary(wider.m)!)[0]).toContain("| 1 | New |");
+    // the same when the comparison is made and shows the test clean on the default branch: new at the commit that brought it there
+    const later = await review([...seeds(A, 2, [DUPLICATE]), ...seeds(B, 2, [DUPLICATE])], { prev: first.state, sha: SHA_B, base });
+    expect(later.state.findings.map((f) => [f.status, f.base])).toEqual([["new", false]]);
   });
 
   it("no baseline: the review is what it was before, and says that none was read", async () => {
@@ -700,10 +775,10 @@ const minute = (m: number): string => `2026-10-13T11:${String(m).padStart(2, "0"
 const json = (j: unknown): Response => new Response(JSON.stringify(j), { status: 200, headers: { "content-type": "application/json" } });
 
 /** The read of the default branch as a review makes it: an installation's client of its own on the fake GitHub. */
-function baseline(gh: Fake, settings: RepoSettings = DEFAULT_SETTINGS) {
+function baseline(gh: Fake, settings: RepoSettings = DEFAULT_SETTINGS, prefer: number[] = []) {
   const { env } = githubSetup();
   const client = installationClient(githubApp(env)!, gh.fetch, now, INSTALLATION, REPO.id, MAX_BASELINE_CALLS + 4);
-  return { client, read: () => baselineEvidence(client, "/repos/acme/shop", { branch: "main", repoId: REPO.id }, settings) };
+  return { client, read: () => baselineEvidence(client, "/repos/acme/shop", { branch: "main", repoId: REPO.id }, settings, { prefer }) };
 }
 /** The runs whose artifacts were asked for, in the order they were asked. */
 const asked = (gh: Fake): number[] =>
@@ -727,18 +802,22 @@ describe("github app: the race files of the default branch (src/github/evidence.
     expect(b.incomplete).toBe(false);
     expect(b.ci!.inputs.map((i) => i.name)).toEqual(["genclass-races/s.json"]);
     expect(b.ci!.artifacts).toEqual([{ name: "genclass-races", runId: mid.id, files: 1 }]);
-    // one list of the branch's finished runs, then the commits from the most recent: no commit's runs are listed again
+    // one list of the branch's finished runs, and no commit's runs are listed again. Runs are asked for their
+    // artifacts from the most recent: the lint run has none with the name, the next run has, and its commit is read
+    // (which asks that run once more, by the reader a pull request's files go through)
     const lists = gh.apiCalls().filter((c) => c.path === "/repos/acme/shop/actions/runs");
     expect(lists).toHaveLength(1);
     expect(Object.fromEntries(lists[0]!.query)).toEqual({ branch: "main", status: "completed", per_page: "100", exclude_pull_requests: "true" });
-    expect(asked(gh)).toEqual([lint.id, mid.id]);
+    expect(asked(gh)).toEqual([lint.id, mid.id, mid.id]);
     expect(asked(gh)).not.toContain(old.id);
     // the artifact came from storage without a credential, as a pull request's does
     expect(gh.storage).toHaveLength(1);
     expect(gh.storage[0]!.headers.authorization).toBeUndefined();
-    expect(client.calls()).toBe(4);
-    // the fingerprints a review compares by
-    expect([...(await signatureKeys(summaryOf(b.ci!.inputs, DEFAULT_SETTINGS)))]).toEqual([await fingerprint("delivery:stale", "GET /api/search")]);
+    expect(client.calls()).toBe(5);
+    // what a review keeps of it to compare by: per fingerprint the tests that flag it, and the tests that ran
+    const index = await baselineIndex(summaryOf(b.ci!.inputs, DEFAULT_SETTINGS));
+    expect([...index.flagged].map(([fp, tests]) => [fp, [...tests]])).toEqual([[await fingerprint("delivery:stale", "GET /api/search"), ["search.spec.ts > search > shows the results of the last query"]]]);
+    expect([...index.ran]).toEqual(["search.spec.ts > search > shows the results of the last query"]);
   });
 
   it("only the branch's own runs count: a pull request's run filed under its name, a fork's, a dispatched one and another branch's are not a baseline", async () => {
@@ -768,8 +847,9 @@ describe("github app: the race files of the default branch (src/github/evidence.
     );
     const b = await baseline(gh).read();
     expect(b.sha).toBe(BASE1);
-    // of two runs of one workflow on the commit, the one that finished last is read, as for a pull request
-    expect(asked(gh)).toEqual([9, 10]);
+    // the most recent of them shows the artifact, and the commit is read: of two runs of one workflow on it, the one
+    // that finished last, as for a pull request
+    expect(asked(gh)).toEqual([9, 9, 10]);
     expect(b.ci!.artifacts).toEqual([{ name: "genclass-races", runId: 9, files: 4 }]);
     // with nothing but the others there is no baseline, and nothing of theirs is asked for
     const none = fakeGithub({ answer: (c) => (c.method === "GET" && c.path === "/repos/acme/shop/actions/runs" ? json({ workflow_runs: rows.slice(0, 8) }) : undefined) });
@@ -796,22 +876,67 @@ describe("github app: the race files of the default branch (src/github/evidence.
     expect((await baseline(named, { ...DEFAULT_SETTINGS, artifact: "races" }).read()).sha).toBe(BASE1);
   });
 
-  it("at most four commits are tried, and the whole costs at most twenty requests", async () => {
+  it("the looking follows workflows, not commits: docs-only merges on top do not hide the commit that has race files", async () => {
+    // as on genclass-dev/GenClass the day this was written: the four most recent commits ran CI and nothing else
+    // (the end-to-end workflow has path filters), and the race files are on the fifth
+    const shape = () => {
+      const gh = fakeGithub();
+      const older = gh.addBaseRun("9".repeat(40), undefined, { created_at: minute(1), workflow_id: 2, name: "e2e" });
+      const ciE = gh.addBaseRun(BASE1, OTHER(), { created_at: minute(10), updated_at: minute(11), workflow_id: 1, name: "CI" });
+      const e2e = gh.addBaseRun(BASE1, undefined, { created_at: minute(10), updated_at: minute(13), workflow_id: 2, name: "e2e" });
+      const ci = [4, 3, 2, 1].map((i) => gh.addBaseRun(`${i}`.repeat(40), OTHER(), { created_at: minute(20 + i), workflow_id: 1, name: "CI" }));
+      return { gh, older, ciE, e2e, ci };
+    };
+    const a = shape();
+    const first = baseline(a.gh);
+    expect(await first.read()).toMatchObject({ sha: BASE1, incomplete: false });
+    // CI's two most recent runs show no race files, and CI is passed over from there on: the end-to-end run is next
+    expect(asked(a.gh).slice(0, 3)).toEqual([a.ci[0]!.id, a.ci[1]!.id, a.e2e.id]);
+    expect(asked(a.gh)).not.toContain(a.ci[2]!.id);
+    expect(asked(a.gh)).not.toContain(a.ci[3]!.id);
+    expect(asked(a.gh)).not.toContain(a.older.id);
+    expect(first.client.calls()).toBeLessThanOrEqual(8);
+    // told which workflow uploaded the pull request's own race files, it asks that workflow's most recent run first
+    const b = shape();
+    const hinted = baseline(b.gh, DEFAULT_SETTINGS, [2]);
+    expect(await hinted.read()).toMatchObject({ sha: BASE1, incomplete: false });
+    expect(asked(b.gh)).toEqual([b.e2e.id, b.e2e.id, b.ciE.id]);
+    // the list, the run that names the commit, that commit's two runs, one download
+    expect(hinted.client.calls()).toBe(5);
+    // a workflow that is not on the default branch at all changes nothing
+    const c = shape();
+    expect(await baseline(c.gh, DEFAULT_SETTINGS, [77]).read()).toMatchObject({ sha: BASE1 });
+  });
+
+  it("a workflow is passed over after two runs without race files; at most ten runs are asked, and the whole costs at most twenty requests", async () => {
+    // one workflow, six commits, and only the oldest run uploaded race files: after two misses it is not asked again
     const quiet = fakeGithub();
     for (let i = 0; i < 6; i++) quiet.addBaseRun(`${i}`.repeat(40), i === 0 ? undefined : OTHER(), { created_at: minute(i) });
-    // the four most recent commits have no race files; the commit that has them is the sixth
     expect(await baseline(quiet).read()).toEqual({ sha: null, ci: null, incomplete: false });
-    expect(asked(quiet)).toHaveLength(MAX_BASELINE_COMMITS);
-    // a commit with more workflows than there are requests for: what is left goes unasked, and the read says so
+    expect(asked(quiet)).toHaveLength(BASELINE_WORKFLOW_MISSES);
+    // thirty workflows, none with race files, then one that has them: the looking stops at its limit and says so
     const busy = fakeGithub();
-    for (let w = 1; w <= 30; w++) busy.addBaseRun(BASE2, OTHER(), { created_at: minute(9), workflow_id: w, name: `w${w}` });
-    busy.addBaseRun(BASE1, undefined, { created_at: minute(1) });
+    for (let w = 1; w <= 30; w++) busy.addBaseRun(BASE2, OTHER(), { created_at: minute(40 - w), workflow_id: w, name: `w${w}` });
+    busy.addBaseRun(BASE1, undefined, { created_at: minute(1), workflow_id: 99 });
     const { read, client } = baseline(busy);
-    const b = await read();
-    expect(b).toEqual({ sha: null, ci: null, incomplete: true });
-    expect(client.calls()).toBeLessThanOrEqual(MAX_BASELINE_CALLS);
-    // requests were kept back for the downloads a commit's artifacts would have needed
-    expect(asked(busy)).toHaveLength(MAX_BASELINE_CALLS - 1 - MAX_ARTIFACTS);
+    expect(await read()).toEqual({ sha: null, ci: null, incomplete: true });
+    expect(asked(busy)).toHaveLength(MAX_BASELINE_PROBES);
+    expect(client.calls()).toBe(1 + MAX_BASELINE_PROBES);
+    // a commit with more runs than there are requests left for: what can be asked is, and the cap holds
+    const wide = fakeGithub();
+    for (let w = 1; w <= 25; w++) wide.addBaseRun(BASE1, w === 1 ? { "genclass-races": racesZip() } : OTHER(), { created_at: minute(9), updated_at: minute(40 - w), workflow_id: w, name: `w${w}` });
+    const all = baseline(wide, DEFAULT_SETTINGS, [1]);
+    const found = await all.read();
+    expect(found.sha).toBe(BASE1);
+    expect(all.client.calls()).toBeLessThanOrEqual(MAX_BASELINE_CALLS);
+    // not every run of the commit could be asked, so race files may have gone unread
+    expect(found.incomplete).toBe(true);
+    // runs in which no job ran are not asked while the commit is looked for
+    const skipped = fakeGithub();
+    skipped.addBaseRun(BASE2, undefined, { created_at: minute(9), conclusion: "skipped" });
+    const real = skipped.addBaseRun(BASE1, undefined, { created_at: minute(1) });
+    expect((await baseline(skipped).read()).sha).toBe(BASE1);
+    expect(asked(skipped)).toEqual([real.id, real.id]);
   });
 });
 
@@ -875,9 +1000,10 @@ describe("github app: reviews against the default branch's race files (src/githu
     expect(check.output.summary).toContain("**2 findings** in this pull request's tests at `1111111` · 1 reproducible · 2 already on the default branch · 2 tests read");
     expect(check.output.summary).toContain("| 1 | Already on the default branch | Duplicate submit · `POST /api/orders` |");
     expect(check.output.summary).toContain("All 2 findings are already on the default branch: its race files at `ddddddd` flag the same kind and operation. They are not counted as new and get no inline comment.");
-    // what it cost: the branch's finished runs listed once, one run's artifacts, one download without a credential
+    // what it cost: the branch's finished runs listed once, one run's artifacts (asked once to find the commit and
+    // once to read it), one download without a credential
     expect(baseLists(s.gh)).toBe(1);
-    expect(s.gh.calls.filter((c) => c.path === `/repos/acme/shop/actions/runs/${base.id}/artifacts`)).toHaveLength(1);
+    expect(s.gh.calls.filter((c) => c.path === `/repos/acme/shop/actions/runs/${base.id}/artifacts`)).toHaveLength(2);
     expect(s.gh.storage).toHaveLength(2);
     expect(s.gh.storage.every((x) => x.headers.authorization === undefined)).toBe(true);
     // every one of those calls carried a token minted for this repository, and only one token was minted
@@ -913,6 +1039,23 @@ describe("github app: reviews against the default branch's race files (src/githu
     // both reviews were within two minutes: the default branch was asked about once
     expect(baseLists(s.gh)).toBe(1);
     expect(s.gh.checksAt(SHA2).at(-1).output.title).toBe("3 findings, 2 reproducible, 2 already on the default branch");
+  });
+
+  it("the default branch's race files are looked for in the workflow that uploaded the pull request's own, whatever ran on top since", async () => {
+    const s = await installed("comment: always\n");
+    // the default branch: the end-to-end workflow (2) last ran five commits ago; four docs-only merges ran CI (1) since
+    const e2e = s.gh.addBaseRun(BASE1, undefined, { created_at: "2026-10-13T10:00:00Z", workflow_id: 2, name: "e2e" });
+    const ci = [1, 2, 3, 4].map((i) => s.gh.addBaseRun(`${i}`.repeat(39) + "f", { "playwright-report": racesZip() }, { created_at: `2026-10-13T10:0${i}:00Z`, workflow_id: 1, name: "CI" }));
+    // the pull request's race files come from that same workflow
+    await pullRequest(s.env, s.gh, "opened", 12, SHA1);
+    const run = s.gh.addRun(SHA1, { "genclass-races": racesZip() }, { workflow_id: 2, name: "e2e" });
+    expect(await finished(s, run.id, SHA1)).toBe("findings");
+    expect(rows(s.gh.summary(12)!).map((l) => l.split(" | ")[1])).toEqual(["Already on the default branch", "Already on the default branch"]);
+    expect(s.gh.summary(12)).toContain("its race files at `ddddddd` flag the same kind and operation");
+    // no run of CI was asked for its artifacts: the end-to-end run was asked first, and it names the commit
+    const askedOf = (id: number) => s.gh.calls.filter((c) => c.path === `/repos/acme/shop/actions/runs/${id}/artifacts`).length;
+    expect(ci.map((r) => askedOf(r.id))).toEqual([0, 0, 0, 0]);
+    expect(askedOf(e2e.id)).toBe(2);
   });
 
   it("`comment: always` lists them in a comment; `baseline: false` reads nothing of the default branch and says nothing of it", async () => {
@@ -1020,6 +1163,27 @@ describe("github app: reviews against the default branch's race files (src/githu
     expect(await pushed(strict, 12, SHA1)).toBe("findings");
     expect(strict.gh.checksAt(SHA1).at(-1)).toMatchObject({ status: "completed", conclusion: "failure" });
     expect(strict.gh.checksAt(SHA1).at(-1).output.summary).toContain("They count for `check.fail_on`, as `check.fail_on_baseline` asks.");
+  });
+
+  it("a known race that reaches a test that was clean on the default branch fails the check and gets the comment, as the pull request's own", async () => {
+    const s = await installed("check:\n  fail_on: reproducible\n");
+    const order = (test: string, seed: number, flagged: boolean) => races(test, seed, flagged ? [{ diagnosis: "duplicate", op: "POST /api/orders" }] : []);
+    const DOUBLE = "checkout.spec.ts > checkout > double click";
+    // the default branch: the double-click test shows the double submit, the plain checkout test runs without it
+    s.gh.addBaseRun(BASE1, { "genclass-races": racesZip({ "d1.json": order(DOUBLE, 1, true), "d2.json": order(DOUBLE, 2, true), "p1.json": order(T_CHECKOUT, 1, false), "p2.json": order(T_CHECKOUT, 2, false) }) });
+    // a pull request that leaves both as they are: neutral, no comment
+    expect(await pushed(s, 12, SHA1, { "d1.json": order(DOUBLE, 1, true), "d2.json": order(DOUBLE, 2, true), "p1.json": order(T_CHECKOUT, 1, false), "p2.json": order(T_CHECKOUT, 2, false) })).toBe("findings");
+    expect(s.gh.checksAt(SHA1).at(-1)).toMatchObject({ status: "completed", conclusion: "neutral" });
+    expect(s.gh.posted(12)).toEqual([]);
+    // a pull request after which the plain checkout test double-submits too, in both seeds
+    expect(await pushed(s, 13, SHA2, { "d1.json": order(DOUBLE, 1, true), "d2.json": order(DOUBLE, 2, true), "p1.json": order(T_CHECKOUT, 1, true), "p2.json": order(T_CHECKOUT, 2, true) })).toBe("findings");
+    const check = s.gh.checksAt(SHA2).at(-1);
+    expect(check).toMatchObject({ status: "completed", conclusion: "failure" });
+    expect(check.output.title).toBe("1 finding, 1 reproducible");
+    const body = s.gh.summary(13)!;
+    expect(rows(body)).toEqual(["| 1 | New | Duplicate submit · `POST /api/orders` | 2 tests: checkout.spec.ts > checkout > double click; checkout.spec.ts > checkout > places one order | 2 of 2 seeds in the first, **reproducible** |"]);
+    expect(body).toContain("Finding 1 is flagged there too, but here also in checkout.spec.ts > checkout > places one order, a test that ran there without it: it is listed as this pull request's.");
+    expect(stateOf(s, 13).findings.map((f) => f.base)).toEqual([false]);
   });
 
   it("the default branch is asked about once for the reviews of two minutes, again after that, and at once when one of its runs ends; a comparison stands when its files can no longer be read", async () => {

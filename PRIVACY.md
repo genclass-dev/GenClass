@@ -181,8 +181,9 @@ to write the comment and do not store them. If the artifact holds other files, w
 
 When a pull request's race files show a finding, we also read the race files that your default branch's own test
 runs uploaded, for the latest commit that has them, to tell which findings are already there. We read them the same
-way, in memory. For up to two minutes we keep, in memory only, which commit they were for and a one-way fingerprint
-of each finding in them, so that the next review of the same repository does not ask GitHub again. You can turn this
+way, in memory. For up to two minutes we keep, in memory only, which commit they were for, a one-way fingerprint of
+each finding in them and the names of the tests, so that the next review of the same repository does not ask GitHub
+again. You can turn this
 comparison off with `baseline: false` in the settings file; the default branch's files are then not read.
 
 **What we store:**
