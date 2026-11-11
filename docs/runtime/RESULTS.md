@@ -1675,6 +1675,49 @@ are not this project's and no report was filed anywhere):
   failures, 0 of 29 passes): the order of actions and answers, which the runtime records on every framework, would
   have said so. Comparing that order between a test's passing and failing runs is not built.
 
+**Two more public suites, on the packed build of this branch** (the same day; each by a separate agent session from a
+fresh clone, Chromium, nothing edited and nothing filed; the packages were `npm pack`ed from the branch before the
+three fixes below and installed next to the project as the workflow file does). Each suite ran plain twice, then
+through the command with the defaults, with `GENCLASS_CHAOS=off`, and with every request to the page's host delayed
+(`GENCLASS_CHAOS_MATCH=http://localhost:<port>/`):
+
+| suite | tests | plain, twice | defaults | delays off | every request delayed | lines printed |
+|---|---:|---|---|---|---|---|
+| epic-stack (React Router, SQLite, mocked outside services) at `893610d` | 26 | 26 and 26 | 52 of 52, 0 held | 52 of 52 | 52 of 52, 211 held | 4 signatures in 4 tests, 3 reproducible; none a race |
+| Next-js-Boilerplate (Next.js 16 App Router) at `b83157a`, without the one test that needs an outside account | 15 | 15 and 15 | 30 of 30, 4 held | 30 of 30 | 30 of 30, 326 held | 0 with delays on; 1 with delays off, seen once in 46 runs of that flow |
+
+No test was flaky or failed in any of these runs, so neither suite was made worse by the fixture or by delays. What
+the two suites found in the tool, each fixed on this branch or beside it and checked on the same suite:
+
+- **A false `overwrote-newer` on every React Router fetcher form** (epic-stack's four lines: the router's `fetchers`
+  state on three `useFetcher` forms). The submit handler marks the fetcher submitting, React commits that state about
+  7 ms after the request has left, and the response replaces it; the request itself is recorded with no cause, so the
+  marker read as something the user wrote after the request started. Change 1 was narrowed: the user's own write is
+  newer data only when the action that made it began after the request was sent. After it, all 26 tests again through
+  the command: **0 signatures, 52 of 52 passed**. The development set is unchanged by the narrowing (seeds 1 to 6:
+  search, checkout and profile 6 of 6, detail 3 of 6 and 3 of 3 pairs, fixed versions 0 of 24, the intended double add
+  as the only other lines). The held-out set, run again after it on a busier machine
+  (`results/after-narrowing.json`), has the same counts as in the table above: without delays 60 of 60 bug trials
+  flagged and 37 of the c to h trials (36 of them f), with delays 56 of 56 and 46 (36 in f); 341.7 s and 413.7 s.
+- **The runtime threw into the page.** Submitting a form that has a control named `id` (an edit form's hidden field)
+  made the submit listener of `src/observe/dom-user.ts` throw a `TypeError`: on such a form `form.id` is that control,
+  not a string. 4 page errors in 3 of epic-stack's 26 tests with the runtime on, 0 without; the suite does not check
+  page errors and stayed green. This is the published runtime's own code, in observe mode, so it is not part of this
+  branch: pull request 187 reads the id safely and keeps the user-action listeners from throwing into the page
+  (runtime suite 1,267 passed, 2 new tests that fail without it).
+- **The command could not start a project's web server.** Next-js-Boilerplate's `webServer.command` names a local
+  bin; `npx playwright test` puts `node_modules/.bin` on `PATH`, the command started with `node <path>` (as the
+  workflow file starts it) did not: `pglite-server: command not found`, exit 127, no race file. The command now puts
+  the project's `.bin` directories first on `PATH`. The same project, started the same way: exit 127 before, 4 of 4
+  tests passed and 4 race files after.
+
+What the fixture sees and delays on these two frameworks, measured there: React Router's router state and form state
+are visible (16 to 19 state writes in a typical test); on Next.js only the router tree and a link's pending flag are,
+and what a server component renders is not a state field, so a stale `router.refresh()` would probably not be
+flagged (not tested). The default chaos filter matched none of React Router's `.data` requests and none of Next's RSC
+payloads; the command's summary says so and names the variable. A choice made with Playwright's `selectOption` is not
+recorded as a user action (the events it dispatches are untrusted, and `observe.untrustedEvents` is off).
+
 **One workflow run on GitHub, outside this repository** (a private repository with the development set's app and the
 one workflow file as published, `docs/github-app/workflows/genclass.yml`): the job ran in 1 min 56 s, uploaded 20
 race files (agent connected in 20, 215 requests held) with the signatures the same commands give locally. The step

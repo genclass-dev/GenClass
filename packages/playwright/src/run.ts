@@ -22,7 +22,7 @@ import { spawn } from "node:child_process";
 import { readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { constants, tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_OUT_DIR, ENV, flagOf, isOff, type Env } from "./env.js";
 import { displayPath, readRacesDirs } from "./files.js";
@@ -287,6 +287,30 @@ function exitCodeOf(r: SpawnResult): number {
   return n ? 128 + n : 1;
 }
 
+/**
+ * PATH as `npx playwright test` gives it to the project: the `node_modules/.bin` of each directory given and of each of
+ * its parents, nearest first, in front of what was there. The workflow file starts this command with `node <path>`,
+ * which adds none of them, so a `webServer.command` that names a local bin (`vite`, `next`, `pglite-server`) was not
+ * found: exit 127 and no test ran (seen on a public Next.js starter). Returns the one variable to set, under the name
+ * the environment already has for it ("Path" on Windows).
+ */
+export function localBinsPath(env: Env, cwd: string, dirs: readonly string[]): Record<string, string> {
+  const key = Object.keys(env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
+  const have = (env[key] ?? "").split(delimiter).filter((p) => p !== "");
+  const bins: string[] = [];
+  for (const d of dirs) {
+    let cur = isAbsolute(d) ? d : resolve(cwd, d);
+    for (let i = 0; i < 64; i++) {
+      const bin = join(cur, "node_modules", ".bin");
+      if (!bins.includes(bin) && !have.includes(bin)) bins.push(bin);
+      const up = dirname(cur);
+      if (up === cur) break;
+      cur = up;
+    }
+  }
+  return { [key]: [...bins, ...have].join(delimiter) };
+}
+
 /** Runs the command with `argv` (without node and the script). Returns the exit code. Never throws. */
 export async function runCommand(argv: readonly string[], io: RunIo): Promise<number> {
   try {
@@ -305,7 +329,7 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
     if (off || !location) {
       // nothing of GenClass: the off switch, or a --config path that does not exist (Playwright says that best itself)
       if (off) io.err(`GenClass is off (${ENV.off}=${io.env[ENV.off]}): running Playwright as it is.\n`);
-      return exitCodeOf(await io.spawn([cli, "test", ...argv], { ...io.env }));
+      return exitCodeOf(await io.spawn([cli, "test", ...argv], { ...io.env, ...localBinsPath(io.env, io.cwd, location ? [location.dir, io.cwd] : [io.cwd]) }));
     }
     let runtimeDir: string;
     try {
@@ -340,7 +364,7 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
     let result: SpawnResult;
     let notes: string[] = [];
     try {
-      result = await io.spawn(plan.argv, { ...io.env, ...plan.env });
+      result = await io.spawn(plan.argv, { ...io.env, ...plan.env, ...localBinsPath(io.env, io.cwd, [location.dir, io.cwd]) });
       try {
         notes = readFileSync(notesFile, "utf8").split("\n");
       } catch {

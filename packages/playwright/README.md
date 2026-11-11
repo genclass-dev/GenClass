@@ -172,8 +172,10 @@ By default (`model: "skip"`) nothing is downloaded and the file carries the runt
 runtime computes from what it already traces (the causal chain of every request, the version history of every
 store field), with no model involved:
 
-- `overwrote-newer`: a request's response chain wrote a field that, since the request started, a newer operation
-  (one that started after it, outside its causal chain) or the user had written. Older data over newer data.
+- `overwrote-newer`: a request's response chain wrote a field that, since the request started, a newer request's
+  response or the user, in an action that began after the request was sent, had written. Older data over newer data.
+  What the action that sent the request writes a moment later (a router's or a query library's "pending" marker) is
+  the same intent as the request and does not count.
 - `identical-in-flight`: two identical requests (same method, URL and body) in flight together, from two separate
   user actions.
 
@@ -263,6 +265,10 @@ What the command does, in order:
    or is interrupted (a run killed with `SIGKILL` leaves it behind: delete it).
 3. It runs `playwright test --config <that file>` with your other arguments as they are, and adds `--repeat-each 2`
    unless you pass a `--repeat-each` yourself: two seeds, so the report can mark a finding **Reproducible**.
+   Playwright gets the `node_modules/.bin` of the config's directory, of the working directory and of their parents
+   at the front of `PATH`, as `npx playwright test` has them: the workflow file starts this command with
+   `node <path>`, and a `webServer.command` that names a local bin (`vite`, `next`, `pglite-server`) was not found
+   without it.
 4. Chaos is on unless `GENCLASS_CHAOS` says otherwise, and the race files go to `test-results/genclass` under the
    working directory, whatever your config's `outputDir` is. Race files of an earlier run in that directory are
    removed first (files whose `schema` is `genclass-races/1`; nothing else is touched).

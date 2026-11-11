@@ -284,6 +284,68 @@ describe("agent: recording and witnesses (AGENT.md §2)", () => {
     expect(c.witnesses()).toEqual([]);
   });
 
+  it("what the action that sent the request wrote, committed a moment after the request left, is one intent: no witness", async () => {
+    // what a router's fetcher form does (React Router's useFetcher, found on a public suite): the submit handler marks
+    // the form "submitting"; React takes that update in the handler and commits it a few ms later; the request leaves
+    // in between, by a path the runtime has no cause for; the response then puts the marker back
+    const s = setup({ mode: undefined });
+    bridge(s);
+    s.server.on("POST", "/settings/profile.data", { body: { ok: true }, latency: 200 });
+    const c = connectAgent(s.rt, { schedule: "natural" });
+    const rt = s.rt as unknown as {
+      observedStore(base: string, initial: unknown, source: string): { name: string; write(v: unknown, w: unknown): void };
+      ctx: { peek(): unknown; isUserSync(op: unknown): boolean };
+    };
+    const capture = () => {
+      const amb = rt.ctx.peek();
+      return { amb, user: amb !== null && rt.ctx.isUserSync(amb), seq: 0 };
+    };
+    const router = rt.observedStore("router", { fetchers: 0 }, "test");
+    await s.clock.advance(100);
+    let inHandler: unknown;
+    s.rt.user({ kind: "submit", target: 'form "Profile"' }, () => {
+      inHandler = capture(); // the state update is made here, in the submit handler
+    });
+    expect(inHandler).toMatchObject({ user: true });
+    await s.clock.advance(2);
+    // the request leaves 2 ms later with nothing that links it to the submit
+    void (async () => {
+      await s.fetch("/settings/profile.data", { method: "POST", body: "name=Ada" });
+      router.write({ fetchers: 0 }, capture());
+    })();
+    await s.clock.advance(7);
+    router.write({ fetchers: 1 }, inHandler); // React commits the handler's update 7 ms after the request left
+    await s.clock.advance(1000);
+    const writes = c.recorded().steps.filter((x) => x.k === "write");
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toMatchObject({ by: "POST /settings/profile.data#1" });
+    expect(c.witnesses()).toEqual([]);
+  });
+
+  it("what the user wrote in an action after the request left is newer data: the response's write over it is a witness", async () => {
+    const s = setup({ mode: undefined });
+    bridge(s);
+    s.server.on("PUT", "/api/profile", { body: { name: "A" }, latency: 400 });
+    const st = s.rt.atom("profile", { name: "" });
+    const c = connectAgent(s.rt, { schedule: "natural" });
+    await s.clock.advance(100);
+    s.rt.user({ kind: "type", target: 'textbox "Display name"' }, () => {
+      st.set({ name: "A" });
+      void (async () => {
+        const j = (await (await s.fetch("/api/profile", { method: "PUT", body: '{"name":"A"}' })).json()) as { name: string };
+        st.set({ name: j.name });
+      })();
+    });
+    await s.clock.advance(100);
+    s.rt.user({ kind: "type", target: 'textbox "Display name"' }, () => st.set({ name: "Ada" }));
+    await s.clock.advance(1000);
+    expect(st.get().name).toBe("A"); // the echo of the first save replaced what was typed after it left
+    const w = c.witnesses();
+    expect(w).toHaveLength(1);
+    expect(w[0]).toMatchObject({ kind: "overwrote-newer", subject: "profile.name", by: "PUT /api/profile#1", overKind: "user" });
+    expect(w[0].gapMs).toBe(100);
+  });
+
   it("the same scenario under fifo delivery leaves the right results and no witness", async () => {
     const s = setup({ mode: undefined });
     bridge(s);

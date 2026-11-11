@@ -44,6 +44,11 @@ Changes to `@genclass/playwright`, the Playwright reporter for
   whoever compares two runs (genclass-dev[bot] knows a finding by its operation). The evidence line keeps the requests
   as they were. A signature of a 0.1.0 file with an id in its path changes once. Not measured on a real suite: no
   finding left on the two public suites carries an id.
+- **The command gives Playwright the project's local bins on `PATH`.** `npx playwright test` puts
+  `node_modules/.bin` on `PATH`; this command, started with `node <path>` as the workflow file does, did not. A
+  project whose `webServer.command` names a local bin then never started: on a public Next.js starter the web server
+  ended with `pglite-server: command not found`, exit 127, and no test ran. The `.bin` of the config's directory, of
+  the working directory and of each of their parents now come first on `PATH`, also when GenClass is switched off.
 - **Seeds come in mirrored pairs.** An even seed gives each request the mirror image of the delay the odd seed before
   it gives (`min + max - delay`), so the default two seeds try each pair of requests in both orders. Seed 1 and every
   odd seed are what they were; even seeds' delays change from 0.1.0. A two-request overwrite then shows in one seed of

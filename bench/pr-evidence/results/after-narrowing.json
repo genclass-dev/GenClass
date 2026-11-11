@@ -1,0 +1,1610 @@
+{
+ "label": "after-fetcher",
+ "date": "2026-11-11",
+ "seeds": 6,
+ "workers": 3,
+ "runner": "packages/playwright/bin/genclass-playwright-run.mjs",
+ "playwrightPackage": "0.1.0",
+ "runtimePackage": "0.3.0-beta.5",
+ "node": "v25.6.0",
+ "runs": [
+  {
+   "mode": "off",
+   "seconds": 341.7,
+   "exit": 0,
+   "summary": [
+    "288 passed (5.7m)"
+   ],
+   "totals": {
+    "trials": 288,
+    "errors": 0,
+    "oracleBugs": 60,
+    "noFile": 0,
+    "agentDown": 0,
+    "legitTrials": 216,
+    "legitFlagged": 37,
+    "legitOracleBugs": 0
+   },
+   "cells": [
+    {
+     "layer": "apollo",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /graphql": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /graphql": [
+       1,
+       2,
+       3,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "apollo",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /graphql": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /graphql": [
+       5
+      ]
+     }
+    },
+    {
+     "layer": "apollo",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "redux",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/items": [
+       1,
+       2
+      ]
+     }
+    },
+    {
+     "layer": "redux",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5
+      ]
+     }
+    },
+    {
+     "layer": "redux",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "state",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/items": [
+       1,
+       2
+      ]
+     }
+    },
+    {
+     "layer": "state",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "state",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 1,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|GET /api/todos": [
+       5
+      ]
+     }
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/items": [
+       1,
+       2
+      ]
+     }
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5
+      ]
+     }
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "zustand",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/items": [
+       1,
+       2
+      ]
+     }
+    },
+    {
+     "layer": "zustand",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5
+      ]
+     }
+    },
+    {
+     "layer": "zustand",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    }
+   ]
+  },
+  {
+   "mode": "on",
+   "seconds": 413.7,
+   "exit": 0,
+   "summary": [
+    "288 passed (6.9m)"
+   ],
+   "totals": {
+    "trials": 288,
+    "errors": 0,
+    "oracleBugs": 59,
+    "noFile": 0,
+    "agentDown": 0,
+    "legitTrials": 216,
+    "legitFlagged": 46,
+    "legitOracleBugs": 3
+   },
+   "cells": [
+    {
+     "layer": "apollo",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /graphql": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "apollo",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /graphql": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /graphql": [
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "apollo",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "apollo",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 5,
+     "flagged": 6,
+     "bugFlagged": 5,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "redux",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/items": [
+       1,
+       2
+      ]
+     }
+    },
+    {
+     "layer": "redux",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "redux",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "redux",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 5,
+     "flagged": 6,
+     "bugFlagged": 5,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "state",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/items": [
+       1,
+       2
+      ]
+     }
+    },
+    {
+     "layer": "state",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "state",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "state",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 1,
+     "flagged": 2,
+     "bugFlagged": 1,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       2,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|GET /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 4,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|GET /api/todos": [
+       2,
+       3,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "tanstack",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 5,
+     "flagged": 6,
+     "bugFlagged": 5,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/items": [
+       1,
+       2
+      ]
+     }
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand-on",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 1,
+     "flagged": 2,
+     "bugFlagged": 1,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       2,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "zustand",
+     "scenario": "a",
+     "trials": 6,
+     "errors": 0,
+     "bug": 5,
+     "flagged": 6,
+     "bugFlagged": 5,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "zustand",
+     "scenario": "b",
+     "trials": 6,
+     "errors": 0,
+     "bug": 6,
+     "flagged": 6,
+     "bugFlagged": 6,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/items": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/items": [
+       1,
+       2
+      ]
+     }
+    },
+    {
+     "layer": "zustand",
+     "scenario": "c",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand",
+     "scenario": "d",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand",
+     "scenario": "e",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand",
+     "scenario": "f",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 6,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|identical-in-flight|POST /api/counter/increment": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "witness|overwrote-newer|POST /api/counter/increment": [
+       5,
+       6
+      ]
+     }
+    },
+    {
+     "layer": "zustand",
+     "scenario": "g",
+     "trials": 6,
+     "errors": 0,
+     "bug": 0,
+     "flagged": 0,
+     "bugFlagged": 0,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {}
+    },
+    {
+     "layer": "zustand",
+     "scenario": "h",
+     "trials": 6,
+     "errors": 0,
+     "bug": 1,
+     "flagged": 2,
+     "bugFlagged": 1,
+     "noFile": 0,
+     "agentDown": 0,
+     "sigs": {
+      "witness|overwrote-newer|GET /api/search": [
+       2,
+       6
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

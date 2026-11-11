@@ -40,7 +40,9 @@ node bench/pr-evidence/dev.mjs --seeds 10                # development set: the 
 node bench/pr-evidence/dev.mjs --seeds 40 --grep detail --settings wait,wait+mirror
 ```
 
-`run.mjs` and `dev.mjs` write a JSON file to `results/` and print a table. `.work/` (the built app, npm's copy of the
+`run.mjs` and `dev.mjs` write a JSON file to `results/` and print a table. `results/after-narrowing.json` and
+`results/dev-after-narrowing-6.json` are both sets run once more after the witness rule was narrowed for a router's
+"submitting" marker (two more public suites, RESULTS.md section 29): the counts did not change. `.work/` (the built app, npm's copy of the
 published packages, every run's race files and verdicts) is ignored by git. A full `run.mjs` at 6 seeds is 288 trials
 a mode, about 17 minutes for the three modes on a 10-core laptop with 3 workers.
 
