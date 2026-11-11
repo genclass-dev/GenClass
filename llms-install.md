@@ -41,7 +41,7 @@ use the lines below) and it prints the exact lines for the framework. Show the u
 before you run or add them. In general (the version this release of the server was tested with):
 
 ```bash
-npm install @genclass/runtime@0.3.0-beta.5
+npm install @genclass/runtime@0.3.0-beta.6
 ```
 
 In the app's browser entry (for Vite `src/main.ts` or `src/main.tsx`; for Next.js a client component loaded once from
@@ -78,7 +78,7 @@ and sends anonymous diagnostics from public hosts by default (`GenClass.init({ t
 Ask for `genclass_findings` after reproducing a bug, `genclass_explore` after changing code that fetches or submits,
 `genclass_replay` to confirm a bug before fixing it and its fix after, and `genclass_scan {url}` to audit a page for
 visual bugs before calling a UI change done (it needs Playwright's Chromium: `npx playwright install chromium`, with `npm i -D playwright` first if the project has
-no Playwright, after the user says yes; the same audit from a terminal is `npx @genclass/runtime@0.3.0-beta.5 scan <url> --local`). When the
+no Playwright, after the user says yes; the same audit from a terminal is `npx @genclass/runtime@0.3.0-beta.6 scan <url> --local`). When the
 user only asked what broke, wait for a yes before writing a fix or a test. The server's instructions and each tool's
 description say when to use what; the procedure (explore arguments, how to read a report, what to say when done) is
 the `genclass` skill: `npx -y @genclass/mcp@0.2.2 init` writes it to `.claude/skills/genclass/SKILL.md` for Claude
