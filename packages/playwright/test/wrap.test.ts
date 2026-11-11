@@ -348,6 +348,7 @@ describe("wrap: one file per test, written before the context closes", () => {
       chaos: null,
       fixture: { model: "skip", agent: null, chaosApplied: null, serviceWorker: false },
       location: { file: "tests/checkout.spec.ts", line: 7 },
+      status: "passed",
     });
     expect(notes).toEqual([]);
   });
@@ -1166,5 +1167,78 @@ describe("wrap: never into the test run", () => {
     const context = await (await pw.chromium.launch()).newContext();
     await expect(context.close()).resolves.toBeUndefined();
     expect(() => w.flush()).not.toThrow();
+  });
+});
+
+describe("wrap: the test's status and the order of steps in its file", () => {
+  it("the steps a context's pages hand over are in the file, and what landed after the test's own code is marked", async () => {
+    start();
+    const info = fakeTestInfo(root, { duration: 0 });
+    current = info;
+    const context = await (await pw.chromium.launch()).newContext();
+    await context.newPage();
+    const t = Date.now();
+    context.push({ t: "steps", id: "load", from: 0, steps: [["a", t - 600, "click", 'button "Go"', ""], ["s", t - 500, "GET /api/a#1"], ["r", t - 400, "GET /api/a#1"]] });
+    // Playwright sets the duration the moment the test's function returns: the wrapper notes when
+    info.duration = 321;
+    expect(Object.getOwnPropertyDescriptor(info, "duration")).toEqual({ value: 321, writable: true, enumerable: true, configurable: true });
+    context.push({ t: "steps", id: "load", from: 3, steps: [["s", Date.now() + 500, "GET /api/b#1"]] });
+    await context.close();
+    const file = read(FILE) as { status?: string; steps?: { labels: string[]; order: string; body?: number } };
+    expect(file.status).toBe("passed");
+    expect(file.steps!.labels).toEqual(['click button "Go"', "GET /api/a", "GET /api/b"]);
+    expect(file.steps!.order).toMatch(/^a0\.1\+0 s1\.1\+100 r1\.1\+100 s2\.1\+\d+$/);
+    expect(file.steps!.body).toBe(3);
+    expect(notes).toEqual([]);
+  });
+
+  it("steps off (the option): the file has none", async () => {
+    start({ steps: false });
+    current = fakeTestInfo(root);
+    const context = await (await pw.chromium.launch()).newContext();
+    await context.newPage();
+    context.push({ t: "steps", id: "load", from: 0, steps: [["s", 1, "GET /api/a#1"]] });
+    await context.close();
+    expect("steps" in read(FILE)).toBe(false);
+  });
+
+  it("a test that closes its context itself and fails afterwards: its file is written again with the status it ended with", async () => {
+    const w = start();
+    const info = fakeTestInfo(root);
+    current = info;
+    const context = await (await pw.chromium.launch()).newContext();
+    await context.newPage();
+    context.push({ t: "witness", witness: witness(1) });
+    await context.close();
+    // the test's function is still running: the file says what was true then
+    expect(read(FILE).status).toBe("passed");
+    info.status = "failed";
+    current = null;
+    w.flush();
+    expect(read(FILE)).toMatchObject({ status: "failed", signatures: [{ sig: "witness|overwrote-newer|GET /api/search" }] });
+    expect(files()).toEqual([FILE]);
+  });
+
+  it("the next test's first context does the same for the test before it, and leaves a file whose status stands alone", async () => {
+    start();
+    const first = fakeTestInfo(root);
+    current = first;
+    const browser = await pw.chromium.launch();
+    await (await browser.newContext()).close();
+    first.status = "timedOut";
+    const untouched = readFileSync(join(outDir, FILE), "utf8");
+    expect(JSON.parse(untouched).status).toBe("passed");
+    current = fakeTestInfo(root, { testId: "next-one", titlePath: ["checkout.spec.ts", "checkout", "next"] });
+    const context = await browser.newContext();
+    expect(read(FILE).status).toBe("timedOut");
+    await context.close();
+    expect(files()).toHaveLength(2);
+    // a test whose status did not change is not written twice
+    const second = files().find((f) => f !== FILE)!;
+    const text = readFileSync(join(outDir, second), "utf8");
+    writeFileSync(join(outDir, second), `${text} `);
+    current = fakeTestInfo(root, { testId: "third", titlePath: ["checkout.spec.ts", "checkout", "third"] });
+    await (await browser.newContext()).close();
+    expect(readFileSync(join(outDir, second), "utf8")).toBe(`${text} `);
   });
 });

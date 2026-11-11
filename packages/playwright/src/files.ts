@@ -1,9 +1,10 @@
 // Reading race files from disk and writing the report (Node only; used by the reporter and the CLI). Reads only
-// `*.json` directly inside the given directories, never follows anything else, and sends nothing anywhere.
+// `*.json` directly inside the given directories, never follows anything else, and sends nothing anywhere. The report
+// is the summariser's, plus the comparison of failing and passing runs for a test that failed in some (explain.ts).
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { summarize, type SummarizeOptions } from "./summarize.js";
+import { summarizeWithOrder, type ReportOptions } from "./explain.js";
 import type { RacesFileInput } from "./types.js";
 
 /** Where the fixture writes, relative to the Playwright config's directory. */
@@ -58,7 +59,7 @@ export function readRacesDirs(dirs: readonly string[], base: string): ReadResult
   return { files, searched };
 }
 
-export interface WriteReportOptions extends SummarizeOptions {
+export interface WriteReportOptions extends ReportOptions {
   /** Directories to read (relative to `base`). */
   dirs: readonly string[];
   /** Base directory for relative paths. */
@@ -70,7 +71,8 @@ export interface WriteReportOptions extends SummarizeOptions {
 /** Reads the files, renders the markdown and writes it (creating the directory). Returns the markdown and where it went. */
 export function writeReport(o: WriteReportOptions): { markdown: string; path: string | null; files: number } {
   const { files, searched } = readRacesDirs(o.dirs, o.base);
-  const markdown = summarize(files, { ...o, sources: o.sources ?? searched });
+  // the summariser's report, with the section about tests that failed in some runs when there is one (explain.ts)
+  const markdown = summarizeWithOrder(files, { ...o, sources: o.sources ?? searched });
   let path: string | null = null;
   if (o.outputFile !== null) {
     path = resolve(o.base, o.outputFile);

@@ -6,7 +6,9 @@
 //   GENCLASS_PLAYWRIGHT       off | 0 | false | no: the register entry does nothing (the off switch)
 //   GENCLASS_CHAOS            on | off (1/0, true/false, yes/no): seeded network chaos. Off unless given; the command
 //                             (genclass-playwright-run) turns it on when it is not set
-//   GENCLASS_SEED             the chaos seed, a whole number from 0 (default 1); Playwright's repeat index is added
+//   GENCLASS_SEED             the chaos seed, a whole number from 0 (default 1); Playwright's repeat index is added.
+//                             Without chaos it is the number a run's file is named with, so runs started one after
+//                             the other keep a file each
 //   GENCLASS_CHAOS_DELAY_MS   "min,max": extra latency per matched request in ms (default 0,600; at most 10000)
 //   GENCLASS_CHAOS_REORDER    on | off (default on); off: matched requests leave in order, latency only
 //   GENCLASS_CHAOS_MIRROR     on | off (default on); off: every seed has delays of its own (an even seed is otherwise
@@ -15,6 +17,8 @@
 //                             (default: the page's own host, any port: /api* or an Accept header asking for JSON)
 //   GENCLASS_WAIT_FOR_RESPONSES_MS  at the end of a test: how long at most to wait for the responses to requests the
 //                             page had already sent, in ms (default: 1000 more than the chaos delay's upper bound; 0: no wait)
+//   GENCLASS_STEPS            how many steps of the page's order a race file carries at most (default 300; 0 or off:
+//                             none; at most 2000)
 //   GENCLASS_OUT_DIR          where the race files go, against the working directory (default test-results/genclass)
 //   GENCLASS_MODEL            skip (default) | load
 //   GENCLASS_MODEL_URL        with GENCLASS_MODEL=load: a model directory URL
@@ -24,6 +28,7 @@
 import { isAbsolute, join, resolve } from "node:path";
 import { DEFAULT_SEED, MAX_WAIT_MS, type ChaosOptions } from "./chaos.js";
 import type { GenClassOptions } from "./session.js";
+import { STEPS_LIMITS } from "./types.js";
 
 /** The variables' names. */
 export const ENV = {
@@ -35,6 +40,7 @@ export const ENV = {
   mirror: "GENCLASS_CHAOS_MIRROR",
   match: "GENCLASS_CHAOS_MATCH",
   wait: "GENCLASS_WAIT_FOR_RESPONSES_MS",
+  steps: "GENCLASS_STEPS",
   outDir: "GENCLASS_OUT_DIR",
   model: "GENCLASS_MODEL",
   modelUrl: "GENCLASS_MODEL_URL",
@@ -95,13 +101,15 @@ export function optionsFromEnv(env: Env, cwd: string, chaosDefault = false): Env
   };
   const options: GenClassOptions = {};
 
+  let seed: number | undefined;
+  const seedText = text(env, ENV.seed);
+  if (seedText !== undefined) {
+    if (/^\d+$/.test(seedText) && Number.isSafeInteger(Number(seedText))) seed = Number(seedText);
+    else bad(ENV.seed, "a whole number from 0", String(DEFAULT_SEED));
+  }
   if (flag(ENV.chaos, chaosDefault)) {
     const chaos: ChaosOptions = {};
-    const seed = text(env, ENV.seed);
-    if (seed !== undefined) {
-      if (/^\d+$/.test(seed) && Number.isSafeInteger(Number(seed))) chaos.seed = Number(seed);
-      else bad(ENV.seed, "a whole number from 0", String(DEFAULT_SEED));
-    }
+    if (seed !== undefined) chaos.seed = seed;
     const delay = text(env, ENV.delayMs);
     if (delay !== undefined) {
       const m = /^(\d+)\s*,\s*(\d+)$/.exec(delay);
@@ -116,6 +124,13 @@ export function optionsFromEnv(env: Env, cwd: string, chaosDefault = false): Env
       if (list.length) chaos.match = list;
     }
     options.chaos = Object.keys(chaos).length ? chaos : true;
+  } else if (seed !== undefined) options.seed = seed; // without chaos: only what the run's file is named with
+
+  const steps = text(env, ENV.steps);
+  if (steps !== undefined) {
+    if (flagOf(steps) === false) options.steps = false;
+    else if (/^\d+$/.test(steps) && Number(steps) <= STEPS_LIMITS.steps) options.steps = Number(steps);
+    else bad(ENV.steps, `a whole number from 0 to ${STEPS_LIMITS.steps}, or off`, "the default");
   }
 
   const wait = text(env, ENV.wait);

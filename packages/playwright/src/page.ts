@@ -22,7 +22,13 @@
 //   7. answers which requests of this page load are still unanswered (window.__GENCLASS_PLAYWRIGHT__.open()), read from
 //      the agent entry's record. The fixture asks at the end of a test and waits, on its own side and for a bounded
 //      time, for the ones sent a moment ago: a response that lands after the test's last assertion is still seen;
-//   8. says when the page goes offline and comes back online (the fixture's chaos holds nothing while it is offline).
+//   8. says when the page goes offline and comes back online (the fixture's chaos holds nothing while it is offline);
+//   9. hands over the order of things on this page, from the agent entry's record, as it grows: each user action
+//      (its kind and the runtime's description of its target, never a value that was typed), each request's send, and
+//      the delivery of its response to the app or its end without one, each with its time. The first time the fixture
+//      asks anything at the end of a test (open() or collect()), it also says how many steps there were by then: what
+//      comes after landed after the test's last line. The fixture names the steps and keeps a bounded number of them
+//      in the race file (steps.ts); only the comparison of a test's passing and failing runs reads them.
 //
 // Observe only: nothing here holds, delays or changes anything in the page; the agent link is connected with
 // `hold: false` and never reaches a bridge. Top frame only, and only on http(s) pages (about:blank and
@@ -44,8 +50,11 @@ export interface PageScriptConfig {
 interface AgentConnection {
   reason: string | null;
   witnesses(): unknown[];
-  /** The record of this page load: each request's send, and its delivery or its end without one, by key. */
-  recorded?(): { steps?: { k?: string; key?: string; t?: number }[] };
+  /**
+   * The record of this page load, oldest first (the newest 600 steps): each user action with its kind and target,
+   * each request's send, and its delivery or its end without one, by key. For an action, `key` is the key pressed.
+   */
+  recorded?(): { steps?: { k?: string; key?: string; t?: number; kind?: string; target?: string }[] };
 }
 
 /**
@@ -127,9 +136,52 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
   };
   // when the agent entry connected, on this page's own clock: its record counts every step's time from then
   let connectedAt = 0;
+  // just before it was asked to connect: where the record's own clock starts, to the millisecond
+  let recordStart = 0;
+  // 9. the order of things on this page. The record's list only grows at its end (and drops its oldest past 600), so
+  //    what is new is what comes after the last step handed over; a step is handed over once, with its place among
+  //    this page load's steps, so the fixture puts it where it belongs whatever order the batches arrive in.
+  const loadId = String(performance.timeOrigin);
+  let lastStep: unknown = null;
+  let handedSteps = 0;
+  let bodyEnded = false;
+  const handSteps = (): void => {
+    try {
+      if (!conn || typeof conn.recorded !== "function") return;
+      const steps = conn.recorded().steps ?? [];
+      if (steps.length === 0) return;
+      const at = lastStep === null ? -1 : steps.lastIndexOf(lastStep as (typeof steps)[number]);
+      if (at === steps.length - 1) return;
+      // on the wall clock (Date.now(), which the fixture's side reads too), so that the page loads and pages of one
+      // test fall into one order and the fixture can tell what landed after the test's own code had finished
+      const base = Date.now() - performance.now() + recordStart;
+      const out: unknown[] = [];
+      for (let i = at + 1; i < steps.length; i++) {
+        const s = steps[i];
+        const when = Math.round(base + (typeof s.t === "number" ? s.t : 0));
+        if (s.k === "act") out.push(["a", when, String(s.kind ?? ""), typeof s.target === "string" ? s.target : "", typeof s.key === "string" ? s.key : ""]);
+        else if ((s.k === "send" || s.k === "recv" || s.k === "end") && typeof s.key === "string") out.push([s.k === "send" ? "s" : s.k === "recv" ? "r" : "x", when, s.key]);
+      }
+      lastStep = steps[steps.length - 1];
+      if (out.length === 0) return;
+      push({ t: "steps", id: loadId, from: handedSteps, steps: out });
+      handedSteps += out.length;
+    } catch {
+      /* never into the page */
+    }
+  };
+  // the test's own code has finished (the fixture asks only then): everything handed over from here on landed after it
+  const endBody = (): void => {
+    if (bodyEnded) return;
+    bodyEnded = true;
+    handSteps();
+    push({ t: "body", id: loadId, n: handedSteps });
+  };
   const api = {
     collect(): Record<string, unknown> {
       drain();
+      endBody();
+      handSteps();
       return { mode: rt ? String(rt.mode) : null, model: status(), agent: conn ? conn.reason : "not-loaded", serviceWorker: serviceWorker() };
     },
     /**
@@ -139,6 +191,7 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
      * for here (the fixture does the waiting, on Node's clock, so a test that controls the page's clock is not stuck).
      */
     open(): { id: string; open: [string, number][] } | null {
+      endBody();
       try {
         if (!conn || typeof conn.recorded !== "function") return null;
         const steps = conn.recorded().steps ?? [];
@@ -213,6 +266,7 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
       queueMicrotask(() => {
         queued = false;
         drain();
+        handSteps();
       });
     });
   } catch {
@@ -237,10 +291,13 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
         };
         try {
           if (typeof realFetch === "function") w.fetch = standIn;
+          recordStart = performance.now();
           conn = typeof m.connectAgent === "function" ? m.connectAgent(rt, { url: cfg.agentUrl, hold: false, anyHost: true, dom: false }) : null;
           connectedAt = performance.now();
           push({ t: "agent", ok: !!conn && conn.reason === null, reason: conn ? conn.reason : "no-connectAgent" });
           drain();
+          // what happened before the agent entry connected is in its record already
+          handSteps();
         } catch (e) {
           push({ t: "agent", ok: false, reason: String((e as Error)?.message ?? e) });
         } finally {
@@ -257,6 +314,7 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
   try {
     addEventListener("pagehide", () => {
       drain();
+      handSteps();
       report();
     });
   } catch {

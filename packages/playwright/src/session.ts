@@ -12,9 +12,10 @@
 
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { DEFAULT_SEED, MAX_WAIT_MS, describeMatch, resolveChaos, type ChaosOptions, type ResolvedChaos } from "./chaos.js";
-import { install, type Collected, type PageLike } from "./install.js";
+import { emptyCollected, install, type Collected, type PageLike } from "./install.js";
 import { buildRacesFile, racesFileName, writeRacesFile } from "./races.js";
-import type { GenClassRacesFile, RacesLocation } from "./types.js";
+import { sequenceOf } from "./steps.js";
+import { RACES_STATUSES, STEPS_LIMITS, type GenClassRacesFile, type RacesLocation, type RacesStatus } from "./types.js";
 
 export interface GenClassOptions {
   /** false: the fixture does nothing (no runtime on the page, no file). Default true. */
@@ -48,7 +49,25 @@ export interface GenClassOptions {
    * adds nothing to a test that ends with no request in flight.
    */
   waitForResponsesMs?: number;
+  /**
+   * Without chaos: the number a run's file is named and labelled with (default 1; Playwright's repeat index is added),
+   * so that runs started one after the other do not write over each other's files. With chaos, `chaos.seed` is it.
+   */
+  seed?: number;
+  /**
+   * How many steps of the page's order a race file carries at most: user actions, each request's send and the delivery
+   * of its response, in order (the file's `steps`). They are what the comparison of a test's failing and passing runs
+   * reads. Default 300 (and at most about 5 KB of the file); `false` or 0: none; at most 2000.
+   */
+  steps?: number | false;
 }
+
+/** How many steps a race file carries unless `steps` says otherwise, and how many bytes they may take then. */
+export const DEFAULT_STEPS = 300;
+export const DEFAULT_STEPS_BYTES = 5 * 1024;
+/** With a `steps` above the default: the bytes they may take, per step asked for, and at most. */
+export const STEPS_BYTES_EACH = 18;
+export const MAX_STEPS_BYTES = 40 * 1024;
 
 /** The largest end-of-test wait a default gives, and the largest that may be asked for, in ms. */
 export const MAX_DEFAULT_WAIT_MS = 5000;
@@ -72,6 +91,8 @@ export interface TestInfoLike {
   status?: string;
   /** The test's timeout in ms as it stands (Playwright's TestInfo.timeout; 0: none). */
   timeout?: number;
+  /** Playwright's TestInfo.duration: 0 while the test's function runs, set the moment it returns or throws. */
+  duration?: number;
   project: { name: string; testDir: string; outputDir?: string };
   config: { configFile?: string; rootDir: string };
 }
@@ -128,11 +149,63 @@ export interface GenClassRun {
 export interface RunPlan {
   /** The chaos of this run (its seed already carries the repeat index), or null for none. */
   chaos: ResolvedChaos | null;
-  /** The seed the file is named and labelled with: the chaos seed, or without chaos 1 plus the repeat index. */
+  /** The seed the file is named and labelled with: the chaos seed, or without chaos `seed` (default 1) plus the repeat index. */
   seed: number;
   model: "skip" | "load";
   /** The end-of-test wait for responses, in ms (0: none). */
   waitMs: number;
+  /** The most steps the file carries (0: none), and the most bytes they take. */
+  steps: number;
+  stepsBytes: number;
+}
+
+/** The `steps` option as a number of steps: the default when unset, 0 for false, never more than the format holds. */
+export function stepsOf(o: GenClassOptions): number {
+  const v = o.steps;
+  if (v === false) return 0;
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return DEFAULT_STEPS;
+  return Math.min(STEPS_LIMITS.steps, Math.floor(v));
+}
+
+/**
+ * Tells when the test's own code finishes. Playwright sets `testInfo.duration` the moment the test's function returns
+ * or throws, before its after-hooks, its screenshots and the teardown of its fixtures; nothing public says so any
+ * other way, and a fixture or a closing context hears of the end only after all of those. So `duration`, while it is
+ * the plain property Playwright made, is watched for its next assignment: the time is noted, the property is put back
+ * as it was, and the value is what Playwright set. Where `duration` is anything else (not there, not a plain writable
+ * number), nothing is touched. Returns a function that gives the time (Date.now()), or undefined while it is not
+ * known. Never throws.
+ */
+export function watchEnd(info: TestInfoLike): () => number | undefined {
+  let endedAt: number | undefined;
+  try {
+    const d = Object.getOwnPropertyDescriptor(info, "duration");
+    if (d && d.configurable && d.writable && typeof d.value === "number" && !d.get && !d.set) {
+      let value: unknown = d.value;
+      Object.defineProperty(info, "duration", {
+        configurable: true,
+        enumerable: d.enumerable,
+        get: () => value,
+        set: (v: unknown) => {
+          value = v;
+          endedAt ??= Date.now();
+          try {
+            Object.defineProperty(info, "duration", { configurable: true, enumerable: d.enumerable, writable: true, value: v });
+          } catch {
+            /* it stays watched: reads and writes still go through */
+          }
+        },
+      });
+    }
+  } catch {
+    /* not ours to watch */
+  }
+  return () => endedAt;
+}
+
+/** The test's status for the file: Playwright's, when it is one a file carries (a skipped test writes none). */
+export function statusOf(info: TestInfoLike): RacesStatus | undefined {
+  return (RACES_STATUSES as readonly string[]).includes(info.status ?? "") ? (info.status as RacesStatus) : undefined;
 }
 
 /**
@@ -163,8 +236,10 @@ export function planRun(o: GenClassOptions, info: TestInfoLike): RunPlan {
   if (o.mode !== undefined && o.mode !== "observe") throw new Error(`@genclass/playwright: genclass.mode must be "observe" (got ${JSON.stringify(o.mode)}): guard and heal are not for tests`);
   if (o.model !== undefined && o.model !== "skip" && o.model !== "load") throw new Error(`@genclass/playwright: genclass.model must be "skip" or "load" (got ${JSON.stringify(o.model)})`);
   const chaos = o.chaos ? resolveChaos(o.chaos, info.repeatEachIndex) : null;
-  const seed = chaos ? chaos.seed : DEFAULT_SEED + Math.max(0, Math.floor(info.repeatEachIndex) || 0);
-  return { chaos, seed, model: o.model ?? "skip", waitMs: waitOf(o, chaos) };
+  const base = typeof o.seed === "number" && Number.isSafeInteger(o.seed) && o.seed >= 0 ? o.seed : DEFAULT_SEED;
+  const seed = chaos ? chaos.seed : base + Math.max(0, Math.floor(info.repeatEachIndex) || 0);
+  const steps = stepsOf(o);
+  return { chaos, seed, model: o.model ?? "skip", waitMs: waitOf(o, chaos), steps, stepsBytes: steps <= DEFAULT_STEPS ? DEFAULT_STEPS_BYTES : Math.min(MAX_STEPS_BYTES, steps * STEPS_BYTES_EACH) };
 }
 
 /** The "genclass-races/1" file of one test: what was collected, under the plan it ran with. */
@@ -186,6 +261,8 @@ export function racesFileOf(info: TestInfoLike, plan: RunPlan, collected: Collec
       ...(collected.modeOverridden ? { modeOverridden: collected.modeOverridden } : {}),
     },
     location: locationOf(info),
+    status: statusOf(info),
+    steps: plan.steps > 0 ? { sequence: sequenceOf(collected.streams ?? [], collected.endedAt), max: plan.steps, bytes: plan.stepsBytes, more: collected.stepsOver ?? 0 } : undefined,
   });
 }
 
@@ -208,11 +285,15 @@ export function writeRun(info: TestInfoLike, outDir: string | undefined, plan: R
  * count, unless none started.
  */
 export function mergeCollected(parts: readonly Collected[]): Collected {
-  const out: Collected = { records: [], witnesses: [], mode: null, model: null, agent: "not-loaded", plans: [], serviceWorker: false, modeOverridden: null };
+  const out: Collected = emptyCollected();
   for (const c of parts) {
     out.records.push(...c.records);
     out.witnesses.push(...c.witnesses);
     out.plans.push(...c.plans);
+    out.streams.push(...(c.streams ?? []));
+    out.stepsOver += c.stepsOver ?? 0;
+    // one test, one end: the earliest any part was told
+    if (c.endedAt !== undefined && (out.endedAt === undefined || c.endedAt < out.endedAt)) out.endedAt = c.endedAt;
     if (out.mode === null) out.mode = c.mode;
     if (out.model === null) out.model = c.model;
     if (c.serviceWorker) out.serviceWorker = true;
@@ -263,10 +344,11 @@ export async function startGenClass(page: PageLike, options: GenClassOptions | u
   const plan = planRun(o, info);
   if (coveredByRegister(page)) return { finish: async () => empty };
   const startedAt = Date.now();
+  const ended = watchEnd(info);
   const session = await install(page, { runtimeDir: o.runtimeDir, model: plan.model, modelUrl: o.modelUrl, chaos: plan.chaos, waitForResponsesMs: plan.waitMs });
   return {
     async finish(): Promise<GenClassRun> {
-      const collected = await session.finish(waitBudget(info, startedAt));
+      const collected = await session.finish(waitBudget(info, startedAt), ended());
       return { collected, ...writeRun(info, o.outDir, plan, collected) };
     },
   };

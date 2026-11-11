@@ -18,6 +18,10 @@
 //     (`dropped`): that test's list is not complete.
 //   - nothing about interventions or false interventions: the files do not carry what an action did to the app, so
 //     the report makes no claim either way.
+//   - nothing about the test's own status or the page's steps, which a file may carry (types.ts): the comparison of a
+//     test's failing and passing runs is another module's (explain.ts, order.ts), which hands its section in through
+//     the `after` option. This module does not import it, so a reader that only summarises (genclass-dev[bot] bundles
+//     this file from source) is what it was.
 //
 // Made to be posted as a GitHub comment: text from the files (test names, evidence lines) is escaped so it cannot
 // turn into markup, and "#123", "GH-123" and "@name" get a zero-width space so GitHub neither links the runtime's
@@ -74,6 +78,11 @@ export interface SummarizeOptions {
   sources?: string[];
   /** Evidence lines longer than this are cut (with "…"). Default 400. */
   maxEvidenceChars?: number;
+  /**
+   * Lines to put after the tests with signatures and before the list of tests with nothing flagged, as they are (a
+   * section of the caller's own, already markdown). They count towards `maxChars` and are never shortened here.
+   */
+  after?: readonly string[];
   /**
    * The report is kept to at most this many characters (JavaScript string length), so that it fits in one GitHub
    * comment. Default 60000 (`DEFAULT_MAX_CHARS`); 0 or Infinity: no limit; other values below 1000 count as 1000.
@@ -336,6 +345,10 @@ export function escapeMarkdown(s: string): string {
 }
 
 /** Inline code that survives backticks in the text. */
+export function inlineCode(s: string): string {
+  return code(s);
+}
+
 function code(s: string): string {
   const t = s.replace(/\s+/g, " ").trim() || " ";
   const run = Math.max(0, ...(t.match(/`+/g) ?? []).map((m) => m.length));
@@ -519,6 +532,8 @@ function render(s: RaceSummary, options: SummarizeOptions, lim: Limits, maxChars
     L.push(`_…and ${plural(flagged.length - lim.tests, "more test")} with signatures, not shown._`);
     L.push("");
   }
+
+  if (options.after?.length) L.push(...options.after, "");
 
   if (quiet.length) {
     L.push(`<details><summary>${plural(quiet.length, "test")} with nothing flagged</summary>`);

@@ -20,6 +20,10 @@ your tests open, and turns what it flagged into one pull-request report. This pa
 For a suite you would rather not edit, one command does what the fixture does, with no change to a spec or to
 `playwright.config`: [Without changing your tests](#without-changing-your-tests).
 
+For a test that fails in some runs and passes in others, the same command runs it many times and says which order of
+user actions, requests and responses its failing runs have and its passing runs do not, on any framework:
+[A test that fails in some runs](#a-test-that-fails-in-some-runs).
+
 What the fixture records without a model download: two happens-before facts the runtime computes on its own
 (`overwrote-newer`, a response that wrote a field over what a newer request or the user had written;
 `identical-in-flight`, two identical requests in flight together from separate user actions). With the model loaded
@@ -93,6 +97,8 @@ Set in `use` in the config, or `test.use({ genclass: {...} })` in a spec or a `d
 | `outDir` | `genclass` in the project's `outputDir` | Where the files go, relative to the config's directory. The default (test-results/genclass) is emptied by Playwright at the start of each run, so files of an earlier run are never read as more seeds. The reporter reads it by default. |
 | `runtimeDir` | the installed package's `dist/` | `@genclass/runtime`'s `dist/` directory, when it is not resolvable from your project. |
 | `waitForResponsesMs` | chaos `delayMs` upper bound + 1000 (1600 by default; 1000 without chaos; at most 5000) | At the end of a test: how long, at most, the fixture waits for the responses to requests the page had already sent, so a response that lands after the test's last assertion is still seen ([At the end of a test](#at-the-end-of-a-test)). `0`: no wait. |
+| `steps` | `300` | How many steps of the page's order the file carries at most (user actions, each request's send and the delivery of its response; about 5 KB): what the comparison of a test's failing and passing runs reads ([A test that fails in some runs](#a-test-that-fails-in-some-runs)). `false` or `0`: none. At most 2000. |
+| `seed` | `1` | Without chaos: the number a run's file is named with (Playwright's repeat index is added), so runs started one after the other keep a file each. With chaos, `chaos.seed` is it. |
 
 ### Chaos
 
@@ -320,12 +326,13 @@ replaced by its default and reported in the summary; it never fails a run.
 | variable | default | what |
 |---|---|---|
 | `GENCLASS_CHAOS` | `on` under the command; `off` with the register entry alone | `on` or `off` (also `1`/`0`, `true`/`false`, `yes`/`no`): the seeded chaos of the [Chaos](#chaos) section. |
-| `GENCLASS_SEED` | `1` | The chaos seed, a whole number from 0. Playwright's repeat index is added, so `--repeat-each 2` runs seeds 1 and 2. |
+| `GENCLASS_SEED` | `1` | The chaos seed, a whole number from 0. Playwright's repeat index is added, so `--repeat-each 2` runs seeds 1 and 2. Without chaos it only names the run's file, so runs started one after the other keep a file each. |
 | `GENCLASS_CHAOS_DELAY_MS` | `0,600` | `min,max`: extra latency per matched request in ms, at most 10000. |
 | `GENCLASS_CHAOS_REORDER` | `on` | `off`: matched requests leave in the order the page sent them (latency only). |
 | `GENCLASS_CHAOS_MIRROR` | `on` | `off`: every seed has delays of its own (an even seed is otherwise the mirror image of the odd seed before it). |
 | `GENCLASS_CHAOS_MATCH` | the page's own host, `/api*` or `Accept: json` | Which requests, as comma-separated path prefixes (`/api,/graphql`) or URL prefixes (`https://api.example.com/`). |
 | `GENCLASS_WAIT_FOR_RESPONSES_MS` | chaos delay's upper bound + 1000 | At the end of a test: how long at most to wait for the responses to requests the page had already sent, in ms. `0`: no wait. |
+| `GENCLASS_STEPS` | `300` (`1000` under `--explain-flaky`) | How many steps of the page's order a race file carries at most; `0` or `off`: none; at most 2000. |
 | `GENCLASS_OUT_DIR` | `test-results/genclass` | Where the race files go, against the working directory. |
 | `GENCLASS_MODEL` | `skip` | `load`: the runtime loads its model in the page, as with the fixture's `model: "load"`; `GENCLASS_MODEL_URL` names a model directory URL. |
 | `GENCLASS_RUNTIME_DIR` | the `@genclass/runtime` installed next to `@genclass/playwright`, else your project's | `@genclass/runtime`'s `dist/` directory, when it is somewhere else. |
@@ -429,7 +436,11 @@ Not covered, as it is today:
 
 Also different from a plain run: `testInfo.config.configFile` is the generated file's path (same directory as
 yours), any route turns off the browser's HTTP cache, and closing a context takes a moment longer (its pages are
-asked first; at most 2 seconds for a page that never answers).
+asked first; at most 2 seconds for a page that never answers). While a test's function runs, `testInfo.duration` is
+an accessor that reads 0, as the plain property did: the entry (and the fixture) watch for the one assignment
+Playwright makes when the function returns, note the time, and put the plain property back with Playwright's value.
+Where `duration` is not the plain number Playwright makes today, nothing is touched
+([`test/hook-smoke`](test/hook-smoke) holds that fact against the installed Playwright).
 
 ### Without the command
 
@@ -447,6 +458,121 @@ off unless you set `GENCLASS_CHAOS=on`, `--repeat-each` is yours to pass, nothin
 before the run, and a remembered line is printed on stderr instead of in a summary. `NODE_OPTIONS` reaches every
 Node process of the run (your web server, your package manager); the entry does nothing there, but a script in your
 suite that sets its own `NODE_OPTIONS` drops it, and then nothing is recorded.
+
+## A test that fails in some runs
+
+A test that fails one run in six fails for a reason, and for a web app the reason is often in the order of things: a
+response reached the page after a click instead of before it, or after a newer response. Run the test enough times
+and that order can be read off, because the failing runs have it and the passing runs do not. No app state is needed
+for that, so it does not depend on the framework: it is measured on an Angular suite, a Vue app with Pinia and a
+page with no framework, three places where the witnesses see no state.
+
+```bash
+npx genclass-playwright-run --explain-flaky tests/search.spec.ts:12            # 30 runs of that test
+npx genclass-playwright-run --explain-flaky=64 -g "bulk edit" --project=chromium
+GENCLASS_CHAOS=off npx genclass-playwright-run --explain-flaky tests/search.spec.ts:12   # without the delays
+```
+
+Every argument but `--explain-flaky` goes to `playwright test`, so select the test the way you usually do. The
+command then runs Playwright that many times (30 unless you give a number, 2 to 400), each a Playwright run of its own
+under the next seed (`--repeat-each 1`: no two runs share a worker, a saved login or a server, which is what breaks
+`--repeat-each N` on many suites), keeps every run's race files, and prints for each test what its failing runs have
+that its passing runs do not:
+
+```text
+GenClass: 16 runs, each a Playwright run of its own (seeds 1 to 16): 16 race files in test-results/genclass (1 test).
+  The order of steps, failing against passing: a measured comparison, not a diagnosis. An order only the failing runs have may be the cause, a consequence of the cause, or neither.
+    [chromium] search.spec.ts > buggy page: the results are the last query's · failed in 6 of 16 runs (under the delays)
+      Compared 6 failing runs with 10 passing runs: every failing run has this order of steps, and no passing run does.
+      1. In 6 of 6 failing runs and in none of the 10 passing runs that recorded these steps, the response to the 2nd `GET /api/search` came before the response to the 1st `GET /api/search` (median 96 ms apart; there the order was the other way round).
+      With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and no passing run has. Orders that every failing run has and no passing run has: 1 here, 0 on average per shuffle.
+```
+
+(That is the package's own end-to-end check, [`test/e2e-flaky`](test/e2e-flaky): a page that writes whichever answer
+lands last, and a test that expects the second query's results. On a real suite, an Angular app where the witnesses
+see nothing, the line was "the response to `POST …/selection_data/` came between the action `click menuitem …` and
+the action `click button "Apply"`", in 4 of 4 failing and none of 48 passing runs:
+[`docs/runtime/RESULTS.md`](../../docs/runtime/RESULTS.md), section 30.)
+
+With the delays on (the default) the runs differ by what each seed holds back; with `GENCLASS_CHAOS=off` they differ
+only by their own timing, which is the mode for a test that is flaky as it is. The delays can make a test fail less,
+not more: on the real suite of RESULTS.md section 30 they pushed the late response past both clicks in most runs.
+Failing runs are what this mode is for, so its exit code is 0 when the runs were made, whatever the tests did (2 when
+Playwright could not be started, Playwright's own code when the first run wrote no race file, and 128 plus the
+signal's number when a signal ended it). While it runs, Playwright's HTML reporter
+is told not to open (`PLAYWRIGHT_HTML_OPEN=never`, unless you set it): it would wait for a key after the first
+failing run. Playwright empties its output directory at the start of every run, and the race files are in it by
+default, so the command sets each run's files aside and puts them all back at the end, also when it is interrupted.
+
+**The usual report says the same when the files already hold enough runs**, for example with retries on, or after
+`--repeat-each 8`: `genclass-report.md` and the command's summary get a section "Failed in some runs" for such a test.
+With too few runs, and no witness in a failing run to read first, there is one line that names the command above for
+that test.
+
+### What is compared
+
+- **Steps.** What the runtime records on every framework without seeing any state: each user action (its kind and
+  the runtime's description of its target, `click button "Apply"`; never a value that was typed), each request when
+  it is sent, and its response when it is delivered to the app (or that it ended without one). They are in each race
+  file, in order (`steps`, [The file format](#the-file-format)). A step is the same step in two runs when its kind,
+  its label and its number agree: "the response to the 2nd `POST /api/orders`". The number counts the requests (or
+  the actions) with that label in the order they were sent (or done).
+- **Two kinds of statement.** "X came before Y", for two steps. And "X came between A and B", for three, where A
+  comes before B in every run and the order of X against each of them varies. One pair cannot say the second: when
+  the passing runs have the response before the first click in some runs and after the second click in others,
+  neither "after the first click" nor "before the second" is the failing runs' alone.
+- **The part of a run that counts.** A failing run stops early, so a step it never reached is unknown there: never
+  "after", never evidence. A passing run goes on where the failing runs stopped, so in a passing run the first user
+  action no failing run reached, and everything after it, is unknown too. And a step that landed after the test's
+  own code had finished (the fixture waits for late responses at the end) cannot have changed the result, so it is
+  not compared in any run. A statement is judged in a run only when the run has every step it names in that part.
+  Where a test's own code ended is the moment Playwright assigns `testInfo.duration`, which it does when the test's
+  function returns or throws, before hooks, screenshots and teardown; a step within 10 ms before it counts as after
+  it, since the test's last check was made in the page a message earlier.
+- **A difference** is a statement true in at least one failing run and in next to no passing run: at most one in
+  twenty of the passing runs that recorded its steps, so none at all below twenty. It must be known in at least three
+  failing runs and in at least half the passing runs. The line gives both counts, the median time between the steps
+  in the failing runs, and where the step was in the passing runs.
+- **The list.** More failing runs first; then a response against a user action or another response before
+  statements about a request's send; then the steps nearest each other. Each line after the first adds failing runs
+  the lines above it do not have, so a test whose failing runs differ among themselves shows as several lines.
+
+### How it keeps from explaining noise
+
+Two runs under different delays differ in many orders for no reason at all, so with few runs some order is always
+"only in the failing runs". Three things stand against reading that as an explanation:
+
+- **A minimum.** Below three failing and three passing runs with recorded steps, nothing is compared, and the output
+  says how many more runs would do.
+- **Shuffled outcomes.** The same search is run with the outcomes dealt at random over the same runs: every way of
+  choosing which runs failed when there are at most 2000 ways, else 1000 seeded shuffles. The output says in how many
+  of them some order did as well, and how many orders separated the two groups on average. When more than 5% of them
+  do as well, the verdict is that the orders found are not told apart from chance, and none is listed.
+- **The same measure for every line.** A line is listed only when its own count of failing runs is one that at most
+  5% of the shuffles reach.
+
+What comes out is a measured comparison, and it is labelled as one. An order that only the failing runs have may be
+the cause, a consequence of the cause (a test that hangs lets later responses land first), or neither; nothing here
+maps a pattern to a bug, and the model is not involved.
+
+### What it does not see
+
+- **Only order, and only these steps.** Two runs with the same order and another timing look the same. Requests are
+  `fetch` and XHR; a WebSocket message, a timer or a render is not a step. A test's own assertions are not steps
+  either: where its code ended is known, not what it was waiting for.
+- **Failing runs that differ among themselves** (five requests, any of which can be the stale one) each have an
+  order only some of the failing runs share, and it takes more runs before one is told apart from chance: on the
+  bench's search test one batch of 30 runs was not enough, and 60 runs gave three lines that every failing run has
+  one of. A failure that is several orders at once ("the 1st answer landed after all four others") is no single pair
+  or between, and is mostly declined: 2 of 12 such tests were explained on the held-out apps, against 16 of 16 where
+  the failure is one order (RESULTS.md section 30).
+- **A label that changes from run to run.** A user action is named by the runtime's description of its target; a
+  button whose text counts down, or names a record created in that run, is a different step in every run and is not
+  compared. Request paths have their ids written `:id`.
+- **The first steps of a long test.** A file holds the first 300 steps of the page's order (1000 under
+  `--explain-flaky`, `GENCLASS_STEPS` up to 2000) and says how many more there were.
+- **Each run starts your web server again**: a run of its own per seed is the price of runs that share nothing.
+- Measured in Chromium only.
 
 ## Measured
 
@@ -483,6 +609,15 @@ The same page under a suite nobody edited ([`test/e2e-unmodified`](test/e2e-unmo
 ([`test/e2e/unmodified.mjs`](test/e2e/unmodified.mjs)): it requires the witness on the buggy page in at least one of
 the command's two seeds, nothing on the fixed page and nothing in a latency-only run. It has no row in the table
 yet: it was written without a browser at hand, and its numbers are added after its first runs in CI.
+
+A test that fails in some runs ([`test/e2e-flaky`](test/e2e-flaky), which also imports only `@playwright/test`) is
+the fourth part ([`test/e2e/flaky.mjs`](test/e2e/flaky.mjs)), run through `genclass-playwright-run
+--explain-flaky=16`: on the buggy page it types two letters and expects the results of the second, so it fails when
+the answer to the first lands last. The check requires sixteen race files, one per seed, each with the test's status
+and the page's steps; at least three failing and three passing runs; and that the command's first line says the
+answer to the 2nd search came before the answer to the 1st in every failing run and in no passing one. What that
+comparison does on the bench, on apps whose state the runtime does not see and on a real suite is in
+[`docs/runtime/RESULTS.md`](../../docs/runtime/RESULTS.md), section 30.
 
 One page is not a benchmark: the numbers to expect on your app depend on what state the runtime can see (above).
 Wider measurements (the six demos, the real-app corpus) are the next step and will go to
@@ -533,7 +668,9 @@ const markdown = summarize([{ name: "checkout-1.json", content: jsonText }], { m
 ```
 
 `buildSummary` returns the same report as data (tests, signatures, seeds, totals, skipped files), and
-`validateRaces` / `parseRaces` check one file.
+`validateRaces` / `parseRaces` check one file. `summarize` is the signatures alone: the section about a test that
+failed in some runs ([A test that fails in some runs](#a-test-that-fails-in-some-runs)) is added by the reporter and
+the two commands, not by this function.
 
 ### The file format
 
@@ -568,6 +705,13 @@ interface GenClassRacesFile {
     file: string;                // "tests/checkout.spec.ts": relative to the repository root, "/" separators
     line: number;
   };
+  status?: "passed" | "failed" | "timedOut" | "interrupted";  // written by the fixture: the test's own status
+  steps?: {                      // written by the fixture: the order of things on the page, bounded
+    labels: string[];            // 'click button "Apply"', "POST /api/orders": at most 400, each at most 160 characters
+    order: string;               // "a0.1+0 s1.1+4 r1.1+38": kind, label, which one, ms since the step before; at most 2000 steps
+    body?: number;               // how many of them happened while the test's own code ran
+    cut?: number;                // how many more the test had after the ones listed
+  };
 }
 ```
 
@@ -576,6 +720,19 @@ An operation (`op`) is the request's method and path without its query, with the
 `GET /api/items/7` and `GET /api/items/1042` are both `GET /api/items/:id`. So a race on a record a test creates is
 the same signature in every seed and the same finding on every push. The runtime's request keys already write ids
 this way; the fixture applies its own rule on top.
+
+`status` and `steps` are what the comparison of a test's failing and passing runs reads
+([A test that fails in some runs](#a-test-that-fails-in-some-runs)); no finding depends on them. In `order`, a step is
+`<kind><label>.<n>+<ms>`: `a` a user action, `s` a request was sent, `r` its response was delivered to the app, `x` it
+ended without one (it failed or was aborted); `label` is an index into `labels`; `n` says which one, counted from 1
+(the 2nd `POST /api/orders`); `ms` is the time since the step before. A request's label is its method and path with
+ids written `:id` (a request to another host starts with the host name, without the port); a user action's is its
+kind and the runtime's description of its target. No query string, no request or response body and no value a user
+typed is in them. The limits are exported as `STEPS_LIMITS`. Both fields are read leniently, the one exception to
+"never half-read" below: a `status` or `steps` this version cannot read is left out and the file is kept, and a reader
+older than them drops them like any field it does not know. The fixture puts the steps into the room the signatures
+leave (300 steps and about 5 KB unless the `steps` option says otherwise): it never leaves a signature out to make
+room for a step, and the file stays within its 64 KB.
 
 `location` is relative to the checkout on GitHub Actions (`GITHUB_WORKSPACE`), else to the Playwright config's
 directory, and is left out when Playwright gives no line or the test file is outside that directory. The report does
@@ -870,15 +1027,16 @@ still fails with Playwright's own error. It also interrupts the command in the m
 and it forks a helper process the way a test would, with the entry preloaded, and requires that the entry stays idle
 there and that Playwright is not loaded. [`test/hook-smoke`](test/hook-smoke) is run by `test/worker.test.ts` on the
 installed Playwright (no browser either): its spec holds the two things the entry needs from Playwright to tell whose
-a browser context is, which hook is running and which test is the one running, and fails when a Playwright no
-longer has them.
+a browser context is, which hook is running and which test is the one running, and the one thing that says when a
+test's own code ended (`testInfo.duration` is assigned when the test's function returns), and fails when a Playwright
+no longer has them.
 
 The end-to-end check needs both builds and Chromium:
 
 ```bash
 npm run build -w @genclass/runtime && npm run build -w @genclass/playwright
 npx playwright install --with-deps chromium
-node packages/playwright/test/e2e/run.mjs   # one run of the table in "Measured": exit 0 when the buggy page has the witness in at least 1 of 5 seeds and nothing else, and the other two rows have nothing; then the same page under the unmodified suite, through genclass-playwright-run
+node packages/playwright/test/e2e/run.mjs   # one run of the table in "Measured": exit 0 when the buggy page has the witness in at least 1 of 5 seeds and nothing else, and the other two rows have nothing; then the same page under the unmodified suite, through genclass-playwright-run; then tests that end early; then a test that fails in some runs, through --explain-flaky
 ```
 
 Each Playwright run of that check is a child process with a time limit, so the check ends by itself; what it found

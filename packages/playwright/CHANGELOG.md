@@ -5,6 +5,45 @@ Changes to `@genclass/playwright`, the Playwright reporter for
 
 ## Unreleased
 
+- **A test that fails in some runs: which order of steps its failing runs have.** New mode of the command:
+  `genclass-playwright-run --explain-flaky[=N] [arguments that select the test]` runs Playwright N times (default 30),
+  each run a Playwright run of its own under the next seed (`--repeat-each 1`, so no two runs share a worker, a saved
+  login or a server), keeps every run's race files (Playwright empties its output directory at each start: the files
+  are set aside and put back at the end), and then compares the order of steps in each test's failing runs with the
+  order in its passing runs. It prints the orders that failing runs have and next to no passing run has: "X came
+  before Y", or "X came between A and B", with the counts of both kinds of run, the median time between the steps, and
+  how often the same search finds as much when the outcomes are shuffled. It uses only what the runtime records on
+  every framework (user actions, each request's send, the delivery of its response) and no app state. It is a
+  measured comparison, labelled as one, never a diagnosis. It refuses below three failing and three passing runs, and
+  calls nothing an explanation when shuffled outcomes do as well in more than 5% of the shuffles. Its exit code is 0
+  when the runs were made (failing runs are what it compares). With `GENCLASS_CHAOS=off` the runs differ only by
+  their own timing. Measured on the bench, on two apps whose state the runtime does not see and on one real suite:
+  [docs/runtime/RESULTS.md](../../docs/runtime/RESULTS.md) section 30.
+- **The report says the same when the files already hold enough runs** (retries, several seeds): a section "Failed in
+  some runs" in `genclass-report.md` (the reporter and `genclass-playwright-report`) and in the command's summary.
+  With too few runs, and no witness in a failing run, one line names the command above for that test. Files without
+  a status (written by 0.1.0) give the report they gave. `summarize()` and `buildSummary()` from code are unchanged
+  and say none of this: the section is a module of its own (`src/explain.ts`) that the summariser does not import, so
+  genclass-dev[bot], which bundles the summariser, reads and writes what it did. New option `after` of `summarize()`
+  and `renderMarkdown()`: lines of the caller's own to put after the tests with signatures.
+- **Two new optional fields in a race file**, both ignored by a reader that does not know them: `status` (the test's
+  own status when the file was written: `passed`, `failed`, `timedOut`, `interrupted`) and `steps` (the page's steps
+  in order: `labels`, and `order` as `<kind><label>.<n>+<ms>` tokens; `body` says how many of them happened while the
+  test's own code ran, `cut` how many more there were). At most 300 steps and about 5 KB by default (`steps` option,
+  `GENCLASS_STEPS`; `false` or `0` for none; `--explain-flaky` keeps 1000), never more than 2000 (`STEPS_LIMITS`), and
+  a file stays within 64 KB: steps go into the room the signatures leave. A step names a request by method and path
+  (ids as `:id`, no query, no body) and a user action by its kind and the runtime's description of its target, never
+  a value that was typed. The validator reads both leniently: a value it cannot read is left out, the file is kept.
+- **When a test's own code ends** is taken from the moment Playwright sets `testInfo.duration`, which it does when
+  the test's function returns or throws, before after-hooks, screenshots and teardown. The property is watched for
+  that one assignment and then put back as it was; where it is not the plain number Playwright makes, nothing is
+  touched and the end is where the page was first asked at the end of the test. Only the `steps` use it (a step that
+  landed after the test's code cannot have changed its result).
+- **Without chaos, `GENCLASS_SEED` (new option `seed`) names a run's file**, so runs started one after the other do
+  not write over each other's files. With chaos it is the chaos seed, as before.
+- A test that closes its own browser context and fails afterwards has its file written again with the status it
+  ended with (when the next test starts, or when the worker exits).
+
 - **The end of a test waits for responses in flight.** Before it collects, the fixture (and the register entry)
   waits for the responses to requests the page had sent a moment ago and not seen answered, so an older response that
   lands after the test's last assertion is recorded. Bounded: at most `waitForResponsesMs` (default: the chaos

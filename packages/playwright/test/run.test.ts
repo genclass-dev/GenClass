@@ -12,9 +12,9 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_REPEAT_EACH, MAX_SUMMARY_SIGNATURES, RUN_USAGE, findPlaywrightCli, parseRunArgs, planCommand, removeRaceFiles, runCommand, runSummary, type RunIo, type SpawnResult, localBinsPath } from "../src/run.js";
+import { DEFAULT_REPEAT_EACH, EXPLAIN_STEPS, MAX_EXPLAIN_RUNS, MAX_SUMMARY_SIGNATURES, RUN_USAGE, explainSummary, findPlaywrightCli, localBinsPath, moveRaceFiles, parseRunArgs, planCommand, removeRaceFiles, runCommand, runSummary, type RunIo, type SpawnResult } from "../src/run.js";
 import { isWrapperConfigName, wrapperConfigSource } from "../src/wrapper.js";
-import { fakeRuntimeDir, fixtureInputs, here } from "./helpers.js";
+import { bulkEditSteps, fakeRuntimeDir, fixtureInputs, here, raceFileWithSteps } from "./helpers.js";
 
 const pkgDir = join(here, "..");
 const CLI = join("/project", "node_modules", "@playwright", "test", "cli.js");
@@ -37,27 +37,28 @@ afterEach(() => {
 
 describe("run: the command's arguments", () => {
   it("knows --config, --repeat-each and --help; everything else is passed through in order", () => {
-    expect(parseRunArgs([])).toEqual({ help: false, config: undefined, repeatEach: false, rest: [] });
+    expect(parseRunArgs([])).toEqual({ help: false, config: undefined, repeatEach: false, explain: null, rest: [] });
     expect(parseRunArgs(["--project", "chromium", "-g", "checkout", "tests/a.spec.ts:12", "--workers=2", "-x"])).toEqual({
       help: false,
       config: undefined,
       repeatEach: false,
+      explain: null,
       rest: ["--project", "chromium", "-g", "checkout", "tests/a.spec.ts:12", "--workers=2", "-x"],
     });
     for (const argv of [["--config", "e2e/pw.config.ts", "--headed"], ["-c", "e2e/pw.config.ts", "--headed"], ["--config=e2e/pw.config.ts", "--headed"], ["-ce2e/pw.config.ts", "--headed"], ["--headed", "-c", "e2e/pw.config.ts"]])
-      expect(parseRunArgs(argv), argv.join(" ")).toEqual({ help: false, config: "e2e/pw.config.ts", repeatEach: false, rest: ["--headed"] });
+      expect(parseRunArgs(argv), argv.join(" ")).toEqual({ help: false, config: "e2e/pw.config.ts", repeatEach: false, explain: null, rest: ["--headed"] });
     // the last one wins, as in Playwright's own parser
     expect(parseRunArgs(["-c", "a.ts", "--config=b.ts"]).config).toBe("b.ts");
-    expect(parseRunArgs(["--repeat-each", "5", "a.spec.ts"])).toEqual({ help: false, config: undefined, repeatEach: true, rest: ["--repeat-each", "5", "a.spec.ts"] });
-    expect(parseRunArgs(["--repeat-each=3"])).toEqual({ help: false, config: undefined, repeatEach: true, rest: ["--repeat-each=3"] });
+    expect(parseRunArgs(["--repeat-each", "5", "a.spec.ts"])).toEqual({ help: false, config: undefined, repeatEach: true, explain: null, rest: ["--repeat-each", "5", "a.spec.ts"] });
+    expect(parseRunArgs(["--repeat-each=3"])).toEqual({ help: false, config: undefined, repeatEach: true, explain: null, rest: ["--repeat-each=3"] });
     expect(parseRunArgs(["--help"]).help).toBe(true);
     expect(parseRunArgs(["-h"]).help).toBe(true);
   });
 
   it("a --config with nothing after it is Playwright's to complain about; nothing is read after a bare --", () => {
-    expect(parseRunArgs(["--headed", "--config"])).toEqual({ help: false, config: undefined, repeatEach: false, rest: ["--headed", "--config"] });
-    expect(parseRunArgs(["-c"])).toEqual({ help: false, config: undefined, repeatEach: false, rest: ["-c"] });
-    expect(parseRunArgs(["--grep", "x", "--", "-c", "--repeat-each", "--help"])).toEqual({ help: false, config: undefined, repeatEach: false, rest: ["--grep", "x", "--", "-c", "--repeat-each", "--help"] });
+    expect(parseRunArgs(["--headed", "--config"])).toEqual({ help: false, config: undefined, repeatEach: false, explain: null, rest: ["--headed", "--config"] });
+    expect(parseRunArgs(["-c"])).toEqual({ help: false, config: undefined, repeatEach: false, explain: null, rest: ["-c"] });
+    expect(parseRunArgs(["--grep", "x", "--", "-c", "--repeat-each", "--help"])).toEqual({ help: false, config: undefined, repeatEach: false, explain: null, rest: ["--grep", "x", "--", "-c", "--repeat-each", "--help"] });
   });
 });
 
@@ -238,6 +239,238 @@ function fakeIo(env: Record<string, string | undefined> = {}): FakeIo {
 
 const leftovers = (dir: string): string[] => readdirSync(dir).filter((n) => isWrapperConfigName(n));
 const raceFile = (test: string, seed: number, signatures: unknown[] = []): string => JSON.stringify({ schema: "genclass-races/1", test, seed, signatures });
+
+describe("run: --explain-flaky, a test's failing runs against its passing ones", () => {
+  const BULK = "list.spec.ts > bulk edit";
+  const DELAYS = { chaos: { latencyMs: [0, 600], reorder: true }, fixture: { model: "skip", agent: null, chaosApplied: 4, serviceWorker: false } };
+  /**
+   * The test fails under seeds 3, 7, 11 and 15 (the response lands between the two clicks) and passes under the others:
+   * four with the response before the first click, eight with it after the second. So of the 1820 ways to call four of
+   * sixteen runs failing, two have an order of their own: the real one, and the four "before" runs.
+   */
+  const failsUnder = (seed: number): boolean => seed % 4 === 3;
+  const writeRun = (dir: string, seed: number, test = BULK): void => {
+    const failed = failsUnder(seed);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${test.replace(/[^a-z]+/gi, "-")}-s${seed}.json`), raceFileWithSteps(test, seed, failed ? "failed" : "passed", bulkEditSteps(failed ? "between" : seed % 2 ? "before" : "after"), DELAYS));
+  };
+
+  it("is read in its three spellings and taken out of what goes to Playwright; a number that is not one, or --repeat-each next to it, is an error", () => {
+    expect(parseRunArgs(["--explain-flaky", "tests/a.spec.ts:12"])).toEqual({ help: false, config: undefined, repeatEach: false, explain: 30, rest: ["tests/a.spec.ts:12"] });
+    expect(parseRunArgs(["--explain-flaky=64", "-g", "bulk edit"])).toEqual({ help: false, config: undefined, repeatEach: false, explain: 64, rest: ["-g", "bulk edit"] });
+    expect(parseRunArgs(["-c", "e2e/pw.config.ts", "--explain-flaky", "12", "--project=chromium"])).toEqual({ help: false, config: "e2e/pw.config.ts", repeatEach: false, explain: 12, rest: ["--project=chromium"] });
+    // a number after the flag is its number of runs; a file name is not
+    expect(parseRunArgs(["--explain-flaky", "2024.spec.ts"])).toMatchObject({ explain: 30, rest: ["2024.spec.ts"] });
+    expect(parseRunArgs(["--", "--explain-flaky"])).toMatchObject({ explain: null, rest: ["--", "--explain-flaky"] });
+    expect(parseRunArgs(["--explain-flaky=2"]).explain).toBe(2);
+    expect(parseRunArgs([`--explain-flaky=${MAX_EXPLAIN_RUNS}`]).explain).toBe(MAX_EXPLAIN_RUNS);
+    for (const bad of ["--explain-flaky=1", "--explain-flaky=0", `--explain-flaky=${MAX_EXPLAIN_RUNS + 1}`, "--explain-flaky=many", "--explain-flaky=", "--explain-flaky=3.5"])
+      expect(parseRunArgs([bad]).error, bad).toBe(`--explain-flaky takes a number of runs from 2 to 400, got ${JSON.stringify(bad.slice("--explain-flaky=".length))}`);
+    expect(parseRunArgs(["--explain-flaky", "1"]).error).toBe('--explain-flaky takes a number of runs from 2 to 400, got "1"');
+    expect(parseRunArgs(["--explain-flaky", "--repeat-each", "3"]).error).toBe("--explain-flaky gives each seed a run of its own: leave out --repeat-each");
+    expect(parseRunArgs(["--repeat-each=3", "--explain-flaky=8"]).error).toBe("--explain-flaky gives each seed a run of its own: leave out --repeat-each");
+  });
+
+  it("plans a run of one seed: --repeat-each 1, the HTML report told not to open, more steps kept; what the user set stands", () => {
+    const base = { cwd: project, cli: CLI, location: { file: join(project, "playwright.config.ts"), dir: project }, module: true, registerPath: join(root, "pkg", "dist", "register.js"), runtimeDir, id: 77, notesFile: join(root, "notes") };
+    const plan = planCommand({ ...base, args: parseRunArgs(["--explain-flaky", "tests/a.spec.ts:12", "--project=chromium"]), env: {} });
+    expect(plan.argv).toEqual([CLI, "test", "--config", join(project, "playwright.config.ts.genclass-77.mjs"), "--repeat-each", "1", "tests/a.spec.ts:12", "--project=chromium"]);
+    expect(plan.env).toMatchObject({ GENCLASS_CHAOS: "on", PLAYWRIGHT_HTML_OPEN: "never", GENCLASS_STEPS: String(EXPLAIN_STEPS) });
+    expect(EXPLAIN_STEPS).toBe(1000);
+    const own = planCommand({ ...base, args: parseRunArgs(["--explain-flaky"]), env: { GENCLASS_CHAOS: "off", PLAYWRIGHT_HTML_OPEN: "always", GENCLASS_STEPS: "200" } });
+    expect("GENCLASS_CHAOS" in own.env || "PLAYWRIGHT_HTML_OPEN" in own.env || "GENCLASS_STEPS" in own.env).toBe(false);
+    // the usual run touches neither
+    const usual = planCommand({ ...base, args: parseRunArgs([]), env: {} });
+    expect("PLAYWRIGHT_HTML_OPEN" in usual.env || "GENCLASS_STEPS" in usual.env).toBe(false);
+  });
+
+  it("runs Playwright once per seed, each seed the next, keeps every run's files, prints the comparison, and exits 0 whatever the tests did", async () => {
+    const io = fakeIo();
+    const outDir = join(project, "test-results", "genclass");
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(join(outDir, "stale-0-s9.json"), raceFileWithSteps("an earlier run", 9, "failed", bulkEditSteps("between")));
+    io.during = (_argv, env) => {
+      const seed = Number(env.GENCLASS_SEED);
+      // Playwright empties its output directory when a run starts, and the race files are in it by default: the
+      // earlier runs' files are not there to lose, the command has set them aside
+      expect(existsSync(outDir) ? readdirSync(outDir) : []).toEqual([]);
+      rmSync(join(project, "test-results"), { recursive: true, force: true });
+      writeRun(env.GENCLASS_OUT_DIR!, seed);
+      return { code: failsUnder(seed) ? 1 : 0, signal: null };
+    };
+    const code = await runCommand(["--explain-flaky=16", "e2e/list.spec.ts:140", "--project=chromium"], io);
+    expect(code).toBe(0);
+    expect(io.spawned).toHaveLength(16);
+    expect(io.spawned.map((s) => s.env.GENCLASS_SEED)).toEqual(Array.from({ length: 16 }, (_, i) => String(i + 1)));
+    for (const s of io.spawned) {
+      expect(s.argv).toEqual([CLI, "test", "--config", join(project, "playwright.config.ts.genclass-77.mjs"), "--repeat-each", "1", "e2e/list.spec.ts:140", "--project=chromium"]);
+      expect(s.env).toMatchObject({ GENCLASS_CHAOS: "on", PLAYWRIGHT_HTML_OPEN: "never", GENCLASS_STEPS: "1000", GENCLASS_OUT_DIR: outDir });
+      expect(s.wrapper).toContain("register.js");
+    }
+    // every run's file is back where the report looks for it, and nothing is left where they waited
+    expect(readdirSync(outDir)).toHaveLength(16);
+    expect(readdirSync(root).filter((n) => n.startsWith("genclass-playwright-"))).toEqual([]);
+    expect(leftovers(project)).toEqual([]);
+    expect(io.stdout).toBe("");
+    const printed = io.stderr.split("\n");
+    expect(printed.filter((l) => l.startsWith("GenClass: run "))).toEqual(Array.from({ length: 16 }, (_, i) => `GenClass: run ${i + 1} of 16 (seed ${i + 1})`));
+    expect(printed.slice(printed.indexOf("GenClass: 16 runs, each a Playwright run of its own (seeds 1 to 16): 16 race files in test-results/genclass (1 test)."))).toEqual([
+      "GenClass: 16 runs, each a Playwright run of its own (seeds 1 to 16): 16 race files in test-results/genclass (1 test).",
+      "  The order of steps, failing against passing: a measured comparison, not a diagnosis. An order only the failing runs have may be the cause, a consequence of the cause, or neither.",
+      "    list.spec.ts > bulk edit · failed in 4 of 16 runs (under the delays)",
+      "      Compared 4 failing runs with 12 passing runs: every failing run has this order of steps, and no passing run does.",
+      '      1. In 4 of 4 failing runs and in none of the 12 passing runs that recorded these steps, the response to `POST /api/selection` came between the action `click menuitem "Urgent"` and the action `click button "Apply"` (median 10 ms after the first and 10 ms before the second; there it came before the first of the two in 4 and after the second in 8).',
+      "      Of the 1820 ways to choose which 4 of these 16 runs failed, 2 give an order that every failing run has and no passing run has (the real outcomes are one of them). Orders that every failing run has and no passing run has: 1 here, 0 on average over those ways.",
+      "",
+    ]);
+  });
+
+  it("starts at GENCLASS_SEED when it is set, and leaves the delays off when the user turned them off", async () => {
+    const io = fakeIo({ GENCLASS_SEED: "40", GENCLASS_CHAOS: "off" });
+    io.during = (_argv, env) => {
+      writeRun(env.GENCLASS_OUT_DIR!, Number(env.GENCLASS_SEED));
+      return { code: 0, signal: null };
+    };
+    expect(await runCommand(["--explain-flaky=3"], io)).toBe(0);
+    expect(io.spawned.map((s) => [s.env.GENCLASS_SEED, s.env.GENCLASS_CHAOS])).toEqual([
+      ["40", "off"],
+      ["41", "off"],
+      ["42", "off"],
+    ]);
+    expect(io.stderr).toContain("GenClass: run 3 of 3 (seed 42)");
+    expect(io.stderr).toContain("GenClass: 3 runs, each a Playwright run of its own (seeds 40 to 42): 3 race files");
+  });
+
+  it("stops when a signal ends a run, with that exit code, and when the first run writes no race file, with Playwright's", async () => {
+    const interrupted = fakeIo();
+    interrupted.during = (_argv, env) => {
+      const seed = Number(env.GENCLASS_SEED);
+      writeRun(env.GENCLASS_OUT_DIR!, seed);
+      return seed === 3 ? { code: null, signal: "SIGINT" } : { code: 0, signal: null };
+    };
+    expect(await runCommand(["--explain-flaky=10"], interrupted)).toBe(130);
+    expect(interrupted.spawned).toHaveLength(3);
+    // the runs that were made are not lost: their files are back in the directory
+    expect(readdirSync(join(project, "test-results", "genclass"))).toHaveLength(3);
+    expect(readdirSync(root).filter((n) => n.startsWith("genclass-playwright-"))).toEqual([]);
+    expect(interrupted.stderr).toContain("GenClass: 3 of 10 runs, each a Playwright run of its own (seeds 1 to 3): 3 race files");
+    expect(leftovers(project)).toEqual([]);
+
+    const nothing = fakeIo();
+    nothing.during = () => ({ code: 1, signal: null });
+    expect(await runCommand(["--explain-flaky=10", "-g", "no such test"], nothing)).toBe(1);
+    expect(nothing.spawned).toHaveLength(1);
+    expect(nothing.stderr).toContain("GenClass: 1 of 10 runs, each a Playwright run of its own (seed 1): 0 race files in test-results/genclass (0 tests).\n  No race file was written, so there is nothing to compare.");
+
+    const code130 = fakeIo();
+    code130.during = (_argv, env) => {
+      writeRun(env.GENCLASS_OUT_DIR!, Number(env.GENCLASS_SEED));
+      return { code: 130, signal: null };
+    };
+    expect(await runCommand(["--explain-flaky=10"], code130)).toBe(130);
+    expect(code130.spawned).toHaveLength(1);
+  });
+
+  it("a start that fails partway, and the process's own exit, put the files of the runs made back too", async () => {
+    const io = fakeIo();
+    const outDir = join(project, "test-results", "genclass");
+    io.during = (_argv, env) => {
+      const seed = Number(env.GENCLASS_SEED);
+      if (seed === 3) throw new Error("spawn ENOMEM");
+      writeRun(env.GENCLASS_OUT_DIR!, seed);
+      return { code: 0, signal: null };
+    };
+    expect(await runCommand(["--explain-flaky=5"], io)).toBe(2);
+    expect(io.stderr).toContain("could not start Playwright (spawn ENOMEM)");
+    expect(readdirSync(outDir)).toHaveLength(2);
+    // what the exit handler does when the command is ended from outside: the same, and safe to do twice
+    for (const fn of io.exits) fn();
+    expect(readdirSync(outDir)).toHaveLength(2);
+    expect(readdirSync(root).filter((n) => n.startsWith("genclass-playwright-"))).toEqual([]);
+  });
+
+  it("moves race files and nothing else", () => {
+    const from = join(root, "from");
+    const to = join(root, "deep", "to");
+    mkdirSync(join(from, "sub"), { recursive: true });
+    writeFileSync(join(from, "a-s1.json"), raceFile("a", 1));
+    writeFileSync(join(from, "b-s2.JSON"), raceFile("b", 2));
+    writeFileSync(join(from, "report.json"), JSON.stringify({ stats: {} }));
+    writeFileSync(join(from, "broken.json"), "{");
+    writeFileSync(join(from, "notes.txt"), "keep");
+    writeFileSync(join(from, "sub", "c-s3.json"), raceFile("c", 3));
+    expect(moveRaceFiles(from, to)).toBe(2);
+    expect(readdirSync(to).sort()).toEqual(["a-s1.json", "b-s2.JSON"]);
+    expect(readdirSync(from).sort()).toEqual(["broken.json", "notes.txt", "report.json", "sub"]);
+    expect(readFileSync(join(to, "a-s1.json"), "utf8")).toBe(raceFile("a", 1));
+    // a file of the same name is replaced; nothing to move makes no directory
+    writeFileSync(join(from, "a-s1.json"), raceFile("a again", 1));
+    expect(moveRaceFiles(from, to)).toBe(1);
+    expect(readFileSync(join(to, "a-s1.json"), "utf8")).toBe(raceFile("a again", 1));
+    expect(moveRaceFiles(join(root, "nowhere"), join(root, "never"))).toBe(0);
+    expect(existsSync(join(root, "never"))).toBe(false);
+  });
+
+  it("an argument it cannot read: exit code 2, why, and nothing is run", async () => {
+    const io = fakeIo();
+    expect(await runCommand(["--explain-flaky=1"], io)).toBe(2);
+    expect(io.spawned).toEqual([]);
+    expect(io.stderr).toBe('genclass-playwright-run: --explain-flaky takes a number of runs from 2 to 400, got "1".\nNothing was run.\n');
+    const both = fakeIo();
+    expect(await runCommand(["--explain-flaky", "--repeat-each", "4"], both)).toBe(2);
+    expect(both.stderr).toBe("genclass-playwright-run: --explain-flaky gives each seed a run of its own: leave out --repeat-each.\nNothing was run.\n");
+    expect(leftovers(project)).toEqual([]);
+  });
+
+  it("what it says when there is nothing to compare: a test that always passed, one that always failed, one with too few of a kind, files without a status", () => {
+    const input = (test: string, seed: number, status: string | undefined, extra: Record<string, unknown> = DELAYS) => ({ name: `${test}-${seed}.json`, content: raceFileWithSteps(test, seed, status, bulkEditSteps(status === "failed" ? "between" : "before"), extra) });
+    const inputs = [
+      ...[1, 2, 3, 4].map((s) => input("a.spec.ts > always passes", s, "passed")),
+      ...[1, 2, 3, 4].map((s) => input("b.spec.ts > always fails", s, "failed")),
+      ...[1, 2, 3, 4].map((s) => input("c.spec.ts > fails once", s, s === 2 ? "failed" : "passed")),
+      ...[1, 2, 3, 4].map((s) => input("d.spec.ts > older files", s, undefined)),
+      ...[1, 2].map((s) => input("e.spec.ts > fails without delays", s, "failed", {})),
+    ];
+    expect(explainSummary({ inputs, dir: "races", notes: ["one worker's line"], report: "", wanted: 4, made: 4, firstSeed: 1 })).toBe(
+      [
+        "GenClass: 4 runs, each a Playwright run of its own (seeds 1 to 4): 18 race files in races (5 tests).",
+        "  The order of steps, failing against passing: a measured comparison, not a diagnosis. An order only the failing runs have may be the cause, a consequence of the cause, or neither.",
+        "    a.spec.ts > always passes · passed in all 4 runs: nothing to compare.",
+        "    b.spec.ts > always fails · failed in all 4 runs: there is no passing run to compare with. GENCLASS_CHAOS=off makes the runs without the delays.",
+        "    c.spec.ts > fails once · failed in 1 of 4 runs: too few of one kind to compare (it takes 3 failing and 3 passing). More runs: --explain-flaky=40",
+        "    d.spec.ts > older files · its race files do not say whether it passed (written by an older @genclass/playwright): nothing to compare.",
+        "    e.spec.ts > fails without delays · failed in all 2 runs: there is no passing run to compare with.",
+        "GenClass notes:",
+        "  - one worker's line",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("the usual run says the same about a test that failed in some of its runs, under its signatures", () => {
+    const inputs = Array.from({ length: 16 }, (_, i) => ({ name: `bulk-${i + 1}.json`, content: raceFileWithSteps(BULK, i + 1, failsUnder(i + 1) ? "failed" : "passed", bulkEditSteps(failsUnder(i + 1) ? "between" : (i + 1) % 2 ? "before" : "after"), DELAYS) }));
+    const two = [{ name: "cart-1.json", content: raceFileWithSteps("cart.spec.ts > adds two", 1, "failed", bulkEditSteps("between"), { ...DELAYS, location: { file: "e2e/cart.spec.ts", line: 12 } }) }, { name: "cart-2.json", content: raceFileWithSteps("cart.spec.ts > adds two", 2, "passed", bulkEditSteps("before"), DELAYS) }];
+    const printed = runSummary({ inputs: [...inputs, ...two], dir: "races", notes: [], report: "REPORT" }).split("\n");
+    expect(printed).toEqual([
+      "GenClass: 18 race files in races (2 tests): 0 signatures in 0 tests, 0 reproducible (flagged in 2 or more seeds of the same test).",
+      "  Failed in some runs (the order of steps, failing against passing: a measured comparison, not a diagnosis):",
+      "    list.spec.ts > bulk edit · failed in 4 of 16 runs (under the delays)",
+      "      Compared 4 failing runs with 12 passing runs: every failing run has this order of steps, and no passing run does.",
+      '      1. In 4 of 4 failing runs and in none of the 12 passing runs that recorded these steps, the response to `POST /api/selection` came between the action `click menuitem "Urgent"` and the action `click button "Apply"` (median 10 ms after the first and 10 ms before the second; there it came before the first of the two in 4 and after the second in 8).',
+      "      Of the 1820 ways to choose which 4 of these 16 runs failed, 2 give an order that every failing run has and no passing run has (the real outcomes are one of them). Orders that every failing run has and no passing run has: 1 here, 0 on average over those ways.",
+      "    cart.spec.ts > adds two · failed in 1 of 2 runs (under the delays), and no witness was recorded in a failing run. That is too few runs to compare (it takes 3 failing and 3 passing). This runs the test 30 times, each run on its own, and compares the order of steps in its failing and passing runs: `npx genclass-playwright-run --explain-flaky e2e/cart.spec.ts:12`",
+      "  The report: REPORT",
+      "",
+    ]);
+    // nothing of it for files that carry no status
+    expect(runSummary({ inputs: fixtureInputs(), dir: "races", notes: [], report: "REPORT" })).not.toContain("Failed in some runs");
+  });
+
+  it("the usage names the mode and the new variable", () => {
+    expect(RUN_USAGE).toContain("genclass-playwright-run --explain-flaky[=N] [arguments that select the test ...]");
+    expect(RUN_USAGE).toContain("GENCLASS_STEPS=<n>");
+  });
+});
 
 describe("run: the command, on a fake process", () => {
   it("writes the generated config next to the user's, runs Playwright on it, removes it, says where the race files are, and exits with Playwright's code", async () => {

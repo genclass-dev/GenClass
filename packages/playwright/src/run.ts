@@ -15,11 +15,25 @@
 // started at all: it is not installed, @genclass/runtime is not there, or the config could not be written. What the
 // command prints goes to stderr, so Playwright's own stdout (a JSON reporter, say) stays as it is.
 //
+// One mode of its own, for a test that fails in some runs and passes in others:
+//
+//   npx genclass-playwright-run --explain-flaky[=N] [arguments of "playwright test" that select the test ...]
+//
+// It runs Playwright N times (default 30), each time once (`--repeat-each 1`) under the next seed, so no two runs share
+// a process, a server or a saved login, keeps every run's race files, and then compares the order of steps in each
+// test's failing runs with the order in its passing runs (order.ts). Playwright empties its output directory when a
+// run starts, and the race files are in it by default: so after each run they are set aside in a directory of the
+// command's own (under the system's temporary directory), and put back together when the last run is over, or when
+// the command is ended early. A failing test is what this mode is for, so its
+// exit code is 0 when the runs were made, whatever the tests did; 2 when nothing could be run, and 128 plus the signal
+// number when a signal ended it. While it runs, Playwright's HTML reporter is told not to open (PLAYWRIGHT_HTML_OPEN,
+// unless set): it would wait for a key after the first failing run.
+//
 // The command's parts are pure and tested as exact text and exact argv (parseRunArgs, planCommand, runSummary);
 // runCommand takes its process (RunIo), so a test runs it without starting anything.
 
 import { spawn } from "node:child_process";
-import { readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { constants, tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
@@ -27,6 +41,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_OUT_DIR, ENV, flagOf, isOff, type Env } from "./env.js";
 import { displayPath, readRacesDirs } from "./files.js";
 import { findRuntimeDir } from "./install.js";
+import { EXPLAIN_FLAG, EXPLAIN_RUNS, orderLines, ordersToReport, testOrders } from "./explain.js";
 import { buildSummary } from "./summarize.js";
 import { RACES_SCHEMA, type RacesFileInput } from "./types.js";
 import { isModuleFile, resolveConfig, wrapperConfigName, wrapperConfigSource, type ConfigLocation } from "./wrapper.js";
@@ -41,6 +56,13 @@ your playwright.config, and writes one race file per test and seed.
     yours is written next to it for the run and removed afterwards;
   - --repeat-each 2 is added unless you pass one: two seeds, so a finding can be marked reproducible.
 
+For a test that fails in some runs and passes in others:
+  genclass-playwright-run --explain-flaky[=N] [arguments that select the test ...]
+    runs it N times (default 30), each run a Playwright run of its own under the next seed, then says
+    which order of user actions, requests and responses its failing runs have and its passing runs do
+    not, with the counts and with what shuffled outcomes give. With GENCLASS_CHAOS=off the runs differ
+    only by their own timing. Its exit code is 0 when the runs were made.
+
 Options are environment variables:
   GENCLASS_CHAOS=off             no seeded network chaos (on by default here: matched API requests are held
                                  for a seeded time, so a suite that passes normally can fail under it)
@@ -49,6 +71,7 @@ Options are environment variables:
   GENCLASS_CHAOS_REORDER=off     latency only: matched requests leave in the order they were sent
   GENCLASS_CHAOS_MATCH=/api,...  path or URL prefixes to hold (default: same host /api* or Accept: json)
   GENCLASS_OUT_DIR=<dir>         where the race files go (default test-results/genclass)
+  GENCLASS_STEPS=<n>             steps of the page's order kept per race file (default 300; 0: none)
   GENCLASS_MODEL=load            load the runtime's model in the page (default skip: no download)
   GENCLASS_RUNTIME_DIR=<dir>     @genclass/runtime's dist/, when it is not installed next to this package
   GENCLASS_PLAYWRIGHT=off        run Playwright as it is
@@ -58,6 +81,10 @@ The exit code is Playwright's.
 
 /** How many seeds a first run gets (`--repeat-each`), unless the user passes one. */
 export const DEFAULT_REPEAT_EACH = 2;
+/** --explain-flaky: the fewest and the most runs it makes, and the steps a race file keeps then unless GENCLASS_STEPS says. */
+export const MIN_EXPLAIN_RUNS = 2;
+export const MAX_EXPLAIN_RUNS = 400;
+export const EXPLAIN_STEPS = 1000;
 /** At most this many signature lines in the command's summary; the report has them all. */
 export const MAX_SUMMARY_SIGNATURES = 10;
 
@@ -68,16 +95,26 @@ export interface RunArgs {
   config: string | undefined;
   /** The user passed --repeat-each. */
   repeatEach: boolean;
-  /** Every argument except --config and its value, in the order given. */
+  /** --explain-flaky: how many runs to make (null: not asked for). */
+  explain: number | null;
+  /** What is wrong with the arguments, when something is (the command then runs nothing). */
+  error?: string;
+  /** Every argument except --config, --explain-flaky and their values, in the order given. */
   rest: string[];
 }
 
 /**
  * Reads the command's arguments. It knows three of Playwright's (--config / -c in all their spellings, --repeat-each,
- * --help / -h) and passes everything else through; after a bare `--` nothing is read at all.
+ * --help / -h) and one of its own (--explain-flaky, --explain-flaky=N, or --explain-flaky N when N is a number), and
+ * passes everything else through; after a bare `--` nothing is read at all.
  */
 export function parseRunArgs(argv: readonly string[]): RunArgs {
-  const out: RunArgs = { help: false, config: undefined, repeatEach: false, rest: [] };
+  const out: RunArgs = { help: false, config: undefined, repeatEach: false, explain: null, rest: [] };
+  const runs = (text: string): void => {
+    const n = /^\d+$/.test(text) ? Number(text) : NaN;
+    if (n >= MIN_EXPLAIN_RUNS && n <= MAX_EXPLAIN_RUNS) out.explain = n;
+    else out.error = `${EXPLAIN_FLAG} takes a number of runs from ${MIN_EXPLAIN_RUNS} to ${MAX_EXPLAIN_RUNS}, got ${JSON.stringify(text)}`;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--") {
@@ -85,6 +122,10 @@ export function parseRunArgs(argv: readonly string[]): RunArgs {
       break;
     }
     if (a === "--help" || a === "-h") out.help = true;
+    else if (a === EXPLAIN_FLAG) {
+      out.explain = EXPLAIN_RUNS;
+      if (i + 1 < argv.length && /^\d+$/.test(argv[i + 1])) runs(argv[++i]);
+    } else if (a.startsWith(`${EXPLAIN_FLAG}=`)) runs(a.slice(EXPLAIN_FLAG.length + 1));
     else if ((a === "--config" || a === "-c") && i + 1 < argv.length) out.config = argv[++i];
     else if (a.startsWith("--config=")) out.config = a.slice("--config=".length);
     else if (/^-c./.test(a)) out.config = a.slice(2);
@@ -93,6 +134,7 @@ export function parseRunArgs(argv: readonly string[]): RunArgs {
       out.rest.push(a);
     }
   }
+  if (out.explain !== null && out.repeatEach && !out.error) out.error = `${EXPLAIN_FLAG} gives each seed a run of its own: leave out --repeat-each`;
   return out;
 }
 
@@ -158,12 +200,39 @@ export function planCommand(i: CommandInput): CommandPlan {
   const outDir = given ? (isAbsolute(given) ? given : resolve(i.cwd, given)) : resolve(i.cwd, DEFAULT_OUT_DIR);
   const env: Record<string, string> = { [ENV.outDir]: outDir, [ENV.runtimeDir]: i.runtimeDir, [ENV.notesFile]: i.notesFile };
   if (flagOf(i.env[ENV.chaos]) === undefined) env[ENV.chaos] = "on";
+  const explain = i.args.explain !== null;
+  if (explain) {
+    // a failing run is expected here: the HTML reporter must not wait for a key after one; and a long test's steps
+    if (!i.env.PLAYWRIGHT_HTML_OPEN?.trim()) env.PLAYWRIGHT_HTML_OPEN = "never";
+    if (!i.env[ENV.steps]?.trim()) env[ENV.steps] = String(EXPLAIN_STEPS);
+  }
   return {
-    argv: [i.cli, "test", "--config", wrapperPath, ...(i.args.repeatEach ? [] : ["--repeat-each", String(DEFAULT_REPEAT_EACH)]), ...i.args.rest],
+    argv: [i.cli, "test", "--config", wrapperPath, ...(explain ? ["--repeat-each", "1"] : i.args.repeatEach ? [] : ["--repeat-each", String(DEFAULT_REPEAT_EACH)]), ...i.args.rest],
     env,
     wrapper: { path: wrapperPath, source: wrapperConfigSource({ registerUrl: pathToFileURL(i.registerPath).href, config: i.location.file, module: i.module }) },
     outDir,
   };
+}
+
+/** The race files directly inside a directory: its `*.json` files whose `schema` is "genclass-races/1", by name. */
+function raceFilesIn(dir: string): string[] {
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return names.filter((name) => {
+    if (!name.toLowerCase().endsWith(".json")) return false;
+    try {
+      const path = join(dir, name);
+      if (!statSync(path).isFile()) return false;
+      const value = JSON.parse(readFileSync(path, "utf8")) as { schema?: unknown } | null;
+      return !!value && typeof value === "object" && value.schema === RACES_SCHEMA;
+    } catch {
+      return false; // not a race file, or not ours to touch
+    }
+  });
 }
 
 /**
@@ -171,27 +240,41 @@ export function planCommand(i: CommandInput): CommandPlan {
  * "genclass-races/1", and nothing else, so a file of an earlier run is never read as another seed. Returns how many.
  */
 export function removeRaceFiles(dir: string): number {
-  let names: string[];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return 0;
-  }
   let removed = 0;
-  for (const name of names) {
-    if (!name.toLowerCase().endsWith(".json")) continue;
-    const path = join(dir, name);
+  for (const name of raceFilesIn(dir)) {
     try {
-      if (!statSync(path).isFile()) continue;
-      const value = JSON.parse(readFileSync(path, "utf8")) as { schema?: unknown } | null;
-      if (!value || typeof value !== "object" || value.schema !== RACES_SCHEMA) continue;
-      rmSync(path);
+      rmSync(join(dir, name));
       removed++;
     } catch {
-      /* not a race file, or not ours to remove */
+      /* not ours to remove */
     }
   }
   return removed;
+}
+
+/**
+ * Moves the race files of one directory into another (made when it is not there), and nothing else. A file of the
+ * same name is replaced. Returns how many were moved; one that could not be moved stays where it was.
+ */
+export function moveRaceFiles(from: string, to: string): number {
+  const names = raceFilesIn(from);
+  if (names.length === 0) return 0;
+  let moved = 0;
+  try {
+    mkdirSync(to, { recursive: true });
+  } catch {
+    return 0;
+  }
+  for (const name of names) {
+    try {
+      copyFileSync(join(from, name), join(to, name));
+      rmSync(join(from, name));
+      moved++;
+    } catch {
+      /* it stays where it was */
+    }
+  }
+  return moved;
 }
 
 function count(n: number, noun: string): string {
@@ -236,14 +319,69 @@ export function runSummary(i: RunSummaryInput): string {
         `  Chaos held no request in ${idle} of ${count(s.files, "race file")}: nothing matched its filter (unless one is set: the page's own host, with a path under /api or an Accept header asking for JSON), or a route of the test or a service worker answered first. For an API elsewhere: ${ENV.match}=/graphql,https://api.example.com/`,
       );
     if (s.skipped.length) lines.push(`  ${count(s.skipped.length, "file")} in that directory could not be read as a race file`);
+    // a test that failed in some runs: its failing runs against its passing ones, or the command that makes enough of them
+    const compared = ordersToReport(testOrders(i.inputs));
+    if (compared.length) {
+      lines.push(`  Failed in some runs (${ORDER_CAVEAT}):`);
+      for (const t of compared) lines.push(...indented(orderLines(t, false)));
+    }
     lines.push(`  The report: ${i.report}`);
   }
+  lines.push(...noteLines(i.notes));
+  return `${lines.join("\n")}\n`;
+}
+
+/** What the comparison of failing and passing runs is, wherever the command prints one. */
+export const ORDER_CAVEAT = "the order of steps, failing against passing: a measured comparison, not a diagnosis";
+
+/** A test's lines under a heading: its first line at four spaces, the rest at six, no empty lines. */
+function indented(lines: readonly string[]): string[] {
+  return lines.filter((l) => l.trim() !== "").map((l, i) => `${i === 0 ? "    " : "      "}${l.trimStart()}`);
+}
+
+function noteLines(given: readonly string[]): string[] {
   const notes = new Map<string, number>();
-  for (const n of i.notes) if (n.trim()) notes.set(n.trim(), (notes.get(n.trim()) ?? 0) + 1);
-  if (notes.size) {
-    lines.push("GenClass notes:");
-    for (const [line, n] of notes) lines.push(`  - ${line}${n > 1 ? ` (${n} workers)` : ""}`);
+  for (const n of given) if (n.trim()) notes.set(n.trim(), (notes.get(n.trim()) ?? 0) + 1);
+  if (!notes.size) return [];
+  return ["GenClass notes:", ...[...notes].map(([line, n]) => `  - ${line}${n > 1 ? ` (${n} workers)` : ""}`)];
+}
+
+export interface ExplainSummaryInput extends RunSummaryInput {
+  /** How many runs were asked for, and how many were made. */
+  wanted: number;
+  made: number;
+  /** The seed of the first run (each run takes the next). */
+  firstSeed: number;
+}
+
+/**
+ * What --explain-flaky prints when its runs are over: for every test in the race files, its failing runs against its
+ * passing ones (order.ts), or why there is nothing to compare.
+ */
+export function explainSummary(i: ExplainSummaryInput): string {
+  const s = buildSummary(i.inputs);
+  const seeds = i.made > 1 ? `seeds ${i.firstSeed} to ${i.firstSeed + i.made - 1}` : `seed ${i.firstSeed}`;
+  const lines = [`GenClass: ${i.made === i.wanted ? count(i.made, "run") : `${i.made} of ${count(i.wanted, "run")}`}, each a Playwright run of its own (${seeds}): ${count(s.files, "race file")} in ${i.dir} (${count(s.totals.tests, "test")}).`];
+  if (s.files === 0) lines.push("  No race file was written, so there is nothing to compare. One is written for each test that opens a browser context while GenClass is on.");
+  else lines.push(`  ${ORDER_CAVEAT[0].toUpperCase()}${ORDER_CAVEAT.slice(1)}. An order only the failing runs have may be the cause, a consequence of the cause, or neither.`);
+  for (const t of testOrders(i.inputs)) {
+    const { failed, passed } = t;
+    const runs = failed + passed;
+    const x = t.explanation;
+    if (failed > 0 && x.verdict !== "too-few-runs") lines.push(...indented(orderLines(t, false)));
+    else if (runs === 0) lines.push(`    ${t.test} · its race files do not say whether it passed (written by an older @genclass/playwright): nothing to compare.`);
+    else if (failed === 0) lines.push(`    ${t.test} · passed in all ${count(runs, "run")}: nothing to compare.`);
+    else if (passed === 0) lines.push(`    ${t.test} · failed in all ${count(runs, "run")}: there is no passing run to compare with.${t.underDelays ? ` ${ENV.chaos}=off makes the runs without the delays.` : ""}`);
+    else {
+      const steps = t.withoutSteps > 0 ? ` (${count(t.withoutSteps, "run")} had no recorded steps)` : "";
+      // enough runs for three of the rarer outcome, with room: three times what it took to see one
+      const rarer = Math.max(1, Math.min(failed, passed));
+      const more = Math.min(MAX_EXPLAIN_RUNS, Math.max(i.wanted + 10, Math.ceil((3 * 3 * runs) / rarer / 10) * 10));
+      lines.push(`    ${t.test} · failed in ${failed} of ${count(runs, "run")}${steps}: too few of one kind to compare (it takes ${x.minimum.failing} failing and ${x.minimum.passing} passing). More runs: ${EXPLAIN_FLAG}=${more}`);
+    }
   }
+  if (s.skipped.length) lines.push(`  ${count(s.skipped.length, "file")} in that directory could not be read as a race file`);
+  lines.push(...noteLines(i.notes));
   return `${lines.join("\n")}\n`;
 }
 
@@ -319,6 +457,10 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
       io.out(RUN_USAGE);
       return 0;
     }
+    if (args.error) {
+      io.err(`genclass-playwright-run: ${args.error}.\nNothing was run.\n`);
+      return 2;
+    }
     const off = isOff(io.env);
     const location = resolveConfig(io.cwd, args.config);
     const cli = io.findCli(location ? [location.dir, io.cwd] : [io.cwd]);
@@ -341,7 +483,18 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
     }
     const notesFile = join(io.tmpdir, `genclass-playwright-${io.id}.notes`);
     const plan = planCommand({ args, cwd: io.cwd, env: io.env, cli, location, module: location.file ? isModuleFile(location.file) : true, registerPath: io.registerPath, runtimeDir, id: io.id, notesFile });
+    // --explain-flaky: where each run's race files wait while the next run starts (Playwright empties its output
+    // directory then). They are put back before anything is read, and whatever ends the command.
+    const kept = args.explain !== null ? join(io.tmpdir, `genclass-playwright-${io.id}.runs`) : null;
     const remove = (): void => {
+      if (kept) {
+        try {
+          moveRaceFiles(kept, plan.outDir);
+          rmSync(kept, { recursive: true, force: true });
+        } catch {
+          /* what could not be put back stays in the temporary directory */
+        }
+      }
       for (const path of [plan.wrapper.path, notesFile]) {
         try {
           rmSync(path, { force: true });
@@ -352,6 +505,8 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
     };
     removeRaceFiles(plan.outDir);
     try {
+      // nothing an earlier command with this id left behind is this run's
+      if (kept) rmSync(kept, { recursive: true, force: true });
       rmSync(notesFile, { force: true });
       writeFileSync(plan.wrapper.path, plan.wrapper.source);
     } catch (e) {
@@ -363,8 +518,21 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
     io.onExit(remove);
     let result: SpawnResult;
     let notes: string[] = [];
+    // --explain-flaky: the same run once per seed, each a Playwright run of its own; every run's race files are kept
+    const wanted = args.explain ?? 1;
+    const seedText = io.env[ENV.seed]?.trim() ?? "";
+    const firstSeed = /^\d+$/.test(seedText) && Number.isSafeInteger(Number(seedText)) ? Number(seedText) : 1;
+    let made = 0;
     try {
-      result = await io.spawn(plan.argv, { ...io.env, ...plan.env, ...localBinsPath(io.env, io.cwd, [location.dir, io.cwd]) });
+      for (;;) {
+        if (args.explain !== null) io.err(`\nGenClass: run ${made + 1} of ${wanted} (seed ${firstSeed + made})\n`);
+        result = await io.spawn(plan.argv, { ...io.env, ...plan.env, ...(args.explain !== null ? { [ENV.seed]: String(firstSeed + made) } : {}), ...localBinsPath(io.env, io.cwd, [location.dir, io.cwd]) });
+        made++;
+        const written = kept ? moveRaceFiles(plan.outDir, kept) : 0;
+        // a signal ended it, or nothing was written by the first run (no test matched, or Playwright did not start)
+        if (made >= wanted || result.signal || (typeof result.code === "number" && result.code >= 128)) break;
+        if (made === 1 && written === 0) break;
+      }
       try {
         notes = readFileSync(notesFile, "utf8").split("\n");
       } catch {
@@ -378,8 +546,15 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
     }
     const dir = displayPath(plan.outDir, io.cwd);
     const report = `node ${quoted(displayPath(join(dirname(io.registerPath), "..", "bin", "genclass-playwright-report.mjs"), io.cwd))} ${quoted(dir)} --out -`;
-    io.err(`\n${runSummary({ inputs: readRacesDirs([plan.outDir], io.cwd).files, dir, notes, report })}`);
-    return exitCodeOf(result);
+    const inputs = readRacesDirs([plan.outDir], io.cwd).files;
+    if (args.explain === null) {
+      io.err(`\n${runSummary({ inputs, dir, notes, report })}`);
+      return exitCodeOf(result);
+    }
+    io.err(`\n${explainSummary({ inputs, dir, notes, report, wanted, made, firstSeed })}`);
+    // failing runs are what this mode is for: Playwright's exit code only when a signal ended it or nothing ran
+    const code = exitCodeOf(result);
+    return code >= 128 || inputs.length === 0 ? code : 0;
   } catch (e) {
     io.err(`genclass-playwright-run: ${message(e)}\n`);
     return 2;

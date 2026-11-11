@@ -28,6 +28,49 @@ export const RACES_SCHEMA = "genclass-races/1";
  */
 export const RACES_LIMITS = { signatures: 200, seeds: 64, test: 1000, evidence: 2000, text: 600, bytes: 64 * 1024 } as const;
 
+/**
+ * The limits of a file's optional `steps` (RacesSteps): `steps` is the most steps one file lists, `labels` the most
+ * distinct labels, `label` the characters of one label. A file stays within RACES_LIMITS.bytes whatever its steps:
+ * the fixture lists fewer steps before it leaves out a signature. A reader that does not know `steps` ignores it.
+ */
+export const STEPS_LIMITS = { steps: 2000, labels: 400, label: 160 } as const;
+
+/** The statuses of a test a race file can carry (Playwright's TestInfo.status, without "skipped": no file is written then). */
+export const RACES_STATUSES = ["passed", "failed", "timedOut", "interrupted"] as const;
+export type RacesStatus = (typeof RACES_STATUSES)[number];
+
+/**
+ * The order of things on the page during one test (GenClassRacesFile.steps): user actions, and each request's send
+ * and the delivery of its response to the app, named so that a step is the same step in every run of the test. It
+ * holds no value a user typed, no query string and no request or response body. Only the comparison of a test's
+ * passing and failing runs reads it (src/order.ts).
+ */
+export interface RacesSteps {
+  /**
+   * What the steps are about, in order of first appearance: a user action as the runtime describes it
+   * ('click button "Apply"'), or a request as its method and path with ids written ":id" ("POST /api/orders"; a
+   * request to another host starts with the host name, without the port). At most STEPS_LIMITS.labels, each at most
+   * STEPS_LIMITS.label characters.
+   */
+  labels: string[];
+  /**
+   * The steps in order, separated by single spaces, each `<kind><label>.<n>+<ms>`: `kind` is "a" (a user action), "s"
+   * (a request was sent), "r" (its response was delivered to the app) or "x" (it ended without one: it failed or was
+   * aborted); `label` is an index into `labels`; `n` says which one, counted from 1 in the order they were done or
+   * sent (the 2nd POST /api/orders); `ms` is the time since the step before it. "a0.1+0 s1.1+4 r1.1+38": a click,
+   * 4 ms later the first POST /api/orders leaves, 38 ms later its response reaches the app. At most
+   * STEPS_LIMITS.steps steps.
+   */
+  order: string;
+  /**
+   * How many of the steps listed happened while the test's own code ran; the ones after them landed while the
+   * fixture waited for responses at the end of the test, and cannot have changed its result. Absent: not known.
+   */
+  body?: number;
+  /** How many more steps the test had after the ones listed (left out to keep the file small). */
+  cut?: number;
+}
+
 /** One distinct race signature seen in a test: `sig` is "trigger|diagnosis|op" with ids normalised by the fixture. */
 export interface RaceSignature {
   /** "trigger|diagnosis|op", e.g. "request|duplicate|POST /api/orders". The grouping key. */
@@ -96,6 +139,16 @@ export interface GenClassRacesFile {
    * line is part of the diff; the summariser and the report do not use it.
    */
   location?: RacesLocation;
+  /**
+   * Optional, written by the fixture: the test's own status when the file was written, as Playwright reports it. It is
+   * what tells a test's failing runs from its passing ones (src/order.ts); a finding never depends on it.
+   */
+  status?: RacesStatus;
+  /**
+   * Optional, written by the fixture: the order of user actions, requests and responses on the page (RacesSteps),
+   * bounded by STEPS_LIMITS. A value this version cannot read is left out, never a reason to skip the file.
+   */
+  steps?: RacesSteps;
 }
 
 /** Where a test is declared (GenClassRacesFile.location). */
