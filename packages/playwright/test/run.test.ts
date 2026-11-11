@@ -306,6 +306,8 @@ describe("run: --explain-flaky, a test's failing runs against its passing ones",
       expect(s.argv).toEqual([CLI, "test", "--config", join(project, "playwright.config.ts.genclass-77.mjs"), "--repeat-each", "1", "e2e/list.spec.ts:140", "--project=chromium"]);
       expect(s.env).toMatchObject({ GENCLASS_CHAOS: "on", PLAYWRIGHT_HTML_OPEN: "never", GENCLASS_STEPS: "1000", GENCLASS_OUT_DIR: outDir });
       expect(s.wrapper).toContain("register.js");
+      // each run with the project's local bins first on PATH, as a single run has them
+      expect(String(s.env.PATH).split(delimiter)[0]).toBe(join(project, "node_modules", ".bin"));
     }
     // every run's file is back where the report looks for it, and nothing is left where they waited
     expect(readdirSync(outDir)).toHaveLength(16);

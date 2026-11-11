@@ -1874,8 +1874,8 @@ e2e/document-list/document-list.spec.ts -g "bulk edit" --project=chromium --work
 **In a real browser, in CI** (`packages/playwright/test/e2e-flaky`, the fourth part of the package's end-to-end
 check): a test on the buggy search page that types two letters and expects the second query's results, run through
 `--explain-flaky=16`. The first request is held at least 80 ms longer than the second under six of the sixteen
-seeds, and the test failed in exactly those (1, 6, 9, 11, 14, 16) in all three runs of the check made here (33 s
-each for the sixteen runs); the command printed "In 6 of 6 failing runs and in none of the 10 passing runs that recorded
+seeds, and the test failed in exactly those (1, 6, 9, 11, 14, 16) in all four runs of the check made here (33 s
+each for the sixteen runs; the fourth on the rebased branch); the command printed "In 6 of 6 failing runs and in none of the 10 passing runs that recorded
 these steps, the response to the 2nd `GET /api/search` came before the response to the 1st `GET /api/search`", and
 exited 0. The check requires that
 line, sixteen race files with status and steps, and no passing run with that order. Writing it found one fault in

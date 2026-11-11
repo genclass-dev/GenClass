@@ -7,7 +7,10 @@ name: Playwright reporter
 # fixture: the MCP e2e search page with the fixture's seeded chaos, five seeds per test, the buggy page must get the
 # overwrote-newer witness, the fixed page and the latency-only run must get nothing, and the reporter must render
 # it. Then the same page under a suite that imports only @playwright/test (packages/playwright/test/e2e-unmodified),
-# run through genclass-playwright-run: the same three requirements, under the command's two seeds. A separate
+# run through genclass-playwright-run: the same three requirements, under the command's two seeds. Last, a test that
+# fails in some runs (packages/playwright/test/e2e-flaky), through `genclass-playwright-run --explain-flaky=16`:
+# sixteen Playwright runs, one per seed, and the comparison of its failing and passing runs must name the order of
+# responses the buggy page gets wrong. A separate
 # workflow from ci.yml so it never blocks the main CI job. It renders the unit-test fixture's report into the job
 # summary to show what a pull-request comment would look like; it posts nothing and sends nothing anywhere (the app
 # server listens on 127.0.0.1 inside the runner; the page's model is skipped).
@@ -121,7 +124,9 @@ jobs:
         run: npx vitest run test/install.test.ts
 
       # Three Playwright runs, each a child process with a time limit: the fixture's suite (15 tests), then the
-      # unmodified suite twice through genclass-playwright-run (latency only: 2 tests; the defaults: 4 tests).
+      # unmodified suite twice through genclass-playwright-run (latency only: 2 tests; the defaults: 4 tests). Then
+      # one more child process with a time limit: --explain-flaky=16 on a suite of one test, sixteen short Playwright
+      # runs (each starts the app server again).
       - name: End to end (the fixture, then an unmodified suite through the command; buggy page flagged, fixed page and latency-only runs clean)
         # shell: bash runs with pipefail, so a failing run.mjs fails the step even though tee succeeds
         shell: bash
