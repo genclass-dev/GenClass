@@ -292,7 +292,8 @@ ignore:
   `witness:overwrote-newer`, `request:duplicate`. It is the second code span of a finding's line in the report inside
   the comment's fold, and `@genclass-dev replay <n>` names it too. It must match exactly.
 - `operation` is the operation as the finding's row shows it. One `*` in it stands for any run of characters:
-  `"GET /api/items/*"`, or `"*"` for every operation of that kind (quote a value that holds a `*`).
+  `"GET /api/items/*"`, or `"*"` for every operation of that kind (quote a value that holds a `*`). Where a row shows
+  a record's id in the path (`GET /api/items/7`), write the `*`: an entry with the id names that one record.
 - A signature that is left out is not listed, numbered or counted, never fails the check, and gets no issue. It is
   never dropped silently: the comment and the check say how many findings were left out at that commit, and the race
   report in the fold still shows every one. A finding that was listed before an entry named it leaves the table at
@@ -524,7 +525,9 @@ pull request up again at its next event, or at the sweep.
   ([the baseline](#baseline)), or its artifact has expired. Every finding is then listed as the pull request's own.
 - **A finding is "New" though the default branch has it.** The comparison is by kind and operation with the default
   branch's most recent commit that has race files: check that commit's race report for the same line. A finding seen
-  in one seed may simply not have shown there.
+  in one seed may simply not have shown there. An operation is compared as the race files write it: where its path
+  holds a record's id (`GET /api/items/7`), each record is an operation of its own, and a record a test creates is
+  another one in every run, so such a finding is new each time.
 - **"The default branch's race files were not read this time".** GitHub was slow or did not answer and the review
   kept its time for its own writes, or the artifact is gone. What was compared before stands; the next review
   compares again.

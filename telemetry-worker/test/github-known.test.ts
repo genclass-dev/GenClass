@@ -17,6 +17,7 @@ import {
   fingerprint,
   hasFindings,
   inlineComments,
+  leftOut,
   legacyFingerprint,
   legacyFingerprints,
   loadState,
@@ -683,6 +684,15 @@ describe("github app: signatures the settings leave out (docs/github-app/README.
     expect(readSettings("ignore: []\nbaseline: true\n")).toEqual({ settings: DEFAULT_SETTINGS, warnings: [] });
     // white space is read as a review writes it
     expect(readSettings('ignore:\n  - kind: " witness:overwrote-newer "\n    operation: "GET   /api/search"\n').settings.ignore).toEqual([rule("witness:overwrote-newer", "GET /api/search")]);
+    // An operation whose ids are written as ":id" (what a race file holds for a path with an id in it, from the
+    // version of @genclass/playwright after 0.1.0 on) needs no quotes and is matched as it is written.
+    const ids = readSettings("ignore:\n  - kind: witness:overwrote-newer\n    operation: GET /api/items/:id\n  - kind: request:duplicate\n    operation: PUT /api/items/:id/tags/:id\n");
+    expect(ids).toEqual({ settings: { ...DEFAULT_SETTINGS, ignore: [rule("witness:overwrote-newer", "GET /api/items/:id"), rule("request:duplicate", "PUT /api/items/:id/tags/:id")] }, warnings: [] });
+    expect(leftOut(ids.settings.ignore, "witness:overwrote-newer", "GET /api/items/:id")).toBe(true);
+    expect(leftOut(ids.settings.ignore, "request:duplicate", "PUT /api/items/:id/tags/:id")).toBe(true);
+    // an entry written with one record's id is that record's: it does not cover the ":id" form, and the other way round
+    expect(leftOut([rule("witness:overwrote-newer", "GET /api/items/7")], "witness:overwrote-newer", "GET /api/items/:id")).toBe(false);
+    expect(leftOut(ids.settings.ignore, "witness:overwrote-newer", "GET /api/items/7")).toBe(false);
   });
 
   it("an entry that names no kind and operation is left out and said, so that a mistake never leaves out more than was meant", () => {

@@ -296,10 +296,11 @@ The version that groups findings by kind and operation, compares them with the d
   on the commit is a failure all the same (seen on a pull request of a trial repository on 2026-11-11: run
   "success", job and check run "failure"), so every test that failed under the delays was a red check, and with the
   push trigger it would have been one on the default branch's commits. A repository that copied the earlier file
-  keeps the red check until it copies the file again. The changed file has not been run on GitHub. What it rests on:
-  a failed step with `continue-on-error` leaves its job's check a success in this repository's own CI (`ci.yml`,
-  the step "Perf budgets", run 42051447382), and `if-no-files-found: error` fails the step according to
-  `actions/upload-artifact`'s own description of the option.
+  keeps the red check until it copies the file again. Run on GitHub once, on 2026-11-11, with the file as it is here
+  (a pull request of a private trial repository): two tests failed under the delays and the step exited 1; the step,
+  the job, its check on the commit and the workflow run all ended "success", and the artifact with 20 race files was
+  uploaded, kept for 30 days. Not run: a run that writes no race file (the upload then fails, according to
+  `actions/upload-artifact`'s own description of `if-no-files-found: error`), and a push to a default branch.
 
 ## Plans and private repositories
 
