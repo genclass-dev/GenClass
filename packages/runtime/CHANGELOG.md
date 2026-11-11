@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Submitting a form that has a control named `id` no longer throws into the page.** A form's named controls shadow
+  its own properties, so with `<input type="hidden" name="id">` (the usual hidden field of an edit form) `form.id` is
+  that input and not a string. The submit listener read it as text and threw a `TypeError` from its capture listener:
+  an uncaught error in the app's own console and error tracker on every such submit, which the runtime's errors
+  observer then recorded as the app's error, and the submit itself was not recorded. Found on a public React Router
+  app's own test suite. The id is now read from the attribute when the property is not a string, and the user-action
+  listeners (click, input, change, submit, keydown) never let an exception reach the page: an element they cannot
+  describe is not recorded and its event goes on to the app as it was. No model-visible text changed
+  (`situation-v2.3`): a form that was described before is described the same way.
 - `init` prints much less after it applies: the telemetry note is two lines (still what is sent, how to turn it off and
   the link), the next steps name the overlay first, and the optional upgrades are one line pointing at `init --dry-run`,
   which still lists them.
