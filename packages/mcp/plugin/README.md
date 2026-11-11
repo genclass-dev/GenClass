@@ -20,7 +20,7 @@ The skill alone, in any agent the skills CLI knows: `npx skills add genclass-dev
 `gh skill install genclass-dev/genclass-plugin genclass`.
 
 Then connect your app's development build and load a page of the dev server. `genclass_setup` prints the install line
-(`npm install @genclass/runtime@0.3.0-beta.5`, the version this release was tested with; the page side needs 0.3.0-beta.1
+(`npm install @genclass/runtime@0.3.0-beta.6`, the version this release was tested with; the page side needs 0.3.0-beta.1
 or later) and the lines for your framework, behind a development check. See the
 [package README](https://github.com/genclass-dev/GenClass/blob/main/packages/mcp/README.md).
 
@@ -63,7 +63,7 @@ for it: `genclass_analytics` `{source: "production"}` reads your own GenClass da
 `GENCLASS_DASHBOARD` to its link; `genclass_scan` with `hosted: true` sends the URL to the genclass.dev page check
 (without it, the page loads in a local headless browser); and `GENCLASS_REPORT`, off by default, mirrors finding ids,
 kinds, page paths, replay verdicts and counts to that dashboard, never titles or page text. When the project has no
-`@genclass/runtime`, `genclass_scan` downloads the version this release pins, `@genclass/runtime@0.3.0-beta.5`, from npm
+`@genclass/runtime`, `genclass_scan` downloads the version this release pins, `@genclass/runtime@0.3.0-beta.6`, from npm
 through npx.
 Details: [AGENT.md section 6](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/AGENT.md#6-untrusted-input-and-security).
 

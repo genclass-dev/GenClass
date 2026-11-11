@@ -91,7 +91,7 @@ them, show the user the line and wait for a yes before running it:
 
 - Add the server and restart the client. Claude Code: `claude mcp add genclass -- npx -y @genclass/mcp@0.2.2`
   (other clients: `npx -y @genclass/mcp@0.2.2 config <client>` prints their lines).
-- For the visual checks alone, no server needed: `npx @genclass/runtime@0.3.0-beta.5 scan <url> --json --local` in a
+- For the visual checks alone, no server needed: `npx @genclass/runtime@0.3.0-beta.6 scan <url> --json --local` in a
   terminal (`--local`: without Playwright's Chromium it stops instead of sending the URL to the genclass.dev page check).
 - In a chat app with no terminal on that machine, say so and give the developer the install line; GenClass cannot
   run there.
