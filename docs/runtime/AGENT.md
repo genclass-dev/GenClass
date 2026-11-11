@@ -100,10 +100,15 @@ lists. It never writes to the event log and never feeds a situation, a decision 
   - `end`: a request that ended without a delivery (failed, aborted, an XHR aborted while held);
   - `write`: a state write, with the request whose response chain made it;
   - `error`: an uncaught error, with the request and action before it.
-- **Witnesses**: two happens-before facts, the same relations the runtime computes for its situations:
-  - `overwrote-newer`: a request's response chain wrote a field that, since the request started, a *newer* operation
-    (one that started after it, outside its causal chain) or the user had written. In words: older data was put over
-    newer data. Not counted: fan-out siblings (requests one click or tick started together, whose completion order is
+- **Witnesses**: two happens-before facts, close to the relations the runtime computes for its situations (narrower
+  where this list says so; the runtime's own facts are unchanged):
+  - `overwrote-newer`: a request's response chain wrote a field that, since the request started, the user, the
+    response chain of a *newer* request (one that started after it), or something a later user action started had
+    written. In words: older data was put over newer data. A write by a timer or another local operation counts as
+    newer only when a user action later than the request's start is at its root: a query library's "pending" flag,
+    which a 0 ms timer of the click that sent the request sets a tick after the request left and the response clears,
+    is the same intent as the request, and a page's own ticker says nothing about what the user or the server knew
+    later (RESULTS.md section 29 counts the lines this took off real suites). Not counted: fan-out siblings (requests one click or tick started together, whose completion order is
     arbitrary, as in the runtime's delivery triage), writes more than 10 s after the response, and writes by an
     interval tick or a timer of 1 s or more that the response's handler scheduled (a ticker is not the response), and
     a write that only reordered the field's elements or entries (the same multiset of elements, the same keys and

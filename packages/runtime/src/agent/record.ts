@@ -1,8 +1,9 @@
 // What happened on this page, in order (docs/runtime/AGENT.md section 2): user actions, requests (by key), the order
 // their responses were delivered, state writes, errors, and two happens-before facts the runtime already computes for
 // its situations, recorded here as witnesses:
-//   overwrote-newer      a request's response chain wrote a field that a newer operation (one that started after the
-//                        request did, outside its causal chain) or the user had written since the request started
+//   overwrote-newer      a request's response chain wrote a field that, since the request started, the user, the
+//                        response chain of a newer request (one that started after it), or something a later user
+//                        action started had written
 //   identical-in-flight  two identical requests (same method, URL and body) in flight together, from separate user
 //                        actions
 // Witnesses are facts, never diagnoses: whether one is a bug is for the order comparison (explore), the model or the
@@ -298,9 +299,11 @@ export class Recorder {
   }
 
   /**
-   * Since `x` started, did a newer operation (started after x, outside x's chain) or the user write `path`? The same
-   * relation as the runtime's writtenOver (src/runtime.ts) and the "newer data" facts, except that a write that only
-   * reorders the field's elements or entries is not an overwrite here (the runtime's own facts are unchanged).
+   * Since `x` started, did the user, a newer request's response chain, or something a later user action started write
+   * `path`? The runtime's writtenOver (src/runtime.ts) and its "newer data" facts count every operation that started
+   * after x and is outside its chain; a witness is narrower in two ways, and the runtime's own facts are unchanged:
+   * a write that only reorders the field's elements or entries is not an overwrite, and a write by a timer or another
+   * local operation is newer only when a user action later than x's start is at its root (see the loop below).
    */
   private checkOverNewer(x: OpRec, path: string, t: number): void {
     if (x.genclass || this.witnesses.length >= MAX_WITNESSES) return;
@@ -323,7 +326,13 @@ export class Recorder {
       // a fan-out sibling (one tick or click fetching several things at once) is a peer, not newer data
       const wNet = byUser ? undefined : this.netOf(w);
       if (wNet && fanOutSibling(x, wNet)) continue;
-      const newer = byUser || w.start > x.start || (!!root && root.kind === "user" && root.start > x.start);
+      // What makes a write newer data than x's: the user made it; or it is in the response chain of a request that
+      // started after x; or it descends from a user action later than x's start. A write by anything else that merely
+      // ran after x started is not: a timer the action that sent x scheduled (a query library's "pending" flag, set a
+      // tick after the request left and cleared by its response) is the same intent as x, and a timer no action
+      // started (a page's own ticker) says nothing about what the user or the server knew later.
+      const laterAction = !!root && root.kind === "user" && root.start > x.start;
+      const newer = byUser || (wNet !== undefined && wNet.start > x.start) || laterAction;
       if (!newer) continue;
       this.seenWitness.add(id);
       const overOp = byUser ? this.ops.userOf(w) ?? w : this.netOf(w) ?? w;

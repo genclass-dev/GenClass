@@ -201,6 +201,89 @@ describe("agent: recording and witnesses (AGENT.md §2)", () => {
     expect(steps.some((x) => x.k === "write" && x.by === "GET /api/search#1")).toBe(true);
   });
 
+  /** A runtime whose timers observer is on, with the app's timers on the fake clock (a timer's callback is then an op). */
+  function withTimers(): { s: Setup; setT: (f: () => void, ms: number) => unknown } {
+    const holder: { clock?: FakeClock } = {};
+    const s = setup({
+      mode: undefined,
+      observe: { fetch: true, timers: true },
+      extraGlobal: { setTimeout: (fn: () => void, ms: number) => holder.clock!.setTimeout(fn, ms), clearTimeout: (h: unknown) => holder.clock!.clearTimeout(h), setInterval: () => 0 },
+    });
+    holder.clock = s.clock;
+    bridge(s);
+    return { s, setT: (f, ms) => (s.g.setTimeout as (f: () => void, ms: number) => unknown)(f, ms) };
+  }
+
+  it("a flag the click sets a tick after its request left, and the response clears, is one intent: no witness", async () => {
+    // what a query library's mutation does: the request leaves in the click, "pending" reaches the store through a
+    // 0 ms timer the same click scheduled (in a browser it runs a few ms after the request started), and the response
+    // sets it back
+    const { s, setT } = withTimers();
+    s.server.on("PATCH", "/api/profile", { body: { ok: true }, latency: 200 });
+    const st = s.rt.atom("profile", { isPending: false });
+    const c = connectAgent(s.rt, { schedule: "natural" });
+    await s.clock.advance(100);
+    s.rt.user({ kind: "click", target: 'button "Save"' }, () => {
+      setT(() => st.set({ isPending: true }), 3);
+      void (async () => {
+        await s.fetch("/api/profile", { method: "PATCH", body: "{}" });
+        st.set({ isPending: false });
+      })();
+    });
+    await s.clock.advance(1000);
+    expect(st.get().isPending).toBe(false);
+    // the timer's write is the click's own: recorded, with the action it came from, and not as newer data
+    const writes = c.recorded().steps.filter((x) => x.k === "write");
+    expect(writes).toHaveLength(2);
+    expect(writes[0]).toMatchObject({ act: 0 });
+    expect(writes[1]).toMatchObject({ by: "PATCH /api/profile#1", act: 0 });
+    expect(c.witnesses()).toEqual([]);
+  });
+
+  it("what a later user action starts is newer data, also through a timer and without a request of its own", async () => {
+    const { s, setT } = withTimers();
+    s.server.on("PUT", "/api/draft", { body: { text: "Ad" }, latency: 400 });
+    const st = s.rt.atom("draft", { text: "" });
+    const c = connectAgent(s.rt, { schedule: "natural" });
+    await s.clock.advance(100);
+    // the save leaves; its response will write the server's echo
+    s.rt.user({ kind: "click", target: 'button "Save"' }, () => {
+      void (async () => {
+        const j = (await (await s.fetch("/api/draft", { method: "PUT", body: '{"text":"Ad"}' })).json()) as { text: string };
+        st.set({ text: j.text });
+      })();
+    });
+    await s.clock.advance(100);
+    // a later click formats the draft a tick later, with no request
+    s.rt.user({ kind: "click", target: 'button "Uppercase"' }, () => {
+      setT(() => st.set({ text: "ADA" }), 3);
+    });
+    await s.clock.advance(1000);
+    expect(st.get().text).toBe("Ad"); // the echo of the older save replaced what the later click had made
+    const w = c.witnesses();
+    expect(w).toHaveLength(1);
+    expect(w[0]).toMatchObject({ kind: "overwrote-newer", subject: "draft.text", by: "PUT /api/draft#1", byAct: 0, overAct: 1 });
+  });
+
+  it("a timer nobody's action started (a page's own ticker) that ran after the request started is not newer data", async () => {
+    const { s, setT } = withTimers();
+    s.server.on("GET", "/api/clock", { body: { now: "12:00" }, latency: 300 });
+    const st = s.rt.atom("clock", { now: "" });
+    const c = connectAgent(s.rt, { schedule: "natural" });
+    // scheduled at page load, by no user action; it fires while the request is in flight
+    setT(() => st.set({ now: "local 12:00" }), 250);
+    await s.clock.advance(100);
+    s.rt.user({ kind: "click", target: 'button "Sync"' }, () => {
+      void (async () => {
+        const j = (await (await s.fetch("/api/clock")).json()) as { now: string };
+        st.set({ now: j.now });
+      })();
+    });
+    await s.clock.advance(1000);
+    expect(st.get().now).toBe("12:00");
+    expect(c.witnesses()).toEqual([]);
+  });
+
   it("the same scenario under fifo delivery leaves the right results and no witness", async () => {
     const s = setup({ mode: undefined });
     bridge(s);

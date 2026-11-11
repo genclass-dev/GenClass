@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`@genclass/runtime/agent`: an `overwrote-newer` witness needs newer data, not merely a later timer** (AGENT.md
+  section 2). The newer write must be the user's, in the response chain of a request that started after the
+  overwriting one, or started by a later user action. Before, any operation that ran after the request started
+  counted, so a query library's mutation was a witness every time: TanStack Query sets `isPending` through a 0 ms
+  timer the click schedules, a few ms after the request left, and the response clearing it was recorded as old over
+  new (every `useMutation` of a real suite, RESULTS.md section 29). A timer no user action started (a page's own
+  ticker) is no longer newer data either. The runtime's own facts, situations and decisions are unchanged: this is the
+  agent entry's record only, which the coding-agent tools and `@genclass/playwright` read. No model-visible text
+  changed.
 - `init` prints much less after it applies: the telemetry note is two lines (still what is sent, how to turn it off and
   the link), the next steps name the overlay first, and the optional upgrades are one line pointing at `init --dry-run`,
   which still lists them.
