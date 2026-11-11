@@ -12,7 +12,8 @@
 //   - the command's comparison says every failing run has one order and no passing run has it, and that order is the
 //     answer to the 2nd search landing before the answer to the 1st: what the page does wrong, found from the order
 //     of responses alone;
-//   - in every failing run's file the order is that way round, and in no passing run's (within the test's own code);
+//   - in every failing run's file the order is that way round, and in no passing run's, wherever the answers landed
+//     (the comparison leaves out nothing a run recorded, also not what came after the test's own code);
 //   - the command exits 0 although Playwright failed in some runs, leaves no generated config and prints no
 //     "GenClass notes:".
 //
@@ -33,9 +34,9 @@ const RUNS = 16;
 const RUN_LIMIT_MS = 420_000;
 const ORDER = "the response to the 2nd `GET /api/search` came before the response to the 1st `GET /api/search`";
 
-/** Where the answers to the two searches are in a file's steps, among those that landed while the test's code ran: [1st, 2nd] (-1: not there). */
+/** Where the answers to the two searches are in a file's steps, wherever they landed: [1st, 2nd] (-1: not there). */
 function answers(file) {
-  const steps = decodeSteps(file.steps).filter((e) => !e.late);
+  const steps = decodeSteps(file.steps);
   return [1, 2].map((n) => steps.findIndex((e) => e.kind === "r" && e.label === "GET /api/search" && e.n === n));
 }
 
@@ -94,7 +95,7 @@ export async function runFlaky(summary, fail) {
   f.failingWithTheOrder = failing.filter(stale).length;
   f.passingWithTheOrder = passing.filter(stale).map((x) => x.file.seed);
   if (f.failingWithTheOrder !== failing.length) stop(`${failing.length - f.failingWithTheOrder} failing runs do not have the answer to the 2nd search before the answer to the 1st`);
-  if (f.passingWithTheOrder.length) stop(`passing runs with the answer to the 2nd search before the answer to the 1st, within the test's own code: seeds ${f.passingWithTheOrder.join(", ")}`);
+  if (f.passingWithTheOrder.length) stop(`passing runs with the answer to the 2nd search before the answer to the 1st: seeds ${f.passingWithTheOrder.join(", ")}`);
 
   const wanted = [
     `GenClass: ${RUNS} runs, each a Playwright run of its own (seeds 1 to ${RUNS}): ${RUNS} race files in test-results/genclass (1 test).`,

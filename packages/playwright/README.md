@@ -463,9 +463,9 @@ suite that sets its own `NODE_OPTIONS` drops it, and then nothing is recorded.
 
 A test that fails one run in six fails for a reason, and for a web app the reason is often in the order of things: a
 response reached the page after a click instead of before it, or after a newer response. Run the test enough times
-and that order can be read off, because the failing runs have it and the passing runs do not. No app state is needed
-for that, so it does not depend on the framework: it is measured on an Angular suite, a Vue app with Pinia and a
-page with no framework, three places where the witnesses see no state.
+and that order can be read off, because the failing runs have it and the passing runs mostly do not. No app state is
+needed for that, so it does not depend on the framework: it is measured on an Angular suite, a Vue app with Pinia and
+a page with no framework, three places where the witnesses see no state.
 
 ```bash
 npx genclass-playwright-run --explain-flaky tests/search.spec.ts:12            # 30 runs of that test
@@ -476,22 +476,23 @@ GENCLASS_CHAOS=off npx genclass-playwright-run --explain-flaky tests/search.spec
 Every argument but `--explain-flaky` goes to `playwright test`, so select the test the way you usually do. The
 command then runs Playwright that many times (30 unless you give a number, 2 to 400), each a Playwright run of its own
 under the next seed (`--repeat-each 1`: no two runs share a worker, a saved login or a server, which is what breaks
-`--repeat-each N` on many suites), keeps every run's race files, and prints for each test what its failing runs have
-that its passing runs do not:
+`--repeat-each N` on many suites) and without retries (`--retries=0`: a retried attempt runs under its first
+attempt's seed, so it is the same delays again and not one more run), keeps every run's race files, and prints for
+each test which order of steps sets its failing runs apart from its passing ones:
 
 ```text
 GenClass: 16 runs, each a Playwright run of its own (seeds 1 to 16): 16 race files in test-results/genclass (1 test).
-  The order of steps, failing against passing: a measured comparison, not a diagnosis. An order only the failing runs have may be the cause, a consequence of the cause, or neither.
+  The order of steps, failing against passing: a measured comparison, not a diagnosis. An order that sets the failing runs apart may be the cause, a consequence of the cause, or neither.
     [chromium] search.spec.ts > buggy page: the results are the last query's · failed in 6 of 16 runs (under the delays)
       Compared 6 failing runs with 10 passing runs: every failing run has this order of steps, and no passing run does.
       1. In 6 of 6 failing runs and in none of the 10 passing runs that recorded these steps, the response to the 2nd `GET /api/search` came before the response to the 1st `GET /api/search` (median 96 ms apart; there the order was the other way round).
-      With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and no passing run has. Orders that every failing run has and no passing run has: 1 here, 0 on average per shuffle.
+      With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 1 here, 0 on average per shuffle.
 ```
 
 (That is the package's own end-to-end check, [`test/e2e-flaky`](test/e2e-flaky): a page that writes whichever answer
 lands last, and a test that expects the second query's results. On a real suite, an Angular app where the witnesses
 see nothing, the line was "the response to `POST …/selection_data/` came between the action `click menuitem …` and
-the action `click button "Apply"`", in 4 of 4 failing and none of 48 passing runs:
+the action `click button "Apply"`", in 4 of 4 failing and none of 60 passing runs:
 [`docs/runtime/RESULTS.md`](../../docs/runtime/RESULTS.md), section 30.)
 
 With the delays on (the default) the runs differ by what each seed holds back; with `GENCLASS_CHAOS=off` they differ
@@ -502,18 +503,23 @@ Playwright could not be started, Playwright's own code when the first run wrote 
 signal's number when a signal ended it). While it runs, Playwright's HTML reporter
 is told not to open (`PLAYWRIGHT_HTML_OPEN=never`, unless you set it): it would wait for a key after the first
 failing run. Playwright empties its output directory at the start of every run, and the race files are in it by
-default, so the command sets each run's files aside and puts them all back at the end, also when it is interrupted.
+default, so the command sets each run's files aside and puts them all back at the end, also when it is interrupted
+(a file it cannot put back stays where it waited, is read from there, and the command says where).
 
-**The usual report says the same when the files already hold enough runs**, for example with retries on, or after
-`--repeat-each 8`: `genclass-report.md` and the command's summary get a section "Failed in some runs" for such a test.
-With too few runs, and no witness in a failing run to read first, there is one line that names the command above for
-that test.
+**The usual report says the same when the files already hold enough runs**, for example after `--repeat-each 8`:
+`genclass-report.md` and the command's summary get a section "Failed in some runs" for such a test. A retried
+attempt is not counted as a run (its file says which attempt it is), and neither is a test marked as expected to
+fail. With too few runs, and no witness in a failing run to read first, there is one line that names the command
+above for that test.
 
 ### What is compared
 
 - **Steps.** What the runtime records on every framework without seeing any state: each user action (its kind and
-  the runtime's description of its target, `click button "Apply"`; never a value that was typed), each request when
-  it is sent, and its response when it is delivered to the app (or that it ended without one). They are in each race
+  the runtime's description of its target, `click button "Apply"`: a role, and a label or the element's visible
+  text), each request when it is sent, and its response when it is delivered to the app (or that it ended without
+  one). What is typed into a form field is never in a step. An editor without a label (a `contenteditable`) is
+  described by its own text, which is what was typed, so a keyboard action on anything but a field, a button or the
+  like is named by its role alone (`type textbox`). They are in each race
   file, in order (`steps`, [The file format](#the-file-format)). A step is the same step in two runs when its kind,
   its label and its number agree: "the response to the 2nd `POST /api/orders`". The number counts the requests (or
   the actions) with that label in the order they were sent (or done).
@@ -521,39 +527,65 @@ that test.
   comes before B in every run and the order of X against each of them varies. One pair cannot say the second: when
   the passing runs have the response before the first click in some runs and after the second click in others,
   neither "after the first click" nor "before the second" is the failing runs' alone.
-- **The part of a run that counts.** A failing run stops early, so a step it never reached is unknown there: never
-  "after", never evidence. A passing run goes on where the failing runs stopped, so in a passing run the first user
-  action no failing run reached, and everything after it, is unknown too. And a step that landed after the test's
-  own code had finished (the fixture waits for late responses at the end) cannot have changed the result, so it is
-  not compared in any run. A statement is judged in a run only when the run has every step it names in that part.
-  Where a test's own code ended is the moment Playwright assigns `testInfo.duration`, which it does when the test's
-  function returns or throws, before hooks, screenshots and teardown; a step within 10 ms before it counts as after
-  it, since the test's last check was made in the page a message earlier.
-- **A difference** is a statement true in at least one failing run and in next to no passing run: at most one in
-  twenty of the passing runs that recorded its steps, so none at all below twenty. It must be known in at least three
-  failing runs and in at least half the passing runs. The line gives both counts, the median time between the steps
-  in the failing runs, and where the step was in the passing runs.
-- **The list.** More failing runs first; then a response against a user action or another response before
-  statements about a request's send; then the steps nearest each other. Each line after the first adds failing runs
-  the lines above it do not have, so a test whose failing runs differ among themselves shows as several lines.
+- **Where a statement is judged.** In a run that recorded every step it names, from everything the run recorded. A
+  step keeps its place wherever it landed, also after the test's own code had finished (the fixture waits for late
+  responses at the end). In a passing run, a request that was sent and not answered when the record ended has its
+  response after everything recorded. A failing run stops early, so a step it did not record is unknown there:
+  never "after", never evidence.
+- **Why nothing is left out.** A passing run ends the moment its last check passes; a failing run lasts until its
+  check gives up, usually seconds later. So more lands "inside the test" in a failing run, for a reason that has
+  nothing to do with order. Leaving out what landed after the test would leave out exactly the passing runs that
+  have the failing runs' order a moment later, and any order would then look like the failing runs' own whenever
+  they last longer. The first version of this comparison did that; an independent review caught it (RESULTS.md
+  section 30 has the numbers). For the same reason a passing run that did not record a statement's steps at all
+  counts as if it had the order: a timer's 4th poll, which a run that passed quickly never sent, must not pick out
+  the passing runs that suit it.
+- **A difference** is one of two things, and the line says which by its counts:
+  - an order that is **the failing runs' alone**: true in at least one failing run and in next to no passing run (at
+    most one in twenty, so none at all below twenty passing runs);
+  - an order that **every failing run has and most passing runs do not**: a pair of responses or user actions, true in
+    every failing run and in fewer than half the passing runs. This is the test whose last check passes before a
+    stale response lands: the passing runs with the same order are the ones where it landed a moment too late to be
+    seen, and the line says in how many of them it came only after the test's own code had ended. It is kept to that
+    plain form (two steps, no request's send) because it is the weaker of the two: under delays the failing runs of
+    a test are the ones where something was slow, and a statement with a poll's send or a third step in it is
+    easily true in all of them for that reason alone.
+
+  A statement must be judged in at least three failing runs and half of them. The line gives both counts, the median
+  time between the steps in the failing runs, and where the step was in the passing runs.
+- **Where a test's own code ended** is the moment Playwright assigns `testInfo.duration`, which it does when the
+  test's function returns or throws, before hooks, screenshots and teardown; a step within 10 ms before it counts as
+  after it. It decides nothing about which runs have an order: only what the line says about the passing runs that
+  have it.
+- **The list.** More failing runs first; then fewer passing runs; then a response against a user action or another
+  response before statements about a request's send; then the steps nearest each other. Each line after the first
+  adds failing runs the lines above it do not have, so a test whose failing runs differ among themselves shows as
+  several lines.
 
 ### How it keeps from explaining noise
 
-Two runs under different delays differ in many orders for no reason at all, so with few runs some order is always
-"only in the failing runs". Three things stand against reading that as an explanation:
+Two runs under different delays differ in many orders for no reason at all, so with few runs some order always sets
+a few failing runs apart. Four things stand against reading that as an explanation:
 
 - **A minimum.** Below three failing and three passing runs with recorded steps, nothing is compared, and the output
-  says how many more runs would do.
+  says how many more runs would do. Three against three is compared and can never be told from chance by one pair
+  (the same pair, with the outcomes swapped, is as strong): it takes at least three against four.
+- **Every run is read the same way**, whatever its outcome (above): what a run recorded late is later, not missing.
 - **Shuffled outcomes.** The same search is run with the outcomes dealt at random over the same runs: every way of
-  choosing which runs failed when there are at most 2000 ways, else 1000 seeded shuffles. The output says in how many
-  of them some order did as well, and how many orders separated the two groups on average. When more than 5% of them
-  do as well, the verdict is that the orders found are not told apart from chance, and none is listed.
-- **The same measure for every line.** A line is listed only when its own count of failing runs is one that at most
-  5% of the shuffles reach.
+  choosing which runs failed when there are at most 2000 ways, else 1000 seeded shuffles. Each difference has a
+  strength: how unlikely it would be, if the order had nothing to do with the outcome, that so many of the runs with
+  that order are failing ones. The output says in how many of the shuffles the strongest difference was as strong as
+  the strongest here, and how many orders separated the two groups on average. When more than 5% of them are as
+  strong, the verdict is that the orders found are not told apart from chance, and none is listed.
+- **The same measure for every line.** A line is listed only when it is as strong as at most 5% of the shuffles
+  reach.
 
-What comes out is a measured comparison, and it is labelled as one. An order that only the failing runs have may be
-the cause, a consequence of the cause (a test that hangs lets later responses land first), or neither; nothing here
-maps a pattern to a bug, and the model is not involved.
+What comes out is a measured comparison, and it is labelled as one. An order that sets the failing runs apart may be
+the cause, a consequence of the cause (under delays, the failing runs are the ones where something was slow), or
+neither; nothing here maps a pattern to a bug, and the model is not involved. About one comparison in twenty of a
+test whose order has nothing to do with its failing will still list a line: that is what 5% means, and it was seen
+(RESULTS.md section 30: a line about two page-load responses on the bench's search test, which a second run of the
+same seeds did not repeat).
 
 ### What it does not see
 
@@ -706,6 +738,7 @@ interface GenClassRacesFile {
     line: number;
   };
   status?: "passed" | "failed" | "timedOut" | "interrupted";  // written by the fixture: the test's own status
+  retry?: number;                // written by the fixture for a retried attempt: which attempt (from 1)
   steps?: {                      // written by the fixture: the order of things on the page, bounded
     labels: string[];            // 'click button "Apply"', "POST /api/orders": at most 400, each at most 160 characters
     order: string;               // "a0.1+0 s1.1+4 r1.1+38": kind, label, which one, ms since the step before; at most 2000 steps
@@ -721,16 +754,21 @@ An operation (`op`) is the request's method and path without its query, with the
 the same signature in every seed and the same finding on every push. The runtime's request keys already write ids
 this way; the fixture applies its own rule on top.
 
-`status` and `steps` are what the comparison of a test's failing and passing runs reads
-([A test that fails in some runs](#a-test-that-fails-in-some-runs)); no finding depends on them. In `order`, a step is
+`status`, `retry` and `steps` are what the comparison of a test's failing and passing runs reads
+([A test that fails in some runs](#a-test-that-fails-in-some-runs)); no finding depends on them. A test marked as
+expected to fail (`test.fail()`) gets no `status`, and a file with a `retry` is not counted as a run. In `order`, a step is
 `<kind><label>.<n>+<ms>`: `a` a user action, `s` a request was sent, `r` its response was delivered to the app, `x` it
 ended without one (it failed or was aborted); `label` is an index into `labels`; `n` says which one, counted from 1
 (the 2nd `POST /api/orders`); `ms` is the time since the step before. A request's label is its method and path with
 ids written `:id` (a request to another host starts with the host name, without the port); a user action's is its
-kind and the runtime's description of its target. No query string, no request or response body and no value a user
-typed is in them. The limits are exported as `STEPS_LIMITS`. Both fields are read leniently, the one exception to
-"never half-read" below: a `status` or `steps` this version cannot read is left out and the file is kept, and a reader
-older than them drops them like any field it does not know. The fixture puts the steps into the room the signatures
+kind and the runtime's description of its target: a role, and a label or the element's visible text (40 characters
+at most), so page text can be in it, as it can be in an evidence line. No query string and no request or response
+body is in them, and nothing typed into a form field; a keyboard action on anything that is not a field, a button or
+the like keeps the role alone, since an editor without a label is described by its own text. The limits are
+exported as `STEPS_LIMITS`. The three fields are read leniently, the one exception to "never half-read" below: a
+`status`, `retry` or `steps` this version cannot read is left out and the file is kept, and a reader older than them
+drops them like any field it does not know. When a page records more between two hand-overs than its record keeps
+(600 entries, store writes among them), the steps end there and the rest count in `cut`. The fixture puts the steps into the room the signatures
 leave (300 steps and about 5 KB unless the `steps` option says otherwise): it never leaves a signature out to make
 room for a step, and the file stays within its 64 KB.
 

@@ -109,7 +109,7 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 1.778
+    "needed": 1.784
    },
    "text": [
     "Compared 13 failing runs with 47 passing runs: every failing run has this order of steps, and so do only 16 of the 47 passing runs.",
@@ -169,14 +169,14 @@
    "chance": {
     "ways": 1000,
     "exact": false,
-    "asStrong": 155,
-    "share": 0.15584415584415584,
+    "asStrong": 174,
+    "share": 0.17482517482517482,
     "separating": 0,
-    "needed": 2.398
+    "needed": 2.428
    },
    "text": [
     "Compared 16 failing runs with 44 passing runs: 25 orders of steps set the failing runs apart, the strongest in 5 of 16, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
-    "With the outcomes shuffled 1000 times, 155 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 174 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,

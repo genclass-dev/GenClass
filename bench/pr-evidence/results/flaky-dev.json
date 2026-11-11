@@ -13,7 +13,7 @@
   "firstLineNamesTheWitnessRequests": 3,
   "firstLineNamesTheWitnessOperations": 3,
   "shuffledRounds": 80,
-  "shuffledExplained": 3,
+  "shuffledExplained": 2,
   "alwaysPassing": 14,
   "alwaysPassingWithAnExplanation": 0
  },
@@ -154,15 +154,15 @@
    "chance": {
     "ways": 1000,
     "exact": false,
-    "asStrong": 10,
-    "share": 0.01098901098901099,
+    "asStrong": 16,
+    "share": 0.016983016983016984,
     "separating": 0,
-    "needed": 2.064
+    "needed": 2.237
    },
    "text": [
     "Compared 7 failing runs with 23 passing runs: every failing run has this order of steps, and so do only 8 of the 23 passing runs.",
     "1. In 7 of 7 failing runs and in 8 of the 23 passing runs that recorded these steps, the response to `GET /api/items/desk` came before the response to `GET /api/items/lamp` (median 115 ms apart; in the other passing runs the order was the other way round). In all 8 of those passing runs, the last of these steps came only after the test's own code had ended.",
-    "With the outcomes shuffled 1000 times, 10 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 16 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -212,19 +212,19 @@
    "chance": {
     "ways": 1000,
     "exact": false,
-    "asStrong": 30,
-    "share": 0.030969030969030968,
+    "asStrong": 46,
+    "share": 0.04695304695304695,
     "separating": 0,
-    "needed": 1.87
+    "needed": 2.262
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and so do only 8 of the 24 passing runs.",
     "1. In 6 of 6 failing runs and in 8 of the 24 passing runs that recorded these steps, the response to `GET /api/items/desk` came before the response to `GET /api/items/lamp` (median 75 ms apart; in the other passing runs the order was the other way round). In all 8 of those passing runs, the last of these steps came only after the test's own code had ended.",
-    "With the outcomes shuffled 1000 times, 30 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 46 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
-    "explained": 2
+    "explained": 1
    },
    "witnessed": 6,
    "sameRequests": 6,
@@ -379,7 +379,7 @@
     "asStrong": 1,
     "share": 0.001998001998001998,
     "separating": 0,
-    "needed": 2.237
+    "needed": 2.646
    },
    "text": [
     "Compared 7 failing runs with 23 passing runs: 5 of the 7 failing runs have this order of steps, and no passing run does.",

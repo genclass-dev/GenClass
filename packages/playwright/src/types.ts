@@ -45,12 +45,14 @@ export type RacesStatus = (typeof RACES_STATUSES)[number];
 /**
  * The order of things on the page during one test (GenClassRacesFile.steps): user actions, and each request's send
  * and the delivery of its response to the app, named so that a step is the same step in every run of the test. It
- * holds no value a user typed, no query string and no request or response body. Only the comparison of a test's
- * passing and failing runs reads it (src/order.ts).
+ * holds no query string and no request or response body, and nothing typed into a form field; a user action carries
+ * the runtime's description of its target (a role, and a label or the element's visible text), which for a keyboard
+ * action on anything but a field or a button is cut down to the role (src/steps.ts actionLabel). Only the comparison
+ * of a test's passing and failing runs reads it (src/order.ts).
  */
 export interface RacesSteps {
   /**
-   * What the steps are about, in order of first appearance: a user action as the runtime describes it
+   * What the steps are about, in order of first appearance: a user action by its kind and target
    * ('click button "Apply"'), or a request as its method and path with ids written ":id" ("POST /api/orders"; a
    * request to another host starts with the host name, without the port). At most STEPS_LIMITS.labels, each at most
    * STEPS_LIMITS.label characters.

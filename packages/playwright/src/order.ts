@@ -28,6 +28,12 @@
 // not record its steps counts as if it had the order: a step that only the longer passing runs have (the 4th poll of
 // a timer, which a run that passed quickly never sent) would otherwise pick out the passing runs that suit it, which
 // is the same mistake by another door. So a statement that many passing runs cannot judge is no difference at all.
+// That rule is for the real outcomes only. Under a shuffle (below) a run that did not record a statement's steps is
+// left out of it whichever label it got: there the runs that stopped early are spread over both labels, and counting
+// them against a statement only when they are called passing would rule out, under nearly every shuffle, statements
+// the real outcomes are allowed (their unrecorded runs are all failing ones), and every shuffle would look weaker
+// than the real outcomes for no reason. Leaving them out can only make a shuffle stronger, so the answer errs
+// towards "chance".
 //
 // A difference is a statement that is one of two things:
 //   alone  true in at least one failing run and in next to no passing run: at most one in twenty of the passing runs,
@@ -509,7 +515,12 @@ export function explainOrder(given: readonly OrderRun[], options: ExplainOptions
   const all = new Int32Array(W);
   for (let r = 0; r < R; r++) all[r >>> 5] |= 1 << (r & 31);
   const needFailing = Math.max(minimum.failing, Math.ceil(F / 2));
+  const needPassing = Math.max(minimum.passing, Math.ceil(P / 2));
   const strengthOf = strengths(R);
+  // `hits`: the real outcomes (their differences are collected). There a passing run that did not record a statement's
+  // steps counts as if it had the order. Under a shuffle a run's label is arbitrary, so a run that did not record them
+  // is left out of the statement on either side, as long as half the "passing" runs remain: that can only make a
+  // shuffle's differences stronger than the same rule would, never weaker (see the header).
   const judge = (fail: Int32Array, hits?: Hit[]): { strength: number; separating: number } => {
     let strength = 0;
     let separating = 0;
@@ -526,13 +537,14 @@ export function explainOrder(given: readonly OrderRun[], options: ExplainOptions
         passingKnown += pop(p.k[w] & passing);
       }
       if (failingWith === 0 || failingKnown < needFailing) continue;
-      // a passing run that did not record these steps counts as if it had the order (see the header)
-      const against = passingWith + (P - passingKnown);
-      const alone = against <= Math.floor(P / PASSING_PER_EXCEPTION);
+      if (!hits && passingKnown < needPassing) continue;
+      const against = hits ? passingWith + (P - passingKnown) : passingWith;
+      const among = hits ? P : passingKnown;
+      const alone = against <= Math.floor(among / PASSING_PER_EXCEPTION);
       // "every" is for a plain pair of responses or user actions (the statement the pattern is known by, its simplest)
-      const every = failingWith === F && against * 2 < P && p.best[0].form === 0 && p.best[0].group === 0;
+      const every = failingWith === F && against * 2 < among && p.best[0].form === 0 && p.best[0].group === 0;
       if (!alone && !every) continue;
-      const v = strengthOf(failingWith, failingKnown, against, P);
+      const v = strengthOf(failingWith, failingKnown, against, among);
       if (v > strength) strength = v;
       if (alone && failingWith === F) separating += p.count;
       hits?.push({ p, with: failingWith, passing: passingWith, against, every: !alone, strength: v });

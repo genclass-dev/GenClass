@@ -159,6 +159,36 @@ describe("order: a failing run stops early, and a step it never reached is never
   });
 });
 
+describe("order: failing runs that stop early, with outcomes that depend on nothing", () => {
+  it("next to none is called explained: a run that did not record a statement's steps is read the same way under the real outcomes and under a shuffle", () => {
+    // One click, twelve requests answered at any time in 600 ms, two more clicks. A failing run stops at a moment of
+    // its own, which has nothing to do with any order; a passing run goes to the end. Counting an unrecorded run
+    // against a statement only when a shuffle calls it passing made every shuffle weaker than the real outcomes:
+    // 108 of 1,367 such tests were then called explained (7.9%), 27 of them (2.0%) with the rule as it is
+    const random = mulberry32(31);
+    const make = (failed: boolean): OrderRun => {
+      const items: { kind: StepEvent["kind"]; label: string; t: number }[] = [{ kind: "a", label: "click Load", t: 0 }];
+      for (let k = 0; k < 12; k++) items.push({ kind: "s", label: `GET /r${k}`, t: 1 });
+      for (let k = 0; k < 12; k++) items.push({ kind: "r", label: `GET /r${k}`, t: 5 + Math.floor(random() * 600) });
+      items.push({ kind: "a", label: "click Next", t: 300 }, { kind: "a", label: "click Done", t: 650 });
+      const stop = failed ? 100 + Math.floor(random() * 500) : Infinity;
+      const sorted = items.map((x, i) => ({ x, i })).sort((a, b) => a.x.t - b.x.t || a.i - b.i);
+      return { failed, events: sorted.filter((o) => o.x.t <= stop).map((o) => ({ ...o.x, n: 1 })) };
+    };
+    let compared = 0;
+    let explained = 0;
+    for (let trial = 0; trial < 240; trial++) {
+      const runs = Array.from({ length: 12 }, () => make(random() < 0.4));
+      const x = explainOrder(runs);
+      if (x.verdict === "too-few-runs") continue;
+      compared++;
+      if (x.verdict === "explained") explained++;
+    }
+    expect(compared).toBeGreaterThan(180);
+    expect(explained / compared).toBeLessThanOrEqual(0.06);
+  });
+});
+
 describe("order: steps missing from some runs", () => {
   it("a failing run that did not record a statement's steps is left out of it; a passing run that did not counts as if it had the order", () => {
     const without = (r: OrderRun, label: string, n: number, kinds: string): OrderRun => ({ ...r, events: r.events.filter((e) => !(kinds.includes(e.kind) && e.label === label && e.n === n)) });
