@@ -29,7 +29,9 @@ const GH = `http://127.0.0.1:${GH_PORT}`;
 const APP_ID = "424242";
 const SECRET = randomBytes(24).toString("hex");
 const SHA = "1".repeat(40);
-const REPO = { id: 7001, name: "shop", full_name: "acme/shop", private: false, owner: { id: 501, login: "acme", type: "Organization" } };
+/** The commit of the default branch whose test run uploaded race files: what the pull request's findings are compared with. */
+const BASE_SHA = "b".repeat(40);
+const REPO = { id: 7001, name: "shop", full_name: "acme/shop", private: false, owner: { id: 501, login: "acme", type: "Organization" }, default_branch: "main" };
 
 const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const PEM = pair.privateKey.export({ type: "pkcs1", format: "pem" });
@@ -90,10 +92,12 @@ function zip(files) {
 
 const FIXTURES = join(ROOT, "packages", "playwright", "test", "fixtures", "races");
 const ARTIFACT = zip(Object.fromEntries(["checkout-1.json", "checkout-2.json", "search-1.json", "search-2.json"].map((n) => [n, readFileSync(join(FIXTURES, n), "utf8")])));
+// the default branch's run: the search test's files only, so the stale response is already there and the double submit is not
+const BASELINE = zip(Object.fromEntries(["search-1.json", "search-2.json"].map((n) => [n, readFileSync(join(FIXTURES, n), "utf8")])));
 
 // --------------------------------------------------------------------------------------------- the stand-in for GitHub
 
-const seen = { calls: [], checks: new Map(), comments: new Map(), reactions: [], storageAuth: [], jwtOk: null, tokens: new Map() };
+const seen = { calls: [], checks: new Map(), comments: new Map(), reactions: [], storageAuth: [], baseLists: 0, jwtOk: null, tokens: new Map() };
 let nextId = 1000;
 
 function standIn() {
@@ -117,8 +121,10 @@ function standIn() {
       };
       if (path.startsWith("/storage/")) {
         seen.storageAuth.push(auth);
-        res.writeHead(200, { "content-type": "application/zip", "content-length": String(ARTIFACT.length) });
-        return res.end(ARTIFACT);
+        // 61: the pull request's artifact; 62: the default branch's
+        const bytes = path.endsWith("/62") ? BASELINE : ARTIFACT;
+        res.writeHead(200, { "content-type": "application/zip", "content-length": String(bytes.length) });
+        return res.end(bytes);
       }
       seen.calls.push(`${req.method} ${path}`);
       const bearer = auth.replace(/^Bearer /, "");
@@ -140,9 +146,16 @@ function standIn() {
       let m;
       if (rest === "/contents/.github/genclass.yml") return send(200, { type: "file", encoding: "base64", content: Buffer.from("min_seeds: 2\ncomment: findings\n").toString("base64") });
       if (rest === "/pulls/12" && req.method === "GET") return send(200, pull());
-      if (rest === "/actions/runs") return send(200, { workflow_runs: [{ id: 5001, name: "e2e", head_sha: SHA, status: "completed", conclusion: "success", html_url: "https://example.test/run", workflow_id: 1, created_at: new Date().toISOString() }] });
+      if (rest === "/actions/runs" && url.searchParams.get("branch") === "main") {
+        // the default branch's finished runs: one, started by a push, with race files
+        seen.baseLists++;
+        return send(200, { workflow_runs: [{ id: 5002, name: "e2e", head_sha: BASE_SHA, status: "completed", conclusion: "success", html_url: "https://example.test/run", workflow_id: 1, created_at: new Date().toISOString(), event: "push", head_branch: "main", head_repository: { id: REPO.id } }] });
+      }
+      if (rest === "/actions/runs") return send(200, { workflow_runs: [{ id: 5001, name: "e2e", head_sha: SHA, status: "completed", conclusion: "success", html_url: "https://example.test/run", workflow_id: 1, created_at: new Date().toISOString(), event: "pull_request", head_branch: "feature", head_repository: { id: REPO.id } }] });
       if (rest === "/actions/runs/5001/artifacts") return send(200, { artifacts: [{ id: 61, name: "genclass-races", size_in_bytes: ARTIFACT.length, expired: false }] });
+      if (rest === "/actions/runs/5002/artifacts") return send(200, { artifacts: [{ id: 62, name: "genclass-races", size_in_bytes: BASELINE.length, expired: false }] });
       if (rest === "/actions/artifacts/61/zip") return send(302, null, { location: `${GH}/storage/61` });
+      if (rest === "/actions/artifacts/62/zip") return send(302, null, { location: `${GH}/storage/62` });
       if (rest === "/check-runs" && req.method === "POST") {
         const id = ++nextId;
         seen.checks.set(id, body);
@@ -170,7 +183,7 @@ function standIn() {
   });
 }
 
-const pull = () => ({ number: 12, state: "open", draft: false, merged: false, user: { id: 77, login: "ada", type: "User" }, head: { sha: SHA, ref: "feature", repo: { id: REPO.id, full_name: REPO.full_name } }, base: { ref: "main", repo: { id: REPO.id } } });
+const pull = () => ({ number: 12, state: "open", draft: false, merged: false, user: { id: 77, login: "ada", type: "User" }, head: { sha: SHA, ref: "feature", repo: { id: REPO.id, full_name: REPO.full_name } }, base: { ref: "main", repo: { id: REPO.id, default_branch: "main" } } });
 
 // --------------------------------------------------------------------------------------------- helpers
 
@@ -276,19 +289,26 @@ try {
   check("the review ran after the response and wrote the check and the comment", await until("a check and a comment", () => seen.checks.size === 1 && seen.comments.size === 1));
   check("workerd signed the app's JWT with the PKCS#1 key (RS256, verified with the public key)", seen.jwtOk === true);
   check("the installation token was asked for this repository only", [...seen.tokens.values()].every((r) => r.length === 1 && r[0] === REPO.id));
-  check("the artifact was fetched from storage without the token", seen.storageAuth.length === 1 && seen.storageAuth[0] === "", JSON.stringify(seen.storageAuth));
+  check("the pull request's artifact and the default branch's were fetched from storage without the token", seen.storageAuth.length === 2 && seen.storageAuth.every((a) => a === ""), JSON.stringify(seen.storageAuth));
+  check("the default branch's runs were listed once, by its name", seen.baseLists === 1, String(seen.baseLists));
   const checkRun = [...seen.checks.values()][0] ?? {};
-  check("the check: neutral, 2 findings, 1 reproducible", checkRun.conclusion === "neutral" && checkRun.output?.title === "2 findings, 1 reproducible", JSON.stringify(checkRun.output?.title));
+  check("the check: neutral, 2 findings, 1 reproducible, 1 already on the default branch", checkRun.conclusion === "neutral" && checkRun.output?.title === "2 findings, 1 reproducible, 1 already on the default branch", JSON.stringify(checkRun.output?.title));
   const comment = [...seen.comments.values()][0] ?? "";
-  check("the comment came through the unzip, the validator and the summariser", comment.includes("| 1 | New | Duplicate submit · `POST /api/orders` |") && comment.includes("| 2 | New | Stale response · `GET /api/search` |"), comment.slice(0, 300));
+  check("the comment came through the unzip, the validator and the summariser", comment.includes("| 1 | New | Duplicate submit · `POST /api/orders` |") && comment.includes("Stale response · `GET /api/search` |"), comment.slice(0, 300));
+  check(
+    "the finding the default branch's race files flag too is listed as already there, with the commit it was compared with",
+    comment.includes("| 2 | Already on the default branch | Stale response · `GET /api/search` |") && comment.includes("1 of the 2 findings is already on the default branch: its race files at `bbbbbbb` flag the same kind and operation."),
+    comment.slice(0, 700),
+  );
 
   // 3. the same run again: nothing is written twice
   const writes = () => seen.calls.filter((c) => /^(POST|PATCH) \/repos/.test(c)).length;
   const before = writes();
   await deliver("workflow_run", { action: "completed", workflow_run: { id: 5001, head_sha: SHA, status: "completed", conclusion: "success", pull_requests: [] }, repository: REPO, installation: { id: 9001 } });
-  await until("the second review to read the artifact", () => seen.storageAuth.length === 2);
+  await until("the second review to read the artifact", () => seen.storageAuth.length === 3);
   await sleep(1500);
   check("a second review of the same evidence writes nothing", writes() === before && seen.comments.size === 1, `${writes()} vs ${before}`);
+  check("within two minutes the default branch is not asked about again: the second review compares with what the worker kept", seen.baseLists === 1 && seen.storageAuth.length === 3, `${seen.baseLists} lists, ${seen.storageAuth.length} downloads`);
 
   // 4. a command
   await deliver("issue_comment", { action: "created", issue: { number: 12, state: "open", user: { id: 77, login: "ada" }, pull_request: {} }, comment: { id: 555, body: "@genclass-dev replay 1", user: { id: 77, login: "ada", type: "User" }, author_association: "MEMBER" }, repository: REPO, installation: { id: 9001 }, sender: { id: 77, login: "ada", type: "User" } });
