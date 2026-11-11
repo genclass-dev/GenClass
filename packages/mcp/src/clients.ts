@@ -15,7 +15,7 @@ export const NAME = "genclass";
  * skill, llms-install.md, the READMEs) names this version, the way a script tag does, so whoever reads a commit knows what
  * runs. It is the newest runtime line at release; only the runtime's own docs, for people, keep that line's npm tag.
  */
-export const RUNTIME_VERSION = "0.3.0-beta.5";
+export const RUNTIME_VERSION = "0.3.0-beta.6";
 
 /** `@genclass/mcp@<version>`: what npx runs. */
 export function pinned(version: string): string {

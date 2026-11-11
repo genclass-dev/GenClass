@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.0-beta.6 (2026-11-11)
+
+One fix in the user-action observer, found by running a public app's own test suite with the runtime on its pages,
+and a quieter `init`. No model-visible text changed (`situation-v2.3`) and the default model is unchanged.
 
 - **Submitting a form that has a control named `id` no longer throws into the page.** A form's named controls shadow
   its own properties, so with `<input type="hidden" name="id">` (the usual hidden field of an edit form) `form.id` is
