@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **The pinned runtime is `@genclass/runtime@0.3.0-beta.6`.** `genclass_scan`'s `npx`, `genclass_setup`'s install line,
+  the skill, `llms-install.md` and the READMEs name it (`npm run sync`, with the runtime's version bump). That runtime
+  fixes an error its submit listener threw into the page on a form with a control named `id`. This reaches users with
+  the next release of this package, once that runtime is on npm (`release-mcp.yml` stops if npm does not serve it).
+
 ## 0.2.2 (2026-11-05)
 
 - **The agent shows each action and waits for a yes.** The skill (the plugin's, the root copy and the one `init`

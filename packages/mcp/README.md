@@ -308,7 +308,7 @@ To remove it: delete `.claude/skills/genclass/` (or the directory the skill tool
 `/plugin uninstall genclass@genclass`.
 
 Then connect the app's development build (once). The agent link needs the newest runtime line, `@genclass/runtime`
-0.3.0-beta.1 or later: `npm install @genclass/runtime@0.3.0-beta.5`, the version this release was tested with (npm's
+0.3.0-beta.1 or later: `npm install @genclass/runtime@0.3.0-beta.6`, the version this release was tested with (npm's
 `latest` is the older 0.2.x, which has no agent entry):
 
 ```ts
@@ -365,7 +365,7 @@ both slow baselines show and it does not is named as what a slow response alone 
 | `genclass_replay` | `arm` / `result`: reproduce one finding exactly |
 | `genclass_analytics` | per-endpoint latency, error rates and request counts, learned relations and flows; production numbers from your GenClass dashboard |
 | `genclass_setup` | the lines to add for your framework, and the config lines for the client it runs in |
-| `genclass_scan` | `{url, phone?, hosted?}`: audit any page (the dev server or a site you do not own) with the 23 measured visual checks in headless Chromium: a score and each problem with its element, selector and a suggested CSS fix, plus the JSON report. Runs `npx @genclass/runtime@0.3.0-beta.5 scan --json --local` (or the project's own runtime); needs Playwright's Chromium (`npx playwright install chromium`), or `hosted: true` for the genclass.dev page check (public pages only, the URL is sent there); the agent asks before either |
+| `genclass_scan` | `{url, phone?, hosted?}`: audit any page (the dev server or a site you do not own) with the 23 measured visual checks in headless Chromium: a score and each problem with its element, selector and a suggested CSS fix, plus the JSON report. Runs `npx @genclass/runtime@0.3.0-beta.6 scan --json --local` (or the project's own runtime); needs Playwright's Chromium (`npx playwright install chromium`), or `hosted: true` for the genclass.dev page check (public pages only, the URL is sent there); the agent asks before either |
 | `genclass_clear` | forget recorded runs and findings |
 
 ## New findings without asking
@@ -405,7 +405,7 @@ By default the server collects nothing and sends nothing to GenClass or anyone e
 `~/.genclass`. `genclass_analytics` `{source: "production"}` reads
 your own GenClass dashboard when you set `GENCLASS_DASHBOARD` to its private link. `genclass_scan` loads the page the
 agent names (that is the page's own traffic) in a local browser; only with `hosted: true` is the URL sent to the
-genclass.dev page check, and when the project has no `@genclass/runtime` with `scan`, npx downloads the version this release pins, `@genclass/runtime@0.3.0-beta.5`, from npm. With `GENCLASS_REPORT` set (off by
+genclass.dev page check, and when the project has no `@genclass/runtime` with `scan`, npx downloads the version this release pins, `@genclass/runtime@0.3.0-beta.6`, from npm. With `GENCLASS_REPORT` set (off by
 default) the server also mirrors its log of the loop to that dashboard, in small batches: the id, kind and page path of
 each finding, when its evidence was read, each replay armed and its verdict, when a regression test was written, each
 explore report (page loads compared, races found) and each clear, so the dashboard's Closed-loop development view
