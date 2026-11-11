@@ -129,10 +129,12 @@ from test to test. The cost is that two causes behind one kind and operation sha
 embedded race report, which stays test by test with each test's own seeds and evidence line, so nothing is lost,
 only folded. What a row keeps of its tests is five names; the seeds are those of the test that flags it in most.
 "Reproducible" keeps its meaning, enough seeds of one test: two tests that each saw it once are not that.
-The operation is taken as the race file writes it; the app does not rewrite it. Where a path holds a record's id,
-each record is an operation of its own, and a record a test creates is another finding in every run, which no
-baseline matches and only an `ignore` entry with a `*` covers. Writing such a segment the same way in every run is
-the part of whatever writes the race file (its `op`), so that the race report and the review name a race alike.
+The operation is taken as the race file writes it; the app does not rewrite it. The runtime's request keys already
+write the ids they recognise in a path as `:id` (`normalizePath` in `packages/runtime/src/util.ts`: numbers, UUIDs,
+long hex strings and tokens, short slugs that mix letters and digits), so a record a test creates does not make a
+new finding in every run. A record that a path names with a plain word keeps an operation of its own, and an
+`ignore` entry with a `*` covers those. Naming a race is the part of whatever writes the race file, so that the
+race report and the review name it alike.
 
 **Numbers for life.** A finding's fingerprint is a hash of its kind and operation; its number is given once. Statuses
 are worked out against the commit whose race files were read last. A row keeps 100 findings. One that is flagged is
