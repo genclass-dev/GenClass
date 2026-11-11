@@ -55,3 +55,8 @@ storage-state*.json
 /results/
 # a node_modules symlink (a worktree's link to another checkout's install) is not a directory, so `node_modules/` misses it
 **/node_modules
+
+# pull-request evidence bench (bench/pr-evidence): the built app and each run's work files
+bench/pr-evidence/.work/
+# a config genclass-playwright-run generated next to the bench's own and a killed run left behind
+bench/pr-evidence/**/*.genclass-*.mjs

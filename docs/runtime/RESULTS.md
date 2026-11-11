@@ -44,6 +44,7 @@ round 1, `r17-v2a` to `r17-v2c` and model 0.1.0 (`r17-v2b`) are superseded and k
 | Measured visual checks (deterministic, not the model) | fixture pages: 35 of 35 planted faults found, 0 false reports. Bench: 0 false reports and 0 fixes in 128 page views of the demos, templates and compat apps; recall 1.00 on 20 of 23 planted fault kinds (run 4), 19 of 23 (run 5); public sites: 8 findings in 96 loads in run 4 (5 confirmed real, 0 check errors, 3 unconfirmed), 6 findings in 97 loads in run 5 (after the review; not looked at) | §13, §14 |
 | Flow expectations (opt-in) | false-report rate not measured yet | §5 |
 | Coding agents: `genclass_explore` and `genclass_replay` on one real page (train VM, headless Chromium, 2026-10-20; one page, one bug class, not a recall figure) | explore found the stale-results race in 5 of 6 reordered runs of the buggy page and reported nothing on the fixed page (0 of 6 differ: no false report); replay reproduced it before the fix and not after; the generated Playwright test failed before and passed after | §18 |
+| The pull-request check's evidence path (`genclass-playwright-run`, no test edited, witnesses only; changes of 2026-11-11, not released) | held-out React app, 6 data layers: the two bug scenarios flagged in 60 of 60 trials where the bug showed (56 of 56 with delays). Correct flows other than a deliberate five-fold "+1": 1 of 180 trials flagged without delays (7 before), with delays 4 of 180 plus 6 where the delays surfaced an unguarded typeahead; the "+1" scenario is flagged in 36 of 36, before and after. Two public suites, nothing edited: 0 signatures after (7 lines before, all one false fact), and no real race found on either | §29 |
 
 ## 1. Model stages compared (held-out simulated apps)
 
@@ -1560,3 +1561,129 @@ Also: five adjacent `[redacted]` in a state value against 199 characters took ov
 **Report text.** On the hunts' Notes at 900 ms the sample before named "2m", "8", "3m", "Loading..." and never the differing "Maple note" row; the lists are now in reading order and the headline names the row. On planted pages the headline names the planted line in **48 of 48** sessions with a verdict (that it shows "Last synced 3 days ago", which the baseline does not; that form field "el-id-*-33" is "default one"; that requests sent to "POST /api/save" are "(absent)", "1" in the baseline). The Notes report itself cannot be shown again without its app.
 
 Caveats: one machine, seeds 1 to 6 only, other agents running on it (load 4 to 11). The stored rescoring reads text, not the runs: the limits above apply, and it says nothing about the new baseline. A page check is the hunt's own and narrow: a run it calls right can differ for a real reason (`rename-two`, `new-session`), and "false" means by that check. Real apps with the new baseline: OpenCode only, one build, the review's four scenarios. Not run: n8n, Open WebUI and Langflow with the new load (no installs, no room), the demos (each has its own runtime and shell on the page, so the harness's injected one would make two), the model suite, `realapps/`.
+
+## 29. What the pull-request check has to go on: the no-edit Playwright path, measured (development Mac, Chromium through Playwright 1.63.0, 2026-11-11, branch `feat/evidence-bench`)
+
+genclass-dev[bot] reads the race files `genclass-playwright-run` writes while a repository's own Playwright suite
+runs. `bench/pr-evidence` measures that path, with no change to a test, on two sets kept apart
+([README](../../bench/pr-evidence/README.md)): a **development set** (`tiny-desk/`: four planted races, the fixed
+version of each, a poll and a button meant to repeat a request) on which the changes below were chosen, and a
+**held-out set** (compat's React app: six data layers, the eight compat scenarios, compat's own oracle) that was read
+afterwards. Two public suites and one workflow run on GitHub outside this repository were run by hand. Every flag is
+a witness (`model: "skip"`, the path's default); the model's detections are not measured here.
+
+**The changes measured** (one in the runtime's agent entry, the rest in `@genclass/playwright`; "before" is the
+packages as published, 0.1.0 and 0.3.0-beta.5):
+
+1. *Runtime:* an `overwrote-newer` witness needs newer data: the user's write, a newer request's response chain, or
+   something a later user action started. A timer the same action scheduled no longer counts (AGENT.md section 2).
+2. The end of a test waits, for a bounded time, for responses to requests already sent.
+3. Seeds come in mirrored pairs (seed 2 holds each request for `min + max` minus seed 1's delay).
+4. Identical reads, and writes to one path, leave in the order the page sent them.
+5. Chaos holds nothing while the page is offline.
+6. The default chaos filter is the page's own host on any port, and the summary says when chaos held nothing.
+7. A request's key writes the ids in its path as `:id`.
+
+**Held-out set** (`run.mjs`, 288 trials a mode: 6 layers × 8 scenarios × 6 seeds; a flag is a race file with at
+least one signature; scenarios a and b are bugs, c to h correct flows). "Before" here is the published packages plus
+change 2, which these trials do not exercise (each settles before it ends).
+
+| | before, no delays | after, no delays | before, delays | after, delays |
+|---|---:|---:|---:|---:|
+| seconds for the 288 trials (plain Playwright: 329) | 329.5 | 327.9 | 398.1 | 405.3 |
+| a, b: trials in which the oracle saw the bug | 60 | 60 | 56 | 56 |
+| of those, flagged | **60** | **60** | **56** | **56** |
+| c to h: trials flagged, of 216 | 43 | 37 | 46 | 46 |
+| of those, scenario f (deliberate repeats) | 36 | 36 | 36 | 36 |
+| c to h without f: trials flagged, of 180 | 7 | **1** | 10 | 10 |
+| of those, an unguarded typeahead going stale under the delays (scenario h; a race the app has) | 0 | 0 | 0 | 6 |
+| c to h without f: lines | 8 | 1 | 19 | 10 |
+| c to h: trials in which the oracle saw a bug that only the handling of requests made, none of them flagged | 0 | 0 | 7 | **0** |
+
+- **Recall.** In both modes, before and after, every trial in which the oracle saw the bug of scenario a (typeahead)
+  or b (double submit) was flagged, in every data layer, also the two whose own state the runtime cannot see
+  (TanStack Query, Apollo), where b is flagged as `identical-in-flight` and the library itself prevents a.
+- **Correct flows, without delays.** Outside f, 7 of 180 trials were flagged before (TanStack Query's status poll in 5, one todo
+  toggle and one item list) and 1 of 180 after: two identical refetches of the todo list in flight together, which
+  is what its one line says.
+- **Correct flows, with delays.** Outside f, 10 of 180 before (19 lines: the status poll in 5 trials, todo refetches and
+  toggles in 5) and 10 of 180 after, of another kind: 4 trials with two identical refetches in flight (4 lines), and
+  6 trials of scenario h in which the delays put an older search answer over a newer one (`overwrote-newer` on
+  `GET /api/search`). h runs the same unguarded typeahead as scenario a on a backend that answers in order. Under
+  delays it goes stale; the oracle saw wrong results at the end in 3 of the 6, and each was flagged. That is a race
+  the app has, surfaced by the delays, not a flag on correct code.
+- **Scenario f is flagged in every trial, before and after** (36 of 36 in both modes): five deliberate presses of
+  "+1", whose identical requests overlap. That is what `identical-in-flight` says, the app is correct, and nothing in
+  the runtime can tell an intended repeat from a double submit. It is the largest source of lines on correct code and
+  is left to the repository to mark as intended.
+- **What the delays themselves broke.** Before, the oracle saw a bug in 7 trials of correct flows under delays, none flagged
+  and all made by how requests were held: 4 in scenario e (offline, then sync: a note sent while offline was held
+  until the network was back and got through ahead of the note before it) and 3 in h (the item list without the item
+  just created). After: none. Change 5 took e to 0 of 36; with mirrored seeds and without change 5 it had been 8 of
+  36, measured in between. The 3 bugs the oracle still sees under delays are h's stale search results above.
+
+**Development set** (`dev.mjs`, ten tests, all passing at normal speed; a planted race counts as flagged in a seed
+when its own signature is in that seed's race file):
+
+| setting | search | checkout | profile | detail | detail: of the seed pairs, in at least one seed / in both | fixed versions flagged | other lines |
+|---|---|---|---|---|---|---|---|
+| published packages, seeds 1 to 6 | 5 of 6 | 6 of 6 | 6 of 6 | **0 of 6** | 0 / 0 of 3 | 0 of 24 runs | 27: the repeat button 12 (`identical-in-flight`) and 8 (`overwrote-newer`), the poll 7 |
+| changes 1, 4 to 7 | 5 of 6 | 6 of 6 | 6 of 6 | 0 of 6 | 0 / 0 of 3 | 0 of 24 | 12: the repeat button (`identical-in-flight`) |
+| plus the wait (2) | 6 of 6 | 6 of 6 | 6 of 6 | 2 of 6 | 2 / 0 of 3 | 0 of 24 | 12 |
+| plus mirrored seeds (3): the default | 6 of 6 | 6 of 6 | 6 of 6 | 3 of 6 | 3 / 0 of 3 | 0 of 24 | 11 |
+| the detail test alone, seeds 1 to 40, wait, seeds not mirrored | | | | 22 of 40 | **16** / 6 of 20 | 0 of 40 | none |
+| the detail test alone, seeds 1 to 40, the default | | | | 20 of 40 | **20** / 0 of 20 | 0 of 40 | none |
+
+- The detail test ends at its last assertion, while the answer for the item the user left is still held: nothing
+  lands before the page closes, so the published packages saw the race in no seed. With the wait it is seen whenever
+  the seed puts the two answers in the stale order.
+- Mirrored seeds: the two seeds of a default run saw the two-request race in 20 of 20 pairs, against 16 of 20 with
+  unrelated seeds. The price is the other column: a two-request race is in one seed of a pair, never both (6 of 20
+  before), so it is marked reproducible only from four seeds. Races among three or more requests (search, profile)
+  and the double submit are in every seed either way.
+- The 15 lines that went away (the poll's 7 and the repeat button's 8 `overwrote-newer`) were made by the delays:
+  the request sent first was held longer, reached the server second and came back with the newer answer. The poll's
+  evidence line read `(16 → 17)`.
+- The fixed versions were flagged in no run under any setting (24 runs each, 40 for the detail test).
+
+**In a real browser, in CI** (`packages/playwright/test/e2e-early`, run by the package's end-to-end check): two tests
+that stop at their first matching assertion on the search page. With the wait, the witness on the buggy page in 6 of
+6 seeds; with `waitForResponsesMs: 0`, in 2 of 6; nothing on the fixed page either way.
+
+**Two public suites, nothing edited** (each run by a separate agent session from a fresh clone; Chromium; the suites
+are not this project's and no report was filed anywhere):
+
+| suite | as published | with the changes |
+|---|---|---|
+| bulletproof-react, `apps/react-vite` (React, TanStack Query; 3 tests) at `9506629` | Chaos held 0 requests (the API is on another port). 8 distinct operations flagged, 7 lines in a serial run, all one fact: `isPending` of a `useMutation`, set by a 0 ms timer of the click and cleared by the response. No real race found. | Chaos held 38 of 38 API requests. **0 signatures** with and without delays; all tests pass; 55 to 57 s with delays against 46 to 48 s plain (two seeds, serial), 45 s without delays. |
+| paperless-ngx, `src-ui` (Angular 22, a real Django back end; 31 tests) at `d05e96c` | Chaos held 0 requests in 62 of 62 files (the API is on another port). 0 signatures: the runtime saw 12 to 15 requests and 2 to 6 user actions a test and no state field (Angular's state is not discovered). | Not re-run. With the filter widened by hand (what change 6 now does): 873 requests held, 0 signatures, 62 of 62 passed. |
+
+- **`--repeat-each 2` broke bulletproof-react's suite** with and without GenClass: both repeats share one saved login,
+  and the same two tests fail under plain `playwright test --repeat-each 2 --workers=2`. The README now has a recipe
+  that gives each seed a run of its own.
+- **A real race the path did not explain.** paperless-ngx's `bulk edit` test is flaky on its own (6 of 61 executions
+  plain): the response of `POST /api/documents/selection_data/` replaces a tag toggle made a moment earlier. It failed
+  more often under the fixture (13 of 60 without delays, 19 of 60 with the default delays holding nothing), because
+  routing every request through Playwright adds latency (median API call 69 ms plain, 111 ms with the fixture and no
+  delays, 165 ms with delays on; measured on a loaded machine), and no line said why: no state is visible on Angular.
+  In 36 traced executions the test failed exactly when that response landed between two of the test's clicks (7 of 7
+  failures, 0 of 29 passes): the order of actions and answers, which the runtime records on every framework, would
+  have said so. Comparing that order between a test's passing and failing runs is not built.
+
+**One workflow run on GitHub, outside this repository** (a private repository with the development set's app and the
+one workflow file as published, `docs/github-app/workflows/genclass.yml`): the job ran in 1 min 56 s, uploaded 20
+race files (agent connected in 20, 215 requests held) with the signatures the same commands give locally. The step
+that runs Playwright exits 1 when a test fails under the delays, so the job's own check on the pull request is red
+although the workflow run is green (`continue-on-error` on the job). The app is not installed on that account: its
+check and comment on a repository outside this one, and on a private one, are still not run.
+
+**What it costs.** Held-out set, same 288 trials: plain Playwright 329 s; through the command without delays
+328 to 330 s (the runtime on the page costs nothing measurable here), with delays 398 to 405 s (+21% to +23%). The command runs two seeds, so a default run is about 2.4 to 2.5 times the plain suite's test
+time. On bulletproof-react: +9 s on 46 to 48 s with delays, nothing measurable without.
+
+**What this does not show.** One app per set, React only, one machine that was doing other work; witnesses only, not
+the model. The held-out backend makes its own delays, so its bug scenarios measure whether a race that happened was
+recorded, not how often delays make one happen. Changes 4 and 5 were derived from how holding a request differs from
+delaying an answer, but the held-out scenario e is where the offline case was seen, so e's after-number is not an
+independent test of change 5. No real race was found on either public suite: these numbers say the path records the
+races that happen in front of it and stays quiet on correct code, not how often a real suite has one to find.
