@@ -63,7 +63,9 @@ node bench/pr-evidence/flaky.mjs files <a directory of race files>   # a real su
 - **Development set:** a buggy tiny-desk test that fails under some seeds and passes under others is one the
   comparison can be asked about. Counted: whether its first line names the two requests that the `overwrote-newer`
   witness of a failing run names (the witness needs React's state; the comparison does not), and that a test which
-  never fails gets no line.
+  never fails gets no line. It was run twice: `results/flaky-dev.json` and `flaky-dev-60.json` (the same runs as one
+  batch of 60), then `flaky-dev-rebased.json` and `flaky-dev-60-rebased.json` after the branch was rebased onto the
+  narrowed witness rule. The counts are the same.
 - **Held-out set:** compat's apps whose state the runtime does not see (Vue with Pinia, plain HTML; Solid's
   `createResource` never shows the bug), the two typeahead scenarios (a: the backend answers shorter prefixes later;
   h: it answers in order and only the delays reorder), compat's oracle as the outcome. With `--data`, a test is one

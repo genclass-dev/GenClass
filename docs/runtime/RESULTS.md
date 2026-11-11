@@ -1801,6 +1801,19 @@ case), and how often the comparison then calls anything explained.
 - **The search test needed more runs than the detail test.** Its failing runs differ among themselves: the 5th
   answer is followed by the 4th in some, the 3rd or the 2nd in others, so each order is in only part of them (10, 6
   and 7 of 16). One batch of 30 was not told apart from chance; 60 runs were.
+- **Run a second time, on the rebased branch** (after section 29's last four commits, which narrowed the witness
+  rule; the same command, 1,600 s, while other sessions' Playwright suites ran on the machine;
+  `results/flaky-dev-rebased.json` and `flaky-dev-60-rebased.json`). The counts are the first run's: 4 of 20
+  test-batches could be compared, 3 were explained, and each first line names the two requests of a failing run's
+  witness; the 14 that never failed and the 2 that never passed got no explanation; shuffled outcomes were called
+  explained in 2 of 80 rounds (batches of 30) and 0 of 40 (batches of 60). The detail test failed under the same 13
+  seeds and got the same lines (7 of 7 and 6 of 6 failing runs, 0 of 15 and 0 of 16 passing; 13 of 13 and 0 of 31 as
+  one batch), its witness naming those two requests in 13 of 13. The search test failed in 14 of 60 (13 of the first
+  run's 16 seeds and one other): one batch of 30 was again not told apart from chance (best order in 4 of 9), the
+  other was explained by one line (5 of 5 failing runs, 0 of 17 passing); as one batch, two lines, and 10 of the 14
+  failing runs have one of them (three lines and 16 of 16 in the first run). One failing search run had no witness
+  this time (seed 36: the 1st and the 5th answer were delivered in the same millisecond, 3 ms apart in the first run,
+  where it had one); its steps have the same stale order in both runs, and the comparison's first line covers it.
 
 **Held-out set, first measurement** (`flaky.mjs held` without `--data`, the method fixed beforehand: compat's Vue 3 +
 Pinia and Solid apps with the GenClass import taken out, scenarios a and h, seeds 1 to 120 in batches of 30, compat's
@@ -1877,7 +1890,8 @@ check): a test on the buggy search page that types two letters and expects the s
 seeds, and the test failed in exactly those (1, 6, 9, 11, 14, 16) in all four runs of the check made here (33 s
 each for the sixteen runs; the fourth on the rebased branch); the command printed "In 6 of 6 failing runs and in none of the 10 passing runs that recorded
 these steps, the response to the 2nd `GET /api/search` came before the response to the 1st `GET /api/search`", and
-exited 0. The check requires that
+exited 0. On GitHub's runners (`playwright-reporter.yml`, the workflow's two runs on the pull request's first push,
+`ubuntu-latest`): the same six seeds and the same line both times, 38 s and 45 s. The check requires that
 line, sixteen race files with status and steps, and no passing run with that order. Writing it found one fault in
 the mode before any measurement depended on it: Playwright empties its output directory at the start of every run,
 so with the race files in their default place each run removed the run before; the command now sets each run's files

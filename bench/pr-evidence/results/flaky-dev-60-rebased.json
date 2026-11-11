@@ -1,0 +1,317 @@
+{
+ "date": "2026-11-11",
+ "node": "v25.6.0",
+ "mode": "dev",
+ "seeds": 60,
+ "batch": 60,
+ "rounds": 20,
+ "seconds": null,
+ "summary": {
+  "investigations": 10,
+  "askable": 2,
+  "explained": 2,
+  "firstLineNamesTheWitnessRequests": 2,
+  "firstLineNamesTheWitnessOperations": 2,
+  "shuffledRounds": 40,
+  "shuffledExplained": 0,
+  "alwaysPassing": 7,
+  "alwaysPassingWithAnExplanation": 0
+ },
+ "rows": [
+  {
+   "test": "buggy > cart counts two adds",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 0,
+   "passed": 60,
+   "failing": 0,
+   "passing": 60,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 60 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "witnessed": 0
+  },
+  {
+   "test": "buggy > checkout places the order",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 0,
+   "passed": 60,
+   "failing": 0,
+   "passing": 60,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 60 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "witnessed": 0
+  },
+  {
+   "test": "buggy > detail shows the item picked last",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 13,
+   "passed": 47,
+   "failing": 13,
+   "passing": 47,
+   "verdict": "explained",
+   "strongest": 13,
+   "covered": 13,
+   "lines": 1,
+   "more": 0,
+   "first": {
+    "form": "pair",
+    "steps": [
+     "r:GET /api/items/desk#1",
+     "r:GET /api/items/lamp#1"
+    ],
+    "failing": {
+     "with": 13,
+     "recorded": 13
+    },
+    "passing": {
+     "with": 0,
+     "recorded": 31
+    },
+    "ms": [
+     95
+    ]
+   },
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 0,
+    "share": 0.000999000999000999,
+    "separating": 0,
+    "needed": 4
+   },
+   "text": [
+    "Compared 13 failing runs with 47 passing runs: every failing run has this order of steps, and no passing run does.",
+    "1. In 13 of 13 failing runs and in none of the 31 passing runs that recorded these steps, the response to `GET /api/items/desk` came before the response to `GET /api/items/lamp` (median 95 ms apart; there the order was the other way round; 16 passing runs left out, where one of these steps came after the point the failing runs reach, or not at all).",
+    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 0
+   },
+   "witnessed": 13,
+   "sameRequests": 13,
+   "sameOperations": 13
+  },
+  {
+   "test": "buggy > profile keeps what was typed",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 60,
+   "passed": 0,
+   "failing": 60,
+   "passing": 0,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 60 failing runs and 0 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "witnessed": 0
+  },
+  {
+   "test": "buggy > search shows the last query's results",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 14,
+   "passed": 46,
+   "failing": 14,
+   "passing": 46,
+   "verdict": "explained",
+   "strongest": 9,
+   "covered": 10,
+   "lines": 2,
+   "more": 0,
+   "first": {
+    "form": "pair",
+    "steps": [
+     "r:GET /api/search#5",
+     "r:GET /api/search#4"
+    ],
+    "failing": {
+     "with": 9,
+     "recorded": 14
+    },
+    "passing": {
+     "with": 0,
+     "recorded": 31
+    },
+    "ms": [
+     171
+    ]
+   },
+   "chance": {
+    "ways": 1000,
+    "exact": false,
+    "asStrong": 0,
+    "share": 0.000999000999000999,
+    "separating": 0,
+    "needed": 6
+   },
+   "text": [
+    "Compared 14 failing runs with 46 passing runs: 10 of the 14 failing runs have one of these orders of steps, and no passing run does.",
+    "1. In 9 of 14 failing runs and in none of the 31 passing runs that recorded these steps, the response to the 5th `GET /api/search` came before the response to the 4th `GET /api/search` (median 171 ms apart; there the order was the other way round; 15 passing runs left out, where one of these steps came after the point the failing runs reach, or not at all).",
+    "2. In 6 of 14 failing runs and in none of the 43 passing runs that recorded these steps, the response to the 5th `GET /api/search` came before the response to the 2nd `GET /api/search` (median 33 ms apart; there the order was the other way round; 3 passing runs left out, where one of these steps came after the point the failing runs reach, or not at all).",
+    "With the outcomes shuffled 1000 times, 0 gave an order that at least 9 failing runs have and next to no passing run has. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
+   ],
+   "shuffled": {
+    "rounds": 20,
+    "explained": 0
+   },
+   "witnessed": 13,
+   "sameRequests": 2,
+   "sameOperations": 13
+  },
+  {
+   "test": "fixed > cart counts two adds",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 0,
+   "passed": 60,
+   "failing": 0,
+   "passing": 60,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 60 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "witnessed": 0
+  },
+  {
+   "test": "fixed > checkout places the order",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 0,
+   "passed": 60,
+   "failing": 0,
+   "passing": 60,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 60 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "witnessed": 0
+  },
+  {
+   "test": "fixed > detail shows the item picked last",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 0,
+   "passed": 60,
+   "failing": 0,
+   "passing": 60,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 60 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "witnessed": 0
+  },
+  {
+   "test": "fixed > profile keeps what was typed",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 0,
+   "passed": 60,
+   "failing": 0,
+   "passing": 60,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 60 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "witnessed": 0
+  },
+  {
+   "test": "fixed > search shows the last query's results",
+   "seeds": [
+    1,
+    60
+   ],
+   "files": 60,
+   "failed": 0,
+   "passed": 60,
+   "failing": 0,
+   "passing": 60,
+   "verdict": "too-few-runs",
+   "strongest": 0,
+   "covered": 0,
+   "lines": 0,
+   "more": 0,
+   "first": null,
+   "chance": null,
+   "text": [
+    "Not compared: 0 failing runs and 60 passing runs with recorded steps, and the comparison needs at least 3 failing and 3 passing."
+   ],
+   "witnessed": 0
+  }
+ ]
+}
