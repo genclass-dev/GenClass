@@ -20,10 +20,12 @@
    "passing": 61,
    "verdict": "explained",
    "strongest": 3,
+   "strength": 4.62,
    "covered": 3,
    "lines": 1,
-   "more": 0,
+   "more": 2,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "a:click menuitem \"TagWithPartial 0\"#1",
@@ -35,7 +37,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 61
+     "recorded": 61,
+     "late": 0
     },
     "ms": [
      32
@@ -44,20 +47,21 @@
    "chance": {
     "ways": 1000,
     "exact": false,
-    "asStrong": 2,
-    "share": 0.002997002997002997,
+    "asStrong": 0,
+    "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.842
    },
    "text": [
     "Compared 3 failing runs with 61 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 3 of 3 failing runs and in none of the 61 passing runs that recorded these steps, the action `click menuitem \"TagWithPartial 0\"` came before the response to `POST localhost/api/documents/selection_data/` (median 32 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 2 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 100,
-    "explained": 1
+    "explained": 7
    }
   }
- ]
+ ],
+ "recompared": "2026-11-11"
 }

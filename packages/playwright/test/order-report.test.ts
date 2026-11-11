@@ -46,11 +46,11 @@ const cart: RacesFileInput[] = [file(CART, 1, "failed", bulkEdit("between", true
 
 const INTRO =
   "For a test that failed in some runs and passed in others, the order of user actions, requests and responses in its failing runs is compared with the order in its passing runs. " +
-  "It is a measured comparison, given with its counts and with what shuffled outcomes give, not a diagnosis: an order only the failing runs have may be the cause, a consequence of the cause, or neither.";
+  "It is a measured comparison, given with its counts and with what shuffled outcomes give, not a diagnosis: an order that sets the failing runs apart may be the cause, a consequence of the cause, or neither.";
 const DIFFERENCE =
   '1. In 5 of 5 failing runs and in none of the 13 passing runs that recorded these steps, the response to `POST /api/selection` came between the action `click menuitem "Urgent"` and the action `click button "Apply"` ' +
   "(median 10 ms after the first and 10 ms before the second; there it came before the first of the two in 6 and after the second in 7).";
-const CHANCE = "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and no passing run has. Orders that every failing run has and no passing run has: 1 here, 0 on average per shuffle.";
+const CHANCE = "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 1 here, 0 on average per shuffle.";
 const HINT =
   "**cart.spec.ts > adds two** · failed in 1 of 2 runs (under the delays), and no witness was recorded in a failing run. That is too few runs to compare (it takes 3 failing and 3 passing). " +
   "This runs the test 30 times, each run on its own, and compares the order of steps in its failing and passing runs: `npx genclass-playwright-run --explain-flaky e2e/cart.spec.ts:12`";
@@ -129,9 +129,27 @@ describe("order in the report: a test with enough failing and passing runs", () 
     const three = [...bulk.slice(0, 3), ...bulk.slice(5, 8)];
     const few = orderLines(testOrders(three)[0], true);
     expect(few).toHaveLength(5);
-    expect(few[2]).toMatch(/^Compared 3 failing runs with 3 passing runs: \d+ orders? of steps (is|are) the failing runs' alone, the most frequent in 3 of 3, and shuffled outcomes give as much too often to call any of them an explanation\. More runs would tell\.$/);
-    expect(few[4]).toMatch(/^Of the 20 ways to choose which 3 of these 6 runs failed, \d+ give an order that every failing run has and no passing run has \(the real outcomes are one of them\)\./);
+    expect(few[2]).toMatch(/^Compared 3 failing runs with 3 passing runs: \d+ orders? of steps sets? the failing runs apart, the strongest in 3 of 3, and shuffled outcomes give as much too often to call any of them an explanation\. More runs would tell\.$/);
+    expect(few[4]).toMatch(/^Of the 20 ways to choose which 3 of these 6 runs failed, \d+ give a difference as strong as the strongest here \(the real outcomes are one of them\)\./);
     expect(few.join("\n")).not.toMatch(/^\d\. /m);
+  });
+
+  it("retried attempts and files that list only the first steps are said; a retried attempt is not compared", () => {
+    // every failing seed was retried twice under its own seed: fifteen failing files, five failing runs
+    const retried = bulk.slice(0, 5).flatMap((f) => [1, 2].map((retry) => ({ name: f.name.replace(".json", `-r${retry}.json`), content: JSON.stringify({ ...JSON.parse(f.content as string), retry }) })));
+    const t = testOrders([...bulk, ...retried])[0];
+    expect(t).toMatchObject({ files: 28, failed: 5, passed: 13, retried: 10, explanation: { verdict: "explained", failing: 5, passing: 13 } });
+    const lines = orderLines(t, true);
+    expect(lines[0]).toBe("**list.spec.ts > bulk edit** · failed in 5 of 18 runs (under the delays)");
+    expect(lines[lines.length - 1]).toBe("Note: 10 retried attempts were not compared (an attempt made after a failure is not a run of its own).");
+    // one failing seed and its two retries are one failing run: too few to compare, and the command is named
+    const once = testOrders([bulk[0], ...retried.slice(0, 2), ...bulk.slice(5)])[0];
+    expect(once).toMatchObject({ failed: 1, passed: 13, retried: 2, explanation: { verdict: "too-few-runs" } });
+    expect(orderLines(once, true)[0]).toContain("failed in 1 of 14 runs (under the delays), and no witness was recorded in a failing run. That is too few runs to compare");
+    // files whose steps were cut
+    const cut = bulk.map((f, i) => (i % 6 === 0 ? { ...f, content: JSON.stringify({ ...JSON.parse(f.content as string), steps: { ...JSON.parse(f.content as string).steps, cut: 40 } }) } : f));
+    const cutLines = orderLines(testOrders(cut)[0], true);
+    expect(cutLines[cutLines.length - 1]).toBe("Note: 3 runs had more steps than their files list, and only the first ones were compared (GENCLASS_STEPS raises the number).");
   });
 
   it("the minimum of runs is an option of the report", () => {
@@ -181,8 +199,25 @@ describe("order in the report: too few runs to compare", () => {
     expect(EXPLAIN_FLAG).toBe("--explain-flaky");
     expect(explainCommand("a.spec.ts > t", { file: "e2e/a.spec.ts", line: 7 })).toBe("npx genclass-playwright-run --explain-flaky e2e/a.spec.ts:7");
     expect(explainCommand("a.spec.ts > t", { file: "e2e/my tests/a.spec.ts", line: 7 })).toBe('npx genclass-playwright-run --explain-flaky "e2e/my tests/a.spec.ts:7"');
-    expect(explainCommand("[chromium] a.spec.ts > checkout > pays (twice)", undefined)).toBe('npx genclass-playwright-run --explain-flaky -g "pays \\\\(twice\\\\)"');
+    expect(explainCommand("[chromium] a.spec.ts > checkout > pays (twice)", undefined)).toBe('npx genclass-playwright-run --explain-flaky -g "pays .twice."');
     expect(orderLines(testOrders([file(CART, 1, "failed", bulkEdit("between", true), DELAYS)])[0], true)[0]).toContain('`npx genclass-playwright-run --explain-flaky -g "adds two"`');
+  });
+
+  it("the command is printed to be pasted: nothing in it means anything to a shell, whatever the test is called", () => {
+    // a title is whatever its author wrote; between double quotes a shell would run what is between backticks or in $( )
+    const hostile = "a.spec.ts > renders `<Button>` and $(HOME) \"twice\" for 100% of !users; a+b\\c";
+    const hint = explainCommand(hostile, undefined);
+    expect(hint).toBe('npx genclass-playwright-run --explain-flaky -g "renders ..Button.. and ..HOME. .twice. for 100. of .users. a.b.c"');
+    expect(hint.slice(hint.indexOf('"') + 1, -1)).toMatch(/^[\p{L}\p{N} _,:@/=.-]+$/u);
+    // as a pattern for --grep it still matches the title it was made from
+    expect(new RegExp(hint.slice(hint.indexOf('"') + 1, -1)).test(hostile.split(" > ").pop()!)).toBe(true);
+    // a path that could not be pasted is not printed: the title is used
+    expect(explainCommand("a.spec.ts > t", { file: "app/(shop)/[id]/a.spec.ts", line: 3 })).toBe('npx genclass-playwright-run --explain-flaky -g "t"');
+    expect(explainCommand("a.spec.ts > t", { file: "e2e/$(x).spec.ts", line: 3 })).toBe('npx genclass-playwright-run --explain-flaky -g "t"');
+    expect(explainCommand("a.spec.ts > t", { file: "-x/a.spec.ts", line: 3 })).toBe('npx genclass-playwright-run --explain-flaky -g "t"');
+    expect(explainCommand("a.spec.ts > ` `", undefined)).toBe('npx genclass-playwright-run --explain-flaky -g ". ."');
+    expect(explainCommand("", undefined)).toBe('npx genclass-playwright-run --explain-flaky -g "."');
+    expect(explainCommand("a.spec.ts > prüft Größe", { file: "tests/größe.spec.ts", line: 9 })).toBe("npx genclass-playwright-run --explain-flaky tests/größe.spec.ts:9");
   });
 });
 

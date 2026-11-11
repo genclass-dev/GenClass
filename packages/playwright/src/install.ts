@@ -172,6 +172,11 @@ const ASK_MS = 1000;
 /** The most steps of the page's order kept for one test, over all its page loads, and the most page loads. */
 export const MAX_KEPT_STEPS = 4000;
 export const MAX_STREAMS = 64;
+/**
+ * How far a page's clock may be from this side's before its times are not used (ms). A batch of steps reaches this
+ * side within milliseconds on one machine; a page that is seconds away has a clock of its own.
+ */
+export const PAGE_CLOCK_SLACK_MS = 2000;
 const OPEN_EXPRESSION = `(function () { var a = window.__GENCLASS_PLAYWRIGHT__; return a && a.open ? a.open() : null; })()`;
 
 /** What window.__GENCLASS_PLAYWRIGHT__.open() answers (page.ts): the page load, and its unanswered requests with their age. */
@@ -322,11 +327,18 @@ export async function install(page: PageLike, o: InstallOptions): Promise<Sessio
       collected.stepsOver += x.steps.length;
       return;
     }
+    // the page recorded more than its record keeps since its last batch: what is lost comes before this batch
+    if (x.gap === true) stream.gap = Math.min(stream.gap ?? Infinity, from);
+    // a page whose clock is not this side's (a test that sets the page's clock, a browser on another machine): its
+    // steps are timed by when they arrived here, which is the same clock the end of the test is read on
+    const here = Date.now();
+    const away = typeof x.now === "number" && Number.isFinite(x.now) && Math.abs(here - x.now) > PAGE_CLOCK_SLACK_MS;
     x.steps.forEach((raw, i) => {
       const at = from + i;
       if (stream.steps[at] !== undefined) return;
       const step = pageStepOf(raw);
       if (!step) return;
+      if (away) step.at = here;
       if (keptSteps >= MAX_KEPT_STEPS || at >= MAX_KEPT_STEPS) {
         collected.stepsOver++;
         return;

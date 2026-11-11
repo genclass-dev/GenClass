@@ -140,6 +140,38 @@ describe("session: the test's status, its steps, and the end of its own code", (
     for (const status of ["skipped", "flaky", "", undefined]) expect(statusOf(fakeTestInfo(root, { status }))).toBeUndefined();
   });
 
+  it("a test marked as expected to fail gets no status: its failing is what Playwright counts as passing, and is not a failing run", () => {
+    // test.fail(): expectedStatus is "failed"; "failed" is then the expected outcome and "passed" the unexpected one
+    for (const status of ["failed", "passed", "timedOut"]) expect(statusOf(fakeTestInfo(root, { status, expectedStatus: "failed" }))).toBeUndefined();
+    expect(statusOf(fakeTestInfo(root, { status: "failed", expectedStatus: "passed" }))).toBe("failed");
+    const info = fakeTestInfo(root, { status: "failed", expectedStatus: "failed" });
+    expect("status" in racesFileOf(info, planRun({}, info), collected({}))).toBe(false);
+  });
+
+  it("a retried attempt says which attempt it is; a first attempt says nothing", () => {
+    const first = fakeTestInfo(root, { status: "failed", retry: 0 });
+    expect("retry" in racesFileOf(first, planRun({}, first), collected({}))).toBe(false);
+    const second = fakeTestInfo(root, { status: "passed", retry: 2 });
+    expect(racesFileOf(second, planRun({}, second), collected({}))).toMatchObject({ status: "passed", retry: 2 });
+    for (const retry of [-1, 1.5, NaN, 1001]) {
+      const odd = fakeTestInfo(root, { status: "failed", retry });
+      expect("retry" in racesFileOf(odd, planRun({}, odd), collected({})), String(retry)).toBe(false);
+    }
+  });
+
+  it("a page load that lost steps: the file holds the steps before the loss and counts the rest as left out", () => {
+    const info = fakeTestInfo(root, { status: "passed" });
+    const streams = [
+      { id: "1", gap: 2, steps: [{ kind: "a" as const, at: 1000, name: 'click button "Go"' }, { kind: "s" as const, at: 1001, name: "GET /api/a#1" }, { kind: "s" as const, at: 1040, name: "GET /api/b#1" }, { kind: "r" as const, at: 1050, name: "GET /api/b#1" }] },
+      // another page of the same test: what it did after the first page's last good step has an unknown number of steps before it
+      { id: "2", steps: [{ kind: "s" as const, at: 1000.5, name: "GET /api/c#1" }, { kind: "r" as const, at: 1030, name: "GET /api/c#1" }] },
+    ];
+    const file = racesFileOf(info, planRun({}, info), collected({ streams, stepsOver: 4 }));
+    expect(file.steps).toMatchObject({ labels: ['click button "Go"', "GET /api/c", "GET /api/a"], order: "a0.1+0 s1.1+1 s2.1+0" });
+    // two of the first page's and one of the second's, one for the loss itself, and the four the fixture did not keep
+    expect(file.steps!.cut).toBe(3 + 1 + 4);
+  });
+
   it("the steps option: 300 by default, false or 0 for none, never more than the format holds; their bytes follow", () => {
     expect([stepsOf({}), stepsOf({ steps: false }), stepsOf({ steps: 0 }), stepsOf({ steps: 1000.7 }), stepsOf({ steps: 99999 }), stepsOf({ steps: -1 }), stepsOf({ steps: NaN })]).toEqual([300, 0, 0, 1000, 2000, 300, 300]);
     expect([DEFAULT_STEPS, DEFAULT_STEPS_BYTES]).toEqual([300, 5120]);

@@ -5,8 +5,10 @@
 // The page script hands over the agent entry's record as it grows: each user action, each request's send, and the
 // delivery of its response to the app (or its end without one), with its time. Here they get names that are the same
 // in every run of a test, which is what lets two runs be compared step by step (order.ts):
-//   - a user action is named by its kind and its target as the runtime describes them ('click button "Apply"'),
-//     never by a value that was typed;
+//   - a user action is named by its kind and its target as the runtime describes them ('click button "Apply"': a
+//     role, and a label or the element's visible text). What is typed into a form field is never in that; and for a
+//     keyboard action on anything but a field, a button or the like, only the role is kept (actionLabel), since an
+//     editor without a label is described by its own text, which is what was typed;
 //   - a request is named by its method and path, ids written ":id" (chaos.ts stablePath, on top of what the runtime's
 //     own key already normalises); a request to another host by host name and path, without the port, so a back end
 //     on a random port has one name;
@@ -60,6 +62,11 @@ export interface PageStream {
   steps: (PageStep | undefined)[];
   /** How many of them happened while the test's own code ran (unset: all of them). */
   body?: number;
+  /**
+   * The place of the first step after ones that were lost: the page recorded more between two hand-overs than its
+   * record keeps (unset: nothing was lost). What comes from there on has an unknown number of steps before it.
+   */
+  gap?: number;
 }
 
 /**
@@ -68,10 +75,15 @@ export interface PageStream {
  */
 export const END_GUARD_MS = 10;
 
-/** A test's steps in order. `bodyKnown`: it is known where the test's own code ended. */
+/**
+ * A test's steps in order. `bodyKnown`: it is known where the test's own code ended. `lost`: steps that are not in
+ * `events` because a page load lost some (PageStream.gap): the ones known to come after the loss, and one for the
+ * loss itself. They count as left out, like the steps a file has no room for.
+ */
 export interface StepSequence {
   events: StepEvent[];
   bodyKnown: boolean;
+  lost?: number;
 }
 
 /** `s` in at most `max` characters: a longer one is cut (never inside a surrogate pair) and ends with "…". */
@@ -83,10 +95,25 @@ function clip(s: string, max: number): string {
   return `${s.slice(0, end)}…`;
 }
 
-/** The label of a user action: its kind, the key pressed when there is one, and its target. */
+/**
+ * Kinds of action made with the keyboard, and the roles whose name is safe to keep for them. The runtime describes a
+ * target as its role and a name ('input "Search"'): a form field's name is its label, never its content, and a button,
+ * a link or a menu item is named by its caption. Anything else is named by its own visible text when it has no label,
+ * and for an element one types into (a rich-text editor, any contenteditable) that text is what was typed. So for a
+ * keyboard action the name is kept only for those roles, and every other target is its role alone ("type textbox").
+ */
+const KEYED = new Set(["type", "key", "change"]);
+const NAMED_ROLES = new Set(["input", "textarea", "select", "checkbox", "radio", "range", "file", "color", "button", "link", "menuitem", "menuitemcheckbox", "menuitemradio", "tab", "option", "switch", "treeitem", "slider"]);
+
+/** The label of a user action: its kind, the key pressed when there is one, and its target (see KEYED). */
 export function actionLabel(kind: unknown, target: unknown, key: unknown): string {
-  const parts = [kind, key, target].map((p) => (typeof p === "string" ? p.replace(/\s+/g, " ").trim() : "")).filter(Boolean);
-  return clip(parts.join(" ") || "action", STEPS_LIMITS.label);
+  const text = (p: unknown): string => (typeof p === "string" ? p.replace(/\s+/g, " ").trim() : "");
+  let where = text(target);
+  if (KEYED.has(text(kind))) {
+    const role = /^[^\s"]+/.exec(where)?.[0] ?? "";
+    if (!NAMED_ROLES.has(role)) where = role;
+  }
+  return clip([text(kind), text(key), where].filter(Boolean).join(" ") || "action", STEPS_LIMITS.label);
 }
 
 /**
@@ -137,10 +164,32 @@ export function sequenceOf(streams: readonly PageStream[], endedAt?: number): St
     stream: number;
   }
   const timed = typeof endedAt === "number" && Number.isFinite(endedAt);
+  // a page load that lost steps: the test's steps are kept up to the last one before the loss, in every page load
+  // (what came after it, there or elsewhere, has an unknown number of steps before it)
+  let until = Infinity;
+  let lost = 0;
+  for (const s of streams) {
+    if (s.gap === undefined) continue;
+    let before = -Infinity;
+    for (let i = Math.min(s.gap, s.steps.length) - 1; i >= 0; i--) {
+      const p = s.steps[i];
+      if (p) {
+        before = p.at;
+        break;
+      }
+    }
+    until = Math.min(until, before);
+    lost = 1;
+  }
   const lists: Item[][] = streams.map((s, stream) => {
     const out: Item[] = [];
     s.steps.forEach((p, i) => {
-      if (p) out.push({ ...p, late: timed ? p.at > endedAt - END_GUARD_MS : s.body !== undefined && i >= s.body, stream });
+      if (!p) return;
+      if (p.at > until || (s.gap !== undefined && i >= s.gap)) {
+        lost++;
+        return;
+      }
+      out.push({ ...p, late: timed ? p.at > endedAt - END_GUARD_MS : s.body !== undefined && i >= s.body, stream });
     });
     return out;
   });
@@ -190,7 +239,9 @@ export function sequenceOf(streams: readonly PageStream[], endedAt?: number): St
     if (it.late) e.late = true;
     events.push(e);
   }
-  return { events, bodyKnown: timed || streams.some((s) => s.body !== undefined) };
+  const seq: StepSequence = { events, bodyKnown: timed || streams.some((s) => s.body !== undefined) };
+  if (lost > 0) seq.lost = lost;
+  return seq;
 }
 
 /** The size of a file's `steps` as the fixture writes it, in bytes (UTF-8), with what the field costs around it. */

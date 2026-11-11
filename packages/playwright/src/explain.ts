@@ -41,6 +41,10 @@ export interface TestOrder {
   explanation: OrderExplanation;
   /** Failing or passing runs whose file carries no steps (not compared). */
   withoutSteps: number;
+  /** Files of a retried attempt (not compared: an attempt made after a failure is not a run of its own). */
+  retried: number;
+  /** Runs compared whose file lists only the first of the test's steps. */
+  cut: number;
   /** A failing run was under the fixture's delays (chaos on and at least one request held). */
   underDelays: boolean;
   /** A failing run's file has a witness. */
@@ -68,12 +72,25 @@ function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** The command that runs one test many times and compares its failing and passing runs (genclass-playwright-run). */
+/**
+ * What a command line can carry between double quotes in any shell without meaning something: letters, digits, the
+ * space and a few signs. A path with anything else is not printed; in a pattern for --grep anything else, and "+",
+ * is written "." (any one character).
+ */
+const PASTABLE_PATH = /^[\p{L}\p{N} _.,:@/=+-]+$/u;
+const NOT_PLAIN = /[^\p{L}\p{N} _,:@/=-]/gu;
+
+/**
+ * The command that runs one test many times and compares its failing and passing runs (genclass-playwright-run). It
+ * is printed to be pasted, so nothing in it may mean something to a shell: a test's title and a file's path are
+ * whatever their author wrote (a backtick, "$(", a quote).
+ */
 export function explainCommand(test: string, location: RacesLocation | undefined): string {
-  if (location) return `npx genclass-playwright-run ${EXPLAIN_FLAG} ${/\s/.test(location.file) ? JSON.stringify(`${location.file}:${location.line}`) : `${location.file}:${location.line}`}`;
-  // without a place: by the test's own title (the last part of its name), as a pattern for --grep
+  if (location && PASTABLE_PATH.test(location.file) && !location.file.startsWith("-"))
+    return `npx genclass-playwright-run ${EXPLAIN_FLAG} ${location.file.includes(" ") ? `"${location.file}:${location.line}"` : `${location.file}:${location.line}`}`;
+  // without a place that can be pasted: by the test's own title (the last part of its name), as a pattern for --grep
   const title = test.split(" > ").pop() ?? test;
-  return `npx genclass-playwright-run ${EXPLAIN_FLAG} -g ${JSON.stringify(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))}`;
+  return `npx genclass-playwright-run ${EXPLAIN_FLAG} -g "${title.replace(NOT_PLAIN, ".").trim() || "."}"`;
 }
 
 /**
@@ -101,7 +118,7 @@ export function testOrders(inputs: readonly RacesFileInput[], options: ExplainOp
     // too few runs to compare: name the command, unless a witness in a failing run is there to read first, or the
     // test never passed and no delay was applied (a test that is simply failing)
     const hint = runs.failed > 0 && explanation.verdict === "too-few-runs" && !witnessed && (underDelays || runs.passed > 0) ? explainCommand(test, location) : null;
-    const t: TestOrder = { test, files: files.length, failed: runs.failed, passed: runs.passed, explanation, withoutSteps: runs.withoutSteps, underDelays, witnessed, hint };
+    const t: TestOrder = { test, files: files.length, failed: runs.failed, passed: runs.passed, explanation, withoutSteps: runs.withoutSteps, retried: runs.retried, cut: runs.cut, underDelays, witnessed, hint };
     if (location) t.location = location;
     out.push(t);
   }
@@ -142,13 +159,15 @@ export function orderLines(t: TestOrder, markdown: boolean): string[] {
     });
     // orders that met the same measure and are not in the list (the ones the lines above name as "also" are counted there)
     const others = x.more - x.differences.reduce((n, d) => n + d.alike, 0);
-    if (others > 0) L.push("", `${plural(others, "other order")} of steps ${others === 1 ? "has" : "have"} as many failing runs as shuffled outcomes rarely give and ${others === 1 ? "adds" : "add"} no failing run to ${x.differences.length === 1 ? "this one" : "these"}.`);
+    if (others > 0) L.push("", `${plural(others, "other order")} of steps ${others === 1 ? "sets" : "set"} the failing runs apart as strongly as shuffled outcomes rarely do and ${others === 1 ? "adds" : "add"} no failing run to ${x.differences.length === 1 ? "this one" : "these"}.`);
   }
   const chance = chanceText(x);
   if (chance) L.push("", chance);
   const notes: string[] = [];
   if (t.withoutSteps > 0) notes.push(`${plural(t.withoutSteps, "run")} had no recorded steps and ${t.withoutSteps === 1 ? "was" : "were"} not compared`);
-  if (x.capped) notes.push("there were more runs or steps than are compared, and the first ones were taken");
+  if (t.retried > 0) notes.push(`${plural(t.retried, "retried attempt")} ${t.retried === 1 ? "was" : "were"} not compared (an attempt made after a failure is not a run of its own)`);
+  if (t.cut > 0) notes.push(`${plural(t.cut, "run")} had more steps than ${t.cut === 1 ? "its file lists" : "their files list"}, and only the first ones were compared (GENCLASS_STEPS raises the number)`);
+  if (x.capped) notes.push("there was more than is compared (runs, steps or orders), and the first ones were taken");
   if (notes.length) L.push("", `Note: ${notes.join("; ")}.`);
   return L;
 }
@@ -157,7 +176,7 @@ export function orderLines(t: TestOrder, markdown: boolean): string[] {
 export const ORDER_HEADING = "### Failed in some runs: the order of steps, failing against passing";
 export const ORDER_INTRO =
   "For a test that failed in some runs and passed in others, the order of user actions, requests and responses in its failing runs is compared with the order in its passing runs. " +
-  "It is a measured comparison, given with its counts and with what shuffled outcomes give, not a diagnosis: an order only the failing runs have may be the cause, a consequence of the cause, or neither.";
+  "It is a measured comparison, given with its counts and with what shuffled outcomes give, not a diagnosis: an order that sets the failing runs apart may be the cause, a consequence of the cause, or neither.";
 
 /**
  * The report's section, as markdown lines: a heading, what the comparison is, and each test's lines. At most

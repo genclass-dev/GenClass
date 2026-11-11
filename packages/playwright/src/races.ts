@@ -27,7 +27,7 @@ import { join } from "node:path";
 import { stablePath } from "./chaos.js";
 import { isRepoPath } from "./schema.js";
 import { encodeSteps, type StepSequence } from "./steps.js";
-import { RACES_LIMITS, RACES_SCHEMA, type GenClassRacesFile, type RaceSignature, type RacesFixtureInfo, type RacesLocation, type RacesStatus } from "./types.js";
+import { RACES_LIMITS, RACES_SCHEMA, RETRY_LIMIT, type GenClassRacesFile, type RaceSignature, type RacesFixtureInfo, type RacesLocation, type RacesStatus } from "./types.js";
 
 /** The `trigger` of a witness signature. */
 export const WITNESS_TRIGGER = "witness";
@@ -80,6 +80,8 @@ export interface RacesInput {
   location?: RacesLocation;
   /** The test's status when the file is written (written as the file's `status`). */
   status?: RacesStatus;
+  /** The attempt, for a retried one (written as the file's `retry` when it is from 1 to RETRY_LIMIT). */
+  retry?: number;
   /**
    * The order of things on the page (written as the file's `steps`): at most `max` steps and `bytes` bytes of them,
    * with `more` steps the fixture did not keep counted as left out.
@@ -206,6 +208,7 @@ export function buildRacesFile(i: RacesInput): GenClassRacesFile {
     }
     if (i.location && isRepoPath(i.location.file) && Number.isInteger(i.location.line) && i.location.line >= 1) file.location = { file: i.location.file, line: i.location.line };
     if (i.status) file.status = i.status;
+    if (typeof i.retry === "number" && Number.isInteger(i.retry) && i.retry >= 1 && i.retry <= RETRY_LIMIT) file.retry = i.retry;
     return file;
   };
   const fits = (file: GenClassRacesFile): boolean => new TextEncoder().encode(racesFileText(file)).length <= RACES_LIMITS.bytes;

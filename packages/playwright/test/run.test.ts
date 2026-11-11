@@ -271,10 +271,13 @@ describe("run: --explain-flaky, a test's failing runs against its passing ones",
     expect(parseRunArgs(["--repeat-each=3", "--explain-flaky=8"]).error).toBe("--explain-flaky gives each seed a run of its own: leave out --repeat-each");
   });
 
-  it("plans a run of one seed: --repeat-each 1, the HTML report told not to open, more steps kept; what the user set stands", () => {
+  it("plans a run of one seed: --repeat-each 1 and no retries, the HTML report told not to open, more steps kept; what the user set stands", () => {
     const base = { cwd: project, cli: CLI, location: { file: join(project, "playwright.config.ts"), dir: project }, module: true, registerPath: join(root, "pkg", "dist", "register.js"), runtimeDir, id: 77, notesFile: join(root, "notes") };
     const plan = planCommand({ ...base, args: parseRunArgs(["--explain-flaky", "tests/a.spec.ts:12", "--project=chromium"]), env: {} });
-    expect(plan.argv).toEqual([CLI, "test", "--config", join(project, "playwright.config.ts.genclass-77.mjs"), "--repeat-each", "1", "tests/a.spec.ts:12", "--project=chromium"]);
+    // no retries: an attempt made after a failure has its first attempt's seed, and is not one more run
+    expect(plan.argv).toEqual([CLI, "test", "--config", join(project, "playwright.config.ts.genclass-77.mjs"), "--repeat-each", "1", "--retries=0", "tests/a.spec.ts:12", "--project=chromium"]);
+    // a --retries of the user's comes after it on the line, so it is the one Playwright takes
+    expect(planCommand({ ...base, args: parseRunArgs(["--explain-flaky", "--retries=2"]), env: {} }).argv.slice(4)).toEqual(["--repeat-each", "1", "--retries=0", "--retries=2"]);
     expect(plan.env).toMatchObject({ GENCLASS_CHAOS: "on", PLAYWRIGHT_HTML_OPEN: "never", GENCLASS_STEPS: String(EXPLAIN_STEPS) });
     expect(EXPLAIN_STEPS).toBe(1000);
     const own = planCommand({ ...base, args: parseRunArgs(["--explain-flaky"]), env: { GENCLASS_CHAOS: "off", PLAYWRIGHT_HTML_OPEN: "always", GENCLASS_STEPS: "200" } });
@@ -303,7 +306,7 @@ describe("run: --explain-flaky, a test's failing runs against its passing ones",
     expect(io.spawned).toHaveLength(16);
     expect(io.spawned.map((s) => s.env.GENCLASS_SEED)).toEqual(Array.from({ length: 16 }, (_, i) => String(i + 1)));
     for (const s of io.spawned) {
-      expect(s.argv).toEqual([CLI, "test", "--config", join(project, "playwright.config.ts.genclass-77.mjs"), "--repeat-each", "1", "e2e/list.spec.ts:140", "--project=chromium"]);
+      expect(s.argv).toEqual([CLI, "test", "--config", join(project, "playwright.config.ts.genclass-77.mjs"), "--repeat-each", "1", "--retries=0", "e2e/list.spec.ts:140", "--project=chromium"]);
       expect(s.env).toMatchObject({ GENCLASS_CHAOS: "on", PLAYWRIGHT_HTML_OPEN: "never", GENCLASS_STEPS: "1000", GENCLASS_OUT_DIR: outDir });
       expect(s.wrapper).toContain("register.js");
       // each run with the project's local bins first on PATH, as a single run has them
@@ -318,11 +321,11 @@ describe("run: --explain-flaky, a test's failing runs against its passing ones",
     expect(printed.filter((l) => l.startsWith("GenClass: run "))).toEqual(Array.from({ length: 16 }, (_, i) => `GenClass: run ${i + 1} of 16 (seed ${i + 1})`));
     expect(printed.slice(printed.indexOf("GenClass: 16 runs, each a Playwright run of its own (seeds 1 to 16): 16 race files in test-results/genclass (1 test)."))).toEqual([
       "GenClass: 16 runs, each a Playwright run of its own (seeds 1 to 16): 16 race files in test-results/genclass (1 test).",
-      "  The order of steps, failing against passing: a measured comparison, not a diagnosis. An order only the failing runs have may be the cause, a consequence of the cause, or neither.",
+      "  The order of steps, failing against passing: a measured comparison, not a diagnosis. An order that sets the failing runs apart may be the cause, a consequence of the cause, or neither.",
       "    list.spec.ts > bulk edit · failed in 4 of 16 runs (under the delays)",
       "      Compared 4 failing runs with 12 passing runs: every failing run has this order of steps, and no passing run does.",
       '      1. In 4 of 4 failing runs and in none of the 12 passing runs that recorded these steps, the response to `POST /api/selection` came between the action `click menuitem "Urgent"` and the action `click button "Apply"` (median 10 ms after the first and 10 ms before the second; there it came before the first of the two in 4 and after the second in 8).',
-      "      Of the 1820 ways to choose which 4 of these 16 runs failed, 2 give an order that every failing run has and no passing run has (the real outcomes are one of them). Orders that every failing run has and no passing run has: 1 here, 0 on average over those ways.",
+      "      Of the 1820 ways to choose which 4 of these 16 runs failed, 2 give a difference as strong as the strongest here (the real outcomes are one of them). Orders that every failing run has and no passing run has: 1 here, 0 on average over those ways.",
       "",
     ]);
   });
@@ -391,6 +394,70 @@ describe("run: --explain-flaky, a test's failing runs against its passing ones",
     expect(readdirSync(root).filter((n) => n.startsWith("genclass-playwright-"))).toEqual([]);
   });
 
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("a run's files that cannot be put back are never deleted: they stay where they waited, are read from there, and the command says where", async () => {
+    const io = fakeIo();
+    const outDir = join(project, "test-results", "genclass");
+    io.during = (_argv, env) => {
+      const seed = Number(env.GENCLASS_SEED);
+      writeRun(env.GENCLASS_OUT_DIR!, seed);
+      // from the last run on, nothing can be made in the output directory (or taken out of it)
+      if (seed === 4) chmodSync(outDir, 0o555);
+      return { code: failsUnder(seed) ? 1 : 0, signal: null };
+    };
+    const waiting = join(root, "genclass-playwright-77.runs");
+    try {
+      expect(await runCommand(["--explain-flaky=4"], io)).toBe(0);
+      // the three earlier runs could not be put back: they are still where they waited, and the comparison read all four
+      expect(readdirSync(waiting)).toHaveLength(3);
+      expect(readdirSync(outDir)).toHaveLength(1);
+      expect(io.stderr).toContain(`genclass-playwright-run: 3 race files could not be put back into test-results/genclass and are in ${waiting} (read from there for the comparison below).`);
+      expect(io.stderr).toContain("GenClass: 4 runs, each a Playwright run of its own (seeds 1 to 4): 4 race files");
+      // the exit handler does not delete them either
+      for (const fn of io.exits) fn();
+      expect(readdirSync(waiting)).toHaveLength(3);
+    } finally {
+      chmodSync(outDir, 0o755);
+    }
+  });
+
+  it("a signal between two runs stops the runs, puts the files back and gives the signal's exit code", async () => {
+    const io = fakeIo();
+    let got: NodeJS.Signals | null = null;
+    let released = 0;
+    io.hold = () => ({ signal: () => got, release: () => void released++ });
+    io.during = (_argv, env) => {
+      const seed = Number(env.GENCLASS_SEED);
+      writeRun(env.GENCLASS_OUT_DIR!, seed);
+      // Ctrl+C lands just after the second run has ended normally, before the third is started
+      if (seed === 2) queueMicrotask(() => void (got = "SIGINT"));
+      return { code: 0, signal: null };
+    };
+    expect(await runCommand(["--explain-flaky=10"], io)).toBe(130);
+    expect(io.spawned).toHaveLength(2);
+    expect(released).toBe(1);
+    expect(readdirSync(join(project, "test-results", "genclass"))).toHaveLength(2);
+    expect(readdirSync(root).filter((n) => n.startsWith("genclass-playwright-"))).toEqual([]);
+    expect(leftovers(project)).toEqual([]);
+    expect(io.stderr).toContain("GenClass: 2 of 10 runs, each a Playwright run of its own (seeds 1 to 2): 2 race files");
+    // the usual run holds signals too, while the generated config is written and removed
+    const usual = fakeIo();
+    let usualReleased = 0;
+    usual.hold = () => ({ signal: () => null, release: () => void usualReleased++ });
+    expect(await runCommand([], usual)).toBe(0);
+    expect(usualReleased).toBe(1);
+  });
+
+  it("with GenClass switched off, or a config that is not there, the mode says so and runs nothing: Playwright does not know the option", async () => {
+    const off = fakeIo({ GENCLASS_PLAYWRIGHT: "off" });
+    expect(await runCommand(["--explain-flaky=8", "-g", "bulk edit"], off)).toBe(2);
+    expect(off.spawned).toEqual([]);
+    expect(off.stderr).toBe("genclass-playwright-run: --explain-flaky compares what GenClass records, and GenClass is off (GENCLASS_PLAYWRIGHT=off).\nNothing was run.\n");
+    const missing = fakeIo();
+    expect(await runCommand(["--explain-flaky", "--config", "nowhere/playwright.config.ts"], missing)).toBe(2);
+    expect(missing.spawned).toEqual([]);
+    expect(missing.stderr).toBe("genclass-playwright-run: the config nowhere/playwright.config.ts was not found.\nNothing was run.\n");
+  });
+
   it("moves race files and nothing else", () => {
     const from = join(root, "from");
     const to = join(root, "deep", "to");
@@ -436,7 +503,7 @@ describe("run: --explain-flaky, a test's failing runs against its passing ones",
     expect(explainSummary({ inputs, dir: "races", notes: ["one worker's line"], report: "", wanted: 4, made: 4, firstSeed: 1 })).toBe(
       [
         "GenClass: 4 runs, each a Playwright run of its own (seeds 1 to 4): 18 race files in races (5 tests).",
-        "  The order of steps, failing against passing: a measured comparison, not a diagnosis. An order only the failing runs have may be the cause, a consequence of the cause, or neither.",
+        "  The order of steps, failing against passing: a measured comparison, not a diagnosis. An order that sets the failing runs apart may be the cause, a consequence of the cause, or neither.",
         "    a.spec.ts > always passes · passed in all 4 runs: nothing to compare.",
         "    b.spec.ts > always fails · failed in all 4 runs: there is no passing run to compare with. GENCLASS_CHAOS=off makes the runs without the delays.",
         "    c.spec.ts > fails once · failed in 1 of 4 runs: too few of one kind to compare (it takes 3 failing and 3 passing). More runs: --explain-flaky=40",
@@ -459,7 +526,7 @@ describe("run: --explain-flaky, a test's failing runs against its passing ones",
       "    list.spec.ts > bulk edit · failed in 4 of 16 runs (under the delays)",
       "      Compared 4 failing runs with 12 passing runs: every failing run has this order of steps, and no passing run does.",
       '      1. In 4 of 4 failing runs and in none of the 12 passing runs that recorded these steps, the response to `POST /api/selection` came between the action `click menuitem "Urgent"` and the action `click button "Apply"` (median 10 ms after the first and 10 ms before the second; there it came before the first of the two in 4 and after the second in 8).',
-      "      Of the 1820 ways to choose which 4 of these 16 runs failed, 2 give an order that every failing run has and no passing run has (the real outcomes are one of them). Orders that every failing run has and no passing run has: 1 here, 0 on average over those ways.",
+      "      Of the 1820 ways to choose which 4 of these 16 runs failed, 2 give a difference as strong as the strongest here (the real outcomes are one of them). Orders that every failing run has and no passing run has: 1 here, 0 on average over those ways.",
       "    cart.spec.ts > adds two · failed in 1 of 2 runs (under the delays), and no witness was recorded in a failing run. That is too few runs to compare (it takes 3 failing and 3 passing). This runs the test 30 times, each run on its own, and compares the order of steps in its failing and passing runs: `npx genclass-playwright-run --explain-flaky e2e/cart.spec.ts:12`",
       "  The report: REPORT",
       "",

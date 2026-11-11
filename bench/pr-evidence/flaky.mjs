@@ -6,6 +6,7 @@
 //   node bench/pr-evidence/flaky.mjs dev   --seeds 60 --batch 30
 //       the development set (tiny-desk): every test under each seed, then per test and per batch of seeds the
 //       comparison, and for a buggy test whether its first line names the two requests its overwrote-newer witness names
+//       (--no-run --from <name>: from the race files of an earlier run, kept as .work/flaky/<name>/races)
 //   node bench/pr-evidence/flaky.mjs held  --apps vue-vite,plain-html --scenarios a,h --data 1,2,3,4,5,6,7,8,9,10 --seeds 30
 //       the held-out set: compat's apps whose state the runtime does not see (setup.mjs builds them), the typeahead
 //       scenarios, compat's oracle as the outcome; a hit is a first line that says a newer search's response came
@@ -21,6 +22,7 @@
 //
 // A batch is one investigation: the runs a developer would have made before reading the answer (--batch of them,
 // seeds in a row). Flags: --seeds N  --batch N  --rounds N (20)  --workers N (3)  --out <file.json>
+//        --first-seed N (held: the delays of seeds N, N+1, ...)  --from <name> (the directory under .work/flaky)
 //        --no-run (use the race files of the last run)  --grep <pattern> (dev)  --port N (dev, 5817)
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -40,6 +42,8 @@ const SEEDS = Number(opt("seeds", MODE === "held" ? "120" : "60"));
 const BATCH = Number(opt("batch", "30"));
 const ROUNDS = Number(opt("rounds", "20"));
 const WORKERS = opt("workers", "3");
+/** held: the seed of the first repeat's delays (GENCLASS_SEED), for a sample under other delays than seeds 1 to N. */
+const FIRST = Number(opt("first-seed", "1"));
 const RUNNER = join(REPO, "packages", "playwright", "bin", "genclass-playwright-run.mjs");
 const RUNTIME = join(REPO, "packages", "runtime", "dist");
 const WORK = join(HERE, ".work", "flaky");
@@ -71,12 +75,12 @@ function shuffled(runs, rounds, seed) {
 }
 
 const stepName = (s) => `${s.kind}:${s.label}#${s.n}`;
-const first = (x) => (x.differences[0] ? { form: x.differences[0].form, steps: x.differences[0].steps.map(stepName), failing: x.differences[0].failing, passing: x.differences[0].passing, ms: x.differences[0].ms } : null);
+const first = (x) => (x.differences[0] ? { kind: x.differences[0].kind, form: x.differences[0].form, steps: x.differences[0].steps.map(stepName), failing: x.differences[0].failing, passing: x.differences[0].passing, ms: x.differences[0].ms } : null);
 
 /** One investigation: the comparison of these runs, and of the same runs with shuffled outcomes. */
 function investigate(runs, seed) {
   const x = explainOrder(runs);
-  const out = { failing: x.failing, passing: x.passing, verdict: x.verdict, strongest: x.strongest, covered: x.covered, lines: x.differences.length, more: x.more, first: first(x), chance: x.chance, text: [verdictText(x), ...x.differences.map((d, i) => `${i + 1}. ${differenceText(d, x, quote)}`), chanceText(x)].filter(Boolean) };
+  const out = { failing: x.failing, passing: x.passing, verdict: x.verdict, strongest: x.strongest, strength: Math.round(x.strength * 1000) / 1000, covered: x.covered, lines: x.differences.length, more: x.more, first: first(x), chance: x.chance && { ...x.chance, needed: Number.isFinite(x.chance.needed) ? Math.round(x.chance.needed * 1000) / 1000 : null }, text: [verdictText(x), ...x.differences.map((d, i) => `${i + 1}. ${differenceText(d, x, quote)}`), chanceText(x)].filter(Boolean) };
   if (x.verdict !== "too-few-runs") out.shuffled = shuffled(runs, ROUNDS, seed);
   return out;
 }
@@ -104,7 +108,8 @@ function witnessPair(evidence) {
 
 function dev() {
   const app = join(HERE, "tiny-desk");
-  const races = join(WORK, "dev", "races");
+  // --from: the race files of another run of this set, kept under .work/flaky (with --no-run)
+  const races = join(WORK, opt("from", "dev"), "races");
   let seconds = null;
   if (!flag("no-run")) {
     if (!existsSync(join(app, "node_modules"))) sh("npm", ["ci", "--no-audit", "--no-fund"], { cwd: app, stdio: "inherit" });
@@ -180,12 +185,13 @@ function held() {
   const rows = [];
   const runs = [];
   for (const app of apps) {
-    const dir = join(WORK, data ? "held-fixed" : "held", app);
+    // --from: another directory under .work/flaky for this run's files (a second sample that keeps the first)
+    const dir = join(WORK, opt("from", data ? "held-fixed" : "held"), app);
     if (!flag("no-run")) {
       if (!existsSync(join(HERE, ".work", app, "dist", "index.html"))) throw new Error(`build the app first: node bench/pr-evidence/setup.mjs ${app}`);
       rmSync(dir, { recursive: true, force: true });
       mkdirSync(dir, { recursive: true });
-      const env = { ...process.env, BENCH_APP: app, BENCH_SCENARIOS: scenarios, BENCH_WORKERS: WORKERS, BENCH_VERDICT_DIR: join(dir, "verdicts"), GENCLASS_CHAOS: "on", GENCLASS_OUT_DIR: join(dir, "races"), GENCLASS_RUNTIME_DIR: RUNTIME, ...(data ? { BENCH_DATA_SEEDS: data } : {}) };
+      const env = { ...process.env, BENCH_APP: app, BENCH_SCENARIOS: scenarios, BENCH_WORKERS: WORKERS, BENCH_VERDICT_DIR: join(dir, "verdicts"), GENCLASS_CHAOS: "on", GENCLASS_SEED: String(FIRST), GENCLASS_OUT_DIR: join(dir, "races"), GENCLASS_RUNTIME_DIR: RUNTIME, ...(data ? { BENCH_DATA_SEEDS: data } : {}) };
       const t0 = Date.now();
       const r = sh(process.execPath, [RUNNER, "--config", "playwright.config.mjs", "--repeat-each", String(SEEDS)], { cwd: HERE, env });
       writeFileSync(join(dir, "output.log"), r.out);
@@ -213,12 +219,13 @@ function held() {
         let noSteps = 0;
         const trial = [];
         for (const v of mine) {
-          const f = races.get(`${layer}|${scenario}|${d}|${v.seed}`);
+          // the verdict counts repeats from 1; the race file carries the seed of that repeat's delays
+          const f = races.get(`${layer}|${scenario}|${d}|${v.seed + FIRST - 1}`);
           if (!v.ok) errors++;
           else if (!f?.steps) noSteps++;
           else trial.push({ failed: typeof v.bug === "string", events: decodeSteps(f.steps) });
         }
-        const row = { app, layer, scenario, ...(d ? { data: Number(d) } : {}), seeds: [from, to], trials: mine.length, errors, noSteps, bug: trial.filter((t) => t.failed).length, ...investigate(trial, from + (d ? Number(d) * 1000 : 0)) };
+        const row = { app, layer, scenario, ...(d ? { data: Number(d) } : {}), seeds: [from + FIRST - 1, to + FIRST - 1], trials: mine.length, errors, noSteps, bug: trial.filter((t) => t.failed).length, ...investigate(trial, from + (d ? Number(d) * 1000 : 0)) };
         row.hit = row.verdict === "explained" && staleSearch(row.first);
         rows.push(row);
       }
@@ -242,7 +249,7 @@ function held() {
   console.log(`   batches with at least three trials of each outcome: ${summary.askable} of ${summary.investigations}`);
   console.log(`   first line is the stale search (a newer search's response before an older one's): ${pct(summary.hits, summary.askable)}; called explained at all: ${summary.explained}`);
   console.log(`   the same trials with shuffled outcomes, called explained: ${pct(summary.shuffledExplained, summary.shuffledRounds)}`);
-  return { mode: "held", apps, scenarios, data: data ? data.split(",").map(Number) : null, seeds: SEEDS, batch: data ? SEEDS : BATCH, rounds: ROUNDS, workers: Number(WORKERS), runs, summary, rows };
+  return { mode: "held", apps, scenarios, data: data ? data.split(",").map(Number) : null, firstSeed: FIRST, seeds: SEEDS, batch: data ? SEEDS : BATCH, rounds: ROUNDS, workers: Number(WORKERS), runs, summary, rows };
 }
 
 // ------------------------------------------------------------------------------------------------ files that are there
@@ -277,6 +284,18 @@ if (!["dev", "held", "files"].includes(MODE)) {
 if (!existsSync(join(REPO, "packages", "playwright", "dist", "summarize.js"))) throw new Error("build first: npm run build -w @genclass/runtime && npm run build -w @genclass/playwright");
 const result = { date: new Date().toISOString().slice(0, 10), node: process.version, ...(MODE === "dev" ? dev() : MODE === "held" ? held() : filesMode()) };
 const out = opt("out", MODE === "files" ? null : join(HERE, "results", `flaky-${MODE}.json`));
+if (out && flag("no-run") && existsSync(resolve(out))) {
+  // compared again from the race files of the run the file is about: when that run was made and how long it took stay
+  try {
+    const was = JSON.parse(readFileSync(resolve(out), "utf8"));
+    result.recompared = result.date;
+    result.date = was.date ?? result.date;
+    if (was.seconds != null) result.seconds = was.seconds;
+    if (Array.isArray(was.runs) && was.runs.length) result.runs = was.runs;
+  } catch {
+    /* not a result file of this script: written afresh */
+  }
+}
 if (out) {
   mkdirSync(dirname(resolve(out)), { recursive: true });
   writeFileSync(resolve(out), JSON.stringify(result, null, 1) + "\n");

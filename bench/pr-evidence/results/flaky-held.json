@@ -19,6 +19,7 @@
   9,
   10
  ],
+ "firstSeed": 1,
  "seeds": 30,
  "batch": 30,
  "rounds": 20,
@@ -38,10 +39,10 @@
  "summary": {
   "investigations": 40,
   "askable": 28,
-  "explained": 18,
-  "hits": 18,
+  "explained": 20,
+  "hits": 20,
   "shuffledRounds": 560,
-  "shuffledExplained": 10
+  "shuffledExplained": 13
  },
  "rows": [
   {
@@ -61,6 +62,7 @@
    "passing": 0,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -88,6 +90,7 @@
    "passing": 2,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -115,10 +118,12 @@
    "passing": 4,
    "verdict": "explained",
    "strongest": 21,
+   "strength": 2.337,
    "covered": 26,
    "lines": 2,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#4",
@@ -130,7 +135,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 4
+     "recorded": 4,
+     "late": 0
     },
     "ms": [
      407
@@ -142,13 +148,13 @@
     "asStrong": 9,
     "share": 0.00999000999000999,
     "separating": 0,
-    "needed": 18
+    "needed": 1.584
    },
    "text": [
     "Compared 26 failing runs with 4 passing runs: every failing run has one of these orders of steps, and no passing run does.",
     "1. In 21 of 26 failing runs and in none of the 4 passing runs that recorded these steps, the response to the 4th `GET /api/search` came before the response to the 1st `GET /api/search` (median 407 ms apart; there the order was the other way round).",
     "2. In 20 of 26 failing runs and in none of the 4 passing runs that recorded these steps, the response to the 4th `GET /api/search` came before the response to the 2nd `GET /api/search` (median 269 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 9 gave an order that at least 21 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 9 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -173,6 +179,7 @@
    "passing": 0,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -200,6 +207,7 @@
    "passing": 5,
    "verdict": "chance",
    "strongest": 3,
+   "strength": 0.247,
    "covered": 0,
    "lines": 0,
    "more": 2,
@@ -210,11 +218,11 @@
     "asStrong": 906,
     "share": 0.906093906093906,
     "separating": 0,
-    "needed": 14
+    "needed": 1.362
    },
    "text": [
-    "Compared 25 failing runs with 5 passing runs: 2 orders of steps are the failing runs' alone, the most frequent in 3 of 25, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
-    "With the outcomes shuffled 1000 times, 906 gave an order that at least 3 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "Compared 25 failing runs with 5 passing runs: 2 orders of steps set the failing runs apart, the strongest in 3 of 25, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 906 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -239,6 +247,7 @@
    "passing": 2,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -266,6 +275,7 @@
    "passing": 5,
    "verdict": "chance",
    "strongest": 15,
+   "strength": 1.676,
    "covered": 0,
    "lines": 0,
    "more": 3,
@@ -276,11 +286,11 @@
     "asStrong": 71,
     "share": 0.07192807192807193,
     "separating": 0,
-    "needed": 16
+    "needed": 1.676
    },
    "text": [
-    "Compared 25 failing runs with 5 passing runs: 3 orders of steps are the failing runs' alone, the most frequent in 15 of 25, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
-    "With the outcomes shuffled 1000 times, 71 gave an order that at least 15 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "Compared 25 failing runs with 5 passing runs: 3 orders of steps set the failing runs apart, the strongest in 15 of 25, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 71 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -303,29 +313,50 @@
    "bug": 14,
    "failing": 14,
    "passing": 16,
-   "verdict": "no-difference",
-   "strongest": 0,
-   "covered": 0,
-   "lines": 0,
+   "verdict": "explained",
+   "strongest": 14,
+   "strength": 5.33,
+   "covered": 14,
+   "lines": 1,
    "more": 0,
-   "first": null,
+   "first": {
+    "kind": "every",
+    "form": "pair",
+    "steps": [
+     "r:GET /api/search#2",
+     "r:GET /api/search#1"
+    ],
+    "failing": {
+     "with": 14,
+     "recorded": 14
+    },
+    "passing": {
+     "with": 3,
+     "recorded": 16,
+     "late": 0
+    },
+    "ms": [
+     274
+    ]
+   },
    "chance": {
     "ways": 1000,
     "exact": false,
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 4
+    "needed": 1.047
    },
    "text": [
-    "Compared 14 failing runs with 16 passing runs: no order of steps is the failing runs' alone.",
-    "With the outcomes shuffled 1000 times, an order that every failing run has and no passing run has turns up 0 times on average per shuffle; here there is none."
+    "Compared 14 failing runs with 16 passing runs: every failing run has this order of steps, and so do only 3 of the 16 passing runs.",
+    "1. In 14 of 14 failing runs and in 3 of the 16 passing runs that recorded these steps, the response to the 2nd `GET /api/search` came before the response to the 1st `GET /api/search` (median 274 ms apart; in the other passing runs the order was the other way round).",
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
     "explained": 0
    },
-   "hit": false
+   "hit": true
   },
   {
    "app": "vue-vite",
@@ -344,6 +375,7 @@
    "passing": 9,
    "verdict": "chance",
    "strongest": 3,
+   "strength": 0.485,
    "covered": 0,
    "lines": 0,
    "more": 2,
@@ -354,11 +386,11 @@
     "asStrong": 579,
     "share": 0.5794205794205795,
     "separating": 0,
-    "needed": 9
+    "needed": 1.459
    },
    "text": [
-    "Compared 21 failing runs with 9 passing runs: 2 orders of steps are the failing runs' alone, the most frequent in 3 of 21, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
-    "With the outcomes shuffled 1000 times, 579 gave an order that at least 3 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "Compared 21 failing runs with 9 passing runs: 2 orders of steps set the failing runs apart, the strongest in 3 of 21, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 579 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -383,6 +415,7 @@
    "passing": 9,
    "verdict": "chance",
    "strongest": 4,
+   "strength": 0.661,
    "covered": 0,
    "lines": 0,
    "more": 2,
@@ -393,11 +426,11 @@
     "asStrong": 281,
     "share": 0.2817182817182817,
     "separating": 0,
-    "needed": 9
+    "needed": 1.459
    },
    "text": [
-    "Compared 21 failing runs with 9 passing runs: 2 orders of steps are the failing runs' alone, the most frequent in 4 of 21, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
-    "With the outcomes shuffled 1000 times, 281 gave an order that at least 4 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "Compared 21 failing runs with 9 passing runs: 2 orders of steps set the failing runs apart, the strongest in 4 of 21, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 281 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -422,10 +455,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -437,7 +472,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      206
@@ -449,12 +485,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.029
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 206 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -479,10 +515,12 @@
    "passing": 23,
    "verdict": "explained",
    "strongest": 7,
+   "strength": 6.309,
    "covered": 7,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -494,7 +532,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 23
+     "recorded": 23,
+     "late": 0
     },
     "ms": [
      123
@@ -506,12 +545,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 0.894
    },
    "text": [
     "Compared 7 failing runs with 23 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 7 of 7 failing runs and in none of the 23 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 123 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -536,10 +575,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -551,7 +592,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      170
@@ -563,12 +605,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.029
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 170 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -593,6 +635,7 @@
    "passing": 30,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -620,10 +663,12 @@
    "passing": 23,
    "verdict": "explained",
    "strongest": 7,
+   "strength": 6.309,
    "covered": 7,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -635,7 +680,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 23
+     "recorded": 23,
+     "late": 0
     },
     "ms": [
      135
@@ -647,12 +693,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 0.894
    },
    "text": [
     "Compared 7 failing runs with 23 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 7 of 7 failing runs and in none of the 23 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 135 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -677,10 +723,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -692,7 +740,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      177
@@ -704,16 +753,16 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.029
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 177 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
-    "explained": 1
+    "explained": 2
    },
    "hit": true
   },
@@ -734,10 +783,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -749,7 +800,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      166
@@ -761,12 +813,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.029
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 166 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -791,6 +843,7 @@
    "passing": 30,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -818,10 +871,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -833,7 +888,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      185
@@ -845,16 +901,16 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.462
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 185 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
-    "explained": 0
+    "explained": 1
    },
    "hit": true
   },
@@ -875,10 +931,12 @@
    "passing": 21,
    "verdict": "explained",
    "strongest": 8,
+   "strength": 5.813,
    "covered": 8,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -890,7 +948,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 21
+     "recorded": 21,
+     "late": 0
     },
     "ms": [
      66
@@ -902,12 +961,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.082
    },
    "text": [
     "Compared 9 failing runs with 21 passing runs: 8 of the 9 failing runs have this order of steps, and no passing run does.",
     "1. In 8 of 9 failing runs and in none of the 21 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 66 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that at least 8 failing runs have and next to no passing run has. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -932,6 +991,7 @@
    "passing": 0,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -959,6 +1019,7 @@
    "passing": 2,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -986,10 +1047,12 @@
    "passing": 4,
    "verdict": "explained",
    "strongest": 21,
+   "strength": 2.337,
    "covered": 26,
    "lines": 2,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#4",
@@ -1001,7 +1064,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 4
+     "recorded": 4,
+     "late": 0
     },
     "ms": [
      404
@@ -1013,13 +1077,13 @@
     "asStrong": 9,
     "share": 0.00999000999000999,
     "separating": 0,
-    "needed": 18
+    "needed": 1.584
    },
    "text": [
     "Compared 26 failing runs with 4 passing runs: every failing run has one of these orders of steps, and no passing run does.",
     "1. In 21 of 26 failing runs and in none of the 4 passing runs that recorded these steps, the response to the 4th `GET /api/search` came before the response to the 1st `GET /api/search` (median 404 ms apart; there the order was the other way round).",
     "2. In 20 of 26 failing runs and in none of the 4 passing runs that recorded these steps, the response to the 4th `GET /api/search` came before the response to the 2nd `GET /api/search` (median 271 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 9 gave an order that at least 21 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 9 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1044,6 +1108,7 @@
    "passing": 0,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -1071,6 +1136,7 @@
    "passing": 4,
    "verdict": "chance",
    "strongest": 16,
+   "strength": 1.437,
    "covered": 0,
    "lines": 0,
    "more": 3,
@@ -1078,14 +1144,14 @@
    "chance": {
     "ways": 1000,
     "exact": false,
-    "asStrong": 83,
-    "share": 0.08391608391608392,
+    "asStrong": 84,
+    "share": 0.08491508491508491,
     "separating": 0,
-    "needed": 18
+    "needed": 1.584
    },
    "text": [
-    "Compared 26 failing runs with 4 passing runs: 3 orders of steps are the failing runs' alone, the most frequent in 16 of 26, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
-    "With the outcomes shuffled 1000 times, 83 gave an order that at least 16 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "Compared 26 failing runs with 4 passing runs: 3 orders of steps set the failing runs apart, the strongest in 16 of 26, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 84 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1110,6 +1176,7 @@
    "passing": 2,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -1137,6 +1204,7 @@
    "passing": 5,
    "verdict": "chance",
    "strongest": 15,
+   "strength": 1.676,
    "covered": 0,
    "lines": 0,
    "more": 3,
@@ -1147,11 +1215,11 @@
     "asStrong": 71,
     "share": 0.07192807192807193,
     "separating": 0,
-    "needed": 16
+    "needed": 1.676
    },
    "text": [
-    "Compared 25 failing runs with 5 passing runs: 3 orders of steps are the failing runs' alone, the most frequent in 15 of 25, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
-    "With the outcomes shuffled 1000 times, 71 gave an order that at least 15 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "Compared 25 failing runs with 5 passing runs: 3 orders of steps set the failing runs apart, the strongest in 15 of 25, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 71 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1174,29 +1242,50 @@
    "bug": 14,
    "failing": 14,
    "passing": 16,
-   "verdict": "no-difference",
-   "strongest": 0,
-   "covered": 0,
-   "lines": 0,
+   "verdict": "explained",
+   "strongest": 14,
+   "strength": 5.33,
+   "covered": 14,
+   "lines": 1,
    "more": 0,
-   "first": null,
+   "first": {
+    "kind": "every",
+    "form": "pair",
+    "steps": [
+     "r:GET /api/search#2",
+     "r:GET /api/search#1"
+    ],
+    "failing": {
+     "with": 14,
+     "recorded": 14
+    },
+    "passing": {
+     "with": 3,
+     "recorded": 16,
+     "late": 0
+    },
+    "ms": [
+     278
+    ]
+   },
    "chance": {
     "ways": 1000,
     "exact": false,
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 4
+    "needed": 1.047
    },
    "text": [
-    "Compared 14 failing runs with 16 passing runs: no order of steps is the failing runs' alone.",
-    "With the outcomes shuffled 1000 times, an order that every failing run has and no passing run has turns up 0 times on average per shuffle; here there is none."
+    "Compared 14 failing runs with 16 passing runs: every failing run has this order of steps, and so do only 3 of the 16 passing runs.",
+    "1. In 14 of 14 failing runs and in 3 of the 16 passing runs that recorded these steps, the response to the 2nd `GET /api/search` came before the response to the 1st `GET /api/search` (median 278 ms apart; in the other passing runs the order was the other way round).",
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
     "explained": 0
    },
-   "hit": false
+   "hit": true
   },
   {
    "app": "plain-html",
@@ -1215,6 +1304,7 @@
    "passing": 9,
    "verdict": "chance",
    "strongest": 3,
+   "strength": 0.485,
    "covered": 0,
    "lines": 0,
    "more": 2,
@@ -1225,11 +1315,11 @@
     "asStrong": 579,
     "share": 0.5794205794205795,
     "separating": 0,
-    "needed": 9
+    "needed": 1.459
    },
    "text": [
-    "Compared 21 failing runs with 9 passing runs: 2 orders of steps are the failing runs' alone, the most frequent in 3 of 21, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
-    "With the outcomes shuffled 1000 times, 579 gave an order that at least 3 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "Compared 21 failing runs with 9 passing runs: 2 orders of steps set the failing runs apart, the strongest in 3 of 21, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 579 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1254,6 +1344,7 @@
    "passing": 9,
    "verdict": "chance",
    "strongest": 4,
+   "strength": 0.661,
    "covered": 0,
    "lines": 0,
    "more": 2,
@@ -1264,11 +1355,11 @@
     "asStrong": 261,
     "share": 0.26173826173826176,
     "separating": 0,
-    "needed": 9
+    "needed": 1.459
    },
    "text": [
-    "Compared 21 failing runs with 9 passing runs: 2 orders of steps are the failing runs' alone, the most frequent in 4 of 21, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
-    "With the outcomes shuffled 1000 times, 261 gave an order that at least 4 failing runs have and no passing run has. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
+    "Compared 21 failing runs with 9 passing runs: 2 orders of steps set the failing runs apart, the strongest in 4 of 21, and shuffled outcomes give as much too often to call any of them an explanation. More runs would tell.",
+    "With the outcomes shuffled 1000 times, 261 gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1293,10 +1384,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -1308,7 +1401,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      208
@@ -1320,12 +1414,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.029
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 208 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1350,10 +1444,12 @@
    "passing": 23,
    "verdict": "explained",
    "strongest": 7,
+   "strength": 6.309,
    "covered": 7,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -1365,7 +1461,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 23
+     "recorded": 23,
+     "late": 0
     },
     "ms": [
      118
@@ -1377,12 +1474,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 0.894
    },
    "text": [
     "Compared 7 failing runs with 23 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 7 of 7 failing runs and in none of the 23 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 118 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1407,10 +1504,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -1422,7 +1521,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      168
@@ -1434,12 +1534,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.029
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 168 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1464,6 +1564,7 @@
    "passing": 30,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -1491,10 +1592,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -1506,7 +1609,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      177
@@ -1518,12 +1622,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.029
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 177 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1548,10 +1652,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
-   "more": 1,
+   "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -1563,7 +1669,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      172
@@ -1575,12 +1682,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 2
+    "needed": 1.462
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 172 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1605,10 +1712,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -1620,7 +1729,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      168
@@ -1632,12 +1742,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.029
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 168 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1662,6 +1772,7 @@
    "passing": 29,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -1689,10 +1800,12 @@
    "passing": 24,
    "verdict": "explained",
    "strongest": 6,
+   "strength": 5.774,
    "covered": 6,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -1704,7 +1817,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 24
+     "recorded": 24,
+     "late": 0
     },
     "ms": [
      184
@@ -1716,16 +1830,16 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.462
    },
    "text": [
     "Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and no passing run does.",
     "1. In 6 of 6 failing runs and in none of the 24 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 184 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
-    "explained": 0
+    "explained": 1
    },
    "hit": true
   },
@@ -1746,10 +1860,12 @@
    "passing": 21,
    "verdict": "explained",
    "strongest": 8,
+   "strength": 5.813,
    "covered": 8,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#3",
@@ -1761,7 +1877,8 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 21
+     "recorded": 21,
+     "late": 0
     },
     "ms": [
      64
@@ -1773,12 +1890,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 1.082
    },
    "text": [
     "Compared 9 failing runs with 21 passing runs: 8 of the 9 failing runs have this order of steps, and no passing run does.",
     "1. In 8 of 9 failing runs and in none of the 21 passing runs that recorded these steps, the response to the 3rd `GET /api/search` came before the response to the 2nd `GET /api/search` (median 64 ms apart; there the order was the other way round).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that at least 8 failing runs have and next to no passing run has. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -1786,5 +1903,6 @@
    },
    "hit": true
   }
- ]
+ ],
+ "recompared": "2026-11-11"
 }

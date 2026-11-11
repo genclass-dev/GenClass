@@ -19,12 +19,14 @@
 //
 //   npx genclass-playwright-run --explain-flaky[=N] [arguments of "playwright test" that select the test ...]
 //
-// It runs Playwright N times (default 30), each time once (`--repeat-each 1`) under the next seed, so no two runs share
-// a process, a server or a saved login, keeps every run's race files, and then compares the order of steps in each
+// It runs Playwright N times (default 30), each time once and without retries (`--repeat-each 1 --retries=0`) under
+// the next seed, so no two runs share a process, a server or a saved login and no failing seed is counted twice,
+// keeps every run's race files, and then compares the order of steps in each
 // test's failing runs with the order in its passing runs (order.ts). Playwright empties its output directory when a
 // run starts, and the race files are in it by default: so after each run they are set aside in a directory of the
 // command's own (under the system's temporary directory), and put back together when the last run is over, or when
-// the command is ended early. A failing test is what this mode is for, so its
+// the command is ended early; a file that cannot be put back stays there and is read from there, never deleted. A
+// signal that arrives between two runs stops the runs and still puts the files back. A failing test is what this mode is for, so its
 // exit code is 0 when the runs were made, whatever the tests did; 2 when nothing could be run, and 128 plus the signal
 // number when a signal ended it. While it runs, Playwright's HTML reporter is told not to open (PLAYWRIGHT_HTML_OPEN,
 // unless set): it would wait for a key after the first failing run.
@@ -58,10 +60,11 @@ your playwright.config, and writes one race file per test and seed.
 
 For a test that fails in some runs and passes in others:
   genclass-playwright-run --explain-flaky[=N] [arguments that select the test ...]
-    runs it N times (default 30), each run a Playwright run of its own under the next seed, then says
-    which order of user actions, requests and responses its failing runs have and its passing runs do
-    not, with the counts and with what shuffled outcomes give. With GENCLASS_CHAOS=off the runs differ
-    only by their own timing. Its exit code is 0 when the runs were made.
+    runs it N times (default 30), each run a Playwright run of its own under the next seed and without
+    retries, then says which order of user actions, requests and responses sets its failing runs apart
+    from its passing ones, with the counts and with what shuffled outcomes give. With
+    GENCLASS_CHAOS=off the runs differ only by their own timing. Its exit code is 0 when the runs were
+    made.
 
 Options are environment variables:
   GENCLASS_CHAOS=off             no seeded network chaos (on by default here: matched API requests are held
@@ -207,7 +210,10 @@ export function planCommand(i: CommandInput): CommandPlan {
     if (!i.env[ENV.steps]?.trim()) env[ENV.steps] = String(EXPLAIN_STEPS);
   }
   return {
-    argv: [i.cli, "test", "--config", wrapperPath, ...(explain ? ["--repeat-each", "1"] : i.args.repeatEach ? [] : ["--repeat-each", String(DEFAULT_REPEAT_EACH)]), ...i.args.rest],
+    // --explain-flaky: each seed once, and no retries (an attempt made after a failure, under the same seed, is not a
+    // run of its own; a --retries of the user's comes later on the line and stands, and its retried attempts are then
+    // left out of the comparison)
+    argv: [i.cli, "test", "--config", wrapperPath, ...(explain ? ["--repeat-each", "1", "--retries=0"] : i.args.repeatEach ? [] : ["--repeat-each", String(DEFAULT_REPEAT_EACH)]), ...i.args.rest],
     env,
     wrapper: { path: wrapperPath, source: wrapperConfigSource({ registerUrl: pathToFileURL(i.registerPath).href, config: i.location.file, module: i.module }) },
     outDir,
@@ -363,7 +369,7 @@ export function explainSummary(i: ExplainSummaryInput): string {
   const seeds = i.made > 1 ? `seeds ${i.firstSeed} to ${i.firstSeed + i.made - 1}` : `seed ${i.firstSeed}`;
   const lines = [`GenClass: ${i.made === i.wanted ? count(i.made, "run") : `${i.made} of ${count(i.wanted, "run")}`}, each a Playwright run of its own (${seeds}): ${count(s.files, "race file")} in ${i.dir} (${count(s.totals.tests, "test")}).`];
   if (s.files === 0) lines.push("  No race file was written, so there is nothing to compare. One is written for each test that opens a browser context while GenClass is on.");
-  else lines.push(`  ${ORDER_CAVEAT[0].toUpperCase()}${ORDER_CAVEAT.slice(1)}. An order only the failing runs have may be the cause, a consequence of the cause, or neither.`);
+  else lines.push(`  ${ORDER_CAVEAT[0].toUpperCase()}${ORDER_CAVEAT.slice(1)}. An order that sets the failing runs apart may be the cause, a consequence of the cause, or neither.`);
   for (const t of testOrders(i.inputs)) {
     const { failed, passed } = t;
     const runs = failed + passed;
@@ -409,6 +415,12 @@ export interface RunIo {
   onExit(fn: () => void): void;
   /** Starts node with these arguments and this environment, and waits for it to end. */
   spawn(argv: string[], env: Record<string, string | undefined>): Promise<SpawnResult>;
+  /**
+   * Keeps a signal sent to this process (Ctrl+C, a kill) from ending it on the spot until `release` is called:
+   * `signal()` says which one arrived, if any. A child that is running still gets it (spawn passes it on); this is for
+   * the moments no child runs, between two of --explain-flaky's runs and while the generated config is being removed.
+   */
+  hold?(): { signal(): NodeJS.Signals | null; release(): void };
 }
 
 function message(e: unknown): string {
@@ -468,6 +480,11 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
       io.err(`genclass-playwright-run: Playwright Test was not found from ${location?.dir ?? io.cwd}. Run this where "npx playwright test" works, after the project's dependencies are installed.\n`);
       return 2;
     }
+    if ((off || !location) && args.explain !== null) {
+      // the mode is GenClass's own: Playwright does not know the option, so its arguments are not passed on as they are
+      io.err(`genclass-playwright-run: ${off ? `${EXPLAIN_FLAG} compares what GenClass records, and GenClass is off (${ENV.off}=${io.env[ENV.off]})` : `the config ${args.config} was not found`}.\nNothing was run.\n`);
+      return 2;
+    }
     if (off || !location) {
       // nothing of GenClass: the off switch, or a --config path that does not exist (Playwright says that best itself)
       if (off) io.err(`GenClass is off (${ENV.off}=${io.env[ENV.off]}): running Playwright as it is.\n`);
@@ -486,11 +503,15 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
     // --explain-flaky: where each run's race files wait while the next run starts (Playwright empties its output
     // directory then). They are put back before anything is read, and whatever ends the command.
     const kept = args.explain !== null ? join(io.tmpdir, `genclass-playwright-${io.id}.runs`) : null;
+    /** Race files that could not be put back: they stay where they waited, and are read from there. */
+    let stranded = 0;
     const remove = (): void => {
       if (kept) {
         try {
           moveRaceFiles(kept, plan.outDir);
-          rmSync(kept, { recursive: true, force: true });
+          stranded = raceFilesIn(kept).length;
+          // only an empty waiting place is removed: a run's files are never deleted for not fitting back
+          if (stranded === 0) rmSync(kept, { recursive: true, force: true });
         } catch {
           /* what could not be put back stays in the temporary directory */
         }
@@ -516,6 +537,8 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
       return 2;
     }
     io.onExit(remove);
+    // a signal between two runs, or while the generated config is removed, must not end this process on the spot
+    const held = io.hold?.();
     let result: SpawnResult;
     let notes: string[] = [];
     // --explain-flaky: the same run once per seed, each a Playwright run of its own; every run's race files are kept
@@ -529,8 +552,9 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
         result = await io.spawn(plan.argv, { ...io.env, ...plan.env, ...(args.explain !== null ? { [ENV.seed]: String(firstSeed + made) } : {}), ...localBinsPath(io.env, io.cwd, [location.dir, io.cwd]) });
         made++;
         const written = kept ? moveRaceFiles(plan.outDir, kept) : 0;
-        // a signal ended it, or nothing was written by the first run (no test matched, or Playwright did not start)
-        if (made >= wanted || result.signal || (typeof result.code === "number" && result.code >= 128)) break;
+        // a signal ended it or arrived since, or nothing was written by the first run (no test matched, or Playwright
+        // did not start)
+        if (made >= wanted || result.signal || (typeof result.code === "number" && result.code >= 128) || held?.signal()) break;
         if (made === 1 && written === 0) break;
       }
       try {
@@ -543,17 +567,22 @@ export async function runCommand(argv: readonly string[], io: RunIo): Promise<nu
       return 2;
     } finally {
       remove();
+      held?.release();
     }
+    // a signal that arrived while no child ran: the runs made are reported, and the exit code is the signal's
+    const signalled = held?.signal() ?? null;
+    const ended: SpawnResult = signalled && !result.signal && !(typeof result.code === "number" && result.code >= 128) ? { code: null, signal: signalled } : result;
     const dir = displayPath(plan.outDir, io.cwd);
     const report = `node ${quoted(displayPath(join(dirname(io.registerPath), "..", "bin", "genclass-playwright-report.mjs"), io.cwd))} ${quoted(dir)} --out -`;
-    const inputs = readRacesDirs([plan.outDir], io.cwd).files;
+    if (kept && stranded > 0) io.err(`\ngenclass-playwright-run: ${count(stranded, "race file")} could not be put back into ${dir} and ${stranded === 1 ? "is" : "are"} in ${kept} (read from there for the comparison below).\n`);
+    const inputs = readRacesDirs(kept && stranded > 0 ? [plan.outDir, kept] : [plan.outDir], io.cwd).files;
     if (args.explain === null) {
       io.err(`\n${runSummary({ inputs, dir, notes, report })}`);
-      return exitCodeOf(result);
+      return exitCodeOf(ended);
     }
     io.err(`\n${explainSummary({ inputs, dir, notes, report, wanted, made, firstSeed })}`);
     // failing runs are what this mode is for: Playwright's exit code only when a signal ended it or nothing ran
-    const code = exitCodeOf(result);
+    const code = exitCodeOf(ended);
     return code >= 128 || inputs.length === 0 ? code : 0;
   } catch (e) {
     io.err(`genclass-playwright-run: ${message(e)}\n`);
@@ -611,5 +640,27 @@ export function processRunIo(): RunIo {
     findCli: findPlaywrightCli,
     onExit: (fn) => void process.on("exit", fn),
     spawn: spawnNode,
+    hold: holdSignals,
+  };
+}
+
+/**
+ * Listens for the signals that would end this process and only notes the first: with a listener there, Node does not
+ * end the process itself. `release` takes the listeners away again (a signal after that ends the process as usual).
+ */
+export function holdSignals(): { signal(): NodeJS.Signals | null; release(): void } {
+  let got: NodeJS.Signals | null = null;
+  const handlers = SIGNALS.map((signal) => {
+    const handler = (): void => {
+      got ??= signal;
+    };
+    process.on(signal, handler);
+    return { signal, handler };
+  });
+  return {
+    signal: () => got,
+    release: () => {
+      for (const h of handlers) process.off(h.signal, h.handler);
+    },
   };
 }

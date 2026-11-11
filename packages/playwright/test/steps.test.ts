@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildRacesFile, racesFileText } from "../src/races.js";
 import { parseRaces } from "../src/schema.js";
 import { actionLabel, decodeSteps, encodeSteps, pageStepOf, readSteps, requestLabel, sequenceOf, stepsBytes, type PageStream, type StepEvent, type StepSequence } from "../src/steps.js";
-import { RACES_LIMITS, STEPS_LIMITS } from "../src/types.js";
+import { RACES_LIMITS, RETRY_LIMIT, STEPS_LIMITS } from "../src/types.js";
 
 const act = (at: number, kind: string, target: string, key = ""): unknown[] => ["a", at, kind, target, key];
 const stream = (id: string, raw: unknown[][], body?: number): PageStream => ({ id, steps: raw.map((r) => pageStepOf(r) ?? undefined), ...(body !== undefined ? { body } : {}) });
@@ -27,10 +27,28 @@ describe("steps: names that are the same in every run", () => {
 
   it("a user action is its kind, the key pressed and its target, never a value", () => {
     expect(actionLabel("click", 'button "Apply"', "")).toBe('click button "Apply"');
-    expect(actionLabel("key", 'textbox "Search"', "Enter")).toBe('key Enter textbox "Search"');
+    expect(actionLabel("key", 'button "Apply"', "Enter")).toBe('key Enter button "Apply"');
     expect(actionLabel("type", ' input\n "Filter   tags" ', undefined)).toBe('type input "Filter tags"');
     expect(actionLabel(undefined, undefined, undefined)).toBe("action");
     expect(actionLabel("click", `button "${"x".repeat(400)}"`, "").length).toBe(STEPS_LIMITS.label);
+  });
+
+  it("typing into anything but a form field is named by the role alone: an editor without a label is described by what was typed into it", () => {
+    // the runtime names an element that has no label by its own visible text; for a contenteditable that is the text
+    // the test (or a user) typed, 40 characters of it
+    expect(actionLabel("type", 'div "Dear Ada, the card number is 4242"', "")).toBe("type div");
+    expect(actionLabel("type", 'textbox "Dear Ada, the card number is 4242"', "")).toBe("type textbox");
+    expect(actionLabel("key", 'textbox "Dear Ada"', "Enter")).toBe("key Enter textbox");
+    expect(actionLabel("change", 'p "typed"', "")).toBe("change p");
+    expect(actionLabel("type", 'x-editor "typed"', "")).toBe("type x-editor");
+    expect(actionLabel("type", "textbox", "")).toBe("type textbox");
+    expect(actionLabel("type", '"only a name"', "")).toBe("type");
+    // a field's name is its label, and a button's, a link's or a menu item's is its caption: those stay
+    for (const role of ["input", "textarea", "select", "checkbox", "radio", "button", "link", "menuitem", "tab", "option", "switch"]) expect(actionLabel("type", `${role} "Name"`, ""), role).toBe(`type ${role} "Name"`);
+    expect(actionLabel("change", 'select "Country"', "")).toBe('change select "Country"');
+    // a click is named by what was clicked, as before
+    expect(actionLabel("click", 'div "TagWithPartial 0"', "")).toBe('click div "TagWithPartial 0"');
+    expect(actionLabel("submit", 'form "Sign in"', "")).toBe('submit form "Sign in"');
   });
 
   it("what the page sends is read by shape; anything else is no step", () => {
@@ -204,6 +222,19 @@ describe("steps: in the race file", () => {
     for (const status of ["passed", "failed", "timedOut", "interrupted"]) {
       const r = parseRaces(JSON.stringify({ ...file, status }));
       expect(r.ok && r.file.status).toBe(status);
+    }
+  });
+
+  it("a retried attempt's number is written and carried when it is one; anything else is left out and the file stays", () => {
+    expect(RETRY_LIMIT).toBe(1000);
+    const file = buildRacesFile({ ...base, status: "failed", retry: 2 });
+    expect(file.retry).toBe(2);
+    const read = parseRaces(racesFileText(file));
+    expect(read.ok && read.file.retry).toBe(2);
+    for (const retry of [0, undefined, -1, 1.5, 1001, NaN]) expect("retry" in buildRacesFile({ ...base, status: "failed", retry }), String(retry)).toBe(false);
+    for (const retry of [0, -1, 1.5, 1001, "2", null, {}]) {
+      const odd = parseRaces(JSON.stringify({ ...file, retry }));
+      expect(odd.ok && !("retry" in odd.file), JSON.stringify(retry)).toBe(true);
     }
   });
 

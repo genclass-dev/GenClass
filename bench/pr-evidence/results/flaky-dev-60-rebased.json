@@ -13,7 +13,7 @@
   "firstLineNamesTheWitnessRequests": 2,
   "firstLineNamesTheWitnessOperations": 2,
   "shuffledRounds": 40,
-  "shuffledExplained": 0,
+  "shuffledExplained": 2,
   "alwaysPassing": 7,
   "alwaysPassingWithAnExplanation": 0
  },
@@ -31,6 +31,7 @@
    "passing": 60,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -54,6 +55,7 @@
    "passing": 60,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -77,10 +79,12 @@
    "passing": 47,
    "verdict": "explained",
    "strongest": 13,
+   "strength": 4.882,
    "covered": 13,
    "lines": 1,
    "more": 0,
    "first": {
+    "kind": "every",
     "form": "pair",
     "steps": [
      "r:GET /api/items/desk#1",
@@ -91,8 +95,9 @@
      "recorded": 13
     },
     "passing": {
-     "with": 0,
-     "recorded": 31
+     "with": 16,
+     "recorded": 47,
+     "late": 16
     },
     "ms": [
      95
@@ -104,12 +109,12 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 4
+    "needed": 1.778
    },
    "text": [
-    "Compared 13 failing runs with 47 passing runs: every failing run has this order of steps, and no passing run does.",
-    "1. In 13 of 13 failing runs and in none of the 31 passing runs that recorded these steps, the response to `GET /api/items/desk` came before the response to `GET /api/items/lamp` (median 95 ms apart; there the order was the other way round; 16 passing runs left out, where one of these steps came after the point the failing runs reach, or not at all).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "Compared 13 failing runs with 47 passing runs: every failing run has this order of steps, and so do only 16 of the 47 passing runs.",
+    "1. In 13 of 13 failing runs and in 16 of the 47 passing runs that recorded these steps, the response to `GET /api/items/desk` came before the response to `GET /api/items/lamp` (median 95 ms apart; in the other passing runs the order was the other way round). In all 16 of those passing runs, the last of these steps came only after the test's own code had ended.",
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
@@ -132,6 +137,7 @@
    "passing": 0,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -154,45 +160,47 @@
    "failing": 14,
    "passing": 46,
    "verdict": "explained",
-   "strongest": 9,
-   "covered": 10,
-   "lines": 2,
+   "strongest": 5,
+   "strength": 2.721,
+   "covered": 5,
+   "lines": 1,
    "more": 0,
    "first": {
+    "kind": "alone",
     "form": "pair",
     "steps": [
      "r:GET /api/search#5",
-     "r:GET /api/search#4"
+     "r:GET /api/search#1"
     ],
     "failing": {
-     "with": 9,
+     "with": 5,
      "recorded": 14
     },
     "passing": {
-     "with": 0,
-     "recorded": 31
+     "with": 1,
+     "recorded": 46,
+     "late": 1
     },
     "ms": [
-     171
+     42
     ]
    },
    "chance": {
     "ways": 1000,
     "exact": false,
-    "asStrong": 0,
-    "share": 0.000999000999000999,
+    "asStrong": 34,
+    "share": 0.03496503496503497,
     "separating": 0,
-    "needed": 6
+    "needed": 2.242
    },
    "text": [
-    "Compared 14 failing runs with 46 passing runs: 10 of the 14 failing runs have one of these orders of steps, and no passing run does.",
-    "1. In 9 of 14 failing runs and in none of the 31 passing runs that recorded these steps, the response to the 5th `GET /api/search` came before the response to the 4th `GET /api/search` (median 171 ms apart; there the order was the other way round; 15 passing runs left out, where one of these steps came after the point the failing runs reach, or not at all).",
-    "2. In 6 of 14 failing runs and in none of the 43 passing runs that recorded these steps, the response to the 5th `GET /api/search` came before the response to the 2nd `GET /api/search` (median 33 ms apart; there the order was the other way round; 3 passing runs left out, where one of these steps came after the point the failing runs reach, or not at all).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that at least 9 failing runs have and next to no passing run has. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
+    "Compared 14 failing runs with 46 passing runs: 5 of the 14 failing runs have this order of steps, and next to no passing run does.",
+    "1. In 5 of 14 failing runs and in 1 of the 46 passing runs that recorded these steps, the response to the 5th `GET /api/search` came before the response to the 1st `GET /api/search` (median 42 ms apart; in the other passing runs the order was the other way round). In that passing run, the last of these steps came only after the test's own code had ended.",
+    "With the outcomes shuffled 1000 times, 34 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 0 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 20,
-    "explained": 0
+    "explained": 2
    },
    "witnessed": 13,
    "sameRequests": 2,
@@ -211,6 +219,7 @@
    "passing": 60,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -234,6 +243,7 @@
    "passing": 60,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -257,6 +267,7 @@
    "passing": 60,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -280,6 +291,7 @@
    "passing": 60,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -303,6 +315,7 @@
    "passing": 60,
    "verdict": "too-few-runs",
    "strongest": 0,
+   "strength": 0,
    "covered": 0,
    "lines": 0,
    "more": 0,
@@ -313,5 +326,6 @@
    ],
    "witnessed": 0
   }
- ]
+ ],
+ "recompared": "2026-11-11"
 }

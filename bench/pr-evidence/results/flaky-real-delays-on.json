@@ -20,10 +20,12 @@
    "passing": 60,
    "verdict": "explained",
    "strongest": 4,
+   "strength": 5.803,
    "covered": 4,
    "lines": 1,
-   "more": 0,
+   "more": 1,
    "first": {
+    "kind": "alone",
     "form": "between",
     "steps": [
      "a:click menuitem \"TagWithPartial 0\"#1",
@@ -36,9 +38,10 @@
     },
     "passing": {
      "with": 0,
-     "recorded": 48,
+     "recorded": 60,
+     "late": 0,
      "before": 6,
-     "after": 42
+     "after": 54
     },
     "ms": [
      18,
@@ -51,17 +54,18 @@
     "asStrong": 0,
     "share": 0.000999000999000999,
     "separating": 0,
-    "needed": 3
+    "needed": 2.733
    },
    "text": [
     "Compared 4 failing runs with 60 passing runs: every failing run has this order of steps, and no passing run does.",
-    "1. In 4 of 4 failing runs and in none of the 48 passing runs that recorded these steps, the response to `POST localhost/api/documents/selection_data/` came between the action `click menuitem \"TagWithPartial 0\"` and the action `click button \"Apply\"` (median 18 ms after the first and 16 ms before the second; there it came before the first of the two in 6 and after the second in 42; 12 passing runs left out, where one of these steps came after the point the failing runs reach, or not at all).",
-    "With the outcomes shuffled 1000 times, 0 gave an order that every failing run has and next to no passing run has. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
+    "1. In 4 of 4 failing runs and in none of the 60 passing runs that recorded these steps, the response to `POST localhost/api/documents/selection_data/` came between the action `click menuitem \"TagWithPartial 0\"` and the action `click button \"Apply\"` (median 18 ms after the first and 16 ms before the second; there it came before the first of the two in 6 and after the second in 54).",
+    "With the outcomes shuffled 1000 times, 0 gave a difference as strong as the strongest here. Orders that every failing run has and next to no passing run has: 1 here, 0 on average per shuffle."
    ],
    "shuffled": {
     "rounds": 100,
     "explained": 3
    }
   }
- ]
+ ],
+ "recompared": "2026-11-11"
 }

@@ -1,6 +1,7 @@
 // The comparison of a test's failing runs with its passing ones (src/order.ts): a measured comparison of the order of
 // steps, with counts and with what shuffled outcomes give. These tests build runs by hand: a planted difference among
-// noise, too few runs, failing runs cut short, steps missing from some runs, and outcomes that say nothing.
+// noise, too few runs, failing runs cut short, steps missing from some runs, outcomes that say nothing, and failing
+// runs that only last longer than passing ones (which must not read as an order of their own).
 import { describe, expect, it } from "vitest";
 import { mulberry32 } from "../src/chaos.js";
 import { DEFAULT_MIN_RUNS, EXACT_WAYS, PASSING_PER_EXCEPTION, chanceText, differenceText, explainOrder, runsOf, statementText, stepText, verdictText, type OrderDifference, type OrderRun, type OrderStatement } from "../src/order.js";
@@ -8,7 +9,7 @@ import { encodeSteps, type StepEvent } from "../src/steps.js";
 
 /**
  * Steps from short names, 10 ms apart: "a:click Go", "s:GET /x", "r:GET /x#2" (the number is 1 unless given). "|"
- * ends the test's own code: what follows is late.
+ * ends the test's own code: what follows landed after it (late).
  */
 function seq(...items: string[]): StepEvent[] {
   const out: StepEvent[] = [];
@@ -28,6 +29,8 @@ function seq(...items: string[]): StepEvent[] {
 
 /** A statement as "first < second" or "before < between < after", in the short names of seq(). */
 const short = (s: OrderStatement): string => s.steps.map((x) => `${x.kind}:${x.label}${x.n > 1 || x.many ? `#${x.n}` : ""}`).join(" < ");
+
+const short_ = short;
 
 const quote = (s: string): string => `\`${s}\``;
 
@@ -113,7 +116,7 @@ describe("order: it refuses below a minimum of failing and passing runs", () => 
     expect(explainOrder(runs, { minFailing: 5 }).verdict).toBe("too-few-runs");
     expect(explainOrder(runs, { minPassing: 9 }).verdict).toBe("too-few-runs");
     expect(explainOrder(runs, { minFailing: 0, minPassing: 0 }).minimum).toEqual({ failing: 1, passing: 1 });
-    const empty: OrderRun[] = [{ failed: true, events: [] }, { failed: true, events: seq("|", "r:GET /late") }];
+    const empty: OrderRun[] = [{ failed: true, events: [] }, { failed: true, events: [] }];
     expect(explainOrder([...runs.filter((r) => !r.failed), ...runs.filter((r) => r.failed).slice(0, 2), ...empty])).toMatchObject({ verdict: "too-few-runs", failing: 2, passing: 8 });
   });
 
@@ -157,43 +160,130 @@ describe("order: a failing run stops early, and a step it never reached is never
 });
 
 describe("order: steps missing from some runs", () => {
-  it("a statement is judged only in the runs that recorded its steps, and the counts say how many did", () => {
-    const runs = searchRuns(6, 14);
-    const without = (r: OrderRun, label: string, n: number): OrderRun => ({ ...r, events: r.events.filter((e) => !(e.kind === "r" && e.label === label && e.n === n)) });
+  it("a failing run that did not record a statement's steps is left out of it; a passing run that did not counts as if it had the order", () => {
+    const without = (r: OrderRun, label: string, n: number, kinds: string): OrderRun => ({ ...r, events: r.events.filter((e) => !(kinds.includes(e.kind) && e.label === label && e.n === n)) });
+    const runs = searchRuns(6, 25);
     const failing = runs.filter((r) => r.failed);
     const passing = runs.filter((r) => !r.failed);
-    const some = [without(failing[0], "GET /search", 1), ...failing.slice(1), without(passing[0], "GET /search", 1), without(passing[1], "GET /search", 2), ...passing.slice(2)];
-    const x = explainOrder(some);
+    // a failing run whose first response was never delivered: the statement is judged in the other five
+    const x = explainOrder([without(failing[0], "GET /search", 1, "r"), ...failing.slice(1), ...passing]);
     expect(x.verdict).toBe("explained");
     expect(short(x.differences[0])).toBe("r:GET /search#2 < r:GET /search#1");
     expect(x.differences[0].failing).toEqual({ with: 5, recorded: 5 });
-    expect(x.differences[0].passing).toEqual({ with: 0, recorded: 12 });
+    expect(x.differences[0].passing).toEqual({ with: 0, recorded: 25, late: 0 });
     expect(x.covered).toBe(5);
-    expect(differenceText(x.differences[0], x, quote)).toContain("In 5 of 6 failing runs and in none of the 12 passing runs that recorded these steps");
-    expect(differenceText(x.differences[0], x, quote)).toContain("; 2 passing runs left out, where one of these steps came after the point the failing runs reach, or not at all).");
+    expect(differenceText(x.differences[0], x, quote)).toContain("In 5 of 6 failing runs and in none of the 25 passing runs that recorded these steps");
+    expect(differenceText(x.differences[0], x, quote)).toContain("; 1 failing run did not record these steps).");
+    // one passing run in twenty-five that never made the second request: it is the one exception the rule allows, and is said
+    const y = explainOrder([...failing, without(passing[0], "GET /search", 2, "sr"), ...passing.slice(1)]);
+    expect(y.verdict).toBe("explained");
+    expect(y.differences[0]).toMatchObject({ kind: "alone", failing: { with: 6, recorded: 6 }, passing: { with: 0, recorded: 24 } });
+    expect(differenceText(y.differences[0], y, quote)).toContain("in none of the 24 passing runs that recorded these steps");
+    expect(differenceText(y.differences[0], y, quote)).toContain("; 1 passing run did not record these steps and is counted as if it had this order).");
+    // two such passing runs are one too many for "the failing runs' alone": it is then an order every failing run has
+    const z = explainOrder([...failing, without(passing[0], "GET /search", 2, "sr"), without(passing[1], "GET /search", 1, "sr"), ...passing.slice(2)]);
+    expect(z.differences[0]).toMatchObject({ kind: "every", failing: { with: 6, recorded: 6 }, passing: { with: 0, recorded: 23 } });
+    expect(verdictText(z)).toBe("Compared 6 failing runs with 25 passing runs: every failing run has this order of steps, and no passing run that recorded these steps does; 2 of the 25 passing runs did not record them.");
+  });
+
+  it("a step only the longer passing runs have picks no passing runs out: the ones without it count against the order", () => {
+    // a timer's 2nd poll: every failing run waited long enough to see it answered; of the passing runs only the six that
+    // took longest did, and those happen to have the stale response before it
+    const head = ["a:click lamp", "s:GET /lamp", "a:click desk", "s:GET /desk"];
+    const failing = Array.from({ length: 6 }, () => ({ failed: true, events: seq(...head, "r:GET /desk", "r:GET /lamp", "s:GET /poll#2", "r:GET /poll#2") }));
+    const long = Array.from({ length: 6 }, () => ({ failed: false, events: seq(...head, "r:GET /lamp", "r:GET /desk", "s:GET /poll#2", "r:GET /poll#2") }));
+    const short = Array.from({ length: 6 }, () => ({ failed: false, events: seq(...head, "r:GET /desk", "|", "r:GET /lamp") }));
+    const x = explainOrder([...failing, ...long, ...short]);
+    // read only in the passing runs that recorded the poll, "the stale response came between /desk and the poll" would
+    // be in 6 of 6 failing runs and in none of 6 passing ones; the six short runs had the same order of responses
+    for (const d of x.differences) for (const stated of [d, ...d.also]) expect(short_(stated)).not.toContain("GET /poll");
+    expect(x.verdict).not.toBe("explained");
+  });
+
+  it("a response not delivered when the record ended: later than everything in a passing run, unknown in a failing one", () => {
+    const both = (failed: boolean, first: "a" | "b"): OrderRun => ({ failed, events: seq("a:open", "s:GET /a", "s:GET /b", ...(first === "a" ? ["r:GET /a", "r:GET /b"] : ["r:GET /b", "r:GET /a"])) });
+    const open = (failed: boolean): OrderRun => ({ failed, events: seq("a:open", "s:GET /a", "s:GET /b", "r:GET /a") });
+    // passing runs that ended before /b was answered did not have "/b before /a": all ten passing runs are judged
+    const x = explainOrder([...Array.from({ length: 5 }, () => both(true, "b")), ...Array.from({ length: 5 }, () => both(false, "a")), ...Array.from({ length: 5 }, () => open(false))]);
+    expect(x.verdict).toBe("explained");
+    expect(short(x.differences[0])).toBe("r:GET /b < r:GET /a");
+    expect(x.differences[0]).toMatchObject({ kind: "alone", failing: { with: 5, recorded: 5 }, passing: { with: 0, recorded: 10 } });
+    // and they did have "/a before /b": with five such passing runs it is not the failing runs' order alone
+    const y = explainOrder([...Array.from({ length: 5 }, () => both(true, "a")), ...Array.from({ length: 5 }, () => both(false, "b")), ...Array.from({ length: 5 }, () => open(false))]);
+    expect(y.differences.filter((d) => d.kind === "alone")).toEqual([]);
+    // failing runs that stopped before /b was answered say nothing about /b: "missing" is never "after"
+    const z = explainOrder([...Array.from({ length: 5 }, () => open(true)), ...Array.from({ length: 10 }, () => both(false, "b"))]);
+    expect(z).toMatchObject({ verdict: "no-difference", differences: [], strongest: 0 });
   });
 
   it("a step too few runs have is not compared at all; a statement fewer than half the passing runs can judge is no difference", () => {
     const runs = searchRuns(6, 14);
     const passing = runs.filter((r) => !r.failed);
-    // the second response is there in 6 failing runs and in only 4 of the 14 passing ones
-    const thin = [...runs.filter((r) => r.failed), ...passing.slice(0, 4), ...passing.slice(4).map((r) => ({ ...r, events: r.events.filter((e) => !(e.kind === "r" && e.label === "GET /search" && e.n === 2)) }))];
+    // the second request is made in 6 failing runs and in only 4 of the 14 passing ones
+    const thin = [...runs.filter((r) => r.failed), ...passing.slice(0, 4), ...passing.slice(4).map((r) => ({ ...r, events: r.events.filter((e) => !(e.label === "GET /search" && e.n === 2)) }))];
     const x = explainOrder(thin);
     for (const d of x.differences) expect(short(d)).not.toBe("r:GET /search#2 < r:GET /search#1");
   });
 
-  it("what landed after the test's own code is not compared: it cannot have changed the result", () => {
-    // passing runs: the first response comes last, after the test has already passed (late), or first
-    const failing = Array.from({ length: 5 }, () => ({ failed: true, events: seq("a:click lamp", "s:GET /lamp", "a:click desk", "s:GET /desk", "r:GET /desk", "r:GET /lamp") }));
+  it("what landed after the test's own code still landed after: a passing run with the failing order, a moment later, has that order", () => {
+    // passing runs: the stale response comes after the test has already passed (late), or the responses come in order
+    const failing = Array.from({ length: 6 }, () => ({ failed: true, events: seq("a:click lamp", "s:GET /lamp", "a:click desk", "s:GET /desk", "r:GET /desk", "r:GET /lamp") }));
     const lateOnes = Array.from({ length: 4 }, () => ({ failed: false, events: seq("a:click lamp", "s:GET /lamp", "a:click desk", "s:GET /desk", "r:GET /desk", "|", "r:GET /lamp") }));
-    const inOrder = Array.from({ length: 6 }, () => ({ failed: false, events: seq("a:click lamp", "s:GET /lamp", "a:click desk", "s:GET /desk", "r:GET /lamp", "r:GET /desk") }));
+    const inOrder = Array.from({ length: 10 }, () => ({ failed: false, events: seq("a:click lamp", "s:GET /lamp", "a:click desk", "s:GET /desk", "r:GET /lamp", "r:GET /desk") }));
     const x = explainOrder([...failing, ...lateOnes, ...inOrder]);
     expect(x.verdict).toBe("explained");
     expect(short(x.differences[0])).toBe("r:GET /desk < r:GET /lamp");
-    expect(x.differences[0]).toMatchObject({ failing: { with: 5, recorded: 5 }, passing: { with: 0, recorded: 6 } });
-    // read as if those responses had landed during the test, the same runs have no order that is the failing runs' alone
+    // not the failing runs' alone: every failing run has it, and so do the four passing runs where it came too late to be seen
+    expect(x.differences[0]).toMatchObject({ kind: "every", failing: { with: 6, recorded: 6 }, passing: { with: 4, recorded: 14, late: 4 } });
+    expect(x.separating).toBe(0);
+    expect(verdictText(x)).toBe("Compared 6 failing runs with 14 passing runs: every failing run has this order of steps, and so do only 4 of the 14 passing runs.");
+    expect(differenceText(x.differences[0], x, quote)).toBe(
+      "In 6 of 6 failing runs and in 4 of the 14 passing runs that recorded these steps, the response to `GET /desk` came before the response to `GET /lamp` (median 10 ms apart; in the other passing runs the order was the other way round). In all 4 of those passing runs, the last of these steps came only after the test's own code had ended.",
+    );
+    // where the test's own code ended changes what is said about those passing runs, never which runs have the order
     const during = lateOnes.map((r) => ({ ...r, events: r.events.map(({ late: _late, ...e }) => e) }));
-    expect(explainOrder([...failing, ...during, ...inOrder]).verdict).toBe("no-difference");
+    const y = explainOrder([...failing, ...during, ...inOrder]);
+    expect(y.differences[0]).toMatchObject({ kind: "every", failing: { with: 6, recorded: 6 }, passing: { with: 4, recorded: 14, late: 0 } });
+    expect(y.strength).toBe(x.strength);
+    expect(differenceText(y.differences[0], y, quote)).not.toContain("after the test's own code had ended");
+    // the same when the stale response had not been delivered at all when the passing run's record ended
+    const open = lateOnes.map((r) => ({ ...r, events: r.events.filter((e) => !e.late) }));
+    expect(explainOrder([...failing, ...open, ...inOrder]).differences[0]).toMatchObject({ kind: "every", passing: { with: 4, recorded: 14, late: 4 } });
+  });
+});
+
+describe("order: failing runs last longer than passing ones, and that is not an order", () => {
+  // One click, two requests in flight, and the test ends when /a is answered. Whether it fails has nothing to do with
+  // the order of the answers. A failing run waits for its check to give up, so it records /b wherever it lands; a
+  // passing run has already ended when /b lands after /a (late: the fixture's wait caught it; open: it did not).
+  const run = (failed: boolean, first: "a" | "b", after: "late" | "open"): OrderRun => {
+    const head = ["a:click Go", "s:GET /a", "s:GET /b"];
+    if (first === "b") return { failed, events: seq(...head, "r:GET /b", "r:GET /a") };
+    if (failed) return { failed, events: seq(...head, "r:GET /a", "r:GET /b") };
+    return { failed, events: after === "late" ? seq(...head, "r:GET /a", "|", "r:GET /b") : seq(...head, "r:GET /a") };
+  };
+
+  it("the case an independent review found: 7 of 11 failing runs with /a first, and so are the 13 passing runs that ended before /b", () => {
+    for (const after of ["late", "open"] as const) {
+      const runs = [...Array.from({ length: 7 }, () => run(true, "a", after)), ...Array.from({ length: 4 }, () => run(true, "b", after)), ...Array.from({ length: 13 }, () => run(false, "a", after)), ...Array.from({ length: 16 }, () => run(false, "b", after))];
+      const x = explainOrder(runs);
+      expect(x.verdict, after).not.toBe("explained");
+      expect(x.differences, after).toEqual([]);
+    }
+  });
+
+  it("over many such tests, with the outcome a coin and the order a coin, next to none is called explained", () => {
+    const random = mulberry32(77);
+    let explained = 0;
+    for (let trial = 0; trial < 120; trial++) {
+      const after = trial % 2 ? "late" : "open";
+      const bFast = trial % 4 < 2 ? 0.5 : 0.7;
+      const runs: OrderRun[] = [];
+      for (let i = 0; i < 40; i++) runs.push(run(random() < 0.3, random() < bFast ? "b" : "a", after));
+      if (explainOrder(runs, { shuffles: 200 }).verdict === "explained") explained++;
+    }
+    // 121 and 202 of 300 before late steps were read as later; a comparison that holds its 5% gives about 6 of 120
+    expect(explained).toBeLessThanOrEqual(10);
   });
 });
 
@@ -243,7 +333,8 @@ describe("order: a step between two others", () => {
     expect(d.form).toBe("between");
     expect(short(d)).toBe("a:click tag < r:POST /selection < a:click Apply");
     expect(d.failing).toEqual({ with: 5, recorded: 5 });
-    expect(d.passing).toEqual({ with: 0, recorded: 13, before: 6, after: 7 });
+    expect(d.passing).toEqual({ with: 0, recorded: 13, late: 0, before: 6, after: 7 });
+    expect(d.kind).toBe("alone");
     expect(d.ms).toEqual([10, 10]);
     expect(x.separating).toBe(1);
     expect(differenceText(d, x, quote)).toBe(
@@ -277,14 +368,22 @@ describe("order: next to no passing run", () => {
       "In 6 of 6 failing runs and in 1 of the 24 passing runs that recorded these steps, the response to the 2nd `GET /search` came before the response to the 1st `GET /search` (median 10 ms apart; in the other passing runs the order was the other way round).",
     );
     expect(verdictText(x)).toBe("Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and next to no passing run does.");
-    expect(chanceText(x)).toMatch(/gave an order that every failing run has and next to no passing run has\. Orders that every failing run has and next to no passing run has: 1 here, /);
+    expect(chanceText(x)).toMatch(/^With the outcomes shuffled 1000 times, \d+ gave a difference as strong as the strongest here\. Orders that every failing run has and next to no passing run has: 1 here, /);
   });
 
-  it("two in twenty-four is one too many, and below twenty passing runs none may have it", () => {
+  it("two in twenty-four, or one below twenty passing runs, is no longer the failing runs' alone: it is an order every failing run has and few passing runs have", () => {
     const two = explainOrder([...Array.from({ length: 6 }, () => stale(true)), stale(false), stale(false), ...Array.from({ length: 22 }, inOrder)]);
-    expect(two).toMatchObject({ verdict: "no-difference", strongest: 0, differences: [] });
+    expect(two).toMatchObject({ verdict: "explained", separating: 0 });
+    expect(two.differences[0]).toMatchObject({ kind: "every", failing: { with: 6, recorded: 6 }, passing: { with: 2, recorded: 24, late: 0 } });
+    expect(verdictText(two)).toBe("Compared 6 failing runs with 24 passing runs: every failing run has this order of steps, and so do only 2 of the 24 passing runs.");
     const few = explainOrder([...Array.from({ length: 6 }, () => stale(true)), stale(false), ...Array.from({ length: 18 }, inOrder)]);
-    expect(few).toMatchObject({ verdict: "no-difference", strongest: 0, differences: [] });
+    expect(few.differences[0]).toMatchObject({ kind: "every", passing: { with: 1, recorded: 19 } });
+    // an order half the passing runs have too is no difference at all, however many failing runs have it
+    const half = explainOrder([...Array.from({ length: 6 }, () => stale(true)), ...Array.from({ length: 12 }, () => stale(false)), ...Array.from({ length: 12 }, inOrder)]);
+    expect(half).toMatchObject({ verdict: "no-difference", strongest: 0, differences: [] });
+    // and one that only some failing runs have must be theirs alone
+    const some = explainOrder([...Array.from({ length: 4 }, () => stale(true)), ...Array.from({ length: 2 }, () => ({ ...inOrder(), failed: true })), stale(false), stale(false), ...Array.from({ length: 22 }, inOrder)]);
+    expect(some).toMatchObject({ verdict: "no-difference", strongest: 0, differences: [] });
     // a strict order is listed before one with an exception, whatever else is equal
     const both = (failed: boolean, leak: boolean): OrderRun => ({
       failed,
@@ -344,14 +443,48 @@ describe("order: how differences are ranked", () => {
   });
 });
 
+describe("order: very many runs and steps", () => {
+  it("the work is bounded: what is over the bound is left out, said, and the answer still comes at once", () => {
+    // 400 runs of 130 responses in an order of their own each: every pair of steps varies, some 16,000 statements
+    const random = mulberry32(5);
+    const runs: OrderRun[] = [];
+    for (let i = 0; i < 400; i++) {
+      const order = Array.from({ length: 130 }, (_, k) => ({ k, key: random() })).sort((a, b) => a.key - b.key);
+      runs.push({ failed: i % 4 === 0, events: order.map((o, at) => ({ kind: "r" as const, label: `GET /r${o.k}`, n: 1, t: at })) });
+    }
+    const started = Date.now();
+    const x = explainOrder(runs);
+    const took = Date.now() - started;
+    expect(x.verdict).not.toBe("explained");
+    expect(x.differences).toEqual([]);
+    expect(x.capped).toBe(true);
+    // fewer shuffles than asked for, never fewer than 200
+    expect(x.chance!.ways).toBeGreaterThanOrEqual(200);
+    expect(x.chance!.ways).toBeLessThan(1000);
+    // seconds on a busy machine; without the bound it was minutes and gigabytes at the limits the function accepts
+    expect(took).toBeLessThan(20_000);
+  });
+});
+
 describe("order: runs from race files", () => {
   const steps = encodeSteps({ events: seq("a:click Go", "s:GET /x", "r:GET /x"), bodyKnown: true }, { max: 300, bytes: 5000 });
 
   it("failed and timed out are failing runs, passed is a passing run; another status or none is not compared", () => {
     const r = runsOf([{ status: "failed", steps }, { status: "timedOut", steps }, { status: "passed", steps }, { status: "passed" }, { status: "interrupted", steps }, { steps }, { status: "passed", steps: { ...steps!, cut: 3 } }]);
-    expect(r).toMatchObject({ failed: 2, passed: 3, withoutSteps: 1, other: 2, cut: 1 });
+    expect(r).toMatchObject({ failed: 2, passed: 3, withoutSteps: 1, other: 2, retried: 0, cut: 1 });
     expect(r.runs.map((x) => x.failed)).toEqual([true, true, false, false]);
     expect(r.runs[0].events).toEqual(seq("a:click Go", "s:GET /x", "r:GET /x"));
+  });
+
+  it("a retried attempt is not a run of its own: one failing seed with two retries is one failing run", () => {
+    // Playwright retries after a failure, and the fixture gives a retry its first attempt's seed: the same delays again
+    const r = runsOf([{ status: "failed", steps }, { status: "failed", steps, retry: 1 }, { status: "failed", steps, retry: 2 }, { status: "passed", steps }, { status: "failed", steps }, { status: "passed", steps, retry: 1 }]);
+    expect(r).toMatchObject({ failed: 2, passed: 1, retried: 3, withoutSteps: 0 });
+    expect(r.runs.map((x) => x.failed)).toEqual([true, false, true]);
+    // thirty seeds, one of which failed and was retried twice: too few failing runs, as without the retries
+    const passing = Array.from({ length: 29 }, () => ({ status: "passed" as const, steps }));
+    const once = runsOf([{ status: "failed", steps }, { status: "failed", steps, retry: 1 }, { status: "failed", steps, retry: 2 }, ...passing]);
+    expect(explainOrder(once.runs)).toMatchObject({ verdict: "too-few-runs", failing: 1, passing: 29 });
   });
 });
 
@@ -373,17 +506,19 @@ describe("order: in words", () => {
     expect(verdictText(explainOrder([searchRun(true, 1), searchRun(false, 2)]))).toBe("Not compared: 1 failing run and 1 passing run with recorded steps, and the comparison needs at least 3 failing and 3 passing.");
     const whole = seq("a:type input", "s:GET /search", "r:GET /search");
     const same = explainOrder([...Array.from({ length: 3 }, () => ({ failed: true, events: whole })), ...Array.from({ length: 4 }, () => ({ failed: false, events: whole }))]);
-    expect(verdictText(same)).toBe("Compared 3 failing runs with 4 passing runs: no order of steps is the failing runs' alone.");
+    expect(verdictText(same)).toBe("Compared 3 failing runs with 4 passing runs: no order of steps sets the failing runs apart.");
     expect(chanceText(same)).toBe("Of the 35 ways to choose which 3 of these 7 runs failed, an order that every failing run has and no passing run has turns up 0 times on average over those ways; here there is none.");
     const x = explainOrder(searchRuns(6, 14));
     expect(verdictText(x)).toBe("Compared 6 failing runs with 14 passing runs: every failing run has this order of steps, and no passing run does.");
-    expect(chanceText(x)).toBe(`With the outcomes shuffled 1000 times, ${x.chance!.asStrong} gave an order that every failing run has and no passing run has. Orders that every failing run has and no passing run has: ${x.separating} here, ${x.chance!.separating} on average per shuffle.`);
+    expect(chanceText(x)).toBe(`With the outcomes shuffled 1000 times, ${x.chance!.asStrong} gave a difference as strong as the strongest here. Orders that every failing run has and no passing run has: ${x.separating} here, ${x.chance!.separating} on average per shuffle.`);
+    const exact = explainOrder(searchRuns(3, 5));
+    expect(chanceText(exact)).toBe(`Of the 56 ways to choose which 3 of these 8 runs failed, ${exact.chance!.asStrong} ${exact.chance!.asStrong === 1 ? "gives" : "give"} a difference as strong as the strongest here (the real outcomes are one of them). Orders that every failing run has and no passing run has: ${exact.separating} here, ${exact.chance!.separating} on average over those ways.`);
     const three = explainOrder([...[1, 2, 3].map((i) => searchRun(true, i)), ...[4, 5, 6].map((i) => searchRun(false, i))]);
-    expect(verdictText(three)).toMatch(/^Compared 3 failing runs with 3 passing runs: \d+ orders? of steps (is|are) the failing runs' alone, the most frequent in 3 of 3, and shuffled outcomes give as much too often to call any of them an explanation\. More runs would tell\.$/);
+    expect(verdictText(three)).toMatch(/^Compared 3 failing runs with 3 passing runs: \d+ orders? of steps sets? the failing runs apart, the strongest in 3 of 3, and shuffled outcomes give as much too often to call any of them an explanation\. More runs would tell\.$/);
     expect(chanceText(explainOrder([]))).toBe("");
   });
 });
 
 // a compile-time check that the exported difference type carries what the report prints
-const _shape: (d: OrderDifference) => number[] = (d) => [d.failing.with, d.failing.recorded, d.passing.recorded, d.adds, d.alike, ...d.ms];
+const _shape: (d: OrderDifference) => number[] = (d) => [d.failing.with, d.failing.recorded, d.passing.recorded, d.passing.late, d.adds, d.alike, ...d.ms];
 void _shape;

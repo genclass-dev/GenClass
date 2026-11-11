@@ -35,6 +35,9 @@ export const RACES_LIMITS = { signatures: 200, seeds: 64, test: 1000, evidence: 
  */
 export const STEPS_LIMITS = { steps: 2000, labels: 400, label: 160 } as const;
 
+/** The largest `retry` a race file carries (GenClassRacesFile.retry). */
+export const RETRY_LIMIT = 1000;
+
 /** The statuses of a test a race file can carry (Playwright's TestInfo.status, without "skipped": no file is written then). */
 export const RACES_STATUSES = ["passed", "failed", "timedOut", "interrupted"] as const;
 export type RacesStatus = (typeof RACES_STATUSES)[number];
@@ -141,7 +144,8 @@ export interface GenClassRacesFile {
   location?: RacesLocation;
   /**
    * Optional, written by the fixture: the test's own status when the file was written, as Playwright reports it. It is
-   * what tells a test's failing runs from its passing ones (src/order.ts); a finding never depends on it.
+   * what tells a test's failing runs from its passing ones (src/order.ts); a finding never depends on it. A test
+   * marked as expected to fail (`test.fail()`) gets none: its failing is not a failing run.
    */
   status?: RacesStatus;
   /**
@@ -149,6 +153,13 @@ export interface GenClassRacesFile {
    * bounded by STEPS_LIMITS. A value this version cannot read is left out, never a reason to skip the file.
    */
   steps?: RacesSteps;
+  /**
+   * Optional, written by the fixture for a retried attempt only: which attempt the file is of (Playwright's
+   * TestInfo.retry, from 1 to RETRY_LIMIT; a first attempt has none). The comparison of a test's failing and passing
+   * runs leaves retried attempts out (src/order.ts): an attempt made after a failure, under the same seed, is not one
+   * more run. Read leniently, like `status` and `steps`.
+   */
+  retry?: number;
 }
 
 /** Where a test is declared (GenClassRacesFile.location). */

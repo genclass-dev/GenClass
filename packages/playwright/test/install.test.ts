@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AGENT_URL, BINDING, MAX_KEPT_STEPS, MAX_STREAMS, WAIT_GRACE_MS, WAIT_POLL_MS, initScriptContent, install, isAgentUrl, resolveRuntimeDir, runtimeFile, type PageLike, type RequestLike, type RouteLike, type Session } from "../src/install.js";
+import { AGENT_URL, BINDING, MAX_KEPT_STEPS, MAX_STREAMS, PAGE_CLOCK_SLACK_MS, WAIT_GRACE_MS, WAIT_POLL_MS, initScriptContent, install, isAgentUrl, resolveRuntimeDir, runtimeFile, type PageLike, type RequestLike, type RouteLike, type Session } from "../src/install.js";
 import { RUNTIME_PATH, resolveChaos } from "../src/chaos.js";
 import { here } from "./helpers.js";
 
@@ -550,6 +550,43 @@ describe("install: the order of things on the page", () => {
     expect(c.endedAt).toBe(5000);
     // asking again changes nothing, and the end is the one first given
     expect((await session.finish(undefined, 9000)).endedAt).toBe(5000);
+  });
+
+  it("a batch that says steps were lost before it marks the page load, at the earliest such place", async () => {
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: null });
+    page.push(steps("load-1", 0, ["s", 1000, "GET /api/a#1"]));
+    page.push({ ...steps("load-1", 3, ["r", 1300, "GET /api/c#1"]), gap: true });
+    page.push({ ...steps("load-1", 1, ["s", 1100, "GET /api/b#1"], ["s", 1200, "GET /api/c#1"]), gap: true });
+    page.push({ ...steps("load-1", 4), gap: "yes" });
+    page.push(steps("load-2", 0, ["s", 2000, "GET /api/d#1"]));
+    const c = await session.finish();
+    expect(c.streams.map((x) => [x.id, x.gap, x.steps.length])).toEqual([
+      ["load-1", 1, 4],
+      ["load-2", undefined, 1],
+    ]);
+  });
+
+  it("a page whose clock is not this side's: its steps are timed by when they arrived", async () => {
+    const page = new FakePage();
+    const session = await install(page, { runtimeDir, model: "skip", chaos: null });
+    const before = Date.now();
+    // a test that set the page's clock to 2030: the page's times are years away from this side's
+    const far = Date.UTC(2030, 0, 1);
+    page.push({ ...steps("load-1", 0, ["a", far, "click", 'button "Go"', ""], ["s", far + 5, "GET /api/a#1"]), now: far + 6 });
+    // a page on this side's clock, within the slack: its own times stand
+    page.push({ ...steps("load-2", 0, ["s", before - 40, "GET /api/b#1"]), now: before - 30 });
+    // no word about the page's clock (an older page script): its times stand
+    page.push(steps("load-3", 0, ["s", 123, "GET /api/c#1"]));
+    const c = await session.finish();
+    const after = Date.now();
+    expect(PAGE_CLOCK_SLACK_MS).toBe(2000);
+    for (const step of c.streams[0].steps) {
+      expect(step!.at).toBeGreaterThanOrEqual(before);
+      expect(step!.at).toBeLessThanOrEqual(after);
+    }
+    expect(c.streams[1].steps[0]!.at).toBe(before - 40);
+    expect(c.streams[2].steps[0]!.at).toBe(123);
   });
 
   it("without a time for the end of the test's code none is made up", async () => {

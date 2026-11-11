@@ -10,14 +10,14 @@
 // looked at one by one), and a string longer than its limit rejects the file like any other bad field. The fixture
 // writes within them (src/races.ts).
 //
-// Two optional fields are read leniently, the one exception to "never half-read": `status` (the test's own status) and
-// `steps` (the order of things on the page, steps.ts). They serve one optional comparison (order.ts) and no finding
+// Three optional fields are read leniently, the one exception to "never half-read": `status` (the test's own status),
+// `retry` (which attempt, for a retried one) and `steps` (the order of things on the page, steps.ts). They serve one optional comparison (order.ts) and no finding
 // depends on them, so a value this version cannot read is left out of the copy and the file's signatures are kept.
 // A reader older than these fields drops them like any field it does not know. Their format is checked here
 // (readSteps) and not in steps.ts, so that this module still imports nothing but the types: whoever bundles the
 // validator from source (genclass-dev[bot]) gets the validator alone.
 
-import { RACES_LIMITS, RACES_SCHEMA, RACES_STATUSES, STEPS_LIMITS, type GenClassRacesFile, type RaceSignature, type RacesParseResult, type RacesStatus, type RacesSteps } from "./types.js";
+import { RACES_LIMITS, RACES_SCHEMA, RACES_STATUSES, RETRY_LIMIT, STEPS_LIMITS, type GenClassRacesFile, type RaceSignature, type RacesParseResult, type RacesStatus, type RacesSteps } from "./types.js";
 
 /** At most this many messages per file; the rest are counted. */
 export const MAX_ERRORS = 8;
@@ -222,6 +222,7 @@ export function validateRaces(value: unknown): RacesParseResult {
   if (typeof value.status === "string" && (RACES_STATUSES as readonly string[]).includes(value.status)) file.status = value.status as RacesStatus;
   const steps = readSteps(value.steps);
   if (steps) file.steps = steps;
+  if (typeof value.retry === "number" && Number.isInteger(value.retry) && value.retry >= 1 && value.retry <= RETRY_LIMIT) file.retry = value.retry;
   return { ok: true, file };
 }
 

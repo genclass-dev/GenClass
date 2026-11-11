@@ -141,7 +141,16 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
   // 9. the order of things on this page. The record's list only grows at its end (and drops its oldest past 600), so
   //    what is new is what comes after the last step handed over; a step is handed over once, with its place among
   //    this page load's steps, so the fixture puts it where it belongs whatever order the batches arrive in.
-  const loadId = String(performance.timeOrigin);
+  //    The page load's name: when it began, and a token of its own where the browser can make one, since two frames or
+  //    pages of one context can begin in the same millisecond (the name is only ever compared, never written anywhere).
+  let token = "";
+  try {
+    const c = w.crypto as { getRandomValues?(into: Uint32Array): Uint32Array } | undefined;
+    if (c && typeof c.getRandomValues === "function") token = `.${Array.from(c.getRandomValues(new Uint32Array(2)), (n) => n.toString(36)).join("")}`;
+  } catch {
+    /* a page without it: the time alone */
+  }
+  const loadId = `${performance.timeOrigin}${token}`;
   let lastStep: unknown = null;
   let handedSteps = 0;
   let bodyEnded = false;
@@ -152,9 +161,14 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
       if (steps.length === 0) return;
       const at = lastStep === null ? -1 : steps.lastIndexOf(lastStep as (typeof steps)[number]);
       if (at === steps.length - 1) return;
+      // the last step handed over is no longer in the record: more was recorded since than the record keeps, and what
+      // it dropped was never handed over. The fixture is told, and keeps this test's steps only up to here
+      const gap = lastStep !== null && at < 0;
       // on the wall clock (Date.now(), which the fixture's side reads too), so that the page loads and pages of one
-      // test fall into one order and the fixture can tell what landed after the test's own code had finished
-      const base = Date.now() - performance.now() + recordStart;
+      // test fall into one order and the fixture can tell what landed after the test's own code had finished. `now`
+      // goes along: a test that sets the page's clock has another Date.now() than the fixture, which then uses its own
+      const now = Date.now();
+      const base = now - performance.now() + recordStart;
       const out: unknown[] = [];
       for (let i = at + 1; i < steps.length; i++) {
         const s = steps[i];
@@ -163,8 +177,8 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
         else if ((s.k === "send" || s.k === "recv" || s.k === "end") && typeof s.key === "string") out.push([s.k === "send" ? "s" : s.k === "recv" ? "r" : "x", when, s.key]);
       }
       lastStep = steps[steps.length - 1];
-      if (out.length === 0) return;
-      push({ t: "steps", id: loadId, from: handedSteps, steps: out });
+      if (out.length === 0 && !gap) return;
+      push(gap ? { t: "steps", id: loadId, from: handedSteps, steps: out, now, gap: true } : { t: "steps", id: loadId, from: handedSteps, steps: out, now });
       handedSteps += out.length;
     } catch {
       /* never into the page */
@@ -204,7 +218,7 @@ export function genclassPageScript(cfg: PageScriptConfig, runGlobal: () => void)
         const now = performance.now() - connectedAt;
         const open: [string, number][] = [];
         sent.forEach((t, key) => open.push([key, Math.max(0, Math.round(now - t))]));
-        return { id: String(performance.timeOrigin), open };
+        return { id: loadId, open };
       } catch {
         return null;
       }

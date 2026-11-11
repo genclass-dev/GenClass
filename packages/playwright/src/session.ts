@@ -14,7 +14,7 @@ import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { DEFAULT_SEED, MAX_WAIT_MS, describeMatch, resolveChaos, type ChaosOptions, type ResolvedChaos } from "./chaos.js";
 import { emptyCollected, install, type Collected, type PageLike } from "./install.js";
 import { buildRacesFile, racesFileName, writeRacesFile } from "./races.js";
-import { sequenceOf } from "./steps.js";
+import { sequenceOf, type StepSequence } from "./steps.js";
 import { RACES_STATUSES, STEPS_LIMITS, type GenClassRacesFile, type RacesLocation, type RacesStatus } from "./types.js";
 
 export interface GenClassOptions {
@@ -89,6 +89,8 @@ export interface TestInfoLike {
   retry?: number;
   /** The test's status when the fixture finishes ("skipped": no file is written). */
   status?: string;
+  /** What the test is expected to end with (Playwright's TestInfo.expectedStatus: "failed" under test.fail()). */
+  expectedStatus?: string;
   /** The test's timeout in ms as it stands (Playwright's TestInfo.timeout; 0: none). */
   timeout?: number;
   /** Playwright's TestInfo.duration: 0 while the test's function runs, set the moment it returns or throws. */
@@ -203,8 +205,13 @@ export function watchEnd(info: TestInfoLike): () => number | undefined {
   return () => endedAt;
 }
 
-/** The test's status for the file: Playwright's, when it is one a file carries (a skipped test writes none). */
+/**
+ * The test's status for the file: Playwright's, when it is one a file carries (a skipped test writes none). A test
+ * marked as expected to fail (`test.fail()`) gets none either: there "failed" is what Playwright counts as passing
+ * and "passed" as failing, and neither is a run the comparison of failing and passing runs should read.
+ */
 export function statusOf(info: TestInfoLike): RacesStatus | undefined {
+  if (typeof info.expectedStatus === "string" && info.expectedStatus !== "passed") return undefined;
   return (RACES_STATUSES as readonly string[]).includes(info.status ?? "") ? (info.status as RacesStatus) : undefined;
 }
 
@@ -262,8 +269,15 @@ export function racesFileOf(info: TestInfoLike, plan: RunPlan, collected: Collec
     },
     location: locationOf(info),
     status: statusOf(info),
-    steps: plan.steps > 0 ? { sequence: sequenceOf(collected.streams ?? [], collected.endedAt), max: plan.steps, bytes: plan.stepsBytes, more: collected.stepsOver ?? 0 } : undefined,
+    retry: info.retry,
+    steps: plan.steps > 0 ? stepsInput(plan, collected) : undefined,
   });
+}
+
+/** The page's steps for the file: in order, with how many were not kept (over the fixture's bound, or after a page load lost some). */
+function stepsInput(plan: RunPlan, collected: Collected): { sequence: StepSequence; max: number; bytes: number; more: number } {
+  const sequence = sequenceOf(collected.streams ?? [], collected.endedAt);
+  return { sequence, max: plan.steps, bytes: plan.stepsBytes, more: (collected.stepsOver ?? 0) + (sequence.lost ?? 0) };
 }
 
 /**
