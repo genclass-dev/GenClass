@@ -20,6 +20,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stablePath } from "./chaos.js";
 import { isRepoPath } from "./schema.js";
 import { RACES_LIMITS, RACES_SCHEMA, type GenClassRacesFile, type RaceSignature, type RacesFixtureInfo, type RacesLocation } from "./types.js";
 
@@ -77,14 +78,18 @@ export interface RacesInput {
 const METHOD_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+([^\s()?#]+)/;
 
 /**
- * "GET /api/search?q=… (#21)" or "GET /api/search#3~retry2" -> "GET /api/search". Anything else is kept with the
- * runtime's per-run op ids ("#12", "(#12)") taken out, so the same detection gives one signature in every seed.
- * At most 300 characters (a longer path is cut the same way in every seed).
+ * "GET /api/search?q=… (#21)" or "GET /api/search#3~retry2" -> "GET /api/search", with the ids in the path written
+ * as ":id" ("GET /api/items/7#1" -> "GET /api/items/:id", chaos.ts stablePath). The operation is what a finding is
+ * known by: from seed to seed here, and from run to run for whoever compares two runs. A record a test creates has
+ * another id in every run, so with the id left in, one race was a new finding each time. The evidence line keeps the
+ * requests as they were. Anything else is kept with the runtime's per-run op ids ("#12", "(#12)") taken out, so the
+ * same detection gives one signature in every seed. At most 300 characters (a longer path is cut the same way in
+ * every seed).
  */
 export function opOf(text: string | undefined): string {
   const t = (text ?? "").replace(/\s+/g, " ").trim();
   const m = METHOD_RE.exec(t);
-  if (m) return cut(`${m[1]} ${m[2]}`, MAX_OP);
+  if (m) return cut(`${m[1]} ${stablePath(m[2]!)}`, MAX_OP);
   return t.replace(/\s*\(#\d+\)/g, "").replace(/#\d+(~\w+)?/g, "").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 

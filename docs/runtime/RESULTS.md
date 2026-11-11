@@ -1584,6 +1584,11 @@ packages as published, 0.1.0 and 0.3.0-beta.5):
 6. The default chaos filter is the page's own host on any port, and the summary says when chaos held nothing.
 7. A request's key writes the ids in its path as `:id`.
 
+One more change is in the branch and not in any number here: a finding's operation (`op`, and so its signature) also
+writes the ids in its path as `:id`. With the id left in, a race on a record the test created was a different
+signature in each seed and a new finding on every push. It was made after these runs, from reading how the app compares
+two runs; unit tests cover it, and no finding left on either public suite carries an id, so it has no measurement.
+
 **Held-out set** (`run.mjs`, 288 trials a mode: 6 layers × 8 scenarios × 6 seeds; a flag is a race file with at
 least one signature; scenarios a and b are bugs, c to h correct flows). "Before" here is the published packages plus
 change 2, which these trials do not exercise (each settles before it ends).

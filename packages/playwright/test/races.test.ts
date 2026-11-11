@@ -42,6 +42,27 @@ describe("races: operations and evidence lines", () => {
     expect(opOf("write to cart.items (#7)")).toBe(opOf("write to cart.items (#31)"));
   });
 
+  it("opOf writes the ids in a path as :id, so a record a test created is the same operation in every run", () => {
+    expect(opOf("GET /api/items/7#1")).toBe("GET /api/items/:id");
+    expect(opOf("GET /api/items/7#1")).toBe(opOf("response to GET /api/items/1042?expand=1 (#9)"));
+    expect(opOf("PUT /api/notes/3f2b8c1e-9d4a-4c6b-8e1f-0a2b3c4d5e6f/title#2")).toBe("PUT /api/notes/:id/title");
+    expect(opOf("DELETE /api/docs/V1StGXR8_Z5jdHi6B-myT#1")).toBe("DELETE /api/docs/:id");
+    // a host in front of the path (a request to another origin) and words that are not ids stay as they are
+    expect(opOf("POST localhost:8001/api/documents/42/notes/#1")).toBe("POST localhost:8001/api/documents/:id/notes/");
+    expect(opOf("GET /api/v2/items/lamp#1")).toBe("GET /api/v2/items/lamp");
+  });
+
+  it("one race on two records is one signature, and its evidence keeps the requests as they were", () => {
+    const a = { ...overwrote, by: "GET /api/items/7#1", over: "GET /api/items/8#1" };
+    const b = { ...overwrote, by: "GET /api/items/1041#1", over: "GET /api/items/1042#1" };
+    const first = signaturesOf([], [a], 1);
+    const second = signaturesOf([], [b], 2);
+    expect(first.map((s) => s.sig)).toEqual(["witness|overwrote-newer|GET /api/items/:id"]);
+    expect(second.map((s) => s.sig)).toEqual(first.map((s) => s.sig));
+    expect(first[0]!.evidence).toContain("GET /api/items/7#1");
+    expect(signaturesOf([], [a, b], 1)).toHaveLength(1);
+  });
+
   it("witnessLine says what happened, in the agent's request keys", () => {
     expect(witnessLine(overwrote)).toBe("The response of GET /api/search#1 wrote search.results over what newer GET /api/search#4, started 0.26s after GET /api/search#1, had written (2 items → 2 items).");
     expect(witnessLine({ ...overwrote, overKind: "user", over: 'type textbox "Title"', change: undefined })).toBe('The response of GET /api/search#1 wrote search.results over what the user (type textbox "Title") had written 0.26s after GET /api/search#1 started.');
@@ -136,8 +157,9 @@ describe("races: signatures and the file", () => {
 
 describe("races: a file is written within the format's limits (RACES_LIMITS), so no reader refuses what the fixture wrote", () => {
   const base = { test: "t", seed: 1, mode: "observe", model: { state: "ready" }, chaos: null };
+  // n distinct operations (routes named r0, r1, ...: a number alone would be an id, and every one the same operation)
   const many = (n: number, message: (i: number) => string = (i) => `m${i}`) =>
-    Array.from({ length: n }, (_, i) => detection({ p: 0.5 + (i % 50) / 100, evidence: { message: message(i), subject: `response to GET /api/items/${i} (#${i})` } }));
+    Array.from({ length: n }, (_, i) => detection({ p: 0.5 + (i % 50) / 100, evidence: { message: message(i), subject: `response to GET /api/items/r${i} (#${i})` } }));
   const bytes = (file: Parameters<typeof racesFileText>[0]) => Buffer.byteLength(racesFileText(file), "utf8");
 
   it("a test with more signatures than a file holds: the most confident stay, and dropped says how many were left out", () => {
