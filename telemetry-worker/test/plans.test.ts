@@ -73,6 +73,11 @@ describe("billing/plans.json: the one source of plans", () => {
     expect(PLANS.filter((p) => p.features.some((x) => /Your own classifier/.test(x.text))).map((p) => p.id)).toEqual(["enterprise"]);
     // every feature line is available: nothing is listed as coming next
     for (const p of PLANS) expect(p.features.filter((x) => !x.available), p.id).toEqual([]);
+    // short lines (the owner, 2026-11-11: less text): a plan says each thing in a few words, and itself in one line
+    for (const p of PLANS) {
+      expect(p.summary.length, p.id).toBeLessThanOrEqual(70);
+      for (const x of p.features) expect(x.text.length, x.text).toBeLessThanOrEqual(60);
+    }
     expect(PLANS.map((p) => p.managed_payments)).toEqual([false, false, false]);
     expect(PLANS.map((p) => p.stripe_tax_code)).toEqual([null, "txcd_10103001", null]);
     // Team is the one plan sold on the site; Enterprise is agreed by email and is what GenClass's grant gives
@@ -379,9 +384,9 @@ describe("Team is the one plan sold on the site, per seat; Enterprise by email",
       expect(page).toContain("grid-template-columns:repeat(3,minmax(0,1fr))");
       expect(page).toContain('<p class="price">$15 / developer / month</p>');
       expect(page).toContain('<span class="aside">US dollars, billed monthly</span>');
-      expect(page).toContain("<li>Members: invite your team to the account&#39;s dashboards, one seat each</li>");
+      expect(page).toContain("<li>Team members, one seat each</li>");
       // the classifier a person trains is listed under Enterprise only
-      expect(page.match(/<li>Your own classifier: /g)).toHaveLength(1);
+      expect(page.match(/<li>Your own classifier/g)).toHaveLength(1);
       if (live) {
         expect(page).toContain('<input id="seats-team" type="number" inputmode="numeric" min="1" max="200" step="1" value="1" data-seats="team">');
         expect(page).toContain('<button class="btn" type="button" data-plan="team"><span>Upgrade to Team</span></button>');
