@@ -192,6 +192,12 @@ Transfer per path (what the worker downloads; brotli q9 here, jsDelivr serves th
   `ort-wasm-simd-threaded.asyncify.wasm` (27 MB) as an asset because ORT references it with
   `new URL(..., import.meta.url)`; GenClass does not load it (it fetches the wasm from `ortWasmPaths`/jsDelivr). The
   inline fallback's `import("onnxruntime-web/webgpu")` becomes a separate 115 KB chunk, loaded only if needed.
+- Vite 7 (7.3.8, measured 2026-11-12, in a fresh React app with the package from npm): the default worker format
+  is one classic script, so `vite build` fails with `Invalid value "iife" for option "worker.format"` unless the app
+  sets `worker: { format: "es" }`; and the dev server's pre-bundle (`node_modules/.vite/deps`) has no `worker.js`, so
+  the worker request fails, Vite warns, and the host falls back to inline, unless the app sets
+  `optimizeDeps: { exclude: ["@genclass/runtime"] }`. With both: the build passes and dev reports `worker: true`. The
+  `genclass` command writes both (`packages/cli/src/vite.mjs`). Vite 5 and 6 have the same default and were not run.
 - webpack 5 supports the same worker pattern natively (not tested here).
 - Self-hosting everything: `genclass-runtime fetch-model public/genclass-model`, copy
   `node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm` to `public/ort/`, then

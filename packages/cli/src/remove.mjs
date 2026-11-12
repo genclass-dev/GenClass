@@ -18,6 +18,7 @@ import { SKILL_MARK, SKILL_PATH, workflowFor } from "./actions.mjs";
 import { gitInfo } from "./git.mjs";
 import { WORKFLOW_PATH } from "./state.mjs";
 import { agree, bad, good, note } from "./tui.mjs";
+import { planViteRemoval } from "./vite.mjs";
 
 const read = (file) => {
   try {
@@ -59,6 +60,9 @@ export function planLeftovers(cwd, deps = {}) {
     if (Object.keys(next).length) changes.push({ file, path, kind: "modify", after: `${JSON.stringify(next, null, 2)}\n`, what: "GenClass's MCP server entry; your other servers stay" });
     else changes.push({ file, path, kind: "delete", what: "GenClass's MCP server was all it held" });
   }
+  // the two Vite settings this command wrote (vite.mjs), or the config file when it created it
+  const vite = planViteRemoval(cwd);
+  if (vite) changes.push({ ...vite, what: vite.kind === "delete" ? "the Vite config this command created" : "the two Vite settings GenClass needed; the rest of the file stays" });
   // 2. the skill, while it is the file this command wrote
   const skill = read(join(cwd, SKILL_PATH));
   if (skill !== null) {

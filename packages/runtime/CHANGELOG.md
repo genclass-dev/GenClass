@@ -15,6 +15,10 @@
   longer runs off a narrow terminal, and a part the page gave nothing to try (the race probe on a page with no
   search box and no form) reads "nothing to try on this page" and is not counted as unmeasured (`partial` stays
   null for it).
+- **Known limitation, now written down: Vite 7 and earlier need `worker: { format: "es" }`** or `vite build` fails
+  with the runtime installed, and `optimizeDeps: { exclude: ["@genclass/runtime"] }` for the model to run in a worker
+  in dev (README "Known limitations", `src/model/README.md`). The `genclass` command writes both (0.2.3); this
+  package's own `init` does not yet.
 - **`init --brief`** folds its sentences to the window and keeps each command and address whole on its own line.
 - **`scan` inside the `genclass` command** finds the script-tag build of the runtime installed in the project
   (`runtimeDist`: `node_modules/@genclass/runtime/dist`, this folder upwards), says what to install when there is

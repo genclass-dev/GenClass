@@ -413,6 +413,12 @@ observing with no download and no worker.
 
 ## Known limitations
 
+- **Vite 7 and earlier need two settings** (measured on Vite 7.3.8, 2026-11-12). Their default worker format is one
+  classic script, which the model's worker cannot be, so `vite build` stops with
+  `Invalid value "iife" for option "worker.format"`; and the dev server's pre-bundle has no worker file, so the model
+  runs on the page's main thread with a warning on each load. Add `worker: { format: "es" }` (the build) and
+  `optimizeDeps: { exclude: ["@genclass/runtime"] }` (the dev server) to your Vite config. `npx genclass` writes both
+  for you and takes them out again; `init` in this package does not yet. Vite 8 needs neither.
 - **The model is new and imperfect.** It misses most problems, it was not evaluated on your app, and in observe mode
   it makes some false flags ([Model quality](#model-quality)). It is not a substitute for tests. Watch observe mode
   before turning on `guard` or `heal`.

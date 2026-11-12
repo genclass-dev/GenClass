@@ -24,6 +24,7 @@ import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { gitInfo } from "./git.mjs";
 import { readNotes } from "./store.mjs";
 import { ago } from "./tui.mjs";
+import { planViteSettings } from "./vite.mjs";
 
 /** Where the one workflow file goes (docs/github-app/workflows/genclass.yml). */
 export const WORKFLOW_PATH = ".github/workflows/genclass.yml";
@@ -168,11 +169,19 @@ export async function readState(o = {}, deps = {}) {
 
   // 2. the runtime in this app
   const linked = !!st.token && (!me || !!app);
+  // added and in the account, but on Vite 7 or earlier without the build setting the model's worker needs (vite.mjs)
+  let vite = null;
+  try {
+    vite = isApp && !st.fresh && linked ? planViteSettings(cwd, project) : null;
+  } catch {
+    vite = null;
+  }
   steps.push({
     id: "runtime",
     title: "Runtime",
-    doing: st.fresh ? "Add GenClass to this app" : "Put this app in your account",
-    state: !isApp ? "blocked" : st.fresh ? "todo" : linked ? "done" : "todo",
+    doing: st.fresh ? "Add GenClass to this app" : vite ? "Add two Vite settings" : "Put this app in your account",
+    state: !isApp ? "blocked" : st.fresh ? "todo" : vite ? "todo" : linked ? "done" : "todo",
+    ...(vite ? { vite: true } : {}),
     detail: !isApp
       ? (project.refused ?? "no web app in this folder")
       : st.fresh
@@ -181,10 +190,16 @@ export async function readState(o = {}, deps = {}) {
           ? "added, with no dashboard yet"
           : me && !app
             ? "added, but this app is not in your account yet"
-            : `${st.handWritten ? "added by hand" : "added"}${app ? ` · app "${app.name}"` : ""}`,
-    why: st.fresh ? "One import and the package. You see the change first. Nothing is drawn on your pages." : "Gives the app its place in your account, so what it finds shows on your dashboard.",
+            : vite
+              ? `added · Vite ${vite.major} needs two build settings`
+              : `${st.handWritten ? "added by hand" : "added"}${app ? ` · app "${app.name}"` : ""}`,
+    why: st.fresh
+      ? "One import and the package. You see the change first. Nothing is drawn on your pages."
+      : vite
+        ? `Without them "vite build" fails on Vite ${vite.major}. You see the change first.`
+        : "Gives the app its place in your account, so what it finds shows on your dashboard.",
     more: "The runtime watches the page in your users' browsers for lost edits, double submits and old data shown over new. It only reports, to the browser console and your dashboard: it never holds, delays or changes anything your app does, and it puts nothing on the page.",
-    run: st.fresh ? "npx genclass init" : "npx genclass connect",
+    run: st.fresh ? "npx genclass init" : vite ? "npx genclass setup" : "npx genclass connect",
     human: null,
   });
 

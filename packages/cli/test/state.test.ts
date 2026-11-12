@@ -83,7 +83,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
 
   it("the test workflow, then the GitHub App: Playwright, the workflow file, then what the app is doing, in that order", async () => {
     const dir = tempDir();
-    viteApp(dir, { devDependencies: { vite: "^7.0.0", "@vitejs/plugin-react": "^5.0.0", "@playwright/test": "^1.50.0" } });
+    viteApp(dir, { devDependencies: { vite: "^8.0.0", "@vitejs/plugin-react": "^5.0.0", "@playwright/test": "^1.50.0" } });
     await addRuntime(dir);
     signIn();
     const git = onGithub(dir);
@@ -232,5 +232,21 @@ describe("genclass: a folder that is not a web app (src/state.mjs appsBelow, src
     // nothing below either: where to run it
     const empty = tempDir();
     expect((await printed(async () => expect(await status({ cwd: empty })).toBe(0))).replace(/\s+/g, " ")).toContain("Run npx genclass inside your web app's folder, or name it: npx genclass --cwd <folder>");
+  });
+});
+
+describe("genclass: an app on Vite 7 with GenClass in it (src/state.mjs, src/vite.mjs)", () => {
+  it("the runtime step is not done until the build setting is there, and says what is missing", async () => {
+    const dir = tempDir();
+    viteApp(dir, { devDependencies: { vite: "^7.0.0", "@vitejs/plugin-react": "^5.0.0" } });
+    await addRuntime(dir);
+    const s = await readState({ cwd: dir }, { runGit: noGit });
+    const rt = s.steps.find((x) => x.id === "runtime")!;
+    // signed out, signing in comes first; the step itself is still to do
+    expect(rt).toMatchObject({ state: "todo", doing: "Add two Vite settings", detail: "added · Vite 7 needs two build settings", run: "npx genclass setup", vite: true });
+    expect(rt.why).toContain('"vite build" fails on Vite 7');
+    // with the setting there (by this command or by hand) the step is done
+    write(dir, { "vite.config.js": 'export default { worker: { format: "es" } };\n' });
+    expect((await readState({ cwd: dir }, { runGit: noGit })).steps.find((x) => x.id === "runtime")).toMatchObject({ state: "done" });
   });
 });

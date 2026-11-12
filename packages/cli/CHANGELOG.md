@@ -10,6 +10,15 @@ From using the command on a real site the morning after 0.2.2, and from watching
   the app, the account and the folder. It fits a 58-column window, where the old block-letter wordmark never showed.
   What comes next stands beside a green bar, and the question is one line under a rule: `❯ Enter to continue · d
   every part · s skip · q stop`. Piped output and `--json` are as plain as before.
+- **An app on Vite 7 or earlier builds again.** Found by installing into a fresh Vite 7 app and running its
+  build: `vite build` failed with `Invalid value "iife" for option "worker.format"` once GenClass was in it, because
+  Vite before 8 bundles a worker as one classic script and the model's worker cannot be one. Every app in GenClass's
+  own repository is on Vite 8, so this was never seen. The runtime step now shows and writes the two settings such
+  an app needs (`worker: { format: "es" }` for the build, `optimizeDeps: { exclude: ["@genclass/runtime"] }` so the
+  dev server runs the model in a worker instead of on the page's thread), as the first keys of your Vite config,
+  with its own marker. An app that already has GenClass gets "Add two Vite settings" as its next step. A config it
+  cannot edit without guessing (a function, one that sets `worker` itself, an app with workers of its own) is left
+  alone and gets the two lines to add by hand. `remove` takes them out. Vite 8 needs nothing and gets nothing.
 - **`npx genclass remove` takes out everything GenClass put in the project.** After the runtime (the import, the
   config file, the package) it lists what the other steps wrote and removes it on one more yes: GenClass's entry
   in `.mcp.json` (your other servers stay; the file goes only when that entry was all it held), the skill (only
