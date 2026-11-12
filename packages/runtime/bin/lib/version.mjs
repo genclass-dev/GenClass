@@ -14,14 +14,25 @@ import { fileURLToPath } from "node:url";
 export const PKG = "@genclass/runtime";
 export const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/** This package's version ("latest" if package.json cannot be read). */
-export const VERSION = (() => {
-  try {
-    return JSON.parse(readFileSync(join(PKG_DIR, "package.json"), "utf8")).version;
-  } catch {
-    return "latest";
-  }
-})();
+/**
+ * Set by the `genclass` command (packages/cli) before these modules load: it bundles them into its own file, where
+ * this package's package.json is not next to them. It names the runtime version it installs (`runtimeVersion`), the
+ * command that runs it again (`cmd`: "npx genclass") and what its banners say (`brand`). Absent in this package's
+ * own bin, where everything comes from package.json as before.
+ */
+export const HOST_CLI = globalThis.__GENCLASS_CLI__ && typeof globalThis.__GENCLASS_CLI__ === "object" ? globalThis.__GENCLASS_CLI__ : null;
+
+/** The runtime version this CLI installs: this package's own ("latest" if package.json cannot be read). */
+export const VERSION =
+  typeof HOST_CLI?.runtimeVersion === "string"
+    ? HOST_CLI.runtimeVersion
+    : (() => {
+        try {
+          return JSON.parse(readFileSync(join(PKG_DIR, "package.json"), "utf8")).version;
+        } catch {
+          return "latest";
+        }
+      })();
 
 const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
 
@@ -37,7 +48,7 @@ export const cmdFor = (version) => {
   const ch = channelOf(version);
   return ch ? `npx ${PKG}@${ch}` : `npx ${PKG}`;
 };
-export const CMD = cmdFor(VERSION);
+export const CMD = typeof HOST_CLI?.cmd === "string" ? HOST_CLI.cmd : cmdFor(VERSION);
 
 /** Semver order (prereleases before their release); null when either side is not a version. */
 export function compareVersions(a, b) {

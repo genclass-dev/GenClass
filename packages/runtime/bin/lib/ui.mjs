@@ -34,8 +34,10 @@ export const out = (s = "") => process.stdout.write(`${s}\n`);
 export const err = (s = "") => process.stderr.write(`${s}\n`);
 
 export function banner(title) {
+  // "GenClass" under the `genclass` command (packages/cli sets the name before these modules load)
+  const brand = typeof globalThis.__GENCLASS_CLI__?.brand === "string" ? globalThis.__GENCLASS_CLI__.brand : "GenClass Runtime";
   out();
-  out(`  ${c.bold(c.magenta("GenClass Runtime"))} ${c.gray(sym.dot)} ${c.bold(title)}`);
+  out(`  ${c.bold(c.magenta(brand))} ${c.gray(sym.dot)} ${c.bold(title)}`);
   out();
 }
 
@@ -142,6 +144,12 @@ export const interactive = () => !!process.stdin.isTTY;
 // questions take them first.
 const typedAhead = [];
 let inputEnded = false;
+
+/**
+ * Whether the terminal's input has ended (end of file at a question). From then on every question resolves "" at
+ * once, which is not an answer: a caller that takes an empty answer as a yes checks this first.
+ */
+export const inputClosed = () => inputEnded;
 
 /**
  * Asks one question and resolves the line typed (trimmed), "" when input ends, or null when stdin is not a

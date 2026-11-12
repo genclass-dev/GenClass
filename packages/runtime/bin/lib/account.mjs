@@ -21,13 +21,17 @@ const SESSION_RE = /^gcs_[A-Za-z0-9_-]{16,200}$/;
 const USER_CODE_RE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 const TIMEOUT_MS = 15_000;
 
-const VERSION = (() => {
-  try {
-    return JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json"), "utf8")).version;
-  } catch {
-    return "0";
-  }
-})();
+// the `genclass` command (packages/cli) bundles this module and names the runtime version it installs (version.mjs)
+const VERSION =
+  typeof globalThis.__GENCLASS_CLI__?.runtimeVersion === "string"
+    ? globalThis.__GENCLASS_CLI__.runtimeVersion
+    : (() => {
+        try {
+          return JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json"), "utf8")).version;
+        } catch {
+          return "0";
+        }
+      })();
 const USER_AGENT = `genclass-runtime-cli/${VERSION}`;
 /**
  * What the CLI calls itself when it asks for a sign-in code (`client_name`): genclass.dev shows it on the approval

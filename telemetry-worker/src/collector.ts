@@ -49,6 +49,7 @@ import { routeBilling } from "./billing.js";
 import { routeTeam } from "./team-routes.js";
 import type { GithubEnv } from "./github/config.js";
 import { routeGithub } from "./github/http.js";
+import { routeCli } from "./cli.js";
 import { json, readCapped } from "./http.js";
 import { afterBatch } from "./paid.js";
 import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, setupCommand, setupPage, startPage } from "./pages.js";
@@ -121,6 +122,11 @@ export interface Env extends GithubEnv {
   MANAGED_PAYMENTS?: string;
   /** "open": every account has the grant plan, nothing is locked (a self-hosted collector; src/plans.ts planGatesOpen). */
   PLAN_GATES?: string;
+  /** `genclass suggest` (src/suggest.ts): the key of the model that writes the plan (a Worker secret). Without it the
+   * plan is ordered by the checks' own weights and no model is asked. Never returned, logged or stored. */
+  OPENAI_API_KEY?: string;
+  /** The model asked (a var in wrangler.toml; default src/suggest.ts DEFAULT_MODEL). */
+  SUGGEST_MODEL?: string;
   /** Export pages per account per minute (src/billing.ts); without it the export is not rate-limited. */
   EXPORT_LIMIT?: RateLimiterLike;
   /** 32 bytes, base64: encrypts forwarding settings at rest (src/forward.ts). Without it they cannot be saved. */
@@ -227,6 +233,9 @@ export async function handle(request: Request, env: Env, opts: HandleOptions = {
   // the GitHub App's routes first: /account/github and /api/account/github sit under the account routes' prefixes
   const github = await routeGithub(request, url, path, env, opts);
   if (github) return github;
+  // the `genclass` command's routes (src/cli.ts): /api/cli/*
+  const cli = await routeCli(request, url, path, env, opts);
+  if (cli) return cli;
   const billing = await routeBilling(request, url, path, env, opts);
   if (billing) return billing;
   // teams (src/team-routes.ts): /api/team and the invite page /account/join/<code>, before the account routes

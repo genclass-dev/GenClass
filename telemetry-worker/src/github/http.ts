@@ -535,6 +535,31 @@ async function updateRepo(c: C, repoId: number): Promise<Response> {
   return json(200, { ok: true, repo: { id: repoId, project: now?.project_id ?? null, paused: !!now?.paused } });
 }
 
+// --------------------------------------------------------------------------------------------- for the genclass command
+
+/**
+ * What the app is doing on one repository ("owner/name"), for the `genclass` command (src/cli.ts GET /api/cli/github).
+ * GitHub is asked nothing here: the answer comes from what GitHub told this account in the last 30 minutes (grantOf)
+ * and from what the app keeps for a repository that answer lists. `known: false` means there is no such answer, or
+ * it was cut at MAX_GRANT_REPOS and does not list the repository: the person continues with GitHub (`connect_url`)
+ * and the next call knows. So nothing is said about a repository GitHub did not just confirm the account can reach.
+ */
+export async function repoStatusForAccount(c: C, cfg: GithubAppConfig | null, accountId: string, name: string): Promise<Record<string, unknown>> {
+  const urls = { connect_url: cfg?.clientId ? `${c.cfg.origin}/github/connect` : null, install_url: cfg ? `${c.cfg.origin}/github/install` : null };
+  const unknown = { repo: name, known: false, installed: null, evidence: false, prs: 0, last: null, private: false, needs_plan: false, paused: false, ...urls };
+  if (!cfg) return unknown;
+  const grant = await grantOf(c, accountId);
+  if (!grant) return unknown;
+  const r = grant.repos.find((x) => x.name.toLowerCase() === name.toLowerCase());
+  // GitHub's answer does not list it: the app is not on it (or the person cannot reach it), unless the answer was cut
+  if (!r) return grant.more ? unknown : { ...unknown, known: true, installed: false };
+  const [did] = await repoActivityByIds(c.db, [r.id]);
+  const stored = await repoById(c.db, r.id);
+  const inst = await installationById(c.db, r.installation);
+  const needsPlan = r.private && (!inst || !(await repoEntitled(c.db, c.env, cfg, inst, { private: true }, c.now)).ok);
+  return { repo: r.name, known: true, installed: true, evidence: !!did?.evidence, prs: did?.prs ?? 0, last: did?.last ?? null, private: r.private, needs_plan: needsPlan, paused: !!stored?.paused, ...urls };
+}
+
 // --------------------------------------------------------------------------------------------- routes
 
 const html = (status: number, body: string, nonce: string, extra: Record<string, string> = {}): Response => new Response(body, { status, headers: securityHeaders(nonce, extra) });

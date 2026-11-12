@@ -1,6 +1,6 @@
 # GenClass Runtime: privacy policy
 
-_Last updated: 2026-11-11._
+_Last updated: 2026-11-12._
 
 This policy covers the diagnostics that `@genclass/runtime` (from `0.1.0-beta.3`) sends to its maintainers. It does not
 cover the website or app that uses GenClass; that site has its own privacy policy. It also covers the
@@ -217,6 +217,28 @@ the app wrote stay on GitHub, where you can delete them.
 **What it does not do:** it does not read your code, does not send anything from your repository to anyone else, does
 not use what it reads to train a model, and does not contact you. The only messages it writes are its check and its
 comments on your own pull requests.
+
+## The genclass command and suggestions
+
+`genclass` is a command a developer runs in their own project (`npx genclass`). It signs them in to their GenClass
+account in the browser, adds GenClass to their app and shows where the setup stands. It reads the project's files on
+their machine to do that. The files stay there.
+
+**`genclass suggest`** measures the project and its live site against a list of checks. Two things leave the machine:
+
+- **Requests to the developer's own site:** its home page, `robots.txt`, `sitemap.xml`, `llms.txt`, one address that
+  should not exist, and DNS lookups for its mail records. They go to that site, not to us.
+- **A digest sent to genclass.dev, to get a plan written for the app.** It holds the checks that failed (each with
+  its title and at most three short evidence lines, such as a status code, a page title or a file name and line
+  number) and five things about the app: its name, framework, address, payment provider and host. It holds no source
+  code, no file contents, no environment values and no secrets; where a check finds a key in a file, the evidence is
+  the kind of key, the file and the line, never the key. The command shows this before the first time it sends it
+  for a project, and `--no-model` sends nothing.
+
+We pass the digest to a language model (OpenAI's API) to order the failed checks and word the reasons, and return
+its answer. We do not store the digest or the answer and do not log them. We keep one number: how many plans an
+account asked for on a day, for 3 days, to hold each plan's daily limit. OpenAI processes the digest under its API
+terms. Nothing from a digest is used to train GenClass's own model.
 
 ## Where it goes and how long we keep it
 

@@ -69,6 +69,11 @@ export interface Plan {
   per_seat?: boolean;
   /** `seats`: the people a plan that is not per_seat holds, the owner included (null or left out: no limit). */
   limits: { apps: number | null; history_days: number; seats?: number | null };
+  /**
+   * `genclass suggest` (src/suggest.ts): `per_day`, model runs an account has a day; `shown`, how many items of the
+   * plan it is shown (null: all). Left out: 3 and 3.
+   */
+  suggestions?: { per_day: number; shown: number | null };
   /** A key a plan leaves out counts as false (entitled). */
   entitlements: Partial<Record<Entitlement, boolean>> & Record<Exclude<Entitlement, "github_private">, boolean>;
   features: { text: string; available: boolean }[];

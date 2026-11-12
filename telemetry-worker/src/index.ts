@@ -4,6 +4,7 @@ import { authRetention } from "./auth.js";
 import { handle, reply, type Env } from "./collector.js";
 import { githubSweep, SWEEP_CRON } from "./github/handlers.js";
 import { githubRetention } from "./github/store.js";
+import { suggestRetention } from "./suggest.js";
 import { planRetention, stripeMode } from "./plans.js";
 
 interface Ctx {
@@ -41,6 +42,6 @@ export default {
     }
     const now = new Date();
     // each sweep on its own: the GitHub App's tables may not exist yet on a database whose migration 0013 is not applied
-    ctx.waitUntil(Promise.all([planRetention(db, now, env.BUCKET, stripeMode(env)), authRetention(db, now).catch(() => undefined), githubRetention(db, now).catch(() => undefined), githubSweep(env).catch(() => undefined)]));
+    ctx.waitUntil(Promise.all([planRetention(db, now, env.BUCKET, stripeMode(env)), authRetention(db, now).catch(() => undefined), githubRetention(db, now).catch(() => undefined), suggestRetention(db, now).catch(() => undefined), githubSweep(env).catch(() => undefined)]));
   },
 };
