@@ -959,6 +959,13 @@ Nothing here has been run. Each step is the owner's, and the Stripe ones need a 
    `--dry-run`. It makes the product GenClass Team (`genclass_team`), its price (`genclass_team_monthly`, US$15 a
    month) and rewrites the portal configuration so seats can be changed there. Buy one seat in test mode, add a
    seat in the portal, invite a second account, cancel.
+   In GenClass's sandbox (`acct_1UQIHU4239nVJvut`, test mode) the product, the price
+   (`price_1Uan7H4239nVJvutbbTCz755`) and two portal configurations already exist, made by hand through Stripe's
+   API on 2026-11-11 with the script's own parameters: Stripe took the quantity update, and made the first
+   configuration the account's default (the account had none), so the second, `bpc_1Uan8D4239nVJvut5P17xZnQ`, is
+   the one the script finds and the worker can open. A Checkout Session with the worker's Team parameters (3 seats,
+   adjustable) was accepted there too. The script reports all of it as unchanged and adds the webhook endpoint and
+   the worker's settings. Nothing exists in live mode yet.
 4. `npx --yes wrangler@4 deploy`. From then: Free shows 7 days and no visitor analytics, export or forwarding; a
    fourth app is refused; the GitHub App needs Team for private repositories (`GITHUB_APP_PRIVATE_REPOS = "plan"`
    in `wrangler.toml`). With a live `STRIPE_SECRET_KEY` Team is on sale to everyone; with a test key only to
