@@ -24,7 +24,7 @@ import { addRuntime, addWorkflow, choosePlan, connectAgent, connectGithubApp, si
 import { brand, canDraw } from "./art.mjs";
 import { BUILD } from "./assets.mjs";
 import { appsBelow, readState, stateJson } from "./state.mjs";
-import { barPara, card, checklist, header, nextBlock, note, pick, PROMPT, rule, summary, typed } from "./tui.mjs";
+import { barPara, card, checklist, header, nextBlock, note, pick, PROMPT, rule, summary, typed, warn } from "./tui.mjs";
 
 /**
  * Prints the header and the steps for a state: the short view, or with `details` every part and what is known
@@ -224,7 +224,14 @@ export async function setup(o = {}, deps = {}) {
         result = "skipped";
       } else result = (await deps.runSuggest({ cwd: o.cwd, fromSetup: true })) === 0 ? "done" : "failed";
     }
-    if (result === "failed") failed = true;
+    if (result === "failed") {
+      failed = true;
+      // what went wrong is above, in the step's own words; this says that the walk goes on without it
+      if (!auto) {
+        out();
+        warn(`${step.doing} did not finish. The steps that do not need it go on, and npx genclass offers it again next time.`);
+      }
+    }
     // done or not, a step is not offered twice in one run: the next reading of the state says where it stands. The
     // one exception is a sign-in that did not finish (the code expired, the browser said no) while someone is at the
     // keyboard: everything after it is better with an account, so it is offered once more

@@ -685,6 +685,13 @@ function tokenRow(tk) {
   }
   if (tk.failed) {
     row("Token", `none: could not create one (${tk.why})`, c.yellow(sym.warn));
+    // the account's plan is why (its app limit): signing in again would hit the same limit, so the way on is one of
+    // the apps it has, or more room
+    if (tk.account && /^upgrade needed/.test(String(tk.why))) {
+      out(`             GenClass works without it; you only miss the dashboard. Use one of your apps instead:`);
+      out(`             ${c.cyan(`${CMD} connect`)} and pick it, or make room at ${c.cyan(hostUrl("/account"))}`);
+      return;
+    }
     out(`             GenClass works without it; you only miss the dashboard. ${tk.account ? `Run ${c.cyan(`${CMD} login`)} again, then` : `Get a token at ${c.cyan(START_URL)}`}`);
     out(`             ${tk.account ? c.cyan(`${CMD} connect`) : `and run ${c.cyan(`${CMD} init --token gc_...`)}`}`);
     return;

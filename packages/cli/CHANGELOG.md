@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.3
+
+- **"Put this app in your account" works.** For an app that already has GenClass in it but is not in the signed-in
+  account (set up by someone else, or before there was an account), the step ran the runtime's `connect` with
+  `--in-account`, an option only `init` takes. `connect` refused it and printed its usage, and the app could never
+  be put in the account from the walk. Since 0.2.0; found by a teammate on a real project. The step now passes
+  `connect` only its own options: it asks which of the account's apps this is (or makes a new one), shows the change
+  and writes it. A test runs both of the runtime's commands with exactly what the step passes.
+- **A step that fails says so, and the walk does not offer what depends on it.** The walk used to go straight on to
+  "See your first page" (asking whether the site was deployed) for an app that was not in the account, which can
+  never finish. Now a failed step gets one line saying it did not finish and will be offered again, and the first
+  page is only offered once the app is in the account.
+- When the account's plan has no room for another app, the hint names an app it has (`connect` and pick it) instead
+  of "sign in again", which hit the same limit.
+
 ## 0.3.2
 
 From the first run of 0.3.1 against production with a real account:

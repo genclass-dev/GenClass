@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **`init` and `connect`: an app the account's plan has no room for points at an app it has.** When creating the
+  app's token fails because of the plan's app limit, the hint was "run login again, then connect", which hits the
+  same limit. It now says to pick one of the account's apps with `connect`, or make room on the account page
+  (`bin/lib/init.mjs`).
+
 - **`scan` waits for a scan of the same page that is already running** on the hosted page check (the check answers
   `in-progress` with how long to wait) and prints that scan's report, within the command's own time limit
   (`--timeout`, 120 s by default); with no time left to wait it stops with the check's message as before
