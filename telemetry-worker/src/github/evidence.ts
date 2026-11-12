@@ -5,6 +5,9 @@
 //   2. Production: when the repository is linked to a GenClass app, that app's findings (kinds, page routes, counts)
 //      from the dashboard's own aggregates (src/dashboard.ts stats), split by whether the pull request's changed files
 //      serve those pages (src/github/routes.ts).
+//   3. The default branch: the race files of its most recent commit that has them, uploaded by its own workflow runs
+//      (baselineEvidence). They are read only to tell which of a pull request's findings are already there, through
+//      the same reader and under the same caps as (1), from runs a pull request cannot stand in for.
 //
 // Invariants:
 // - An artifact is untrusted input (a pull request from a fork uploads whatever it likes). It is downloaded up to a
@@ -161,8 +164,12 @@ function whyNot(reason: string): string {
  * about by itself when the list of the commit's runs does not show it. Throws GithubError when the commit's runs
  * cannot be listed, and anywhere for a rate limit, a refused token or a used-up request budget (the caller reports
  * those); anything else wrong with one run or artifact is a note, and `incomplete`.
+ * `o.runs`: the commit's workflow runs as GitHub described them in a list the caller already has (baselineEvidence:
+ * the runs of a branch); they are not listed again, and only they are asked. `o.maxCalls`: fewer requests than
+ * MAX_EVIDENCE_CALLS may be made. `o.workflows`: the caller's set, to which the workflow of every run that gave a
+ * file from an artifact with the name is added (baselineEvidence asks those workflows' runs of the default branch first).
  */
-export async function ciEvidence(gh: GithubClient, repo: string, headSha: string, settings: RepoSettings, o: { firstRun?: number } = {}): Promise<CiEvidence> {
+export async function ciEvidence(gh: GithubClient, repo: string, headSha: string, settings: RepoSettings, o: { firstRun?: number; runs?: readonly unknown[]; maxCalls?: number; workflows?: Set<number> } = {}): Promise<CiEvidence> {
   const out = noEvidence();
   if (!/^[0-9a-f]{40,64}$/.test(headSha)) return out;
   /** Something of the commit's race files may have gone unread, with the sentence that says what. */
@@ -171,10 +178,11 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
     out.notes.push(note);
   };
   const before = gh.calls();
+  const maxCalls = Math.min(MAX_EVIDENCE_CALLS, o.maxCalls ?? MAX_EVIDENCE_CALLS);
   // requests this function made; the client counts more than one for each when GitHub redirects them (a renamed repository)
-  let made = 1;
+  let made = o.runs ? 0 : 1;
   // one request for every run of the commit; without each run's list of pull requests, an entry is about 10 KB
-  const listed = obj(await gh.get(`${repo}/actions/runs`, { query: { head_sha: headSha, per_page: MAX_LISTED_RUNS, exclude_pull_requests: true }, maxBytes: 4 * 1024 * 1024 }));
+  const listed: Obj = o.runs ? { workflow_runs: o.runs } : obj(await gh.get(`${repo}/actions/runs`, { query: { head_sha: headSha, per_page: MAX_LISTED_RUNS, exclude_pull_requests: true }, maxBytes: 4 * 1024 * 1024 }));
   const all = Array.isArray(listed.workflow_runs) ? listed.workflow_runs : [];
   const runs: Run[] = [];
   const ids = new Set<number>();
@@ -368,6 +376,7 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
         unread(`The artifact "${name}" could not be opened${e instanceof ZipError ? ` (${e.message})` : ""}.`);
       }
       out.artifacts.push({ name, runId: run.id, files });
+      if (files > 0 && run.workflow > 0) o.workflows?.add(run.workflow);
     }
   };
 
@@ -378,7 +387,7 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
     // Every artifact that may still be downloaded costs a request: those are kept back. The rest is for lists, each at
     // what a request has cost so far (two when GitHub redirects them).
     const used = gh.calls() - before;
-    const room = Math.floor((MAX_EVIDENCE_CALLS - used - (MAX_ARTIFACTS - tried)) / Math.max(1, Math.ceil(used / made)));
+    const room = Math.floor((maxCalls - used - (MAX_ARTIFACTS - tried)) / Math.max(1, Math.ceil(used / Math.max(1, made))));
     const batch = order.slice(asked, asked + Math.min(ASKED_AT_ONCE, MAX_ASKED_RUNS - asked, room));
     if (!batch.length) break;
     asked += batch.length;
@@ -413,6 +422,122 @@ export async function ciEvidence(gh: GithubClient, repo: string, headSha: string
   const total = typeof listed.total_count === "number" ? listed.total_count : 0;
   if (all.length && total > all.length) unread(`This commit has ${total} workflow runs; the ${all.length} GitHub lists first were looked at.`);
   return out;
+}
+
+// --------------------------------------------------------------------------------------------- the default branch
+
+/** Workflow runs of the default branch that are listed for a baseline: one request, the most GitHub gives in one. */
+export const MAX_BASELINE_RUNS = 100;
+/** Runs asked for their artifacts while the commit with race files is looked for. */
+export const MAX_BASELINE_PROBES = 10;
+/** Runs of one workflow that may show no race files before that workflow's older runs are passed over. */
+export const BASELINE_WORKFLOW_MISSES = 2;
+/**
+ * GitHub requests one baseline may cost: the list of the branch's runs, a list of artifacts for each run asked and a
+ * download for each artifact read. A client of its own is used for it (src/github/handlers.ts), so a baseline takes
+ * nothing from the requests a review has for the pull request itself.
+ */
+export const MAX_BASELINE_CALLS = 20;
+/**
+ * What may have started a workflow run for it to count as the default branch's own: a push to the branch, or its
+ * schedule. Both run the branch's own commit and nothing else. A run started by a pull request is left out even when
+ * GitHub files it under the branch's name (a fork's branch may be called "main", and a `pull_request_target` run
+ * carries the base branch's name and commit while it tests the pull request's code): what such a run uploaded says
+ * nothing about the default branch, and a pull request must not be able to supply its own baseline.
+ */
+const BASELINE_EVENTS: readonly string[] = ["push", "schedule"];
+
+export interface BaselineEvidence {
+  /** The commit of the default branch whose race files were read; null when none could be read. */
+  sha: string | null;
+  /** That commit's race files, read like a pull request's (ciEvidence); null with `sha`. */
+  ci: CiEvidence | null;
+  /**
+   * Some of the default branch's race files may have gone unread: of the commit that was read, or of a more recent
+   * one whose files could not be read (an expired artifact, a failed download), or because the looking stopped at
+   * its limit on requests.
+   */
+  incomplete: boolean;
+}
+
+/**
+ * The race files of the default branch's most recent commit that has them, for comparing a pull request's findings
+ * with what is already there. `repo` is "/repos/<owner>/<name>"; `base` is the default branch's name and the
+ * repository's id, as GitHub gave them.
+ *
+ * One request lists the branch's completed workflow runs, the most recent first. Only runs that are the branch's own
+ * count: started by a push to it or by its schedule (BASELINE_EVENTS), with the branch's name, in this repository.
+ *
+ * Which commit has race files is found by asking runs for their artifacts, the most recent first, at most
+ * MAX_BASELINE_PROBES of them. Most commits of a default branch have none: a docs-only merge runs lint and no
+ * end-to-end job, and a workflow with path filters does not run at all. So the looking follows workflows, not
+ * commits: a workflow whose BASELINE_WORKFLOW_MISSES most recent runs showed no artifact with the name is passed over
+ * from there on, and the runs of `o.prefer` come first: the workflows whose runs uploaded the pull request's own race
+ * files, which on most repositories are the ones that upload them for the default branch too.
+ *
+ * The first run that shows such an artifact names the commit. That commit's runs are then read by ciEvidence itself,
+ * so the same caps hold (artifacts, bytes, files, signatures) and the same rule picks one artifact of two with one
+ * name. When what it gives holds a race file that validates, that is the baseline; when not (the artifact has
+ * expired, could not be downloaded, holds something else), the looking goes on with older runs, and `incomplete` says
+ * that a more recent commit's files went unread. The whole costs at most MAX_BASELINE_CALLS requests.
+ *
+ * Nothing here is trusted more than a pull request's artifact is: the files go through the same reader and
+ * validator, and what comes of them is a set of fingerprints to compare with.
+ * Throws GithubError as ciEvidence does (a rate limit, a refused token, a used-up budget) and when the branch's runs
+ * cannot be listed; the caller decides what a failure means for the review.
+ */
+export async function baselineEvidence(gh: GithubClient, repo: string, base: { branch: string; repoId: number }, settings: RepoSettings, o: { prefer?: readonly number[] } = {}): Promise<BaselineEvidence> {
+  const before = gh.calls();
+  const left = (): number => MAX_BASELINE_CALLS - (gh.calls() - before);
+  const listed = obj(await gh.get(`${repo}/actions/runs`, { query: { branch: base.branch, status: "completed", per_page: MAX_BASELINE_RUNS, exclude_pull_requests: true }, maxBytes: 4 * 1024 * 1024 }));
+  const runs: { id: number; sha: string; workflow: number; at: string; raw: Obj }[] = [];
+  for (const r0 of Array.isArray(listed.workflow_runs) ? listed.workflow_runs : []) {
+    const r = obj(r0);
+    const id = posInt(r.id);
+    const sha = text(r.head_sha, 64);
+    // GitHub's `branch` filter is not taken at its word: each run says which branch, repository and event it is of
+    if (!id || !/^[0-9a-f]{40,64}$/.test(sha) || r.head_branch !== base.branch || posInt(obj(r.head_repository).id) !== base.repoId) continue;
+    if (r.status !== "completed" || !BASELINE_EVENTS.includes(text(r.event, 40))) continue;
+    runs.push({ id, sha, workflow: posInt(r.workflow_id) ?? 0, at: text(r.created_at, 30), raw: r });
+  }
+  runs.sort((a, b) => later(a.at, b.at) || b.id - a.id);
+  const prefer = new Set(o.prefer ?? []);
+  // a run in which no job ran uploaded nothing: it is not asked
+  const order = [...runs.filter((r) => prefer.has(r.workflow)), ...runs.filter((r) => !prefer.has(r.workflow))].filter((r) => !NO_JOBS.includes(text(r.raw.conclusion, 20)));
+  const misses = new Map<number, number>();
+  const tried = new Set<string>();
+  let probes = 0;
+  let incomplete = false;
+  for (const r of order) {
+    if (tried.has(r.sha) || (misses.get(r.workflow) ?? 0) >= BASELINE_WORKFLOW_MISSES) continue;
+    // Reading a commit's race files asks its run again and downloads its artifacts: those requests are kept back.
+    // When the looking stops here, race files may be in a run that was not asked.
+    if (probes >= MAX_BASELINE_PROBES || left() <= MAX_ARTIFACTS + 2) {
+      incomplete = true;
+      break;
+    }
+    probes++;
+    let named = false;
+    try {
+      const a = obj(await gh.get(`${repo}/actions/runs/${r.id}/artifacts`, { query: { per_page: 100 } }));
+      named = (Array.isArray(a.artifacts) ? a.artifacts : []).some((x) => text(obj(x).name, 100).startsWith(settings.artifact));
+    } catch (e) {
+      if (fatal(e)) throw e;
+      // the list did not come: whether this run has race files is not known
+      incomplete = true;
+      continue;
+    }
+    if (!named) {
+      misses.set(r.workflow, (misses.get(r.workflow) ?? 0) + 1);
+      continue;
+    }
+    tried.add(r.sha);
+    const ci = await ciEvidence(gh, repo, r.sha, settings, { runs: runs.filter((x) => x.sha === r.sha).map((x) => x.raw), maxCalls: left() });
+    if (ci.inputs.some((i) => !i.error && typeof i.content === "string" && parseRaces(i.content).ok)) return { sha: r.sha, ci, incomplete: incomplete || ci.incomplete };
+    // race files that could not be read are not a commit without race files: an older commit may stand in, and the review says so
+    incomplete = incomplete || ci.incomplete;
+  }
+  return { sha: null, ci: null, incomplete };
 }
 
 // --------------------------------------------------------------------------------------------- production

@@ -281,7 +281,8 @@ replaced by its default and reported in the summary; it never fails a run.
 ### In CI: one new workflow file
 
 [`docs/github-app/workflows/genclass.yml`](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/workflows/genclass.yml)
-is a whole workflow to copy to `.github/workflows/genclass.yml`: on pull requests, with `contents: read` only, it
+is a whole workflow to copy to `.github/workflows/genclass.yml`: on pull requests and on pushes to `main` or `master`
+(the app compares a pull request's findings with the default branch's race files), with `contents: read` only, it
 installs your dependencies with the package manager your lockfile names, installs `@genclass/playwright` and
 `@genclass/runtime@beta` outside your project (so your `package.json` and lockfile are untouched), installs the
 browsers your Playwright wants, runs the command and uploads `test-results/genclass` as the artifact
@@ -693,8 +694,10 @@ The same with the GitHub CLI only (it updates the bot's comment that starts with
 
 [genclass-dev[bot]](https://github.com/genclass-dev/GenClass/blob/main/docs/github-app/README.md), GenClass's GitHub App,
 does the posting itself: the workflow only uploads the race files, with no write permission, so
-it is the same for pull requests from forks. The app keeps one comment per pull request, numbers the findings, says
-from push to push which are new, still flagged or not flagged at the new commit, and answers `@genclass-dev replay 1`.
+it is the same for pull requests from forks. The app keeps one comment per pull request, numbers the findings (one
+per kind and operation, with the tests that reach it), says from push to push which are new, still flagged or not
+flagged at the new commit, and answers `@genclass-dev replay 1`. When the job also runs on pushes to your default
+branch, a finding that is flagged there too is listed as already on the default branch, not as new.
 
 ```yaml
       - run: npx playwright test --repeat-each 2
@@ -703,7 +706,7 @@ from push to push which are new, still flagged or not flagged at the new commit,
         with:
           name: genclass-races
           path: test-results/genclass
-          retention-days: 7
+          retention-days: 30
 ```
 
 Use one or the other: with the app installed, leave out the comment step above, or a pull request gets two comments.

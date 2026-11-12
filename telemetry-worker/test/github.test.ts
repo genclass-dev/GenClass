@@ -2439,7 +2439,9 @@ describe("github app: a pause and a review at the same moment (src/github/store.
     expect(gh.checksAt(SHA1)).toHaveLength(1);
     expect(gh.checksAt(SHA1)[0].output.title).toBe("2 findings, 1 reproducible");
     // the commit's runs were read once: the second pass did not read them again as if it had been asked for
-    expect(gh.calls.filter((c) => c.method === "GET" && c.path === "/repos/acme/shop/actions/runs")).toHaveLength(1);
+    // (the other list of runs is the default branch's, which the review that found something compared with)
+    expect(gh.calls.filter((c) => c.method === "GET" && c.path === "/repos/acme/shop/actions/runs" && c.query.has("head_sha"))).toHaveLength(1);
+    expect(gh.calls.filter((c) => c.method === "GET" && c.path === "/repos/acme/shop/actions/runs" && c.query.get("branch") === "main")).toHaveLength(1);
   });
 
   it("a pause set after someone asked for a review stops that review before it writes", async () => {

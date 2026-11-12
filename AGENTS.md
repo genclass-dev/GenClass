@@ -125,7 +125,9 @@ Azure, `git push`, `npm publish`.
    finds maintainers or sends them anything (genclass-dev/GenClass#173). Every line the app writes comes from a race
    file or a linked app's aggregates, through the reporter's escaping: nothing is inferred from a diff, and a finding
    that is gone is "not flagged now", never "fixed". It has no contents permission and reads its settings from the
-   default branch only. Asking GitHub for another permission, storing more than the ids, hashes and titles in
+   default branch only. What a pull request's findings are compared with (the baseline) is read only from workflow
+   runs that a push to the default branch or its schedule started, never from a run a pull request started, and a
+   signature the settings leave out (`ignore`) is counted in every review, never dropped silently. Asking GitHub for another permission, storing more than the ids, hashes and titles in
    `migrations/0013_github_app.sql`, or reading a private repository without a plan needs the owner's OK, like rule 8.
 
 11. **`genclass suggest` reports measured checks, and sends a digest, never code** (`packages/cli/src/suggest/`,

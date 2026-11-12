@@ -181,21 +181,31 @@ does nothing on a repository where it is not installed. Installing it needs no G
 
 **What it can read on GitHub**, and only in the repositories it is installed on: pull requests and their comments;
 the list of files a pull request changes, with which lines changed; the workflow runs of a pull request's latest
-commit and the files those runs uploaded as artifacts; and one settings file, `.github/genclass.yml`. It has no
-permission to read the rest of a repository: it cannot read, copy or change source code.
+commit and of the repository's default branch, and the files those runs uploaded as artifacts; and one settings
+file, `.github/genclass.yml`. It has no permission to read the rest of a repository: it cannot read, copy or change
+source code.
 
 **What it reads for a review:** the artifact your workflow uploaded with GenClass's race files. These are small files
 the GenClass test fixture writes: the names of your tests, the requests the page made (their method and path, such as
 `POST /api/orders`, without query values), and one sentence per finding about what happened. We read them in memory
 to write the comment and do not store them. If the artifact holds other files, we do not read them.
 
+When a pull request's race files show a finding, we also read the race files that your default branch's own test
+runs uploaded, for the latest commit that has them, to tell which findings are already there. We read them the same
+way, in memory. For up to two minutes we keep, in memory only, which commit they were for, a one-way fingerprint of
+each finding in them and the names of the tests, so that the next review of the same repository does not ask GitHub
+again. You can turn this
+comparison off with `baseline: false` in the settings file; the default branch's files are then not read.
+
 **What we store:**
 
 - For an installation: the GitHub account's id and name, whether it is a person or an organization, and whether the
   app is on all or selected repositories.
 - For a pull request the app commented on: the repository's id, the pull request's number, the id of our comment and
-  of our check, the latest commit's id, and for each finding a one-way fingerprint, its kind, the request it is about,
-  the test's title and the seeds it was seen in. This is the same text that is in the comment on the pull request.
+  of our check, the latest commit's id, the id of the commit of your default branch that its findings were compared
+  with, and for each finding a one-way fingerprint, its kind, the request it is about, the titles of up to five
+  tests, the seeds it was seen in, and whether the default branch's race files show it too. This is the same text
+  that is in the comment on the pull request.
 - The ids of the messages GitHub sent us, for 7 days, so that we handle each one once.
 - If you buy or change a plan on GitHub Marketplace: your GitHub account's id and name and the plan. GitHub handles
   the payment; we never see card details.

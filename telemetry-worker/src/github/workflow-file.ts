@@ -36,9 +36,16 @@ export const WORKFLOW_FILE = `# GenClass on your existing Playwright suite: no c
 # defaults.run.working-directory and prefix the artifact path with it.
 #
 # The run holds your app's API calls for a seeded time, so tests that pass in your own e2e job can
-# fail here: this job is separate and allowed to fail, so it never blocks a pull request.
+# fail here. A failing test leaves this job green (the race files say what the run showed); the job
+# is red when no race file was written. It is separate and allowed to fail, so it never blocks a
+# pull request.
 name: genclass
-on: pull_request
+# Pull requests, and pushes to the default branch: a review tells a pull request's findings from the
+# ones already there. Under another name than main or master, put your default branch in the list.
+on:
+  pull_request:
+  push:
+    branches: [main, master]
 permissions:
   contents: read
 jobs:
@@ -68,15 +75,17 @@ jobs:
       # Your suite under two seeds, with GenClass on the pages it opens. Arguments after the path go
       # to "playwright test" (--project chromium, a file, ...). GENCLASS_CHAOS=off: no holds.
       - name: Playwright with GenClass
+        continue-on-error: true
         run: node "$RUNNER_TEMP/genclass/node_modules/@genclass/playwright/bin/genclass-playwright-run.mjs"
       # One small JSON file per test and seed. genclass-dev[bot] reads artifacts named genclass*.
+      # With no file at all this step fails: nothing ran under GenClass, and a step above says why.
       - uses: actions/upload-artifact@v4
         if: \${{ !cancelled() }}
         with:
           name: genclass-races
           path: test-results/genclass
-          retention-days: 7
-          if-no-files-found: ignore
+          retention-days: 30
+          if-no-files-found: error
 `;
 
 /**

@@ -80,7 +80,7 @@ const WORKFLOW = `      - run: npx playwright test --repeat-each 2
         with:
           name: genclass-races
           path: test-results/genclass
-          retention-days: 7`;
+          retention-days: 30`;
 
 const SETTINGS = `# ${SETTINGS_PATH} (optional; these are the defaults)
 reviews:
@@ -89,6 +89,8 @@ reviews:
 comment: findings     # findings | always | never
 check:
   fail_on: never      # never | reproducible | any
+baseline: true        # compare with the default branch's race files
+ignore: []            # signatures to leave out, each a kind and an operation
 inline: true
 min_seeds: 2
 artifact: genclass    # artifacts whose name starts with this are read
@@ -102,7 +104,7 @@ function steps(slug: string): string {
 ${snippet("Install", "npm i -D @genclass/playwright @genclass/runtime@beta")}
 ${snippet("Configure", FIXTURE)}</div>
 <div><h3>Upload the race files from your workflow</h3>
-<p>The fixture writes one small JSON file per test and seed to <code>test-results/genclass</code>. ${esc(slug)}[bot] reads the artifact when the workflow run finishes, also for pull requests from forks, whose own token cannot comment.</p>
+<p>The fixture writes one small JSON file per test and seed to <code>test-results/genclass</code>. ${esc(slug)}[bot] reads the artifact when the workflow run finishes, also for pull requests from forks, whose own token cannot comment. Run the job on pushes to your default branch too: a review compares a pull request's findings with the race files uploaded there, and lists what is already there as that, not as new.</p>
 ${snippet("In the job that runs Playwright", WORKFLOW)}</div>
 <div><h3>Open a pull request</h3>
 <p>The GenClass check appears on its commits. When something is flagged, one comment lists each finding with its test, its seeds and the evidence line; it is edited in place on later pushes. Reply <code>@${esc(slug)} help</code> on the pull request for the commands.</p></div>
@@ -113,7 +115,7 @@ function permissions(slug: string): string {
   return `<ul class="facts">
 <li><b>Pull requests, read and write:</b> the list of files a pull request changes (their paths and which lines the diff shows) and its own comments.</li>
 <li><b>Checks, write:</b> the GenClass check on each commit.</li>
-<li><b>Actions, read:</b> the workflow runs of a pull request's head commit and the artifact with the race files.</li>
+<li><b>Actions, read:</b> the workflow runs of a pull request's head commit and the artifact with the race files. When those flag something, also the default branch's own workflow runs and the race files of its most recent commit that has them, to tell which findings are already there.</li>
 <li><b>Issues, read and write:</b> GitHub delivers pull-request comments (the <code>@${esc(slug)}</code> commands) under this permission; the app reacts to a command to show it was seen, and opens an issue only when a setting or a person with write access asks.</li>
 <li><b>One file, read:</b> <code>${esc(SETTINGS_PATH)}</code> on the default branch, your settings.</li>
 <li><b>Metadata, read:</b> required by GitHub for every app.</li>
@@ -150,8 +152,9 @@ export function githubLandingPage(nonce: string, o: { slug: string; privateRepos
   <h2 class="h2l">What a review contains</h2>
   <ul class="facts">
     <li>One check on each commit and one comment per pull request, edited in place. With nothing flagged there is no comment.</li>
-    <li>Each finding names its test, the operation (<code>POST /api/orders</code>), how many seeds of that test flagged it, and the evidence line the runtime printed. Flagged in two or more seeds of the same test, it is marked reproducible.</li>
-    <li>From push to push a finding is new, still flagged, or not flagged at the new commit. The app does not call anything fixed: a replay on your machine proves a fix.</li>
+    <li>Each finding is one kind and operation (<code>POST /api/orders</code>), with the tests that flag it, how many seeds of a test flagged it, and the evidence line the runtime printed. One race that several tests reach is one finding. Flagged in two or more seeds of the same test, it is marked reproducible.</li>
+    <li>From push to push a finding is new, still flagged, or not flagged at the new commit. One that the default branch's race files flag too is listed as already on the default branch, not as new. The app does not call anything fixed: a replay on your machine proves a fix.</li>
+    <li>A signature your team has settled on is left out with one entry in the settings file, and every review says how many were left out.</li>
     <li>With a repository linked to a GenClass app: that app's production findings on the pages the pull request's files serve.</li>
     <li><code>@${esc(o.slug)} replay 1</code> gives the steps to reproduce a finding; <code>@${esc(o.slug)} fix 1</code> writes a brief your coding agent can work from with <code>@genclass/mcp</code>, in your own CI or on your machine.</li>
     <li>Each line is a diagnosis by the on-device model or a fact the runtime measured. Whether it is a bug is for you to decide.</li>
@@ -168,7 +171,7 @@ export function githubLandingPage(nonce: string, o: { slug: string; privateRepos
 <section class="stack mt-l">
   <h2 class="h2l">What it keeps</h2>
   <ul class="facts">
-    <li>For an installation: its GitHub account's name and id. For a pull request: the ids of the app's own comment and check, and per finding a fingerprint and the short title already in the comment.</li>
+    <li>For an installation: its GitHub account's name and id. For a pull request: the ids of the app's own comment and check, the commit of the default branch its findings were compared with, and per finding a fingerprint, the short titles already in the comment and whether the default branch's race files flag it too.</li>
     <li>Never: code, diffs, file contents, race files, tokens. An artifact is read in memory for the review and dropped.</li>
     <li>Uninstalling removes everything kept for the installation at once. <a href="${PRIVACY}">The privacy policy</a> has the full list.</li>
   </ul>

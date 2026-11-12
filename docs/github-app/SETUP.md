@@ -198,8 +198,8 @@ What to know before turning it on:
   the text percent-encoded (checked on github.com on 2026-11-10, signed in). `BRANCH` must be a branch that exists:
   the literal `HEAD` answers 404. The check uses the repository's default branch as GitHub names it, in the pull
   request GitHub returns or else in the event's signed payload. When neither names one, the check has no link.
-- GitHub answers an address of about 6,000 characters with an error. The file is 2,495 characters and 3,935
-  percent-encoded, and the whole address for a short repository name is 4,023. The worker builds no address longer
+- GitHub answers an address of about 6,000 characters with an error. The file is 2,990 characters and 4,688
+  percent-encoded, and the whole address for a short repository name is 4,776. The worker builds no address longer
   than 5,800: if the file grows past that, the checks say what they say without the link.
 - The file's text is in two places: `docs/github-app/workflows/genclass.yml`, which is the source, and
   `WORKFLOW_FILE` in `telemetry-worker/src/github/workflow-file.ts`. `test/github-workflow.test.ts` fails when they
@@ -215,7 +215,9 @@ What to know before turning it on:
 
 Checked on github.com on 2026-11-10, signed in: the address the worker builds for this repository (4,035 characters)
 opens the new-file editor at `.github/workflows/genclass.yml` on `main` with the whole file filled in
-([the screenshot](media/one-click-workflow.jpg)). Nothing was committed from it.
+([the screenshot](media/one-click-workflow.jpg)). Nothing was committed from it. That was the file of that day
+(2,495 characters). The file is longer now (the sizes above), and the longer address has not been opened on
+github.com: do it once before turning the link on.
 
 ## Try it without touching production
 
@@ -265,6 +267,41 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
 - **A request to delete data.** Uninstalling deletes everything kept for an installation. For one repository:
   `DELETE FROM github_prs WHERE repo_id = ?`, `DELETE FROM github_repos WHERE repo_id = ?` and
   `DELETE FROM github_repo_facts WHERE repo_id = ?`.
+
+## Upgrading to grouped findings, the baseline and `ignore`
+
+The version that groups findings by kind and operation, compares them with the default branch's race files and reads
+`ignore` needs no migration and no new permission, secret or variable. Before deploying it:
+
+- **Stored rows change form by themselves.** A pull request's findings (`github_prs.state`) are written as version 2
+  by its next review; version 1 rows are read and regrouped until then ([DESIGN.md](DESIGN.md), "Numbers for life").
+  A rollback to the earlier worker reads a version 2 row as empty: that pull request's findings are numbered from 1
+  again in its existing comment. Nothing else is lost, and nothing has to be repaired by hand.
+- **What the app reads changes**, within the Actions permission it already has: the default branch's workflow runs
+  and the race files of its latest commit that has them. [PRIVACY.md](../../PRIVACY.md#the-github-app), the guide and
+  the app's page say so from the same change. The Marketplace listing's transparency disclosures on GitHub were
+  entered before it and have to be brought in line by hand
+  ([the listing](../adoption/listings/github-marketplace.md)).
+- **Requests.** A review that finds something makes up to 20 more requests to GitHub for the comparison, usually 4
+  (the branch's runs, one run's artifacts twice, one download), at most once in two minutes per repository and
+  isolate. The hourly caps on reviews are unchanged.
+- **Repositories get a baseline only when their workflow runs on the default branch.** The two workflow files in
+  [`workflows/`](workflows/) do since this change (pushes to `main` or `master`); a repository that copied the earlier
+  file sees "No baseline was read" in its reviews until it adds that trigger. This repository's own
+  `playwright-reporter.yml` runs on pushes already, with path filters and seven days of retention, so its baseline
+  exists only for a week after a push that touched those paths.
+- **The one-file workflow's job is green when a test fails under the delays.** In
+  [`workflows/genclass.yml`](workflows/genclass.yml) the step "Playwright with GenClass" is allowed to fail, and the
+  upload fails when there is no race file: the job's own check is red when nothing ran under GenClass, and green
+  otherwise. Before, `continue-on-error` was on the job only. That keeps the workflow run green, and the job's check
+  on the commit is a failure all the same (seen on a pull request of a trial repository on 2026-11-11: run
+  "success", job and check run "failure"), so every test that failed under the delays was a red check, and with the
+  push trigger it would have been one on the default branch's commits. A repository that copied the earlier file
+  keeps the red check until it copies the file again. Run on GitHub once, on 2026-11-11, with the file as it is here
+  (a pull request of a private trial repository): two tests failed under the delays and the step exited 1; the step,
+  the job, its check on the commit and the workflow run all ended "success", and the artifact with 20 race files was
+  uploaded, kept for 30 days. Not run: a run that writes no race file (the upload then fails, according to
+  `actions/upload-artifact`'s own description of `if-no-files-found: error`), and a push to a default branch.
 
 ## Plans and private repositories
 
