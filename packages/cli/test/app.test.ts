@@ -140,13 +140,18 @@ describe("genclass login: a sign-in from before dashboards is approved once more
   it("signed out, or with a sign-in that can show dashboards, the usual login runs (null)", async () => {
     expect(await signInAgain({}, { fetchFn: fakeServer({}).fetchFn })).toBeNull();
     saveCredentials({ host: HOST, access_token: SESSION, account: ACCOUNT });
-    // the server looks at the sign-in before the app: a current one gets "not found" for the id no app has
-    const fine = fakeServer({ "GET /api/cli/app": { status: 404, json: { ok: false, error: "not found" } } });
+    // a sign-in approved for everything the command does: one question, the newest thing a terminal is approved for
+    const current = fakeServer({ "GET /api/cli/account": { json: { plan: { id: "free", name: "Free" } } } });
     let asked = 0;
+    expect(await signInAgain({}, { fetchFn: current.fetchFn, signIn: async () => (asked++, "done") })).toBeNull();
+    expect(current.calls.map((c) => c.path)).toEqual(["/api/cli/account"]);
+    expect(current.calls[0]!.auth).toBe(`Bearer ${SESSION}`);
+    // a server without that route is asked the one before it. It looks at the sign-in before the app: a current
+    // one gets "not found" for the id no app has
+    const fine = fakeServer({ "GET /api/cli/app": { status: 404, json: { ok: false, error: "not found" } } });
     expect(await signInAgain({}, { fetchFn: fine.fetchFn, signIn: async () => (asked++, "done") })).toBeNull();
     expect(asked).toBe(0);
-    expect(fine.calls.map((c) => `${c.path}${c.query}`)).toEqual(["/api/cli/app?id=-&range=24h"]);
-    expect(fine.calls[0]!.auth).toBe(`Bearer ${SESSION}`);
+    expect(fine.calls.map((c) => `${c.path}${c.query}`)).toEqual(["/api/cli/account", "/api/cli/app?id=-&range=24h"]);
     // a server that cannot be reached, or one without the route, changes nothing either
     const down = (async () => {
       throw new Error("offline");
@@ -164,5 +169,13 @@ describe("genclass login: a sign-in from before dashboards is approved once more
     expect(said.replace(/\s+/g, " ")).toContain("One more approval in the browser");
     // an approval that is not given is exit 1, and nothing else is tried
     expect(await printed(async () => expect(await signInAgain({}, { fetchFn: old.fetchFn, signIn: async () => "skipped" })).toBe(1))).toContain("signed in");
+    // a sign-in that can show dashboards but is from before the plan, alerts and questions is old too: `login` is
+    // where the command sends such a person, so "already signed in" there would be a dead end
+    const before = fakeServer({ "GET /api/cli/account": { status: 403, json: { ok: false, error: "sign in again: genclass login", reauth: true } }, "GET /api/cli/app": { status: 404, json: { ok: false, error: "not found" } } });
+    seen.length = 0;
+    const again = await printed(async () => expect(await signInAgain({}, { fetchFn: before.fetchFn, signIn: async (o) => (seen.push(o), "done") })).toBe(0));
+    expect(seen).toHaveLength(1);
+    expect(before.calls.map((c) => c.path)).toEqual(["/api/cli/account"]);
+    expect(again.replace(/\s+/g, " ")).toContain("the page lists what the terminal can do");
   });
 });

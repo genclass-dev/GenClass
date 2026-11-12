@@ -133,13 +133,18 @@ const pairs = (list, max) =>
     .map((x) => ({ key: x.key.slice(0, 300), count: count(x.count) }));
 
 /**
- * True when the saved sign-in works but was approved before the command could show dashboards, so the server asks
- * for one more approval (403 with `reauth`). Asked with an id no app has: the server checks the sign-in first.
- * False for anything else, including a server that cannot be reached.
+ * True when the saved sign-in works but was approved before the command could do what it does now, so the server
+ * asks for one more approval (403 with `reauth`). The newest thing a terminal is approved for is asked first (the
+ * account's plan); a server without that route is asked the one before it (a dashboard, with an id no app has:
+ * the server checks the sign-in first). False for anything else, including a server that cannot be reached.
  */
 export async function signInIsOld(creds, opts = {}) {
-  const r = await request("/api/cli/app?id=-&range=24h", { token: creds.access_token, host: creds.host, fetchFn: opts.fetchFn });
-  return !r.ok && r.status === 403 && r.json?.reauth === true;
+  const ask = (path) => request(path, { token: creds.access_token, host: creds.host, fetchFn: opts.fetchFn });
+  const old = (r) => !r.ok && r.status === 403 && r.json?.reauth === true;
+  const newest = await ask("/api/cli/account");
+  if (old(newest)) return true;
+  if (newest.ok || newest.status !== 404) return false;
+  return old(await ask("/api/cli/app?id=-&range=24h"));
 }
 
 /**

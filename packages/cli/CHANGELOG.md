@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1
+
+- **`genclass login` renews a sign-in that 0.3.0 asks to renew.** A sign-in approved before 0.3.0 can show
+  dashboards but not the plan, alerts, stored events or questions, and the command says "run npx genclass login
+  once". `login` only looked at whether the sign-in could show dashboards, so for such a sign-in it answered
+  "already signed in", which was a dead end for anyone not at a prompt that signs in on Enter. It now asks the
+  server the newest thing a terminal is approved for, and signs in again when the answer is "sign in again". Found
+  the first time 0.3.0 met a real older sign-in in production.
+
 ## 0.3.0
 
 The command becomes the whole product in a terminal. Until now it set GenClass up and ended; what the dashboard
