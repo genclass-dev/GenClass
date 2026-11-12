@@ -146,8 +146,8 @@ export function render(app, state, o = {}) {
 }
 
 /**
- * `genclass login` when the saved sign-in is from before the command could show dashboards: says so and signs in
- * again (one approval in the browser). Returns the exit code, or null when the sign-in is fine, missing or cannot be
+ * `genclass login` when the saved sign-in is from before the command could do what it does now (show dashboards;
+ * the plan, alerts, stored events, questions): says so and signs in again (one approval in the browser). Returns the exit code, or null when the sign-in is fine, missing or cannot be
  * checked, and the usual login command should run.
  * @param {{ noBrowser?: boolean }} o
  * @param {{ fetchFn?: typeof fetch, signIn?: (o: object) => Promise<string> }} [deps]
@@ -157,7 +157,7 @@ export async function signInAgain(o = {}, deps = {}) {
   const { creds } = readCredentialsFor();
   if (!creds || !(await signInIsOld(creds, deps))) return null;
   out();
-  note("You are signed in, from before the command could show dashboards. One more approval in the browser adds that.");
+  note("You are signed in, from before the command could do all it does now. One more approval in the browser adds that: the page lists what the terminal can do.");
   return (await (deps.signIn ?? signIn)(o)) === "done" ? 0 : 1;
 }
 

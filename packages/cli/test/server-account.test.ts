@@ -14,6 +14,7 @@ import { cliToken, createApp, detection, now, resetClock, sendBatch, setNow, set
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { ask, forget } from "../src/ask.mjs";
 import { askModel, fetchAccount, fetchConnections } from "../src/api.mjs";
+import { signInAgain } from "../src/app.mjs";
 import { agentLink, apps, claudeAdd, connections, exportEvents, funnels, plan, team } from "../src/manage.mjs";
 import { analytics } from "../src/views.mjs";
 import { HOST, isolate, printed, tempDir } from "./helpers.js";
@@ -111,10 +112,16 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(f).toContain("Apps 1 • no limit");
     expect(f).toContain("Includes visitor analytics, alerts to Slack, Sentry and others, the stored events as a file, private repositories");
     expect(f).not.toContain("T E A M");
+    // a sign-in the real server calls current is left alone by `genclass login`
+    expect(await signInAgain({}, { ...me.deps, signIn: async () => "done" })).toBeNull();
     older(sql);
     const old = flat((await said(() => plan(me.o, me.deps))).text);
     expect(old).toContain("Plan Team");
     expect(old).toContain("npx genclass login");
+    // and the command that line names does sign in again, instead of answering "already signed in"
+    let signed = 0;
+    await printed(async () => expect(await signInAgain({}, { ...me.deps, signIn: async () => (signed++, "done") })).toBe(0));
+    expect(signed).toBe(1);
   });
 
   it("team: Free is one person and says which plan holds a team; Team lists its people and makes an invite link once", async () => {
