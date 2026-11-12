@@ -1160,7 +1160,10 @@ What decides the answer:
 
 - **The model.** With the secret `OPENAI_API_KEY`, the digest is sent to the model named by `SUGGEST_MODEL`
   (default `gpt-6.2-sol`) with a fixed instruction and a strict JSON
-  schema. The model orders and explains: only ids the request named come back, each once, cut to length and cleaned
+  schema. When the key has no model of that name (the API answers `model_not_found`), the worker reads the key's
+  model list and asks the newest model it has of the same family and tier instead (`gpt-6.2-sol` → `gpt-6.1-sol`),
+  and the log names the models and the one it asked; a name with no sibling gets no stand-in. The configured name
+  is tried again by the next isolate, so a key that gains it starts using it. The model orders and explains: only ids the request named come back, each once, cut to length and cleaned
   of control characters, and ids it leaves out follow in weight order. Without the key, when the day's runs are used
   up, or when the model fails, is slow (40 seconds) or answers something else, the plan is the checks by their own
   weights and `source` is `checks`. The route never fails because of the model.

@@ -1,7 +1,7 @@
 // The `genclass` command's routes (src/cli.ts, src/suggest.ts): the account's overview, what the GitHub App is doing
 // on one repository, and the suggestions plan (the model, the plan's numbers, what is never stored).
 import { beforeEach, describe, expect, it } from "vitest";
-import { askModel, byWeight, DEFAULT_MODEL, MODEL_URL, planFromAnswer, readDigest, suggestRetention, suggestionLimits } from "../src/suggest.js";
+import { askModel, byWeight, DEFAULT_MODEL, MODEL_URL, MODELS_URL, planFromAnswer, readDigest, resetStandIns, standIn, suggestRetention, suggestionLimits } from "../src/suggest.js";
 import { PLANS } from "../src/plans.js";
 import { CLI_DASHBOARD_FROM } from "../src/cli.js";
 import { advance, call, cliToken, createApp, detection, now, resetClock, sendBatch, setNow, setPlan, setup, signedIn } from "./account-helpers.js";
@@ -9,6 +9,7 @@ import { APP_ID, fakeGithub, githubSetup, INSTALLATION, OWNER, REPO } from "./gi
 
 beforeEach(() => {
   resetClock();
+  resetStandIns();
 });
 
 const KEY = "sk-test-model-key-0123456789abcdef";
@@ -373,6 +374,62 @@ describe("genclass command: the digest and the model's answer (src/suggest.ts)",
     expect(d.checks[1]).toEqual({ id: "x", area: "other", title: "x", weight: 1, evidence: [] });
     expect([d.passed, d.unknown]).toEqual([0, 500]);
     expect(byWeight(d.checks).map((c: any) => c.id)).toEqual(["title", "x"]);
+  });
+
+  it("a key without the configured model: the newest one it has of the same family and tier is asked instead, once found", async () => {
+    const list = [
+      { id: "gpt-6.1-terra", created: 50 }, { id: "gpt-6.1-sol", created: 49 }, { id: "gpt-6-sol", created: 40 }, { id: "gpt-5.6-sol", created: 30 },
+      { id: "gpt-image-2.6-flare", created: 60 }, { id: "ft:gpt-6-sol:acme:x", created: 70 }, { id: "o3", created: 10 },
+    ];
+    // pure: same family, same tier word, newest; nothing is guessed for a name with no tier or no sibling
+    expect(standIn("gpt-6.2-sol", list)).toBe("gpt-6.1-sol");
+    expect(standIn("gpt-6.2-terra", list)).toBe("gpt-6.1-terra");
+    expect(standIn("gpt-6.2-nova", list)).toBeNull();
+    expect(standIn("gpt-6.2", list)).toBeNull();
+    expect(standIn("o5-sol", list)).toBeNull();
+    expect(standIn("gpt-6.1-sol", [{ id: "gpt-6.1-sol", created: 1 }])).toBeNull();
+
+    const digest = readDigest(DIGEST) as any;
+    const calls: { url: string; model?: string; auth: string | null }[] = [];
+    const logs: string[] = [];
+    const log = console.log;
+    console.log = (...a: unknown[]) => void logs.push(a.join(" "));
+    const fetch = async (url: string, init?: RequestInit) => {
+      const auth = new Headers(init?.headers as HeadersInit).get("authorization");
+      if (url === MODELS_URL) {
+        calls.push({ url, auth });
+        return new Response(JSON.stringify({ data: list }), { status: 200 });
+      }
+      const model = JSON.parse(String(init?.body)).model as string;
+      calls.push({ url, model, auth });
+      if (model === DEFAULT_MODEL) return new Response(JSON.stringify({ error: { code: "model_not_found", message: `The model \`${model}\` does not exist or you do not have access to it. key sk-proj-abc123` } }), { status: 404 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: answer(DIGEST.checks.map((c) => ({ id: c.id }))) } }] }), { status: 200 });
+    };
+    try {
+      const plan = await askModel({ OPENAI_API_KEY: KEY }, fetch, digest);
+      expect(plan?.map((p) => p.id)).toEqual(DIGEST.checks.map((c) => c.id));
+      expect(calls.map((c) => c.model ?? "list")).toEqual([DEFAULT_MODEL, "list", "gpt-6.1-sol"]);
+      expect(calls.every((c) => c.auth === `Bearer ${KEY}`)).toBe(true);
+      // the next request asks the stand-in straight away: one call
+      calls.length = 0;
+      expect(await askModel({ OPENAI_API_KEY: KEY }, fetch, digest)).not.toBeNull();
+      expect(calls.map((c) => c.model)).toEqual(["gpt-6.1-sol"]);
+      // the log says what happened and names models, never the key, a quoted part of one or a fine-tuned id
+      const said = logs.join("\n");
+      expect(said).toContain("model_not_found");
+      expect(said).toContain("asking gpt-6.1-sol in place of gpt-6.2-sol");
+      expect(said).toContain("gpt-6.1-terra, gpt-6.1-sol");
+      expect(said).not.toContain(KEY);
+      expect(said).not.toContain("sk-proj-abc123");
+      expect(said).not.toContain("ft:");
+      // a key with no sibling at all: no second question, the checks' own order
+      resetStandIns();
+      calls.length = 0;
+      const none = async (url: string, init?: RequestInit) => (url === MODELS_URL ? new Response(JSON.stringify({ data: [{ id: "o3", created: 1 }] }), { status: 200 }) : fetch(url, { ...init, body: JSON.stringify({ model: DEFAULT_MODEL }) }));
+      expect(await askModel({ OPENAI_API_KEY: KEY }, none, digest)).toBeNull();
+    } finally {
+      console.log = log;
+    }
   });
 
   it("planFromAnswer and askModel never let an id through that was not sent", async () => {

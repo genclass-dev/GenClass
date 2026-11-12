@@ -175,10 +175,6 @@ export function planFromAnswer(text: unknown, digest: Digest): PlanItem[] | null
 }
 
 /**
- * Asks the model for the plan. Null when there is no key, the request fails or times out, or the answer does not
- * pass planFromAnswer. The reason is logged as a word or a status code, never a body.
- */
-/**
  * Why the model's API refused, for the worker's log: its error code and the start of its message, with anything
  * shaped like a key taken out (an authentication error quotes part of the key). Never the request, never the key.
  */
@@ -200,35 +196,64 @@ async function modelError(res: Response): Promise<string> {
 /** Where the key's models are listed. */
 export const MODELS_URL = "https://api.openai.com/v1/models";
 
+interface ModelRow {
+  id: string;
+  created: number;
+}
+
 /**
- * The names of the general models the key can use, for the log: ids that start with gpt-, chatgpt- or o<digit>,
- * never a fine-tuned model's id (it carries an organization's name). At most 80, newest first; "" when unreadable.
+ * The general models the key can use, newest first: ids that start with gpt-, chatgpt- or o<digit>, never a
+ * fine-tuned model's id (it carries an organization's name). At most 80; [] when the list cannot be read.
  */
-async function modelNames(f: Fetch, key: string): Promise<string> {
+async function keyModels(f: Fetch, key: string): Promise<ModelRow[]> {
   try {
     const res = await f(MODELS_URL, { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return `(the list answered HTTP ${res.status})`;
+    if (!res.ok) return [];
     const j = (await res.json().catch(() => null)) as { data?: { id?: unknown; created?: unknown }[] } | null;
     return (j?.data ?? [])
-      .filter((m) => typeof m.id === "string" && /^(?:gpt-|chatgpt-|o\d)[A-Za-z0-9.-]{0,60}$/.test(m.id))
-      .sort((a, b) => (Number(b.created) || 0) - (Number(a.created) || 0))
-      .slice(0, 80)
-      .map((m) => m.id as string)
-      .join(", ");
+      .filter((m): m is { id: string; created?: unknown } => typeof m.id === "string" && /^(?:gpt-|chatgpt-|o\d)[A-Za-z0-9.-]{0,60}$/.test(m.id))
+      .map((m) => ({ id: m.id, created: Number(m.created) || 0 }))
+      .sort((x, y) => y.created - x.created || (x.id < y.id ? 1 : -1))
+      .slice(0, 80);
   } catch {
-    return "(the list could not be read)";
+    return [];
   }
 }
 
+/**
+ * The model that stands in for one the key does not have: the newest the key has in the same family and tier
+ * ("gpt-6.2-sol" -> "gpt-6.1-sol"). Null when the wanted name has no tier word or nothing matches: no other model
+ * is guessed at. Pure.
+ */
+export function standIn(wanted: string, models: { id: string; created: number }[]): string | null {
+  const m = /^([a-z]+)-\d+(?:\.\d+)?-([a-z]+)$/.exec(wanted);
+  if (!m) return null;
+  const same = new RegExp(`^${m[1]}-\\d+(?:\\.\\d+)?-${m[2]}$`);
+  return [...models].filter((x) => same.test(x.id) && x.id !== wanted).sort((x, y) => y.created - x.created || (x.id < y.id ? 1 : -1))[0]?.id ?? null;
+}
+
+/** The stand-in found for a wanted model, kept while this isolate lives (a deploy or a recycle asks again). */
+const standIns = new Map<string, string>();
+/** For the tests: forget every stand-in. */
+export const resetStandIns = (): void => standIns.clear();
+
+/**
+ * Asks the model to order and explain the failed checks. Null when there is no key, nothing failed, the request
+ * failed or timed out, or the answer was not the JSON asked for: the caller then uses the checks' own order.
+ * When the key has no model of the configured name, the newest model it has of the same family and tier is asked
+ * instead (standIn), and the log says which; the configured name is tried again by the next isolate, so a key that
+ * gains it starts using it without a change here. The key is never logged.
+ */
 export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, digest: Digest): Promise<PlanItem[] | null> {
   const key = (env.OPENAI_API_KEY ?? "").trim();
   if (!key || !digest.checks.length) return null;
-  try {
-    const res = await f(MODEL_URL, {
+  const wanted = modelName(env);
+  const call = (model: string) =>
+    f(MODEL_URL, {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({
-        model: modelName(env),
+        model,
         messages: [
           { role: "system", content: SYSTEM },
           { role: "user", content: JSON.stringify({ app: digest.app, passed: digest.passed, not_checked: digest.unknown, failed: digest.checks }) },
@@ -238,12 +263,24 @@ export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL"
       }),
       signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
     });
+  try {
+    let res = await call(standIns.get(wanted) ?? wanted);
     if (!res.ok) {
       const why = await modelError(res);
       console.log(`suggest: the model answered HTTP ${res.status}${why}`);
-      // the key has no such model: say in the log which ones it has, so the name can be set right (SUGGEST_MODEL)
-      if (why.includes("model_not_found")) console.log(`suggest: models this key can use: ${await modelNames(f, key)}`);
-      return null;
+      if (!why.includes("model_not_found") || standIns.has(wanted)) return null;
+      // the key has no such model: ask the newest one it has of the same family and tier, and say so in the log
+      const models = await keyModels(f, key);
+      console.log(`suggest: models this key can use: ${models.map((m) => m.id).join(", ") || "(the list could not be read)"}`);
+      const other = standIn(wanted, models);
+      if (!other) return null;
+      console.log(`suggest: asking ${other} in place of ${wanted}`);
+      res = await call(other);
+      if (!res.ok) {
+        console.log(`suggest: the model answered HTTP ${res.status}${await modelError(res)}`);
+        return null;
+      }
+      standIns.set(wanted, other);
     }
     const j = (await res.json().catch(() => null)) as { choices?: { message?: { content?: unknown } }[] } | null;
     const plan = planFromAnswer(j?.choices?.[0]?.message?.content, digest);
