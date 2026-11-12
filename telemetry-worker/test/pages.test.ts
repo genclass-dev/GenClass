@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { Window } from "happy-dom";
 import { ANALYTICS_RUNTIME, analyticsPrompt, CDN_SCRIPT, DASH_CSS, dashboardPage, DEFAULT_CHOICES, esc, installPrompt, KEY_RUNTIME, MCP_PKG, MESH_SCRIPT, notFoundPage, openSourcePage, openSourcePrompt, orgName, RUNTIME_PKG, securityHeaders, SNIPPET_RUNTIME, setupPage, startPage, type DashboardOptions } from "../src/pages.js";
-import { THEME_HEAD_JS } from "../src/studio.js";
+import { FRAME_SCALE, scaleCss, THEME_HEAD_JS } from "../src/studio.js";
 
 const setupOf = (o: Record<string, unknown> = {}) => setupPage("n", { token: "gc_TestToken0123456789abc", secret: "a".repeat(32), lastEvent: null, ...o });
 import { accountPage, devicePage, forgotPage, lockedLinkPage, loginPage, messagePage, newProjectPage, ORG_CSS, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
@@ -451,9 +451,33 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
     const dash = dashboardPage("n", project);
     for (const t of ["--accent:#3ecf8e", "--accent-f:#006239", "--rule:#2e2e2e", "--panel:#1f1f1f"]) expect(dash).toContain(t);
     expect(dash).toContain(":focus-visible{outline:2px solid var(--accent);outline-offset:2px}");
-    expect(dash).toMatch(/\.sb-top\{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:48px;/);
-    expect(dash).toContain(".btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 12px;border-radius:6px;");
+    // the frame is drawn FRAME_SCALE (1.1) larger than written (src/studio.ts scaleCss): 48px reads 52.8px
+    expect(dash).toContain(scaleCss(".sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:48px;"));
+    expect(dash).toContain(".sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:52.8px;");
+    expect(dash).toContain(scaleCss(".btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 12px;border-radius:6px;"));
     expect(dash).toContain('<img src="https://genclass.dev/brand/mark-64.png?v=2" alt="" width="22" height="22">');
+  });
+
+  it("the frame is drawn 1.1 times larger than written from 768px wide: px lengths scale, hairlines and breakpoints stay", () => {
+    expect(FRAME_SCALE).toBe(1.1);
+    expect(scaleCss("body{font:14px/1.5 x;border:1px solid;outline:2px solid;margin:-8px;top:.5px;font-size:13.5px}")).toBe(
+      "body{font:15.4px/1.5 x;border:1px solid;outline:2px solid;margin:-8.8px;top:.5px;font-size:14.9px}",
+    );
+    // a breakpoint is the window's size: kept; the rules inside it scale
+    expect(scaleCss("@media (max-width:900px){.a{padding:24px 20px}}")).toBe("@media (max-width:900px){.a{padding:26.4px 22px}}");
+    // viewport units, colours, names with digits, percentages and unitless numbers stay
+    expect(scaleCss(".b{height:calc(100vh - 48px);box-shadow:0 0 0 200vmax #121212;width:50%;z-index:40}.mt-12px{x:1}")).toBe(
+      ".b{height:calc(100vh - 52.8px);box-shadow:0 0 0 200vmax #121212;width:50%;z-index:40}.mt-12px{x:1}",
+    );
+    expect(scaleCss("a{width:10px}", 1)).toBe("a{width:10px}");
+    // only the frame's <style> elements: a script's "px" strings are left alone
+    const dash = dashboardPage("n", project);
+    expect(dash).toContain(".sb-rail{position:sticky;top:52.8px;align-self:flex-start;height:calc(100vh - 52.8px);width:228.8px;flex:none;z-index:30}");
+    expect(dash).not.toMatch(/<script[^>]*>[^<]*\d\.\dpx/);
+    // from 768px wide: the written CSS stays first (a phone draws it as written), the scaled copy follows in a media rule
+    const head = /<style nonce="n">([\s\S]*?)<\/style>/.exec(dash)![1]!;
+    expect(head.indexOf(".sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:48px;")).toBeLessThan(head.indexOf("@media (min-width:768px){"));
+    expect(head.slice(head.indexOf("@media (min-width:768px){"))).toContain("height:52.8px;");
   });
 
   it("scroll targets clear the sticky headers; one small button size per look; touch targets on coarse pointers", () => {
@@ -465,11 +489,11 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
     expect(site).toContain(".btn.sm{min-height:34px;");
     expect(site).toContain("@media (max-width:620px){.btn.sm{min-height:44px}}");
     const dash = dashboardPage("n", project);
-    expect(dash).toContain(".btn.sm,.btn.tiny{min-height:26px;padding:0 10px;font-size:12px}");
-    expect(dash).toContain("@media (pointer:coarse){.btn,.btn.sm,.btn.tiny{min-height:40px}");
+    expect(dash).toContain(scaleCss(".btn.sm,.btn.tiny{min-height:26px;padding:0 10px;font-size:12px}"));
+    expect(dash).toContain(scaleCss("@media (pointer:coarse){.btn,.btn.sm,.btn.tiny{min-height:40px}"));
     expect(dash).not.toMatch(/\.btn\.sm\{min-height:(28|30)px/);
     // every #section under Studio's 48px header
-    expect(dash).toContain(".sb [id]{scroll-margin-top:64px}");
+    expect(dash).toContain(scaleCss(".sb [id]{scroll-margin-top:64px}"));
     expect(startPage("n")).toContain(".tablewrap{overflow-x:auto;padding-left:6px;margin-left:-6px}");
     // a route with a total but no per-type breakdown is drawn in the Other grey, not stale responses' red-orange
     expect(dash).toContain('i0.style.background = "var(--t0)"');

@@ -1,5 +1,5 @@
 // HTML for the paid plans: /account/billing (the plan, its renewal or end, the plans side by side, Upgrade, Switch and
-// Manage billing buttons, the seats of a plan sold per seat, and the team: members, invite links and the teams the
+// Manage billing buttons, the apps (or seats) of a plan sold by quantity, and the team: members, invite links and the teams the
 // account is a member of; src/team.ts) and the plan-dependent sections of an owned app's dashboard (forwarding and export, and the
 // note on the time ranges). A switch between two paid plans is a new Checkout (src/billing.ts checkout); back from it
 // the page waits for the new plan. Same shell, tokens and rules as the account pages; server-rendered text goes through esc(),
@@ -22,7 +22,8 @@ import {
   GRACE_DAYS,
   keepDays,
   LIVE_STATUSES,
-  MAX_SEATS,
+  MAX_QUANTITY,
+  unitOf,
   PAID_PLANS,
   PAST_DUE_GRACE_DAYS,
   RETIRED_PLAN_IDS,
@@ -56,6 +57,8 @@ const switchable = (): string | null => (PAID_PLANS.length > 1 ? PAID_PLANS.map(
 export interface BillingView {
   account: { id: string; email: string | null; githubLogin: string | null };
   apps: { id: string; name: string }[];
+  /** How many of those apps the account owns (the others are its teams'): what a per_app plan counts. */
+  ownApps?: number;
   billing: Billing;
   /** What the account may use now: its paid plan or GenClass's grant (src/plans.ts accessOf). */
   access: Access;
@@ -145,10 +148,13 @@ function statusLine(v: BillingView, plan: Plan): string {
   if (b.subscription_status === "trialing") {
     return `You are on the ${name} plan, in a trial until ${day(b.current_period_end)}. When it ends your card is charged for the first month (${esc(priceText(plan))}), unless you cancel before in Manage billing.`;
   }
-  if (plan.per_seat === true && v.access.seats !== null) {
-    const n = v.access.seats;
+  const n = plan.per_seat === true ? v.access.seats : plan.per_app === true ? v.access.apps : null;
+  const unit = unitOf(plan);
+  if (unit && n !== null) {
     const total = (plan.price_usd_cents.monthly ?? 0) * n;
-    return `You are on the ${name} plan with <b>${n} seat${n === 1 ? "" : "s"}</b>, ${esc(priceText(plan))} ($${total % 100 ? (total / 100).toFixed(2) : String(total / 100)} a month). It renews on ${day(b.current_period_end)}. Add or remove seats in Manage billing.`;
+    const own = v.ownApps ?? v.apps.length;
+    const over = unit === "app" && own > n ? ` You have ${own} apps: ${own - n === 1 ? "the one made last has" : `the ${own - n} made last have`} the Free plan's features until you add apps.` : "";
+    return `You are on the ${name} plan for <b>${n} ${unit}${n === 1 ? "" : "s"}</b>, ${esc(priceText(plan))} ($${total % 100 ? (total / 100).toFixed(2) : String(total / 100)} a month). It renews on ${day(b.current_period_end)}. Add or remove ${unit}s in Manage billing.${over}`;
   }
   return `You are on the ${name} plan, ${esc(priceText(plan))}. It renews on ${day(b.current_period_end)}.`;
 }
@@ -162,11 +168,13 @@ function planColumn(v: BillingView, p: Plan, current: Plan): string {
   const waiting = !!awaited(v, current);
   const pick = !cur && v.picked === p.id && v.live && !waiting;
   // the first paid plan's button is the strong one, unless another was picked on the pricing page
-  // a plan sold per seat asks how many people first (the owner is one); Stripe's page shows it and lets them change it
-  const seats =
-    p.per_seat === true
-      ? `<label class="seats" for="seats-${esc(p.id)}">Seats <input id="seats-${esc(p.id)}" type="number" inputmode="numeric" min="1" max="${MAX_SEATS}" step="1" value="${Math.max(1, v.team?.used ?? 1)}" data-seats="${esc(p.id)}"></label>`
-      : "";
+  // a plan sold by quantity asks how many first: apps (the apps the account holds) or people (the owner is one);
+  // Stripe's page shows it and lets them change it
+  const unit = unitOf(p);
+  const start = unit === "app" ? Math.min(MAX_QUANTITY, Math.max(1, v.ownApps ?? v.apps.length)) : Math.max(1, v.team?.used ?? 1);
+  const seats = unit
+    ? `<label class="seats" for="seats-${esc(p.id)}">${unit === "app" ? "Apps" : "Seats"} <input id="seats-${esc(p.id)}" type="number" inputmode="numeric" min="1" max="${MAX_QUANTITY}" step="1" value="${start}" data-seats="${esc(p.id)}" data-unit="${unit}"></label>`
+    : "";
   const buy = `${seats}<button class="btn${p !== PAID_PLANS[0] && !pick ? " ghost" : ""}" type="button" data-plan="${esc(p.id)}"${pick ? " data-pick" : ""}><span>${subscribed ? "Switch to" : "Upgrade to"} ${esc(p.name)}</span></button>`;
   const talk = `<a class="btn ghost" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass ${p.name}`)}"><span>Talk to us</span></a>`;
   let act = "";
@@ -194,14 +202,16 @@ function teamSection(v: BillingView): string {
   const t = v.team;
   if (!t) return "";
   const holds = t.seats === null || t.seats > 1;
-  const sold = PAID_PLANS.filter((p) => p.per_seat === true).map((p) => p.name);
+  // the plans on sale that hold more than one person: per seat, or with no limit on people (Team, per app)
+  const sold = PAID_PLANS.filter((p) => p.per_seat === true || p.limits.seats === null).map((p) => p.name);
+  const perSeat = PAID_PLANS.some((p) => p.per_seat === true);
   const aside = t.seats === null ? `${t.used} ${t.used === 1 ? "person" : "people"}` : `${t.used} of ${t.seats} seat${t.seats === 1 ? "" : "s"} used`;
   let own: string;
   if (!holds) {
     own = `<p class="intro">${
       t.access.plan.per_seat === true
         ? "Your plan has one seat, yours. Add seats in Manage billing to invite your team."
-        : `The ${esc(t.access.plan.name)} plan is for one person.${sold.length ? ` Members come with ${esc(sold.join(" and "))}: one seat each, and they open the dashboards of your apps with their own sign-in.` : ""}`
+        : `The ${esc(t.access.plan.name)} plan is for one person.${sold.length ? ` Members come with ${esc(sold.join(" and "))}${perSeat ? ": one seat each, and they" : ": as many as you invite, and they"} open the dashboards of your apps with their own sign-in.` : ""}`
     }</p>`;
   } else {
     const over = t.members.some((m) => !m.active);
@@ -218,7 +228,7 @@ function teamSection(v: BillingView): string {
           .map((i) => `<tr><td>Not used yet</td><td data-l="Made">${time(i.created)}</td><td data-l="Expires">${time(i.expires)}</td><td class="act"><button class="btn sm ghost" type="button" data-rminvite="${esc(i.id)}">Revoke</button></td></tr>`)
           .join("")}</tbody></table></div>`
       : "";
-    own = `<p class="intro">Members open the dashboards of your apps with their own sign-in. They cannot change an app, its forwarding or export, or see billing. You are the first seat.</p>
+    own = `<p class="intro">Members open the dashboards of your apps with their own sign-in. They cannot change an app, its forwarding or export, or see billing.${t.seats === null ? "" : " You are the first seat."}</p>
   ${over ? '<p class="intro"><b>More members than seats.</b> The members marked No seat cannot open your dashboards until you add seats in Manage billing or remove someone.</p>' : ""}
   ${members}${invites}
   <div class="acct-form"><button class="btn ghost" type="button" id="invite"><span>Make an invite link</span></button></div>
@@ -292,7 +302,7 @@ ${
   manage
     ? `<section class="blk" id="manage">
   <div class="blk-h"><h2>Manage billing</h2><span class="aside">On Stripe</span></div>
-  <p class="intro">Card, invoices${PAID_PLANS.some((p) => p.per_seat === true) ? ", seats" : ""} and cancellation.</p>
+  <p class="intro">Card, invoices${PAID_PLANS.some((p) => p.per_app === true) ? ", apps" : ""}${PAID_PLANS.some((p) => p.per_seat === true) ? ", seats" : ""} and cancellation.</p>
   <div class="acct-form"><button class="btn ghost" type="button" id="portal"><span>Manage billing</span></button></div>
   <p class="err" id="portalerr" role="alert"></p>
 </section>`
@@ -312,8 +322,8 @@ ${teamSection(v)}
       var body = { plan: b.getAttribute("data-plan") }, seats = document.querySelector('[data-seats="' + body.plan + '"]');
       if (seats) {
         var n = Number(seats.value);
-        if (!(n >= 1 && n <= ${MAX_SEATS} && Math.floor(n) === n)) { err.textContent = "Seats is a whole number from 1 to ${MAX_SEATS}. For a larger team, email ${esc(CONTACT)}."; return; }
-        body.seats = n;
+        if (!(n >= 1 && n <= ${MAX_QUANTITY} && Math.floor(n) === n)) { err.textContent = (seats.getAttribute("data-unit") === "app" ? "Apps" : "Seats") + " is a whole number from 1 to ${MAX_QUANTITY}. For more, email ${esc(CONTACT)}."; return; }
+        body.quantity = n;
       }
       gcBusy(b, true, "Opening Stripe...");
       gcPost("/api/billing/checkout", body).then(function(j){ location.href = j.url; }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });

@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import PLANS_JSON from "../../billing/plans.json";
 import { resetTokenCache } from "../src/dashboard.js";
 import { resetOwnerCache } from "../src/paid.js";
-import { accessOf, byAgreement, cleanSeats, FREE, GRANT_PLAN, ownedPrice, PAID_PLANS, PLANS, planByLookupKey, planForPrice, priceText, RETIRED_PLAN_IDS, seatsOf, viewRanges } from "../src/plans.js";
+import { accessOf, appsOf, byAgreement, cleanQuantity, FREE, GRANT_PLAN, ownedPrice, PAID_PLANS, PLANS, planByLookupKey, planForPrice, priceText, RETIRED_PLAN_IDS, seatsOf, soldByQuantity, unitOf, viewRanges } from "../src/plans.js";
 import { isGenClassSubscription, resetStripeCache, retiredSubscription, subscriptionState } from "../src/stripe.js";
 import {
+  advance,
   call,
   createApp,
   deliver,
@@ -26,7 +27,8 @@ import {
 
 // The real plans (billing/plans.json, version 3, 2026-11-11), with no fixture: Free, Team and Enterprise. Free is what
 // finds, shows and fixes the problems (the dashboard's problems for one person, 3 apps, 7 days shown); Team is sold on
-// Stripe Checkout per developer (US$15 a seat a month) and adds visitor analytics, forwarding, export, 90 days and
+// Stripe Checkout per app since 2026-11-12 (US$15 an app a month; per developer before, test/team.test.ts keeps the
+// seats on that plan file) and adds visitor analytics, forwarding, export, 90 days and
 // members (test/team.test.ts); Enterprise is agreed by email and given by GenClass's own grant, with the classifier a
 // person trains. There is no trial. Selling one paid plan that is not per seat (Individual, until 2026-10-22) is tested on
 // test/fixtures/plans-individual.json (one-paid tests); the machinery that two paid plans or a locked dashboard reach
@@ -61,8 +63,11 @@ describe("billing/plans.json: the one source of plans", () => {
     // Free: what finds, shows and fixes the problems, for one person; nothing else
     expect(free!.limits).toEqual({ apps: 3, history_days: 7, seats: 1 });
     expect(free!.entitlements).toEqual({ dashboard: true, forwarding: false, export: false, analytics: false, custom_model: false, github_private: false });
-    // Team: sold per seat, everything a team uses but the classifier a person trains
-    expect(PLANS.map((p) => p.per_seat)).toEqual([false, true, false]);
+    // Team: sold per app (owner, 2026-11-12), any number of people, everything a team uses but the classifier
+    expect(PLANS.map((p) => p.per_seat)).toEqual([false, false, false]);
+    expect(PLANS.map((p) => p.per_app === true)).toEqual([false, true, false]);
+    expect(PLANS.map((p) => [soldByQuantity(p), unitOf(p)])).toEqual([[false, null], [true, "app"], [false, null]]);
+    expect(team!.features.map((x) => x.text)).toContain("Unlimited team members");
     expect(team!.limits).toEqual({ apps: null, history_days: 90, seats: null });
     expect(team!.entitlements).toEqual({ dashboard: true, forwarding: true, export: true, analytics: true, custom_model: false, github_private: true });
     expect(team!.features[0]).toEqual({ text: "Everything in Free", available: true });
@@ -86,7 +91,7 @@ describe("billing/plans.json: the one source of plans", () => {
     expect(GRANT_PLAN.id).toBe("enterprise");
     expect(FREE.id).toBe("free");
     expect(priceText(free!)).toBe("$0");
-    expect(priceText(team!)).toBe("$15 / developer / month");
+    expect(priceText(team!)).toBe("$15 / app / month");
     expect(priceText(enterprise!)).toBe("By agreement");
     expect(planByLookupKey("genclass_team_monthly")?.id).toBe("team");
     // Individual (until 2026-10-22) and the plans before it name no plan any more
@@ -110,43 +115,53 @@ describe("billing/plans.json: the one source of plans", () => {
     const at = new Date("2026-10-19T12:00:00Z");
     const later = "2026-12-31T00:00:00.000Z";
     const row = (o: Record<string, unknown> = {}) => ({ plan: "free", stripe_mode: null, comp_until: null, ...o });
-    const none = { plan: FREE, source: null, seats: 1 };
+    const none = { plan: FREE, source: null, seats: 1, apps: 3 };
     expect(accessOf(null, null, at)).toEqual(none);
     expect(accessOf(row(), "live", at)).toEqual(none);
-    expect(accessOf(row({ comp_until: later }), "live", at)).toMatchObject({ source: "comp", plan: { id: "enterprise" }, seats: null });
+    expect(accessOf(row({ comp_until: later }), "live", at)).toMatchObject({ source: "comp", plan: { id: "enterprise" }, seats: null, apps: null });
     expect(accessOf(row({ comp_until: "2026-10-01T00:00:00.000Z" }), "live", at)).toEqual(none);
     // the plans that ended (Pro and Custom on 2026-10-19, Individual on 2026-10-22) count as Free
     expect(accessOf(row({ plan: "individual", stripe_mode: "live" }), "live", at)).toEqual(none);
     expect(accessOf(row({ plan: "individual", comp_until: later }), "live", at)).toMatchObject({ source: "comp", plan: { id: "enterprise" } });
     expect(accessOf(row({ plan: "pro" }), "live", at)).toEqual(none);
     expect(accessOf(row({ plan: "custom", stripe_mode: "live" }), "live", at)).toEqual(none);
-    // Team, paid: the seats are the subscription's quantity, one when the row has none
-    expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 4 }), "live", at)).toMatchObject({ source: "paid", plan: { id: "team" }, seats: 4 });
-    expect(accessOf(row({ plan: "team", stripe_mode: "live" }), "live", at)).toMatchObject({ source: "paid", plan: { id: "team" }, seats: 1 });
+    // Team, paid: the subscription's quantity (the seats column) is the apps, one when the row has none; no seat limit
+    expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 4 }), "live", at)).toMatchObject({ source: "paid", plan: { id: "team" }, seats: null, apps: 4 });
+    expect(accessOf(row({ plan: "team", stripe_mode: "live" }), "live", at)).toMatchObject({ source: "paid", plan: { id: "team" }, seats: null, apps: 1 });
     // bought in test mode: counts only under a test key
     expect(accessOf(row({ plan: "team", stripe_mode: "test", seats: 4 }), "live", at)).toEqual(none);
-    expect(accessOf(row({ plan: "team", stripe_mode: "test", seats: 4 }), "test", at)).toMatchObject({ source: "paid", seats: 4 });
-    // a grant names its plan (comp_plan); unknown, empty or free: plans.json grant_plan. A grant has no seat count
-    expect(accessOf(row({ comp_until: later, comp_plan: "team" }), "live", at)).toMatchObject({ source: "comp", plan: { id: "team" }, seats: null });
+    expect(accessOf(row({ plan: "team", stripe_mode: "test", seats: 4 }), "test", at)).toMatchObject({ source: "paid", apps: 4 });
+    // a grant names its plan (comp_plan); unknown, empty or free: plans.json grant_plan. A grant has no seat or app count
+    expect(accessOf(row({ comp_until: later, comp_plan: "team" }), "live", at)).toMatchObject({ source: "comp", plan: { id: "team" }, seats: null, apps: null });
     for (const comp_plan of [null, "", "free", "pro"]) expect(accessOf(row({ comp_until: later, comp_plan }), "live", at), String(comp_plan)).toMatchObject({ source: "comp", plan: { id: "enterprise" } });
-    // both: the plan listed later applies (a Team grant does not lower a paid Team's seats; an Enterprise grant wins)
-    expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 2, comp_until: later, comp_plan: "team" }), "live", at)).toMatchObject({ source: "paid", seats: 2 });
-    expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 2, comp_until: later }), "live", at)).toMatchObject({ source: "comp", plan: { id: "enterprise" }, seats: null });
+    // both: the plan listed later applies (a Team grant does not change a paid Team's apps; an Enterprise grant wins)
+    expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 2, comp_until: later, comp_plan: "team" }), "live", at)).toMatchObject({ source: "paid", apps: 2 });
+    expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 2, comp_until: later }), "live", at)).toMatchObject({ source: "comp", plan: { id: "enterprise" }, seats: null, apps: null });
     // PLAN_GATES open (a self-hosted collector): everyone, an app without an account too, has the grant plan
     expect(accessOf(null, null, at, true)).toMatchObject({ source: "open", plan: { id: "enterprise" }, seats: null });
     expect(accessOf(row(), null, at, true)).toMatchObject({ source: "open", plan: { id: "enterprise" } });
   });
 
-  it("seats: 1 to 200 whole seats; a paid per-seat plan holds what was paid for, any other plan its own limit", () => {
-    for (const ok of [1, 2, 200]) expect(cleanSeats(ok)).toBe(ok);
-    for (const bad of [0, -1, 201, 1.5, "3", null, undefined, NaN, Infinity]) expect(cleanSeats(bad), String(bad)).toBeNull();
+  it("quantity: 1 to 200; a paid per-app plan holds the apps paid for and any number of people; a per-seat plan the seats", () => {
+    for (const ok of [1, 2, 200]) expect(cleanQuantity(ok)).toBe(ok);
+    for (const bad of [0, -1, 201, 1.5, "3", null, undefined, NaN, Infinity]) expect(cleanQuantity(bad), String(bad)).toBeNull();
     const [free, team, enterprise] = PLANS;
     expect(seatsOf(free!, null, null)).toBe(1);
-    expect(seatsOf(team!, "paid", 5)).toBe(5);
-    expect(seatsOf(team!, "paid", null)).toBe(1);
-    expect(seatsOf(team!, "paid", 0)).toBe(1);
-    expect(seatsOf(team!, "comp", 5)).toBeNull();
+    expect(appsOf(free!, null, null)).toBe(3);
+    // Team (per app): the apps paid for, at least 1; no seat limit; a grant has no app limit
+    expect(appsOf(team!, "paid", 5)).toBe(5);
+    expect(appsOf(team!, "paid", null)).toBe(1);
+    expect(appsOf(team!, "paid", 0)).toBe(1);
+    expect(appsOf(team!, "comp", 5)).toBeNull();
+    expect(seatsOf(team!, "paid", 5)).toBeNull();
     expect(seatsOf(enterprise!, "comp", null)).toBeNull();
+    expect(appsOf(enterprise!, "comp", null)).toBeNull();
+    // a per-seat plan (Team until 2026-11-12) holds the seats paid for, and its apps are its own limit
+    const perSeat = { ...team!, per_app: false, per_seat: true };
+    expect(seatsOf(perSeat, "paid", 5)).toBe(5);
+    expect(seatsOf(perSeat, "paid", null)).toBe(1);
+    expect(seatsOf(perSeat, "comp", 5)).toBeNull();
+    expect(appsOf(perSeat, "paid", 5)).toBeNull();
   });
 });
 
@@ -258,8 +273,9 @@ describe("no trial", () => {
       // Team is on sale to everyone under a live key
       on_sale: true,
       access: null,
-      // Free holds one person
+      // Free holds one person and 3 apps
       seats: 1,
+      apps: 3,
     });
   });
 
@@ -301,7 +317,7 @@ describe("no trial", () => {
   });
 });
 
-describe("Team is the one plan sold on the site, per seat; Enterprise by email", () => {
+describe("Team is the one plan sold on the site, per app; Enterprise by email", () => {
   it("checkout sells Team and nothing else, and never calls Stripe for another plan", async () => {
     const { env } = setup(LIVE);
     const { cookie } = await signedIn(env);
@@ -311,18 +327,26 @@ describe("Team is the one plan sold on the site, per seat; Enterprise by email",
       expect(r.status, plan).toBe(400);
       expect(((await r.json()) as any).error).toBe("choose a plan: team");
     }
-    for (const seats of [0, 201, 1.5, "3", null]) {
-      const r = await call(env, "POST", "/api/billing/checkout", { body: { plan: "team", seats }, cookie, fetch: s.fetch });
-      expect(r.status, String(seats)).toBe(400);
-      expect(((await r.json()) as any).error).toBe("seats is a whole number from 1 to 200; for a larger team email mehar@genclass.dev");
+    for (const quantity of [0, 201, 1.5, "3", null]) {
+      for (const key of ["quantity", "seats"]) {
+        const r = await call(env, "POST", "/api/billing/checkout", { body: { plan: "team", [key]: quantity }, cookie, fetch: s.fetch });
+        expect(r.status, `${key} ${String(quantity)}`).toBe(400);
+        expect(((await r.json()) as any).error).toBe("the number of apps is a whole number from 1 to 200; for more email mehar@genclass.dev");
+      }
     }
     expect(s.calls).toEqual([]);
   });
 
-  it("a Team checkout: the seats are the quantity, the buyer can still change them on Stripe's page; one seat when none is sent", async () => {
-    for (const [body, seats] of [[{ plan: "team", seats: 3 }, "3"], [{ plan: "team" }, "1"]] as const) {
+  it("a Team checkout: the apps are the quantity, the buyer can still change them on Stripe's page and add a promotion code; the account's own apps when none is sent", async () => {
+    for (const [body, seats, made] of [
+      [{ plan: "team", quantity: 3 }, "3", 0],
+      [{ plan: "team", seats: 3 }, "3", 0],
+      [{ plan: "team" }, "1", 0],
+      [{ plan: "team" }, "2", 2],
+    ] as const) {
       const { env } = setup(LIVE);
       const { cookie, account } = await signedIn(env);
+      for (let i = 0; i < made; i++) await createApp(env, cookie, `App ${i}`);
       const s = fakeStripe();
       const r = await call(env, "POST", "/api/billing/checkout", { body, cookie, fetch: s.fetch });
       expect(r.status).toBe(200);
@@ -339,6 +363,7 @@ describe("Team is the one plan sold on the site, per seat; Enterprise by email",
         "metadata[genclass_plan]": "team",
         "metadata[genclass_seats]": seats,
         payment_method_collection: "always",
+        allow_promotion_codes: "true",
         "subscription_data[billing_mode][type]": "flexible",
       });
       // Team is sold on standard Checkout, never through Managed Payments
@@ -367,14 +392,14 @@ describe("Team is the one plan sold on the site, per seat; Enterprise by email",
       return t.sql.rows("SELECT plan, seats FROM accounts")[0];
     };
     expect(await apply(sub(4))).toEqual({ plan: "team", seats: 4 });
-    expect(await (await call(t.env, "GET", "/api/billing", { cookie: a.cookie })).json()).toMatchObject({ plan: "team", access: "paid", seats: 4 });
+    expect(await (await call(t.env, "GET", "/api/billing", { cookie: a.cookie })).json()).toMatchObject({ plan: "team", access: "paid", seats: null, apps: 4 });
     expect(await apply(sub(2))).toEqual({ plan: "team", seats: 2 });
     expect(await apply(sub(2, "canceled"))).toEqual({ plan: "free", seats: null });
     log.mockRestore();
-    expect(await (await call(t.env, "GET", "/api/billing", { cookie: a.cookie })).json()).toMatchObject({ plan: "free", access: null, seats: 1 });
+    expect(await (await call(t.env, "GET", "/api/billing", { cookie: a.cookie })).json()).toMatchObject({ plan: "free", access: null, seats: 1, apps: 3 });
   });
 
-  it("the billing page: three plans; Team with its price, a seats box and Upgrade for an account that can buy; Talk to us for Enterprise", async () => {
+  it("the billing page: three plans; Team with its price, an apps box and Upgrade for an account that can buy; Talk to us for Enterprise", async () => {
     for (const keys of [{}, LIVE]) {
       const t = setup(keys);
       const a = await signedIn(t.env);
@@ -382,13 +407,13 @@ describe("Team is the one plan sold on the site, per seat; Enterprise by email",
       const live = "STRIPE_SECRET_KEY" in keys;
       expect(page).toContain(live ? "You are on the <b>Free</b> plan.</p>" : "You are on the <b>Free</b> plan. Paid plans are not on sale yet.</p>");
       expect(page).toContain("grid-template-columns:repeat(3,minmax(0,1fr))");
-      expect(page).toContain('<p class="price">$15 / developer / month</p>');
+      expect(page).toContain('<p class="price">$15 / app / month</p>');
       expect(page).toContain('<span class="aside">US dollars, billed monthly</span>');
-      expect(page).toContain("<li>Team members, one seat each</li>");
+      expect(page).toContain("<li>Unlimited team members</li>");
       // the classifier a person trains is listed under Enterprise only
       expect(page.match(/<li>Your own classifier/g)).toHaveLength(1);
       if (live) {
-        expect(page).toContain('<input id="seats-team" type="number" inputmode="numeric" min="1" max="200" step="1" value="1" data-seats="team">');
+        expect(page).toContain('Apps <input id="seats-team" type="number" inputmode="numeric" min="1" max="200" step="1" value="1" data-seats="team" data-unit="app">');
         expect(page).toContain('<button class="btn" type="button" data-plan="team"><span>Upgrade to Team</span></button>');
       } else {
         expect(page).not.toContain("data-plan=");
@@ -400,26 +425,62 @@ describe("Team is the one plan sold on the site, per seat; Enterprise by email",
       expect(page).toContain('Questions about Team, Enterprise, your own classifier, self-hosting or invoices? Email <a href="mailto:mehar@genclass.dev">mehar@genclass.dev</a>.');
       // the Team section says what Free is: one person, members with Team
       expect(page).toContain('<span class="aside">1 of 1 seat used</span>');
-      expect(page).toContain("The Free plan is for one person. Members come with Team: one seat each, and they open the dashboards of your apps with their own sign-in.");
+      expect(page).toContain("The Free plan is for one person. Members come with Team: as many as you invite, and they open the dashboards of your apps with their own sign-in.");
       expect(visible(page)).not.toMatch(/—|!/);
     }
   });
 
-  it("a paid Team account: the status line says its seats and the monthly total; a server with PLAN_GATES open says it sells nothing", async () => {
+  it("a paid Team account: the status line says its apps and the monthly total; a server with PLAN_GATES open says it sells nothing", async () => {
     const t = setup(LIVE);
     const a = await signedIn(t.env);
     setPlan(t.sql, a.account.id, "team", { stripe_customer_id: "cus_b000000001", stripe_mode: "live", seats: 3, subscription_id: "sub_b000000001", subscription_status: "active", current_period_end: "2026-11-13T12:00:00.000Z" });
     const page = await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }));
-    expect(page).toContain('You are on the <b>Team</b> plan with <b>3 seats</b>, $15 / developer / month ($45 a month). It renews on <time datetime="2026-11-13T12:00:00.000Z" data-f="date">2026-11-13</time>. Add or remove seats in Manage billing.');
+    expect(page).toContain('You are on the <b>Team</b> plan for <b>3 apps</b>, $15 / app / month ($45 a month). It renews on <time datetime="2026-11-13T12:00:00.000Z" data-f="date">2026-11-13</time>. Add or remove apps in Manage billing.');
     expect(page).toContain('<span class="tag">Your plan</span>');
-    expect(page).toContain('<span class="aside">1 of 3 seats used</span>');
-    expect(page).toContain('<p class="intro">Card, invoices, seats and cancellation.</p>');
+    expect(page).toContain('<span class="aside">1 person</span>');
+    expect(page).toContain('<p class="intro">Card, invoices, apps and cancellation.</p>');
     const open = setup({ PLAN_GATES: "open" });
     const b = await signedIn(open.env);
     const self = await text(call(open.env, "GET", "/account/billing", { cookie: b.cookie }));
     expect(self).toContain("This server gives every account everything in <b>Enterprise</b>: it sells no plans (PLAN_GATES is open).");
     expect(self).toContain('<span class="tag">This server</span>');
     expect(self).not.toContain("data-plan=");
+  });
+
+  it("per app: no more apps than paid for; with fewer apps paid than held, only the first apps made keep Team", async () => {
+    const t = setup(LIVE);
+    const a = await signedIn(t.env);
+    const paid = (apps: number) =>
+      setPlan(t.sql, a.account.id, "team", { stripe_customer_id: "cus_p000000001", stripe_mode: "live", seats: apps, subscription_id: "sub_p000000001", subscription_status: "active", current_period_end: "2026-11-13T12:00:00.000Z" });
+    paid(2);
+    const first = await createApp(t.env, a.cookie, "First");
+    advance(1000);
+    const second = await createApp(t.env, a.cookie, "Second");
+    advance(1000);
+    // the third is past the 2 apps paid for: refused, with where to add one
+    const r = await call(t.env, "POST", "/api/account/projects", { body: { name: "Third" }, cookie: a.cookie });
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({
+      ok: false,
+      error: "your Team plan pays for 2 apps; add apps in Manage billing at https://genclass.dev/account/billing",
+      upgrade_url: "https://genclass.dev/account/billing",
+    });
+    const forwarding = async (id: string) => ((await (await call(t.env, "GET", `/api/account/projects/${id}/integrations`, { cookie: a.cookie })).json()) as any).forwarding;
+    expect([await forwarding(first.id), await forwarding(second.id)]).toEqual([true, true]);
+    // one app paid for now (lowered in Manage billing): the app made first keeps Team, the other has Free's features
+    paid(1);
+    resetOwnerCache();
+    expect([await forwarding(first.id), await forwarding(second.id)]).toEqual([true, false]);
+    const exp = await call(t.env, "GET", `/api/account/projects/${second.id}/events`, { cookie: a.cookie });
+    expect(exp.status).toBe(403);
+    expect(await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }))).toContain(
+      "You are on the <b>Team</b> plan for <b>1 app</b>, $15 / app / month ($15 a month).",
+    );
+    expect(await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }))).toContain("You have 2 apps: the one made last has the Free plan's features until you add apps.");
+    // a grant of Team has no app limit
+    setPlan(t.sql, a.account.id, "free", { stripe_customer_id: null, subscription_id: null, subscription_status: null, current_period_end: null, seats: null, comp_until: "9999-12-31T00:00:00.000Z", comp_plan: "team" });
+    expect([await forwarding(first.id), await forwarding(second.id)]).toEqual([true, true]);
+    expect((await call(t.env, "POST", "/api/account/projects", { body: { name: "Third" }, cookie: a.cookie })).status).toBe(201);
   });
 
   it("an account still stored on Individual reads as Free; GenClass's grant gives Enterprise", async () => {

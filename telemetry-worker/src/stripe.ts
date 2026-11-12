@@ -62,8 +62,9 @@
 //   NOTIFY_WEBHOOK) only once Stripe reports that plan's price paid: the subscription's latest invoice (fetched with it)
 //   is paid and has a positive line on that price (a first invoice, which a switch from another plan is too), seen on
 //   invoice.paid or on the subscription's own events.
-// - A plan sold per seat (billing/plans.json per_seat: Team) is one subscription item whose quantity is the seats: the
-//   buyer picks it on GenClass's billing page (1 to MAX_SEATS), Checkout shows it and lets them change it there, and
+// - A plan sold by quantity (billing/plans.json per_app: Team since 2026-11-12, or per_seat) is one subscription item
+//   whose quantity is the apps (or the seats): the buyer picks it on GenClass's billing page (1 to MAX_QUANTITY),
+//   Checkout shows it and lets them change it there, and
 //   afterwards they change it in the Billing Portal (GenClass's configuration allows a quantity update for those
 //   products only, never a switch of price; scripts/stripe-setup.mjs). The webhook writes the quantity Stripe has now
 //   to accounts.seats with the plan, so seats follow the subscription like the plan does; src/team.ts reads them.
@@ -72,7 +73,7 @@
 import type { Env } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like } from "./dashboard.js";
 import { json } from "./http.js";
-import { cleanSeats, entitled, LIVE_STATUSES, LOOKUP_PREFIX, MAX_SEATS, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
+import { cleanQuantity, entitled, soldByQuantity, LIVE_STATUSES, LOOKUP_PREFIX, MAX_QUANTITY, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
 import { equalStrings } from "./webauthn.js";
 
 export const STRIPE_API = "https://api.stripe.com";
@@ -391,13 +392,13 @@ export function managedPayments(env: Env, plan: Plan): boolean {
 export async function checkoutSession(
   env: Env,
   f: Fetch,
-  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number },
+  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; quantity?: number },
 ): Promise<string> {
   const lookup = o.plan.stripe_lookup_keys.monthly;
   if (!lookup) throw new StripeError(`the ${o.plan.name} plan has no monthly price`, 400);
-  // a plan sold per seat: the quantity is the seats asked for, and the buyer can still change it on Stripe's page
-  const perSeat = o.plan.per_seat === true;
-  const seats = perSeat ? (cleanSeats(o.seats ?? 1) ?? 1) : 1;
+  // a plan sold by quantity: the apps or seats asked for, and the buyer can still change it on Stripe's page
+  const perSeat = soldByQuantity(o.plan);
+  const seats = perSeat ? (cleanQuantity(o.quantity ?? 1) ?? 1) : 1;
   if (o.switchFrom !== undefined && !idOf(o.switchFrom)) throw new StripeError("not a subscription id", 400);
   const closed: string[] = [];
   if (!o.fresh) {
@@ -432,13 +433,15 @@ export async function checkoutSession(
         mode: "subscription",
         customer: o.customer,
         client_reference_id: o.account.id,
-        line_items: [perSeat ? { price, quantity: seats, adjustable_quantity: { enabled: true, minimum: 1, maximum: MAX_SEATS } } : { price, quantity: 1 }],
+        line_items: [perSeat ? { price, quantity: seats, adjustable_quantity: { enabled: true, minimum: 1, maximum: MAX_QUANTITY } } : { price, quantity: 1 }],
         // back from a switch, the page waits for the new plan
         success_url: `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}`,
         cancel_url: `${o.origin}/account/billing`,
         metadata: { ...mark, genclass_plan: o.plan.id, ...(perSeat ? { genclass_seats: String(seats) } : {}) },
         // a card (or another payment method) up front
         payment_method_collection: "always",
+        // the "Add promotion code" field: codes made in the Stripe dashboard (Product catalog, Coupons) for GenClass's prices
+        allow_promotion_codes: true,
         subscription_data: { metadata: mark, billing_mode: { type: "flexible" } },
         managed_payments: managedPayments(env, o.plan) ? { enabled: true } : undefined,
       },
@@ -594,7 +597,7 @@ export interface SubscriptionState {
   lookupKey: string | null;
   periodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  /** For a plan sold per seat: the quantity of its subscription item (1 to MAX_SEATS; a larger one reads as MAX_SEATS). Else null. */
+  /** For a plan sold by quantity: the quantity of its subscription item, apps or seats (1 to MAX_QUANTITY; a larger one reads as MAX_QUANTITY). Else null. */
   seats: number | null;
 }
 
@@ -636,7 +639,7 @@ export function subscriptionState(sub: Obj, o: { pastDueSince?: string | null; n
     lookupKey,
     periodEnd: isoOf(end),
     cancelAtPeriodEnd: status !== "canceled" && (sub?.cancel_at_period_end === true || typeof sub?.cancel_at === "number"),
-    seats: priced?.per_seat === true ? (cleanSeats(quantity) ?? (typeof quantity === "number" && quantity > MAX_SEATS ? MAX_SEATS : 1)) : null,
+    seats: priced && soldByQuantity(priced) ? (cleanQuantity(quantity) ?? (typeof quantity === "number" && quantity > MAX_QUANTITY ? MAX_QUANTITY : 1)) : null,
   };
 }
 
