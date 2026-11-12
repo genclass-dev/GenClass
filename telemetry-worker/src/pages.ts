@@ -1925,6 +1925,8 @@ const DASH_JS = `
       host.appendChild(box);
     });
     var ed = document.getElementById("ixfunedit"); ed.textContent = "";
+    // a member of the app's team reads the funnels; the owner edits them
+    if (P.member) return;
     if (!editing) {
       var b = el("button", "btn ghost sm", F.length ? "Edit funnels" : "Add a funnel"); b.type = "button";
       b.addEventListener("click", function(){ editing = true; funnels(lastS, pagesByViews); var f0 = document.querySelector("#ixfunedit input"); if (f0) f0.focus(); });
@@ -2507,6 +2509,11 @@ export interface DashboardOptions {
   account?: { apps: { id: string; name: string }[]; current: string; email: string | null; plan?: string | null };
   /** The project's id (account mode). */
   id?: string;
+  /**
+   * Account mode: the signed-in account is a member of the app's team, not its owner (src/team.ts). The page is
+   * read-only: no agent link button, no funnel editor, no Delete project (the server refuses each with a 404 anyway).
+   */
+  member?: boolean;
   /** When the app's first batch arrived (account mode; null while waiting). */
   firstEvent?: string | null;
   /** Account mode: whether the app's private dashboard link still opens these stats (the footer says so). */
@@ -2783,12 +2790,15 @@ function connectDialog(c: ConnectOptions): string {
  * Account mode: none yet, or one made before (kept only as a hash); Create makes one and shows it once. A private
  * link is its own agent link; the page script fills it in.
  */
-function agentAccess(acct: boolean, privateLink: boolean): string {
+function agentAccess(acct: boolean, privateLink: boolean, member = false): string {
   const out =
     '<div class="alink-out hidden"><div class="kval"><code></code><button class="btn sm ghost" type="button" data-copy="" aria-label="Copy the agent link">Copy</button></div></div>';
   if (!acct)
     return `<div class="alink"><div class="keyrow"><div class="k">Agent link</div><div class="kval"><span class="alink-st">This page's address</span></div>
 <p class="kn">Keep it private.</p></div>${out}</div>`;
+  // a member of the app's team: the link is the owner's to make
+  if (member)
+    return `<div class="alink"><div class="keyrow"><div class="k">Agent link</div><div class="kval"><span class="alink-st">The app's owner makes it.</span></div></div></div>`;
   return `<div class="alink"><div class="keyrow"><div class="k">Agent link</div><div class="kval"><span class="alink-st">${privateLink ? "On" : "None yet."}</span></div>
 <p class="kn">Read only. Keep it private.</p></div>
 ${out}<div class="row"><button class="btn sm" type="button" data-mklink${privateLink ? ' data-on="1"' : ""}>${privateLink ? "New agent link" : "Create agent link"}</button></div><p class="err" role="alert"></p></div>`;
@@ -2807,7 +2817,7 @@ const MCP_TOOLS: [string, string][] = [
 ];
 
 /** The MCP view: connect a coding agent (client, options, configuration, prompt), the agent link, the tools, the data. */
-function mcpView(acct: boolean, privateLink: boolean): string {
+function mcpView(acct: boolean, privateLink: boolean, member = false): string {
   return `<div id="mcp" data-v="mcp" data-tour="74|Your coding agent|Connect Claude Code or Codex so it can read these problems and fix them." data-tour-view="mcp">
 <section class="blk">
   <div class="blk-h"><h2>Connect your agent</h2><span class="aside">${MCP_PKG}</span></div>
@@ -2815,7 +2825,7 @@ function mcpView(acct: boolean, privateLink: boolean): string {
 </section>
 <section class="blk" id="mcp-access">
   <div class="blk-h"><h2>Agent access</h2><span class="aside">GENCLASS_DASHBOARD</span></div>
-  ${agentAccess(acct, privateLink)}
+  ${agentAccess(acct, privateLink, member)}
 </section>
 <section class="blk" id="mcp-tools">
   <div class="blk-h"><h2>Tools</h2><span class="aside">${MCP_TOOLS.length}</span></div>
@@ -2825,7 +2835,7 @@ function mcpView(acct: boolean, privateLink: boolean): string {
 </section>
 <section class="blk" id="mcp-json">
   <div class="blk-h"><h2>JSON</h2><span class="aside">Read only</span></div>
-  <pre class="code" id="jsonurl">Create an agent link first.</pre>
+  <pre class="code" id="jsonurl">${member ? "Ask the app's owner for the agent link." : "Create an agent link first."}</pre>
 </section>
 </div>`;
 }
@@ -2838,8 +2848,11 @@ export function dashboardPage(
   const acct = opts.account;
   if (acct && opts.locked) return lockedDashboardPage(nonce, project, { ...opts, account: acct });
   const waiting = !project.lastEvent;
+  // a member of the app's team (never without an account): the owner-only controls are left out
+  const member = !!acct && opts.member === true;
+  const owner = !!acct && !!opts.id && !member;
   const base = acct
-    ? { ...project, id: opts.id, firstEvent: opts.firstEvent ?? null, statsUrl: `/api/account/projects/${opts.id}/stats`, funnelsUrl: `/api/account/projects/${opts.id}/funnels`, account: true, ...(opts.endpoint ? { endpoint: opts.endpoint } : {}) }
+    ? { ...project, id: opts.id, firstEvent: opts.firstEvent ?? null, statsUrl: `/api/account/projects/${opts.id}/stats`, funnelsUrl: `/api/account/projects/${opts.id}/funnels`, account: true, ...(member ? { member: true } : {}), ...(opts.endpoint ? { endpoint: opts.endpoint } : {}) }
     : opts.endpoint
       ? { ...project, endpoint: opts.endpoint }
       : project;
@@ -2859,7 +2872,7 @@ export function dashboardPage(
     runtimeReady: opts.runtimeReady === true,
     endpoint: opts.endpoint ?? null,
     analytics: promptBlock(project.token, where, opts.endpoint ?? null, "Paste it into your coding agent."),
-    choices: { agent: acct ? (opts.privateLink ? "replace" : "new") : "this" },
+    choices: { agent: member ? null : acct ? (opts.privateLink ? "replace" : "new") : "this" },
   });
   const settings = `<div id="settings" data-v="settings" data-tour="78|Settings|Your project key, links, and the rest." data-tour-view="settings">
 <section class="blk">
@@ -2868,7 +2881,7 @@ export function dashboardPage(
   ${acct && opts.id ? `<div class="keyrow"><div class="k">Project ID</div><div class="kval"><code id="sid">${esc(opts.id)}</code><button class="btn sm ghost" type="button" data-copy="${esc(opts.id)}" data-target="sid" aria-label="Copy the project ID">Copy</button></div></div>` : ""}
   <div class="keyrow"><div class="k">Created</div><div class="kval"><span>${project.created ? esc(project.created.slice(0, 10)) : "-"}</span></div></div>
   <div class="keyrow"><div class="k">Data kept</div><div class="kval"><span id="keep">${keep >= 365 ? "1 year" : `${keep} days`}</span></div></div>
-  <div class="keyrow"><div class="k">Owner</div><div class="kval"><span>${acct ? esc(orgName(acct.email)) : "Private link"}</span>${acct ? "" : '<a class="btn sm ghost" href="/login?next=%2Faccount%3Fclaim%3D1">Add to an account</a>'}</div></div>
+  <div class="keyrow"><div class="k">Owner</div><div class="kval"><span>${member ? "Your team's owner" : acct ? esc(orgName(acct.email)) : "Private link"}</span>${acct ? "" : '<a class="btn sm ghost" href="/login?next=%2Faccount%3Fclaim%3D1">Add to an account</a>'}</div></div>
 </section>
 <section class="blk" id="keys">
   <div class="blk-h"><h2>API keys</h2></div>
@@ -2877,10 +2890,10 @@ export function dashboardPage(
 </section>
 <section class="blk">
   <div class="blk-h"><h2>Agent access</h2><span class="aside">For @genclass/mcp</span></div>
-  ${agentAccess(!!acct, !!opts.privateLink)}
+  ${agentAccess(!!acct, !!opts.privateLink, member)}
 </section>
 ${
-  acct && opts.id
+  owner
     ? `<section class="blk" id="delproj">
   <div class="blk-h"><h2>Delete project</h2><span class="aside">Cannot be undone</span></div>
   <p class="poss-note">Deletes ${esc(project.name)} and all its data.</p>
@@ -2941,7 +2954,7 @@ ${
       groups: [
         { label: "Configuration", items: [{ href: "#settings", label: "General" }, { href: "#keys", label: "API keys" }] },
         ...(opts.extra ? [{ label: "Data", items: [{ href: "#forwarding", label: "Integrations" }, { href: "#export", label: "Export" }] }] : []),
-        ...(acct && opts.id ? [{ label: "Danger zone", items: [{ href: "#delproj", label: "Delete project" }] }] : []),
+        ...(owner ? [{ label: "Danger zone", items: [{ href: "#delproj", label: "Delete project" }] }] : []),
       ],
     },
   ];
@@ -3074,7 +3087,7 @@ ${connect}
   <p class="loop-foot" id="loop-foot"></p>
 </section>
 </div>
-${mcpView(!!acct, !!opts.privateLink)}
+${mcpView(!!acct, !!opts.privateLink, member)}
 ${settings}
 ${opts.extra?.html ?? ""}
 </div>`;

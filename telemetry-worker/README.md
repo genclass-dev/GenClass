@@ -965,7 +965,12 @@ Nothing here has been run. Each step is the owner's, and the Stripe ones need a 
    configuration the account's default (the account had none), so the second, `bpc_1Uan8D4239nVJvut5P17xZnQ`, is
    the one the script finds and the worker can open. A Checkout Session with the worker's Team parameters (3 seats,
    adjustable) was accepted there too. The script reports all of it as unchanged and adds the webhook endpoint and
-   the worker's settings. Nothing exists in live mode yet.
+   the worker's settings.
+   In the live account (`acct_1UQIFDKdAcQCxrpH`) the same was made the same way on 2026-11-11, on the owner's yes:
+   the product `genclass_team`, the price `price_1UaoDhKdAcQCxrpHINiYv5uX` and two portal configurations, of which
+   `bpc_1UaoDyKdAcQCxrpH3NEpehi1` is the one that is not the default. No webhook endpoint and no worker secret
+   exist yet, so nothing is on sale: the script, run with the live key, reports the product, price and portal as
+   unchanged and adds both.
 4. `npx --yes wrangler@4 deploy`. From then: Free shows 7 days and no visitor analytics, export or forwarding; a
    fourth app is refused; the GitHub App needs Team for private repositories (`GITHUB_APP_PRIVATE_REPOS = "plan"`
    in `wrangler.toml`). With a live `STRIPE_SECRET_KEY` Team is on sale to everyone; with a test key only to
