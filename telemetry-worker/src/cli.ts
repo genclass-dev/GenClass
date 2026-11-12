@@ -202,7 +202,7 @@ async function account(c: C): Promise<Response> {
     plan: { id: access.plan.id, name: access.plan.name, price: access.plan.id === FREE.id ? null : priceText(access.plan), summary: access.plan.summary },
     // why the account has its plan now: "paid", "comp" (GenClass's own grant), "open" (this server's PLAN_GATES), or null on Free
     access: access.source,
-    limits: { apps: access.plan.limits.apps, history_days: access.plan.limits.history_days, seats: access.seats, suggestions_per_day: lim.per_day, suggestions_shown: lim.shown },
+    limits: { apps: access.apps, history_days: access.plan.limits.history_days, seats: access.seats, suggestions_per_day: lim.per_day, suggestions_shown: lim.shown },
     used: { apps: apps.filter((p) => p.account_id === a.account.id).length, suggestions_today: await usedToday(c.db, a.account.id, c.now), seats: t.used },
     includes: { analytics: entitled(access.plan, "analytics"), forwarding: entitled(access.plan, "forwarding"), export: entitled(access.plan, "export"), private_repositories: entitled(access.plan, "github_private") },
     subscription: { status: b.subscription_status, current_period_end: b.current_period_end, cancel_at_period_end: !!b.cancel_at_period_end },

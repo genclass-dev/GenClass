@@ -1,8 +1,11 @@
 // Routes for the paid plans. Checked before the account routes (src/auth.ts); null for any other path.
 //
-//   POST /api/billing/checkout {plan: "<id>", seats?}   browser session + Origin; {url} of Stripe Checkout (with
-//                                                       switch: true when it replaces the plan already paid); `seats`
-//                                                       (1 to 200, default 1) for a plan sold per seat (Team)
+//   POST /api/billing/checkout {plan: "<id>", quantity?} browser session + Origin; {url} of Stripe Checkout (with
+//                                                       switch: true when it replaces the plan already paid);
+//                                                       `quantity` (1 to 200; `seats` is read the same) for a plan
+//                                                       sold by quantity: the apps of a per_app plan (Team; default
+//                                                       the apps the account holds), the seats of a per_seat one
+//                                                       (default 1). Checkout takes promotion codes.
 //   POST /api/billing/trial                            410: GenClass has no trial any more (the dashboard is free)
 //   POST /api/billing/portal                           browser session + Origin; {url} of the Billing Portal
 //   POST /api/billing/webhook                          Stripe only: signature, no session (src/stripe.ts)
@@ -36,16 +39,18 @@ import {
   accountAccess,
   accountBilling,
   accountPlan,
+  projectAccess,
   canBuy,
-  cleanSeats,
+  cleanQuantity,
   entitled,
-  MAX_SEATS,
+  MAX_QUANTITY,
   PAID_PLANS,
   PLANS,
   PLANS_FILE,
   planById,
   stripeMode,
   type Entitlement,
+  unitOf,
   type Plan,
 } from "./plans.js";
 import {
@@ -161,6 +166,8 @@ export async function routeBilling(request: Request, url: URL, path: string, env
         access: access.source,
         // the people the account holds now, the owner included (null: no limit)
         seats: access.seats,
+        // the apps the account may hold now (a per_app plan: the apps paid for; null: no limit)
+        apps: access.apps,
       });
     }
     case "/account/billing": {
@@ -173,7 +180,8 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       // the plan picked on the pricing page survives the sign-in
       if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${picked.id}${go ? "&start=1" : ""}` : ""}`)}`);
       const access = await accountAccess(c.db, a.account.id, env, c.now);
-      const apps = (await accountProjects(c, a.account.id)).map((p) => ({ id: p.id!, name: p.name }));
+      const all = await accountProjects(c, a.account.id);
+      const apps = all.map((p) => ({ id: p.id!, name: p.name }));
       const b = await accountBilling(c.db, a.account.id, env);
       const team = await teamOf(c.db, env, a.account.id, c.now);
       const memberships = await membershipsOf(c.db, env, a.account.id, c.now);
@@ -183,6 +191,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
           memberships,
           account: { id: a.account.id, email: a.account.email, githubLogin: a.account.github_login },
           apps,
+          ownApps: all.filter((p) => p.account_id === a.account.id).length,
           billing: b,
           access,
           live: canBuy(env, a.account),
@@ -243,12 +252,20 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
     if (!PAID_PLANS.length) return fail(400, `no plan is sold on genclass.dev: Free costs nothing, and Enterprise is agreed by email with ${PLANS_FILE.contact}`);
     return fail(400, `choose a plan: ${PAID_PLANS.map((p) => p.id).join(" or ")}`);
   }
-  // a plan sold per seat: how many people (the owner included); one when the page sends none
-  let seats = 1;
-  if (plan.per_seat === true && body.seats !== undefined) {
-    const n = cleanSeats(body.seats);
-    if (n === null) return fail(400, `seats is a whole number from 1 to ${MAX_SEATS}; for a larger team email ${PLANS_FILE.contact}`);
-    seats = n;
+  // a plan sold by quantity: how many apps (per_app; the apps the account holds when the page sends none) or people
+  // (per_seat, the owner included; one when the page sends none)
+  let quantity = 1;
+  const unit = unitOf(plan);
+  if (unit) {
+    const asked = body.quantity !== undefined ? body.quantity : body.seats;
+    if (asked !== undefined) {
+      const n = cleanQuantity(asked);
+      if (n === null) return fail(400, `the number of ${unit}s is a whole number from 1 to ${MAX_QUANTITY}; for more email ${PLANS_FILE.contact}`);
+      quantity = n;
+    } else if (unit === "app") {
+      // the account's own apps, not the apps of teams it is a member of
+      quantity = Math.min(MAX_QUANTITY, Math.max(1, (await accountProjects(c, a.account.id)).filter((p) => p.account_id === a.account.id).length));
+    }
   }
   if (await overBudget(c.env.AUTH_LIMIT, "checkout", a.account.id)) return tooMany();
   // as stored: ensureCustomer decides what to do with a customer from the other Stripe mode
@@ -285,11 +302,11 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
         if (await foreignInvoice(c.env, f, customer.id, subs)) return refuseShared(c, f, account.id, customer.id, SHARED_INVOICE);
         // once the new subscription's first payment clears, the webhook refunds `held`'s unused time to its card and
         // cancels it; until then it stays
-        const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, switchFrom: held.id, seats });
+        const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, switchFrom: held.id, quantity });
         return json(200, { url, switch: true });
       }
     }
-    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, seats });
+    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, quantity });
     return json(200, { url });
   } catch (e) {
     return stripeFail(e);
@@ -358,8 +375,8 @@ export async function integrationsFor(c: C, f: Fetch, accountId: string, project
   const a = { account: { id: accountId } };
   const p = await ownedProject(c, a.account.id, projectId);
   if (!p || !p.id) return fail(404, "not found");
-  // a grant gives its plan's forwarding too (src/plans.ts accountAccess)
-  const plan = await accountPlan(c.db, a.account.id, c.env, c.now);
+  // a grant gives its plan's forwarding too, and an app past the apps a per_app plan pays for has Free's (projectAccess)
+  const plan = (await projectAccess(c.db, p, c.env, c.now)).plan;
 
   if (kindRaw === null) {
     if (write) return method();
@@ -476,7 +493,7 @@ export async function exportFor(c: C, accountId: string, projectId: string): Pro
   const who = { accountId };
   const p = await ownedProject(c, who.accountId, projectId);
   if (!p) return fail(404, "not found");
-  const plan: Plan = await accountPlan(c.db, who.accountId, c.env, c.now);
+  const plan: Plan = (await projectAccess(c.db, p, c.env, c.now)).plan;
   if (!entitled(plan, "export")) return upgrade(c, "export");
   if (await overBudget(c.env.EXPORT_LIMIT, "export", who.accountId)) return tooMany();
   const q = c.url.searchParams;

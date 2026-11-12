@@ -9,7 +9,7 @@ import type { BucketLike, Env } from "./collector.js";
 import { RETENTION_DAYS, type D1Like } from "./dashboard.js";
 import { storeForExport } from "./export.js";
 import { forwardBatch } from "./forward.js";
-import { ACCESS_COLUMNS, accessOf, entitled, FREE, keepDays, planGatesOpen, stripeMode, type AccessRow, type Plan, type StripeMode } from "./plans.js";
+import { ACCESS_COLUMNS, accessOf, entitled, FREE, keepDays, planGatesOpen, stripeMode, withinPaidApps, type AccessRow, type Plan, type StripeMode } from "./plans.js";
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -45,7 +45,8 @@ export async function ownerOf(db: D1Like, token: string, nowMs: number, mode: St
     )
     .bind(token)
     .first<AccessRow & { id: string | null; name: string; account_id: string | null; n: number }>();
-  const plan = row?.account_id ? accessOf(row, mode, new Date(nowMs), open).plan : FREE;
+  // an app past the apps a per_app plan pays for has Free's export and forwarding (src/plans.ts withinPaidApps)
+  const plan = row?.account_id ? (await withinPaidApps(db, row.id, accessOf(row, mode, new Date(nowMs), open))).plan : FREE;
   const o: Owner | null = row ? { projectId: row.id, name: row.name, accountId: row.account_id, plan, destinations: Number(row.n) || 0 } : null;
   if (owners.size > 5000) owners.clear();
   owners.set(token, { o, exp: nowMs + OWNER_MS });

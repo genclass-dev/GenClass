@@ -67,7 +67,7 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     const teamPlan = PLANS.find((p) => p.id === "team")!;
     expect(offered.offer).toEqual({
       plan: { id: "team", name: "Team" },
-      price: "$15 / developer / month",
+      price: "$15 / app / month",
       summary: teamPlan.summary,
       features: teamPlan.features.filter((f) => f.available && !/^Everything in /.test(f.text)).map((f) => f.text),
       checkout_url: "https://genclass.dev/account/billing?plan=team&start=1",

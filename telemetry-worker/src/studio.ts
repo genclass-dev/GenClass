@@ -1,9 +1,9 @@
 // The Supabase Studio frame every signed-in page and every app dashboard uses (the owner asked for Supabase's layout
 // one to one, 2026-10-25): a 48px header (the organization and project switchers with their slash dividers, the
 // Connect button, the search in the middle (owner, 2026-11-05) that opens the command menu, the theme button, help and
-// the account menu), a 48px icon rail
-// that widens to 208px with its labels on hover or focus, an optional product menu for views with sub-pages, and the
-// page on the canvas. The organization is the account and a project is an app (one key each).
+// the account menu), a 208px menu with icons and labels that stays open (the owner, 2026-11-12: the icon rail that
+// widened on hover was distracting; on a phone it is the burger's drawer), an optional product menu for views with
+// sub-pages, and the page on the canvas. The organization is the account and a project is an app (one key each).
 // Tokens are Supabase Studio's dark theme (canvas #121212, surfaces #171717 / #1f1f1f, borders #2e2e2e, text #fafafa,
 // #b4b4b4 and #898989, brand #3ecf8e, primary buttons #006239 with a 30% brand border, Inter for text and Source Code
 // Pro for code, 6px corners), under the token names the dashboard's own CSS already uses (--paper is the canvas, --ink
@@ -347,17 +347,15 @@ body.sb{min-height:100vh}
 .dd-m .who small{display:block;color:var(--ink3);font-size:12px}
 .dd-m form{display:block}
 .sb-body{display:flex;min-height:calc(100vh - 48px)}
-/* the rail: 48px of icons; its labels show while the pointer or the focus is on it (Studio's "expand on hover") */
-.sb-rail{position:sticky;top:48px;align-self:flex-start;height:calc(100vh - 48px);width:48px;flex:none;z-index:30}
-.sb-rail nav{position:absolute;inset:0 auto 0 0;width:48px;height:100%;display:flex;flex-direction:column;gap:2px;padding:8px;background:var(--head);border-right:1px solid var(--rule);overflow:hidden;transition:width .15s ease,box-shadow .15s ease}
-.sb-rail:hover nav,.sb-rail:has(:focus-visible) nav,.sb-rail.tour nav{width:208px;box-shadow:var(--shadow-r)}
+/* the menu: icons with their labels, always open (it no longer widens on hover); a phone opens it from the burger */
+.sb-rail{position:sticky;top:48px;align-self:flex-start;height:calc(100vh - 48px);width:208px;flex:none;z-index:30}
+.sb-rail nav{position:absolute;inset:0 auto 0 0;width:208px;height:100%;display:flex;flex-direction:column;gap:2px;padding:8px;background:var(--head);border-right:1px solid var(--rule);overflow:hidden auto;transition:width .15s ease,box-shadow .15s ease}
 .sb-rail a{display:flex;align-items:center;gap:10px;height:32px;min-height:32px;padding:0 6px;border-radius:6px;color:var(--ink3);text-decoration:none;font-size:14px;white-space:nowrap}
 .sb-rail a .ic{width:20px;height:20px}
 .sb-rail a:hover{background:var(--s200);color:var(--ink)}
 .sb-rail a[aria-current=true],.sb-rail a[aria-current=page]{background:var(--s300);color:var(--ink)}
-.sb-rail a .lbl{opacity:0;transition:opacity .1s}
-.sb-rail a .cnt{margin-left:auto;font:11px var(--mono);color:var(--ink3);opacity:0}
-.sb-rail:hover a .lbl,.sb-rail:has(:focus-visible) a .lbl,.sb-rail:hover a .cnt,.sb-rail:has(:focus-visible) a .cnt,.sb-rail.tour a .lbl,.sb-rail.tour a .cnt{opacity:1}
+.sb-rail a .lbl{overflow:hidden;text-overflow:ellipsis}
+.sb-rail a .cnt{margin-left:auto;font:11px var(--mono);color:var(--ink3)}
 .sb-rail hr{border:0;border-top:1px solid var(--rule);margin:6px 2px}
 .sb-rail .end{margin-top:auto}
 /* the product menu: Studio's second column, its title on top, groups under small labels */
@@ -432,7 +430,6 @@ main.wrap{flex:1;min-width:0}
   .sb-rail{position:fixed;left:0;top:48px;height:calc(100vh - 48px);width:0;z-index:60}
   .sb-rail nav{width:0;padding:8px 0;border-right:0}
   body.sb-open .sb-rail nav{width:240px;padding:8px;border-right:1px solid var(--rule);box-shadow:var(--shadow-r)}
-  body.sb-open .sb-rail a .lbl,body.sb-open .sb-rail a .cnt{opacity:1}
   .sb-cr .nm{max-width:120px}
   .sb-crumbs .bdg,.sb-fb{display:none}
   .sb-page{padding:20px 16px 48px}
@@ -883,14 +880,62 @@ function commandMenu(o: StudioOptions): string {
 }
 
 /**
+ * How much larger than written the frame draws everything (the owner, 2026-11-12: the dashboard looked "a bit too
+ * zoomed out"). CSS `zoom` would do it, but it also scales viewport units (the menu ran past the window) and the
+ * positions the scripts set from measurements (the tour landed off center), so the lengths themselves are scaled.
+ */
+export const FRAME_SCALE = 1.1;
+
+/**
+ * `css` with every length in px multiplied by `k` (to a tenth of a pixel), so the page is drawn that much larger, as a
+ * browser zoom would draw it. Lengths of 2px or less (hairlines, outlines, focus rings) and the conditions of @media
+ * rules (the breakpoints are the window's own size) stay as written.
+ */
+export function scaleCss(css: string, k: number = FRAME_SCALE): string {
+  if (k === 1) return css;
+  return css
+    .split(/(@media[^{]*\{)/)
+    .map((part, i) =>
+      i % 2
+        ? part
+        : part.replace(/(^|[^\w.#-])(-?)(\d*\.?\d+)px\b/g, (m, pre: string, sign: string, n: string) => {
+            const v = Number(n);
+            return v <= 2 ? m : `${pre}${sign}${Math.round(v * k * 10) / 10}px`;
+          }),
+    )
+    .join("");
+}
+
+/** From this window width up the frame is drawn FRAME_SCALE larger; a phone keeps the sizes as written (they fit 375px). */
+export const SCALE_FROM_PX = 768;
+
+/**
+ * `html` with each of its <style> elements followed, inside the same element, by its CSS scaled (scaleCss) for windows
+ * SCALE_FROM_PX wide and wider, which overrides the written sizes there; scripts and markup are left as they are.
+ */
+const scaleStyles = (html: string): string =>
+  html.replace(/(<style nonce="[^"]*">)([\s\S]*?)(<\/style>)/g, (_m, a: string, css: string, b: string) => `${a}${css}@media (min-width:${SCALE_FROM_PX}px){${sizesOnly(scaleCss(css))}}${b}`);
+
+/**
+ * The scaled copy without the custom properties that hold no length (the colour tokens and the like): the written ones
+ * apply as they are, so the page keeps one set of tokens. Every other declaration stays, so the copy cascades as the
+ * written CSS does; rules left empty are dropped.
+ */
+const sizesOnly = (css: string): string =>
+  css
+    .replace(/--[\w-]+:[^;{}]*(;|(?=\}))/g, (d) => (/\dpx/.test(d) ? d : ""))
+    .replace(/[^{};]+\{\}/g, "");
+
+/**
  * The whole document: head (fonts, the frame's CSS, the page's CSS), the header, the rail, the product menus, <main>
- * with the page, the command menu, and one script (the copy helpers, the frame, the page).
+ * with the page, the command menu, and one script (the copy helpers, the frame, the page). On a window SCALE_FROM_PX
+ * wide or wider, every <style> in it is drawn FRAME_SCALE larger than written (scaleStyles).
  */
 export function studioPage(nonce: string, o: StudioOptions): string {
   const rail = o.rail.map((g) => g.map(railLink).join("")).join("<hr>");
   const end = o.railEnd?.length ? `<div class="end">${o.railEnd.map(railLink).join("")}</div>` : "";
   const menus = o.menus?.length ? `<aside class="sb-menu">${o.menus.map(productMenu).join("")}</aside>` : "";
-  return `<!doctype html>
+  return scaleStyles(`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -917,5 +962,5 @@ ${commandMenu(o)}
 ${o.link && !o.link.locked ? protectDialog() : ""}
 <script nonce="${nonce}">${COPY_JS}${THEME_JS}${o.link && !o.link.locked ? LOCK_JS : ""}${STUDIO_JS}${o.script}</script>
 </body>
-</html>`;
+</html>`);
 }

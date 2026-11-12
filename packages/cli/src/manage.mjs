@@ -215,11 +215,11 @@ export async function team(o = {}, deps = {}) {
   out();
   if (t.seats !== null && t.seats <= 1) {
     out(`  ${c.bold(`${clean(a.plan.name, 20)} is for one person.`)}`);
-    note("A team comes with the plan that is sold per developer: everyone on it opens the same dashboards.");
+    note("A team comes with Team: everyone you invite opens the same dashboards.");
     out(`    ${c.cyan("npx genclass plan")}`);
   } else {
     out(`  ${c.gray("Invite someone:")} ${c.cyan("npx genclass team invite")}`);
-    out(`  ${c.gray("Remove someone or add seats, in the browser:")}`);
+    out(`  ${c.gray(t.seats === null ? "Remove someone or change your plan, in the browser:" : "Remove someone or add seats, in the browser:")}`);
     out(`    ${c.cyan(billing)}`);
   }
   out();

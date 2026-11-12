@@ -112,13 +112,14 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     expect(await no.json()).toMatchObject({ ok: false, upgrade_url: "https://genclass.dev/account/billing" });
   });
 
-  it("Team: the price, the subscription's state, the seats, and an invite link that is shown once", async () => {
+  it("Team: the price, the subscription's state, the apps paid for, any number of people, and an invite link that is shown once", async () => {
     const { env, sql } = setup({ STRIPE_SECRET_KEY: "sk_live_fake" });
     const me = await cliUser(env);
     team(sql, me.account.id, 3);
     const j = await json(get(env, "/api/cli/account", me.bearer));
-    expect(j.plan).toMatchObject({ id: "team", name: "Team", price: "$15 / developer / month" });
-    expect([j.access, j.limits.seats, j.limits.apps, j.limits.history_days]).toEqual(["paid", 3, null, 90]);
+    expect(j.plan).toMatchObject({ id: "team", name: "Team", price: "$15 / app / month" });
+    // sold per app since 2026-11-12: the quantity paid for (3) is the apps; people have no limit
+    expect([j.access, j.limits.seats, j.limits.apps, j.limits.history_days]).toEqual(["paid", null, 3, 90]);
     expect(j.includes).toEqual({ analytics: true, forwarding: true, export: true, private_repositories: true });
     expect(j.subscription).toEqual({ status: "active", current_period_end: "2026-12-13T12:00:00.000Z", cancel_at_period_end: false });
     expect(j.offer).toBeNull();

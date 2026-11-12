@@ -88,15 +88,15 @@ function form(params) {
 }
 
 /**
- * The Billing Portal's subscription_update feature. Plans sold per seat (billing/plans.json per_seat) let the buyer
- * change the seats there: a quantity update of that product's own prices and nothing else (never a switch of price),
+ * The Billing Portal's subscription_update feature. Plans sold by quantity (billing/plans.json per_seat or per_app) let the buyer
+ * change the seats or apps there: a quantity update of that product's own prices and nothing else (never a switch of price),
  * charged or credited at once. Only products and prices this run found or made (`made`: plan id to { product,
  * planned, prices }); a product only planned in a dry run, or one with no price yet, is left out, and with none the
  * feature stays off, as before per-seat plans.
  */
 export function seatUpdate(plans, made = {}) {
   const products = plans
-    .filter((p) => p.per_seat === true && made[p.id] && !made[p.id].planned && made[p.id].prices.length)
+    .filter((p) => (p.per_seat === true || p.per_app === true) && made[p.id] && !made[p.id].planned && made[p.id].prices.length)
     .map((p) => ({ product: made[p.id].product, prices: made[p.id].prices }));
   return products.length ? { enabled: true, default_allowed_updates: ["quantity"], proration_behavior: "always_invoice", products } : { enabled: false };
 }
@@ -327,7 +327,7 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
 
   async function portal(existing, made = {}) {
     const update = seatUpdate(PLANS.plans, made);
-    if (update.enabled) say(`portal: seats can be changed for ${update.products.map((p) => p.product).join(", ")} (a quantity update, charged at once)`);
+    if (update.enabled) say(`portal: the quantity (seats or apps) can be changed for ${update.products.map((p) => p.product).join(", ")} (a quantity update, charged at once)`);
     const params = {
       business_profile: { headline: PORTAL_HEADLINE, privacy_policy_url: `${SITE}/privacy`, terms_of_service_url: `${SITE}/terms` },
       default_return_url: `${SITE}/account/billing`,
@@ -343,7 +343,7 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
         },
         // no plan switch here: a Managed Payments subscription cannot take another plan's price, and must not move
         // onto a subscription outside Managed Payments; the billing page switches with a new Checkout. The one update
-        // allowed is the quantity of a per-seat plan's own price (the seats)
+        // allowed is the quantity of a per-seat or per-app plan's own price
         subscription_update: update,
       },
       metadata: { genclass: MARK },

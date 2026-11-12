@@ -96,20 +96,21 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(f).toContain("Not included visitor analytics, alerts to Slack, Sentry and others, the stored events as a file, private repositories");
     // the paid plan's card, in the server's words, and (nobody at a terminal) where it starts
     expect(f).toContain("T E A M");
-    expect(f).toContain("$15 / developer / month");
+    expect(f).toContain("$15 / app / month");
     expect(text).toContain(`${HOST}/account/billing?plan=team&start=1`);
     expect(JSON.parse((await said(() => plan({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: true, plan: { id: "free" }, limits: { apps: 3 }, offer: { plan: { id: "team" } } });
   });
 
-  it("Team: the price, when it renews, the seats; a sign-in from before still gets the plan's name and what to do", async () => {
+  it("Team: the price, when it renews, the apps paid for and any number of people; a sign-in from before still gets the plan's name and what to do", async () => {
     const { env, sql } = setup(LIVE);
     const me = await account(env);
     team3(sql, me.account.id);
     const f = flat((await said(() => plan(me.o, me.deps))).text);
-    expect(f).toContain("Plan Team $15 / developer / month");
+    expect(f).toContain("Plan Team $15 / app / month");
     expect(f).toContain("Renews 2026-12-13");
-    expect(f).toContain("People 1 of 3");
-    expect(f).toContain("Apps 1 • no limit");
+    // Team is sold per app (2026-11-12): the quantity paid for (3) is the apps; people have no limit
+    expect(f).toContain("Apps 1 of 3");
+    expect(f).toContain("People 1 • no limit");
     expect(f).toContain("Includes visitor analytics, alerts to Slack, Sentry and others, the stored events as a file, private repositories");
     expect(f).not.toContain("T E A M");
     // a sign-in the real server calls current is left alone by `genclass login`
@@ -142,7 +143,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(link).toBeTruthy();
     expect(flat(made.text)).toContain("It works once");
     const list = flat((await said(() => team(me.o, me.deps))).text);
-    expect(list).toContain("Team 1 of 3 seats used");
+    expect(list).toContain("Team 1 person");
     expect(list).toContain("ada@example.com owner");
     expect(list).toContain("an invite link is open until");
     expect(list).toContain("npx genclass team invite");
