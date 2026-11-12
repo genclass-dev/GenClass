@@ -143,7 +143,8 @@ export async function addViteSettings(state, o = {}) {
     warn(plan.note);
     return "skipped";
   }
-  warn(`Vite ${plan.major} needs two settings for GenClass's model worker. Without them "vite build" fails.`);
+  warn(`Vite ${plan.major} needs two settings for the model's worker.`);
+  note('Without them "vite build" fails.');
   out();
   printChange(plan.change);
   if (!o.yes) {
