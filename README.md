@@ -33,10 +33,19 @@ take a prerelease. Both lines load the same model. AI coding agents working on t
 npx genclass   # signs you in, adds GenClass to your app and walks you through the rest
 ```
 
-Run it in your web app's folder. It shows where the project stands (signed in, GenClass in the app, first page seen,
-pull requests checked, coding agent connected, suggestions) and does the next step; run it again any time and it
-continues from there. `npx genclass suggest` tells you what your app is missing, most important first
-([`packages/cli`](packages/cli/README.md)).
+Run it in your web app's folder and press Enter for each step: account, runtime, dashboard, test workflow, GitHub
+App, coding agent, suggestions. A step that does not fit your project is skipped, Enter also stops any wait, and
+running it again continues from where things are. It draws nothing on your pages. Then:
+
+```bash
+npx genclass dashboard   # what GenClass found on your live site, in the terminal
+npx genclass suggest     # what your app is missing, most important first
+```
+
+With a coding agent (Claude Code, Cursor, Codex), tell it to run `npx genclass status --json` and then
+`npx genclass setup --yes`: the command asks nothing when an agent runs it, and prints a link for the two things only
+you can do (approve the sign-in, install the GitHub App). Guide: [genclass.dev/docs/cli](https://genclass.dev/docs/cli);
+package: [`packages/cli`](packages/cli/README.md).
 
 To add only the runtime, with no account:
 
