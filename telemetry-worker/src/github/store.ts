@@ -250,6 +250,42 @@ export async function reposByIds(db: D1Like, repoIds: number[]): Promise<RepoRow
   return out;
 }
 
+/** What the app has done on a repository, for the account page: whether race files were ever read, and the pull requests it wrote on. */
+export interface RepoActivity {
+  repo_id: number;
+  /** ISO time race files were first read for it, else null (github_repo_facts.evidence). */
+  evidence: string | null;
+  /** Pull requests the app wrote something on, among the rows still kept (github_prs: 30 days after a close). */
+  prs: number;
+  /** ISO time the newest of those rows last changed, else null. */
+  last: string | null;
+}
+
+/**
+ * What the app has done on these repositories: one statement per IN_CHUNK ids, however many there are (the ids are
+ * bound once and named by number in both halves). A repository the app has done nothing on is left out.
+ */
+export async function repoActivityByIds(db: D1Like, repoIds: number[]): Promise<RepoActivity[]> {
+  const all = [...new Set(repoIds)];
+  const out = new Map<number, RepoActivity>();
+  for (let i = 0; i < all.length; i += IN_CHUNK) {
+    const part = all.slice(i, i + IN_CHUNK);
+    const ids = part.map((_, k) => `?${k + 1}`).join(", ");
+    const r = await db
+      .prepare(
+        `SELECT repo_id, evidence, 0 AS prs, NULL AS last FROM github_repo_facts WHERE repo_id IN (${ids}) ` +
+          `UNION ALL SELECT repo_id, NULL AS evidence, COUNT(*) AS prs, MAX(updated) AS last FROM github_prs WHERE repo_id IN (${ids}) AND reviews > 0 GROUP BY repo_id`,
+      )
+      .bind(...part)
+      .all<RepoActivity>();
+    for (const row of r.results ?? []) {
+      const at = out.get(row.repo_id) ?? { repo_id: row.repo_id, evidence: null, prs: 0, last: null };
+      out.set(row.repo_id, { repo_id: row.repo_id, evidence: row.evidence ?? at.evidence, prs: at.prs + Number(row.prs ?? 0), last: row.last ?? at.last });
+    }
+  }
+  return [...out.values()];
+}
+
 /** The most linked repositories of one account a page lists (reposLinkedToAccount). */
 export const MAX_LINKED_LISTED = 300;
 

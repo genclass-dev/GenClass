@@ -1086,6 +1086,28 @@ async function finishProvider(c: C, ident: Identity, st: OAuthState): Promise<Re
   return redirect(st.next ?? "/account?welcome=1", [sessionCookie(c, s.secret)]);
 }
 
+/**
+ * For the GitHub App's "Continue with GitHub" (src/github/http.ts connectCallback), from a browser that is not signed
+ * in: GitHub vouched for this identity through the app's own OAuth client, in a flow this browser started (a state
+ * kept on the server and named by a cookie, both checked there). From here on it is GitHub sign-in (finishProvider):
+ * the account that has this GitHub identity is signed in to, or one is created; an account with a passkey gets the
+ * passkey step first and no session until it succeeds. `accountId` is that account, null when there is none after.
+ */
+export async function signInWithGithubIdentity(c: C, who: { id: number; login: string }, next: string): Promise<{ response: Response; accountId: string | null }> {
+  const sub = String(who.id);
+  const response = await finishProvider(c, { provider: "github", sub, email: null, emailVerified: false, login: who.login }, { s: "", next: safeNext(next), link: null, sid: null });
+  const row = await c.db.prepare("SELECT id FROM accounts WHERE github_id = ?").bind(sub).first<{ id: string }>();
+  return { response, accountId: row?.id ?? null };
+}
+
+/**
+ * A sign-in start that stores a row is rate limited, as /auth/github is (oauthStart): the page to answer with when
+ * this client is over its budget, else null.
+ */
+export async function oauthStartLimited(c: C): Promise<Response | null> {
+  return (await overLimit(c, "oauth")) ? tooManyPage() : null;
+}
+
 async function createProviderAccount(c: C, ident: Identity): Promise<string> {
   const id = randomBase62(22);
   await c.db

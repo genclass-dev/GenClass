@@ -158,7 +158,8 @@ Since then, on production (2026-11-10): the app was made public; pull request 17
 one of them written by an unmodified suite through `genclass-playwright-run`; and the form on `/github/setup` opened
 GitHub's new-file editor with the workflow file filled in.
 
-Not yet run against GitHub: Connect GitHub, a pull request from a fork, a private repository, `issues: merge`, the
+Not yet run against GitHub: Connect GitHub and Continue with GitHub (the button on `/github/setup`, which signs a
+person in through the app's own OAuth client), a pull request from a fork, a private repository, `issues: merge`, the
 fix workflow, a rate limit.
 
 Without GitHub:
@@ -275,7 +276,7 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
   managing the installation has a plan with `github_private` (`billing/plans.json`: Enterprise, so a grant by
   `comp_until` is how an agreement is switched on), or the GitHub account has a paid plan on GitHub Marketplace.
 - The account managing an installation is `github_installations.owner`. For an installation on a person's own GitHub
-  account, the worker sets it when that person uses Connect GitHub: GitHub says who they are, and the installation is
+  account, the worker sets it when that person uses Connect GitHub (or Continue with GitHub on `/github/setup`): GitHub says who they are, and the installation is
   on that account. For an organization the worker never sets it. GitHub answers who administers an organization only
   to an app with the organization permission "Members" (`GET /user/memberships/orgs/{org}`), which this app does not
   ask for, and being able to push to one of the organization's repositories proves nothing about the organization.

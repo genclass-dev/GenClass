@@ -4,8 +4,10 @@
 //   POST /api/github/marketplace    GitHub only: the Marketplace listing's webhook (plan purchases and changes)
 //   GET  /github                    the app's public page: what it does, what it may read and write, install
 //   GET  /github/install            to GitHub's install page for the app
-//   GET  /github/setup              where GitHub sends someone after installing: the next steps (no account needed)
-//   GET  /github/connect            signed in: ask GitHub who this is and which installations they can reach
+//   GET  /github/setup              where GitHub sends someone after installing: what the app does, the one step
+//                                   left, and "Continue with GitHub" (reviews need no account)
+//   GET  /github/connect            ask GitHub who this is and which installations they can reach; from a browser
+//                                   that is not signed in, GitHub's answer also signs the person in
 //   GET  /github/callback           GitHub's answer to /github/connect
 //   GET  /account/github            signed in: the installations and repositories, and which app each is linked to
 //   GET  /api/account/github        the same as JSON
@@ -31,7 +33,13 @@
 //   the server's operator sets that account by hand (docs/github-app/SETUP.md). Connecting never takes an
 //   installation from an account whose plan includes private repositories for one whose plan does not.
 // - The user access token from /github/callback is used for those few questions and dropped: never stored, never
-//   logged. What is kept for 30 minutes is the answer (repository ids, names and whether the person can push).
+//   logged. What is kept for 30 minutes is the answer (repository ids, names, default branches and whether the person
+//   can push).
+// - /github/connect from a browser that is not signed in ("Continue with GitHub" on /github/setup) is GitHub sign-in
+//   through the app's own OAuth client: GitHub's answer to who the person is signs them in to the account that has
+//   that GitHub identity, or makes one (auth.ts signInWithGithubIdentity: the same path as GitHub sign-in, so an
+//   account with a passkey still needs it), and the same answer is kept for that account. Nothing in the callback's
+//   address chooses the account, and such a start is rate limited like every sign-in start that stores a row.
 // - A repository is linked to a GenClass app only by an account that owns the app AND can push to the repository
 //   according to that answer, from the browser, with this server's Origin (CSRF). Taking a link away needs less: the
 //   account that owns the linked app can always do it (same browser session and Origin), with or without access to
@@ -45,9 +53,11 @@
 //   form: a body that is exactly one `payload` field. Anything else is refused (400), so that bytes GitHub signed as
 //   JSON for the app's webhook (a comment's text may hold "&payload=...") can never be read as a form that sets a plan.
 // - The OAuth state is single use, kept server-side and named by a cookie that holds only its row id; the callback
-//   must arrive in the session that started it.
+//   must arrive in the session that started it, or, for a start made signed out, in the browser that holds the cookie.
+// - What the account page says the app is doing on a repository (race files read, pull requests written on) is shown
+//   only for repositories GitHub's answer lists for that person, and comes in one statement per 90 of them.
 
-import { accountContext, accountProjects, csrfFail, fail, getCookie, originOk, ownedProject, page, readJson, redirect, webSession, type C } from "../auth.js";
+import { accountContext, accountProjects, csrfFail, fail, getCookie, oauthStartLimited, originOk, ownedProject, page, readJson, redirect, signInWithGithubIdentity, webSession, type C } from "../auth.js";
 import { messagePage } from "../account-pages.js";
 import type { Env, HandleOptions } from "../collector.js";
 import { randomBase62 } from "../dashboard.js";
@@ -61,7 +71,8 @@ import { repoEntitled } from "./entitlement.js";
 import { handleEvent, jobContext, OutOfTime } from "./handlers.js";
 import { AppKeyError } from "./jwt.js";
 import { accountGithubPage, githubLandingPage, githubSetupPage, type GithubAccountView } from "./pages.js";
-import { claimDelivery, finishDelivery, forgetDelivery, installationById, installationsByIds, installationsOf, linkRepo, pauseRepo, repoById, reposByIds, reposLinkedToAccount, setInstallationOwner, unlinkRepo, upsertInstallation } from "./store.js";
+import { claimDelivery, finishDelivery, forgetDelivery, installationById, installationsByIds, installationsOf, linkRepo, pauseRepo, repoActivityByIds, repoById, reposByIds, reposLinkedToAccount, setInstallationOwner, unlinkRepo, upsertInstallation } from "./store.js";
+import { BRANCH_RE } from "./workflow-file.js";
 
 /** Largest webhook body read (an installation event lists every repository it covers). */
 export const MAX_WEBHOOK_BYTES = 3 * 1024 * 1024;
@@ -193,6 +204,8 @@ interface GrantRepo {
   private: boolean;
   installation: number;
   push: boolean;
+  /** The repository's default branch as GitHub named it, when it is a name the workflow link takes. */
+  branch?: string;
 }
 interface Grant {
   github: { id: number; login: string };
@@ -205,27 +218,38 @@ interface Grant {
 const cookie = (c: C, name: string, value: string, maxAgeS: number, path: string): string =>
   `${name}=${value}; Path=${path}; Max-Age=${maxAgeS}; HttpOnly; SameSite=Lax${c.cfg.secure ? "; Secure" : ""}`;
 
+/**
+ * GET /github/connect: to GitHub's authorization page for the app, with a state kept on the server. Signed in, the
+ * state belongs to the session ("Connect GitHub"). Not signed in ("Continue with GitHub" on /github/setup), it belongs
+ * to this browser only, through the cookie that names its row: GitHub's answer to who this is then signs the person
+ * in (connectCallback), so installing the app and having an account is one round trip.
+ */
 async function connectStart(c: C, cfg: GithubAppConfig): Promise<Response> {
   if (!cfg.clientId) return page(404, (n) => messagePage(n, { title: "Connecting GitHub is not set up", text: "This GenClass server has no client id and secret for its GitHub App, so it cannot ask GitHub who you are. Reviews work without it.", links: [["Your apps", "/account"]] }));
   const a = await webSession(c);
-  if (!a) return redirect(`/login?next=${encodeURIComponent("/account/github")}`);
   const id = randomBase62(22);
   const state = b64url(crypto.getRandomValues(new Uint8Array(32)));
-  // one start at a time per account: a page that makes a signed-in browser load this address cannot pile up rows
-  await c.db.batch([
-    c.db.prepare("DELETE FROM challenges WHERE kind = 'oauth:ghapp' AND account_id = ?").bind(a.account.id),
-    c.db
-      .prepare("INSERT INTO challenges (id, kind, challenge, account_id, data, expires) VALUES (?, 'oauth:ghapp', ?, ?, ?, ?)")
-      .bind(id, state, a.account.id, JSON.stringify({ sid: a.sessionId }), new Date(c.now.getTime() + OAUTH_MS).toISOString()),
-  ]);
+  const insert = c.db.prepare("INSERT INTO challenges (id, kind, challenge, account_id, data, expires) VALUES (?, 'oauth:ghapp', ?, ?, ?, ?)");
+  const expires = new Date(c.now.getTime() + OAUTH_MS).toISOString();
+  if (a) {
+    // one start at a time per account: a page that makes a signed-in browser load this address cannot pile up rows
+    await c.db.batch([c.db.prepare("DELETE FROM challenges WHERE kind = 'oauth:ghapp' AND account_id = ?").bind(a.account.id), insert.bind(id, state, a.account.id, JSON.stringify({ sid: a.sessionId }), expires)]);
+  } else {
+    // no account to keep to one row, so these starts are rate limited like every sign-in start that stores one
+    const limited = await oauthStartLimited(c);
+    if (limited) return limited;
+    await insert.bind(id, state, null, JSON.stringify({ signin: true }), expires).run();
+  }
   const q = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: `${cfg.origin}/github/callback`, state });
   return redirect(`${cfg.web}/login/oauth/authorize?${q}`, [cookie(c, OAUTH_COOKIE, id, OAUTH_MS / 1000, "/github")]);
 }
 
 async function connectCallback(c: C, cfg: GithubAppConfig, f: Fetch): Promise<Response> {
   const clear = cookie(c, OAUTH_COOKIE, "", 0, "/github");
+  // where "Try again" leads: the account page, or, for a start made signed out, the start itself
+  let again = "/account/github";
   const bad = (status: number, text: string): Response => {
-    const r = page(status, (n) => messagePage(n, { title: "GitHub was not connected", text, links: [["Try again", "/account/github"]] }));
+    const r = page(status, (n) => messagePage(n, { title: "GitHub was not connected", text, links: [["Try again", again]] }));
     r.headers.append("set-cookie", clear);
     return r;
   };
@@ -238,6 +262,8 @@ async function connectCallback(c: C, cfg: GithubAppConfig, f: Fetch): Promise<Re
     id && /^[A-Za-z0-9]{22}$/.test(id)
       ? await c.db.prepare("DELETE FROM challenges WHERE id = ? AND kind = 'oauth:ghapp' RETURNING challenge, account_id, data, expires").bind(id).first<{ challenge: string; account_id: string | null; data: string | null; expires: string }>()
       : null;
+  // a start made signed out names no account: its row belongs to this browser alone
+  if (row && row.account_id === null) again = "/github/connect";
   if (c.url.searchParams.get("error")) return bad(400, "GitHub did not authorize this. Nothing was connected.");
   const state = c.url.searchParams.get("state");
   if (!row || Date.parse(row.expires) <= c.now.getTime() || !state || !equalStrings(state, row.challenge)) {
@@ -245,17 +271,19 @@ async function connectCallback(c: C, cfg: GithubAppConfig, f: Fetch): Promise<Re
     return bad(400, "This link expired or was opened in another browser. Start again from your account page.");
   }
   const a = await webSession(c);
-  let sid: unknown = null;
+  let data: { sid?: unknown; signin?: unknown } = {};
   try {
-    sid = (JSON.parse(row.data ?? "{}") as { sid?: unknown }).sid;
+    data = (JSON.parse(row.data ?? "{}") ?? {}) as { sid?: unknown; signin?: unknown };
   } catch {
     /* no session recorded */
   }
-  if (!a || a.account.id !== row.account_id || a.sessionId !== sid) return bad(403, "Your session changed while you were away. Sign in, then connect GitHub again.");
+  const signin = row.account_id === null && data.signin === true;
+  // a start made by a session must come back in that session; one made signed out has no session to come back in
+  if (!signin && (!a || a.account.id !== row.account_id || a.sessionId !== data.sid)) return bad(403, "Your session changed while you were away. Sign in, then connect GitHub again.");
   const code = c.url.searchParams.get("code");
   if (!code || code.length > 2048) return bad(400, "GitHub did not send a code. Start again.");
 
-  let grant: Grant;
+  let answer: Answer;
   try {
     const r = await f(`${cfg.web}/login/oauth/access_token`, {
       method: "POST",
@@ -265,27 +293,55 @@ async function connectCallback(c: C, cfg: GithubAppConfig, f: Fetch): Promise<Re
     });
     const tok = ((await r.json().catch(() => null)) ?? {}) as Record<string, unknown>;
     if (!r.ok || typeof tok.access_token !== "string" || !tok.access_token) throw new Error("no token");
-    grant = await readGrant(c, cfg, f, tok.access_token, a.account.id);
+    answer = await readGrant(c, cfg, f, tok.access_token);
   } catch (e) {
     console.log(`github connect: failed: ${e instanceof GithubError ? e.kind : "error"}`);
     return bad(502, "GitHub did not answer the questions this page asks it. Start again in a minute.");
   }
-  // the newest answer replaces any earlier one of this account
-  await c.db.batch([
-    c.db.prepare("DELETE FROM challenges WHERE kind = 'ghapp:grant' AND account_id = ?").bind(a.account.id),
-    c.db
-      .prepare("INSERT INTO challenges (id, kind, challenge, account_id, data, expires) VALUES (?, 'ghapp:grant', ?, ?, ?, ?)")
-      .bind(randomBase62(22), b64url(crypto.getRandomValues(new Uint8Array(16))), a.account.id, JSON.stringify(grant), grant.expires),
-  ]);
-  return redirect("/account/github?connected=1", [clear]);
+  const to = "/account/github?connected=1";
+  // signed in (also: signed in since, in this browser, for a start made signed out): the answer is this account's
+  if (a) {
+    await keepAnswer(c, a.account.id, answer);
+    return redirect(to, [clear]);
+  }
+  // Not signed in: GitHub's answer to who this is signs the person in, as GitHub sign-in does: to the account that
+  // has this GitHub identity, or to a new one. With a passkey on the account the response is the passkey step, and
+  // the session comes after it; the answer is kept for the account either way.
+  const { response, accountId } = await signInWithGithubIdentity(c, answer.grant.github, to);
+  if (accountId) await keepAnswer(c, accountId, answer);
+  response.headers.append("set-cookie", clear);
+  return response;
+}
+
+/** GitHub's answer for one person, and the installations of this app that are on that person's own GitHub account. */
+interface Answer {
+  grant: Grant;
+  own: number[];
 }
 
 /**
- * Ask GitHub, as the person, who they are and which installations of THIS app and which of their repositories they
- * can reach; record those installations, and make this account the manager of the one on their own GitHub account.
- * The token goes no further than this function.
+ * Keep GitHub's answer for `accountId` (the newest replaces any earlier one of the account), and make the account the
+ * manager of the installations on the person's own GitHub account.
  */
-async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string, accountId: string): Promise<Grant> {
+async function keepAnswer(c: C, accountId: string, answer: Answer): Promise<void> {
+  for (const id of answer.own) await manageInstallation(c, id, accountId);
+  await c.db.batch([
+    c.db.prepare("DELETE FROM challenges WHERE kind = 'ghapp:grant' AND account_id = ?").bind(accountId),
+    c.db
+      .prepare("INSERT INTO challenges (id, kind, challenge, account_id, data, expires) VALUES (?, 'ghapp:grant', ?, ?, ?, ?)")
+      .bind(randomBase62(22), b64url(crypto.getRandomValues(new Uint8Array(16))), accountId, JSON.stringify(answer.grant), answer.grant.expires),
+  ]);
+}
+
+/** The longest default branch name kept with GitHub's answer (a longer one is left out: no workflow button for it). */
+const MAX_BRANCH_CHARS = 120;
+
+/**
+ * Ask GitHub, as the person, who they are and which installations of THIS app and which of their repositories they
+ * can reach, and record those installations. `own` lists the ones on their own GitHub account, which keepAnswer
+ * makes theirs to manage. The token goes no further than this function.
+ */
+async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string): Promise<Answer> {
   const gh = userClient(cfg, f, () => c.now, token, 4 + MAX_INSTALLATIONS * 3);
   const me = (await gh.get<Record<string, unknown>>("/user")) ?? {};
   const id = posInt(me.id);
@@ -295,6 +351,7 @@ async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string, ac
   if (!id || !login) throw new GithubError("unexpected", 200, "GitHub did not say who this is");
   const installs = await gh.list<Record<string, unknown>>("/user/installations", { max: 100, key: "installations" });
   const repos: GrantRepo[] = [];
+  const own: number[] = [];
   let more = false;
   let seen = 0;
   for (const i of installs) {
@@ -320,16 +377,18 @@ async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string, ac
         more = true;
         continue;
       }
-      repos.push({ id: rid, name, private: r.private !== false, installation: iid, push });
+      // the default branch, as GitHub names it: where the account page's button opens the workflow file's editor
+      const branch = typeof r.default_branch === "string" && r.default_branch.length <= MAX_BRANCH_CHARS && BRANCH_RE.test(r.default_branch) ? r.default_branch : null;
+      repos.push({ id: rid, name, private: r.private !== false, installation: iid, push, ...(branch ? { branch } : {}) });
     }
     // the installation is recorded (its webhook may have been missed)
     await upsertInstallation(c.db, { id: iid, accountId: acctId, login: acctLogin, type: String(acct.type ?? "User"), selection: String(i.repository_selection ?? "selected"), suspended: !!i.suspended_at }, c.now);
-    // Managed by this account only when the installation is on the GitHub account of the person connecting: GitHub's
-    // own answer to who they are. What they can reach or push to in it proves nothing about the account it is on
-    // (an outside collaborator on one repository of an organization can push there), so it never counts.
-    if (acctId === id) await manageInstallation(c, iid, accountId);
+    // Managed by the person's account only when the installation is on the GitHub account of the person connecting:
+    // GitHub's own answer to who they are. What they can reach or push to in it proves nothing about the account it
+    // is on (an outside collaborator on one repository of an organization can push there), so it never counts.
+    if (acctId === id) own.push(iid);
   }
-  return { github: { id, login }, repos, more, expires: new Date(c.now.getTime() + GRANT_MS).toISOString() };
+  return { grant: { github: { id, login }, repos, more, expires: new Date(c.now.getTime() + GRANT_MS).toISOString() }, own };
 }
 
 /**
@@ -376,6 +435,8 @@ async function accountView(c: C, cfg: GithubAppConfig, accountId: string, who: s
   const insts = new Map(managed.map((i) => [i.id, i]));
   for (const i of await installationsByIds(c.db, granted.map((r) => r.installation).filter((id) => !insts.has(id)))) insts.set(i.id, i);
   const stored = new Map((await reposByIds(c.db, granted.map((r) => r.id))).map((r) => [r.repo_id, r]));
+  // what the app has done on each repository GitHub's answer lists: one statement per 90 of them
+  const activity = new Map((await repoActivityByIds(c.db, granted.map((r) => r.id))).map((r) => [r.repo_id, r]));
   // Whether a private repository is reviewed is a matter of its installation (the plan of the account managing it,
   // or its Marketplace plan), not of the account looking at this page: asked once per installation that lists one.
   const unread = new Map<number, boolean>();
@@ -387,7 +448,22 @@ async function accountView(c: C, cfg: GithubAppConfig, accountId: string, who: s
     const s = stored.get(r.id);
     // a link to another account's app is shown as linked, never by name
     const mine = s?.project_id && projects.some((p) => p.id === s.project_id) ? s.project_id : null;
-    return { id: r.id, name: r.name, private: r.private, installation: r.installation, push: r.push, project: mine, linkedElsewhere: !!s?.project_id && !mine, paused: !!s?.paused, needsPlan: r.private && unread.get(r.installation) === true };
+    const did = activity.get(r.id);
+    return {
+      id: r.id,
+      name: r.name,
+      private: r.private,
+      installation: r.installation,
+      push: r.push,
+      project: mine,
+      linkedElsewhere: !!s?.project_id && !mine,
+      paused: !!s?.paused,
+      needsPlan: r.private && unread.get(r.installation) === true,
+      branch: typeof r.branch === "string" && BRANCH_RE.test(r.branch) ? r.branch : null,
+      evidence: !!did?.evidence,
+      prs: did?.prs ?? 0,
+      last: did?.last ?? null,
+    };
   });
   // Links to this account's apps on repositories GitHub's answer does not list (no answer now, or no access any
   // more): all this page can do there is take the link away. A private one is not named: its name may have changed
@@ -409,8 +485,12 @@ async function accountView(c: C, cfg: GithubAppConfig, accountId: string, who: s
     repos: repos.sort((a, b) => a.name.localeCompare(b.name)),
     linked,
     projects,
-    notice: c.url.searchParams.get("connected") === "1" ? "GitHub is connected. Link a repository to one of your apps below." : null,
+    notice: c.url.searchParams.get("connected") === "1" ? "GitHub is connected. Each repository the app is on is listed below, with what the app is doing there." : null,
     privatePlan: cfg.privateRepos === "open" || access.plan.entitlements.github_private === true,
+    // just connected (also: just installed and signed in from /github/setup): the page says in short what the app does
+    welcome: c.url.searchParams.get("connected") === "1",
+    openRepos: cfg.privateRepos === "open",
+    workflowLink: cfg.workflowLink ? { web: cfg.web } : null,
   };
 }
 
@@ -485,7 +565,7 @@ export async function routeGithub(request: Request, url: URL, path: string, env:
   if (path === "/github/setup") {
     if (!get) return fail(405, "method not allowed");
     const nonce = randomBase62(22);
-    return html(200, githubSetupPage(nonce, { slug: cfg.slug, canConnect: !!cfg.clientId, workflowLink: cfg.workflowLink ? { web: cfg.web } : null }), nonce);
+    return html(200, githubSetupPage(nonce, { slug: cfg.slug, canConnect: !!cfg.clientId, workflowLink: cfg.workflowLink ? { web: cfg.web } : null, privateRepos: cfg.privateRepos }), nonce);
   }
 
   const c = accountContext(request, url, env, opts);
