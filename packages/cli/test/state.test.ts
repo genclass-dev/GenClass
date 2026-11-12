@@ -142,7 +142,10 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     saveNotes(dir, { site: "https://shop.example", suggest: { at: "2026-11-10T12:00:00.000Z", failed: 7, urgent: 2, passed: 19, top: ["https"] } });
     const s = await readState({ cwd: dir }, { runGit: noGit, now: Date.parse("2026-11-12T12:00:00Z") });
     expect(s.steps.find((x) => x.id === "agent")).toMatchObject({ state: "done", detail: ".mcp.json, .cursor/mcp.json" });
-    expect(s.steps.find((x) => x.id === "suggestions")).toMatchObject({ state: "done", detail: "7 to do, 2 urgent · checked 2 days ago" });
+    expect(s.steps.find((x) => x.id === "suggestions")).toMatchObject({ state: "waiting", detail: "7 to do, 2 urgent · checked 2 days ago", human: "work through the list: genclass suggest" });
+    // with nothing left on the list it is done
+    saveNotes(dir, { suggest: { at: "2026-11-12T11:00:00.000Z", failed: 0, urgent: 0, passed: 26, top: [] } });
+    expect((await readState({ cwd: dir }, { runGit: noGit, now: Date.parse("2026-11-12T12:00:00Z") })).steps.find((x) => x.id === "suggestions")).toMatchObject({ state: "done", detail: "nothing to do · checked 1 hour ago" });
     expect(s.app.site).toBe("https://shop.example");
     // the notes are kept outside the project
     expect(existsSync(join(dir, ".genclass"))).toBe(false);

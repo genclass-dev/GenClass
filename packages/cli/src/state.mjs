@@ -190,11 +190,12 @@ export async function readState(o = {}, deps = {}) {
   steps.push({
     id: "suggestions",
     title: "Suggestions",
-    state: s ? "done" : "todo",
-    detail: s ? `${s.failed} to do${s.urgent ? `, ${s.urgent} urgent` : ""} · checked ${ago(s.at, now)}` : "",
+    // run once, it is done only when nothing is left on the list; until then it waits on the person, not on a command
+    state: !s ? "todo" : s.failed ? "waiting" : "done",
+    detail: !s ? "" : s.failed ? `${s.failed} to do${s.urgent ? `, ${s.urgent} urgent` : ""} · checked ${ago(s.at, now)}` : `nothing to do · checked ${ago(s.at, now)}`,
     why: "GenClass checks your repository and your live site for what a launched app needs (search engines and AI assistants can read it, payments are live, secrets are safe, people can see the price) and tells you what to do first, in plain words.",
     run: "genclass suggest",
-    human: null,
+    human: s?.failed ? "work through the list: genclass suggest" : null,
   });
 
   const next = steps.find((x) => x.state === "todo" && !(o.skip ?? []).includes(x.id)) ?? null;

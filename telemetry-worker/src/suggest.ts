@@ -26,8 +26,8 @@ import type { Plan } from "./plans.js";
 export const MAX_SUGGEST_BYTES = 64 * 1024;
 /** The most failed checks one request may name. */
 export const MAX_CHECKS = 60;
-/** The model asked when SUGGEST_MODEL is not set. */
-export const DEFAULT_MODEL = "gpt-5-mini";
+/** The model asked when SUGGEST_MODEL is not set (the owner's choice, 2026-11-12). */
+export const DEFAULT_MODEL = "gpt-6.2-sol";
 export const MODEL_URL = "https://api.openai.com/v1/chat/completions";
 /** How long the model may take before the checks' own order is used. */
 export const MODEL_TIMEOUT_MS = 40_000;

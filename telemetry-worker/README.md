@@ -1136,7 +1136,7 @@ time and cached in memory until 5 minutes before they expire.
 | `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET` | secrets | Connect GitHub; without them repositories cannot be linked |
 | `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | secret | the listing's webhook. Set it to a value of its own once the listing exists; unset, that endpoint accepts the app's webhook secret |
 | `OPENAI_API_KEY` | secret | `genclass suggest`: the key of the model that writes the plan ([The genclass command](#the-genclass-command)). Without it the plan is ordered by the checks' own weights |
-| `SUGGEST_MODEL` | var | the model asked (default `gpt-5-mini`) |
+| `SUGGEST_MODEL` | var | the model asked (default `gpt-6.2-sol`) |
 | `GITHUB_APP_SLUG` | var | the app's URL name (`genclass`): its bot is `<slug>[bot]` and its commands start with `@<slug>` |
 | `GITHUB_APP_PRIVATE_REPOS` | var | `plan` (default) or `open` |
 | `GITHUB_APP_WORKFLOW_LINK` | var | `on`: the check with no race files, and `/github/setup`, link to GitHub's new-file editor with `docs/github-app/workflows/genclass.yml` filled in. Anything else: off |
@@ -1158,7 +1158,7 @@ sign-in, `/api/me`, `/api/account/projects`) and three of its own (`src/cli.ts`;
 What decides the answer:
 
 - **The model.** With the secret `OPENAI_API_KEY`, the digest is sent to the model named by `SUGGEST_MODEL`
-  (default `gpt-5-mini`; check the name against your OpenAI account) with a fixed instruction and a strict JSON
+  (default `gpt-6.2-sol`) with a fixed instruction and a strict JSON
   schema. The model orders and explains: only ids the request named come back, each once, cut to length and cleaned
   of control characters, and ids it leaves out follow in weight order. Without the key, when the day's runs are used
   up, or when the model fails, is slow (40 seconds) or answers something else, the plan is the checks by their own
