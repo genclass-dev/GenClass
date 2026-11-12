@@ -55,6 +55,8 @@ const switchable = (): string | null => (PAID_PLANS.length > 1 ? PAID_PLANS.map(
 
 export interface BillingView {
   account: { id: string; email: string | null; githubLogin: string | null };
+  /** Every app with its plan (plans are per project since billing/plans.json version 4). */
+  projects?: { id: string; name: string; access: Access }[];
   apps: { id: string; name: string }[];
   billing: Billing;
   /** What the account may use now: its paid plan or GenClass's grant (src/plans.ts accessOf). */
@@ -167,7 +169,12 @@ function planColumn(v: BillingView, p: Plan, current: Plan): string {
     p.per_seat === true
       ? `<label class="seats" for="seats-${esc(p.id)}">Seats <input id="seats-${esc(p.id)}" type="number" inputmode="numeric" min="1" max="${MAX_SEATS}" step="1" value="${Math.max(1, v.team?.used ?? 1)}" data-seats="${esc(p.id)}"></label>`
       : "";
-  const buy = `${seats}<button class="btn${p !== PAID_PLANS[0] && !pick ? " ghost" : ""}" type="button" data-plan="${esc(p.id)}"${pick ? " data-pick" : ""}><span>${subscribed ? "Switch to" : "Upgrade to"} ${esc(p.name)}</span></button>`;
+  // a plan sold per project is bought on that project's own page, from the list below
+  const buy = p.per_project === true
+    ? v.projects?.length
+      ? `<a class="btn" href="#projects"><span>Choose a project</span></a>`
+      : '<span class="muted">Add a project first: run npx genclass in your app.</span>'
+    : `${seats}<button class="btn${p !== PAID_PLANS[0] && !pick ? " ghost" : ""}" type="button" data-plan="${esc(p.id)}"${pick ? " data-pick" : ""}><span>${subscribed ? "Switch to" : "Upgrade to"} ${esc(p.name)}</span></button>`;
   const talk = `<a class="btn ghost" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass ${p.name}`)}"><span>Talk to us</span></a>`;
   let act = "";
   if (cur) act = `<span class="tag">${v.access.source === "comp" ? "Set up by GenClass" : v.access.source === "open" ? "This server" : "Your plan"}</span>`;
@@ -178,6 +185,151 @@ function planColumn(v: BillingView, p: Plan, current: Plan): string {
     .map((f) => `<li${f.available ? "" : ' class="soon"'}>${esc(f.text)}${f.available || /coming next/i.test(f.text) ? "" : " (coming next)"}</li>`)
     .join("");
   return `<div class="plan${cur ? " cur" : pick ? " pick" : ""}"><h3>${esc(p.name)}</h3><p class="price">${esc(priceText(p))}</p><p class="sum">${esc(p.summary)}</p><ul>${features}</ul><div class="act">${act}</div></div>`;
+}
+
+/** The account's projects, each with its plan and the way to change it (its own page). */
+function projectsSection(v: BillingView): string {
+  if (!v.projects?.length) return "";
+  const rows = v.projects
+    .map((p) => {
+      const a = p.access;
+      const what = a.locked
+        ? `<span class="tag" style="color:var(--warn);border-color:var(--warn)">Needs a plan</span>`
+        : a.plan.id === "free"
+          ? "Free"
+          : `<b>${esc(a.plan.name)}</b>${a.source === "comp" ? " (set up by GenClass)" : ""}`;
+      const act = a.source === "paid" ? `<a href="/account/billing?project=${encodeURIComponent(p.id)}">See plan</a>` : `<a class="btn${a.locked ? "" : " ghost"}" href="/account/billing?project=${encodeURIComponent(p.id)}"><span>${a.locked ? "Choose a plan" : "Upgrade"}</span></a>`;
+      return `<tr><td>${esc(p.name)}</td><td>${what}</td><td class="act">${act}</td></tr>`;
+    })
+    .join("");
+  return `<section class="blk team" id="projects">
+  <div class="blk-h"><h2>Projects</h2><span class="aside">A plan per project</span></div>
+  <p class="intro">Each project has its own plan. Free covers ${FREE_APPS} projects; ${esc(PAID_PLANS[0] ? `${PAID_PLANS[0].name} is ${priceText(PAID_PLANS[0])}` : "")}, everyone on your team included.</p>
+  <table><thead><tr><th>Project</th><th>Plan</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+</section>`;
+}
+
+const FREE_APPS = PLANS[0]?.limits.apps ?? 3;
+
+export interface ProjectPlanView {
+  account: { id: string; email: string | null; githubLogin: string | null };
+  apps: { id: string; name: string }[];
+  project: { id: string; name: string };
+  access: Access;
+  /** The project's own subscription, as the webhook wrote it. */
+  sub: { status: string | null; periodEnd: string | null; cancels: boolean };
+  usage: { used: number; limit: number | null; observe_only: boolean; resets: string } | null;
+  live: boolean;
+  testMode: boolean;
+  /** Back from Stripe Checkout (?done=1). */
+  done: boolean;
+  /** Open the checkout at once (?start=1, from the genclass command). */
+  go: boolean;
+  /** The project was just added from the genclass command (?from=cli). */
+  fromCli: boolean;
+  now: Date;
+}
+
+/**
+ * One project's plan: what it is on, what it has used, and the paid plan large with "Try free for now (limited)"
+ * small under it (the owner's layout, 2026-11-12). The genclass command opens this page when it adds a project.
+ */
+export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
+  const offer = PAID_PLANS[0] ?? null;
+  const a = v.access;
+  const paid = a.source === "paid";
+  const name = esc(v.project.name);
+  const status = a.source === "open"
+    ? `This server gives every project everything in <b>${esc(a.plan.name)}</b>.`
+    : paid
+      ? v.sub.cancels
+        ? `<b>${name}</b> is on <b>${esc(a.plan.name)}</b> until ${day(v.sub.periodEnd)}. It is cancelled and will not renew; you can resume it in Manage billing.`
+        : v.sub.status === "past_due"
+          ? `<b>${name}</b> is on <b>${esc(a.plan.name)}</b>. The last payment did not go through: update your card in Manage billing.`
+          : `<b>${name}</b> is on <b>${esc(a.plan.name)}</b>${v.sub.periodEnd ? `. It renews on ${day(v.sub.periodEnd)}` : ""}.`
+      : a.source === "comp"
+        ? `<b>${name}</b> has <b>${esc(a.plan.name)}</b>, set up by GenClass. You can start paying for it any time.`
+        : a.locked
+          ? `<b>${name}</b> needs a plan: Free covers ${FREE_APPS} projects, and this one is past them.`
+          : `<b>${name}</b> is on <b>Free</b>.`;
+  const usage = v.usage && v.usage.limit !== null
+    ? `<p class="status">${v.usage.observe_only ? `<b>Observing only.</b> ` : ""}Problems fixed live this month: <b>${v.usage.used} of ${v.usage.limit}</b>.${v.usage.observe_only ? ` GenClass keeps finding and reporting every problem, and stops fixing them on visitors' screens until ${day(v.usage.resets)}, or until this project has ${esc(offer?.name ?? "a paid plan")}.` : ""}</p>`
+    : "";
+  const notice = v.done && !paid
+    ? '<p class="notice n-ok" role="status" id="donemsg"><b>Thanks.</b> This page changes as soon as Stripe confirms your payment, usually within a minute.</p>'
+    : v.done
+      ? `<p class="notice n-ok" role="status"><b>Thanks.</b> ${name} is on ${esc(a.plan.name)} now.</p>`
+      : v.fromCli && !paid
+        ? `<p class="notice" role="status"><b>${name}</b> is in your account. Choose its plan.</p>`
+        : "";
+  const test = v.testMode && v.live ? '<p class="notice" role="note"><b>Stripe test mode.</b> No real money moves. Pay with card 4242 4242 4242 4242, any future date and any CVC.</p>' : "";
+  const features = (offer?.features ?? []).filter((f) => f.available).map((f) => `<li>${esc(f.text)}</li>`).join("");
+  const card = offer && !paid && a.source !== "open"
+    ? `<div class="plan pick big"><h3>${esc(offer.name)}</h3><p class="price">${esc(priceText(offer))}</p><p class="sum">${esc(offer.summary)}</p><ul>${features}</ul>
+  <div class="act">${v.live ? `<button class="btn" type="button" data-plan="${esc(offer.id)}" data-pick><span>Start ${esc(offer.name)} for ${name}</span></button>` : '<span class="muted">Paid plans are not on sale yet.</span>'}</div></div>
+  ${a.locked ? "" : `<p class="free"><a href="/account/apps/${encodeURIComponent(v.project.id)}">Try free for now (limited)</a></p>`}`
+    : paid
+      ? `<div class="acct-form"><button class="btn ghost" type="button" id="portal"><span>Manage billing</span></button></div><p class="err" id="portalerr" role="alert"></p>`
+      : "";
+  const body = `
+<div class="sb-page" id="mc" tabindex="-1">
+<header class="sb-ph" id="top"><div>
+  <h1>A plan for ${name}</h1>
+  <p class="status" id="status">${status}</p>
+  ${usage}
+</div></header>
+${notice}${test}
+<section class="blk" id="plan">
+  ${card}
+  <p class="err" id="planerr" role="alert"></p>
+  <p class="intro"><a href="/account/billing#projects">All your projects and their plans</a></p>
+</section>
+</div>
+<script type="application/json" id="cfg">${embed({ project: v.project.id, go: v.go && !paid && v.live, wait: v.done && !paid })}</script>`;
+  const script = `
+(function(){
+  gcDropQuery(["project"]);
+  var cfg = JSON.parse(document.getElementById("cfg").textContent);
+  var b = document.querySelector("[data-plan]");
+  if (b) b.addEventListener("click", function(){
+    var err = document.getElementById("planerr"); err.textContent = "";
+    gcBusy(b, true, "Opening Stripe...");
+    gcPost("/api/billing/checkout", { plan: b.getAttribute("data-plan"), project_id: cfg.project }).then(function(j){ location.href = j.url; }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });
+  });
+  if (b) b.focus();
+  // sent here by the genclass command to start the plan: the same click a person would make
+  if (b && cfg.go) b.click();
+  var portal = document.getElementById("portal");
+  if (portal) portal.addEventListener("click", function(){
+    var err = document.getElementById("portalerr"); err.textContent = "";
+    gcBusy(portal, true, "Opening Stripe...");
+    gcPost("/api/billing/portal", {}).then(function(j){ location.href = j.url; }, function(e){ err.textContent = gcWhy(e); gcBusy(portal, false); });
+  });
+  if (cfg.wait) {
+    var tries = 0;
+    var timer = setInterval(function(){
+      if (++tries > 40) { clearInterval(timer); return; }
+      fetch("/api/billing?project=" + encodeURIComponent(cfg.project), { headers: { accept: "application/json" }, cache: "no-store", credentials: "same-origin" })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){ if (j && j.project && j.project.source === "paid") { clearInterval(timer); location.reload(); } })
+        .catch(function(){});
+    }, 3000);
+  }
+})();`;
+  const label = v.account.email ?? (v.account.githubLogin ? `@${v.account.githubLogin}` : "Your account");
+  return studioPage(nonce, {
+    title: `A plan for ${v.project.name} | GenClass`,
+    account: true,
+    org: { name: orgName(label), plan: a.plan.name, href: "/account" },
+    projects: v.apps,
+    project: null,
+    user: { label, sub: orgName(label) },
+    ...orgRail("billing"),
+    railLabel: "Organization",
+    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".plan.big{max-width:520px;padding:28px}.plan.big h3{font-size:26px}.plan.big .price{font-size:16px}.free{margin-top:14px;font-size:13px}.free a{color:var(--ink3)}",
+    body,
+    script: CLIENT_JS + script,
+  });
 }
 
 /** Back from Checkout and the plan bought is not on the account yet: that plan ("paid": any paid plan), else null. */
@@ -298,6 +450,7 @@ ${
 </section>`
     : ""
 }
+${projectsSection(v)}
 ${teamSection(v)}
 </div>
 <script type="application/json" id="cfg">${embed(v.go === true ? { want, go: true } : { want })}</script>`;

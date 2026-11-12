@@ -50,7 +50,8 @@ import { isKind, KINDS } from "./forward.js";
 import { githubApp } from "./github/config.js";
 import { repoStatusForAccount } from "./github/http.js";
 import { json } from "./http.js";
-import { accountAccess, accountBilling, canBuy, entitled, firstPlanWith, FREE, hasAnalytics, hasDashboard, PAID_PLANS, pickRange, priceText, projectAccess, viewRanges, type Access } from "./plans.js";
+import { accountAccess, accountBilling, accountProjectsAccess, canBuy, entitled, firstPlanWith, FREE, hasAnalytics, hasDashboard, PAID_PLANS, pickRange, priceText, projectAccess, viewRanges, type Access } from "./plans.js";
+import { liveFixUsage } from "./usage.js";
 import { askModel, byWeight, claimRun, hasModel, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem } from "./suggest.js";
 import { createInvite, isTeamError, membershipsOf, teamOf } from "./team.js";
 
@@ -67,10 +68,25 @@ async function overview(c: C): Promise<Response> {
     account: accountJson(a.account),
     plan: { id: access.plan.id, name: access.plan.name },
     suggestions: { per_day: lim.per_day, shown: lim.shown, used_today: await usedToday(c.db, a.account.id, c.now), model: hasModel(c.env) },
-    projects: (await accountProjects(c, a.account.id)).map((p) => projectJson(c, p)),
+    projects: await withPlans(c, a.account.id),
     github: { app: gh !== null, install_url: gh ? `${c.cfg.origin}/github/install` : null, connect_url: gh?.clientId ? `${c.cfg.origin}/github/connect` : null },
     billing_url: `${c.cfg.origin}/account/billing`,
     offer: offerFor(c, a.account, access),
+  });
+}
+
+/**
+ * The account's apps (its own and its teams'), each with its plan and the page where it is chosen (plans are per
+ * project since billing/plans.json version 4): `plan` { id, name, source }, `needs_plan` for one past the projects
+ * Free covers, `plan_url`. An app of a team the account is in carries no plan: its owner chooses it.
+ */
+async function withPlans(c: C, accountId: string): Promise<Record<string, unknown>[]> {
+  const access = new Map((await accountProjectsAccess(c.db, accountId, c.env, c.now)).map((x) => [x.row.token, x.access]));
+  return (await accountProjects(c, accountId)).map((p) => {
+    const j: Record<string, unknown> = { ...projectJson(c, p) };
+    const a = p.account_id === accountId ? access.get(p.token) : undefined;
+    if (a) Object.assign(j, { plan: { id: a.plan.id, name: a.plan.name, source: a.source }, needs_plan: a.locked === "free_projects", plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
+    return j;
   });
 }
 
@@ -120,11 +136,12 @@ async function app(c: C): Promise<Response> {
   if (!p) return fail(404, "not found");
   // the same plan rules as the dashboard page's own request (src/auth.ts, /api/account/projects/<id>/stats)
   const access = await projectAccess(c.db, p, c.env, c.now);
-  if (!hasDashboard(access)) return lockedJson(c);
+  if (!hasDashboard(access)) return lockedJson(c, access, p.id);
   const range = pickRange(c.url.searchParams.get("range"), viewRanges(access.plan));
   const s = await stats(c.db, p, range, c.now);
   const view = hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` });
-  return json(200, { ...view, recent: view.recent.slice(0, APP_RECENT), dashboard_url: projectJson(c, p).dashboard_url });
+  const usage = await liveFixUsage(c.db, p.token, access.plan, c.now).catch(() => null);
+  return json(200, { ...view, recent: view.recent.slice(0, APP_RECENT), dashboard_url: projectJson(c, p).dashboard_url, usage, plan: { id: access.plan.id, name: access.plan.name, source: access.source }, plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
 }
 
 async function suggest(c: C): Promise<Response> {
@@ -255,8 +272,8 @@ async function funnels(c: C): Promise<Response> {
   const p = await ownedProject(c, a.account.id, c.url.searchParams.get("id") ?? "");
   if (!p) return fail(404, "not found");
   // the same plan rules as the dashboard page's funnel editor (src/auth.ts)
-  const access = await accountAccess(c.db, a.account.id, c.env, c.now);
-  if (!hasDashboard(access)) return lockedJson(c);
+  const access = await projectAccess(c.db, p, c.env, c.now);
+  if (!hasDashboard(access)) return lockedJson(c, access, p.id);
   if (!hasAnalytics(access)) return upgradeJson(c, "funnels are part of visitor analytics", "analytics");
   return putFunnels(c.req, c.db, p.token);
 }
@@ -279,7 +296,7 @@ async function ask(c: C, f: Fetch): Promise<Response> {
   if (!p) return fail(404, "not found");
   // the numbers the model gets are the ones this account's dashboard shows for the app: the same plan rules
   const access = await projectAccess(c.db, p, c.env, c.now);
-  if (!hasDashboard(access)) return lockedJson(c);
+  if (!hasDashboard(access)) return lockedJson(c, access, p.id);
   const mine = await accountAccess(c.db, a.account.id, c.env, c.now);
   const lim = suggestionLimits(mine.plan);
   const left = async (): Promise<number> => Math.max(0, lim.per_day - (await usedToday(c.db, a.account.id, c.now)));

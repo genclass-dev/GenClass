@@ -25,7 +25,8 @@
 // EXPORT_LIMIT's.
 
 import { accountContext, accountProjects, authenticate, csrfFail, fail, originOk, ownedProject, page, readJson, redirect, webSession, type Auth, type C } from "./auth.js";
-import { billingPage } from "./billing-pages.js";
+import { billingPage, projectPlanPage } from "./billing-pages.js";
+import { liveFixUsage } from "./usage.js";
 import type { Env, HandleOptions, RateLimiterLike } from "./collector.js";
 import { randomBase62, sha256Hex, type Project } from "./dashboard.js";
 import { decodeCursor, exportResponse, PAGE_MAX, parseTime } from "./export.js";
@@ -44,6 +45,8 @@ import {
   PLANS,
   PLANS_FILE,
   planById,
+  projectAccess,
+  accountProjectsAccess,
   stripeMode,
   type Entitlement,
   type Plan,
@@ -55,6 +58,7 @@ import {
   foreignInvoice,
   HOLDING_STATUSES,
   isGenClassSubscription,
+  projectOf,
   managedPayments,
   missingCustomer,
   modeNote,
@@ -151,6 +155,14 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       if (a instanceof Response) return a;
       const b = await accountBilling(c.db, a.account.id, env);
       const access = await accountAccess(c.db, a.account.id, env, c.now);
+      // one project's plan (?project=<id>): its page waits for its payment with this
+      const pid = url.searchParams.get("project");
+      if (pid) {
+        const p = await ownedProject(c, a.account.id, pid);
+        if (!p) return fail(404, "not found");
+        const pa = await projectAccess(c.db, p, env, c.now);
+        return json(200, { project: { id: p.id, plan: pa.plan.id, source: pa.source, locked: pa.locked ?? null } });
+      }
       return json(200, {
         plan: planById(b.plan).id,
         subscription_status: b.subscription_status,
@@ -165,6 +177,36 @@ export async function routeBilling(request: Request, url: URL, path: string, env
     }
     case "/account/billing": {
       if (!get) return method();
+      // one project's plan page (?project=<id>): what the genclass command opens when it adds a project
+      const pid = url.searchParams.get("project");
+      if (pid) {
+        const start = url.searchParams.get("start") === "1";
+        const fromCli = url.searchParams.get("from") === "cli";
+        const a = await webSession(c);
+        if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing?project=${encodeURIComponent(pid)}${start ? "&start=1" : ""}${fromCli ? "&from=cli" : ""}`)}`);
+        const p = await ownedProject(c, a.account.id, pid);
+        if (!p || !p.id) return redirect("/account/billing#projects");
+        const access = await projectAccess(c.db, p, env, c.now);
+        const row = await c.db.prepare("SELECT subscription_status, current_period_end, cancel_at_period_end FROM projects WHERE id = ?").bind(p.id).first<{ subscription_status: string | null; current_period_end: string | null; cancel_at_period_end: number | null }>();
+        const apps = (await accountProjects(c, a.account.id)).map((x) => ({ id: x.id!, name: x.name }));
+        const usage = await liveFixUsage(c.db, p.token, access.plan, c.now).catch(() => null);
+        return page(200, (n) =>
+          projectPlanPage(n, {
+            account: { id: a.account.id, email: a.account.email, githubLogin: a.account.github_login },
+            apps,
+            project: { id: p.id!, name: p.name },
+            access,
+            sub: { status: row?.subscription_status ?? null, periodEnd: row?.current_period_end ?? null, cancels: !!row?.cancel_at_period_end },
+            usage,
+            live: canBuy(env, a.account),
+            testMode: stripeMode(env) === "test",
+            done: url.searchParams.get("done") === "1",
+            go: start,
+            fromCli,
+            now: c.now,
+          }),
+        );
+      }
       const picked = pickedPlan(url.searchParams.get("plan"));
       // ?start=1 with a plan: the person chose it a moment ago (in the genclass command's plan step), so the page
       // opens that plan's checkout itself instead of waiting for one more click
@@ -177,8 +219,11 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       const b = await accountBilling(c.db, a.account.id, env);
       const team = await teamOf(c.db, env, a.account.id, c.now);
       const memberships = await membershipsOf(c.db, env, a.account.id, c.now);
+      const names = new Map((await accountProjects(c, a.account.id)).filter((x) => x.account_id === a.account.id).map((x) => [x.token, x.name]));
+      const projects = (await accountProjectsAccess(c.db, a.account.id, env, c.now)).filter((x) => names.has(x.row.token)).map((x) => ({ id: x.row.id!, name: names.get(x.row.token)!, access: x.access }));
       return page(200, (n) =>
         billingPage(n, {
+          projects,
           team,
           memberships,
           account: { id: a.account.id, email: a.account.email, githubLogin: a.account.github_login },
@@ -242,6 +287,11 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
   if (!plan) {
     if (!PAID_PLANS.length) return fail(400, `no plan is sold on genclass.dev: Free costs nothing, and Enterprise is agreed by email with ${PLANS_FILE.contact}`);
     return fail(400, `choose a plan: ${PAID_PLANS.map((p) => p.id).join(" or ")}`);
+  }
+  // a plan sold per project (billing/plans.json version 4) is bought for one of the account's apps
+  if (plan.per_project === true) {
+    if (typeof body.project_id !== "string" || !body.project_id) return fail(400, `the ${plan.name} plan is bought for one project: send project_id`);
+    return checkoutProject(c, f, a, plan, body.project_id);
   }
   // a plan sold per seat: how many people (the owner included); one when the page sends none
   let seats = 1;
@@ -337,6 +387,41 @@ async function portal(c: C, f: Fetch): Promise<Response> {
   }
 }
 
+/**
+ * Checkout for one project: the project must be the account's and not already on that plan; the Stripe customer is
+ * the account's own (the same checks as the account's checkout: GenClass's, holding nothing else). One subscription
+ * of quantity 1 per project, its metadata naming the project (src/stripe.ts checkoutSession, applyProjectSubscription);
+ * the account's other subscriptions are never touched.
+ */
+async function checkoutProject(c: C, f: Fetch, a: Auth, plan: Plan, projectId: string): Promise<Response> {
+  const p = await ownedProject(c, a.account.id, projectId);
+  if (!p || !p.id) return fail(404, "not found");
+  const access = await projectAccess(c.db, p, c.env, c.now);
+  if (access.source === "paid" && access.plan.id === plan.id) return fail(409, `${p.name} is already on the ${plan.name} plan`);
+  const row = await c.db.prepare("SELECT subscription_status FROM projects WHERE id = ?").bind(p.id).first<{ subscription_status: string | null }>();
+  if (row?.subscription_status === "past_due" || row?.subscription_status === "unpaid") {
+    return fail(409, `the last payment for ${p.name} did not go through; update your card in Manage billing to pay it, or email ${PLANS_FILE.contact}`);
+  }
+  if (await overBudget(c.env.AUTH_LIMIT, "checkout", a.account.id)) return tooMany();
+  const account = { id: a.account.id, email: a.account.email, ...(await accountBilling(c.db, a.account.id)) };
+  try {
+    let customer = await ensureCustomer(c.env, f, c.db, account);
+    if (!customer.fresh) {
+      const own = await checkCustomer(c.env, f, account.id, customer.id);
+      if (own.state === "not_genclass") return refuseShared(c, f, account.id, customer.id, NOT_GENCLASS);
+      if (own.state === "ok" && sharedCustomer(own.subs)) return refuseShared(c, f, account.id, customer.id, SHARED_SUBSCRIPTION);
+      if (own.state === "missing") customer = await ensureCustomer(c.env, f, c.db, { ...account, stripe_customer_id: customer.id, stripe_mode: stripeMode(c.env) }, customer.id);
+      // a payment for this project that the webhook has not written yet: never a second subscription
+      const subs = own.state === "ok" ? own.subs : [];
+      if (subs.some((s) => projectOf(s) === p.id && HOLDING_STATUSES.has(s.status))) return fail(409, `a plan for ${p.name} is already going through; reload this page in a minute`);
+    }
+    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, project: { id: p.id } });
+    return json(200, { url });
+  } catch (e) {
+    return stripeFail(e);
+  }
+}
+
 // --------------------------------------------------------------------------------------------- forwarding settings
 
 async function integrations(c: C, f: Fetch, projectId: string, kindRaw: string | null, test: boolean): Promise<Response> {
@@ -358,8 +443,8 @@ export async function integrationsFor(c: C, f: Fetch, accountId: string, project
   const a = { account: { id: accountId } };
   const p = await ownedProject(c, a.account.id, projectId);
   if (!p || !p.id) return fail(404, "not found");
-  // a grant gives its plan's forwarding too (src/plans.ts accountAccess)
-  const plan = await accountPlan(c.db, a.account.id, c.env, c.now);
+  // the project's own plan (a grant gives its plan's forwarding too: src/plans.ts projectAccess)
+  const plan = (await projectAccess(c.db, p, c.env, c.now)).plan;
 
   if (kindRaw === null) {
     if (write) return method();
@@ -476,7 +561,7 @@ export async function exportFor(c: C, accountId: string, projectId: string): Pro
   const who = { accountId };
   const p = await ownedProject(c, who.accountId, projectId);
   if (!p) return fail(404, "not found");
-  const plan: Plan = await accountPlan(c.db, who.accountId, c.env, c.now);
+  const plan: Plan = (await projectAccess(c.db, p, c.env, c.now)).plan;
   if (!entitled(plan, "export")) return upgrade(c, "export");
   if (await overBudget(c.env.EXPORT_LIMIT, "export", who.accountId)) return tooMany();
   const q = c.url.searchParams;

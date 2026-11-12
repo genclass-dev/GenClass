@@ -117,8 +117,9 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     const me = await cliUser(env);
     team(sql, me.account.id, 3);
     const j = await json(get(env, "/api/cli/account", me.bearer));
-    expect(j.plan).toMatchObject({ id: "team", name: "Team", price: "$15 / developer / month" });
-    expect([j.access, j.limits.seats, j.limits.apps, j.limits.history_days]).toEqual(["paid", 3, null, 90]);
+    expect(j.plan).toMatchObject({ id: "team", name: "Team", price: "$15 / project / month" });
+    // Team is per project since plans.json version 4: no seat count, the whole team is in
+    expect([j.access, j.limits.seats, j.limits.apps, j.limits.history_days]).toEqual(["paid", null, null, 90]);
     expect(j.includes).toEqual({ analytics: true, forwarding: true, export: true, private_repositories: true });
     expect(j.subscription).toEqual({ status: "active", current_period_end: "2026-12-13T12:00:00.000Z", cancel_at_period_end: false });
     expect(j.offer).toBeNull();
