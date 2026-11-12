@@ -180,6 +180,16 @@ export async function setup(o = {}, deps = {}) {
       break;
     }
     if (!step) {
+      // someone is at a terminal: the command stays open (home.mjs); otherwise it says what is left and ends
+      if (!auto && o.home !== false && deps.home) {
+        const waiting = state.steps.filter((s) => s.state === "waiting");
+        if (state.complete) out(`\n  ${c.green("Everything is set up.")}`);
+        else if (waiting.length) {
+          out();
+          for (const s of waiting) note(`${s.title}: ${s.human ?? s.detail}.`);
+        }
+        return deps.home({ ...o, cwd: state.cwd });
+      }
       closing(state);
       break;
     }

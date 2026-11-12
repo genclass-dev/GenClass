@@ -58,9 +58,9 @@ export function wrap(text, cols = width() - 4) {
   return lines;
 }
 
-/** Prints `text` wrapped, every line behind `indent`. */
+/** Prints `text` wrapped, every line behind `indent`, none longer than the narrowest window the command draws for (width() less 2). */
 export function para(text, indent = "  ", paint = (s) => s) {
-  for (const l of wrap(text, width() - indent.length)) out(`${indent}${paint(l)}`);
+  for (const l of wrap(text, width() - 2 - indent.length)) out(`${indent}${paint(l)}`);
 }
 
 /** A horizontal rule as wide as the text. */
@@ -281,6 +281,12 @@ export async function pick(question, labels, def = 0) {
 /** One line typed at `question`; null when stdin is not a terminal or input has ended. */
 export async function typed(question) {
   const a = await ask(question);
+  return a === null || (a === "" && inputClosed()) ? null : a;
+}
+
+/** One line typed at `question` that is never shown (a key, a webhook address); null when stdin is not a terminal or input has ended. */
+export async function secret(question) {
+  const a = await ask(question, { hidden: true });
   return a === null || (a === "" && inputClosed()) ? null : a;
 }
 

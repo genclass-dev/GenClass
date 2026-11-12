@@ -128,7 +128,18 @@ export async function choosePlan(state, o = {}, deps = {}) {
   const a = await typed(`  ${PROMPT()} ${c.bold("Enter")} ${c.gray(`to start ${offer.plan.name}`)} ${dot} ${c.bold("f")} ${c.gray("free for now")} ${dot} ${c.bold("q")} ${c.gray("stop")}  `);
   if (a === null || /^q/i.test(a)) return "quit";
   if (/^[fs]/i.test(a)) return stayFree(`${free} for now. ${offer.plan.name} any time: ${offer.checkoutUrl}`);
-  // the checkout: opened in the browser, paid on Stripe; this command never sees a card
+  if (await checkout(offer, o, deps)) return "done";
+  note(`This project goes on with ${free} for now.`);
+  return "skipped";
+}
+
+/**
+ * Opens a plan's checkout in the browser and waits for the payment (Enter stops the wait). The page is
+ * genclass.dev's, the payment is Stripe's; this command never sees a card. Returns whether the plan became active.
+ * @param {{ plan: { name: string }, checkoutUrl: string }} offer
+ * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
+ */
+export async function checkout(offer, o = {}, deps = {}) {
   out();
   out(`  Open  ${c.cyan(offer.checkoutUrl)}`);
   if (openBrowser(offer.checkoutUrl, o)) note("Your browser is opening the checkout.");
@@ -147,12 +158,9 @@ export async function choosePlan(state, o = {}, deps = {}) {
     }
   }
   await stop.done();
-  if (paid) {
-    sp.stop("ok", `${offer.plan.name} is active. Thank you.`);
-    return "done";
-  }
-  sp.stop("warn", `No payment yet, so this project goes on with ${free} for now. ${offer.plan.name} starts the moment the payment goes through.`);
-  return "skipped";
+  if (paid) sp.stop("ok", `${offer.plan.name} is active. Thank you.`);
+  else sp.stop("warn", `No payment yet. ${offer.plan.name} starts the moment the payment goes through.`);
+  return paid;
 }
 
 // ------------------------------------------------------------------------------------------------ 2. the runtime
