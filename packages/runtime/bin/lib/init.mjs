@@ -58,7 +58,7 @@ remove   takes out exactly what init added (the lines and blocks marked "${MARK}
                    package.json's name), writes it into what it adds, and saves the token and your
                    private dashboard link in ${LOCAL_FILE} (the dashboard is free; visitor analytics
                    come with the Team plan; \`dashboard\` prints the link again). Signed in (\`login\`), init first asks
-                   whether the new app goes into your GenClass account instead (--yes: it does)
+                   whether the new app goes into your GenClass account instead (--yes or --in-account: it does)
   --no-token       no token, no network (no dashboard; you can add one later: ${START_URL})
   --no-telemetry   turn off GenClass's anonymous diagnostics (on by default; see TELEMETRY.md and
                    PRIVACY.md). Written as an option file (genclass.config.ts/js, imported right before
@@ -106,6 +106,7 @@ const BOOL = {
   "no-telemetry": "noTelemetry",
   telemetry: "telemetry",
   "no-token": "noToken",
+  "in-account": "inAccount",
   help: "help",
   h: "help",
 };
@@ -770,7 +771,9 @@ async function offerAccount(o, tk) {
   if (!tk.pending && !tk.wouldCreate) return tk;
   const creds = readCredentials();
   if (!creds) return tk;
-  if (tk.wouldCreate || o.yes || !interactive()) return { ...tk, account: creds };
+  // --in-account: the caller already has the person's word that the app goes into their account (the `genclass`
+  // command asks for the sign-in one step before this one)
+  if (tk.wouldCreate || o.yes || o.inAccount || !interactive()) return { ...tk, account: creds };
   const ok = await confirm(`Signed in as ${accountLabel(creds.account)}: create this app in your GenClass account?`);
   if (ok === false) {
     out(`  ${c.gray("Not in your account: init creates the app with a private dashboard link instead, as without an account.")}`);

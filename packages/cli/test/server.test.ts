@@ -3,10 +3,12 @@
 // page seen" on real routes.
 import { beforeEach, describe, expect, it } from "vitest";
 import { handle } from "../../../telemetry-worker/src/collector.js";
-import { cliToken, createApp, detection, now, resetClock, sendBatch, setPlan, setup, signedIn } from "../../../telemetry-worker/test/account-helpers.js";
+import { CLI_DASHBOARD_FROM } from "../../../telemetry-worker/src/cli.js";
+import { cliToken, createApp, detection, now, resetClock, sendBatch, setNow, setPlan, setup, signedIn } from "../../../telemetry-worker/test/account-helpers.js";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { run as runInit } from "../../runtime/bin/lib/init.mjs";
-import { fetchOverview, fetchRepoStatus, requestPlan } from "../src/api.mjs";
+import { fetchApp, fetchOverview, fetchRepoStatus, requestPlan } from "../src/api.mjs";
+import { dashboard } from "../src/app.mjs";
 import { readState } from "../src/state.mjs";
 import { HOST, isolate, printed, tempDir, viteApp } from "./helpers.js";
 
@@ -58,16 +60,50 @@ describe("genclass against the collector (src/api.mjs, telemetry-worker/src/cli.
     viteApp(dir);
     const deps = { runGit: () => null, fetchFn: through(env) };
     const at = async () => Object.fromEntries((await readState({ cwd: dir }, deps)).steps.map((s) => [s.id, s.state]));
-    expect(await at()).toMatchObject({ account: "done", runtime: "next", "first-page": "todo" });
+    expect(await at()).toMatchObject({ account: "done", runtime: "next", dashboard: "todo" });
     // the app in the account, and the runtime added with its token
     const app = await createApp(env, me.cookie, "shop");
     await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--token", app.token])).toBe(0));
-    expect(await at()).toMatchObject({ runtime: "done", "first-page": "waiting" });
+    expect(await at()).toMatchObject({ runtime: "done", dashboard: "waiting" });
     // the live site sends its first batch
     expect((await sendBatch(env, app.token, detection())).status).toBe(202);
     const s = await readState({ cwd: dir }, { ...deps, now: now().getTime() });
-    expect(s.steps.find((x) => x.id === "first-page")).toMatchObject({ state: "done", detail: "last page just now" });
+    expect(s.steps.find((x) => x.id === "dashboard")).toMatchObject({ state: "done", detail: "last page just now" });
     expect(s.app).toMatchObject({ name: "shop", token: app.token, dashboardUrl: `${HOST}/account/apps/${app.id}` });
+  });
+
+  it("genclass dashboard shows the app's own numbers from the real route, and an older sign-in is asked to sign in again", async () => {
+    const { env, sql } = setup();
+    setNow(new Date(Date.parse(CLI_DASHBOARD_FROM) + 3_600_000));
+    const me = await account(env);
+    const dir = tempDir();
+    viteApp(dir);
+    const app = await createApp(env, me.cookie, "shop");
+    await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--token", app.token])).toBe(0));
+    expect((await sendBatch(env, app.token, [{ t: "session", host: "shop.example", route: "/" }, ...detection("duplicate", "/checkout"), ...detection("stale", "/orders/:id")])).status).toBe(202);
+    const deps = { runGit: () => null, fetchFn: through(env), now: now().getTime() };
+    const data = await fetchApp(me.creds, app.id, "7d", deps);
+    expect(data).toMatchObject({ ok: true, name: "shop", range: "7d", totals: { found: 2, checks: 0 }, visitors: null, visitorsPlan: { plan: "Team", upgradeUrl: `${HOST}/account/billing` }, dashboardUrl: `${HOST}/account/apps/${app.id}` });
+    expect((data as any).problems.map((p: any) => p.key).sort()).toEqual(["duplicate\t/checkout", "stale\t/orders/:id"]);
+    let code = -1;
+    const view = await printed(async () => (code = await dashboard({ cwd: dir }, deps)));
+    expect(code).toBe(0);
+    expect(view).toContain("last 7 days");
+    expect(view).toMatch(/Problems found\s+2/);
+    expect(view).toMatch(/1\s+duplicate\s+\/checkout\s+the same request went out twice/);
+    expect(view).toMatch(/1\s+stale\s+\/orders\/:id/);
+    expect(view).toContain("visitor analytics come with the Team plan");
+    expect(view).toContain(`${HOST}/account/apps/${app.id}`);
+    expect(view).not.toContain("SECRET PAGE TEXT");
+    // for a coding agent: the same as data
+    const j = JSON.parse(await printed(async () => expect(await dashboard({ cwd: dir, json: true }, deps)).toBe(0)));
+    expect(j).toMatchObject({ ok: true, app: "shop", totals: { found: 2 } });
+    // a sign-in approved before the approval page said the command can show dashboards
+    sql.db.exec(`UPDATE auth_sessions SET created = '${new Date(Date.parse(CLI_DASHBOARD_FROM) - 1000).toISOString()}' WHERE kind = 'cli'`);
+    expect(await fetchApp(me.creds, app.id, "7d", deps)).toMatchObject({ ok: false, status: 403, reauth: true });
+    const old = await printed(async () => expect(await dashboard({ cwd: dir }, deps)).toBe(1));
+    expect(old).toContain("genclass login");
+    expect(old).toContain(`${HOST}/account/apps/${app.id}`);
   });
 
   it("the GitHub App's status and the plan come back in the shapes the command reads", async () => {

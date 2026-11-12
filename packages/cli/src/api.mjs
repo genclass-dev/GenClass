@@ -1,6 +1,6 @@
 // What the `genclass` command asks genclass.dev beyond the runtime CLI's own calls (packages/runtime/bin/lib/account.mjs):
-// the account's overview (plan, apps, limits), what the GitHub App is doing on this repository, and the suggestions
-// plan. The request and answer shapes are the collector's (telemetry-worker/src/cli.ts).
+// the account's overview (plan, apps, limits), what the GitHub App is doing on this repository, the suggestions
+// plan, and one app's dashboard as data. The request and answer shapes are the collector's (telemetry-worker/src/cli.ts).
 //
 // Invariants:
 // - Every call carries the CLI session saved by `genclass login` and goes to the host that session was made for.
@@ -98,5 +98,54 @@ export async function requestPlan(creds, digest, opts = {}) {
     upgradeUrl: sameOrigin(j.upgrade_url, creds.host),
     remainingToday: Number.isFinite(Number(j.remaining_today)) && j.remaining_today !== null ? Number(j.remaining_today) : null,
     limited: j.limited === true,
+  };
+}
+
+const count = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.round(Number(v))) : 0);
+const pairs = (list, max) =>
+  (Array.isArray(list) ? list : [])
+    .filter((x) => x && typeof x === "object" && typeof x.key === "string")
+    .slice(0, max)
+    .map((x) => ({ key: x.key.slice(0, 300), count: count(x.count) }));
+
+/**
+ * One app's dashboard as data, for `genclass dashboard`: the counts the browser dashboard shows, for the period.
+ * `reauth` is true when this sign-in was approved before the command could show dashboards (sign in again);
+ * `missing` when the server has no such route; `locked` when the app's plan leaves the dashboard out.
+ * @param {{ access_token: string, host: string }} creds
+ * @param {string} id     the app's id in the account (from the overview)
+ * @param {string} [range] "24h", "7d" or "30d" (a plan may show longer ones)
+ */
+export async function fetchApp(creds, id, range = "7d", opts = {}) {
+  const r = await request(`/api/cli/app?id=${encodeURIComponent(id)}&range=${encodeURIComponent(range)}`, { token: creds.access_token, host: creds.host, fetchFn: opts.fetchFn });
+  if (!r.ok) return { ok: false, status: r.status, reason: failure(r), ...(r.status === 404 ? { missing: true } : {}), ...(r.json?.reauth === true ? { reauth: true } : {}), ...(r.json?.locked === true ? { locked: true, upgradeUrl: sameOrigin(r.json.upgrade_url, creds.host) } : {}) };
+  const j = r.json ?? {};
+  const t = j.totals && typeof j.totals === "object" ? j.totals : {};
+  const b = j.breakdowns && typeof j.breakdowns === "object" ? j.breakdowns : {};
+  const st = j.agent?.stages && typeof j.agent.stages === "object" ? j.agent.stages : {};
+  const v = j.visits && typeof j.visits === "object" ? j.visits : {};
+  const lock = j.locked?.analytics && typeof j.locked.analytics === "object" ? j.locked.analytics : null;
+  return {
+    ok: true,
+    name: str(j.name, 80) ?? "",
+    range: str(j.range, 8) ?? range,
+    lastEvent: str(j.lastEvent, 40),
+    totals: { visits: count(t.sessions), found: count(t.detections), handled: count(t.acted), possible: count(t.possible), checks: count(t.checks), pageViews: count(t.ix_views) },
+    previous: { found: count(j.previous?.detections), visits: count(j.previous?.sessions) },
+    /** problems found per bucket (hour or day), oldest first */
+    series: (Array.isArray(j.series) ? j.series : []).slice(-400).map((x) => count(x?.detections)),
+    /** kind TAB page */
+    problems: pairs(b.detect_issue, 200),
+    possible: pairs(b.possible_issue, 200),
+    checks: pairs(b.check_issue, 200),
+    kinds: pairs(b.detect_diagnosis, 25),
+    recent: (Array.isArray(j.recent) ? j.recent : [])
+      .filter((x) => x && typeof x === "object")
+      .slice(0, 20)
+      .map((x) => ({ at: str(x.t, 40), kind: str(x.diagnosis, 60), route: str(x.route, 200), handled: x.acted === 1 || x.acted === true })),
+    visitors: lock ? null : { visits: count(v.sessions), pages: count(v.pages), bounces: count(v.bounces), entry: pairs(v.entry, 25) },
+    visitorsPlan: lock ? { plan: str(lock.plan, 40), upgradeUrl: sameOrigin(lock.upgrade_url, creds.host) } : null,
+    agent: { found: count(st.found), reproduced: count(st.reproduced), fixed: count(st.fixed), closed: count(st.closed), open: count(st.open), last: str(j.agent?.last, 40) },
+    dashboardUrl: sameOrigin(j.dashboard_url, creds.host),
   };
 }

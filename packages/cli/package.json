@@ -1,6 +1,6 @@
 {
   "name": "genclass",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "GenClass CLI: one command that signs you in, adds GenClass to your app, connects your pull requests and your coding agent, and tells you what your app is missing.",
   "type": "module",
   "license": "Apache-2.0",

@@ -4,15 +4,16 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { WORKFLOW_FILE as COLLECTOR_WORKFLOW } from "../../../telemetry-worker/src/github/workflow-file.js";
-import { connectAgent, mcpServer, planAgentConfig, setUpPullRequests, workflowFor } from "../src/actions.mjs";
+import { addWorkflow, connectAgent, connectGithubApp, mcpServer, planAgentConfig, workflowFor } from "../src/actions.mjs";
 import { BUILD, WORKFLOW_FILE } from "../src/assets.mjs";
 import { parseArgs, run, USAGE } from "../src/cli.mjs";
 import { githubName, gitInfo } from "../src/git.mjs";
 import { WORKFLOW_PATH } from "../src/state.mjs";
-import { ago, clean, visible, wrap } from "../src/tui.mjs";
-import { isolate, printed, tempDir, viteApp, write } from "./helpers.js";
+import { ago, checklist, clean, summary, visible, wrap } from "../src/tui.mjs";
+import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
+import { ACCOUNT, fakeServer, HOST, isolate, printed, SESSION, tempDir, viteApp, write } from "./helpers.js";
 
 isolate();
 
@@ -41,21 +42,60 @@ describe("genclass: the one workflow file (src/assets.mjs, src/actions.mjs workf
     const dir = tempDir();
     viteApp(dir);
     const state = { cwd: dir, git: { root: dir, github: null }, workflows: [] } as never;
-    const out = await printed(async () => expect(await setUpPullRequests(state, { yes: true })).toBe("done"));
+    const out = await printed(async () => expect(await addWorkflow(state, { yes: true })).toBe("done"));
     expect(readFileSync(join(dir, WORKFLOW_PATH), "utf8")).toBe(WORKFLOW_FILE);
     expect(out).toContain("new file");
     expect(out).toContain(`git add ${WORKFLOW_PATH} && git commit -m "Add GenClass to pull requests" && git push`);
     expect(existsSync(join(dir, ".git"))).toBe(false);
     // a second time the file is there: it is left alone
     write(dir, { [WORKFLOW_PATH]: "mine\n" });
-    const again = await printed(async () => expect(await setUpPullRequests(state, { yes: true })).toBe("skipped"));
+    const again = await printed(async () => expect(await addWorkflow(state, { yes: true })).toBe("skipped"));
     expect(again).toContain("already there");
     expect(readFileSync(join(dir, WORKFLOW_PATH), "utf8")).toBe("mine\n");
     // without a terminal and without --yes nothing is written
     const other = tempDir();
     viteApp(other);
-    await printed(async () => expect(await setUpPullRequests({ cwd: other, git: { root: other, github: null }, workflows: [] } as never, {})).toBe("skipped"));
+    const st = { cwd: other, git: { root: other, github: null }, workflows: [] } as never;
+    await printed(async () => expect(await addWorkflow(st, {})).toBe("skipped"));
     expect(existsSync(join(other, WORKFLOW_PATH))).toBe(false);
+    // on a terminal the step's Enter is the yes: the walk passes it on, and the file is written without a second question
+    await printed(async () => expect(await addWorkflow(st, { confirmed: true })).toBe("done"));
+    expect(readFileSync(join(other, WORKFLOW_PATH), "utf8")).toBe(WORKFLOW_FILE);
+  });
+
+  it("the GitHub App: without a terminal nothing is opened or waited for, and the two links are printed", async () => {
+    const dir = tempDir();
+    viteApp(dir);
+    const state = { cwd: dir, git: { root: dir, github: "acme/shop" } } as never;
+    // signed out, or no GitHub repository: nothing to do
+    expect(await connectGithubApp(state, {})).toBe("skipped");
+    saveCredentials({ host: HOST, access_token: SESSION, account: ACCOUNT });
+    expect(await connectGithubApp({ cwd: dir, git: { root: dir, github: null } } as never, {})).toBe("skipped");
+    const answer = (over: Record<string, unknown>) => ({ "GET /api/cli/github": { json: { repo: "acme/shop", known: true, installed: false, evidence: false, prs: 0, last: null, private: false, needs_plan: false, paused: false, connect_url: `${HOST}/github/connect`, install_url: `${HOST}/github/install`, ...over } } });
+    const ask = async (routes: Parameters<typeof fakeServer>[0], o = {}) => {
+      const server = fakeServer(routes);
+      vi.stubGlobal("fetch", server.fetchFn);
+      try {
+        let result = "";
+        const said = await printed(async () => (result = await connectGithubApp(state, o)));
+        return { result, said, calls: server.calls };
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    };
+    const not = await ask(answer({}));
+    expect(not.result).toBe("skipped");
+    expect(not.said).toContain(`${HOST}/github/install`);
+    expect(not.said).toContain("Continue with GitHub");
+    expect(not.calls.map((c) => `${c.path}${c.query}`)).toEqual(["/api/cli/github?repo=acme%2Fshop"]);
+    // already on the repository: done, with one request
+    const on = await ask(answer({ installed: true }), { yes: true });
+    expect([on.result, on.calls.length]).toEqual(["done", 1]);
+    expect(on.said).toContain("The GenClass GitHub App is on acme/shop.");
+    // a genclass.dev without the route says where to look in the browser
+    const older = await ask({});
+    expect(older.result).toBe("skipped");
+    expect(older.said).toContain(`${HOST}/account/github`);
   });
 });
 
@@ -103,6 +143,25 @@ describe("genclass: text and git helpers (src/tui.mjs, src/git.mjs)", () => {
     expect(visible(`${ESC}[1mbold${ESC}[22m`)).toBe(4);
   });
 
+  it("the short view is at most one line per kind of thing; the full list has one line per part", async () => {
+    const steps = [
+      { title: "Account", doing: "Sign in", state: "done", detail: "ada@example.com" },
+      { title: "Runtime", doing: "Add GenClass to this app", state: "done", detail: "added" },
+      { title: "Dashboard", doing: "See your first page", state: "waiting", detail: "deploy, then open your site once" },
+      { title: "Test workflow", doing: "Add the test workflow", state: "next", detail: "Playwright found" },
+      { title: "GitHub App", doing: "Connect the GitHub App", state: "todo", detail: "after the test workflow" },
+      { title: "Coding agent", doing: "Connect your coding agent", state: "todo", detail: "" },
+      { title: "Suggestions", doing: "See what your app is missing", state: "optional", detail: "" },
+    ];
+    const short = (await printed(() => summary(steps))).trimEnd().split("\n");
+    expect(short.map((l) => l.replace(/\s+/g, " ").trim().split(" ").slice(1).join(" "))).toEqual(["Done Account • Runtime", "Next Add the test workflow", "Waiting Dashboard: deploy, then open your site once", "Later GitHub App • Coding agent"]);
+    const full = (await printed(() => checklist(steps))).trimEnd().split("\n");
+    expect(full).toHaveLength(7);
+    expect(full[3]).toContain("Test workflow");
+    // nothing done, nothing waiting: two lines
+    expect((await printed(() => summary([{ title: "Account", doing: "Sign in", state: "next" }, { title: "Runtime", state: "todo" }]))).trimEnd().split("\n")).toHaveLength(2);
+  });
+
   it("wrap() and ago() are plain", () => {
     expect(wrap("one two three four five", 9)).toEqual(["one two", "three", "four five"]);
     expect(wrap("a\nb", 20)).toEqual(["a", "b"]);
@@ -143,7 +202,13 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
     const status = execFileSync(process.execPath, [main, "status", "--cwd", dir], { env, encoding: "utf8" });
     expect(status).toContain("GenClass");
     expect(status).toContain("shop");
-    expect(status).toContain("Next  Sign in to GenClass");
+    expect(status).toContain("Next  Sign in");
+    expect(status).toContain("Later    Runtime");
+    expect(status).toContain("Every part: genclass status --all");
+    // the full list on request: every part of GenClass by name
+    const all = execFileSync(process.execPath, [main, "status", "--all", "--cwd", dir], { env, encoding: "utf8" });
+    for (const part of ["Account", "Runtime", "Dashboard", "Test workflow", "GitHub App", "Coding agent", "Suggestions"]) expect(all, part).toContain(part);
+    expect(all).not.toContain("Every part:");
     expect(status).toContain("Run genclass login");
     // a command handed to the runtime CLI's own code prints this command's name
     // (signed out, whoami says how to sign in and exits 1)
@@ -156,7 +221,9 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
     expect(json.next).toMatchObject({ id: "account", run: "genclass login" });
     // without a terminal, `genclass` alone changes nothing and prints the checklist
     const bare = execFileSync(process.execPath, [main, "--cwd", dir], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    expect(bare).toContain("Next  Sign in to GenClass");
+    expect(bare).toContain("Next  Sign in");
+    // the art is for a terminal only: nothing piped holds it
+    expect(bare).not.toContain("█");
     expect(existsSync(join(dir, ".mcp.json"))).toBe(false);
   });
 });

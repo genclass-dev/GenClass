@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.0
+
+- **`genclass dashboard` shows the app in the terminal**: problems found on the live site by kind and page, measured
+  visual checks, what was handled, visitors, what the coding agent did with the findings, what the GitHub App is
+  doing and what the last suggestions run left. `--range 24h|7d|30d`, `--all`, `--app <name>`, `--open`, `--json`.
+  The numbers are the browser dashboard's, from a new route (`GET /api/cli/app`) with the same plan rules. The
+  sign-in page now says the command can show them; a sign-in approved before that is asked to sign in once more
+  instead of gaining it silently. Signed out, the command still prints an app's private dashboard link.
+- **A short view.** The first screen is three or four lines: what is done, what is next, what waits on something
+  outside this machine, what comes later. `d` (or `genclass status --all`) shows every part with what is known about
+  it and a fuller explanation, and `d` again folds it back.
+- **Every part of GenClass is a step**: account, runtime, dashboard, test workflow, GitHub App, coding agent,
+  suggestions. The workflow file and the GitHub App were one step and are now two, in that order.
+- **One Enter per step.** Enter is the yes for what the step's sentence says it writes, so the workflow file and the
+  agent configuration are written without a second question, and an app added after signing in goes into the
+  account without being asked again (`init --in-account`). The diff of the runtime's change is still shown first.
+- **The GitHub App connects by itself as far as it can.** The step asks genclass.dev what GitHub says; with no
+  answer it opens Continue with GitHub and waits, and when the app is not on the repository it opens GitHub's
+  install page and waits until it is. Without a terminal it prints the two links.
+- **An opening wordmark**, GENCLASS in block letters, on a terminal that is wide enough and has the characters.
+  Never in piped output or `--json`.
+- `status --json`: step ids are now `account`, `runtime`, `dashboard`, `workflow`, `github-app`, `agent`,
+  `suggestions` (were `first-page` and `pull-requests`), and each step has a short `title`.
+
 ## 0.1.1
 
 - **Fixed: the guided setup ended at the suggestions step's address question.** A question asked right after another

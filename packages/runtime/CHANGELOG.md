@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **`init --in-account`**: a signed-in developer's new app goes into their account without the question
+  (`bin/lib/init.mjs`). The `genclass` command passes it when the person signed in one step earlier
+  (`genclass` 0.2.0). Without the flag `init` asks as before.
 - **Fixed in the CLI: a question asked right after another one could end the command at the prompt.** The reader of
   one question closes a turn after its answer; a question asked before that had its input paused by the close. Each
   question now waits for the one before it to have closed (`bin/lib/ui.mjs` `ask`). `init` and `login` always had

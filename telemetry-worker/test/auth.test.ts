@@ -537,7 +537,8 @@ describe("accounts: device flow for the CLI (RFC 8628)", () => {
     expect(page).toContain("genclass-runtime 0.3.0");
     // the warning comes before the buttons, and the scope says what a CLI session can and cannot do
     expect(page.indexOf("Approve only a sign-in you started")).toBeLessThan(page.indexOf('id="yes"'));
-    expect(page).toContain("It cannot read your apps' stats");
+    expect(page).toContain("show your apps' dashboards");
+    expect(page).toContain("It cannot change how you sign in.");
 
     const ap = await call(env, "POST", "/api/device/approve", { body: { user_code: code.user_code.replace("-", " ").toLowerCase(), approve: true }, cookie });
     expect(ap.status).toBe(200);

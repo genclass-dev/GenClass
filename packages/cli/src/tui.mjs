@@ -103,6 +103,27 @@ export function checklist(steps) {
   }
 }
 
+/**
+ * The short view of the steps: one line for what is done, one for what is next, one for each thing that waits on
+ * something outside this machine, one for what comes later. Steps that do not apply to the project are left out
+ * (the full list, checklist(), names them and says why).
+ * @param {{ title: string, doing?: string, state: string, detail?: string }[]} steps
+ */
+export function summary(steps) {
+  const room = width() - 4 - 3 - 9;
+  const names = (list) => clean(list.map((s) => s.title).join(` ${sym.dot} `), room);
+  const line = (mark, label, text) => out(`  ${mark}  ${label}${text}`);
+  const pad = (label) => label.padEnd(9);
+  const done = steps.filter((s) => s.state === "done");
+  const next = steps.find((s) => s.state === "next");
+  const later = steps.filter((s) => s.state === "todo");
+  if (done.length) line(MARK.done(), pad("Done"), c.gray(names(done)));
+  for (const b of steps.filter((s) => s.state === "blocked")) line(MARK.blocked(), pad(b.title), c.gray(clean(b.detail ?? "", room)));
+  if (next) line(MARK.next(), c.bold(pad("Next")), c.bold(clean(next.doing ?? next.title, room)));
+  for (const w of steps.filter((s) => s.state === "waiting")) line(MARK.waiting(), pad("Waiting"), c.gray(clean(`${w.title}: ${w.detail ?? ""}`, room)));
+  if (later.length) line(MARK.todo(), c.gray(pad("Later")), c.gray(names(later)));
+}
+
 /** The block under the checklist that says what comes next and why, in plain words. */
 export function nextBlock(title, text) {
   out();

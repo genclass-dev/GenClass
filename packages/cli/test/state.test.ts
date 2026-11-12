@@ -1,4 +1,4 @@
-// Where a project stands (src/state.mjs): each of the six steps is read from what is on disk and what genclass.dev
+// Where a project stands (src/state.mjs): each of the seven steps is read from what is on disk and what genclass.dev
 // answers, and there is exactly one next step.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -27,7 +27,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
   it("a folder that is no web app says so, and signing in is still the next step", async () => {
     const dir = tempDir();
     const s = await readState({ cwd: dir }, { runGit: noGit });
-    expect(states(s)).toEqual({ account: "next", runtime: "blocked", "first-page": "optional", "pull-requests": "optional", agent: "optional", suggestions: "todo" });
+    expect(states(s)).toEqual({ account: "next", runtime: "blocked", dashboard: "optional", workflow: "optional", "github-app": "optional", agent: "optional", suggestions: "todo" });
     expect(s.next?.id).toBe("account");
     expect(s.steps[1]!.detail).toContain("no web app in this folder");
     expect(s.app.isApp).toBe(false);
@@ -40,7 +40,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     const server = fakeServer({});
     const s = await readState({ cwd: dir }, { runGit: noGit, fetchFn: server.fetchFn });
     expect(server.calls).toEqual([]);
-    expect(states(s)).toEqual({ account: "next", runtime: "todo", "first-page": "todo", "pull-requests": "optional", agent: "todo", suggestions: "todo" });
+    expect(states(s)).toEqual({ account: "next", runtime: "todo", dashboard: "todo", workflow: "optional", "github-app": "optional", agent: "todo", suggestions: "todo" });
     expect(s.steps[1]).toMatchObject({ run: "genclass init", detail: "Vite + React" });
     expect(s.steps[3]!.detail).toBe("not a git repository yet");
     expect(s.app).toMatchObject({ name: "shop", framework: "Vite + React", isApp: true, token: null });
@@ -65,12 +65,12 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     signIn();
     // the token is in the code but the account has no such app: connecting is next
     const without = await readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview() } }).fetchFn });
-    expect(states(without)).toMatchObject({ account: "done", runtime: "next", "first-page": "todo" });
+    expect(states(without)).toMatchObject({ account: "done", runtime: "next", dashboard: "todo" });
     expect(without.steps[1]).toMatchObject({ run: "genclass connect", detail: "added, but this app is not in your account yet" });
     expect(without.app.token).toBe(TOKEN);
     // in the account, nothing received yet: waiting on a deploy, which is no command, so the next step is after it
     const waiting = await readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project()] }) } }).fetchFn });
-    expect(states(waiting)).toMatchObject({ runtime: "done", "first-page": "waiting", agent: "next" });
+    expect(states(waiting)).toMatchObject({ runtime: "done", dashboard: "waiting", agent: "next" });
     expect(waiting.steps[1]!.detail).toBe('added · app "shop"');
     expect(waiting.steps[2]).toMatchObject({ detail: "deploy, then open your site once", human: "deploy your app and open the live site once" });
     expect(waiting.app.dashboardUrl).toBe(`${HOST}/account/apps/proj000000000001`);
@@ -80,7 +80,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     expect(seen.steps[2]).toMatchObject({ state: "done", detail: "last page 3 hours ago" });
   });
 
-  it("pull requests: Playwright, the workflow file, then what the GitHub App is doing, in that order", async () => {
+  it("the test workflow, then the GitHub App: Playwright, the workflow file, then what the app is doing, in that order", async () => {
     const dir = tempDir();
     viteApp(dir, { devDependencies: { vite: "^7.0.0", "@vitejs/plugin-react": "^5.0.0", "@playwright/test": "^1.50.0" } });
     await addRuntime(dir);
@@ -88,22 +88,27 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     const git = onGithub(dir);
     const base = { "GET /api/cli/overview": { json: overview({ projects: [project({ last_event: "2026-11-12T09:00:00.000Z" })] }) } };
     const read = (routes: Parameters<typeof fakeServer>[0] = {}) => readState({ cwd: dir }, { runGit: git, fetchFn: fakeServer({ ...base, ...routes }).fetchFn });
-    const pr = (s: Awaited<ReturnType<typeof readState>>) => s.steps.find((x) => x.id === "pull-requests")!;
+    const wf = (s: Awaited<ReturnType<typeof readState>>) => s.steps.find((x) => x.id === "workflow")!;
+    const pr = (s: Awaited<ReturnType<typeof readState>>) => s.steps.find((x) => x.id === "github-app")!;
     expect(hasPlaywright(dir, { has: () => false })).toBe(false);
 
-    // no workflow file yet
-    expect(pr(await read())).toMatchObject({ state: "next", detail: "Playwright found · no workflow file yet", run: "genclass setup" });
+    // no workflow file yet: it is the next step, and the app comes after it
+    const none = await read();
+    expect(wf(none)).toMatchObject({ state: "next", title: "Test workflow", doing: "Add the test workflow", detail: "Playwright found · no workflow file yet", run: "genclass setup" });
+    expect(pr(none)).toMatchObject({ state: "todo", title: "GitHub App", detail: "after the test workflow" });
     write(dir, { [WORKFLOW_PATH]: "name: genclass\njobs:\n  genclass:\n    steps:\n      - run: node genclass-playwright-run.mjs\n", ".github/workflows/ci.yml": "name: ci\n" });
     expect(genclassWorkflows(dir)).toEqual([WORKFLOW_PATH]);
 
     // a genclass.dev that cannot say (an older collector): the page says where to look, and it is not the next step
-    expect(pr(await read())).toMatchObject({ state: "waiting", run: null });
+    const old = await read();
+    expect(wf(old)).toMatchObject({ state: "done", detail: WORKFLOW_PATH });
+    expect(pr(old)).toMatchObject({ state: "waiting", run: null });
     const status = (over: Record<string, unknown>) => ({ "GET /api/cli/github": { json: { repo: "acme/shop", known: true, installed: true, evidence: false, prs: 0, last: null, private: false, needs_plan: false, paused: false, connect_url: `${HOST}/github/connect`, install_url: `${HOST}/github/install`, ...over } } });
     // GitHub has not told this account anything yet: continue with GitHub
     const unknown = await read(status({ known: false, installed: null }));
     expect(pr(unknown)).toMatchObject({ state: "next", human: "install the GitHub App and continue with GitHub in your browser" });
     // GitHub's answer does not list the repository
-    expect(pr(await read(status({ installed: false })))).toMatchObject({ state: "next", detail: "the GitHub App is not on acme/shop yet" });
+    expect(pr(await read(status({ installed: false })))).toMatchObject({ state: "next", detail: "not on acme/shop yet", human: "install the GitHub App on this repository" });
     // installed, no race files read yet: waiting for the first pull request
     expect(pr(await read(status({})))).toMatchObject({ state: "waiting", human: "commit the workflow file and open a pull request" });
     // reviewing
@@ -118,15 +123,19 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     expect(server.calls.map((c) => `${c.path}${c.query}`)).toEqual(["/api/cli/overview", "/api/cli/github?repo=acme%2Fshop"]);
   });
 
-  it("pull requests do not apply without GitHub or without Playwright, and say which", async () => {
+  it("the test workflow and the GitHub App do not apply without GitHub or without Playwright, and say which", async () => {
     const dir = tempDir();
     viteApp(dir);
     signIn();
     const f = fakeServer({ "GET /api/cli/overview": { json: overview() } }).fetchFn;
-    const pr = async (runGit: (a: string[]) => string | null) => (await readState({ cwd: dir }, { runGit, fetchFn: f })).steps.find((x) => x.id === "pull-requests")!;
+    const step = (id: string) => async (runGit: (a: string[]) => string | null) => (await readState({ cwd: dir }, { runGit, fetchFn: f })).steps.find((x) => x.id === id)!;
+    const pr = step("workflow");
+    const app = step("github-app");
     expect(await pr(noGit)).toMatchObject({ state: "optional", detail: "not a git repository yet" });
     expect(await pr((a) => (a[1] === "--show-toplevel" ? dir : a[0] === "remote" ? "https://gitlab.com/acme/shop.git" : "main"))).toMatchObject({ state: "optional", detail: "the repository is not on GitHub" });
     expect(await pr(onGithub(dir))).toMatchObject({ state: "optional", detail: "no Playwright tests yet" });
+    expect(await app(noGit)).toMatchObject({ state: "optional", detail: "not a git repository yet" });
+    expect(await app(onGithub(dir))).toMatchObject({ state: "optional", detail: "needs Playwright tests first" });
     write(dir, { "playwright.config.ts": "export default {};\n" });
     expect(await pr(onGithub(dir))).toMatchObject({ state: "todo" });
   });
@@ -174,8 +183,10 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     const s = await readState({ cwd: dir, skip: ["account"] }, { runGit: noGit });
     expect(s.next?.id).toBe("runtime");
     const j = stateJson(s);
-    expect(j.next).toMatchObject({ id: "runtime", run: "genclass init", human: null });
-    expect(j.steps.map((x) => x.id)).toEqual(["account", "runtime", "first-page", "pull-requests", "agent", "suggestions"]);
+    expect(j.next).toMatchObject({ id: "runtime", title: "Add GenClass to this app", run: "genclass init", human: null });
+    // every step has a short name, what doing it is called, one sentence and a fuller one
+    for (const x of s.steps) expect([x.title.length > 0, x.doing.length > 0, x.why.length > 0 && x.why.length < 100, x.more.length > 0], x.id).toEqual([true, true, true, true]);
+    expect(j.steps.map((x) => x.id)).toEqual(["account", "runtime", "dashboard", "workflow", "github-app", "agent", "suggestions"]);
     expect(j.steps[0]).toMatchObject({ state: "todo", run: "genclass login", human: "approve the sign-in in your browser" });
     expect(j.complete).toBe(false);
     expect(JSON.stringify(j)).not.toContain(SESSION);
