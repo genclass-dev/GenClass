@@ -1148,13 +1148,16 @@ describe("github app: Connect GitHub when GitHub falters (http.ts connectCallbac
       const gh = fakeGithub();
       person(gh);
       const me = await signedIn(s.env);
-      // the same database, with the installation's row refusing to be written `fails` times
+      // the same database, with the installation's row refusing to be written `fails` times, sent alone (run) or in a
+      // batch (the stand-in's batch runs each statement with all(): store.ts writes the row with the day's count)
       let fails = 0;
+      const refused = (text: string) => text.startsWith("INSERT INTO github_installations") && fails-- > 0;
+      const lost = () => Promise.reject(new Error("D1_ERROR: Network connection lost."));
       const wrap = (text: string, st: D1Stmt): D1Stmt => ({
         bind: (...v: unknown[]) => wrap(text, st.bind(...v)),
         first: <T>() => st.first<T>(),
-        all: <T>() => st.all<T>(),
-        run: () => (text.startsWith("INSERT INTO github_installations") && fails-- > 0 ? Promise.reject(new Error("D1_ERROR: Network connection lost.")) : st.run()),
+        all: <T>() => (refused(text) ? lost() : st.all<T>()),
+        run: () => (refused(text) ? lost() : st.run()),
       });
       const db: D1Like = { prepare: (text) => wrap(text, s.sql.api.prepare(text)), batch: (stmts) => s.sql.api.batch(stmts) };
       const env = { ...s.env, DB: db };
@@ -1163,6 +1166,8 @@ describe("github app: Connect GitHub when GitHub falters (http.ts connectCallbac
       expect(first.back.status).toBe(302);
       expect(first.waits).toEqual([RETRY_WAIT_MS]);
       expect(grants(s.sql)).toBe(1);
+      // the failed try wrote no count: the installation is counted once
+      expect(s.sql.rows("SELECT SUM(installs) AS n FROM github_install_days")).toEqual([{ n: 1 }]);
       fails = 99;
       const second = await comeBack(env, me, gh.fetch);
       expect(second.back.status).toBe(500);

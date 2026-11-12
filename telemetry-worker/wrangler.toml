@@ -56,6 +56,10 @@ GITHUB_APP_PRIVATE_REPOS = "plan"
 # off, and then nothing the app writes on GitHub is different. "on" since 2026-11-10: @genclass/playwright 0.1.0, which
 # that workflow installs, is on npm.
 GITHUB_APP_WORKFLOW_LINK = "on"
+# GITHUB_APP_OWN_ACCOUNTS: our own GitHub accounts, separated by commas (the organization and the maintainers). An
+# install or uninstall on one of them is counted in a row of its own in the daily counts (github_install_days,
+# migration 0016), so our test installs are never read as someone else's. It changes nothing else.
+GITHUB_APP_OWN_ACCOUNTS = "genclass-dev,Karanvir1729,MeharPro"
 
 # Paid plans (README "Paid plans"), Worker secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
 # STRIPE_WEBHOOK_SECRET_TEST, STRIPE_PORTAL_CONFIGURATION and STRIPE_PORTAL_CONFIGURATION_TEST (GenClass's Billing

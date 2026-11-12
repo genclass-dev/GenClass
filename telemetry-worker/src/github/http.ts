@@ -72,7 +72,7 @@ import { securityHeaders } from "../pages.js";
 import { accountAccess, entitled } from "../plans.js";
 import { b64url, equalStrings } from "../webauthn.js";
 import { GithubError, posInt, repoPath, userClient, type Fetch } from "./api.js";
-import { githubApp, installUrl, type GithubAppConfig } from "./config.js";
+import { githubApp, installUrl, isOwnAccount, type GithubAppConfig } from "./config.js";
 import { repoEntitled } from "./entitlement.js";
 import { handleEvent, jobContext, OutOfTime } from "./handlers.js";
 import { AppKeyError } from "./jwt.js";
@@ -451,7 +451,7 @@ async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string, at
     }
     // the installation is recorded (its webhook may have been missed)
     at.step = "save";
-    await upsertInstallation(c.db, { id: iid, accountId: acctId, login: acctLogin, type: String(acct.type ?? "User"), selection: String(i.repository_selection ?? "selected"), suspended: !!i.suspended_at }, c.now);
+    await upsertInstallation(c.db, { id: iid, accountId: acctId, login: acctLogin, type: String(acct.type ?? "User"), selection: String(i.repository_selection ?? "selected"), suspended: !!i.suspended_at, own: isOwnAccount(cfg, acctLogin) }, c.now);
     // Managed by the person's account only when the installation is on the GitHub account of the person connecting:
     // GitHub's own answer to who they are. What they can reach or push to in it proves nothing about the account it
     // is on (an outside collaborator on one repository of an organization can push there), so it never counts.

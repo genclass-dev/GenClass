@@ -325,10 +325,13 @@ workflow runs, check runs (its own "Re-run"), and installs and uninstalls.
   the issue opened for it, and per finding a fingerprint (a hash), its group, operation, test title and seeds: what
   is in the comment already. 30 days after it closes, the row is deleted.
 - Webhook delivery ids, for a week, so that one delivery is handled once.
+- For each day, how many installations were added and how many were removed: two numbers and a date, with no account,
+  installation or repository in them.
 - Never: source code, diffs, file contents, race files or tokens. An artifact is read in memory and dropped; the
   installation token lives in memory for under an hour; your GitHub token from Connect is used once.
 
-Uninstalling the app, or taking a repository out of it, deletes what was kept for it at once.
+Uninstalling the app, or taking a repository out of it, deletes what was kept for it at once. The day's count of
+uninstalls goes up by one, and says nothing about who left.
 [PRIVACY.md](../../PRIVACY.md#the-github-app) is the policy.
 
 ## Plans

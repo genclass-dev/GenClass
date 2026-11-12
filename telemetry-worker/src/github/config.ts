@@ -9,6 +9,8 @@
 //   to copy the workflow file from.
 // - The client id and secret are only needed for linking a repository to a GenClass app (GitHub tells us who is
 //   asking); reviews work without them.
+// - GITHUB_APP_OWN_ACCOUNTS only chooses which of two daily counts an install or uninstall adds to
+//   (github_install_days). It never changes what the app reads, reviews or writes for an installation.
 // - Nothing here is logged or echoed: the key and the secrets leave this module only as arguments to WebCrypto.
 
 import type { Env } from "../collector.js";
@@ -44,6 +46,12 @@ export interface GithubEnv {
    * @genclass/playwright, which that workflow installs, is on npm.
    */
   GITHUB_APP_WORKFLOW_LINK?: string;
+  /**
+   * GitHub accounts of the people who run this server, separated by commas ("genclass-dev,octocat"). Used for one
+   * thing: an install or uninstall on one of them is counted apart in the daily counts (github_install_days), so the
+   * operator's own test installs are not read as someone else's. Unset: no account is the operator's.
+   */
+  GITHUB_APP_OWN_ACCOUNTS?: string;
 }
 
 export interface GithubAppConfig {
@@ -60,6 +68,8 @@ export interface GithubAppConfig {
   privateRepos: "plan" | "open";
   /** The link that opens GitHub's new-file editor with the workflow file filled in is shown (GITHUB_APP_WORKFLOW_LINK is "on"). */
   workflowLink: boolean;
+  /** The operator's own GitHub accounts, in lower case (GITHUB_APP_OWN_ACCOUNTS): counted apart in the daily install counts. */
+  ownAccounts: string[];
   /** This server's own origin (where the app's pages and webhook live), without a trailing slash. */
   origin: string;
 }
@@ -87,6 +97,17 @@ function root(v: string | undefined, fallback: string): string {
 
 export const DEFAULT_SLUG = "genclass-dev";
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+/** Accounts read from GITHUB_APP_OWN_ACCOUNTS at most. */
+export const MAX_OWN_ACCOUNTS = 20;
+
+/** GITHUB_APP_OWN_ACCOUNTS as a list: lower case, each a name GitHub could give an account, no name twice. */
+export function ownAccounts(v: string | undefined): string[] {
+  const names = trimmed(v).toLowerCase().split(",").map((s) => s.trim()).filter((s) => /^[a-z0-9_-]{1,39}$/.test(s));
+  return [...new Set(names)].slice(0, MAX_OWN_ACCOUNTS);
+}
+
+/** Whether a GitHub account is one of the operator's own (GITHUB_APP_OWN_ACCOUNTS; case does not matter). */
+export const isOwnAccount = (cfg: Pick<GithubAppConfig, "ownAccounts">, login: string): boolean => cfg.ownAccounts.includes(login.toLowerCase());
 
 /** The app's configuration, or null while the app is not set up on this server. */
 export function githubApp(env: Env): GithubAppConfig | null {
@@ -108,6 +129,7 @@ export function githubApp(env: Env): GithubAppConfig | null {
     web: root(env.GITHUB_WEB_URL, "https://github.com"),
     privateRepos: trimmed(env.GITHUB_APP_PRIVATE_REPOS).toLowerCase() === "open" ? "open" : "plan",
     workflowLink: trimmed(env.GITHUB_APP_WORKFLOW_LINK).toLowerCase() === "on",
+    ownAccounts: ownAccounts(env.GITHUB_APP_OWN_ACCOUNTS),
     origin: (env.AUTH_ORIGIN || env.DASHBOARD_ORIGIN || "https://genclass.dev").replace(/\/+$/, ""),
   };
 }

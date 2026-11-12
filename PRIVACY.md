@@ -197,6 +197,9 @@ to write the comment and do not store them. If the artifact holds other files, w
   of our check, the latest commit's id, and for each finding a one-way fingerprint, its kind, the request it is about,
   the test's title and the seeds it was seen in. This is the same text that is in the comment on the pull request.
 - The ids of the messages GitHub sent us, for 7 days, so that we handle each one once.
+- A count for each day: how many times the app was installed and how many times it was uninstalled. It is two numbers
+  and a date. It holds no account, installation or repository, so it cannot say who installed or uninstalled. We keep
+  it so that we can see whether people stay.
 - If you buy or change a plan on GitHub Marketplace: your GitHub account's id and name and the plan. GitHub handles
   the payment; we never see card details.
 
@@ -212,7 +215,8 @@ who can see the pull request can see them.
 
 **How long:** a pull request's record is deleted 30 days after it is closed, and after 180 days in any case. When you
 uninstall the app, or remove a repository from it, everything we stored for it is deleted at once. Comments and checks
-the app wrote stay on GitHub, where you can delete them.
+the app wrote stay on GitHub, where you can delete them. The daily count of installs and uninstalls is kept: it holds
+nothing about you.
 
 **What it does not do:** it does not read your code, does not send anything from your repository to anyone else, does
 not use what it reads to train a model, and does not contact you. The only messages it writes are its check and its

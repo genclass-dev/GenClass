@@ -309,6 +309,10 @@ try {
     return /"n":\s*0\b/.test(out);
   });
   check("after the uninstall the app's tables hold nothing for it", left);
+
+  // 7. the day's counts, as D1 in workerd wrote them: the one install and the one uninstall, and nothing else
+  const counted = await run(npx, ["--yes", "wrangler@4", "d1", "execute", "genclass-dashboard", "--local", "-c", config, "--persist-to", join(dir, "state"), "--json", "--command", "SELECT SUM(installs) AS installs, SUM(uninstalls) AS uninstalls, SUM(own) AS own FROM github_install_days"], { cwd: dir, env: { ...process.env, CI: "1", WRANGLER_SEND_METRICS: "false" } }).catch(() => "");
+  check("one install and one uninstall were counted for the day", /"installs":\s*1\b/.test(counted) && /"uninstalls":\s*1\b/.test(counted) && /"own":\s*0\b/.test(counted), counted.replace(/\s+/g, " ").slice(0, 200));
 } catch (e) {
   failed++;
   console.error(`e2e: ${e?.message ?? e}`);

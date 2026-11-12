@@ -80,7 +80,7 @@ import type { Env } from "../collector.js";
 import type { D1Like } from "../dashboard.js";
 import { appClient, forgetInstallation, GithubError, installationClient, posInt, repoPath, type Fetch, type GithubClient } from "./api.js";
 import { NEEDS_FINDING, NEEDS_WRITE, parseCommand } from "./commands.js";
-import { githubApp, type GithubAppConfig } from "./config.js";
+import { githubApp, isOwnAccount, type GithubAppConfig } from "./config.js";
 import { repoEntitled } from "./entitlement.js";
 import { ciEvidence, noEvidence, productionEvidence } from "./evidence.js";
 import {
@@ -296,7 +296,7 @@ export function githubLogin(v: unknown): string | null {
 async function installationFor(ctx: Ctx, id: number, repo: RepoRef | null): Promise<Installation | null> {
   const known = await installationById(ctx.db, id);
   if (known || !repo?.owner) return known;
-  await upsertInstallation(ctx.db, { id, accountId: repo.owner.id, login: repo.owner.login, type: repo.owner.type, selection: "unknown" }, ctx.now());
+  await upsertInstallation(ctx.db, { id, accountId: repo.owner.id, login: repo.owner.login, type: repo.owner.type, selection: "unknown", own: isOwnAccount(ctx.cfg, repo.owner.login) }, ctx.now());
   return installationById(ctx.db, id);
 }
 
@@ -912,14 +912,14 @@ async function onInstallation(ctx: Ctx, p: Obj): Promise<string> {
     case "unsuspend":
     case "new_permissions_accepted":
       if (!accountId || !/^[A-Za-z0-9_-]{1,39}$/.test(login)) return "ignored";
-      await upsertInstallation(ctx.db, { id, accountId, login, type: str(a.type, 20), selection: str(i.repository_selection, 10) }, ctx.now());
+      await upsertInstallation(ctx.db, { id, accountId, login, type: str(a.type, 20), selection: str(i.repository_selection, 10), own: isOwnAccount(ctx.cfg, login) }, ctx.now());
       return String(p.action);
     case "suspend":
       await setSuspended(ctx.db, id, true, ctx.now());
       forgetInstallation(id);
       return "suspended";
     case "deleted":
-      await deleteInstallation(ctx.db, id);
+      await deleteInstallation(ctx.db, id, ctx.now(), ctx.cfg.ownAccounts);
       forgetInstallation(id);
       return "deleted";
     default:
