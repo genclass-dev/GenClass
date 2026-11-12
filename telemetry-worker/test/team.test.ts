@@ -46,7 +46,7 @@ describe("invite links: who can make one, and how many", () => {
     expect(r.status).toBe(403);
     expect(await r.json()).toEqual({
       ok: false,
-      error: `the Free plan is for one person; members come with a plan sold per developer; see the plans at ${PLANS_URL}`,
+      error: `the Free plan is for one person; members come with Team; see the plans at ${PLANS_URL}`,
       upgrade_url: PLANS_URL,
     });
     expect(sql.rows("SELECT id FROM team_invites")).toEqual([]);

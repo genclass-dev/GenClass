@@ -85,6 +85,8 @@ describe("checkout for one project (POST /api/billing/checkout { plan, project_i
       customer: "cus_ada0000001",
       "line_items[0][price]": "price_team000001",
       "line_items[0][quantity]": "1",
+      // the "Add promotion code" field
+      allow_promotion_codes: "true",
       "metadata[genclass_project]": b.shop.id,
       "metadata[genclass_plan]": "team",
       "subscription_data[metadata][genclass_project]": b.shop.id,

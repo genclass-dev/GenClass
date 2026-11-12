@@ -18,7 +18,12 @@
 
 import type { Env } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like } from "./dashboard.js";
-import { accountAccess, type Access } from "./plans.js";
+import { accountAccess, PAID_PLANS, type Access } from "./plans.js";
+
+/** The plans on sale that hold more than one person (per seat, or with no limit on people), for the upgrade message. */
+const TEAM_PLANS = PAID_PLANS.filter((p) => p.per_seat === true || p.limits.seats === null)
+  .map((p) => p.name)
+  .join(" and ");
 
 export const INVITE_MS = 7 * 86_400_000;
 /** The code in an invite link (/join/<code>). */
@@ -119,7 +124,7 @@ export async function canRead(db: D1Like, env: Env, memberId: string, ownerId: s
 
 const fullError = (t: Team): TeamError =>
   t.seats !== null && t.seats <= 1
-    ? { status: 403, upgrade: true, error: `the ${t.access.plan.name} plan is for one person; members come with a plan sold per developer` }
+    ? { status: 403, upgrade: true, error: `the ${t.access.plan.name} plan is for one person; members come with ${TEAM_PLANS || "a paid plan"}` }
     : { status: 409, error: `every seat is taken (${t.seats} of ${t.seats}): add a seat in Manage billing, remove a member or revoke an invite` };
 
 /**

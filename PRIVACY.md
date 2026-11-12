@@ -142,11 +142,11 @@ and invite links.
 
 ## Paid plans, payments and Stripe
 
-Free costs nothing, Team is sold on genclass.dev per developer (since 11 November 2026), and Enterprise is agreed by
+Free costs nothing, Team is sold on genclass.dev per project (since 12 November 2026; per developer from 11 November), and Enterprise is agreed by
 email. A plan decides what your dashboard shows, never what is collected: an app that turned visitor analytics on has
 them counted on Free too, and they show once its plan includes them. A paid plan (Team; the Individual plan was one
 until 22 October 2026) is paid through Stripe, which processes payments
-for us. We keep the number of seats your subscription pays for, next to its status. When you upgrade, we send Stripe
+for us. We keep which app a subscription pays for (or, for a plan bought per developer, the number of seats), next to its status. When you choose Free for an app, we keep when, the reason you picked and anything you wrote (at most 500 characters), and we read them to improve our plans. When you upgrade, we send Stripe
 your account's email (if it has one) and your GenClass account id, and you type your card or other payment details
 into Stripe's own checkout page: they go to Stripe and never reach GenClass. Stripe handles them under its own privacy
 policy (stripe.com/privacy) and keeps your invoices and receipts, which you can see under Manage billing on your
