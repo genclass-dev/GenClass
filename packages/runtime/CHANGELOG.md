@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Free's live-fix limit: observe only past it.** genclass.dev's plans are per project (Free: 3 apps, 100 problems
+  fixed live a month per app; Team, US$15 a project a month, no limit). When an app's plan has used its live fixes for
+  the month, the collector's reply to a telemetry batch says so (`x-genclass-observe`), and the runtime observes only
+  until the UTC month ends: everything is still found and reported, nothing is changed, one console warning. It is
+  remembered per app in `localStorage["genclass:observe"]`; a reply without the header (the plan was paid for) lifts
+  it. It only ever lowers the mode; nothing more is sent, and with telemetry off nothing is capped (TELEMETRY.md "Where
+  it goes", CONTRACT.md §17). First load: +0.30 KB for `/auto` (109.24 KB), +0.29 KB for the main entry (100.96 KB).
+
 - **`init`/`connect` recognise more existing setups:** `@genclass/nuxt` and `@genclass/astro` in a config, and the
   key of a hand-written setup (`bin/lib/init.mjs` `inspectProject`). `connect --yes` refuses to replace a key that is
   none of the account's apps unless `--app` or `--name` says which (`bin/lib/login.mjs`). Run by a host CLI

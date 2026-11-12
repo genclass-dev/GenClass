@@ -862,3 +862,54 @@ describe("telemetry: a full queue drops routine decision records first (TELEMETR
 });
 
 void createRuntime;
+
+describe("telemetry: the collector's word on the app's plan (observe only past its live fixes, owner 2026-11-12)", () => {
+  const TOKEN = "gc_AbCdEfGhIjKlMnOpQrStUv";
+  /** A localStorage stand-in. */
+  const storage = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, String(v)), removeItem: (k: string) => void m.delete(k), m };
+  };
+  /** A transport whose replies say observe (or not), as the collector's header does through the native transport. */
+  function replying(observe: () => string | null) {
+    const sent: unknown[] = [];
+    return { sent, send(_u: string, body: string) { sent.push(JSON.parse(body)); return Promise.resolve({ observe: observe() }); } };
+  }
+
+  it("a reply that says observe caps the page at observe; it is remembered for this key until the month ends; a reply without it lifts it", async () => {
+    let say: string | null = "live-fix-limit";
+    const t = replying(() => say);
+    const ls = storage();
+    const s = setup({ token: TOKEN, telemetry: { transport: t }, extraGlobal: { crypto: globalThis.crypto, localStorage: ls } });
+    const rt = s.rt as unknown as RuntimeImpl;
+    expect(rt.effectiveMode()).toBe("guard");
+    await rt.telemetry!.flush();
+    expect(rt.effectiveMode()).toBe("observe");
+    const now = new Date(s.clock.now());
+    expect(ls.m.get("genclass:observe")).toBe(`${TOKEN} ${Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)}`);
+    // the next page of the same app starts in observe, before any reply
+    const t2 = replying(() => null);
+    const next = setup({ token: TOKEN, telemetry: { transport: t2 }, extraGlobal: { crypto: globalThis.crypto, localStorage: ls } });
+    expect((next.rt as unknown as RuntimeImpl).effectiveMode()).toBe("observe");
+    // another app on the same origin is not capped by it
+    const other = setup({ token: "gc_ZzZzZzZzZzZzZzZzZzZzZz", telemetry: { transport: replying(() => null) }, extraGlobal: { crypto: globalThis.crypto, localStorage: ls } });
+    expect((other.rt as unknown as RuntimeImpl).effectiveMode()).toBe("guard");
+    // the plan changed (paid): a reply without the header lifts the cap and forgets it
+    say = null;
+    await (next.rt as unknown as RuntimeImpl).telemetry!.flush();
+    expect((next.rt as unknown as RuntimeImpl).effectiveMode()).toBe("guard");
+    expect(ls.m.has("genclass:observe")).toBe(false);
+  });
+
+  it("it never raises a mode: an app in observe stays in observe, and a reply the page cannot read changes nothing", async () => {
+    const ls = storage();
+    const s = setup({ mode: "observe", token: TOKEN, telemetry: { transport: replying(() => null) }, extraGlobal: { crypto: globalThis.crypto, localStorage: ls } });
+    await (s.rt as unknown as RuntimeImpl).telemetry!.flush();
+    expect((s.rt as unknown as RuntimeImpl).effectiveMode()).toBe("observe");
+    // a beacon or a custom transport answers nothing readable
+    const quiet = setup({ token: TOKEN, telemetry: { transport: { send: () => Promise.resolve() } }, extraGlobal: { crypto: globalThis.crypto, localStorage: ls } });
+    (quiet.rt as unknown as RuntimeImpl).capToObserve(true);
+    await (quiet.rt as unknown as RuntimeImpl).telemetry!.flush();
+    expect((quiet.rt as unknown as RuntimeImpl).effectiveMode()).toBe("observe");
+  });
+});

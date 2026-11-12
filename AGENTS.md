@@ -113,7 +113,11 @@ Azure, `git push`, `npm publish`.
    `package-lock.json` in sync. TypeScript strict, ESM only, `src/` uses no Node APIs (`types: []`).
 8. **Telemetry** stays disclosed (console notice, `TELEMETRY.md`, both READMEs, CHANGELOG), sends no page text
    unless the app opts in, keeps every opt-out (`telemetry: false`, `?genclass=no-telemetry`, localStorage, GPC) and
-   never feeds a decision. Widening what is sent needs the owner's OK.
+   never feeds a decision. Widening what is sent needs the owner's OK. Exception (owner, 2026-11-12; CONTRACT.md
+   §17): the collector's reply to a batch may carry `x-genclass-observe` when the app's plan has used its live fixes
+   for the month (Free: 100); the runtime then caps its mode at observe until the UTC month ends
+   (`src/telemetry/client.ts` planReply, `runtime.ts` capToObserve). It only ever lowers the mode, the batch's
+   content does not change, and with telemetry off there is no reply and no cap.
 9. **Publish only through the release workflows**: `.github/workflows/release.yml` on a `v*` tag whose version
    equals `packages/runtime/package.json`; `.github/workflows/release-mcp.yml` on a `mcp-v*` tag for
    `@genclass/mcp` (its first version is published once by the owner from the workflow's tarball, because npm sets up

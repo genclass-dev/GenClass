@@ -794,11 +794,28 @@ export class RuntimeImpl implements Runtime {
   }
   private routeWarned = new Set<number>();
 
-  /** min(global mode, sample cap, breaker cap): the session-wide part of the effective mode. */
+  /** The app's plan has used its live fixes for the month (the collector's reply, src/telemetry/client.ts planReply). */
+  private planObserve = false;
+
+  /**
+   * Caps this page at observe (true) or lifts that cap (false). Only the collector's reply about the app's plan calls
+   * it; it never raises the mode above what the app asked for. Observe finds and reports everything and changes
+   * nothing, which is what an app without GenClass's actions gets: a correct app is never made worse by it.
+   */
+  capToObserve(on: boolean): void {
+    if (on === this.planObserve) return;
+    this.planObserve = on;
+    if (on && this._mode !== "observe") {
+      this.warnOnce("plan-observe", "GenClass: live fixes used for the month, observing only. genclass.dev/account/billing");
+    }
+  }
+
+  /** min(global mode, sample cap, breaker cap, plan cap): the session-wide part of the effective mode. */
   private sessionMode(): ModeOrOff {
     if (this.enabledState !== "on") return "off";
     let m: ModeOrOff = this._mode;
     if (!this.sampled) m = minMode(m, "observe");
+    if (this.planObserve) m = minMode(m, "observe");
     if (this.breakerImpl?.tripped) m = minMode(m, this.breakerImpl.cfg.downgradeTo);
     return m;
   }

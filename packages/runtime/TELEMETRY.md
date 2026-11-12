@@ -538,6 +538,12 @@ section 4.5.
   With a Content-Security-Policy, allow
   `https://genclass.dev` in `connect-src` or turn telemetry off; after 3 failed requests in a row a page stops sending
   (a 429 is a back-off, not a failure, since 0.3.0).
+- **The reply:** the collector answers a batch with its status, a `Retry-After` on a 429 and, when the app's plan
+  has used its live fixes for the month (Free: 100 problems fixed on visitors' screens a month per app), the header
+  `x-genclass-observe`. Then GenClass observes only until the UTC month ends: it keeps finding and reporting every
+  problem and changes nothing, and it says so once in the console. It remembers this for the app in
+  `localStorage["genclass:observe"]` (the app's token and the month's end). A reply without the header lifts it.
+  Nothing more is sent for this; with telemetry off there is no reply, so nothing is capped.
 - **Storage:** a private Cloudflare R2 bucket (`genclass-telemetry`), gzip JSON Lines, one object per batch,
   partitioned by UTC date, runtime version and model version. The collector adds only the time it received the
   batch and the visitor's coarse **country** (two letters, from Cloudflare). It does not store IP addresses, user

@@ -355,6 +355,10 @@ observing with no download and no worker.
 ## Privacy and telemetry
 
 - **Decisions are local.** Situations are built and decided in the browser; nothing is sent to make a decision.
+- **Free's live-fix limit.** On genclass.dev's Free plan an app gets 100 problems fixed live a month. Past it, the
+  collector's reply to a diagnostics batch tells the page to observe only until the month ends (it keeps finding and
+  reporting problems, and says so once in the console). Nothing more is sent for it; with diagnostics off it never
+  happens.
 - **Anonymous diagnostics are on by default** with `GenClass.init()` in a browser (and so with `/auto`, the script
   tag and `init` setups), except on local and private hosts (`localhost`, `*.localhost`, `*.local`, `*.test`,
   `127.0.0.1`, `::1`, private IP ranges), in Node/SSR, and in `createRuntime()`. `0.1.0-beta.3` to `0.2.1` send from
@@ -1109,7 +1113,7 @@ retraining, which has not been measured
   ([RESULTS.md §10](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#10-release-030-beta0-first-load-and-telemetry-volume-ci)).
   The interaction-analytics stub measured about 108.5 / 100.4 KB on its branch (§15); `0.3.0-beta.1` to `beta.4` are
   not re-measured here (`summary().requests` added 34 B in `0.3.0-beta.2`, §23), and `test/bundle.test.ts` keeps them
-  under 109.0 KB and 100.7 KB (the limits follow CI's gzip on Node 22; RESULTS.md §14 lists each raise). The model worker, ONNX
+  under 109.3 KB and 101.0 KB (the limits follow CI's gzip on Node 22; RESULTS.md §14 lists each raise). The model worker, ONNX
   Runtime, the devtools, the sinks and the visual checks load on demand; ONNX Runtime's `.wasm` (3.1 MB brotli; 5.5 MB
   with WebGPU, per the install tests) is never part of your build. The script-tag file is about 129 KB gzip.
 - **Model:** with onnxruntime-web 1.30 on single-thread WASM, a forward pass takes an estimated 182 / 330 / 599 ms at
