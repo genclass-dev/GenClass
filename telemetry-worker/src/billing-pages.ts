@@ -211,6 +211,17 @@ function projectsSection(v: BillingView): string {
 
 const FREE_APPS = PLANS[0]?.limits.apps ?? 3;
 
+/** The popup's reasons (src/billing.ts FREE_REASONS, kept in step by a test): [value, the words shown]. */
+const FREE_REASON_WORDS: readonly (readonly [string, string])[] = [
+  ["price", "It costs too much"],
+  ["trying", "I'm only trying GenClass out"],
+  ["approval", "I need to ask my team or my boss"],
+  ["feature", "It's missing something I need"],
+  ["unsure", "I'm not sure it works for my app yet"],
+  ["other", "Something else"],
+];
+export const FREE_REASONS_SHOWN = FREE_REASON_WORDS;
+
 export interface ProjectPlanView {
   account: { id: string; email: string | null; githubLogin: string | null };
   apps: { id: string; name: string }[];
@@ -262,7 +273,7 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const notice = v.done && !paid
     ? '<p class="notice n-ok" role="status" id="donemsg"><b>Thanks.</b> This page changes as soon as Stripe confirms your payment, usually within a minute.</p>'
     : v.done
-      ? `<p class="notice n-ok" role="status"><b>Thanks.</b> ${name} is on ${esc(a.plan.name)} now. <a href="/account/apps/${encodeURIComponent(v.project.id)}">Open its dashboard</a>, or go back to your terminal if you started there: it goes on by itself.</p>`
+      ? `<p class="notice n-ok" role="status"><b>Thanks.</b> ${name} is on ${esc(a.plan.name)} now. <a href="/account/apps/${encodeURIComponent(v.project.id)}">Open its dashboard</a>.</p>`
       : (v.fromCli || v.isNew) && !paid && a.source === null
         ? `<p class="notice" role="status"><b>${name}</b> is in your account. Choose its plan to go on.</p>`
         : "";
@@ -271,7 +282,17 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const card = offer && !paid && a.source !== "open"
     ? `<div class="plan pick big"><h3>${esc(offer.name)}</h3><p class="price">${esc(priceText(offer))}</p><p class="sum">${esc(offer.summary)}</p><ul>${features}</ul>
   <div class="act">${v.live ? `<button class="btn" type="button" data-plan="${esc(offer.id)}" data-pick><span>Start ${esc(offer.name)} for ${name}</span></button>` : '<span class="muted">Paid plans are not on sale yet.</span>'}</div></div>
-  ${a.locked || a.source !== null ? "" : `<p class="free" id="freebox"><button class="linkish" type="button" id="free">Try for free (limited)</button></p>`}`
+  ${a.locked || a.source !== null ? "" : `<p class="free"><a href="#why" class="linkish" id="free">Try for free (limited)</a></p>
+  <dialog id="why" class="why" aria-labelledby="whyh">
+    <form id="whyform">
+      <h2 id="whyh">What's stopping you from paying?</h2>
+      <p class="muted">Pick one. It tells us what to fix.</p>
+      <fieldset>${FREE_REASON_WORDS.map(([val, words]) => `<label><input type="radio" name="why" value="${esc(val)}"> ${esc(words)}</label>`).join("")}</fieldset>
+      <textarea id="whynote" maxlength="500" placeholder="Anything else? (optional)"></textarea>
+      <p class="err" id="whyerr" role="alert"></p>
+      <div class="why-act"><button class="btn" type="button" id="whyteam"><span>Start ${esc(offer.name)} instead</span></button><button class="btn ghost" type="submit" id="whygo" disabled><span>Continue with Free (limited)</span></button></div>
+    </form>
+  </dialog>`}`
     : paid
       ? `<div class="acct-form"><button class="btn ghost" type="button" id="portal"><span>Manage billing</span></button></div><p class="err" id="portalerr" role="alert"></p>`
       : "";
@@ -303,19 +324,26 @@ ${notice}${test}
   if (b) b.focus();
   // sent here by the genclass command to start the plan: the same click a person would make
   if (b && cfg.go) b.click();
-  // the small way on: Free for this app, for now. The genclass command waits for this choice or a payment
+  // the small way on: Free for this app, for now, once the person has said what stops them from paying (the
+  // genclass command waits for this choice or a payment)
   var fr = document.getElementById("free");
-  if (fr) fr.addEventListener("click", function(){
-    var err = document.getElementById("planerr"); err.textContent = "";
-    fr.disabled = true;
-    gcPost("/api/billing/projects/" + encodeURIComponent(cfg.project) + "/free", {}).then(function(){
-      if (cfg.cli) {
-        var box = document.getElementById("freebox");
-        box.className = "free notice n-ok";
-        box.textContent = "Free for now (limited). Go back to your terminal: it goes on by itself.";
-      } else location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew ? "#connect" : "");
-    }, function(e){ err.textContent = gcWhy(e); fr.disabled = false; });
-  });
+  var why = document.getElementById("why");
+  var go = document.getElementById("whygo");
+  if (fr && why) {
+    fr.addEventListener("click", function(e){ e.preventDefault(); if (why.showModal) why.showModal(); else why.setAttribute("open", ""); });
+    why.querySelectorAll("input[name=why]").forEach(function(r){ r.addEventListener("change", function(){ go.disabled = false; }); });
+    document.getElementById("whyteam").addEventListener("click", function(){ if (why.close) why.close(); else why.removeAttribute("open"); if (b) b.click(); });
+    document.getElementById("whyform").addEventListener("submit", function(e){
+      e.preventDefault();
+      var picked = why.querySelector("input[name=why]:checked");
+      var err = document.getElementById("whyerr"); err.textContent = "";
+      if (!picked) { err.textContent = "Pick what is stopping you."; return; }
+      gcBusy(go, true, "Saving...");
+      gcPost("/api/billing/projects/" + encodeURIComponent(cfg.project) + "/free", { reason: picked.value, note: document.getElementById("whynote").value }).then(function(){
+        location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew || cfg.cli ? "#connect" : "");
+      }, function(e2){ err.textContent = gcWhy(e2); gcBusy(go, false); });
+    });
+  }
   var portal = document.getElementById("portal");
   if (portal) portal.addEventListener("click", function(){
     var err = document.getElementById("portalerr"); err.textContent = "";
@@ -343,7 +371,7 @@ ${notice}${test}
     user: { label, sub: orgName(label) },
     ...orgRail("billing"),
     railLabel: "Organization",
-    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".plan.big{max-width:560px;padding:34px 32px 30px}.plan.big h3{font-size:34px;letter-spacing:-.01em}.plan.big .price{font-size:22px;font-weight:600;margin-top:6px}.plan.big .sum{font-size:15px}.plan.big li{font-size:15px}.plan.big .act .btn{width:100%;justify-content:center;padding:15px 18px;font-size:17px}.free{margin-top:12px;font-size:11px;max-width:560px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}.free.notice{font-size:14px;text-align:left;margin-top:14px}",
+    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".plan.big{max-width:560px;padding:34px 32px 30px}.plan.big h3{font-size:34px;letter-spacing:-.01em}.plan.big .price{font-size:22px;font-weight:600;margin-top:6px}.plan.big .sum{font-size:15px}.plan.big li{font-size:15px}.plan.big .act .btn{width:100%;justify-content:center;padding:15px 18px;font-size:17px}.free{margin-top:12px;font-size:11px;max-width:560px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}dialog.why{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:460px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}dialog.why::backdrop{background:rgba(0,0,0,.62)}dialog.why h2{font-size:21px;margin:0 0 4px}dialog.why fieldset{border:0;padding:0;margin:14px 0 6px}dialog.why label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;cursor:pointer}dialog.why textarea{margin-top:6px}.why-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}",
     body,
     script: CLIENT_JS + script,
   });

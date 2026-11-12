@@ -174,6 +174,9 @@ describe("the dashboard is free: every app opens it, with an account or without"
     // a fourth app is created and waits for a plan of its own (plans per project, version 4: test/project-plans.test.ts)
     const fourth = await call(env, "POST", "/api/account/projects", { body: { name: "d" }, cookie });
     expect(fourth.status).toBe(201);
+    // Free chosen for it on its plan page first (until then the app's page opens that plan page)
+    expect((await call(env, "GET", `/account/apps/${apps[0]!.id}`, { cookie })).headers.get("location")).toBe(`/account/billing?project=${apps[0]!.id}`);
+    expect((await call(env, "POST", `/api/billing/projects/${apps[0]!.id}/free`, { cookie, body: { reason: "trying" } })).status).toBe(200);
     const page = await text(call(env, "GET", `/account/apps/${apps[0]!.id}`, { cookie }));
     expect(page).not.toContain("has no dashboard");
     // the sections are there and say which plans have them; no forms

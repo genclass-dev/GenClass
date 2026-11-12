@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTokenCache } from "../src/dashboard.js";
 import { resetOwnerCache } from "../src/paid.js";
 import { accountWide, FREE, priceText, PLANS } from "../src/plans.js";
+import { FREE_REASONS } from "../src/billing.js";
+import { FREE_REASONS_SHOWN } from "../src/billing-pages.js";
 import { resetStripeCache } from "../src/stripe.js";
 import { monthOf, OBSERVE_HEADER, resetUsageCache } from "../src/usage.js";
 import { call, createApp, deliver, fakeStripe, GENCLASS_PORTAL, price, resetClock, sendBatch, setPlan, setup, signedIn, stripeEvent, subscription, WEBHOOK_SECRET } from "./account-helpers.js";
@@ -195,8 +197,15 @@ describe("Free covers 3 projects; a fourth waits for a plan of its own", () => {
     expect(one).toContain('<div class="plan pick big"><h3>Team</h3><p class="price">$15 / project / month</p>');
     expect(one).toContain('data-plan="team" data-pick><span>Start Team for Shop</span>');
     // Free is the small way on, a very small button under the big card
-    expect(one).toContain('<p class="free" id="freebox"><button class="linkish" type="button" id="free">Try for free (limited)</button></p>');
+    // Free is the small way on: a very small link under the big card, and a popup that asks why before it goes on
+    expect(one).toContain('<p class="free"><a href="#why" class="linkish" id="free">Try for free (limited)</a></p>');
     expect(one).toContain(".linkish{background:none;border:0;padding:0;font:inherit;font-size:11px");
+    expect(one).toContain('<h2 id="whyh">What\'s stopping you from paying?</h2>');
+    for (const [val, words] of FREE_REASONS) expect(one).toContain(`<label><input type="radio" name="why" value="${val}"> ${words.replace(/'/g, "&#39;")}</label>`);
+    expect(one).toContain('<button class="btn ghost" type="submit" id="whygo" disabled><span>Continue with Free (limited)</span></button>');
+    expect(one).toContain("<span>Start Team instead</span>");
+    // it never sends anyone back to a terminal: the choice is made here
+    expect(one.toLowerCase()).not.toContain("terminal");
     expect(one).toContain("<b>Shop</b> is in your account. Choose its plan to go on.");
     // the fourth: no free way on
     const fourth = await text(call(t.env, "GET", `/account/billing?project=${apps[3]!.id}`, { cookie: a.cookie }));
@@ -217,21 +226,54 @@ describe("Free covers 3 projects; a fourth waits for a plan of its own", () => {
     for (const n of ["Shop", "Blog", "Docs", "Extra"]) apps.push(await createApp(t.env, a.cookie, n));
     const chosen = (id: string) => t.sql.db.prepare("SELECT plan_chosen FROM projects WHERE id = ?").get(id) as { plan_chosen: string | null };
     expect(chosen(apps[0]!.id).plan_chosen).toBeNull();
-    const r = await call(t.env, "POST", `/api/billing/projects/${apps[0]!.id}/free`, { cookie: a.cookie, body: {} });
+    // nobody goes on with Free without saying why: a reason from the list is needed
+    expect((await call(t.env, "POST", `/api/billing/projects/${apps[0]!.id}/free`, { cookie: a.cookie, body: {} })).status).toBe(400);
+    expect((await call(t.env, "POST", `/api/billing/projects/${apps[0]!.id}/free`, { cookie: a.cookie, body: { reason: "because" } })).status).toBe(400);
+    expect(chosen(apps[0]!.id).plan_chosen).toBeNull();
+    const told: string[] = [];
+    const hook = (async (u: string | URL | Request, init?: RequestInit) => (String(u).startsWith("https://hooks.example/") ? (told.push(String(init?.body)), new Response("ok")) : new Response("no", { status: 500 }))) as never;
+    const env = { ...t.env, NOTIFY_WEBHOOK: "https://hooks.example/notify" };
+    const r = await call(env, "POST", `/api/billing/projects/${apps[0]!.id}/free`, { cookie: a.cookie, body: { reason: "price", note: "  too much\u0007 for a side project  " }, fetch: hook });
     expect(r.status).toBe(200);
+    expect(t.sql.rows("SELECT account_id, project_id, reason, note FROM plan_feedback")).toEqual([{ account_id: a.account.id, project_id: apps[0]!.id, reason: "price", note: "too much  for a side project" }]);
+    expect(told).toHaveLength(1);
+    expect(JSON.parse(told[0]!)).toMatchObject({ kind: "free_chosen", reason: "price", project: apps[0]!.id, text: 'Free chosen for "Shop" (ada@example.com): It costs too much. "too much  for a side project"' });
     expect(await r.json()).toEqual({ ok: true, plan: "free" });
     expect(chosen(apps[0]!.id).plan_chosen).toMatch(/^20\d\d-\d\d-\d\dT/);
     expect(chosen(apps[1]!.id).plan_chosen).toBeNull();
     // the fourth has only the paid plan
-    expect((await call(t.env, "POST", `/api/billing/projects/${apps[3]!.id}/free`, { cookie: a.cookie, body: {} })).status).toBe(409);
+    expect((await call(t.env, "POST", `/api/billing/projects/${apps[3]!.id}/free`, { cookie: a.cookie, body: { reason: "trying" } })).status).toBe(409);
     expect(chosen(apps[3]!.id).plan_chosen).toBeNull();
     // another account's app, and no app at all
     const b = await signedIn(t.env, "bob@example.com");
-    expect((await call(t.env, "POST", `/api/billing/projects/${apps[1]!.id}/free`, { cookie: b.cookie, body: {} })).status).toBe(404);
+    expect((await call(t.env, "POST", `/api/billing/projects/${apps[1]!.id}/free`, { cookie: b.cookie, body: { reason: "trying" } })).status).toBe(404);
     expect(chosen(apps[1]!.id).plan_chosen).toBeNull();
     // signed out, and a GET
-    expect((await call(t.env, "POST", `/api/billing/projects/${apps[1]!.id}/free`, { body: {} })).status).toBe(401);
+    expect((await call(t.env, "POST", `/api/billing/projects/${apps[1]!.id}/free`, { body: { reason: "trying" } })).status).toBe(401);
     expect((await call(t.env, "GET", `/api/billing/projects/${apps[1]!.id}/free`, { cookie: a.cookie })).status).toBe(405);
+    expect(t.sql.rows("SELECT COUNT(*) AS n FROM plan_feedback")).toEqual([{ n: 1 }]);
+    // the popup lists exactly the reasons the route takes
+    expect(FREE_REASONS_SHOWN).toEqual(FREE_REASONS);
+  });
+
+  it("the website: an app on Free that has not chosen opens its plan page instead of its dashboard, until it has", async () => {
+    const t = setup(LIVE);
+    const a = await signedIn(t.env);
+    const shop = await createApp(t.env, a.cookie, "Shop");
+    const r = await call(t.env, "GET", `/account/apps/${shop.id}`, { cookie: a.cookie });
+    expect(r.status).toBe(302);
+    expect(r.headers.get("location")).toBe(`/account/billing?project=${shop.id}`);
+    await call(t.env, "POST", `/api/billing/projects/${shop.id}/free`, { cookie: a.cookie, body: { reason: "unsure" } });
+    expect((await call(t.env, "GET", `/account/apps/${shop.id}`, { cookie: a.cookie })).status).toBe(200);
+    // on Team: never sent there
+    const blog = await createApp(t.env, a.cookie, "Blog");
+    t.sql.db.prepare("UPDATE projects SET plan = 'team', stripe_mode = 'live', subscription_id = 'sub_b', subscription_status = 'active' WHERE id = ?").run(blog.id);
+    expect((await call(t.env, "GET", `/account/apps/${blog.id}`, { cookie: a.cookie })).status).toBe(200);
+    // where nothing is sold, nothing to choose
+    const none = setup();
+    const n = await signedIn(none.env);
+    const app = await createApp(none.env, n.cookie, "Docs");
+    expect((await call(none.env, "GET", `/account/apps/${app.id}`, { cookie: n.cookie })).status).toBe(200);
   });
 
   it("an older plan link (?plan=team&start=1, from the pricing page or an older genclass command) opens the first app on Free", async () => {

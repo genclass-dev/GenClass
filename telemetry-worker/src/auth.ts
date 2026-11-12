@@ -81,7 +81,7 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, firstPlanWith, FREE, hasAnalytics, hasDashboard, keepDays, pickRange, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, keepDays, PAID_PLANS, pickRange, projectAccess, viewRanges } from "./plans.js";
 import { activeOwners, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
 import {
@@ -2104,6 +2104,12 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     const mine = p.account_id === a.account.id;
     const apps = (await accountProjects(c, a.account.id)).map((x) => ({ id: x.id!, name: x.name }));
     const access = await projectAccess(c.db, p, env, c.now);
+    // plans per project: the account's own app on Free, where the paid plan is sold, opens its plan page until one is
+    // chosen there, Team or Free with what stops the person from paying (the owner's call, 2026-11-12)
+    if (mine && access.source === null && access.plan.id === FREE.id && PAID_PLANS[0]?.per_project === true && canBuy(env, a.account)) {
+      const row = await c.db.prepare("SELECT plan_chosen FROM projects WHERE id = ?").bind(p.id).first<{ plan_chosen: string | null }>();
+      if (!row?.plan_chosen) return redirect(`/account/billing?project=${encodeURIComponent(p.id!)}`);
+    }
     const base = {
       account: { apps, current: p.id!, email: a.account.email ?? (a.account.github_login ? `@${a.account.github_login}` : null), plan: access.plan.name },
       id: p.id!,

@@ -254,7 +254,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
     }
   }
   const free = /^\/api\/billing\/projects\/([^/]+)\/free$/.exec(path);
-  if (free) return m === "POST" ? chooseFree(c, free[1]!) : method();
+  if (free) return m === "POST" ? chooseFree(c, f, free[1]!) : method();
   if (integ) return integrations(c, f, integ[1]!, integ[2] ?? null, !!integ[3]);
   if (events) return exportEvents(c, events[1]!);
   if (keys) return exportKeys(c, keys[1] ?? null);
@@ -263,19 +263,46 @@ export async function routeBilling(request: Request, url: URL, path: string, env
 
 // --------------------------------------------------------------------------------------------- Checkout, portal
 
+/** What can stop someone from paying, as the plan page's popup lists them: [value, the words shown]. */
+export const FREE_REASONS: readonly (readonly [string, string])[] = [
+  ["price", "It costs too much"],
+  ["trying", "I'm only trying GenClass out"],
+  ["approval", "I need to ask my team or my boss"],
+  ["feature", "It's missing something I need"],
+  ["unsure", "I'm not sure it works for my app yet"],
+  ["other", "Something else"],
+];
+const NOTE_MAX = 500;
+
 /**
- * POST /api/billing/projects/<id>/free: Free chosen for one app for now, on its plan page (the small "Try for free
- * (limited)"). It writes when (projects.plan_chosen), which the genclass command's plan step waits for, and changes
- * nothing else: the app is on Free either way. An app past the ones Free covers has only the paid plan (409).
+ * POST /api/billing/projects/<id>/free { reason, note? }: Free chosen for one app, on its plan page, with what is
+ * stopping the person from paying (the popup behind "Try for free (limited)"; the owner's call, 2026-11-12: nobody
+ * goes on with Free without saying why). The reason is one of FREE_REASONS; the note is optional, at most 500
+ * characters. It keeps the answer (plan_feedback), writes when (projects.plan_chosen), which the genclass command's
+ * plan step and the app's page wait for, and tells the owner (NOTIFY_WEBHOOK). The app is on Free either way. An app
+ * past the ones Free covers has only the paid plan (409).
  */
-async function chooseFree(c: C, id: string): Promise<Response> {
+async function chooseFree(c: C, f: Fetch, id: string): Promise<Response> {
   const a = await browserWrite(c, "a plan is chosen");
   if (a instanceof Response) return a;
+  const body = await readJson(c, 4096);
+  if (body instanceof Response) return body;
+  const reason = FREE_REASONS.find(([v]) => v === body.reason);
+  if (!reason) return fail(400, "choose what is stopping you from paying");
+  const note = typeof body.note === "string" ? body.note.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, NOTE_MAX) : "";
   const p = await ownedProject(c, a.account.id, id);
   if (!p || !p.id) return fail(404, "not found");
   const access = await projectAccess(c.db, p, c.env, c.now);
   if (access.locked) return fail(409, `Free covers ${FREE.limits.apps ?? 3} projects, and this one is past them: it needs a paid plan`);
-  await c.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ? AND account_id = ?").bind(c.now.toISOString(), p.id, a.account.id).run();
+  const at = c.now.toISOString();
+  await c.db.batch([
+    c.db.prepare("INSERT INTO plan_feedback (account_id, project_id, reason, note, created) VALUES (?, ?, ?, ?, ?)").bind(a.account.id, p.id, reason[0], note || null, at),
+    c.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ? AND account_id = ?").bind(at, p.id, a.account.id),
+  ]);
+  await notifyOwner(
+    { env: c.env, fetch: f, now: c.now },
+    { kind: "free_chosen", account: a.account.id, project: p.id, reason: reason[0], text: `Free chosen for "${p.name}" (${a.account.email ?? a.account.github_login ?? a.account.id}): ${reason[1]}${note ? `. "${note}"` : ""}` },
+  ).catch(() => false);
   return json(200, { ok: true, plan: access.plan.id });
 }
 
