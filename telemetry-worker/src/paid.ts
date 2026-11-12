@@ -9,7 +9,7 @@ import type { BucketLike, Env } from "./collector.js";
 import { RETENTION_DAYS, type D1Like } from "./dashboard.js";
 import { storeForExport } from "./export.js";
 import { forwardBatch } from "./forward.js";
-import { ACCESS_COLUMNS, accessOf, entitled, FREE, keepDays, planGatesOpen, stripeMode, withinPaidApps, type AccessRow, type Plan, type StripeMode } from "./plans.js";
+import { ACCESS_COLUMNS, accessOf, accountWide, better, entitled, FREE, keepDays, planGatesOpen, projectOwnAccess, stripeMode, type AccessRow, type Plan, type StripeMode } from "./plans.js";
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -40,13 +40,20 @@ export async function ownerOf(db: D1Like, token: string, nowMs: number, mode: St
   const cols = ACCESS_COLUMNS.split(", ").map((k) => `a.${k}`).join(", ");
   const row = await db
     .prepare(
-      `SELECT p.id, p.name, p.account_id, ${cols}, (SELECT COUNT(*) FROM integrations i WHERE i.project_id = p.id AND i.enabled = 1) AS n ` +
+      `SELECT p.id, p.name, p.account_id, p.created, p.plan AS p_plan, p.stripe_mode AS p_mode, p.comp_until AS p_comp, p.comp_plan AS p_comp_plan, ${cols}, ` +
+        "(SELECT COUNT(*) FROM integrations i WHERE i.project_id = p.id AND i.enabled = 1) AS n " +
         "FROM projects p LEFT JOIN accounts a ON a.id = p.account_id WHERE p.token = ?",
     )
     .bind(token)
-    .first<AccessRow & { id: string | null; name: string; account_id: string | null; n: number }>();
-  // an app past the apps a per_app plan pays for has Free's export and forwarding (src/plans.ts withinPaidApps)
-  const plan = row?.account_id ? (await withinPaidApps(db, row.id, accessOf(row, mode, new Date(nowMs), open))).plan : FREE;
+    .first<AccessRow & { id: string | null; name: string; account_id: string | null; created: string; p_plan: string | null; p_mode: string | null; p_comp: string | null; p_comp_plan: string | null; n: number }>();
+  const now = new Date(nowMs);
+  // the project's own plan or grant, or a subscription of its whole account from before plans were per project
+  // (src/plans.ts projectAccess; Free has neither export nor forwarding, so the 3-project lock does not matter here)
+  const plan = !row?.account_id
+    ? FREE
+    : open
+      ? accessOf(row, mode, now, true).plan
+      : better(projectOwnAccess({ id: row.id, token, created: row.created, plan: row.p_plan, stripe_mode: row.p_mode, comp_until: row.p_comp, comp_plan: row.p_comp_plan }, mode, now), accountWide(row, mode, now)).plan;
   const o: Owner | null = row ? { projectId: row.id, name: row.name, accountId: row.account_id, plan, destinations: Number(row.n) || 0 } : null;
   if (owners.size > 5000) owners.clear();
   owners.set(token, { o, exp: nowMs + OWNER_MS });

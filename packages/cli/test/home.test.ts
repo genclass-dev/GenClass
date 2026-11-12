@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMMANDS as ALL, nearest, run } from "../src/cli.mjs";
-import { COMMANDS, home, menu, offerInstall, read, words } from "../src/home.mjs";
+import { COMMANDS, home, installShortName, menu, read, words } from "../src/home.mjs";
 import { readPrefs, savePrefs, shorten, shortNameWorks } from "../src/name.mjs";
 import { isolate, printed, tempDir, write } from "./helpers.js";
 import { plainLines, tooWide } from "./stats.js";
@@ -54,6 +54,9 @@ describe("genclass: how the command is typed here (src/name.mjs)", () => {
     expect(shorten("Run npx genclass fix, then npx genclass problems.")).toBe("Run genclass fix, then genclass problems.");
     expect(shorten("npm install -g genclass")).toBe("npm install -g genclass");
     expect(shorten("npx genclassic")).toBe("npx genclassic");
+    // in colour, the code just before it is not a letter of the word
+    expect(shorten("Every row: \u001b[36mnpx genclass dashboard --all\u001b[39m")).toBe("Every row: \u001b[36mgenclass dashboard --all\u001b[39m");
+    expect(shorten("xnpx genclass")).toBe("xnpx genclass");
     // what it remembers for the person sits next to the sign-in, not in a project
     expect(readPrefs()).toEqual({});
     expect(savePrefs({ installAsked: true })).toBe(true);
@@ -61,31 +64,32 @@ describe("genclass: how the command is typed here (src/name.mjs)", () => {
     expect(readPrefs()).toEqual({ installAsked: true, askTold: true });
   });
 
-  it("installing is offered once, as the command it runs, and only with a yes", async () => {
+  it("a run through npx on a terminal installs the command itself and says so; a failure waits a day; never in CI", async () => {
     const before = process.env.CI;
     delete process.env.CI;
     try {
       const ran: string[] = [];
-      type("n");
-      const no = await at58(async () => expect(await offerInstall({ install: async (v: string) => (ran.push(v), { ok: true, text: "" }) })).toBe("declined"));
-      expect(tooWide(no)).toEqual([]);
-      const flat = plainLines(no).join(" ").replace(/\s+/g, " ");
-      expect(flat).toContain("Type just genclass from now on?");
-      expect(flat).toContain("npm install -g genclass");
-      expect(ran).toEqual([]);
-      // asked once: the answer is remembered
-      expect(await offerInstall({ install: async () => ({ ok: true, text: "" }) })).toBe("skipped");
-      savePrefs({ installAsked: false });
-      type("");
-      const yes = await at58(async () => expect(await offerInstall({ install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("installed"));
+      const yes = await at58(async () => expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("installed"));
+      expect(tooWide(yes)).toEqual([]);
       expect(ran).toHaveLength(1);
-      expect(yes).toContain("Open a new terminal and type genclass.");
-      savePrefs({ installAsked: false });
-      type("");
-      const failed = await at58(async () => expect(await offerInstall({ install: async () => ({ ok: false, text: "EACCES" }) })).toBe("failed"));
+      const flat = plainLines(yes).join(" ").replace(/\s+/g, " ");
+      expect(flat).toContain("Added. Open a new terminal window and type genclass.");
+      expect(flat).toContain("npm uninstall -g genclass takes it out.");
+      // a failure says how by hand, and is not tried again for a day
+      const failed = await at58(async () => expect(await installShortName({ interactive: () => true, install: async () => ({ ok: false, text: "EACCES" }), works: () => false })).toBe("failed"));
       expect(plainLines(failed).join(" ").replace(/\s+/g, " ")).toContain("npm install -g genclass (some systems need sudo in front)");
+      expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
+      expect(await installShortName({ interactive: () => true, now: Date.now() + 25 * 60 * 60_000, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("installed");
+      expect(ran).toHaveLength(2);
+      // already there, no terminal, or CI: nothing runs
+      expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => true })).toBe("skipped");
+      expect(await installShortName({ interactive: () => false, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
+      process.env.CI = "1";
+      expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
+      expect(ran).toHaveLength(2);
     } finally {
-      process.env.CI = before;
+      if (before === undefined) delete process.env.CI;
+      else process.env.CI = before;
     }
   });
 });
@@ -108,6 +112,10 @@ describe("genclass: the home (src/home.mjs)", () => {
     expect(read("npx genclass fix 2")).toEqual({ command: ["fix", "2"] });
     expect(read("genclass problems")).toEqual({ command: ["problems"] });
     expect(read("npx genclass dashbord")).toEqual({ unknown: "dashbord" });
+    // a number is the command listed with it
+    expect(read("1")).toEqual({ command: ["dashboard"] });
+    expect(read(String(COMMANDS.findIndex(([n]) => n === "profile") + 1))).toEqual({ command: ["profile"] });
+    expect(read("99")).toEqual({ unknown: "99" });
     expect(read("npx genclass")).toEqual({ help: true });
     // every command the command line has, including the runtime's own, is a command here and never a question
     for (const cmd of ["connect", "init", "audit"]) expect(read(`${cmd} --name shop now`)).toEqual({ command: [cmd, "--name", "shop", "now"] });

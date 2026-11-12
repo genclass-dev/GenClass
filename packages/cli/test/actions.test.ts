@@ -2,7 +2,7 @@
 // workflow file, the agent configuration, cleaned text, git remotes and the command line.
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { WORKFLOW_FILE as COLLECTOR_WORKFLOW } from "../../../telemetry-worker/src/github/workflow-file.js";
@@ -260,7 +260,9 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
   it("the real entry names itself to the runtime CLI's modules: its commands say genclass, not the runtime package", () => {
     const dir = tempDir();
     viteApp(dir);
-    const env = { ...process.env, NO_COLOR: "1", GENCLASS_HOST: "" };
+    // a machine with genclass installed would print the short name: the PATH here has none
+    const PATH = String(process.env.PATH ?? "").split(delimiter).filter((d) => d && !existsSync(join(d, "genclass"))).join(delimiter);
+    const env = { ...process.env, PATH, NO_COLOR: "1", GENCLASS_HOST: "" };
     const main = fileURLToPath(new URL("../src/main.mjs", import.meta.url));
     const status = execFileSync(process.execPath, [main, "status", "--cwd", dir], { env, encoding: "utf8" });
     expect(status).toContain("GenClass");

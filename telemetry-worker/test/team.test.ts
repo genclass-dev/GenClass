@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// Seats are tested on billing/plans.json version 3 (2026-11-11), where Team was sold per seat: since version 4 Team is
+// per project and holds everyone, and the seat rules (src/team.ts) stay for any plan sold per seat.
+vi.mock("../../billing/plans.json", async () => ({ default: (await import("./fixtures/plans-v3-seats.json")).default }));
 import { authRetention } from "../src/auth.js";
 import { resetTokenCache } from "../src/dashboard.js";
 import { resetOwnerCache } from "../src/paid.js";
@@ -6,11 +9,9 @@ import { resetStripeCache } from "../src/stripe.js";
 import { activeOwners, INVITE_MS } from "../src/team.js";
 import { advance, call, cliToken, createApp, detection, GENCLASS_PORTAL, now, resetClock, sendBatch, setPlan, setup, signedIn, WEBHOOK_SECRET } from "./account-helpers.js";
 
-// Teams on the plans as they were sold per seat until 2026-11-12 (test/fixtures/plans-per-seat.json, plans.json
-// version 3 with Team per_seat; src/team.ts, src/team-routes.ts): Free is one person, Team holds the seats paid for
-// (the owner first, then members in joining order), a grant has no seat count. Members read the owner's dashboards
-// with the owner's plan and change nothing. Team is sold per app since (any number of members): test/plans.test.ts.
-vi.mock("../../billing/plans.json", async () => ({ default: (await import("./fixtures/plans-per-seat.json")).default }));
+// Teams on the real plans (billing/plans.json version 3; src/team.ts, src/team-routes.ts): Free is one person, Team
+// holds the seats paid for (the owner first, then members in joining order), a grant has no seat count. Members read
+// the owner's dashboards with the owner's plan and change nothing.
 
 const LIVE = { STRIPE_SECRET_KEY: "sk_live_fake", STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, STRIPE_PORTAL_CONFIGURATION: GENCLASS_PORTAL };
 const PLANS_URL = "https://genclass.dev/account/billing";

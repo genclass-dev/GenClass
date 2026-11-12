@@ -28,7 +28,7 @@ import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "./assets.mjs";
 import { freeLimits, WORKFLOW_PATH } from "./state.mjs";
 import { saveNotes } from "./store.mjs";
-import { agree, bad, good, note, planCard, PROMPT, spinner, typed, warn } from "./tui.mjs";
+import { agree, bad, clean, good, note, planCard, PROMPT, spinner, typed, warn } from "./tui.mjs";
 import { planViteSettings } from "./vite.mjs";
 
 /** Resolves after `ms`, or at once when `signal` aborts. */
@@ -113,6 +113,8 @@ export async function signIn(o = {}) {
 export async function choosePlan(state, o = {}, deps = {}) {
   const offer = state.steps.find((s) => s.id === "plan")?.offer;
   if (!offer) return "skipped";
+  // plans per project: the choice is made on the app's own plan page
+  if (offer.project) return projectPlan(offer, o, deps);
   const free = offer.free.name;
   const limits = freeLimits(offer.free);
   const stayFree = (line) => {
@@ -140,27 +142,67 @@ export async function choosePlan(state, o = {}, deps = {}) {
  * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
  */
 export async function checkout(offer, o = {}, deps = {}) {
+  return (await waitForPlan(offer, o, deps)) === "paid";
+}
+
+/**
+ * One app's plan, on its page in the browser (genclass.dev/account/billing?project=<id>): the paid plan large, with
+ * its price and what it has, and a very small "Try for free (limited)" under it (none for an app past the ones Free
+ * covers). The command opens the page and waits for the choice made there: a payment, or Free for now. Without a
+ * terminal (--yes, a coding agent) it opens the page and goes on, and the step stays open until the choice is made.
+ * Returns "done" once the app has its plan; "quit" when the wait ended without a choice (the setup stops there);
+ * "skipped" without a terminal.
+ * @param {{ plan: { name: string }, price: string, free: { name: string, apps: number | null }, checkoutUrl: string, project: { id: string, name: string, token: string }, needs: boolean }} offer
+ */
+export async function projectPlan(offer, o = {}, deps = {}) {
+  const name = clean(offer.project.name, 30);
+  planCard(offer, offer.project.name);
+  note(offer.needs ? `Free covers ${offer.free.apps ?? 3} apps and this is one more: it needs ${offer.plan.name}, ${offer.price}.` : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`);
+  if (o.yes || !interactive()) {
+    out(`  Open  ${c.cyan(offer.checkoutUrl)}`);
+    if (openBrowser(offer.checkoutUrl, o)) note("Your browser is opening its plan page. Run npx genclass again once it is chosen.");
+    return "skipped";
+  }
+  const got = await waitForPlan(offer, o, deps);
+  if (got) return "done";
+  // the setup goes on only once the app has its plan: Team, or Free with what stops the person from paying (the
+  // owner's call, 2026-11-12)
+  note(`The setup goes on once ${name} has its plan: ${offer.needs ? offer.plan.name : `${offer.plan.name}, or ${offer.free.name} for now`}, on ${offer.checkoutUrl}`);
+  return "quit";
+}
+
+/**
+ * Opens a plan's page in the browser and waits (Enter stops the wait): for the account's plan (a server from before
+ * plans per project), or for one app's: its payment, or Free chosen for it on the page. The page is genclass.dev's,
+ * the payment is Stripe's; this command never sees a card. Returns "paid", "free" or null.
+ */
+async function waitForPlan(offer, o = {}, deps = {}) {
+  const app = offer.project ? clean(offer.project.name, 30) : null;
   out();
   out(`  Open  ${c.cyan(offer.checkoutUrl)}`);
-  if (openBrowser(offer.checkoutUrl, o)) note("Your browser is opening the checkout.");
+  if (openBrowser(offer.checkoutUrl, o)) note(app ? `Your browser is opening the plan page for ${app}.` : "Your browser is opening the checkout.");
   const creds = readCredentials();
   const stop = stopOnEnter();
-  const sp = spinner(`Waiting for the payment in the browser${canStop()}`);
+  const sp = spinner(`${app && !offer.needs ? "Waiting for your choice in the browser" : "Waiting for the payment in the browser"}${canStop()}`);
   const until = Date.now() + (deps.waitMs ?? 10 * 60_000);
-  let paid = false;
+  let got = null;
   while (creds && !stop.signal.aborted && Date.now() < until) {
     await nap(deps.everyMs ?? 3000, stop.signal);
     if (stop.signal.aborted) break;
     const me = await fetchOverview(creds, deps);
-    if (me.ok && me.plan && me.plan.id !== "free") {
-      paid = true;
-      break;
-    }
+    if (!me.ok) continue;
+    if (offer.project) {
+      const p = me.projects.find((x) => x.token === offer.project.token);
+      if (p?.plan && (p.plan.id !== "free" || p.plan.source)) got = "paid";
+      else if (p?.planChosen && !offer.needs) got = "free";
+    } else if (me.plan && me.plan.id !== "free") got = "paid";
+    if (got) break;
   }
   await stop.done();
-  if (paid) sp.stop("ok", `${offer.plan.name} is active. Thank you.`);
-  else sp.stop("warn", `No payment yet. ${offer.plan.name} starts the moment the payment goes through.`);
-  return paid;
+  if (got === "paid") sp.stop("ok", `${offer.plan.name} is active${app ? ` for ${app}` : ""}. Thank you.`);
+  else if (got === "free") sp.stop("ok", `${app} is on ${offer.free.name} for now (limited).`);
+  else sp.stop("warn", app && !offer.needs ? "No choice yet." : `No payment yet. ${offer.plan.name} starts the moment the payment goes through.`);
+  return got;
 }
 
 // ------------------------------------------------------------------------------------------------ 2. the runtime

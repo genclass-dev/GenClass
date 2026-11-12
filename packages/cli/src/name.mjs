@@ -36,7 +36,7 @@ export function shortNameWorks(env = process.env, platform = process.platform) {
 }
 
 /** `text` with every `npx genclass` said the short way. */
-export const shorten = (text) => String(text).replace(/\bnpx genclass\b/g, "genclass");
+export const shorten = (text) => String(text).replace(/(^|[^\w-]|\u001b\[[0-9;]*m)npx genclass\b/g, "$1genclass");
 
 let short = false;
 let wrapped = false;

@@ -1067,7 +1067,7 @@ export function newProjectPage(nonce: string, v: NewProjectView): string {
     ev.preventDefault(); err.textContent = "";
     if (!name.value.trim()) { err.textContent = "Give the project a name."; name.focus(); return; }
     gcBusy(b, true, "Creating...");
-    gcPost("/api/account/projects", { name: name.value }).then(function(j){ location.href = "/account/apps/" + encodeURIComponent(j.project.id) + "#connect"; }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });
+    gcPost("/api/account/projects", { name: name.value }).then(function(j){ location.href = "/account/billing?project=" + encodeURIComponent(j.project.id) + "&new=1"; }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });
   });
 })();`;
   return studioPage(nonce, {

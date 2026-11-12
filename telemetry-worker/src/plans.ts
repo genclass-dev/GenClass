@@ -13,14 +13,9 @@
 //   GenClass's (ownedPrice, plans.json retired_plans). Every plan includes the dashboard; the locked paths
 //   (hasDashboard false) are kept for a plan file that leaves it out, and the tests run them on a fixture
 //   (test/fixtures/plans-two-paid.json). There is no trial.
-// - Quantity. A plan sold by quantity (soldByQuantity) has one Stripe subscription item whose quantity src/stripe.ts
-//   writes to accounts.seats (the column keeps its first name). Team is per_app since 2026-11-12: the quantity is how
-//   many apps the plan covers (appsOf): no more apps are created past it, and when the account holds more apps than
-//   it pays for (it lowered the quantity in Manage billing), only its first apps by creation have the plan's
-//   entitlements, the others Free's (projectAccess). A per_seat plan would be paid per person instead: the quantity
+// - Seats. A per_seat plan is paid per person: the subscription's quantity (accounts.seats, written by src/stripe.ts)
 //   is how many people the account holds, its owner included. A plan that is not per_seat holds limits.seats people
-//   (Free: 1; null: no limit, Team's), and a plan GenClass grants has no seat or app count, so no limit. seatsOf and
-//   appsOf say it.
+//   (Free: 1; null: no limit), and a plan GenClass grants has no seat count, so no limit. seatsOf says it.
 // - PLAN_GATES = "open" (a self-hosted collector, wrangler.selfhost.toml): every account has the grant plan, so
 //   nothing is locked on a server that sells nothing (planGatesOpen, source "open").
 // - A plan comes from accounts.plan, which src/stripe.ts derives from the Stripe subscription. Entitlements follow the
@@ -72,10 +67,15 @@ export interface Plan {
   managed_payments: boolean;
   /** Sold per person: the monthly price is for one seat, and the subscription's quantity is the seats (seatsOf). */
   per_seat?: boolean;
-  /** Sold per app: the monthly price is for one app, and the subscription's quantity is the apps it covers (appsOf). */
-  per_app?: boolean;
-  /** `seats`: the people a plan that is not per_seat holds, the owner included (null or left out: no limit). */
-  limits: { apps: number | null; history_days: number; seats?: number | null };
+  /** Sold per project (version 4): one subscription of quantity 1 for each app, its metadata naming the app. */
+  per_project?: boolean;
+  /**
+   * `seats`: the people a plan that is not per_seat holds, the owner included (null or left out: no limit). `apps`
+   * on Free: how many of an account's projects it covers (a later one is locked until it has a plan).
+   * `live_fixes_per_month`: what the runtime may fix on visitors' screens a month for one project (interventions and
+   * visual fixes); past it the runtime is told to observe only until the month ends (null or left out: no limit).
+   */
+  limits: { apps: number | null; history_days: number; seats?: number | null; live_fixes_per_month?: number | null };
   /**
    * `genclass suggest` (src/suggest.ts): `per_day`, model runs an account has a day; `shown`, how many items of the
    * plan it is shown (null: all). Left out: 3 and 3.
@@ -189,26 +189,20 @@ export function canBuy(env: Env, account: { id: string; email: string | null }):
   return list.some((x) => x === account.id || (!!email && x.toLowerCase() === email));
 }
 
-/** "$29 / month", "$15 / developer / month" (per_seat), "$15 / app / month" (per_app), "$0", or "By agreement". */
+/** "$29 / month", "$15 / developer / month" (a per_seat plan), "$0", or "By agreement" for a plan agreed by email. */
 export function priceText(plan: Plan): string {
   const c = plan.price_usd_cents.monthly;
   if (c === null) return "By agreement";
   if (!c) return "$0";
-  return `$${c % 100 ? (c / 100).toFixed(2) : String(c / 100)}${plan.per_seat === true ? " / developer" : plan.per_app === true ? " / app" : ""} / month`;
+  return `$${c % 100 ? (c / 100).toFixed(2) : String(c / 100)}${plan.per_project === true ? " / project" : plan.per_seat === true ? " / developer" : ""} / month`;
 }
 
-/** Sold by quantity: one subscription item whose quantity is the seats (per_seat) or the apps (per_app). */
-export const soldByQuantity = (plan: Plan): boolean => plan.per_seat === true || plan.per_app === true;
+/** The most seats one Checkout sells and one account holds on a per_seat plan; a larger team is agreed by email. */
+export const MAX_SEATS = 200;
 
-/** What one unit of a plan sold by quantity is, for the pages and messages: "seat" or "app" (else null). */
-export const unitOf = (plan: Plan): "seat" | "app" | null => (plan.per_seat === true ? "seat" : plan.per_app === true ? "app" : null);
-
-/** The most seats or apps one Checkout sells (the apps match auth.ts MAX_APPS_PER_ACCOUNT); more is agreed by email. */
-export const MAX_QUANTITY = 200;
-
-/** A quantity as asked for (Checkout) or as Stripe reports it (a subscription item's quantity): 1 to MAX_QUANTITY. */
-export function cleanQuantity(v: unknown): number | null {
-  return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_QUANTITY ? v : null;
+/** A seat count as asked for (Checkout) or as Stripe reports it (a subscription item's quantity): 1 to MAX_SEATS. */
+export function cleanSeats(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_SEATS ? v : null;
 }
 
 /** PLAN_GATES = "open": this server gives every account the grant plan (a self-hosted collector). */
@@ -278,8 +272,8 @@ export interface Access {
   source: AccessSource | null;
   /** How many people the account holds now, its owner included (seatsOf); null: no limit. */
   seats: number | null;
-  /** How many apps the account may hold now (appsOf): Free's 3, the apps paid for on a per_app plan; null: no limit. */
-  apps: number | null;
+  /** A project on Free past the account's first limits.apps free projects: no dashboard until it has a plan. */
+  locked?: "free_projects";
 }
 
 /** The columns accountAccess reads (accounts, migrations 0004, 0006 and 0014). */
@@ -289,14 +283,14 @@ export interface AccessRow {
   comp_until: string | null;
   /** The plan GenClass's grant gives (migration 0014); empty or unknown: plans.json grant_plan. */
   comp_plan?: string | null;
-  /** The quantity paid for on a plan sold by quantity, seats or apps (migration 0014, src/stripe.ts). */
+  /** The paid seats of a per_seat plan: the subscription's quantity (migration 0014, src/stripe.ts). */
   seats?: number | null;
 }
 
 export const ACCESS_COLUMNS = "plan, stripe_mode, comp_until, comp_plan, seats";
-export const NO_ACCESS: Access = { plan: FREE, source: null, seats: FREE.limits.seats ?? null, apps: FREE.limits.apps };
+export const NO_ACCESS: Access = { plan: FREE, source: null, seats: FREE.limits.seats ?? null };
 /** What every account has on a server with PLAN_GATES open. */
-export const OPEN_ACCESS: Access = { plan: GRANT_PLAN, source: "open", seats: null, apps: null };
+export const OPEN_ACCESS: Access = { plan: GRANT_PLAN, source: "open", seats: null };
 
 /**
  * How many people an account on `plan` holds, its owner included (null: no limit). A paid per_seat plan: the seats
@@ -304,17 +298,8 @@ export const OPEN_ACCESS: Access = { plan: GRANT_PLAN, source: "open", seats: nu
  * no seat count, so no limit).
  */
 export function seatsOf(plan: Plan, source: AccessSource | null, paidSeats: number | null | undefined): number | null {
-  if (plan.per_seat === true) return source === "paid" ? Math.max(1, cleanQuantity(paidSeats) ?? 1) : null;
+  if (plan.per_seat === true) return source === "paid" ? Math.max(1, cleanSeats(paidSeats) ?? 1) : null;
   return plan.limits.seats ?? null;
-}
-
-/**
- * How many apps an account on `plan` may hold (null: no plan limit; the abuse cap still applies). A paid per_app plan:
- * the apps paid for, at least 1. A grant of a per_app plan: no limit. Any other plan: its limits.apps.
- */
-export function appsOf(plan: Plan, source: AccessSource | null, paid: number | null | undefined): number | null {
-  if (plan.per_app === true) return source === "paid" ? Math.max(1, cleanQuantity(paid) ?? 1) : null;
-  return plan.limits.apps;
 }
 
 /** The plan a grant gives: the one accounts.comp_plan names when it is a plan above Free, else plans.json grant_plan. */
@@ -343,16 +328,56 @@ export function accessOf(row: AccessRow | null | undefined, mode: StripeMode | n
   const paid = modeCounts(row.stripe_mode, mode) ? planById(row.plan) : FREE;
   const comp = future(row.comp_until, now);
   const grant = grantPlan(row.comp_plan);
-  if (paid.id !== "free" && (!comp || rank(paid) >= rank(grant))) return { plan: paid, source: "paid", seats: seatsOf(paid, "paid", row.seats), apps: appsOf(paid, "paid", row.seats) };
-  if (comp) return { plan: grant, source: "comp", seats: seatsOf(grant, "comp", null), apps: appsOf(grant, "comp", null) };
+  if (paid.id !== "free" && (!comp || rank(paid) >= rank(grant))) return { plan: paid, source: "paid", seats: seatsOf(paid, "paid", row.seats) };
+  if (comp) return { plan: grant, source: "comp", seats: seatsOf(grant, "comp", null) };
   return NO_ACCESS;
 }
 
-/** The account's access at `now` under the current Stripe key (accessOf). */
+/** The better of two accesses: the plan listed later in plans.json, a paid one before a grant of the same plan. */
+export function better(a: Access, b: Access): Access {
+  if (rank(b.plan) !== rank(a.plan)) return rank(b.plan) > rank(a.plan) ? b : a;
+  return a.source === "paid" || b.source !== "paid" ? a : b;
+}
+
+/** The columns a project's own plan is read from (migration 0016). */
+export const PROJECT_PLAN_COLUMNS = "id, token, created, plan, stripe_mode, comp_until, comp_plan";
+export interface ProjectPlanRow {
+  id: string | null;
+  token: string;
+  created: string;
+  plan: string | null;
+  stripe_mode: string | null;
+  comp_until: string | null;
+  comp_plan: string | null;
+}
+
+/**
+ * What an account gives every one of its apps: a subscription of the whole account from before plans were per
+ * project, and GenClass's grant of a plan that is not sold per project (Enterprise, agreed by email). A grant of a
+ * plan sold per project (Team) covers only the apps it was copied to (migration 0016: the owner's choice, "every
+ * project they have").
+ */
+export function accountWide(row: AccessRow | null | undefined, mode: StripeMode | null, now: Date): Access {
+  if (!row) return NO_ACCESS;
+  return accessOf(grantPlan(row.comp_plan).per_project === true ? { ...row, comp_until: null } : row, mode, now);
+}
+
+/** A project's own access: its paid plan (as the current Stripe key sees it) or its grant (accessOf), else Free. */
+export const projectOwnAccess = (r: ProjectPlanRow, mode: StripeMode | null, now: Date): Access =>
+  accessOf({ plan: r.plan, stripe_mode: r.stripe_mode, comp_until: r.comp_until, comp_plan: r.comp_plan, seats: null }, mode, now);
+
+/**
+ * What an account may use for itself (suggestions a day, its team, export keys) at `now`: the best of its own paid
+ * plan or grant (accessOf; from before plans were per project) and every one of its projects' (projectOwnAccess).
+ */
 export async function accountAccess(db: D1Like, accountId: string, env: Env, now: Date): Promise<Access> {
   if (planGatesOpen(env)) return OPEN_ACCESS;
+  const mode = stripeMode(env);
   const row = await db.prepare(`SELECT ${ACCESS_COLUMNS} FROM accounts WHERE id = ?`).bind(accountId).first<AccessRow>();
-  return accessOf(row, stripeMode(env), now);
+  let best = accessOf(row, mode, now);
+  const r = await db.prepare(`SELECT ${PROJECT_PLAN_COLUMNS} FROM projects WHERE account_id = ?`).bind(accountId).all<ProjectPlanRow>();
+  for (const p of r.results ?? []) best = better(best, projectOwnAccess(p, mode, now));
+  return best;
 }
 
 /** The account's plan for its entitlements at `now`: the paid plan or the grant's, else Free. */
@@ -360,36 +385,52 @@ export async function accountPlan(db: D1Like, accountId: string, env: Env, now: 
   return (await accountAccess(db, accountId, env, now)).plan;
 }
 
-/** This access opens dashboards (every plan in billing/plans.json today). */
-export const hasDashboard = (a: Access): boolean => entitled(a.plan, "dashboard");
+/** This access opens dashboards (every plan in billing/plans.json today), unless the project waits for a plan. */
+export const hasDashboard = (a: Access): boolean => entitled(a.plan, "dashboard") && !a.locked;
 
 /** This access shows visitor analytics (Team and Enterprise); without it the stats are served with them left out. */
 export const hasAnalytics = (a: Access): boolean => entitled(a.plan, "analytics");
 
+/** The access behind an app: its account's, or Free's for an app known only by its private link. */
 /**
- * The access behind an app: its account's, or Free's for an app known only by its private link. On a paid per_app plan
- * only the account's first `apps` apps by creation (then id) have it; an app past them (the account lowered the
- * quantity in Manage billing) has Free's, like an app with no account.
+ * Every app of an account with its access (projectAccess's rule, in one pass): its own plan or grant, its account's
+ * subscription from before plans were per project, and the lock on a project past the ones Free covers. In the
+ * order the apps were created.
  */
-export async function projectAccess(db: D1Like, project: { id?: string | null; account_id?: string | null }, env: Env, now: Date): Promise<Access> {
-  if (planGatesOpen(env)) return OPEN_ACCESS;
-  if (!project.account_id) return NO_ACCESS;
-  return withinPaidApps(db, project.id ?? null, await accountAccess(db, project.account_id, env, now));
+export async function accountProjectsAccess(db: D1Like, accountId: string, env: Env, now: Date): Promise<{ row: ProjectPlanRow; access: Access }[]> {
+  const rows = (await db.prepare(`SELECT ${PROJECT_PLAN_COLUMNS} FROM projects WHERE account_id = ? AND id IS NOT NULL ORDER BY created, rowid`).bind(accountId).all<ProjectPlanRow>()).results ?? [];
+  if (planGatesOpen(env)) return rows.map((row) => ({ row, access: OPEN_ACCESS }));
+  const mode = stripeMode(env);
+  const acct = await db.prepare(`SELECT ${ACCESS_COLUMNS} FROM accounts WHERE id = ?`).bind(accountId).first<AccessRow>();
+  const legacy = accountWide(acct, mode, now);
+  const cap = FREE.limits.apps;
+  let free = 0;
+  return rows.map((row) => {
+    const access = better(projectOwnAccess(row, mode, now), legacy);
+    if (access.plan.id !== FREE.id) return { row, access };
+    free++;
+    return { row, access: cap !== null && free > cap ? { ...access, locked: "free_projects" as const } : access };
+  });
 }
 
-/**
- * `access` for the app `projectId` of the account it belongs to: unchanged, unless the account pays per app (a paid
- * per_app plan) and the app is not among its first `access.apps` apps by creation, then id; such an app has Free's.
- */
-export async function withinPaidApps(db: D1Like, projectId: string | null, access: Access): Promise<Access> {
-  if (access.source !== "paid" || access.plan.per_app !== true || access.apps === null || !projectId) return access;
-  const before = await db
-    .prepare(
-      "SELECT COUNT(*) AS n FROM projects q JOIN projects p ON p.id = ? WHERE q.account_id = p.account_id AND (q.created < p.created OR (q.created = p.created AND q.id < p.id))",
-    )
-    .bind(projectId)
-    .first<{ n: number }>();
-  return Number(before?.n ?? 0) < access.apps ? access : NO_ACCESS;
+export async function projectAccess(db: D1Like, project: { account_id?: string | null; token?: string; id?: string | null }, env: Env, now: Date): Promise<Access> {
+  if (planGatesOpen(env)) return OPEN_ACCESS;
+  if (!project.account_id) return NO_ACCESS;
+  const mode = stripeMode(env);
+  // a subscription of the whole account from before plans were per project, and an account-wide grant (accountWide),
+  // cover every one of its apps
+  const acct = await db.prepare(`SELECT ${ACCESS_COLUMNS} FROM accounts WHERE id = ?`).bind(project.account_id).first<AccessRow>();
+  const legacy = accountWide(acct, mode, now);
+  const rows = (await db.prepare(`SELECT ${PROJECT_PLAN_COLUMNS} FROM projects WHERE account_id = ? ORDER BY created, rowid`).bind(project.account_id).all<ProjectPlanRow>()).results ?? [];
+  const mine = rows.find((r) => (project.token ? r.token === project.token : r.id === project.id));
+  const of = (r: ProjectPlanRow): Access => better(projectOwnAccess(r, mode, now), legacy);
+  const access = mine ? of(mine) : legacy;
+  if (access.plan.id !== FREE.id || !mine) return access;
+  // Free covers the account's first limits.apps projects on Free, oldest first; a later one waits for a plan
+  const cap = FREE.limits.apps;
+  if (cap === null) return access;
+  const free = rows.filter((r) => of(r).plan.id === FREE.id);
+  return free.findIndex((r) => r.token === mine.token) >= cap ? { ...access, locked: "free_projects" } : access;
 }
 
 /** The first plan in plans.json that includes `e` (the plan an upgrade message names), or null. */
@@ -408,8 +449,8 @@ export interface AppLimit {
  * limit applies to every account without a plan or grant, whatever the Stripe key.
  */
 export async function appLimit(db: D1Like, env: Env, accountId: string, now: Date): Promise<AppLimit> {
-  const access = await accountAccess(db, accountId, env, now);
-  return { plan: access.plan, max: access.apps };
+  const plan = await accountPlan(db, accountId, env, now);
+  return { plan, max: plan.limits.apps };
 }
 
 /** The 409 for an account at its plan's app limit: says the limit and where to go, for the page and the CLI. */
@@ -417,10 +458,7 @@ export function appLimitBody(lim: AppLimit, origin: string): { ok: false; error:
   const url = `${origin}/account/billing`;
   return {
     ok: false,
-    error:
-      lim.plan.per_app === true
-        ? `your ${lim.plan.name} plan pays for ${lim.max} app${lim.max === 1 ? "" : "s"}; add apps in Manage billing at ${url}`
-        : `the ${lim.plan.name} plan holds ${lim.max} app${lim.max === 1 ? "" : "s"}; see the plans at ${url}`,
+    error: `the ${lim.plan.name} plan holds ${lim.max} app${lim.max === 1 ? "" : "s"}; see the plans at ${url}`,
     upgrade_url: url,
   };
 }

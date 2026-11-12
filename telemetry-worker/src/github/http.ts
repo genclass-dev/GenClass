@@ -316,7 +316,7 @@ async function connectCallback(c: C, cfg: GithubAppConfig, f: Fetch): Promise<Re
       f(`${cfg.web}/login/oauth/access_token`, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json", "user-agent": "genclass.dev" },
-        body: new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, code, redirect_uri: `${cfg.origin}/github/callback` }).toString(),
+        body: new URLSearchParams({ client_id: cfg.clientId ?? "", client_secret: cfg.clientSecret ?? "", code, redirect_uri: `${cfg.origin}/github/callback` }).toString(),
         signal: AbortSignal.timeout(10_000),
       });
     let r: Response;

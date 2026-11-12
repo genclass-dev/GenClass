@@ -1,11 +1,8 @@
 // Routes for the paid plans. Checked before the account routes (src/auth.ts); null for any other path.
 //
-//   POST /api/billing/checkout {plan: "<id>", quantity?} browser session + Origin; {url} of Stripe Checkout (with
-//                                                       switch: true when it replaces the plan already paid);
-//                                                       `quantity` (1 to 200; `seats` is read the same) for a plan
-//                                                       sold by quantity: the apps of a per_app plan (Team; default
-//                                                       the apps the account holds), the seats of a per_seat one
-//                                                       (default 1). Checkout takes promotion codes.
+//   POST /api/billing/checkout {plan: "<id>", seats?}   browser session + Origin; {url} of Stripe Checkout (with
+//                                                       switch: true when it replaces the plan already paid); `seats`
+//                                                       (1 to 200, default 1) for a plan sold per seat (Team)
 //   POST /api/billing/trial                            410: GenClass has no trial any more (the dashboard is free)
 //   POST /api/billing/portal                           browser session + Origin; {url} of the Billing Portal
 //   POST /api/billing/webhook                          Stripe only: signature, no session (src/stripe.ts)
@@ -28,7 +25,8 @@
 // EXPORT_LIMIT's.
 
 import { accountContext, accountProjects, authenticate, csrfFail, fail, originOk, ownedProject, page, readJson, redirect, webSession, type Auth, type C } from "./auth.js";
-import { billingPage } from "./billing-pages.js";
+import { billingPage, projectPlanPage } from "./billing-pages.js";
+import { liveFixUsage } from "./usage.js";
 import type { Env, HandleOptions, RateLimiterLike } from "./collector.js";
 import { randomBase62, sha256Hex, type Project } from "./dashboard.js";
 import { decodeCursor, exportResponse, PAGE_MAX, parseTime } from "./export.js";
@@ -39,18 +37,19 @@ import {
   accountAccess,
   accountBilling,
   accountPlan,
-  projectAccess,
   canBuy,
-  cleanQuantity,
+  cleanSeats,
   entitled,
-  MAX_QUANTITY,
+  MAX_SEATS,
+  FREE,
   PAID_PLANS,
   PLANS,
   PLANS_FILE,
   planById,
+  projectAccess,
+  accountProjectsAccess,
   stripeMode,
   type Entitlement,
-  unitOf,
   type Plan,
 } from "./plans.js";
 import {
@@ -60,6 +59,7 @@ import {
   foreignInvoice,
   HOLDING_STATUSES,
   isGenClassSubscription,
+  projectOf,
   managedPayments,
   missingCustomer,
   modeNote,
@@ -156,6 +156,14 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       if (a instanceof Response) return a;
       const b = await accountBilling(c.db, a.account.id, env);
       const access = await accountAccess(c.db, a.account.id, env, c.now);
+      // one project's plan (?project=<id>): its page waits for its payment with this
+      const pid = url.searchParams.get("project");
+      if (pid) {
+        const p = await ownedProject(c, a.account.id, pid);
+        if (!p) return fail(404, "not found");
+        const pa = await projectAccess(c.db, p, env, c.now);
+        return json(200, { project: { id: p.id, plan: pa.plan.id, source: pa.source, locked: pa.locked ?? null } });
+      }
       return json(200, {
         plan: planById(b.plan).id,
         subscription_status: b.subscription_status,
@@ -166,12 +174,43 @@ export async function routeBilling(request: Request, url: URL, path: string, env
         access: access.source,
         // the people the account holds now, the owner included (null: no limit)
         seats: access.seats,
-        // the apps the account may hold now (a per_app plan: the apps paid for; null: no limit)
-        apps: access.apps,
       });
     }
     case "/account/billing": {
       if (!get) return method();
+      // one project's plan page (?project=<id>): what the genclass command opens when it adds a project
+      const pid = url.searchParams.get("project");
+      if (pid) {
+        const start = url.searchParams.get("start") === "1";
+        const fromCli = url.searchParams.get("from") === "cli";
+        const isNew = url.searchParams.get("new") === "1";
+        const a = await webSession(c);
+        if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing?project=${encodeURIComponent(pid)}${start ? "&start=1" : ""}${fromCli ? "&from=cli" : ""}${isNew ? "&new=1" : ""}`)}`);
+        const p = await ownedProject(c, a.account.id, pid);
+        if (!p || !p.id) return redirect("/account/billing#projects");
+        const access = await projectAccess(c.db, p, env, c.now);
+        const row = await c.db.prepare("SELECT subscription_status, current_period_end, cancel_at_period_end, plan_chosen FROM projects WHERE id = ?").bind(p.id).first<{ subscription_status: string | null; current_period_end: string | null; cancel_at_period_end: number | null; plan_chosen: string | null }>();
+        const apps = (await accountProjects(c, a.account.id)).map((x) => ({ id: x.id!, name: x.name }));
+        const usage = await liveFixUsage(c.db, p.token, access.plan, c.now).catch(() => null);
+        return page(200, (n) =>
+          projectPlanPage(n, {
+            account: { id: a.account.id, email: a.account.email, githubLogin: a.account.github_login },
+            apps,
+            project: { id: p.id!, name: p.name },
+            access,
+            sub: { status: row?.subscription_status ?? null, periodEnd: row?.current_period_end ?? null, cancels: !!row?.cancel_at_period_end },
+            usage,
+            live: canBuy(env, a.account),
+            testMode: stripeMode(env) === "test",
+            done: url.searchParams.get("done") === "1",
+            go: start,
+            fromCli,
+            isNew,
+            chosen: !!row?.plan_chosen,
+            now: c.now,
+          }),
+        );
+      }
       const picked = pickedPlan(url.searchParams.get("plan"));
       // ?start=1 with a plan: the person chose it a moment ago (in the genclass command's plan step), so the page
       // opens that plan's checkout itself instead of waiting for one more click
@@ -179,19 +218,27 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       const a = await webSession(c);
       // the plan picked on the pricing page survives the sign-in
       if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${picked.id}${go ? "&start=1" : ""}` : ""}`)}`);
+      // a plan sold per project, picked on the pricing page or started from an older genclass command: the plan page
+      // of the account's first app still on Free, where it is bought for that app
+      if (picked?.per_project === true) {
+        const open = (await accountProjectsAccess(c.db, a.account.id, env, c.now)).find((x) => x.row.id && x.access.plan.id === FREE.id && x.access.source === null && !x.access.locked)
+          ?? (await accountProjectsAccess(c.db, a.account.id, env, c.now)).find((x) => x.row.id && x.access.locked);
+        if (open) return redirect(`/account/billing?project=${encodeURIComponent(open.row.id!)}${go ? "&from=cli" : ""}`);
+      }
       const access = await accountAccess(c.db, a.account.id, env, c.now);
-      const all = await accountProjects(c, a.account.id);
-      const apps = all.map((p) => ({ id: p.id!, name: p.name }));
+      const apps = (await accountProjects(c, a.account.id)).map((p) => ({ id: p.id!, name: p.name }));
       const b = await accountBilling(c.db, a.account.id, env);
       const team = await teamOf(c.db, env, a.account.id, c.now);
       const memberships = await membershipsOf(c.db, env, a.account.id, c.now);
+      const names = new Map((await accountProjects(c, a.account.id)).filter((x) => x.account_id === a.account.id).map((x) => [x.token, x.name]));
+      const projects = (await accountProjectsAccess(c.db, a.account.id, env, c.now)).filter((x) => names.has(x.row.token)).map((x) => ({ id: x.row.id!, name: names.get(x.row.token)!, access: x.access }));
       return page(200, (n) =>
         billingPage(n, {
+          projects,
           team,
           memberships,
           account: { id: a.account.id, email: a.account.email, githubLogin: a.account.github_login },
           apps,
-          ownApps: all.filter((p) => p.account_id === a.account.id).length,
           billing: b,
           access,
           live: canBuy(env, a.account),
@@ -206,6 +253,8 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       );
     }
   }
+  const free = /^\/api\/billing\/projects\/([^/]+)\/free$/.exec(path);
+  if (free) return m === "POST" ? chooseFree(c, f, free[1]!) : method();
   if (integ) return integrations(c, f, integ[1]!, integ[2] ?? null, !!integ[3]);
   if (events) return exportEvents(c, events[1]!);
   if (keys) return exportKeys(c, keys[1] ?? null);
@@ -213,6 +262,49 @@ export async function routeBilling(request: Request, url: URL, path: string, env
 }
 
 // --------------------------------------------------------------------------------------------- Checkout, portal
+
+/** What can stop someone from paying, as the plan page's popup lists them: [value, the words shown]. */
+export const FREE_REASONS: readonly (readonly [string, string])[] = [
+  ["price", "It costs too much"],
+  ["trying", "I'm only trying GenClass out"],
+  ["approval", "I need to ask my team or my boss"],
+  ["feature", "It's missing something I need"],
+  ["unsure", "I'm not sure it works for my app yet"],
+  ["other", "Something else"],
+];
+const NOTE_MAX = 500;
+
+/**
+ * POST /api/billing/projects/<id>/free { reason, note? }: Free chosen for one app, on its plan page, with what is
+ * stopping the person from paying (the popup behind "Try for free (limited)"; the owner's call, 2026-11-12: nobody
+ * goes on with Free without saying why). The reason is one of FREE_REASONS; the note is optional, at most 500
+ * characters. It keeps the answer (plan_feedback), writes when (projects.plan_chosen), which the genclass command's
+ * plan step and the app's page wait for, and tells the owner (NOTIFY_WEBHOOK). The app is on Free either way. An app
+ * past the ones Free covers has only the paid plan (409).
+ */
+async function chooseFree(c: C, f: Fetch, id: string): Promise<Response> {
+  const a = await browserWrite(c, "a plan is chosen");
+  if (a instanceof Response) return a;
+  const body = await readJson(c, 4096);
+  if (body instanceof Response) return body;
+  const reason = FREE_REASONS.find(([v]) => v === body.reason);
+  if (!reason) return fail(400, "choose what is stopping you from paying");
+  const note = typeof body.note === "string" ? body.note.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, NOTE_MAX) : "";
+  const p = await ownedProject(c, a.account.id, id);
+  if (!p || !p.id) return fail(404, "not found");
+  const access = await projectAccess(c.db, p, c.env, c.now);
+  if (access.locked) return fail(409, `Free covers ${FREE.limits.apps ?? 3} projects, and this one is past them: it needs a paid plan`);
+  const at = c.now.toISOString();
+  await c.db.batch([
+    c.db.prepare("INSERT INTO plan_feedback (account_id, project_id, reason, note, created) VALUES (?, ?, ?, ?, ?)").bind(a.account.id, p.id, reason[0], note || null, at),
+    c.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ? AND account_id = ?").bind(at, p.id, a.account.id),
+  ]);
+  await notifyOwner(
+    { env: c.env, fetch: f, now: c.now },
+    { kind: "free_chosen", account: a.account.id, project: p.id, reason: reason[0], text: `Free chosen for "${p.name}" (${a.account.email ?? a.account.github_login ?? a.account.id}): ${reason[1]}${note ? `. "${note}"` : ""}` },
+  ).catch(() => false);
+  return json(200, { ok: true, plan: access.plan.id });
+}
 
 /**
  * GenClass opens no Stripe page for, and starts no Checkout on, a stored customer that is not provably its own or that
@@ -252,20 +344,17 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
     if (!PAID_PLANS.length) return fail(400, `no plan is sold on genclass.dev: Free costs nothing, and Enterprise is agreed by email with ${PLANS_FILE.contact}`);
     return fail(400, `choose a plan: ${PAID_PLANS.map((p) => p.id).join(" or ")}`);
   }
-  // a plan sold by quantity: how many apps (per_app; the apps the account holds when the page sends none) or people
-  // (per_seat, the owner included; one when the page sends none)
-  let quantity = 1;
-  const unit = unitOf(plan);
-  if (unit) {
-    const asked = body.quantity !== undefined ? body.quantity : body.seats;
-    if (asked !== undefined) {
-      const n = cleanQuantity(asked);
-      if (n === null) return fail(400, `the number of ${unit}s is a whole number from 1 to ${MAX_QUANTITY}; for more email ${PLANS_FILE.contact}`);
-      quantity = n;
-    } else if (unit === "app") {
-      // the account's own apps, not the apps of teams it is a member of
-      quantity = Math.min(MAX_QUANTITY, Math.max(1, (await accountProjects(c, a.account.id)).filter((p) => p.account_id === a.account.id).length));
-    }
+  // a plan sold per project (billing/plans.json version 4) is bought for one of the account's apps
+  if (plan.per_project === true) {
+    if (typeof body.project_id !== "string" || !body.project_id) return fail(400, `the ${plan.name} plan is bought for one project: send project_id`);
+    return checkoutProject(c, f, a, plan, body.project_id);
+  }
+  // a plan sold per seat: how many people (the owner included); one when the page sends none
+  let seats = 1;
+  if (plan.per_seat === true && body.seats !== undefined) {
+    const n = cleanSeats(body.seats);
+    if (n === null) return fail(400, `seats is a whole number from 1 to ${MAX_SEATS}; for a larger team email ${PLANS_FILE.contact}`);
+    seats = n;
   }
   if (await overBudget(c.env.AUTH_LIMIT, "checkout", a.account.id)) return tooMany();
   // as stored: ensureCustomer decides what to do with a customer from the other Stripe mode
@@ -302,11 +391,11 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
         if (await foreignInvoice(c.env, f, customer.id, subs)) return refuseShared(c, f, account.id, customer.id, SHARED_INVOICE);
         // once the new subscription's first payment clears, the webhook refunds `held`'s unused time to its card and
         // cancels it; until then it stays
-        const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, switchFrom: held.id, quantity });
+        const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, switchFrom: held.id, seats });
         return json(200, { url, switch: true });
       }
     }
-    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, quantity });
+    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, seats });
     return json(200, { url });
   } catch (e) {
     return stripeFail(e);
@@ -354,6 +443,41 @@ async function portal(c: C, f: Fetch): Promise<Response> {
   }
 }
 
+/**
+ * Checkout for one project: the project must be the account's and not already on that plan; the Stripe customer is
+ * the account's own (the same checks as the account's checkout: GenClass's, holding nothing else). One subscription
+ * of quantity 1 per project, its metadata naming the project (src/stripe.ts checkoutSession, applyProjectSubscription);
+ * the account's other subscriptions are never touched.
+ */
+async function checkoutProject(c: C, f: Fetch, a: Auth, plan: Plan, projectId: string): Promise<Response> {
+  const p = await ownedProject(c, a.account.id, projectId);
+  if (!p || !p.id) return fail(404, "not found");
+  const access = await projectAccess(c.db, p, c.env, c.now);
+  if (access.source === "paid" && access.plan.id === plan.id) return fail(409, `${p.name} is already on the ${plan.name} plan`);
+  const row = await c.db.prepare("SELECT subscription_status FROM projects WHERE id = ?").bind(p.id).first<{ subscription_status: string | null }>();
+  if (row?.subscription_status === "past_due" || row?.subscription_status === "unpaid") {
+    return fail(409, `the last payment for ${p.name} did not go through; update your card in Manage billing to pay it, or email ${PLANS_FILE.contact}`);
+  }
+  if (await overBudget(c.env.AUTH_LIMIT, "checkout", a.account.id)) return tooMany();
+  const account = { id: a.account.id, email: a.account.email, ...(await accountBilling(c.db, a.account.id)) };
+  try {
+    let customer = await ensureCustomer(c.env, f, c.db, account);
+    if (!customer.fresh) {
+      const own = await checkCustomer(c.env, f, account.id, customer.id);
+      if (own.state === "not_genclass") return refuseShared(c, f, account.id, customer.id, NOT_GENCLASS);
+      if (own.state === "ok" && sharedCustomer(own.subs)) return refuseShared(c, f, account.id, customer.id, SHARED_SUBSCRIPTION);
+      if (own.state === "missing") customer = await ensureCustomer(c.env, f, c.db, { ...account, stripe_customer_id: customer.id, stripe_mode: stripeMode(c.env) }, customer.id);
+      // a payment for this project that the webhook has not written yet: never a second subscription
+      const subs = own.state === "ok" ? own.subs : [];
+      if (subs.some((s) => projectOf(s) === p.id && HOLDING_STATUSES.has(s.status))) return fail(409, `a plan for ${p.name} is already going through; reload this page in a minute`);
+    }
+    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, project: { id: p.id } });
+    return json(200, { url });
+  } catch (e) {
+    return stripeFail(e);
+  }
+}
+
 // --------------------------------------------------------------------------------------------- forwarding settings
 
 async function integrations(c: C, f: Fetch, projectId: string, kindRaw: string | null, test: boolean): Promise<Response> {
@@ -375,7 +499,7 @@ export async function integrationsFor(c: C, f: Fetch, accountId: string, project
   const a = { account: { id: accountId } };
   const p = await ownedProject(c, a.account.id, projectId);
   if (!p || !p.id) return fail(404, "not found");
-  // a grant gives its plan's forwarding too, and an app past the apps a per_app plan pays for has Free's (projectAccess)
+  // the project's own plan (a grant gives its plan's forwarding too: src/plans.ts projectAccess)
   const plan = (await projectAccess(c.db, p, c.env, c.now)).plan;
 
   if (kindRaw === null) {

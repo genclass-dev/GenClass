@@ -16,7 +16,13 @@ import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { openBrowser, signIn } from "./actions.mjs";
 import { fetchApp, signInIsOld } from "./api.mjs";
 import { readState } from "./state.mjs";
-import { ago, bad, clean, header, note, typed, visible, warn, width, wrap } from "./tui.mjs";
+import { ago, bad, clean, header, note, PROMPT, typed, visible, warn, width, wrap } from "./tui.mjs";
+
+/** "Dec 1" for an ISO time (UTC). */
+const monthDay = (iso) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? String(iso).slice(0, 10) : d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+};
 
 /** The model's default kinds in plain words (packages/runtime/src/situation/questions.ts DEFAULT_DIAGNOSES). */
 export const KINDS = {
@@ -98,6 +104,14 @@ export function render(app, state, o = {}) {
   const cell = (label, value) => `${c.gray(label.padEnd(15))}${c.bold(String(value).padEnd(9))}`;
   out(`  ${c.gray(RANGE_WORDS[app.range] ?? app.range)}${app.lastEvent ? c.gray(` · last page ${ago(app.lastEvent, o.now)}`) : ""}`);
   out();
+  // past this month's live fixes: GenClass observes only, and the way on is the app's plan
+  const u = app.usage;
+  if (u?.observeOnly && u.limit !== null) {
+    const [first = "", ...rest] = wrap(`Observing only. This app used its ${n(u.limit)} live fixes for the month, so GenClass finds and reports problems and fixes none${u.resets ? ` until ${monthDay(u.resets)}` : ""}. A paid plan has no limit: npx genclass plan`, width() - 6);
+    out(`  ${c.yellow(sym.warn)} ${c.bold(first)}`);
+    for (const l of rest) out(`    ${l}`);
+    out();
+  }
   // the dashboard page's own words: a page load is one page GenClass watched
   out(`  ${cell("Page loads", n(t.visits))}  ${cell("Problems found", n(t.found))}`.trimEnd());
   out(`  ${cell("Handled", n(t.handled))}  ${cell("Visual checks", n(t.checks))}`.trimEnd());
@@ -132,6 +146,8 @@ export function render(app, state, o = {}) {
     part("Visitors", v.visits ? `${plural(v.visits, "visit")} · ${plural(v.pages, "page view")}${bounce}` : c.gray("none counted in this period (analytics is opt-in: genclass.dev/docs)"));
     if (v.visits && v.entry.length) for (const l of wrap(`came in on ${v.entry.slice(0, all ? 10 : 3).map((e) => `${clean(e.key, 30)} (${n(e.count)})`).join(", ")}`, width() - 4 - 15)) out(`  ${" ".repeat(15)}${c.gray(l)}`);
   } else if (app.visitorsPlan) part("Visitors", c.gray(`visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Team", 20)} plan${app.visitorsPlan.upgradeUrl ? `: ${app.visitorsPlan.upgradeUrl}` : ""}`));
+  if (u && u.limit !== null) part("Live fixes", u.observeOnly ? c.yellow(`${n(u.used)} of ${n(u.limit)} this month · observing only`) : `${n(u.used)} of ${n(u.limit)} this month`);
+  else if (u?.used) part("Live fixes", `${n(u.used)} this month · no limit`);
   const a = app.agent;
   const agentStep = state?.steps?.find((s) => s.id === "agent");
   part("Coding agent", a.found ? `${n(a.found)} found · ${n(a.reproduced)} reproduced · ${n(a.fixed)} fixed · ${n(a.closed)} with a test` : agentStep?.state === "done" ? c.gray("connected · nothing reported in this period") : c.gray("not connected yet: npx genclass setup"));
@@ -176,6 +192,10 @@ export async function dashboard(o = {}, deps = {}) {
 }
 
 /** How an app is named after --app: its name in quotes, or its id when another app has the same name. */
+/** An app as a choice in a list: its name, and its id's start when the name is shared or there is none. */
+export const appLabel = (p, projects) =>
+  p.name === "unnamed" || projects.filter((x) => x.name.toLowerCase() === p.name.toLowerCase()).length > 1 ? `${p.name === "unnamed" ? "unnamed app" : p.name} (${String(p.id).slice(0, 6)})` : p.name;
+
 export const appArg = (p, projects) => {
   const name = clean(p.name, 200);
   // a name that is shared, cut, or holds a quote is not typed: the id always works
@@ -205,6 +225,19 @@ export async function pickApp(o = {}, deps = {}, name = "dashboard") {
   // which app: --app by id or by name, else this folder's, else the account's only one
   const byId = o.app ? projects.filter((p) => p.id === o.app) : [];
   const wanted = byId.length ? byId : o.app ? projects.filter((p) => p.name.toLowerCase() === String(o.app).toLowerCase()) : state.app.token ? projects.filter((p) => p.token === state.app.token) : projects.length === 1 ? projects : [];
+  // on a terminal: the apps as numbered choices, and the number picks one
+  if (wanted.length !== 1 && projects.length && !o.json && !o.yes && interactive()) {
+    const list = (wanted.length > 1 ? wanted : projects).slice(0, 30);
+    header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+    note(wanted.length > 1 ? `More than one app is named "${clean(o.app, 40)}". Which one?` : o.app ? `No app named "${clean(o.app, 40)}". Which one?` : state.app.token ? "This folder's app is not in your account yet. Which app?" : "Which app?");
+    list.forEach((p, i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${c.bold(clean(appLabel(p, projects), 34))}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`));
+    out();
+    const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("back")}  `);
+    const i = a !== null && /^\d+$/.test(a.trim()) ? Number(a.trim()) - 1 : -1;
+    if (list[i]) return { state, creds, target: list[i] };
+    out();
+    return { code: 2 };
+  }
   if (wanted.length !== 1) {
     if (o.json) out(JSON.stringify({ ok: false, error: projects.length ? "which app" : "no app yet", apps: projects.map((p) => p.name) }));
     else {

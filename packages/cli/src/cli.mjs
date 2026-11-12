@@ -11,7 +11,7 @@
 // - Nothing here reads a file or the network: it parses and dispatches.
 
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
-import { c, err, out } from "../../runtime/bin/lib/ui.mjs";
+import { c, err, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
 
 export const USAGE = `genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.
@@ -122,6 +122,18 @@ export async function run(argv, ctx = {}) {
     return 2;
   }
   const runSuggest = async (so) => (await import("./suggest/index.mjs")).suggest(so);
+  // on Free, a command run on its own ends with one line saying so, and the way up (the home says it after each)
+  const upsold = async (code, line = true) => {
+    const c0 = await code;
+    if (line && !ctx.nested && !o.json && !o.yes && interactive()) {
+      try {
+        await (await import("./manage.mjs")).freeLine(o);
+      } catch {
+        /* best effort */
+      }
+    }
+    return c0;
+  };
   if (cmd === "suggest") {
     const url = o.url ?? rest.find((a) => !a.startsWith("-")) ?? null;
     const unknown = rest.filter((a) => a.startsWith("-"));
@@ -129,7 +141,7 @@ export async function run(argv, ctx = {}) {
       err(`genclass suggest: unknown option ${unknown[0]}\n\n${USAGE}`);
       return 2;
     }
-    return runSuggest({ ...o, url });
+    return upsold(runSuggest({ ...o, url }));
   }
   if (cmd !== null && !COMMANDS.includes(cmd)) {
     const near = nearest(cmd);
@@ -148,16 +160,16 @@ export async function run(argv, ctx = {}) {
   if (cmd === "dashboard") {
     // signed out, the runtime CLI's own command still knows an app's private dashboard link
     const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", [...(o.cwd ? ["--cwd", o.cwd] : []), ...(o.open ? ["--open"] : [])]);
-    return (await import("./app.mjs")).dashboard(o, { fallback });
+    return upsold((await import("./app.mjs")).dashboard(o, { fallback }));
   }
-  if (["problems", "events", "health", "report"].includes(cmd)) return (await import("./views.mjs"))[cmd](o);
+  if (["problems", "events", "health", "report"].includes(cmd)) return upsold((await import("./views.mjs"))[cmd](o), cmd !== "report");
   if (cmd === "analytics") {
     const { analytics, ANALYTICS_SECTIONS } = await import("./views.mjs");
     if (words[0] && !ANALYTICS_SECTIONS.includes(words[0])) {
       err(`genclass analytics: there is no part ${c.bold(words[0])}. The parts: ${ANALYTICS_SECTIONS.join(", ")}`);
       return 2;
     }
-    return analytics({ ...o, section: words[0] ?? null });
+    return upsold(analytics({ ...o, section: words[0] ?? null }));
   }
   if (cmd === "agent") {
     if (words[0] === "link") return (await import("./manage.mjs")).agentLink(o);
@@ -167,15 +179,17 @@ export async function run(argv, ctx = {}) {
     }
     return (await import("./views.mjs")).agent(o);
   }
-  if (cmd === "fix") return (await import("./fix.mjs")).fix({ ...o, what: words.join(" ") || null });
-  if (cmd === "ask") return (await import("./ask.mjs")).ask({ ...o, question: words.join(" ") });
-  if (["apps", "plan", "team", "connections", "funnels"].includes(cmd)) return (await import("./manage.mjs"))[cmd]({ ...o, args: words });
+  if (cmd === "fix") return upsold((await import("./fix.mjs")).fix({ ...o, what: words.join(" ") || null }));
+  if (cmd === "ask") return upsold((await import("./ask.mjs")).ask({ ...o, question: words.join(" ") }));
+  if (["apps", "plan", "team", "connections", "funnels", "profile", "upgrade"].includes(cmd)) return upsold((await import("./manage.mjs"))[cmd]({ ...o, args: words }), ["apps", "connections", "funnels"].includes(cmd));
   if (cmd === "export") return (await import("./manage.mjs")).exportEvents(o);
   const { setup, status } = await import("./setup.mjs");
   if (cmd === "status") return status(o);
   if (cmd === "setup" || cmd === null) {
     // on a terminal the command stays open when the walk ends: a prompt for commands and questions (home.mjs)
-    const home = async (ho) => (await import("./home.mjs")).home(ho, { runCommand: (a) => run(a, { nested: true }), nearest });
+    const home = async (ho) => (await import("./home.mjs")).home(ho, { runCommand: (a) => run(a, { nested: true }), nearest, afterCommand: async () => (await import("./manage.mjs")).freeLine({ cwd: ho.cwd }) });
+    // `genclass` alone works from the first run on (home.mjs installShortName)
+    if (!ctx.nested && !o.yes && !o.json) await (await import("./home.mjs")).installShortName();
     return setup({ ...o, ...(ctx.nested ? { home: false } : {}) }, { runSuggest, home });
   }
   return 2;
@@ -184,7 +198,7 @@ export async function run(argv, ctx = {}) {
 /** Every command, for the "did you mean" of a mistyped one. */
 export const COMMANDS = [
   "setup", "status", "suggest", "dashboard", "problems", "analytics", "events", "health", "report", "export", "fix", "ask", "scan", "connections", "agent", "funnels",
-  "apps", "plan", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version",
+  "apps", "plan", "upgrade", "profile", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version",
 ];
 
 /** The command a mistyped one is closest to (at most two edits away), or null. */

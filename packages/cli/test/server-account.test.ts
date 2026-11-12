@@ -15,7 +15,7 @@ import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { answerLines, ask, forget, marks } from "../src/ask.mjs";
 import { askModel, fetchAccount, fetchConnections } from "../src/api.mjs";
 import { signInAgain } from "../src/app.mjs";
-import { agentLink, apps, claudeAdd, connections, exportEvents, funnels, plan, team } from "../src/manage.mjs";
+import { agentLink, apps, claudeAdd, connections, exportEvents, freeLine, funnels, plan, profile, team, upgrade } from "../src/manage.mjs";
 import { analytics } from "../src/views.mjs";
 import { HOST, isolate, printed, tempDir } from "./helpers.js";
 import { plainLines, tooWide } from "./stats.js";
@@ -96,21 +96,55 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(f).toContain("Not included visitor analytics, alerts to Slack, Sentry and others, the stored events as a file, private repositories");
     // the paid plan's card, in the server's words, and (nobody at a terminal) where it starts
     expect(f).toContain("T E A M");
-    expect(f).toContain("$15 / app / month");
-    expect(text).toContain(`${HOST}/account/billing?plan=team&start=1`);
+    expect(f).toContain("$15 / project / month");
+    // plans are per project: the account's one app on Free has its own plan page
+    expect(text).toContain(`${HOST}/account/billing?project=${me.app.id}&from=cli`);
+    expect(f).toContain("Apps and their plans Shop Free");
     expect(JSON.parse((await said(() => plan({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: true, plan: { id: "free" }, limits: { apps: 3 }, offer: { plan: { id: "team" } } });
   });
 
-  it("Team: the price, when it renews, the apps paid for and any number of people; a sign-in from before still gets the plan's name and what to do", async () => {
+  it("Free says so after a command, with the way up; profile and upgrade name the app on Free and its plan page", async () => {
+    const { env, sql } = setup(LIVE);
+    const me = await account(env);
+    const line = await said(async () => ((await freeLine(me.o, me.deps)) ? 0 : 1));
+    expect(line.code).toBe(0);
+    expect(tooWide(line.text)).toEqual([]);
+    expect(flat(line.text)).toContain("You are on Free, which has limits (3 apps, 100 live fixes a month, 7 days of history). Team has none, for $15 / project / month. Upgrade now: npx genclass upgrade");
+    // profile: who, the plan, each app's plan, and the choices (nobody at a terminal: as commands)
+    const p = await said(() => profile(me.o, me.deps));
+    expect(p.code).toBe(0);
+    expect(tooWide(p.text)).toEqual([]);
+    const f = flat(p.text);
+    expect(f).toContain("Profile");
+    expect(f).toContain("Signed in as ada@example.com");
+    expect(f).toContain("Plan Free (limited)");
+    expect(f).toContain("Apps and their plans Shop Free");
+    expect(f).toContain("Upgrade Shop to Team $15 / project / month npx genclass upgrade");
+    expect(f).toContain("Sign out npx genclass logout");
+    expect(JSON.parse((await said(() => profile({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: true, plan: { id: "free" }, apps: [{ name: "Shop", plan: { id: "free" } }], upgrade_url: `${HOST}/account/billing?project=${me.app.id}&from=cli` });
+    // upgrade: the paid plan's card and the app's plan page
+    const u = await said(() => upgrade(me.o, me.deps));
+    expect(u.code).toBe(0);
+    expect(tooWide(u.text)).toEqual([]);
+    expect(flat(u.text)).toContain("A plan for Shop");
+    expect(u.text).toContain(`${HOST}/account/billing?project=${me.app.id}&from=cli`);
+    // on Team: no line, nothing to upgrade
+    sql.db.prepare("UPDATE projects SET plan = 'team', stripe_mode = 'live', subscription_id = 'sub_s', subscription_status = 'active' WHERE id = ?").run(me.app.id);
+    expect(await freeLine(me.o, me.deps)).toBe(false);
+    expect(flat((await said(() => upgrade(me.o, me.deps))).text)).toContain("Nothing to upgrade here");
+  });
+
+  it("Team: the price, when it renews, the seats; a sign-in from before still gets the plan's name and what to do", async () => {
     const { env, sql } = setup(LIVE);
     const me = await account(env);
     team3(sql, me.account.id);
     const f = flat((await said(() => plan(me.o, me.deps))).text);
-    expect(f).toContain("Plan Team $15 / app / month");
+    expect(f).toContain("Plan Team $15 / project / month");
     expect(f).toContain("Renews 2026-12-13");
-    // Team is sold per app (2026-11-12): the quantity paid for (3) is the apps; people have no limit
-    expect(f).toContain("Apps 1 of 3");
+    // Team is per project, everyone on it included
     expect(f).toContain("People 1 • no limit");
+    expect(f).toContain("Apps and their plans Shop Team");
+    expect(f).toContain("Apps 1 • no limit");
     expect(f).toContain("Includes visitor analytics, alerts to Slack, Sentry and others, the stored events as a file, private repositories");
     expect(f).not.toContain("T E A M");
     // a sign-in the real server calls current is left alone by `genclass login`
@@ -163,10 +197,12 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(flat(made.text)).toMatch(/Made Blog two\. Project key gc_[A-Za-z0-9]{22}/);
     await said(() => apps({ cwd: me.dir, args: ["new", "Third"] }, me.deps));
     const over = await said(() => apps({ cwd: me.dir, args: ["new", "Fourth"] }, me.deps));
-    expect(over.code).toBe(1);
-    expect(flat(over.text)).toContain("npx genclass plan");
+    // a fourth app is made, and needs a plan of its own
+    expect(over.code).toBe(0);
+    expect(flat(over.text)).toContain("Free covers 3 apps: this one needs a paid plan.");
+    expect(over.text).toMatch(/account\/billing\?project=[0-9a-f]+/);
     expect((await said(() => apps({ cwd: me.dir, args: ["new"] }, me.deps))).code).toBe(2);
-    expect(JSON.parse((await said(() => apps({ cwd: me.dir, json: true }, me.deps))).text).apps.map((a: any) => a.name)).toEqual(["Blog two", "Shop", "Third"]);
+    expect(JSON.parse((await said(() => apps({ cwd: me.dir, json: true }, me.deps))).text).apps.map((a: any) => a.name)).toEqual(["Blog two", "Fourth", "Shop", "Third"]);
   });
 });
 

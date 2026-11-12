@@ -62,9 +62,8 @@
 //   NOTIFY_WEBHOOK) only once Stripe reports that plan's price paid: the subscription's latest invoice (fetched with it)
 //   is paid and has a positive line on that price (a first invoice, which a switch from another plan is too), seen on
 //   invoice.paid or on the subscription's own events.
-// - A plan sold by quantity (billing/plans.json per_app: Team since 2026-11-12, or per_seat) is one subscription item
-//   whose quantity is the apps (or the seats): the buyer picks it on GenClass's billing page (1 to MAX_QUANTITY),
-//   Checkout shows it and lets them change it there, and
+// - A plan sold per seat (billing/plans.json per_seat: Team) is one subscription item whose quantity is the seats: the
+//   buyer picks it on GenClass's billing page (1 to MAX_SEATS), Checkout shows it and lets them change it there, and
 //   afterwards they change it in the Billing Portal (GenClass's configuration allows a quantity update for those
 //   products only, never a switch of price; scripts/stripe-setup.mjs). The webhook writes the quantity Stripe has now
 //   to accounts.seats with the plan, so seats follow the subscription like the plan does; src/team.ts reads them.
@@ -73,7 +72,7 @@
 import type { Env } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like } from "./dashboard.js";
 import { json } from "./http.js";
-import { cleanQuantity, entitled, soldByQuantity, LIVE_STATUSES, LOOKUP_PREFIX, MAX_QUANTITY, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
+import { cleanSeats, entitled, LIVE_STATUSES, LOOKUP_PREFIX, MAX_SEATS, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
 import { equalStrings } from "./webauthn.js";
 
 export const STRIPE_API = "https://api.stripe.com";
@@ -392,19 +391,21 @@ export function managedPayments(env: Env, plan: Plan): boolean {
 export async function checkoutSession(
   env: Env,
   f: Fetch,
-  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; quantity?: number },
+  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string } },
 ): Promise<string> {
   const lookup = o.plan.stripe_lookup_keys.monthly;
   if (!lookup) throw new StripeError(`the ${o.plan.name} plan has no monthly price`, 400);
-  // a plan sold by quantity: the apps or seats asked for, and the buyer can still change it on Stripe's page
-  const perSeat = soldByQuantity(o.plan);
-  const seats = perSeat ? (cleanQuantity(o.quantity ?? 1) ?? 1) : 1;
+  // a plan sold per seat: the quantity is the seats asked for, and the buyer can still change it on Stripe's page
+  const perSeat = o.plan.per_seat === true;
+  const seats = perSeat ? (cleanSeats(o.seats ?? 1) ?? 1) : 1;
   if (o.switchFrom !== undefined && !idOf(o.switchFrom)) throw new StripeError("not a subscription id", 400);
   const closed: string[] = [];
   if (!o.fresh) {
     const open = await stripe(env, f, "GET", "/v1/checkout/sessions", { customer: o.customer, status: "open", limit: 20 });
     for (const x of Array.isArray(open?.data) ? (open.data as Obj[]) : []) {
       if (typeof x?.id !== "string" || !SESSION_ID_RE.test(x.id) || !ownSession(x, o.account.id)) continue;
+      // another project's open checkout is left open: each project is bought on its own page
+      if ((x.metadata?.genclass_project ?? undefined) !== o.project?.id) continue;
       const same =
         x.metadata?.genclass_plan === o.plan.id &&
         (x.metadata?.genclass_switch_from ?? undefined) === o.switchFrom &&
@@ -418,6 +419,9 @@ export async function checkoutSession(
   const price = await priceId(env, f, lookup, o.now.getTime(), o.plan);
   const mark: Record<string, string> = { genclass: GENCLASS_MARK, genclass_account: o.account.id };
   if (o.switchFrom) mark.genclass_switch_from = o.switchFrom;
+  // a plan per project: the subscription names its project, and the webhook writes it there (applyProjectSubscription)
+  if (o.project) mark.genclass_project = o.project.id;
+  const back = o.project ? `${o.origin}/account/billing?project=${encodeURIComponent(o.project.id)}` : `${o.origin}/account/billing`;
   // a double click within the same minute gets the same session; after closing pages, a new key (the old session
   // under the plain key may be one of those just closed); a switch has its own
   const after = closed.length ? `-after-${(await sha256Hex(closed.join(","))).slice(0, 16)}` : "";
@@ -433,10 +437,10 @@ export async function checkoutSession(
         mode: "subscription",
         customer: o.customer,
         client_reference_id: o.account.id,
-        line_items: [perSeat ? { price, quantity: seats, adjustable_quantity: { enabled: true, minimum: 1, maximum: MAX_QUANTITY } } : { price, quantity: 1 }],
+        line_items: [perSeat ? { price, quantity: seats, adjustable_quantity: { enabled: true, minimum: 1, maximum: MAX_SEATS } } : { price, quantity: 1 }],
         // back from a switch, the page waits for the new plan
-        success_url: `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}`,
-        cancel_url: `${o.origin}/account/billing`,
+        success_url: o.project ? `${back}&done=1` : `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}`,
+        cancel_url: back,
         metadata: { ...mark, genclass_plan: o.plan.id, ...(perSeat ? { genclass_seats: String(seats) } : {}) },
         // a card (or another payment method) up front
         payment_method_collection: "always",
@@ -445,7 +449,7 @@ export async function checkoutSession(
         subscription_data: { metadata: mark, billing_mode: { type: "flexible" } },
         managed_payments: managedPayments(env, o.plan) ? { enabled: true } : undefined,
       },
-      `genclass-checkout-${o.account.id}-${o.plan.id}${perSeat ? `-x${seats}` : ""}-${Math.floor(o.now.getTime() / 60_000)}${from}${after}`,
+      `genclass-checkout-${o.account.id}${o.project ? `-p-${o.project.id}` : ""}-${o.plan.id}${perSeat ? `-x${seats}` : ""}-${Math.floor(o.now.getTime() / 60_000)}${from}${after}`,
     );
   } catch (e) {
     priceCache.delete(lookup); // the cached price may have been replaced since
@@ -597,7 +601,7 @@ export interface SubscriptionState {
   lookupKey: string | null;
   periodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  /** For a plan sold by quantity: the quantity of its subscription item, apps or seats (1 to MAX_QUANTITY; a larger one reads as MAX_QUANTITY). Else null. */
+  /** For a plan sold per seat: the quantity of its subscription item (1 to MAX_SEATS; a larger one reads as MAX_SEATS). Else null. */
   seats: number | null;
 }
 
@@ -639,7 +643,7 @@ export function subscriptionState(sub: Obj, o: { pastDueSince?: string | null; n
     lookupKey,
     periodEnd: isoOf(end),
     cancelAtPeriodEnd: status !== "canceled" && (sub?.cancel_at_period_end === true || typeof sub?.cancel_at === "number"),
-    seats: priced && soldByQuantity(priced) ? (cleanQuantity(quantity) ?? (typeof quantity === "number" && quantity > MAX_QUANTITY ? MAX_QUANTITY : 1)) : null,
+    seats: priced?.per_seat === true ? (cleanSeats(quantity) ?? (typeof quantity === "number" && quantity > MAX_SEATS ? MAX_SEATS : 1)) : null,
   };
 }
 
@@ -774,6 +778,12 @@ export function cardOnFile(sub: Obj): boolean {
   return !!(idOf(sub?.default_payment_method) ?? idOf(sub?.default_source) ?? idOf(c?.invoice_settings?.default_payment_method) ?? idOf(c?.default_source));
 }
 
+/** The project a per-project subscription is for (its metadata genclass_project, billing/plans.json version 4), or null. */
+export const projectOf = (s: Obj): string | null => {
+  const v = s?.metadata?.genclass_project;
+  return typeof v === "string" && /^[A-Za-z0-9_-]{6,40}$/.test(v) ? v : null;
+};
+
 /** The account already has this subscription, live: its plan was granted from it. */
 const granted = (account: BillingAccount, sub: Obj): boolean => !!account.subscription_id && idOf(sub?.id) === account.subscription_id && LIVE_STATUSES.has(account.subscription_status ?? "");
 
@@ -824,6 +834,8 @@ export async function handleEvent(x: EventContext, event: Obj): Promise<EventRes
   if (!accountsSubscription(account, sub)) return ignored("the subscription is not the account's", event, true);
   // a trial from before GenClass dropped trials whose card failed the $1 check stays out of the account for good
   if (sub?.metadata?.genclass_card_check === "failed") return ignored("its card failed the $1 check", event, true);
+  // a plan per project (billing/plans.json version 4): written to the project its metadata names, never to the account
+  if (projectOf(sub)) return applyProjectSubscription(x, account, sub, event);
   // the subscription already recorded for the account stays readable whatever its price now says (it then counts as
   // Free); any other must be provably GenClass's
   if (!isGenClassSubscription(sub) && idOf(sub?.id) !== account.subscription_id) return ignored("not a GenClass subscription", event, true);
@@ -908,10 +920,12 @@ const rank = (s: Obj): number => Math.max(0, PLANS.findIndex((p) => p.id === sub
  * when it is not live or not GenClass's. The caller applies `keep` first and then settles `extra` (settleOthers).
  */
 async function oneSubscription(x: EventContext, account: BillingAccount, sub: Obj): Promise<OneSubscription | null> {
+  if (projectOf(sub)) return null;
   const customer = idOf(sub?.customer);
   if (!customer || customer !== account.stripe_customer_id || !LIVE_STATUSES.has(sub?.status) || !isGenClassSubscription(sub)) return null;
   const all = await customerSubscriptions(x.env, x.fetch, customer);
-  const holding = all.filter((s) => HOLDING_STATUSES.has(s.status) && isGenClassSubscription(s) && (granted(account, s) || (paymentCleared(s) && cardOnFile(s))));
+  // a project's subscription is never a duplicate of the account's: each project is paid for on its own
+  const holding = all.filter((s) => !projectOf(s) && HOLDING_STATUSES.has(s.status) && isGenClassSubscription(s) && (granted(account, s) || (paymentCleared(s) && cardOnFile(s))));
   // the only one that bills (Stripe may have ended the account's recorded one before its event arrived): it is chosen
   if (holding.length < 2) return { keep: sub, extra: [] };
   const newest = (a: Obj, b: Obj): number => (Number(b.created) || 0) - (Number(a.created) || 0) || String(b.id).localeCompare(String(a.id));
@@ -1049,6 +1063,53 @@ export async function applySubscription(x: EventContext, account: BillingAccount
     )
     // the seats follow the subscription like the plan: a plan that is not sold per seat, or that ended, has none
     .bind(s.plan, subId, s.status, pastDueSince, s.periodEnd, s.cancelAtPeriodEnd ? 1 : 0, stripeMode(x.env), s.plan === "free" ? null : s.seats, account.id, customer)
+    .run();
+  return { status: "applied", ours: true, account: account.id, plan: s.plan };
+}
+
+interface ProjectBilling {
+  id: string;
+  name: string;
+  subscription_id: string | null;
+  subscription_status: string | null;
+}
+
+/**
+ * A subscription for one project: the same checks as the account's (provably GenClass's, its first payment cleared,
+ * a card on file for a trial), then its plan, status and period on that project's row. The project must be one of
+ * the account's. A second live subscription for a project that already has one is not written and not cancelled:
+ * the owner is told, so nobody is charged twice without a person looking. Exported for tests.
+ */
+export async function applyProjectSubscription(x: EventContext, account: BillingAccount, sub: Obj, event: Obj = {}): Promise<EventResult> {
+  const subId = idOf(sub?.id);
+  const pid = projectOf(sub);
+  if (!subId || !pid) return ignored("the subscription names no project", event, true);
+  const p = await x.db
+    .prepare("SELECT id, name, subscription_id, subscription_status FROM projects WHERE id = ? AND account_id = ?")
+    .bind(pid, account.id)
+    .first<ProjectBilling>();
+  if (!p) return ignored("the project is not the account's", event, true);
+  const mine = p.subscription_id === subId;
+  const projectGranted = mine && LIVE_STATUSES.has(p.subscription_status ?? "");
+  if (!isGenClassSubscription(sub) && !mine) return ignored("not a GenClass subscription", event, true);
+  if (!projectGranted && LIVE_STATUSES.has(sub?.status) && !paymentCleared(sub)) return ignored("its first payment has not cleared yet", event, true);
+  if (!projectGranted && !cardOnFile(sub)) return ignored("its trial has no saved payment method", event, true);
+  if (p.subscription_id && !mine && LIVE_STATUSES.has(p.subscription_status ?? "")) {
+    if (LIVE_STATUSES.has(sub?.status)) {
+      await notifyOwner(x, {
+        event: "project_second_subscription",
+        text: `${modeNote(x.env)}GenClass account ${account.id}: project ${p.id} has subscription ${p.subscription_id} and a second one, ${subId}, started. Nothing was cancelled: refund and cancel one of them in Stripe.`,
+        account_id: account.id,
+        project_id: p.id,
+        subscription_id: subId,
+      });
+    }
+    return ignored("not the project's current subscription", event, true);
+  }
+  const s = subscriptionState(sub, { now: x.now });
+  await x.db
+    .prepare("UPDATE projects SET plan = ?, subscription_id = ?, subscription_status = ?, current_period_end = ?, cancel_at_period_end = ?, stripe_mode = ? WHERE id = ? AND account_id = ?")
+    .bind(s.plan === "free" ? null : s.plan, subId, s.status, s.periodEnd, s.cancelAtPeriodEnd ? 1 : 0, stripeMode(x.env), p.id, account.id)
     .run();
   return { status: "applied", ours: true, account: account.id, plan: s.plan };
 }

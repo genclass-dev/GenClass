@@ -1490,31 +1490,23 @@ describe("Managed Payments for Pro, flexible billing mode, switching between Pro
 // ------------------------------------------------------------------------------------------------- limits
 
 describe("plans: the Free plan's limits (apps, dashboard ranges)", () => {
-  it("a fourth app on Free is refused with a link to upgrade, created or claimed; Pro may add it", async () => {
-    const { env, sql } = setup(LIVE);
-    const { cookie, account } = await signedIn(env);
+  it("a fourth app on Free is created or claimed, and waits for a plan of its own (plans per project, version 4)", async () => {
+    const { env } = setup(LIVE);
+    const { cookie } = await signedIn(env);
     for (const n of ["a", "b", "c"]) await createApp(env, cookie, n);
     const r = await call(env, "POST", "/api/account/projects", { body: { name: "d" }, cookie });
-    expect(r.status).toBe(409);
-    expect(await r.json()).toEqual({
-      ok: false,
-      error: "the Free plan holds 3 apps; see the plans at https://genclass.dev/account/billing",
-      upgrade_url: "https://genclass.dev/account/billing",
-    });
+    expect(r.status).toBe(201);
     const anon = (await (await call(env, "POST", "/api/projects", { body: { name: "Old" }, origin: null })).json()) as any;
-    expect((await call(env, "POST", "/api/account/projects/claim", { body: { dashboard_url: anon.dashboardUrl }, cookie })).status).toBe(409);
-    setPlan(sql, account.id, "pro");
-    expect((await call(env, "POST", "/api/account/projects", { body: { name: "d" }, cookie })).status).toBe(201);
     expect((await call(env, "POST", "/api/account/projects/claim", { body: { dashboard_url: anon.dashboardUrl }, cookie })).status).toBe(200);
   });
 
-  it("without any Stripe key the Free plan's app limit applies too; GenClass's grant lifts it", async () => {
+  it("without any Stripe key a fourth app is created all the same; GenClass's account-wide grant covers it", async () => {
     const { env, sql } = setup();
     const { cookie, account } = await signedIn(env);
     for (const n of ["a", "b", "c"]) await createApp(env, cookie, n);
-    expect((await call(env, "POST", "/api/account/projects", { body: { name: "d" }, cookie })).status).toBe(409);
+    expect((await call(env, "POST", "/api/account/projects", { body: { name: "d" }, cookie })).status).toBe(201);
     setPlan(sql, account.id, "free", { comp_until: "9999-12-31T00:00:00.000Z" });
-    for (const n of ["d", "e"]) await createApp(env, cookie, n);
+    for (const n of ["e", "f"]) await createApp(env, cookie, n);
   });
 
   it("ranges: Free has no dashboard (its stats answer 402); Pro and Custom reach a year; a longer ask gets the longest shown", async () => {
@@ -1634,8 +1626,6 @@ describe("GET /account/billing", () => {
       access: null,
       // the fixture's plans set no seats: no limit
       seats: null,
-      // the fixture's Free holds 3 apps
-      apps: 3,
     });
     setPlan(sql, a.account.id, "custom", { subscription_id: "sub_c000000001", subscription_status: "active", current_period_end: "2026-11-13T12:00:00.000Z" });
     const html = await (await call(env, "GET", "/account/billing", { cookie: a.cookie })).text();
@@ -1775,9 +1765,9 @@ describe("Stripe test and live mode", () => {
     expect(page).not.toContain("data-plan=");
     expect(page).not.toContain("Stripe test mode");
     expect(((await (await call(env, "GET", "/api/billing", { cookie: other.cookie })).json()) as any).on_sale).toBe(false);
-    // the Free plan's app limit applies whatever the key
+    // a fourth app is created whatever the key (it waits for a plan of its own)
     for (const n of ["a", "b", "c"]) await createApp(env, other.cookie, n);
-    expect((await call(env, "POST", "/api/account/projects", { body: { name: "d" }, cookie: other.cookie })).status).toBe(409);
+    expect((await call(env, "POST", "/api/account/projects", { body: { name: "d" }, cookie: other.cookie })).status).toBe(201);
   });
 
   it("the webhook takes the test secret with a test key, and ignores (200) the other mode's events after going live", async () => {

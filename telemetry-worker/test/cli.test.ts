@@ -67,12 +67,21 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     const teamPlan = PLANS.find((p) => p.id === "team")!;
     expect(offered.offer).toEqual({
       plan: { id: "team", name: "Team" },
-      price: "$15 / app / month",
+      price: "$15 / project / month",
       summary: teamPlan.summary,
       features: teamPlan.features.filter((f) => f.available && !/^Everything in /.test(f.text)).map((f) => f.text),
-      checkout_url: "https://genclass.dev/account/billing?plan=team&start=1",
-      free: { name: "Free", apps: 3, history_days: 7, suggestions_shown: 3 },
+      // plans are per project: the one app on Free has its own plan page
+      checkout_url: `https://genclass.dev/account/billing?project=${app.id}&from=cli`,
+      free: { name: "Free", apps: 3, history_days: 7, suggestions_shown: 3, live_fixes: 100 },
     });
+    // each app says its plan, whether Free was chosen for it, and its plan page
+    expect(offered.projects[0]).toMatchObject({ plan: { id: "free", name: "Free", source: null }, needs_plan: false, plan_chosen: false, plan_url: `https://genclass.dev/account/billing?project=${app.id}` });
+    sql.db.prepare("UPDATE projects SET plan_chosen = '2026-11-12T00:00:00.000Z' WHERE id = ?").run(app.id);
+    expect(((await (await call(selling, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).projects[0].plan_chosen).toBe(true);
+    // the app on Team: nothing left to offer (the account has no other app on Free)
+    sql.db.prepare("UPDATE projects SET plan = 'team', stripe_mode = 'live', subscription_id = 'sub_x', subscription_status = 'active' WHERE id = ?").run(app.id);
+    expect(((await (await call(selling, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
+    sql.db.prepare("UPDATE projects SET plan = NULL, stripe_mode = NULL, subscription_id = NULL, subscription_status = NULL WHERE id = ?").run(app.id);
     expect(offered.offer.features).toContain("Visitor analytics");
     expect(offered.offer.features.join(" ")).not.toContain("Everything in Free");
     // a test key sells only to the accounts on its list
@@ -87,7 +96,10 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     const team = (await (await call({ ...env, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any;
     expect(team.plan).toEqual({ id: "team", name: "Team" });
     expect(team.suggestions).toEqual({ per_day: 30, shown: null, used_today: 0, model: true });
-    // an account that has a plan (here GenClass's grant) is offered none, whatever the server sells
+    // an account whose apps all have a plan (here GenClass's grant, which is per project for a plan sold per project:
+    // migration 0016 copied it onto the apps that existed) is offered none, whatever the server sells
+    expect(((await (await call({ ...selling, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer.checkout_url).toBe(`https://genclass.dev/account/billing?project=${app.id}&from=cli`);
+    sql.db.prepare("UPDATE projects SET comp_until = ?, comp_plan = 'team' WHERE id = ?").run(FUTURE(), app.id);
     expect(((await (await call({ ...selling, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
     expect(JSON.stringify(team)).not.toContain(KEY);
   });
