@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4
+
+- **A repository that was renamed on GitHub is found under its new name.** A checkout cloned before a rename still
+  carries the old name in its remote, and genclass.dev knows the repository by the current one, so the GitHub App
+  step said "not on acme/shop-old yet" for an app that was installed and reviewing. When the server answers "not
+  installed", the command asks github.com where the old address leads now (one HEAD request, public repositories
+  only) and asks again under that name. The step's details say the new name and the line that updates the remote.
+  Found on GenClass's own repository the first time the step was run against GitHub.
+
 ## 0.2.3
 
 From using the command on a real site the morning after 0.2.2, and from watching its owner use it:

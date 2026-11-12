@@ -229,6 +229,12 @@ command-line sign-in, the same counts the dashboard page on genclass.dev shows f
 page where a sign-in is approved says the terminal can do this; a sign-in approved before that page said so (before
 2026-11-12) cannot, and is asked to sign in again. Nothing new is collected or stored for it.
 
+**The GitHub App step** asks genclass.dev whether the app is on the project's repository, by the repository's name
+(`owner/name`, read from the git remote). When the answer is "not installed", the command also asks github.com where
+that name leads now (one `HEAD https://github.com/owner/name`, no sign-in, no cookies), because a repository renamed
+on GitHub is known to genclass.dev under its new name. Nothing but the repository's address is sent, and a private
+repository answers "not found" and is left as it is.
+
 **`genclass suggest`** measures the project and its live site against a list of checks. Two things leave the machine:
 
 - **Requests to the developer's own site:** its home page, `robots.txt`, `sitemap.xml`, `llms.txt`, one address that

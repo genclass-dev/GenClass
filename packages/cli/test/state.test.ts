@@ -7,6 +7,7 @@ import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { run as runInit } from "../../runtime/bin/lib/init.mjs";
 import { status } from "../src/setup.mjs";
 import { agentConfigs, appsBelow, genclassWorkflows, hasPlaywright, readState, stateJson, WORKFLOW_PATH } from "../src/state.mjs";
+import { renamedRepo } from "../src/git.mjs";
 import { saveNotes } from "../src/store.mjs";
 import { ACCOUNT, fakeServer, HOST, isolate, overview, printed, project, SESSION, tempDir, TOKEN, viteApp, write } from "./helpers.js";
 
@@ -248,5 +249,54 @@ describe("genclass: an app on Vite 7 with GenClass in it (src/state.mjs, src/vit
     // with the setting there (by this command or by hand) the step is done
     write(dir, { "vite.config.js": 'export default { worker: { format: "es" } };\n' });
     expect((await readState({ cwd: dir }, { runGit: noGit })).steps.find((x) => x.id === "runtime")).toMatchObject({ state: "done" });
+  });
+});
+
+describe("genclass: a repository that was renamed on GitHub (src/git.mjs renamedRepo, src/state.mjs)", () => {
+  const head = (status: number, location?: string) =>
+    (async () => new Response(null, { status, headers: location ? { location } : {} })) as unknown as typeof fetch;
+
+  it("github.com's redirect gives the current name; anything else gives none", async () => {
+    expect(await renamedRepo("acme/shop-old", { fetchFn: head(301, "https://github.com/acme/shop") })).toBe("acme/shop");
+    expect(await renamedRepo("acme/shop", { fetchFn: head(200) })).toBeNull(); // not renamed
+    expect(await renamedRepo("acme/secret", { fetchFn: head(404) })).toBeNull(); // private, or gone
+    expect(await renamedRepo("acme/Shop", { fetchFn: head(301, "https://github.com/acme/shop") })).toBeNull(); // only its letter case
+    expect(await renamedRepo("acme/shop-old", { fetchFn: head(301, "https://evil.example/acme/shop") })).toBeNull(); // not GitHub
+    expect(await renamedRepo("acme/shop-old", { fetchFn: head(301, "https://github.com/login?return_to=x") })).toBeNull();
+    expect(await renamedRepo("not a repo", { fetchFn: head(301, "https://github.com/acme/shop") })).toBeNull();
+    const down = (async () => {
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+    expect(await renamedRepo("acme/shop-old", { fetchFn: down })).toBeNull();
+  });
+
+  it("the app is looked up under the current name, so an installed app is not reported as missing", async () => {
+    const dir = tempDir();
+    viteApp(dir, { devDependencies: { vite: "^8.0.0", "@vitejs/plugin-react": "^5.0.0", "@playwright/test": "^1.50.0" } });
+    await addRuntime(dir);
+    write(dir, { [WORKFLOW_PATH]: "name: genclass\njobs:\n  genclass:\n    steps:\n      - run: node genclass-playwright-run.mjs\n" });
+    signIn();
+    const asked: string[] = [];
+    const server = fakeServer({
+      "GET /api/cli/overview": { json: overview({ projects: [project()] }) },
+      "GET /api/cli/github": (url: URL) => {
+        const repo = url.searchParams.get("repo")!;
+        asked.push(repo);
+        return { json: repo === "acme/shop" ? { known: true, installed: true, evidence: true, prs: 34 } : { known: true, installed: false } };
+      },
+    });
+    const git = (args: string[]) => (args[0] === "rev-parse" && args[1] === "--show-toplevel" ? dir : args[0] === "remote" ? "https://github.com/acme/shop-old.git" : args[0] === "rev-parse" ? "main" : null);
+    // without an answer from GitHub the old name stands, and the app looks missing
+    const stale = await readState({ cwd: dir }, { runGit: git, fetchFn: server.fetchFn });
+    expect(stale.steps.find((x) => x.id === "github-app")).toMatchObject({ state: "next", detail: "not on acme/shop-old yet" });
+    // GitHub says the repository is acme/shop now: asked again under that name
+    asked.length = 0;
+    const s = await readState({ cwd: dir }, { runGit: git, fetchFn: server.fetchFn, renamedRepo: async (r: string) => (r === "acme/shop-old" ? "acme/shop" : null) });
+    expect(asked).toEqual(["acme/shop-old", "acme/shop"]);
+    const step = s.steps.find((x) => x.id === "github-app")!;
+    expect(step).toMatchObject({ state: "done", detail: "reviewing · 34 pull requests so far" });
+    expect(step.more).toContain("GitHub now calls this repository acme/shop");
+    expect(step.more).toContain("git remote set-url origin https://github.com/acme/shop.git");
+    expect(s.git).toMatchObject({ github: "acme/shop", renamedFrom: "acme/shop-old" });
   });
 });
