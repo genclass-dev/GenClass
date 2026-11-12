@@ -39,9 +39,10 @@ GitHub ──webhook──▶ POST /api/github/webhook      signature, delivery 
                            reviewPull: lease ─▶ settings (default branch) ─▶ artifacts of the head commit
                                        ─▶ zip ─▶ race-file validator ─▶ the reporter's summariser
                                        ─▶ fold into the pull request's findings (D1) ─▶ check, comment, inline
-person  ──browser──▶ /github, /github/setup        static
+person  ──browser──▶ /github, /github/setup        static (setup: after installing; "Continue with GitHub")
                     /github/connect ─▶ GitHub ─▶ /github/callback   who is this, what can they reach
-                    /account/github                 link a repository to an app
+                                                    (not signed in: GitHub's answer also signs them in)
+                    /account/github                 what the app is doing on each repository; link one to an app
 ```
 
 | File | Role |
@@ -219,6 +220,9 @@ nothing more. It refuses for forks, because a comment-started workflow runs with
 | A repository or branch name made to change where the workflow link points (another repository, another host, another file or text) or to put markup into the check | The link's parts are the server's own GitHub web root, the repository's full name and its default branch as GitHub gives them (the pull request GitHub returns, else the event's signed payload) and the app's own file text. Nothing in it comes from a race file, a pull request's title, a head or base branch, or a request. The full name must be `owner/name` in the characters GitHub allows, and the branch a name git allows: no `.` or `..` segment, no empty segment, none of the characters git refuses; otherwise there is no link. Each branch segment, the file's name and the text are percent-encoded down to letters, digits, `-`, `_` and `.`, so a `#`, `?`, `&`, `%`, a bracket or a quote in a branch name stays inside its path segment and cannot start a query, a fragment, a second link or markup. No address over 5,800 characters is built |
 | Input typed into the form on the setup page becoming markup, or an address somewhere else | The page's script, under the page's nonce and the same content security policy, checks the two inputs against the same two patterns, builds the same address with `encodeURIComponent`, and opens it in a new tab without an opener. Messages are set as text. The form has no action and no inline handler, and nothing typed is sent to the server |
 | Login CSRF on Connect | State kept server-side, single use, bound to the session that started it; the cookie holds only the row's id |
+| Login CSRF on "Continue with GitHub" (the same start from a browser that is not signed in, which ends in a session) | The state is single use and kept server-side in a row only that browser's cookie names (HttpOnly, SameSite=Lax), so a code and state from someone else's flow find no row there and nothing is exchanged. Who is signed in is GitHub's answer to the token's own `GET /user`, never anything in the callback's address. A code GitHub sends on its own after an install (no state of ours) is not exchanged: the person gets the setup page and its button |
+| A page making browsers start "Continue with GitHub" over and over to pile up rows | These starts have no account to keep to one row, so they are rate limited per network like every sign-in start that stores one (`AUTH_LIMIT`), and a row lasts 10 minutes |
+| Taking over an account through "Continue with GitHub" | It is GitHub sign-in: the account is the one whose `github_id` GitHub vouched for, or a new one. Nothing is attached by email or login, and an account with a passkey still has to pass the passkey step before it gets a session |
 | A leaked installation token | Asked per repository, kept in memory under an hour, never stored or logged |
 | The token reaching GitHub's storage host | A download's redirect is fetched without any credential |
 | One busy installation starving the rest | 120 reviews an hour per installation, 400 per pull request, a call budget per job; the sweep looks at 20 pull requests a run |
@@ -250,8 +254,9 @@ installations; and an app with a free listing may not sell a paid service only o
 listing qualifies, the paid plan has to be offered there too.
 
 The entitlement is looked up on one GenClass account per installation, the account that manages it
-(`github_installations.owner`). For an installation on a person's own GitHub account that is the account they use
-Connect GitHub from: GitHub says who they are, and the installation is on that account. For an organization, nothing
+(`github_installations.owner`). For an installation on a person's own GitHub account that is the account they connect
+GitHub from (Connect GitHub signed in, or Continue with GitHub after installing, which signs them in to the account
+that has their GitHub identity): GitHub says who they are, and the installation is on that account. For an organization, nothing
 the app can ask says who administers it. `GET /user/installations` lists every installation in which the person can
 reach a repository, outside collaborators included, and `GET /user/memberships/orgs/{org}`, which gives the person's
 role, is listed in GitHub's documentation under the organization permission "Members", which the app does not ask

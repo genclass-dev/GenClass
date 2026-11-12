@@ -4,7 +4,8 @@ import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { D1Like, D1Stmt } from "../src/dashboard.js";
-import { advance, call, cliToken, createApp, now, resetClock, setPlan, signedIn } from "./account-helpers.js";
+import { workflowLink, workflowLinkData } from "../src/github/workflow-file.js";
+import { advance, call, cliToken, createApp, now, refusingLimiter, resetClock, setPlan, signedIn } from "./account-helpers.js";
 import { APP_ID, CLIENT_ID, deliver, fakeGithub, githubSetup, INSTALLATION, installationCreated, OWNER, pullRequest, REPO, result, SHA1, SHA2, signature, WEBHOOK_SECRET } from "./github-helpers.js";
 
 beforeEach(() => {
@@ -87,7 +88,7 @@ describe("github app: its pages", () => {
     expect(html).toContain("It reads the race files your workflow uploads, never your source code.");
     expect(html).toContain("Not asked for:</b> repository contents");
     expect(html).toContain("<b>Public repositories:</b> free");
-    expect(html).toContain("with the Enterprise plan, by agreement");
+    expect(html).toContain('with the Team or Enterprise plan (<a href="/account/billing">the plans</a>). Without one, a private repository is not read at all.');
     expect(html).toContain("name: genclass-races");
     // nothing else on this worker became indexable
     expect((await call(env, "GET", "/login", { origin: null })).headers.get("x-robots-tag")).toBe("noindex, nofollow");
@@ -120,6 +121,38 @@ describe("github app: its pages", () => {
     expect(sql.rows("SELECT * FROM github_installations")).toEqual([]);
   });
 
+  it("/github/setup is short: one button to continue with GitHub, five lines on what the app does and cannot do, the one step left", async () => {
+    const { env, sql } = githubSetup();
+    const html = await (await call(env, "GET", `/github/setup?installation_id=${INSTALLATION}&setup_action=install`, { origin: null })).text();
+    // the one button: GitHub says who this is, which signs them in and shows their repositories
+    expect(html).toContain('<a class="btn green xl" href="/github/connect">Continue with GitHub</a>');
+    expect(html).toContain("This signs you in to GenClass with your GitHub account, free, and makes an account if you have none.");
+    expect(html).toContain("Your GitHub token is used for that question and not kept.");
+    expect(html).toContain('<a href="/login?next=%2Faccount%2Fgithub">sign in to it</a>');
+    expect(html).toContain("Reviews need no account.");
+    // what installing did, and did not do
+    expect(html).toContain("<b>What installing changed:</b> nothing. Nothing is written when the app is installed, and the GenClass runtime is not added to your app or your repositories");
+    expect(html).toContain("<b>What it reads:</b> the race files your workflow uploads, never your source code.");
+    expect(html).toContain("<b>What it costs:</b> public repositories are free, for every account and organization. Private repositories come with Team or Enterprise.");
+    expect(html).toContain("Uninstalling the app deletes what was kept for it at once.");
+    expect(html.match(/<ul class="facts">/g)!.length).toBeGreaterThanOrEqual(1);
+    // the button and the five lines come before the step, and everything else is folded away
+    const at = (t: string) => html.indexOf(t);
+    expect(at("Continue with GitHub")).toBeLessThan(at("In short"));
+    expect(at("In short")).toBeLessThan(at("The one step left, with no change to your tests"));
+    expect(at("The one step left, with no change to your tests")).toBeLessThan(at('<details class="gh-more mt-l">'));
+    expect(at('<details class="gh-more mt-l">')).toBeLessThan(at("Or in your own e2e job"));
+    // opening the page asks nobody anything and keeps nothing
+    expect(sql.rows("SELECT * FROM challenges")).toEqual([]);
+    // a server that reviews every repository says so; one that cannot ask GitHub who someone is has no button
+    const open = await (await call(githubSetup({ GITHUB_APP_PRIVATE_REPOS: "open" }).env, "GET", "/github/setup", { origin: null })).text();
+    expect(open).toContain("This server reviews private repositories too.");
+    const bare = await (await call(githubSetup({ GITHUB_APP_CLIENT_ID: undefined }).env, "GET", "/github/setup", { origin: null })).text();
+    expect(bare).not.toContain("/github/connect");
+    expect(bare).not.toContain("Continue with GitHub");
+    expect(bare).toContain("Reviews need no account.");
+  });
+
   it("the account page links to GitHub only on a server that runs the app", async () => {
     const on = githubSetup();
     const me = await signedIn(on.env);
@@ -131,11 +164,20 @@ describe("github app: its pages", () => {
 });
 
 describe("github app: Connect GitHub", () => {
-  it("signed out it goes to sign-in; signed in it sends the browser to GitHub with a state kept on the server", async () => {
+  it("signed in it sends the browser to GitHub with a state kept on the server for the session; signed out, with one kept for the browser alone", async () => {
     const { env, sql } = githubSetup();
+    // signed out ("Continue with GitHub" after installing): the same page at GitHub, and a row that names no account
     const out = await call(env, "GET", "/github/connect", { origin: null });
     expect(out.status).toBe(302);
-    expect(out.headers.get("location")).toBe("/login?next=%2Faccount%2Fgithub");
+    const there = new URL(out.headers.get("location")!);
+    expect(`${there.origin}${there.pathname}`).toBe("https://github.com/login/oauth/authorize");
+    expect(there.searchParams.get("client_id")).toBe(CLIENT_ID);
+    expect(there.searchParams.get("redirect_uri")).toBe("https://genclass.dev/github/callback");
+    expect(there.searchParams.has("scope")).toBe(false);
+    expect(out.headers.getSetCookie().find((c) => c.startsWith("gc_oauth_ghapp="))).toMatch(/^gc_oauth_ghapp=[A-Za-z0-9]{22}; Path=\/github; Max-Age=600; HttpOnly; SameSite=Lax; Secure$/);
+    expect(sql.rows("SELECT challenge, account_id, data FROM challenges WHERE kind = 'oauth:ghapp'")).toEqual([{ challenge: there.searchParams.get("state"), account_id: null, data: '{"signin":true}' }]);
+    expect(sql.rows("SELECT * FROM accounts")).toEqual([]);
+    sql.db.prepare("DELETE FROM challenges").run();
     const me = await signedIn(env);
     const r = await call(env, "GET", "/github/connect", { cookie: me.cookie, origin: null });
     expect(r.status).toBe(302);
@@ -269,6 +311,260 @@ describe("github app: Connect GitHub", () => {
     expect(s.sql.rows("SELECT * FROM challenges WHERE kind = 'ghapp:grant'")).toEqual([]);
   });
 
+});
+
+/** "Continue with GitHub" in a browser that is not signed in (or that holds `cookie`): the start, then GitHub's answer through the callback. */
+async function continueWithGithub(env: Parameters<typeof call>[0], gh: ReturnType<typeof fakeGithub>, o: { cookie?: string; code?: string } = {}) {
+  const start = await call(env, "GET", "/github/connect", { origin: null });
+  const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+  const oauth = cookieOf(start, "gc_oauth_ghapp")!;
+  const back = await call(env, "GET", `/github/callback?code=${o.code ?? "good-code"}&state=${encodeURIComponent(state)}`, { cookie: o.cookie ? `${o.cookie}; ${oauth}` : oauth, origin: null, fetch: gh.fetch });
+  return { start, state, oauth, back, session: cookieOf(back, "__Host-gc_session") };
+}
+
+describe("github app: Continue with GitHub, from a browser that is not signed in (src/github/http.ts header)", () => {
+  it("one round trip: GitHub says who this is, a free account is made and signed in, and GitHub's answer is kept for it", async () => {
+    const { env, sql } = githubSetup();
+    const gh = fakeGithub();
+    person(gh);
+    const { back, session } = await continueWithGithub(env, gh);
+    expect(back.status).toBe(302);
+    expect(back.headers.get("location")).toBe("/account/github?connected=1");
+    expect(session).toMatch(/^__Host-gc_session=.{20,}/);
+    expect(cookieOf(back, "gc_oauth_ghapp")).toBe("gc_oauth_ghapp=");
+    // the code was exchanged once; then the same questions Connect GitHub asks
+    expect(gh.calls.map((c) => c.path)).toEqual(["/login/oauth/access_token", "/user", "/user/installations", `/user/installations/${INSTALLATION}/repositories`]);
+    const accounts = sql.rows("SELECT id, email, github_id, github_login FROM accounts");
+    expect(accounts).toEqual([{ id: expect.any(String), email: null, github_id: "77", github_login: "ada" }]);
+    const grant = sql.rows("SELECT account_id, data, expires FROM challenges WHERE kind = 'ghapp:grant'");
+    expect(grant).toHaveLength(1);
+    expect(grant[0]!.account_id).toBe(accounts[0]!.id);
+    expect(grant[0]!.expires).toBe(new Date(now().getTime() + 30 * 60_000).toISOString());
+    expect(JSON.parse(String(grant[0]!.data)).github).toEqual({ id: 77, login: "ada" });
+    // nothing in the database holds the token, and the start's row is used up
+    const dump = JSON.stringify([sql.rows("SELECT * FROM challenges"), sql.rows("SELECT * FROM github_installations"), sql.rows("SELECT * FROM accounts"), sql.rows("SELECT * FROM auth_sessions")]);
+    expect(dump).not.toContain("ghu_usertoken");
+    expect(sql.rows("SELECT * FROM challenges WHERE kind = 'oauth:ghapp'")).toEqual([]);
+    // an organization's installation is recorded and still has no manager
+    expect(sql.rows("SELECT id, account_login, owner FROM github_installations")).toEqual([{ id: INSTALLATION, account_login: "acme", owner: null }]);
+
+    // where they land: signed in, connected, what the app does in short, and each repository with what the app is doing there
+    const page = await call(env, "GET", "/account/github?connected=1", { cookie: session!, origin: null });
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain("GitHub is connected. Each repository the app is on is listed below, with what the app is doing there.");
+    expect(html).toContain("Connected as <b>ada</b>.");
+    expect(html).toContain("What genclass-dev[bot] does, in short");
+    expect(html).toContain("<b>What installing changed:</b> nothing.");
+    expect(html).toContain("<b>Waiting for race files</b>");
+    // on the free plan, with nothing asked for
+    const api = (await (await call(env, "GET", "/api/account/github", { cookie: session!, origin: null })).json()) as any;
+    expect(api.plan).toBe("Free");
+    expect(api.who).toBe("@ada");
+    expect(api.repos.map((x: any) => [x.name, x.evidence, x.prs, x.last])).toEqual([
+      ["acme/docs", false, 0, null],
+      ["acme/shop", false, 0, null],
+    ]);
+    // the five lines are for the visit right after connecting
+    expect(await (await call(env, "GET", "/account/github", { cookie: session!, origin: null })).text()).not.toContain("does, in short");
+  });
+
+  it("an installation on the person's own GitHub account is theirs to manage from that click", async () => {
+    const { env, sql } = githubSetup();
+    const { back, session } = await continueWithGithub(env, ownAccount());
+    expect(back.headers.get("location")).toBe("/account/github?connected=1");
+    const account = sql.rows("SELECT id FROM accounts")[0]!.id;
+    expect(managerOf(sql)).toBe(account);
+    expect(await (await call(env, "GET", "/account/github", { cookie: session!, origin: null })).text()).toContain("<b>ada</b> (personal account, selected repositories), managed by this account");
+  });
+
+  it("someone whose account has that GitHub identity is signed in to it: no second account", async () => {
+    const { env, sql } = githubSetup();
+    const me = await signedIn(env, "ada@example.com");
+    sql.db.prepare("UPDATE accounts SET github_id = '77', github_login = 'old-name' WHERE id = ?").run(me.account.id);
+    const gh = fakeGithub();
+    person(gh);
+    const { back, session } = await continueWithGithub(env, gh);
+    expect(back.status).toBe(302);
+    expect(back.headers.get("location")).toBe("/account/github?connected=1");
+    expect(sql.rows("SELECT id, github_login FROM accounts")).toEqual([{ id: me.account.id, github_login: "ada" }]);
+    expect(sql.rows("SELECT account_id FROM challenges WHERE kind = 'ghapp:grant'")).toEqual([{ account_id: me.account.id }]);
+    // a new session of that account
+    expect(session).not.toBe(me.cookie);
+    expect(((await (await call(env, "GET", "/api/account/github", { cookie: session!, origin: null })).json()) as any).who).toBe("ada@example.com");
+  });
+
+  it("an account with a passkey still needs it: the passkey step and no session, with the answer kept for the account", async () => {
+    const { env, sql } = githubSetup();
+    const me = await signedIn(env, "ada@example.com");
+    sql.db.prepare("UPDATE accounts SET github_id = '77' WHERE id = ?").run(me.account.id);
+    sql.db.prepare("INSERT INTO credentials (id, account_id, public_key, alg, sign_count, created) VALUES ('cred-1', ?, 'pk', -7, 0, ?)").run(me.account.id, now().toISOString());
+    const gh = fakeGithub();
+    person(gh);
+    const sessions = sql.rows("SELECT COUNT(*) AS n FROM auth_sessions")[0]!.n;
+    const { back, session } = await continueWithGithub(env, gh);
+    expect(back.status).toBe(302);
+    expect(back.headers.get("location")).toBe("/login/passkey");
+    expect(session).toBeNull();
+    expect(sql.rows("SELECT COUNT(*) AS n FROM auth_sessions")[0]!.n).toBe(sessions);
+    expect(cookieOf(back, "__Host-gc_mfa")).toMatch(/^__Host-gc_mfa=[A-Za-z0-9]{22}$/);
+    expect(cookieOf(back, "gc_oauth_ghapp")).toBe("gc_oauth_ghapp=");
+    // after the passkey the person goes where the flow was going
+    const step = sql.rows("SELECT account_id, data FROM challenges WHERE kind = 'mfa'");
+    expect(step).toHaveLength(1);
+    expect(step[0]!.account_id).toBe(me.account.id);
+    expect(JSON.parse(String(step[0]!.data))).toEqual({ next: "/account/github?connected=1", via: "github" });
+    expect(sql.rows("SELECT account_id FROM challenges WHERE kind = 'ghapp:grant'")).toEqual([{ account_id: me.account.id }]);
+  });
+
+  it("the callback does nothing with a state this browser was not given, without its cookie, twice, or when GitHub refuses", async () => {
+    const s = githubSetup();
+    const gh = fakeGithub();
+    person(gh);
+    const back = (q: string, cookie?: string) => call(s.env, "GET", `/github/callback?${q}`, { cookie, origin: null, fetch: gh.fetch });
+    const begin = async () => {
+      const start = await call(s.env, "GET", "/github/connect", { origin: null });
+      return { state: encodeURIComponent(new URL(start.headers.get("location")!).searchParams.get("state")!), oauth: cookieOf(start, "gc_oauth_ghapp")! };
+    };
+    const first = await begin();
+    // another browser: the state without the cookie that names its row
+    expect((await back(`code=good-code&state=${first.state}`)).status).toBe(400);
+    // a wrong state uses the row up, so the right one no longer works either; "Try again" starts over
+    const wrong = await back("code=good-code&state=wrong", first.oauth);
+    expect(wrong.status).toBe(400);
+    expect(await wrong.text()).toContain('href="/github/connect"');
+    expect((await back(`code=good-code&state=${first.state}`, first.oauth)).status).toBe(400);
+    // the person pressed Cancel at GitHub
+    const second = await begin();
+    expect((await back(`error=access_denied&state=${second.state}`, second.oauth)).status).toBe(400);
+    expect(gh.calls).toEqual([]);
+    // a code GitHub does not accept
+    const third = await begin();
+    expect((await back(`code=bad-code&state=${third.state}`, third.oauth)).status).toBe(502);
+    // a person GitHub does not name properly gets no account
+    const fourth = await begin();
+    gh.user.login = "dependabot[bot]";
+    expect((await back(`code=good-code&state=${fourth.state}`, fourth.oauth)).status).toBe(502);
+    expect(s.sql.rows("SELECT * FROM accounts")).toEqual([]);
+    expect(s.sql.rows("SELECT * FROM auth_sessions")).toEqual([]);
+    expect(s.sql.rows("SELECT * FROM challenges WHERE kind IN ('ghapp:grant', 'oauth:ghapp', 'mfa')")).toEqual([]);
+  });
+
+  it("a browser that signed in while GitHub was asked keeps the answer for the account it is signed in to", async () => {
+    const { env, sql } = githubSetup();
+    const gh = fakeGithub();
+    person(gh);
+    const start = await call(env, "GET", "/github/connect", { origin: null });
+    const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+    const oauth = cookieOf(start, "gc_oauth_ghapp")!;
+    const me = await signedIn(env, "grace@example.com");
+    const back = await call(env, "GET", `/github/callback?code=good-code&state=${encodeURIComponent(state)}`, { cookie: `${me.cookie}; ${oauth}`, origin: null, fetch: gh.fetch });
+    expect(back.status).toBe(302);
+    expect(back.headers.get("location")).toBe("/account/github?connected=1");
+    expect(cookieOf(back, "__Host-gc_session")).toBeNull();
+    expect(sql.rows("SELECT id, github_id FROM accounts")).toEqual([{ id: me.account.id, github_id: null }]);
+    expect(sql.rows("SELECT account_id FROM challenges WHERE kind = 'ghapp:grant'")).toEqual([{ account_id: me.account.id }]);
+  });
+
+  it("these starts are rate limited like every sign-in start that stores a row (AUTH_LIMIT); a signed-in start is one row per account", async () => {
+    const base = githubSetup();
+    const me = await signedIn(base.env);
+    const env = { ...base.env, AUTH_LIMIT: refusingLimiter };
+    const out = await call(env, "GET", "/github/connect", { origin: null });
+    expect(out.status).toBe(429);
+    expect(out.headers.get("retry-after")).toBe("60");
+    expect(out.headers.getSetCookie()).toEqual([]);
+    expect(base.sql.rows("SELECT * FROM challenges WHERE kind = 'oauth:ghapp'")).toEqual([]);
+    for (let i = 0; i < 3; i++) expect((await call(env, "GET", "/github/connect", { cookie: me.cookie, origin: null })).status).toBe(302);
+    expect(base.sql.rows("SELECT account_id FROM challenges WHERE kind = 'oauth:ghapp'")).toEqual([{ account_id: me.account.id }]);
+  });
+});
+
+describe("github app: what the account page says the app is doing on each repository (src/github/pages.ts header)", () => {
+  /** person(), with each repository's default branch as GitHub lists it: one more they can push to, and one whose branch is no branch name. */
+  function withBranches(gh: ReturnType<typeof fakeGithub>) {
+    person(gh);
+    const can = { admin: false, push: true, pull: true };
+    gh.user.repositories.set(INSTALLATION, [
+      { id: REPO.id, full_name: REPO.full_name, private: false, default_branch: "main", permissions: can },
+      { id: 7003, full_name: "acme/docs", private: true, default_branch: "trunk", permissions: { admin: false, push: false, pull: true } },
+      { id: 7004, full_name: "acme/api", private: false, default_branch: "release/2.x", permissions: can },
+      { id: 7005, full_name: "acme/odd", private: false, default_branch: "no branch", permissions: can },
+    ]);
+  }
+  const WEB = "https://github.com";
+  const dataOf = (html: string) => /<script type="application\/json" id="gh-wf-data">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? null;
+
+  it("waiting: a button that opens GitHub's new-file editor on the default branch; reviewing: how many pull requests; the same in the API", async () => {
+    const s = githubSetup({ GITHUB_APP_WORKFLOW_LINK: "on" });
+    const gh = fakeGithub();
+    withBranches(gh);
+    const { env, sql, me } = await connected("ada@example.com", s, gh);
+    // the app read race files for acme/api and wrote on two of its pull requests (a third has a row and nothing written)
+    const iso = now().toISOString();
+    sql.db.prepare("INSERT INTO github_repo_facts (repo_id, installation_id, evidence, updated) VALUES (7004, ?, ?, ?)").run(INSTALLATION, iso, iso);
+    for (const [number, reviews] of [[1, 3], [2, 1], [3, 0]]) sql.db.prepare("INSERT INTO github_prs (repo_id, number, installation_id, reviews, updated) VALUES (7004, ?, ?, ?, ?)").run(number!, INSTALLATION, reviews!, iso);
+    const view = async () => ((await (await call(env, "GET", "/api/account/github", { cookie: me.cookie, origin: null })).json()) as any).repos.map((x: any) => [x.name, x.branch, x.evidence, x.prs, x.last]);
+    expect(await view()).toEqual([
+      ["acme/api", "release/2.x", true, 2, iso],
+      ["acme/docs", "trunk", false, 0, null],
+      ["acme/odd", null, false, 0, null],
+      ["acme/shop", "main", false, 0, null],
+    ]);
+    const html = await (await call(env, "GET", "/account/github", { cookie: me.cookie, origin: null })).text();
+    expect(html).toContain("<th>What the app is doing</th>");
+    expect(html).toContain(`<b>Reviewing</b><br>2 pull requests so far, the latest on ${iso.slice(0, 10)}`);
+    // waiting, and theirs to commit to, on a branch GitHub named: the button
+    expect(html).toContain('data-wf-repo="acme/shop" data-wf-branch="main" aria-label="Add the workflow file to acme/shop"');
+    // no button where the app already reads race files, where they cannot push (a private repository without a plan
+    // is not reviewed at all), or where GitHub's default branch is not a name the link takes
+    for (const name of ["acme/api", "acme/docs", "acme/odd"]) expect(html, name).not.toContain(`data-wf-repo="${name}"`);
+    expect(html).toContain("<b>Not reviewed</b>");
+    expect(html.match(/<b>Waiting for race files<\/b>/g)).toHaveLength(2);
+    // the file's text is on the page once, as data; the button's script builds the address from it
+    const raw = dataOf(html)!;
+    expect(raw).not.toMatch(/[<>&]/);
+    expect(JSON.parse(raw)).toEqual(workflowLinkData(WEB));
+    const scripts = [...html.matchAll(/<script nonce="[^"]+">([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+    const own = scripts.find((t) => t.includes("function gcWorkflowLink"))!;
+    const mine = own.slice(own.indexOf("function gcWorkflowLink"));
+    expect(mine).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function/);
+    const opened: unknown[][] = [];
+    const err = { textContent: "before" };
+    const button = (repo: string, branch: string) => {
+      let click: (() => void) | undefined;
+      return { getAttribute: (n: string) => (n === "data-wf-repo" ? repo : n === "data-wf-branch" ? branch : null), addEventListener: (t: string, fn: () => void) => (t === "click" ? (click = fn) : undefined), press: () => click!() };
+    };
+    const buttons = [button("acme/shop", "main"), button("mallory/evil?x=1", "main"), button("acme/shop", "../x")];
+    const doc = { getElementById: (id: string) => (id === "gh-wf-data" ? { textContent: raw } : id === "gherr" ? err : null), querySelectorAll: (q: string) => (q === "button[data-wf-repo]" ? buttons : []) };
+    new Function("document", "window", mine)(doc, { open: (...a: unknown[]) => (opened.push(a), null) });
+    buttons[0]!.press();
+    expect(opened).toEqual([[workflowLink(WEB, "acme/shop", "main"), "_blank", "noopener,noreferrer"]]);
+    expect(err.textContent).toBe("");
+    // what is no repository or no branch opens nothing and says so as text
+    buttons[1]!.press();
+    buttons[2]!.press();
+    expect(opened).toHaveLength(1);
+    expect(err.textContent).toBe("No address could be built for that repository. Copy the file from the guide instead.");
+
+    // paused says so, and has no button either
+    expect((await call(env, "POST", `/api/account/github/repos/${REPO.id}`, { cookie: me.cookie, body: { paused: true } })).status).toBe(200);
+    const paused = await (await call(env, "GET", "/account/github", { cookie: me.cookie, origin: null })).text();
+    expect(paused).toContain("<b>Paused</b>");
+    expect(paused).not.toContain('data-wf-repo="');
+    expect(dataOf(paused)).toBeNull();
+  });
+
+  it("a server without the workflow link says what the app is doing and has no button, no data block and no builder", async () => {
+    const gh = fakeGithub();
+    withBranches(gh);
+    const { env, me } = await connected("ada@example.com", githubSetup(), gh);
+    const html = await (await call(env, "GET", "/account/github", { cookie: me.cookie, origin: null })).text();
+    expect(html.match(/<b>Waiting for race files<\/b>/g)).toHaveLength(3);
+    expect(html).not.toContain("data-wf-repo");
+    expect(html).not.toContain("gh-wf-data");
+    expect(html).not.toContain("gcWorkflowLink");
+  });
 });
 
 describe("github app: who manages an installation (src/github/http.ts header, src/github/entitlement.ts)", () => {
@@ -641,8 +937,11 @@ describe("github app: linking a repository to a GenClass app", () => {
     expect(big.api.repos.find((x: any) => x.id === 100_297)).toMatchObject({ project: null, paused: true });
     expect(big.api.repos.filter((x: any) => x.project || x.paused)).toHaveLength(2);
     expect(big.api.repos.filter((x: any) => x.needsPlan)).toHaveLength(44);
-    // 298 more repositories and one more installation cost a handful of statements, not one or two each
-    expect(big.statements - small.statements).toBeLessThanOrEqual(6);
+    // what the app is doing on each of them came with the rest
+    expect(big.api.repos.every((x: any) => x.evidence === false && x.prs === 0 && x.last === null)).toBe(true);
+    // 298 more repositories and one more installation cost a handful of statements, not one or two each (what is
+    // kept for them, and what the app has done on them: one statement each per 90 repositories)
+    expect(big.statements - small.statements).toBeLessThanOrEqual(9);
     expect(big.statements).toBeLessThanOrEqual(20);
   });
 });

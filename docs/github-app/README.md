@@ -20,7 +20,17 @@ repositories come with the Team plan ([Plans](#plans)).
 ## Setup
 
 1. **Install the app** on the account or organization, for all repositories or the ones you pick. Nothing else is
-   asked: no sign-up, no token.
+   asked: no sign-up, no token. Installing changes nothing: nothing is written when the app is installed, and the
+   GenClass runtime is not added to your app or your repositories: it runs only on the pages your tests open in that
+   workflow's run.
+
+   GitHub then sends you to <https://genclass.dev/github/setup>, which says in five lines what the app does and
+   cannot do, and what is left to do. **Continue with GitHub** there is optional and free: it signs you in to
+   GenClass with your GitHub account (making an account if you have none), and
+   <https://genclass.dev/account/github> then lists each repository the app is on with what the app is doing there:
+   waiting for race files, reviewing (and how many pull requests so far), paused, or not reviewed. A repository that
+   is waiting has a button that opens GitHub's new-file editor with the workflow file filled in, on its default
+   branch. Reviews need no account.
 
    Then give it something to read, one of two ways. **With no change to your tests:** copy
    [`workflows/genclass.yml`](workflows/genclass.yml) to `.github/workflows/genclass.yml` and go to step 4. It runs
@@ -229,9 +239,10 @@ Reviews from race files need no account. If the app's runtime also runs in your 
 that GenClass app and reviews add a section: that app's findings in the last days on the pages the pull request's
 changed files serve.
 
-1. Sign in at <https://genclass.dev/account/github> and choose **Connect GitHub**. GitHub tells GenClass which
-   installations of the app and which repositories you can reach. Your GitHub token is used for that question and not
-   kept; the answer is kept for 30 minutes.
+1. Sign in at <https://genclass.dev/account/github> and choose **Connect GitHub**, or use **Continue with GitHub**
+   on the page GitHub shows after installing, which signs you in and connects in one step. GitHub tells GenClass
+   which installations of the app and which repositories you can reach. Your GitHub token is used for that question
+   and not kept; the answer is kept for 30 minutes.
 2. Pick the GenClass app for a repository. You need write access to the repository and the app must be in your
    account.
 
@@ -318,8 +329,8 @@ Uninstalling the app, or taking a repository out of it, deletes what was kept fo
 - **A self-hosted collector** reviews every repository: it sells no plans (`PLAN_GATES = "open"`, or
   `GITHUB_APP_PRIVATE_REPOS = "open"`).
 - **Whose plan counts.** The plan that counts for an installation's private repositories is the plan of the GenClass
-  account that manages it. An installation on your own GitHub account is managed by the GenClass account you choose
-  Connect GitHub from. For an organization, the managing account is set when the plan is agreed: write to
+  account that manages it. An installation on your own GitHub account is managed by the GenClass account you connect
+  GitHub from (Connect GitHub on the account page, or Continue with GitHub after installing). For an organization, the managing account is set when the plan is agreed: write to
   mehar@genclass.dev. Being able to push to a repository does not make an account the manager of its installation.
   <https://genclass.dev/account/github> shows for each installation whether your account, another account or no
   account manages it.

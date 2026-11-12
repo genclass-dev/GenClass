@@ -1,6 +1,6 @@
 # GenClass Runtime: privacy policy
 
-_Last updated: 2026-11-09._
+_Last updated: 2026-11-11._
 
 This policy covers the diagnostics that `@genclass/runtime` (from `0.1.0-beta.3`) sends to its maintainers. It does not
 cover the website or app that uses GenClass; that site has its own privacy policy. It also covers the
@@ -200,10 +200,12 @@ to write the comment and do not store them. If the artifact holds other files, w
 - If you buy or change a plan on GitHub Marketplace: your GitHub account's id and name and the plan. GitHub handles
   the payment; we never see card details.
 
-**If you connect GitHub to a GenClass account** (optional, to show your app's production findings on your pull
-requests): we ask GitHub who you are and which repositories you can reach through the app. We use GitHub's token for
-that question and do not keep it. We keep the answer (the repositories' ids and names and whether you can write to
-them) for 30 minutes. Afterwards we keep only the link you made between a repository and one of your apps and, when the
+**If you connect GitHub to a GenClass account** (optional: to see what the app is doing on your repositories, and
+to show your app's production findings on your pull requests): we ask GitHub who you are and which repositories you
+can reach through the app. We use GitHub's token for that question and do not keep it. We keep the answer (the
+repositories' ids, names and default branches and whether you can write to them) for 30 minutes. "Continue with
+GitHub" on the page GitHub shows after installing does the same and signs you in: if no GenClass account has your
+GitHub identity yet, one is made with your GitHub id and login, as with any GitHub sign-in. Afterwards we keep only the link you made between a repository and one of your apps and, when the
 app is installed on your own GitHub account, that your GenClass account manages that installation. When a
 repository is linked, the kind, page path and count of that app's findings appear on its pull requests, where everyone
 who can see the pull request can see them.

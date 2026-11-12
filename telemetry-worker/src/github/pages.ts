@@ -4,6 +4,13 @@
 // Invariants:
 // - /github and /github/setup are static: they show nothing about any installation, account or repository, whatever
 //   their address carries, so they can be opened by anyone.
+// - /github/setup is where a person lands right after installing, so it is short: that the app is installed and what
+//   that changed (nothing), one button ("Continue with GitHub": /github/connect signs them in and shows their
+//   repositories), what the app does and cannot do in five lines (inShort), and the one step left. Everything else
+//   is folded away below. The account page shows the same five lines once, right after connecting.
+// - The account page says, per repository GitHub's answer lists, what the app is doing there: waiting for race files
+//   (with a button that opens GitHub's new-file editor for the workflow file on the default branch, built by the
+//   page's script like the setup page's form), reviewing, paused, or not reviewed for want of a plan.
 // - On a server that has the workflow link on (config.ts GITHUB_APP_WORKFLOW_LINK), /github/setup has a small form: a
 //   repository and a branch a person types, and a button that opens GitHub's new-file editor with the workflow file
 //   filled in. The address is built by the page's script (workflow-file.ts WORKFLOW_LINK_JS), under the page's nonce,
@@ -49,6 +56,13 @@ ul.facts b{color:var(--ink);font-weight:500}
 .gh-wf-err{font-size:13px;color:var(--warn);max-width:76ch}
 .gh-wf-err:empty{display:none}
 @media (max-width:620px){.gh-wf{grid-template-columns:minmax(0,1fr)}}
+details.gh-more{max-width:76ch;border-top:1px solid var(--rule);padding-top:14px}
+details.gh-more>summary{cursor:pointer;font-size:14px;font-weight:500;color:var(--ink2)}
+details.gh-more>summary:hover{color:var(--ink)}
+details.gh-more[open]>summary{margin-bottom:6px}
+.gh-st{font-size:13px;color:var(--ink2)}
+.gh-st b{font-weight:500;color:var(--ink)}
+.gh-st .btn{margin-top:6px}
 `;
 
 const snippet = (label: string, code: string): string =>
@@ -107,6 +121,21 @@ function permissions(slug: string): string {
 </ul>`;
 }
 
+/**
+ * What the app does and cannot do, in five lines, for someone who has just installed it (/github/setup, and the
+ * account page right after connecting). The sentences are docs/github-app/README.md's ("Setup", "What it may read and
+ * write", "What it keeps", "Plans").
+ */
+function inShort(privateRepos: "plan" | "open"): string {
+  return `<ul class="facts">
+<li><b>What it does:</b> on a pull request it posts one check and, when something is flagged, one comment: a request that left twice, an older response applied over a newer one, a write that was overwritten, each with its test, its seeds and the evidence line.</li>
+<li><b>What it reads:</b> the race files your workflow uploads, never your source code. It cannot read, clone or change your code, branches, workflows, secrets or settings, and it never opens a pull request.</li>
+<li><b>What installing changed:</b> nothing. Nothing is written when the app is installed, and the GenClass runtime is not added to your app or your repositories: it runs only on the pages your tests open in that workflow's run.</li>
+<li><b>What it costs:</b> public repositories are free, for every account and organization. ${privateRepos === "open" ? "This server reviews private repositories too." : "Private repositories come with Team or Enterprise."}</li>
+<li><b>How to remove it:</b> uninstall it in your GitHub settings. Uninstalling the app deletes what was kept for it at once.</li>
+</ul>`;
+}
+
 /** /github: what the app is and does, for someone who has not installed it. */
 export function githubLandingPage(nonce: string, o: { slug: string; privateRepos: "plan" | "open" }): string {
   const bot = `${esc(o.slug)}[bot]`;
@@ -148,7 +177,7 @@ export function githubLandingPage(nonce: string, o: { slug: string; privateRepos
   <h2 class="h2l">Plans</h2>
   <ul class="facts">
     <li><b>Public repositories:</b> free, for every account and organization.</li>
-    <li><b>Private repositories:</b> ${o.privateRepos === "open" ? "included while the app is in beta." : `with the Enterprise plan, by agreement: write to <a href="mailto:${esc(PLANS_FILE.contact)}">${esc(PLANS_FILE.contact)}</a>. Without it, a private repository is not read at all.`}</li>
+    <li><b>Private repositories:</b> ${o.privateRepos === "open" ? "included while the app is in beta." : `with the Team or Enterprise plan (<a href="/account/billing">the plans</a>). Without one, a private repository is not read at all.`}</li>
   </ul>
 </section>`;
   return shell(nonce, `GenClass for GitHub: ${o.slug}[bot]`, body, "", { index: true });
@@ -199,12 +228,12 @@ function workflowSection(link: { web: string } | null): string {
   const source = `<a href="${WORKFLOW_SOURCE}"><code>workflows/genclass.yml</code></a>`;
   if (!link) {
     return `<section class="stack mt-l" id="workflow">
-  <h2 class="h2l">With no change to your tests</h2>
+  <h2 class="h2l">The one step left, with no change to your tests</h2>
   <p class="gh-p">Copy ${source} from the GenClass repository to ${path} in yours. ${WORKFLOW_DOES}</p>
 </section>`;
   }
   return `<section class="stack mt-l" id="workflow">
-  <h2 class="h2l">With no change to your tests</h2>
+  <h2 class="h2l">The one step left, with no change to your tests</h2>
   <p class="gh-p">Add one workflow file, ${path}. ${WORKFLOW_DOES} The button opens GitHub's new-file editor in a new tab with the file filled in; you review it and commit it there.</p>
   <form class="gh-wf" id="gh-wf" novalidate>
     <label for="gh-wf-repo">Repository<input type="text" id="gh-wf-repo" name="repo" placeholder="owner/name" maxlength="140" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>
@@ -218,19 +247,35 @@ function workflowSection(link: { web: string } | null): string {
 }
 
 /**
- * /github/setup: after installing. Static: it says what to do next and shows nothing about any installation.
+ * /github/setup: where GitHub sends someone right after installing. Static: it shows nothing about any installation.
+ * Short on purpose: that the app is installed and what is left to do, one button, five lines on what the app does and
+ * cannot do, the one step left; the rest is folded away.
+ * `canConnect`: this server can ask GitHub who someone is, so the page has "Continue with GitHub" (/github/connect:
+ * it signs the person in, with a new free account when they have none, and shows their repositories).
  * `workflowLink`: this server shows the link that opens GitHub's new-file editor (config.ts `workflowLink`), with its
  * GitHub web root; absent or null, the page says to copy the workflow file from the repository.
+ * `privateRepos`: "open" on a server that reviews every repository (config.ts `privateRepos`); default "plan".
  */
-export function githubSetupPage(nonce: string, o: { slug: string; canConnect: boolean; workflowLink?: { web: string } | null }): string {
+export function githubSetupPage(nonce: string, o: { slug: string; canConnect: boolean; workflowLink?: { web: string } | null; privateRepos?: "plan" | "open" }): string {
   const link = o.workflowLink ?? null;
+  const next = o.canConnect
+    ? `<div class="gh-cta"><a class="btn green xl" href="/github/connect">Continue with GitHub</a></div>
+  <p class="gh-note">This signs you in to GenClass with your GitHub account, free, and makes an account if you have none. You then see each repository the app is on and what the app is doing there. Your GitHub token is used for that question and not kept. With a GenClass account already, <a href="/login?next=%2Faccount%2Fgithub">sign in to it</a> and choose Connect GitHub. Reviews need no account.</p>`
+    : `<p class="gh-note">Reviews need no account.</p>`;
   const body = `
 <style nonce="${nonce}">${GH_CSS}</style>
 <section class="stack mt-xl">
   <h1>${esc(o.slug)}[bot] is installed</h1>
-  <p class="lead">It reviews a pull request as soon as that pull request's workflow run uploads race files. One workflow file, or two steps in your own e2e job; no account needed.</p>
+  <p class="lead">One step is left: a workflow file that runs your Playwright tests under GenClass. Until race files were read for a repository once, the app stays silent there.</p>
+  ${next}
+</section>
+<section class="stack mt-l">
+  <h2 class="h2l">In short</h2>
+  ${inShort(o.privateRepos ?? "plan")}
 </section>
 ${workflowSection(link)}
+<details class="gh-more mt-l">
+<summary>Other ways to set it up, settings and commands</summary>
 <section class="stack mt-l">
   <h2 class="h2l">Or in your own e2e job</h2>
   ${steps(o.slug)}
@@ -243,8 +288,9 @@ ${workflowSection(link)}
     <li><b>Coding agents:</b> <a href="${DOCS}#fix">a workflow</a> can pick up <code>@${esc(o.slug)} fix</code> and run your agent with <code>@genclass/mcp</code> in your own CI, with your own key.</li>
   </ul>
   ${snippet("Settings file", SETTINGS)}
-  <p class="gh-note"><a href="${DOCS}">The guide</a> has every setting and command. To remove the app, uninstall it in your GitHub settings: everything kept for the installation is deleted at once.</p>
-</section>`;
+  <p class="gh-note"><a href="${DOCS}">The guide</a> has every setting and command.</p>
+</section>
+</details>`;
   return shell(nonce, `${o.slug}[bot] is installed | GenClass`, body, link ? WORKFLOW_LINK_JS + SETUP_FORM_JS : "", {});
 }
 
@@ -266,7 +312,24 @@ export interface GithubAccountView {
    * The repositories GitHub's answer lists. `needsPlan`: private, and its installation has no plan that includes
    * private repositories (the managing account's, or a Marketplace plan), so it is not reviewed.
    */
-  repos: { id: number; name: string; private: boolean; installation: number; push: boolean; project: string | null; linkedElsewhere: boolean; paused: boolean; needsPlan: boolean }[];
+  repos: {
+    id: number;
+    name: string;
+    private: boolean;
+    installation: number;
+    push: boolean;
+    project: string | null;
+    linkedElsewhere: boolean;
+    paused: boolean;
+    needsPlan: boolean;
+    /** The default branch as GitHub named it, when GitHub's answer has one the workflow link takes. */
+    branch: string | null;
+    /** Race files were read for it once: from then on every pull request there gets the check. */
+    evidence: boolean;
+    /** Pull requests the app wrote something on (among the rows still kept), and when the newest last changed. */
+    prs: number;
+    last: string | null;
+  }[];
   /**
    * Repositories linked to one of this account's apps that GitHub's answer does not list (there is no answer now, or
    * the person cannot reach them any more): the link can be taken away, nothing else. `name` is null for a private one.
@@ -276,10 +339,32 @@ export interface GithubAccountView {
   notice: string | null;
   /** This account's own plan includes private repositories, or the server reviews every repository. */
   privatePlan: boolean;
+  /** Just connected (also: just installed, and signed in from /github/setup): the page says in short what the app does. */
+  welcome: boolean;
+  /** The server reviews every repository (config.ts `privateRepos` "open"). */
+  openRepos: boolean;
+  /** This server links to GitHub's new-file editor for the workflow file (config.ts `workflowLink`), with its web root. */
+  workflowLink: { web: string } | null;
+}
+
+/**
+ * What the app is doing on one repository of the account page, in a few words (HTML). `canAdd`: the page has the
+ * button's script and data, the person can push, and GitHub named a default branch the link takes.
+ */
+function repoStatus(r: GithubAccountView["repos"][number], canAdd: boolean): string {
+  if (r.needsPlan) return "<b>Not reviewed</b>";
+  if (r.paused) return "<b>Paused</b>";
+  if (r.evidence) {
+    const n = r.prs === 1 ? "1 pull request" : `${r.prs} pull requests`;
+    return `<b>Reviewing</b>${r.prs > 0 ? `<br>${n} so far${r.last ? `, the latest on ${esc(r.last.slice(0, 10))}` : ""}` : "<br>race files were read"}`;
+  }
+  // the repository's name and branch go into attributes escaped; the script checks both against the link's patterns
+  const add = canAdd ? `<br><button class="btn sm" type="button" data-wf-repo="${esc(r.name)}" data-wf-branch="${esc(r.branch ?? "")}" aria-label="Add the workflow file to ${esc(r.name)}"><span>Add the workflow file</span></button>` : "";
+  return `<b>Waiting for race files</b>${add}`;
 }
 
 /** Who manages an installation, and what that decides (HTML; the same sentences as docs/github-app/README.md, "Plans"). */
-const managing = (): string => `The plan that counts for an installation's private repositories is the plan of the GenClass account that manages it. An installation on your own GitHub account is managed by the GenClass account you choose Connect GitHub from. For an organization, the managing account is set when the plan is agreed: write to <a href="mailto:${esc(PLANS_FILE.contact)}">${esc(PLANS_FILE.contact)}</a>. Being able to push to a repository does not make an account the manager of its installation.`;
+const managing = (): string => `The plan that counts for an installation's private repositories is the plan of the GenClass account that manages it. An installation on your own GitHub account is managed by the GenClass account you connect GitHub from (Connect GitHub here, or Continue with GitHub after installing). For an organization, the managing account is set when the plan is agreed: write to <a href="mailto:${esc(PLANS_FILE.contact)}">${esc(PLANS_FILE.contact)}</a>. Being able to push to a repository does not make an account the manager of its installation.`;
 
 /** What the list of links outside GitHub's answer is (the same sentences as docs/github-app/README.md, "Production findings"). */
 const LINKED_ELSEWHERE =
@@ -293,6 +378,10 @@ export function accountGithubPage(nonce: string, v: GithubAccountView): string {
   const appName = (id: string): string => v.projects.find((p) => p.id === id)?.name ?? "one of your apps";
   // the one control an app's own account has on a repository it cannot write to: take its app's link away
   const unlink = (repoId: number, what: string): string => `<button class="btn sm ghost" type="button" data-unlink="${repoId}" aria-label="Unlink ${esc(what)}"><span>Unlink</span></button>`;
+  // "Add the workflow file": for a repository the person can commit to, still waiting for race files, on a server
+  // that shows the link, when GitHub named its default branch
+  const canAdd = (r: GithubAccountView["repos"][number]): boolean => !!v.workflowLink && r.push && !!r.branch && !r.evidence && !r.paused && !r.needsPlan;
+  const adds = v.repos.some(canAdd);
   const rows = v.repos
     .map((r) => {
       const where = `<a href="https://github.com/${esc(r.name)}" rel="noreferrer">${esc(r.name)}</a>${r.private ? ' <span class="aside">· private</span>' : ""}`;
@@ -307,7 +396,7 @@ export function accountGithubPage(nonce: string, v: GithubAccountView): string {
         : r.paused
           ? ' <span class="aside">· paused</span>'
           : "";
-      return `<tr><td data-l="Repository">${where}${note}</td><td data-l="GenClass app">${link}</td><td class="act">${act}</td></tr>`;
+      return `<tr><td data-l="Repository">${where}${note}</td><td data-l="What the app is doing" class="gh-st">${repoStatus(r, canAdd(r))}</td><td data-l="GenClass app">${link}</td><td class="act">${act}</td></tr>`;
     })
     .join("");
   const linkedRows = v.linked
@@ -325,7 +414,11 @@ export function accountGithubPage(nonce: string, v: GithubAccountView): string {
       ? `<p class="intro">Connected as <b>${esc(v.connected.login)}</b>. GitHub's answer about your repositories is used for 30 minutes, then this page asks again.${v.connected.more ? " Only the first 300 repositories are listed." : ""} <a href="/github/connect">Refresh from GitHub</a></p>`
       : `<p class="intro">To link a repository, this page asks GitHub which installations of ${esc(v.slug)}[bot] and which repositories you can reach. Your GitHub token is used for that question and not kept.</p><div class="row"><a class="btn" href="/github/connect"><span>Connect GitHub</span></a></div>`;
   const table = v.repos.length
-    ? `<div class="tablewrap"><table class="dt rows"><thead><tr><th>Repository</th><th>GenClass app</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+    ? `<div class="tablewrap"><table class="dt rows"><thead><tr><th>Repository</th><th>What the app is doing</th><th>GenClass app</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${
+        adds
+          ? `<p class="gh-note">Add the workflow file opens GitHub's new-file editor in a new tab with <code>${esc(WORKFLOW_PATH)}</code> filled in; you review it and commit it there. ${WORKFLOW_DOES}</p><script type="application/json" id="gh-wf-data">${dataBlock(workflowLinkData(v.workflowLink!.web))}</script>`
+          : ""
+      }`
     : v.connected
       ? `<p class="intro">GitHub lists no repository you can reach through an installation of ${esc(v.slug)}[bot]. <a href="/github/install">Install it</a> on an account or an organization first.</p>`
       : "";
@@ -333,7 +426,7 @@ export function accountGithubPage(nonce: string, v: GithubAccountView): string {
   const errp = `<p class="err" id="gherr" role="alert"></p>`;
   const body = `
 <div class="sb-page" id="mc" tabindex="-1">
-<style nonce="${nonce}">${GH_CSS}.gh .pnl+.pnl{margin-top:20px}.gh .pnl-b{padding:16px 20px}.gh .pnl-h h1{font-size:14px;color:var(--ink)}.gh select{max-width:260px}.gh .aside{font-size:12px;color:var(--ink3)}.gh .gh-note{margin:10px 0 14px}.gh-ok{font-size:14px;color:var(--ink2);margin-bottom:16px}.gh-ok b{font-weight:500;color:var(--accent)}</style>
+<style nonce="${nonce}">${GH_CSS}.gh .pnl+.pnl{margin-top:20px}.gh .pnl-b{padding:16px 20px}.gh .pnl-h h1{font-size:14px;color:var(--ink)}.gh select{max-width:260px}.gh .aside{font-size:12px;color:var(--ink3)}.gh .gh-note{margin:10px 0 14px}.gh-ok{font-size:14px;color:var(--ink2);margin-bottom:16px}.gh-ok b{font-weight:500;color:var(--accent)}.gh table.dt td{white-space:normal;overflow-wrap:anywhere}.gh table.dt td.act{white-space:nowrap}.gh table.dt td.gh-st{min-width:170px;overflow-wrap:normal}</style>
 <div class="gh">
 ${v.notice ? `<p class="gh-ok" role="status"><b>Done.</b> ${esc(v.notice)}</p>` : ""}
 <section class="pnl">
@@ -346,6 +439,7 @@ ${v.notice ? `<p class="gh-ok" role="status"><b>Done.</b> ${esc(v.notice)}</p>` 
 </section>
 ${table ? `<section class="pnl"><div class="pnl-h"><h2>Repositories</h2><span class="aside">${v.repos.length} you can reach</span></div><div class="pnl-b">${table}${errp}</div></section>` : ""}
 ${linkedRows ? `<section class="pnl"><div class="pnl-h"><h2>Linked, not in GitHub's answer</h2><span class="aside">${v.linked.length} linked to your apps</span></div><div class="pnl-b"><p class="intro">${LINKED_ELSEWHERE}${v.linked.some((r) => !r.name) ? " A private repository is listed without its name." : ""}</p><div class="tablewrap"><table class="dt rows"><thead><tr><th>Repository</th><th>GenClass app</th><th></th></tr></thead><tbody>${linkedRows}</tbody></table></div>${table ? "" : errp}</div></section>` : ""}
+${v.welcome ? `<section class="pnl"><div class="pnl-h"><h2>What ${esc(v.slug)}[bot] does, in short</h2><a class="btn sm ghost" href="${DOCS}">The guide</a></div><div class="pnl-b">${inShort(v.openRepos ? "open" : "plan")}</div></section>` : ""}
 </div>
 </div>`;
   const script = `
@@ -382,6 +476,22 @@ ${linkedRows ? `<section class="pnl"><div class="pnl-h"><h2>Linked, not in GitHu
     });
   });
 })();`;
+  // "Add the workflow file" (after WORKFLOW_LINK_JS, which defines gcWorkflowLink): the address is built here from the
+  // button's repository and branch, each checked against the link's patterns, and opened in a new tab. Nothing is sent
+  // to this server; a message is set with textContent.
+  const addScript = `
+(function(){
+  var block = document.getElementById("gh-wf-data"), err = document.getElementById("gherr"), d;
+  if (!block) return;
+  try { d = JSON.parse(block.textContent || ""); } catch (e) { return; }
+  document.querySelectorAll("button[data-wf-repo]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var url = gcWorkflowLink(d, b.getAttribute("data-wf-repo") || "", b.getAttribute("data-wf-branch") || "");
+      if (err) err.textContent = url ? "" : "No address could be built for that repository. Copy the file from the guide instead.";
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+    });
+  });
+})();`;
   return studioPage(nonce, {
     title: "GitHub | GenClass",
     account: true,
@@ -393,6 +503,6 @@ ${linkedRows ? `<section class="pnl"><div class="pnl-h"><h2>Linked, not in GitHu
     railLabel: "Organization",
     css: DASH_CSS + ORG_CSS,
     body,
-    script: CLIENT_JS + script,
+    script: CLIENT_JS + script + (adds ? WORKFLOW_LINK_JS + addScript : ""),
   });
 }
