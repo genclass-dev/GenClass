@@ -307,7 +307,9 @@ describe("github app: Connect GitHub", () => {
     const fourth = await call(s.env, "GET", "/github/connect", { cookie: me.cookie, origin: null });
     const st4 = new URL(fourth.headers.get("location")!).searchParams.get("state")!;
     const refused = await back(`code=bad-code&state=${encodeURIComponent(st4)}`, `${me.cookie}; ${cookieOf(fourth, "gc_oauth_ghapp")!}`);
-    expect(refused.status).toBe(502);
+    // GitHub's own word for it (bad_verification_code): the person is told the link was used or has expired
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain("this link was already used or has expired");
     expect(s.sql.rows("SELECT * FROM challenges WHERE kind = 'ghapp:grant'")).toEqual([]);
   });
 
@@ -440,7 +442,7 @@ describe("github app: Continue with GitHub, from a browser that is not signed in
     expect(gh.calls).toEqual([]);
     // a code GitHub does not accept
     const third = await begin();
-    expect((await back(`code=bad-code&state=${third.state}`, third.oauth)).status).toBe(502);
+    expect((await back(`code=bad-code&state=${third.state}`, third.oauth)).status).toBe(400);
     // a person GitHub does not name properly gets no account
     const fourth = await begin();
     gh.user.login = "dependabot[bot]";

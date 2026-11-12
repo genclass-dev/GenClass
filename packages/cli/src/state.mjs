@@ -21,7 +21,7 @@ import { detectProject } from "../../runtime/bin/lib/detect.mjs";
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { accountLabel, inspectProject } from "../../runtime/bin/lib/init.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
-import { gitInfo } from "./git.mjs";
+import { gitInfo, renamedRepo } from "./git.mjs";
 import { readNotes } from "./store.mjs";
 import { ago } from "./tui.mjs";
 import { planViteSettings } from "./vite.mjs";
@@ -140,7 +140,24 @@ export async function readState(o = {}, deps = {}) {
   const playwright = hasPlaywright(cwd, project);
   const workflows = git.root ? genclassWorkflows(git.root) : [];
   let repo = null;
-  if (me && git.github) repo = await fetchRepoStatus(creds, git.github, deps);
+  if (me && git.github) {
+    repo = await fetchRepoStatus(creds, git.github, deps);
+    // genclass.dev knows a repository by the name GitHub has for it now. A checkout cloned before a rename still
+    // carries the old one, under which the app looks "not installed": ask GitHub for the current name and ask again.
+    // (With a server given by a test there is no GitHub to ask, unless the test says what it would answer.)
+    if (repo.ok && repo.known && repo.installed === false) {
+      const lookup = deps.renamedRepo ?? (deps.fetchFn ? null : renamedRepo);
+      const current = lookup ? await lookup(git.github) : null;
+      if (current) {
+        const again = await fetchRepoStatus(creds, current, deps);
+        if (again.ok) {
+          repo = again;
+          git.renamedFrom = git.github;
+          git.github = current;
+        }
+      }
+    }
+  }
 
   /** @type {Step[]} */
   const steps = [];
@@ -256,7 +273,7 @@ export async function readState(o = {}, deps = {}) {
     doing: "Connect the GitHub App",
     ...gh,
     why: "It comments on a pull request when a page ends up wrong. It cannot read or change your code.",
-    more: "The app reads the race files the test workflow uploads and posts one check and one comment, with the steps to see the problem. You install it on GitHub in your browser; this command only waits for GitHub's answer.",
+    more: `The app reads the race files the test workflow uploads and posts one check and one comment, with the steps to see the problem. You install it on GitHub in your browser; this command only waits for GitHub's answer.${git.renamedFrom ? ` GitHub now calls this repository ${git.github} (this checkout's remote still says ${git.renamedFrom}); to update it: git remote set-url origin https://github.com/${git.github}.git` : ""}`,
   });
 
   // 6. the coding agent
@@ -300,7 +317,7 @@ export async function readState(o = {}, deps = {}) {
     /** the account's apps as genclass.dev lists them ([] signed out) */
     projects: me?.projects ?? [],
     sessionProblem: creds && !me ? offline : null,
-    git: { repo: git.repo, github: git.github, root: git.root, branch: git.branch },
+    git: { repo: git.repo, github: git.github, root: git.root, branch: git.branch, ...(git.renamedFrom ? { renamedFrom: git.renamedFrom } : {}) },
     playwright,
     workflows,
     repo: repo?.ok ? repo : null,

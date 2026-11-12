@@ -10,7 +10,7 @@ Run it in your web app's folder. It shows where the project stands and walks you
 per step. Stop at any point and run it again: it continues from what is true now.
 
 ```text
-  ╭─ GenClass ────────────────────────────────────────────── v0.2.3 ─╮
+  ╭─ GenClass ────────────────────────────────────────────── v0.2.4 ─╮
   │                                                                  │
   │                        Welcome back, Ada!                        │
   │                                                                  │
@@ -52,7 +52,7 @@ it, and `d` again to fold it back.
 | Runtime | Adds GenClass to the app: one import (or script tag) and the package. It watches the page in your users' browsers for lost edits, double submits and old data shown over new, and only reports, to the console and your dashboard. Nothing is drawn on your pages. | Your entry file and `package.json`; you see the change first. `genclass remove` undoes it. |
 | Dashboard | Waits for your live site to be opened once. GenClass sends nothing from localhost. | Nothing. |
 | Test workflow | Runs your Playwright tests once more per pull request with slow and reordered responses. | One new file, `.github/workflows/genclass.yml`, which you commit. |
-| GitHub App | Comments on a pull request when a page ends up wrong, with the steps to see it. The command opens GitHub's install page and waits for the answer. | Nothing in your project. The app cannot read or change your code. |
+| GitHub App | Comments on a pull request when a page ends up wrong, with the steps to see it. The command opens GitHub's install page and waits for the answer. A repository that was renamed on GitHub is looked up under its new name. | Nothing in your project. The app cannot read or change your code. |
 | Coding agent | Gives Claude Code, Cursor and other agents GenClass's tools and its skill: ask what went wrong, replay it, check the fix. | `.mcp.json` (or `.cursor/mcp.json`) and `.claude/skills/genclass/SKILL.md`. |
 | Suggestions | Tells you what your app is missing, most important first. | Nothing in your project. |
 

@@ -292,10 +292,19 @@ async function connectCallback(c: C, cfg: GithubAppConfig, f: Fetch): Promise<Re
       signal: AbortSignal.timeout(10_000),
     });
     const tok = ((await r.json().catch(() => null)) ?? {}) as Record<string, unknown>;
-    if (!r.ok || typeof tok.access_token !== "string" || !tok.access_token) throw new Error("no token");
+    if (!r.ok || typeof tok.access_token !== "string" || !tok.access_token) {
+      // GitHub's own word for why (a short code such as bad_verification_code, never the token or the code itself),
+      // so a failed connect can be told apart afterwards: this server keeps no request logs to look it up in
+      const why = typeof tok.error === "string" && /^[a-z_]{1,60}$/.test(tok.error) ? tok.error : `http ${r.status}`;
+      console.log(`github connect: no token: ${why}`);
+      // a code is good once and for ten minutes: a page that was loaded twice, or left open, ends here
+      if (why === "bad_verification_code") return bad(400, "GitHub says this link was already used or has expired. Start again: it takes a few seconds.");
+      throw new Error("no token");
+    }
     answer = await readGrant(c, cfg, f, tok.access_token);
   } catch (e) {
-    console.log(`github connect: failed: ${e instanceof GithubError ? e.kind : "error"}`);
+    const what = e instanceof GithubError ? `${e.kind} ${e.status}` : e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError") ? "timeout" : "error";
+    console.log(`github connect: failed: ${what}`);
     return bad(502, "GitHub did not answer the questions this page asks it. Start again in a minute.");
   }
   const to = "/account/github?connected=1";
