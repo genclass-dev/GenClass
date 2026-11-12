@@ -206,6 +206,7 @@ describe("POST /api/billing/checkout and /api/billing/portal", () => {
     expect(s.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual([
       "GET /v1/customers/cus_known0001",
       "GET /v1/subscriptions",
+      "GET /v1/products/genclass_pro",
       "GET /v1/invoices",
       `GET /v1/billing_portal/configurations/${GENCLASS_PORTAL}`,
       "POST /v1/billing_portal/sessions",
@@ -337,18 +338,19 @@ describe("POST /api/billing/webhook: the plan follows the subscription", () => {
     expect(t.plan()).toEqual({ plan: "pro", subscription_id: "sub_ada0000001", subscription_status: "active", current_period_end: new Date(1_792_000_000_000).toISOString(), cancel_at_period_end: 0 });
     // the subscription (with its prices' products, its customer and its latest invoice), then the customer's
     // subscriptions (one subscription per account)
-    expect(t.s.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual(["GET /v1/subscriptions/sub_ada0000001", "GET /v1/subscriptions"]);
+    expect(t.s.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual(["GET /v1/subscriptions/sub_ada0000001", "GET /v1/subscriptions", "GET /v1/products/genclass_pro"]);
     expect(t.s.calls[0]!.url.searchParams.get("expand[0]")).toBe("items.data.price.product");
     expect(t.s.calls[0]!.url.searchParams.get("expand[1]")).toBe("customer");
     expect(t.s.calls[0]!.url.searchParams.get("expand[2]")).toBe("latest_invoice");
-    expect(t.s.calls[1]!.url.searchParams.get("expand[0]")).toBe("data.items.data.price.product");
+    // a list expands 4 levels at most (Stripe refuses more): the prices, then each product on its own
+    expect(t.s.calls[1]!.url.searchParams.get("expand[0]")).toBe("data.items.data.price");
     expect(t.sql.rows("SELECT stripe_mode FROM accounts")).toEqual([{ stripe_mode: "live" }]);
     expect(t.sql.rows("SELECT id, type FROM billing_events")).toEqual([{ id: ev.id, type: "customer.subscription.created" }]);
     // a redelivery is recognised by its id: no second fetch, no change
     t.s.subs.get("sub_ada0000001")!.status = "canceled";
     const again = await deliver(t.env, ev, t.s.fetch);
     expect(await again.json()).toEqual({ received: true, duplicate: true });
-    expect(t.s.calls).toHaveLength(2);
+    expect(t.s.calls).toHaveLength(3);
     expect(t.plan().plan).toBe("pro");
   });
 
@@ -552,7 +554,7 @@ describe("POST /api/billing/webhook: the plan follows the subscription", () => {
     const ev = stripeEvent("invoice.paid", { ...paid, customer_email: "ada@example.com", customer_name: "Ada Lovelace", customer_address: { line1: "1 Main St" } });
     expect(await (await deliver(t.env, ev, t.s.fetch)).json()).toEqual({ received: true, result: "applied" });
     log.mockRestore();
-    expect(t.s.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual(["GET /v1/subscriptions/sub_ada0000001", "GET /v1/subscriptions"]);
+    expect(t.s.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual(["GET /v1/subscriptions/sub_ada0000001", "GET /v1/subscriptions", "GET /v1/products/genclass_custom"]);
     expect(t.plan().plan).toBe("custom");
     expect(t.sql.rows("SELECT subscription_id FROM custom_requests")).toEqual([{ subscription_id: "sub_ada0000001" }]);
     // nothing of the buyer's from the invoice is stored or sent
@@ -1141,7 +1143,7 @@ describe("Managed Payments for Pro, flexible billing mode, switching between Pro
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000001", switch: true });
     // the customer and everything on it are checked, the invoices too
-    expect(calls(t.s)).toEqual(["GET /v1/customers/cus_sw00000001", "GET /v1/subscriptions", "GET /v1/invoices", "GET /v1/checkout/sessions", "GET /v1/prices", "POST /v1/checkout/sessions"]);
+    expect(calls(t.s)).toEqual(["GET /v1/customers/cus_sw00000001", "GET /v1/subscriptions", "GET /v1/products/genclass_pro", "GET /v1/invoices", "GET /v1/checkout/sessions", "GET /v1/prices", "POST /v1/checkout/sessions"]);
     const form = sessionForm(t.s);
     expect(form).toMatchObject({
       customer: "cus_sw00000001",
@@ -1178,6 +1180,8 @@ describe("Managed Payments for Pro, flexible billing mode, switching between Pro
     expect(calls(t.s)).toEqual([
       "GET /v1/subscriptions/sub_cus0000001",
       "GET /v1/subscriptions",
+      "GET /v1/products/genclass_pro",
+      "GET /v1/products/genclass_custom",
       "GET /v1/invoices",
       "GET /v1/invoice_payments",
       "GET /v1/refunds",
@@ -1185,9 +1189,9 @@ describe("Managed Payments for Pro, flexible billing mode, switching between Pro
       "DELETE /v1/subscriptions/sub_pro0000001",
     ]);
     expect(t.atCancel).toEqual([{ plan: "custom", subscription_id: "sub_cus0000001" }]);
-    expect(t.s.calls[2]!.url.searchParams.get("subscription")).toBe("sub_pro0000001");
-    expect(t.s.calls[2]!.url.searchParams.get("status")).toBe("paid");
-    const refund = t.s.calls[5]!;
+    expect(t.s.calls[4]!.url.searchParams.get("subscription")).toBe("sub_pro0000001");
+    expect(t.s.calls[4]!.url.searchParams.get("status")).toBe("paid");
+    const refund = t.s.calls[7]!;
     expect(Object.fromEntries(refund.form!)).toEqual({
       payment_intent: paymentIntentFor("in_pro0000001"),
       amount: String(PRO_UNUSED),
@@ -1199,7 +1203,7 @@ describe("Managed Payments for Pro, flexible billing mode, switching between Pro
     });
     expect(refund.headers["idempotency-key"]).toBe(`genclass-refund-switch:sub_pro0000001-in_pro0000001-${PRO_UNUSED}`);
     // no proration, no final invoice: nothing goes to the customer's balance
-    expect(t.s.calls[6]!.url.search).toBe("");
+    expect(t.s.calls[8]!.url.search).toBe("");
     expect(t.s.subs.get("sub_pro0000001")!.status).toBe("canceled");
     expect(t.row()).toEqual({ plan: "custom", subscription_id: "sub_cus0000001", subscription_status: "active" });
     // the Custom purchase is recorded; the owner always hears of the switch, with the refund
@@ -1653,7 +1657,7 @@ describe("deleting an account with a paid plan", () => {
     expect(sql.rows("SELECT COUNT(*) AS n FROM accounts")[0]!.n).toBe(1);
     const del = await call(env, "DELETE", "/api/account", { body: { confirm: "delete" }, cookie: a.cookie, fetch: s.fetch });
     expect(del.status).toBe(204);
-    expect(s.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual(["GET /v1/customers/cus_del0000001", "GET /v1/subscriptions", "GET /v1/checkout/sessions", "DELETE /v1/subscriptions/sub_del0000001"]);
+    expect(s.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual(["GET /v1/customers/cus_del0000001", "GET /v1/subscriptions", "GET /v1/products/genclass_pro", "GET /v1/checkout/sessions", "DELETE /v1/subscriptions/sub_del0000001"]);
     expect(s.subs.get("sub_del0000001")!.status).toBe("canceled");
     expect(sql.rows("SELECT COUNT(*) AS n FROM accounts")[0]!.n).toBe(0);
   });

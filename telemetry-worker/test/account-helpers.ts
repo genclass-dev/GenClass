@@ -202,6 +202,9 @@ export function fakeStripe(o: { answer?: (url: URL, init: RequestInit) => Respon
     calls.push({ method, url, form, headers });
     const custom = o.answer?.(url, init);
     if (custom) return custom;
+    // Stripe refuses an expand deeper than 4 levels, whatever the endpoint (a list's data. counts as one)
+    const deep = expands(url).find((e) => e.split(".").length > 4);
+    if (deep) return ok({ error: { type: "invalid_request_error", message: `You cannot expand more than 4 levels of a property. Property: ${deep}.` } }, 400);
     const p = url.pathname;
     if (method === "GET" && p === "/v1/prices") {
       // GenClass's two prices, with their products expanded (the worker asks for data.product)
@@ -276,7 +279,19 @@ export function fakeStripe(o: { answer?: (url: URL, init: RequestInit) => Respon
     if (method === "GET" && p === "/v1/subscriptions") {
       const customer = url.searchParams.get("customer");
       const withInvoice = expands(url).includes("data.latest_invoice");
-      return ok({ data: [...subs.values()].filter((s) => s.customer === customer).map((s) => (withInvoice ? { ...s, latest_invoice: latest(s) } : s)) });
+      // as Stripe lists them: a price's product is its id (a list cannot expand it: 4 levels at most, checked above)
+      const listed = (s: any) => ({
+        ...s,
+        items: s.items && Array.isArray(s.items.data) ? { ...s.items, data: s.items.data.map((i: any) => (i?.price?.product?.id ? { ...i, price: { ...i.price, product: i.price.product.id } } : i)) } : s.items,
+      });
+      return ok({ data: [...subs.values()].filter((s) => s.customer === customer).map((s) => (withInvoice ? { ...listed(s), latest_invoice: latest(s) } : listed(s))) });
+    }
+    const prod = /^\/v1\/products\/([^/]+)$/.exec(p);
+    if (method === "GET" && prod) {
+      // the products the stored subscriptions' prices carry
+      const id = decodeURIComponent(prod[1]!);
+      for (const s of subs.values()) for (const i of (s as any).items?.data ?? []) if (i?.price?.product?.id === id) return ok(i.price.product);
+      return ok({ error: { code: "resource_missing", message: `No such product: '${id}'` } }, 404);
     }
     if (method === "GET" && p === "/v1/billing_portal/configurations") {
       const d = url.searchParams.get("is_default");

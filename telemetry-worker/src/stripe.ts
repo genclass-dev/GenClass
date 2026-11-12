@@ -107,6 +107,8 @@ type Obj = Record<string, any>;
 
 const STRIPE_ID_RE = /^[a-z]{2,8}_[A-Za-z0-9]{6,255}$/;
 const SESSION_ID_RE = /^cs_[A-Za-z0-9_]{6,255}$/;
+/** A product id: Stripe's (prod_...) or one scripts/stripe-setup.mjs named (genclass_team). */
+const PRODUCT_ID_RE = /^[A-Za-z0-9_]{1,128}$/;
 
 /** Subscriptions that exist and bill, or can bill again: an account may hold one. */
 export const HOLDING_STATUSES = new Set([...LIVE_STATUSES, "unpaid", "paused"]);
@@ -287,8 +289,23 @@ export async function ensureCustomer(env: Env, f: Fetch, db: D1Like, a: BillingA
  * only ensureCustomer writes.
  */
 export async function customerSubscriptions(env: Env, f: Fetch, customer: string): Promise<Obj[]> {
-  const r = await stripe(env, f, "GET", "/v1/subscriptions", { customer, status: "all", limit: 100, expand: ["data.items.data.price.product", "data.latest_invoice"] });
-  return (Array.isArray(r?.data) ? r.data : []).filter((s: Obj) => idOf(s?.id));
+  // Stripe expands at most 4 levels: a list reaches data.items.data.price, not the price's product (asking for
+  // data.items.data.price.product is a 400, which broke Checkout for every account with a customer until 2026-11-12),
+  // so each product the prices name is fetched once and put back in its place, as a single subscription expands it
+  const r = await stripe(env, f, "GET", "/v1/subscriptions", { customer, status: "all", limit: 100, expand: ["data.items.data.price", "data.latest_invoice"] });
+  const subs: Obj[] = (Array.isArray(r?.data) ? r.data : []).filter((s: Obj) => idOf(s?.id));
+  const prices: Obj[] = subs.flatMap((s) => (Array.isArray(s?.items?.data) ? (s.items.data as Obj[]) : []).map((i) => i?.price).filter((p): p is Obj => !!p && typeof p === "object"));
+  const products = new Map<string, Obj>();
+  for (const id of new Set(prices.map((p) => p.product).filter((x): x is string => typeof x === "string" && PRODUCT_ID_RE.test(x)))) {
+    try {
+      products.set(id, await stripe(env, f, "GET", `/v1/products/${encodeURIComponent(id)}`));
+    } catch (e) {
+      // a product deleted in Stripe: its price stays unexpanded, so it is provably no one's (src/plans.ts planForPrice)
+      if (!(e instanceof StripeError && e.status === 404)) throw e;
+    }
+  }
+  for (const p of prices) if (typeof p.product === "string" && products.has(p.product)) p.product = products.get(p.product);
+  return subs;
 }
 
 /**
