@@ -173,6 +173,22 @@ function onlyGenClass(calls: { method: string; url: URL; body: Obj }[]) {
 }
 
 describe("scripts/stripe-setup.mjs on the shared Stripe account (shared with another business)", () => {
+  it("seatUpdate: the portal lets a buyer change the quantity of a per-seat plan's own prices, and nothing else", () => {
+    const team = { id: "team", per_seat: true };
+    const made = { team: { product: "genclass_team", planned: false, prices: ["price_team000001"] }, individual: { product: "genclass_individual", planned: false, prices: ["price_indiv00001"] } };
+    expect(setup.seatUpdate([{ id: "free" }, team, { id: "individual", per_seat: false }], made)).toEqual({
+      enabled: true,
+      default_allowed_updates: ["quantity"],
+      proration_behavior: "always_invoice",
+      products: [{ product: "genclass_team", prices: ["price_team000001"] }],
+    });
+    // no per-seat plan, a product only planned in a dry run, or one with no price yet: the feature stays off
+    expect(setup.seatUpdate([{ id: "individual", per_seat: false }], made)).toEqual({ enabled: false });
+    expect(setup.seatUpdate([team], { team: { product: "genclass_team", planned: true, prices: [] } })).toEqual({ enabled: false });
+    expect(setup.seatUpdate([team], { team: { product: "genclass_team", planned: false, prices: [] } })).toEqual({ enabled: false });
+    expect(setup.seatUpdate([team])).toEqual({ enabled: false });
+  });
+
   it("first run: GenClass Individual and its price, one endpoint, one portal configuration; nothing of the other business's read or changed", async () => {
     const a = account();
     const before = a.snapshot();

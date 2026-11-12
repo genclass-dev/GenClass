@@ -154,7 +154,8 @@ describe("funnels (stored per app, counted from the visits' routes)", () => {
   });
 
   it("saved from the private link: checked, the whole list replaced; the sample cannot be changed", async () => {
-    const { env, sql } = acctSetup();
+    // funnels are part of visitor analytics: here a server whose every app has them (PLAN_GATES open, a self-hosted one)
+    const { env, sql } = acctSetup({ PLAN_GATES: "open" });
     const p = await createProject(sql.api, "Shop", NOW);
     const put = (path: string, body: unknown, ct = "application/json") =>
       handle(new Request(`https://genclass.dev${path}`, { method: "PUT", body: typeof body === "string" ? body : JSON.stringify(body), headers: { "content-type": ct } }), env, { now: () => NOW });
@@ -174,8 +175,27 @@ describe("funnels (stored per app, counted from the visits' routes)", () => {
     expect(st.funnels).toEqual([{ name: "Signup", steps: ["/", "/signup", "/welcome"], counts: [0, 0, 0] }]);
   });
 
+  it("on a plan without visitor analytics (Free) funnels cannot be saved: a 403 that names the plan and the plans page", async () => {
+    const { env, sql } = acctSetup();
+    const p = await createProject(sql.api, "Shop", NOW);
+    const body = JSON.stringify({ funnels: [{ name: "Signup", steps: ["/", "/signup"] }] });
+    const link = await handle(new Request(`https://genclass.dev/api/projects/${p.secret}/funnels`, { method: "PUT", body, headers: { "content-type": "application/json" } }), env, { now: () => NOW });
+    expect(link.status).toBe(403);
+    expect(await link.json()).toEqual({
+      ok: false,
+      error: "funnels are part of visitor analytics, which comes with the Team plan; see the plans at https://genclass.dev/account/billing",
+      upgrade_url: "https://genclass.dev/account/billing",
+    });
+    const { cookie } = await signedIn(env);
+    const appRow = await createApp(env, cookie);
+    const acct = await call(env, "PUT", `/api/account/projects/${appRow.id}/funnels`, { body: JSON.parse(body), cookie });
+    expect(acct.status).toBe(403);
+    expect(((await acct.json()) as { upgrade_url: string }).upgrade_url).toBe("https://genclass.dev/account/billing");
+    expect(sql.rows("SELECT funnels FROM projects WHERE funnels IS NOT NULL")).toEqual([]);
+  });
+
   it("saved in account mode: the owner's browser session with our Origin; not a CLI session, not another account", async () => {
-    const { env } = acctSetup();
+    const { env } = acctSetup({ PLAN_GATES: "open" });
     const { cookie } = await signedIn(env);
     const appRow = await createApp(env, cookie);
     const body = { funnels: [{ name: "Trial", steps: ["/pricing", "/signup"] }] };

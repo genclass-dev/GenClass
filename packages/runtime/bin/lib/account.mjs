@@ -143,6 +143,9 @@ export function failure(r, what) {
   if (r.status === 0) return r.reason;
   if (r.status === 401) return "the CLI session is no longer valid (signed out, revoked or expired)";
   if (r.status === 429) return `too many requests from this network right now (HTTP 429)`;
+  // the account's plan is why (its app limit, or something it leaves out): genclass.dev's own sentence names the plan
+  // and the page with the plans, so it is shown as it is
+  if (typeof r.json?.upgrade_url === "string" && typeof r.json?.error === "string") return `${what ? `${what}: ` : ""}upgrade needed: ${r.json.error}`;
   const msg = typeof r.json?.error === "string" ? `: ${r.json.error}` : "";
   return `${what ? `${what}: ` : ""}the server answered HTTP ${r.status}${msg}`;
 }

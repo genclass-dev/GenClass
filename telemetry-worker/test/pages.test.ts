@@ -8,7 +8,7 @@ import { THEME_HEAD_JS } from "../src/studio.js";
 const setupOf = (o: Record<string, unknown> = {}) => setupPage("n", { token: "gc_TestToken0123456789abc", secret: "a".repeat(32), lastEvent: null, ...o });
 import { accountPage, devicePage, forgotPage, lockedLinkPage, loginPage, messagePage, newProjectPage, ORG_CSS, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
 import { sampleStats } from "../src/sample.js";
-import type { Stats } from "../src/dashboard.js";
+import { stripAnalytics, type Stats } from "../src/dashboard.js";
 
 const NOW = new Date("2026-10-13T20:00:00Z");
 const nf = new Intl.NumberFormat();
@@ -584,6 +584,33 @@ describe("dashboard page: interaction analytics (docs/runtime/ANALYTICS.md secti
     expect(hidden("visits")).toBe(false);
     expect(hidden("moves")).toBe(true);
     await close();
+  });
+
+  it("a plan without visitor analytics: the Visitors view says which plan shows them and links to the plans; no setup, no sections", async () => {
+    // what the server sends for such a plan (stripAnalytics): no ix_* numbers, and why
+    const st = stripAnalytics(sampleStats("7d", NOW), { plan: "Team", upgrade_url: "https://genclass.dev/account/billing" });
+    const { doc, hidden, text, close } = await render(st);
+    expect(hidden("visits")).toBe(false);
+    expect(hidden("ixlock")).toBe(false);
+    expect(text("#ixlockmsg")).toBe(
+      "Visitor analytics (visits, sources, devices, funnels and clicks) come with the Team plan. If your app has them turned on they are still counted, and the last 90 days show here once the plan includes them.",
+    );
+    expect(doc.getElementById("ixlocka")!.getAttribute("href")).toBe("https://genclass.dev/account/billing");
+    expect(text("#ixlocka")).toBe("See the plans");
+    expect(text("#c-visits")).toBe("");
+    // neither the setup prompt (the app may have analytics on already) nor any analytics section
+    for (const id of ["ixsetup", "ixsum", "ixpages", "clicks", "ix-sources", "ix-devices", "ix-sessions", "ix-entry", "ix-funnels", "moves"]) expect(hidden(id), id).toBe(true);
+    // the problems are all there
+    expect(text("#tiles > div:nth-child(1) .v")).toBe(nf.format(problems(st)));
+    await close();
+    // a plans address that is not an https URL is not put in the link; with every plan's analytics the panel stays hidden
+    const odd = await render(stripAnalytics(sampleStats("7d", NOW), { plan: null, upgrade_url: "javascript:alert(1)" }));
+    expect(odd.doc.getElementById("ixlocka")!.getAttribute("href")).toBe("/account/billing");
+    expect(odd.text("#ixlockmsg")).toContain("are not part of this app's plan");
+    await odd.close();
+    const full = await render(sampleStats("7d", NOW));
+    expect(full.hidden("ixlock")).toBe(true);
+    await full.close();
   });
 
   it("an app without analytics: the Visitors view is one big copy-prompt button, the other sections hidden", async () => {

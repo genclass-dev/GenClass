@@ -39,16 +39,17 @@ routes = [
 RUNTIME_ON_NPM = "0.3.0-beta.5"
 # "on" sells the plans marked managed_payments in billing/plans.json through Stripe Managed Payments (Stripe, through
 # Link, is the merchant of record, for 3.5% of each payment on top of Stripe's fees). No plan is marked today
-# (no plan is sold on the site today), so it stays "off"; README "Paid plans".
+# (Team is sold on standard Checkout), so it stays "off"; README "Paid plans".
 MANAGED_PAYMENTS = "off"
 # The GitHub App, genclass-dev[bot] (docs/github-app/SETUP.md). GITHUB_APP_SLUG is the app's URL name on GitHub
 # (github.com/apps/<slug>; its bot is <slug>[bot]). GITHUB_APP_PRIVATE_REPOS: "plan" reviews private repositories only
 # for an installation whose GenClass account or GitHub Marketplace plan includes them (billing/plans.json
 # github_private); "open" reviews every repository. Public repositories are always reviewed, free.
-# "open" since 2026-11-10 (the owner): the app is free for every repository while it is new; a paid plan for private
-# repositories comes later, and "plan" is the switch for it.
+# "open" from 2026-11-10 (the owner: free for every repository while it was new); "plan" since billing/plans.json
+# version 3 (2026-11-11, the owner): private repositories come with Team and Enterprise. A private repository without
+# such a plan gets one neutral check that says so, and is not read.
 GITHUB_APP_SLUG = "genclass-dev"
-GITHUB_APP_PRIVATE_REPOS = "open"
+GITHUB_APP_PRIVATE_REPOS = "plan"
 # GITHUB_APP_WORKFLOW_LINK: "on" puts a link on the check that has no race files to read, and a small form on
 # /github/setup, that opens GitHub's own new-file editor with docs/github-app/workflows/genclass.yml filled in, so
 # adding that file is a review and a commit (src/github/workflow-file.ts; docs/github-app/SETUP.md). Anything else is

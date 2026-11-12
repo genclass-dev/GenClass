@@ -131,11 +131,22 @@ link. If you cannot sign in any more, write to the contact below from an address
 account, or, if you forgot your password, from the address you sign in with (GenClass cannot email a reset link
 yet); an account id alone is not enough, because it can be known to others.
 
+## Teams
+
+An account on a plan with members can make invite links. A link works once, for 7 days, and we store only a hash of
+it; we send no email, you pass the link on yourself. When someone joins your team, you see the email or GitHub login
+of their GenClass account and the day they joined, and they see yours. A member can open the dashboards of your apps
+and nothing else of your account: not its billing, its sign-ins, its export or its forwarding settings. You can remove
+a member and a member can leave at any time; deleting an account removes it from every team, and deletes its own team
+and invite links.
+
 ## Paid plans, payments and Stripe
 
-No plan is sold on genclass.dev today: Free costs nothing and includes your own classifier, and Enterprise is agreed by
-email. A paid plan (the Individual plan was one until 22 October 2026) is paid through Stripe, which processes payments
-for us. When you upgrade, we send Stripe
+Free costs nothing, Team is sold on genclass.dev per developer (since 11 November 2026), and Enterprise is agreed by
+email. A plan decides what your dashboard shows, never what is collected: an app that turned visitor analytics on has
+them counted on Free too, and they show once its plan includes them. A paid plan (Team; the Individual plan was one
+until 22 October 2026) is paid through Stripe, which processes payments
+for us. We keep the number of seats your subscription pays for, next to its status. When you upgrade, we send Stripe
 your account's email (if it has one) and your GenClass account id, and you type your card or other payment details
 into Stripe's own checkout page: they go to Stripe and never reach GenClass. Stripe handles them under its own privacy
 policy (stripe.com/privacy) and keeps your invoices and receipts, which you can see under Manage billing on your

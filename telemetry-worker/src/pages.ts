@@ -1752,6 +1752,18 @@ const DASH_JS = `
   function visits(S){
     var B = S.breakdowns, T0 = S.totals, views = T0.ix_views || 0, on = views > 0 || (B.ix_click || []).length > 0;
     var V = S.visits || { sessions: 0, pages: 0, bounces: 0, entry: [], exit: [] }, nv = V.sessions || T0.ix_sessions || 0;
+    // the app's plan leaves visitor analytics out (the server sent none: src/dashboard.ts stripAnalytics): the view
+    // says which plan shows them, and nothing else of it is drawn
+    var lock = S.locked && S.locked.analytics, lk = document.getElementById("ixlock");
+    if (lk) lk.classList.toggle("hidden", !lock);
+    if (lock) {
+      ["ixsetup", "ixsum", "ixpages"].concat(IX_SECTIONS).forEach(function(id){ var e = document.getElementById(id); if (e) e.classList.add("hidden"); });
+      var lm = document.getElementById("ixlockmsg"), la = document.getElementById("ixlocka"), cl = document.getElementById("c-visits");
+      if (lm) lm.textContent = "Visitor analytics (visits, sources, devices, funnels and clicks) " + (lock.plan ? "come with the " + lock.plan + " plan" : "are not part of this app's plan") + ". If your app has them turned on they are still counted, and the last 90 days show here once the plan includes them.";
+      if (la && typeof lock.upgrade_url === "string" && lock.upgrade_url.indexOf("https://") === 0) la.href = lock.upgrade_url;
+      if (cl) cl.textContent = "";
+      return;
+    }
     // off: the Visitors view is the setup (the copy-prompt button); on: the setup hides and every section shows
     document.getElementById("ixsetup").classList.toggle("hidden", on);
     ["ixsum", "ixpages"].forEach(function(id){ document.getElementById(id).classList.toggle("hidden", !on); });
@@ -3013,6 +3025,7 @@ ${connect}
 </section>
 <section class="blk" id="visits" data-v="visitors" data-tour="70|Visitors|Visits, sources, devices and funnels." data-tour-view="visits">
   <div class="blk-h"><h2>Overview</h2></div>
+  <div id="ixlock" class="hidden"><p class="quiet" id="ixlockmsg"></p><p class="mt-l"><a class="btn" id="ixlocka" href="/account/billing"><span>See the plans</span></a></p></div>
   <div id="ixsetup" class="hidden">${promptBlock(project.token, where, opts.endpoint ?? null, "Analytics are off. Paste the prompt into your coding agent.")}<p class="fine" id="ixver">Needs @genclass/runtime ${ANALYTICS_RUNTIME} or later.<span id="ixold"></span></p></div>
   <div id="ixsum"></div>
   <div id="ixpages" class="mt-l"></div>

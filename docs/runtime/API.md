@@ -73,7 +73,7 @@ hosts (`0.2.1` sends from them too, by mistake; fixed in `0.2.2`), outside a bro
 
 **App token and dashboard** (0.3.0: `0.2.x` ignores `token`). `token: "gc_..."` (from
 `npx @genclass/runtime@beta init` or https://genclass.dev/start) is sent with each telemetry batch so the app's diagnostics
-show up on its private dashboard (`https://genclass.dev/dashboard/<secret>`; free on every plan, and
+show up on its private dashboard (`https://genclass.dev/dashboard/<secret>`; the dashboard is on every plan, Free included, and
 `npx @genclass/runtime@beta dashboard` prints the link for the app in the current folder); with a token, decision events also
 carry `fn` (see "Protected functions"). Public; malformed values log one warning and are ignored; it does nothing
 while telemetry is off (on a local host the console says so once). `rt.telemetry.token` reports it while telemetry

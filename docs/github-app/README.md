@@ -5,7 +5,8 @@ tests run, the runtime watches the page under test: a request that left twice, a
 one, a write that was overwritten. The fixture writes that to small files, your workflow uploads them, and the app
 posts one check and one comment with each finding's test, its seeds and the evidence line.
 
-It reads the race files your workflow uploads, never your source code. It is free, on public and private repositories.
+It reads the race files your workflow uploads, never your source code. It is free on public repositories; private
+repositories come with the Team plan ([Plans](#plans)).
 
 - Install: <https://genclass.dev/github> (or `https://github.com/apps/genclass-dev/installations/new`)
 - Code: [`telemetry-worker/src/github/`](../../telemetry-worker/src/github/)
@@ -307,14 +308,16 @@ Uninstalling the app, or taking a repository out of it, deletes what was kept fo
 
 ## Plans
 
-- **Free today (2026-11-10), for public and private repositories**, for every account and organization, with no limit
-  on repositories or pull requests other than the [limits](#limits) below.
-- **Public repositories stay free.** A paid plan for private repositories may come later; it will be announced
-  here before it applies, and nothing in the app can make a public repository need one.
-- **A self-hosted collector, or a later paid plan,** can require a plan for private repositories
-  (`GITHUB_APP_PRIVATE_REPOS = "plan"`). A private repository without one is then not read at all: it gets one neutral
-  check that says so, on the first pull request the app sees there, once per repository, and no comment.
-- **Whose plan counts, when plans apply.** The plan that counts for an installation's private repositories is the plan of the GenClass
+- **Public repositories are free**, for every account and organization, with no limit on repositories or pull
+  requests other than the [limits](#limits) below. Nothing in the app can make a public repository need a plan.
+- **Private repositories come with Team or Enterprise** (announced here on 2026-11-11; Team is US$15 a developer a
+  month, <https://genclass.dev/pricing>). From 2026-11-10 to the day the collector with these plans was deployed the
+  app reviewed private repositories for everyone. A private repository without such a plan is not read at all: it
+  gets one neutral check that says so, on the first pull request the app sees there, once per repository, and no
+  comment.
+- **A self-hosted collector** reviews every repository: it sells no plans (`PLAN_GATES = "open"`, or
+  `GITHUB_APP_PRIVATE_REPOS = "open"`).
+- **Whose plan counts.** The plan that counts for an installation's private repositories is the plan of the GenClass
   account that manages it. An installation on your own GitHub account is managed by the GenClass account you choose
   Connect GitHub from. For an organization, the managing account is set when the plan is agreed: write to
   mehar@daybot.ca. Being able to push to a repository does not make an account the manager of its installation.

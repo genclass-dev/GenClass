@@ -2,6 +2,8 @@
 // dashboard's private link, which the developer gives the server as GENCLASS_DASHBOARD (the URL or the secret). What
 // it returns is what the dashboard shows: counts of sessions, decisions, detections by diagnosis and page, the latest
 // decisions (trigger, diagnosis, action, page). It holds no page text, by the telemetry's design (TELEMETRY.md).
+// The dashboard answers with what the app's plan shows: the longest range it has when a longer one is asked for, and
+// `locked.analytics` when it leaves visitor analytics out (the plan that has them and where the plans are).
 // GENCLASS_DASHBOARD=sample reads the public sample dashboard.
 
 export interface ProdStats {
@@ -13,6 +15,8 @@ export interface ProdStats {
   series?: { bucket: string; sessions: number; decisions: number; detections: number; acted: number; possible: number }[];
   recent?: Record<string, unknown>[];
   previous?: Record<string, number>;
+  /** What the app's plan leaves out of the answer (telemetry-worker/src/dashboard.ts stripAnalytics). */
+  locked?: { analytics?: { plan?: string | null; upgrade_url?: string } };
 }
 
 export function dashboardTarget(v: string | undefined): { origin: string; secret: string } | null {

@@ -457,6 +457,34 @@ export function messagePage(nonce: string, o: { title: string; text: string; lin
   return authPage(nonce, `${o.title} | GenClass`, `<h1>${esc(o.title)}</h1><p class="lead">${esc(o.text)}</p>${links ? `<div class="acts">${links}</div>` : ""}${detail}`, "");
 }
 
+/**
+ * /account/join/<code>, a team invite link (src/team-routes.ts). `ask`: the signed-in visitor is asked to join the
+ * team of `owner` as `me`; `own`: the link is the visitor's own team's; `gone`: unknown, used, revoked or expired.
+ */
+export function joinPage(nonce: string, o: { state: "gone" } | { state: "own" } | { state: "ask"; code: string; owner: string; me: string }): string {
+  if (o.state === "gone") {
+    return messagePage(nonce, { title: "This invite link does not work", text: "It was used, revoked, or is older than 7 days. Ask the person who sent it for a new one.", links: [["Your apps", "/account"]] });
+  }
+  if (o.state === "own") {
+    return messagePage(nonce, { title: "This is your own team's invite link", text: "Send it to the person you want to add. It works once, for 7 days.", links: [["Plan and billing", "/account/billing#team"]] });
+  }
+  const inner = `
+<h1>Join the team of ${esc(o.owner)}</h1>
+<p class="lead">You are signed in as <b>${esc(o.me)}</b>. Joining lets you open the dashboards of that team's apps. Your own apps, plan and billing stay as they are, and you can leave from your account page.</p>
+<div class="acts"><button class="btn green" id="join" type="button"><span>Join the team</span></button> <a class="btn ghost" href="/account">Not now</a></div>
+<p class="err" id="err" role="alert"></p>
+<script type="application/json" id="cfg">${JSON.stringify({ code: o.code }).replace(/</g, "\\u003c")}</script>`;
+  const script = `
+(function(){
+  var b = document.getElementById("join"), err = document.getElementById("err"), cfg = JSON.parse(document.getElementById("cfg").textContent);
+  b.addEventListener("click", function(){
+    err.textContent = ""; gcBusy(b, true, "Joining...");
+    gcPost("/api/team/join", { code: cfg.code }).then(function(j){ location.href = j.next || "/account"; }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });
+  });
+})();`;
+  return authPage(nonce, "Join a team | GenClass", inner, script);
+}
+
 export function appNotFoundPage(nonce: string): string {
   return messagePage(nonce, { title: "App not found", text: "This app does not exist, or it belongs to another account.", links: [["Your apps", "/account"]] });
 }
@@ -594,7 +622,8 @@ export interface SessionRow {
 
 export interface AccountView {
   account: { id: string; email: string | null; emailVerified: boolean; google: boolean; githubLogin: string | null; created: string };
-  projects: { id: string; name: string; token: string; dashboard_url: string; created: string; last_event: string | null; first_event: string | null; privateLink: boolean }[];
+  /** `team`: for an app of a team this account is a member of, that team's owner (its email or @login); the app is read-only here. */
+  projects: { id: string; name: string; token: string; dashboard_url: string; created: string; last_event: string | null; first_event: string | null; privateLink: boolean; team?: string | null }[];
   passkeys: { id: string; created: string; lastUsed: string | null; transports: string[] }[];
   /** Browser sessions, then terminal (CLI) sessions, newest first. */
   web: SessionRow[];
@@ -729,9 +758,11 @@ export function accountPage(nonce: string, v: AccountView): string {
   <div><h2><a href="/account/apps/${esc(p.id)}">${esc(p.name)}</a></h2><p class="pk">${esc(p.token)}</p></div>
   <div class="meta"><span class="bdg ${live ? "brand" : "warning"}"><i></i>${live ? "Live" : "Waiting"}</span>${live ? `<span>Last event ${time(p.last_event, "ago")}</span>` : ""}</div>
   <div class="acts"><button class="btn sm ghost" type="button" data-copy="${esc(p.token)}" aria-label="Copy the project API key of ${esc(p.name)}">Copy key</button>${
-    p.privateLink
-      ? `<span>Private link on</span><button class="btn sm ghost" type="button" data-linkoff="${esc(p.id)}" aria-label="Turn off the private dashboard link of ${esc(p.name)}">Turn off</button>`
-      : ""
+    p.team
+      ? `<span>Team of ${esc(p.team)}</span>`
+      : p.privateLink
+        ? `<span>Private link on</span><button class="btn sm ghost" type="button" data-linkoff="${esc(p.id)}" aria-label="Turn off the private dashboard link of ${esc(p.name)}">Turn off</button>`
+        : ""
   }</div>
 </li>`;
     })

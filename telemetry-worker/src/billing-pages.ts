@@ -1,5 +1,6 @@
 // HTML for the paid plans: /account/billing (the plan, its renewal or end, the plans side by side, Upgrade, Switch and
-// Manage billing buttons) and the plan-dependent sections of an owned app's dashboard (forwarding and export, and the
+// Manage billing buttons, the seats of a plan sold per seat, and the team: members, invite links and the teams the
+// account is a member of; src/team.ts) and the plan-dependent sections of an owned app's dashboard (forwarding and export, and the
 // note on the time ranges). A switch between two paid plans is a new Checkout (src/billing.ts checkout); back from it
 // the page waits for the new plan. Same shell, tokens and rules as the account pages; server-rendered text goes through esc(),
 // scripts insert text with textContent. Buttons that need Stripe are shown only to an account that can buy (a live
@@ -21,6 +22,7 @@ import {
   GRACE_DAYS,
   keepDays,
   LIVE_STATUSES,
+  MAX_SEATS,
   PAID_PLANS,
   PAST_DUE_GRACE_DAYS,
   RETIRED_PLAN_IDS,
@@ -34,6 +36,7 @@ import {
   type Entitlement,
   type Plan,
 } from "./plans.js";
+import type { Team } from "./team.js";
 
 const CONTACT = PLANS_FILE.contact;
 const day = (iso: string | null): string => (iso ? time(iso, "date") : "");
@@ -43,7 +46,7 @@ function plansWith(e: Entitlement, last: "and" | "or" = "and"): string {
   const n = PLANS.filter((p) => entitled(p, e)).map((p) => p.name);
   return n.length > 1 ? `${n.slice(0, -1).join(", ")} ${last} ${n[n.length - 1]}` : (n[0] ?? "");
 }
-/** Every plan includes `e` (today: the dashboard, forwarding, export and analytics). */
+/** Every plan includes `e` (today: only the dashboard). */
 const everyPlan = (e: Entitlement): boolean => PLANS.every((p) => entitled(p, e));
 /** "A and B": the paid plans a switch moves between, said only when there are two or more. */
 const switchable = (): string | null => (PAID_PLANS.length > 1 ? PAID_PLANS.map((p) => p.name).join(" and ") : null);
@@ -68,6 +71,10 @@ export interface BillingView {
   switchTo?: string | null;
   /** The names of the plans sold through Stripe Managed Payments (src/stripe.ts managedPayments). */
   managedPlans?: string[];
+  /** The account's team as its owner sees it (src/team.ts teamOf); left out, the page has no Team section. */
+  team?: Team;
+  /** The teams this account is a member of (src/team.ts membershipsOf). */
+  memberships?: { ownerId: string; email: string | null; githubLogin: string | null; joined: string; active: boolean }[];
   now: Date;
 }
 
@@ -88,22 +95,33 @@ const BILLING_CSS = `
 .status{margin-top:6px;font-size:14px;line-height:1.55;max-width:80ch;color:var(--ink2)}
 .status b{color:var(--ink);font-weight:500}
 .status a{color:var(--ink)}
+.plan .seats{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);margin-bottom:8px}
+.plan .seats input{width:72px;min-height:32px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);font:13px var(--mono)}
+.team .intro{font-size:14.5px;color:var(--ink2);margin-top:10px;max-width:72ch;line-height:1.55}
+.team .intro a{color:var(--ink)}
+.team .ok{font-size:14px;color:var(--ink2);margin-top:8px}
+.team .ok:empty{display:none}
+.team .ok code{font:13px var(--mono);overflow-wrap:anywhere}
+.team td.act{text-align:right;white-space:nowrap}
+.team .acct-form{margin-top:14px}
 @media (max-width:860px){.plans{grid-template-columns:1fr}}
 `;
 
 function statusLine(v: BillingView, plan: Plan): string {
   const b = v.billing;
   const name = `<b>${esc(plan.name)}</b>`;
+  // a server with PLAN_GATES open (a self-hosted collector): nothing is sold and nothing is locked
+  if (v.access.source === "open") return `This server gives every account everything in <b>${esc(v.access.plan.name)}</b>: it sells no plans (PLAN_GATES is open).`;
   if (plan.id === "free") {
     if (v.access.source === "comp") return `You have <b>${esc(v.access.plan.name)}</b>, set up by GenClass. Questions: <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.`;
     const overdue = !!b.subscription_id && (b.subscription_status === "past_due" || b.subscription_status === "unpaid");
     // a subscription not ended while the account reads as Free, with nothing sold on the site (or a stored plan GenClass
     // no longer sells): one to a retired plan (plans.json retired_plans; the webhook stores its plan as free). Paying it
     // gives no plan, so the page says to cancel it, never to pay it
-    const retired =
-      !!b.subscription_id &&
-      ["active", "trialing", "past_due", "unpaid"].includes(b.subscription_status ?? "") &&
-      (!PAID_PLANS.length || RETIRED_PLAN_IDS.includes(b.plan));
+    // With a plan on sale an overdue subscription on a Free account may also be that plan's, lapsed (the branch
+    // below), so there only one still live counts as retired: a live subscription that gives no plan can be nothing else
+    const known = !PAID_PLANS.length || RETIRED_PLAN_IDS.includes(b.plan);
+    const retired = !!b.subscription_id && (known ? ["active", "trialing", "past_due", "unpaid"] : ["active", "trialing"]).includes(b.subscription_status ?? "");
     const ended = retired
       ? b.cancel_at_period_end
         ? ` Your subscription to a plan GenClass no longer sells is cancelled and ends on ${day(b.current_period_end)}, without another charge.`
@@ -125,22 +143,32 @@ function statusLine(v: BillingView, plan: Plan): string {
   if (b.subscription_status === "trialing") {
     return `You are on the ${name} plan, in a trial until ${day(b.current_period_end)}. When it ends your card is charged for the first month (${esc(priceText(plan))}), unless you cancel before in Manage billing.`;
   }
+  if (plan.per_seat === true && v.access.seats !== null) {
+    const n = v.access.seats;
+    const total = (plan.price_usd_cents.monthly ?? 0) * n;
+    return `You are on the ${name} plan with <b>${n} seat${n === 1 ? "" : "s"}</b>, ${esc(priceText(plan))} ($${total % 100 ? (total / 100).toFixed(2) : String(total / 100)} a month). It renews on ${day(b.current_period_end)}. Add or remove seats in Manage billing.`;
+  }
   return `You are on the ${name} plan, ${esc(priceText(plan))}. It renews on ${day(b.current_period_end)}.`;
 }
 
 function planColumn(v: BillingView, p: Plan, current: Plan): string {
   // the column marked as the account's: its paid plan, or the grant's
-  const cur = p.id === (v.access.source === "comp" ? v.access.plan.id : current.id);
+  const cur = p.id === (v.access.source === "comp" || v.access.source === "open" ? v.access.plan.id : current.id);
   const subscribed = !!v.billing.subscription_id && LIVE_STATUSES.has(v.billing.subscription_status ?? "") && current.id !== "free";
   // back from Checkout (a purchase or a switch) and still waiting for Stripe's word: no buttons, so a second purchase
   // or switch cannot start
   const waiting = !!awaited(v, current);
   const pick = !cur && v.picked === p.id && v.live && !waiting;
   // the first paid plan's button is the strong one, unless another was picked on the pricing page
-  const buy = `<button class="btn${p !== PAID_PLANS[0] && !pick ? " ghost" : ""}" type="button" data-plan="${esc(p.id)}"${pick ? " data-pick" : ""}><span>${subscribed ? "Switch to" : "Upgrade to"} ${esc(p.name)}</span></button>`;
+  // a plan sold per seat asks how many people first (the owner is one); Stripe's page shows it and lets them change it
+  const seats =
+    p.per_seat === true
+      ? `<label class="seats" for="seats-${esc(p.id)}">Seats <input id="seats-${esc(p.id)}" type="number" inputmode="numeric" min="1" max="${MAX_SEATS}" step="1" value="${Math.max(1, v.team?.used ?? 1)}" data-seats="${esc(p.id)}"></label>`
+      : "";
+  const buy = `${seats}<button class="btn${p !== PAID_PLANS[0] && !pick ? " ghost" : ""}" type="button" data-plan="${esc(p.id)}"${pick ? " data-pick" : ""}><span>${subscribed ? "Switch to" : "Upgrade to"} ${esc(p.name)}</span></button>`;
   const talk = `<a class="btn ghost" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass ${p.name}`)}"><span>Talk to us</span></a>`;
   let act = "";
-  if (cur) act = `<span class="tag">${v.access.source === "comp" ? "Set up by GenClass" : "Your plan"}</span>`;
+  if (cur) act = `<span class="tag">${v.access.source === "comp" ? "Set up by GenClass" : v.access.source === "open" ? "This server" : "Your plan"}</span>`;
   else if (p.id === "free") act = subscribed && v.live ? '<span class="muted">To go back to Free, cancel in Manage billing.</span>' : "";
   else if (byAgreement(p)) act = talk;
   else if (v.live && !waiting) act = buy;
@@ -155,6 +183,60 @@ function awaited(v: BillingView, current: Plan): string | null {
   if (!v.done) return null;
   if (v.switchTo && v.switchTo !== current.id) return v.switchTo;
   return current.id === "free" ? "paid" : null;
+}
+
+const who = (x: { email: string | null; githubLogin: string | null }): string => x.email ?? (x.githubLogin ? `@${x.githubLogin}` : "A GenClass account");
+
+/** The Team section: seats, members, invite links (the owner's side) and the teams this account is a member of. */
+function teamSection(v: BillingView): string {
+  const t = v.team;
+  if (!t) return "";
+  const holds = t.seats === null || t.seats > 1;
+  const sold = PAID_PLANS.filter((p) => p.per_seat === true).map((p) => p.name);
+  const aside = t.seats === null ? `${t.used} ${t.used === 1 ? "person" : "people"}` : `${t.used} of ${t.seats} seat${t.seats === 1 ? "" : "s"} used`;
+  let own: string;
+  if (!holds) {
+    own = `<p class="intro">${
+      t.access.plan.per_seat === true
+        ? "Your plan has one seat, yours. Add seats in Manage billing to invite your team."
+        : `The ${esc(t.access.plan.name)} plan is for one person.${sold.length ? ` Members come with ${esc(sold.join(" and "))}: one seat each, and they open the dashboards of your apps with their own sign-in.` : ""}`
+    }</p>`;
+  } else {
+    const over = t.members.some((m) => !m.active);
+    const members = t.members.length
+      ? `<div class="tablewrap"><table class="dt rows"><thead><tr><th>Member</th><th>Joined</th><th>Access</th><th></th></tr></thead><tbody>${t.members
+          .map(
+            (m) =>
+              `<tr><td>${esc(who(m))}</td><td data-l="Joined">${time(m.joined)}</td><td data-l="Access">${m.active ? "Dashboards" : '<span class="muted">No seat</span>'}</td><td class="act"><button class="btn sm ghost" type="button" data-rmmember="${esc(m.id)}" aria-label="Remove ${esc(who(m))} from your team">Remove</button></td></tr>`,
+          )
+          .join("")}</tbody></table></div>`
+      : '<p class="intro">No members yet. Make an invite link and send it to a teammate: it works once, for 7 days.</p>';
+    const invites = t.invites.length
+      ? `<div class="tablewrap"><table class="dt rows"><thead><tr><th>Invite link</th><th>Made</th><th>Expires</th><th></th></tr></thead><tbody>${t.invites
+          .map((i) => `<tr><td>Not used yet</td><td data-l="Made">${time(i.created)}</td><td data-l="Expires">${time(i.expires)}</td><td class="act"><button class="btn sm ghost" type="button" data-rminvite="${esc(i.id)}">Revoke</button></td></tr>`)
+          .join("")}</tbody></table></div>`
+      : "";
+    own = `<p class="intro">Members open the dashboards of your apps with their own sign-in. They cannot change an app, its forwarding or export, or see billing. You are the first seat.</p>
+  ${over ? '<p class="intro"><b>More members than seats.</b> The members marked No seat cannot open your dashboards until you add seats in Manage billing or remove someone.</p>' : ""}
+  ${members}${invites}
+  <div class="acct-form"><button class="btn ghost" type="button" id="invite"><span>Make an invite link</span></button></div>
+  <p class="err" id="teamerr" role="alert"></p><p class="ok" id="teamok" role="status"></p>`;
+  }
+  const mine = v.memberships?.length
+    ? `<div class="blk-h"><h2>Teams you are in</h2></div>
+  <div class="tablewrap"><table class="dt rows"><thead><tr><th>Team of</th><th>Joined</th><th>Access</th><th></th></tr></thead><tbody>${v.memberships
+    .map(
+      (m) =>
+        `<tr><td>${esc(who(m))}</td><td data-l="Joined">${time(m.joined)}</td><td data-l="Access">${m.active ? "Dashboards" : '<span class="muted">No seat now</span>'}</td><td class="act"><button class="btn sm ghost" type="button" data-leave="${esc(m.ownerId)}" aria-label="Leave the team of ${esc(who(m))}">Leave</button></td></tr>`,
+    )
+    .join("")}</tbody></table></div>
+  <p class="err" id="leaveerr" role="alert"></p>`
+    : "";
+  return `<section class="blk team" id="team">
+  <div class="blk-h"><h2>Team</h2><span class="aside">${esc(aside)}</span></div>
+  ${own}
+  ${mine}
+</section>`;
 }
 
 export function billingPage(nonce: string, v: BillingView): string {
@@ -208,12 +290,13 @@ ${
   manage
     ? `<section class="blk" id="manage">
   <div class="blk-h"><h2>Manage billing</h2><span class="aside">On Stripe</span></div>
-  <p class="intro">Card, invoices and cancellation.</p>
+  <p class="intro">Card, invoices${PAID_PLANS.some((p) => p.per_seat === true) ? ", seats" : ""} and cancellation.</p>
   <div class="acct-form"><button class="btn ghost" type="button" id="portal"><span>Manage billing</span></button></div>
   <p class="err" id="portalerr" role="alert"></p>
 </section>`
     : ""
 }
+${teamSection(v)}
 </div>
 <script type="application/json" id="cfg">${embed({ want })}</script>`;
 
@@ -224,10 +307,38 @@ ${
   document.querySelectorAll("[data-plan]").forEach(function(b){
     b.addEventListener("click", function(){
       var err = document.getElementById("planerr"); err.textContent = "";
+      var body = { plan: b.getAttribute("data-plan") }, seats = document.querySelector('[data-seats="' + body.plan + '"]');
+      if (seats) {
+        var n = Number(seats.value);
+        if (!(n >= 1 && n <= ${MAX_SEATS} && Math.floor(n) === n)) { err.textContent = "Seats is a whole number from 1 to ${MAX_SEATS}. For a larger team, email ${esc(CONTACT)}."; return; }
+        body.seats = n;
+      }
       gcBusy(b, true, "Opening Stripe...");
-      gcPost("/api/billing/checkout", { plan: b.getAttribute("data-plan") }).then(function(j){ location.href = j.url; }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });
+      gcPost("/api/billing/checkout", body).then(function(j){ location.href = j.url; }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });
     });
   });
+  // the team: an invite link is shown once; removing, revoking and leaving take two clicks (gcArm)
+  var teamerr = document.getElementById("teamerr"), teamok = document.getElementById("teamok"), invite = document.getElementById("invite");
+  if (invite) invite.addEventListener("click", function(){
+    teamerr.textContent = ""; teamok.textContent = ""; gcBusy(invite, true, "Making the link...");
+    gcPost("/api/team/invites", {}).then(function(j){
+      gcBusy(invite, false);
+      teamok.textContent = "Send this link to one person. It works once, for 7 days, and is not shown again: ";
+      var c = document.createElement("code"); c.textContent = j.url; teamok.appendChild(c);
+    }, function(e){ teamerr.textContent = gcWhy(e); gcBusy(invite, false); });
+  });
+  function gone(sel, attr, url, label, errId){
+    document.querySelectorAll(sel).forEach(function(b){
+      b.addEventListener("click", function(){
+        if (!gcArm(b, label)) return;
+        b.disabled = true;
+        gcPost(url + encodeURIComponent(b.getAttribute(attr)), undefined, "DELETE").then(function(){ location.reload(); }, function(e){ var x = document.getElementById(errId); if (x) x.textContent = gcWhy(e); b.disabled = false; });
+      });
+    });
+  }
+  gone("[data-rmmember]", "data-rmmember", "/api/team/members/", "Confirm remove", "teamerr");
+  gone("[data-rminvite]", "data-rminvite", "/api/team/invites/", "Confirm revoke", "teamerr");
+  gone("[data-leave]", "data-leave", "/api/team/memberships/", "Confirm leave", "leaveerr");
   var pick = document.querySelector("[data-pick]");
   if (pick) pick.focus();
   var portal = document.getElementById("portal");

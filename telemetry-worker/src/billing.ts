@@ -1,8 +1,8 @@
 // Routes for the paid plans. Checked before the account routes (src/auth.ts); null for any other path.
 //
-//   POST /api/billing/checkout {plan: "<id>"}          browser session + Origin; {url} of Stripe Checkout (with
-//                                                       switch: true when it replaces the plan already paid); no
-//                                                       plan is sold on the site today, so a 400
+//   POST /api/billing/checkout {plan: "<id>", seats?}   browser session + Origin; {url} of Stripe Checkout (with
+//                                                       switch: true when it replaces the plan already paid); `seats`
+//                                                       (1 to 200, default 1) for a plan sold per seat (Team)
 //   POST /api/billing/trial                            410: GenClass has no trial any more (the dashboard is free)
 //   POST /api/billing/portal                           browser session + Origin; {url} of the Billing Portal
 //   POST /api/billing/webhook                          Stripe only: signature, no session (src/stripe.ts)
@@ -11,10 +11,11 @@
 //   GET  /account/trial                                to the account page (genclass.dev's pricing page linked
 //                                                       here until 2026-10-19), through sign-up when signed out
 //   GET|PUT|PATCH|DELETE /api/account/projects/<id>/integrations[/<kind>]   forwarding destinations (plans with
-//                                                       forwarding: all of them today)
+//                                                       forwarding: Team and Enterprise; else a 403 with upgrade_url)
 //   POST /api/account/projects/<id>/integrations/<kind>/test               one test record to that destination
-//   GET  /api/account/projects/<id>/events?from&to&format&cursor&limit      export (plans with export: all of them
-//                                                       today): an export key as a bearer token, or the browser session
+//   GET  /api/account/projects/<id>/events?from&to&format&cursor&limit      export (plans with export: Team and
+//                                                       Enterprise; else a 403 with upgrade_url): an export key as a
+//                                                       bearer token, or the browser session
 //   GET|POST /api/account/export-keys, DELETE /api/account/export-keys/<id> export keys (browser session)
 //
 // A command line session (the CLI's bearer token) is refused on every route here: the approval page promises it
@@ -35,7 +36,9 @@ import {
   accountBilling,
   accountPlan,
   canBuy,
+  cleanSeats,
   entitled,
+  MAX_SEATS,
   PAID_PLANS,
   PLANS,
   PLANS_FILE,
@@ -61,6 +64,7 @@ import {
   stripeWebhook,
   subscriptionState,
 } from "./stripe.js";
+import { membershipsOf, teamOf } from "./team.js";
 import { b64url } from "./webauthn.js";
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -83,7 +87,7 @@ function stripeFail(e: unknown): Response {
 }
 
 /** True when this account is over its per-minute budget for `bucket` (keyed by a hash of bucket + account id). */
-async function overBudget(lim: RateLimiterLike | undefined, bucket: string, accountId: string): Promise<boolean> {
+export async function overBudget(lim: RateLimiterLike | undefined, bucket: string, accountId: string): Promise<boolean> {
   if (!lim) return false;
   try {
     return !(await lim.limit({ key: (await sha256Hex(`billing:${bucket}:${accountId}`)).slice(0, 32) })).success;
@@ -91,13 +95,13 @@ async function overBudget(lim: RateLimiterLike | undefined, bucket: string, acco
     return false; // the limiter is best effort
   }
 }
-const tooMany = (): Response => fail(429, "too many requests from this account; try again in a minute", { "retry-after": "60" });
+export const tooMany = (): Response => fail(429, "too many requests from this account; try again in a minute", { "retry-after": "60" });
 
 /** The plan a link names (?plan=<id>, from the pricing page), if it is a paid plan. */
 const pickedPlan = (v: string | null): Plan | null => PAID_PLANS.find((p) => p.id === v) ?? null;
 
 /** A browser-only write: a cookie session with our Origin. */
-async function browserWrite(c: C, what: string): Promise<Auth | Response> {
+export async function browserWrite(c: C, what: string): Promise<Auth | Response> {
   const a = await authenticate(c);
   if (!a) return fail(401, "not signed in");
   if (a.via !== "cookie") return fail(403, `${what} only in the browser, on genclass.dev`);
@@ -105,7 +109,7 @@ async function browserWrite(c: C, what: string): Promise<Auth | Response> {
   return a;
 }
 
-async function browserRead(c: C): Promise<Auth | Response> {
+export async function browserRead(c: C): Promise<Auth | Response> {
   const a = await authenticate(c);
   if (!a) return fail(401, "not signed in");
   if (a.via !== "cookie") return fail(403, "only in the browser, on genclass.dev");
@@ -152,8 +156,10 @@ export async function routeBilling(request: Request, url: URL, path: string, env
         current_period_end: b.current_period_end,
         cancel_at_period_end: !!b.cancel_at_period_end,
         on_sale: PAID_PLANS.length > 0 && canBuy(env, a.account),
-        // why the account has its plan now: "paid", "comp" (GenClass's own grant), or null on Free
+        // why the account has its plan now: "paid", "comp" (GenClass's own grant), "open" (this server's PLAN_GATES), or null on Free
         access: access.source,
+        // the people the account holds now, the owner included (null: no limit)
+        seats: access.seats,
       });
     }
     case "/account/billing": {
@@ -165,8 +171,12 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       const access = await accountAccess(c.db, a.account.id, env, c.now);
       const apps = (await accountProjects(c, a.account.id)).map((p) => ({ id: p.id!, name: p.name }));
       const b = await accountBilling(c.db, a.account.id, env);
+      const team = await teamOf(c.db, env, a.account.id, c.now);
+      const memberships = await membershipsOf(c.db, env, a.account.id, c.now);
       return page(200, (n) =>
         billingPage(n, {
+          team,
+          memberships,
           account: { id: a.account.id, email: a.account.email, githubLogin: a.account.github_login },
           apps,
           billing: b,
@@ -228,6 +238,13 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
     if (!PAID_PLANS.length) return fail(400, `no plan is sold on genclass.dev: Free costs nothing, and Enterprise is agreed by email with ${PLANS_FILE.contact}`);
     return fail(400, `choose a plan: ${PAID_PLANS.map((p) => p.id).join(" or ")}`);
   }
+  // a plan sold per seat: how many people (the owner included); one when the page sends none
+  let seats = 1;
+  if (plan.per_seat === true && body.seats !== undefined) {
+    const n = cleanSeats(body.seats);
+    if (n === null) return fail(400, `seats is a whole number from 1 to ${MAX_SEATS}; for a larger team email ${PLANS_FILE.contact}`);
+    seats = n;
+  }
   if (await overBudget(c.env.AUTH_LIMIT, "checkout", a.account.id)) return tooMany();
   // as stored: ensureCustomer decides what to do with a customer from the other Stripe mode
   const account = { id: a.account.id, email: a.account.email, ...(await accountBilling(c.db, a.account.id)) };
@@ -263,11 +280,11 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
         if (await foreignInvoice(c.env, f, customer.id, subs)) return refuseShared(c, f, account.id, customer.id, SHARED_INVOICE);
         // once the new subscription's first payment clears, the webhook refunds `held`'s unused time to its card and
         // cancels it; until then it stays
-        const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, switchFrom: held.id });
+        const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, switchFrom: held.id, seats });
         return json(200, { url, switch: true });
       }
     }
-    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh });
+    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, seats });
     return json(200, { url });
   } catch (e) {
     return stripeFail(e);

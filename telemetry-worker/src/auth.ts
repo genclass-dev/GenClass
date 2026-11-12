@@ -66,6 +66,7 @@ import {
   SECRET_RE,
   sha256Hex,
   stats,
+  stripAnalytics,
   type D1Like,
   type Project,
 } from "./dashboard.js";
@@ -77,7 +78,8 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, appLimit, appLimitBody, hasDashboard, pickRange, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, appLimit, appLimitBody, firstPlanWith, hasAnalytics, hasDashboard, keepDays, pickRange, projectAccess, viewRanges } from "./plans.js";
+import { activeOwners, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
 import {
   b64url,
@@ -256,7 +258,7 @@ export function cleanEmail(v: unknown): string | null {
   return /^[^@]+@[^@]+\.[^@.]+$/.test(s) ? s : null;
 }
 
-/** Only same-site paths under /account or /login/device may be a `next` target. */
+/** Only same-site paths under /account (a team invite link, /account/join/<code>, is one) or /login/device may be a `next` target. */
 export function safeNext(v: string | null | undefined): string | null {
   if (!v || v.length > 300 || !v.startsWith("/") || v.startsWith("//") || /[\\\u0000-\u001f]/.test(v)) return null;
   return /^\/(account(\/[A-Za-z0-9/]*)?([?#].*)?|login\/device(\?code=[A-Za-z-]{0,12})?)$/.test(v) ? v : null;
@@ -455,9 +457,12 @@ export interface ProjectJson {
   created: string;
   last_event: string | null;
   first_event: string | null;
+  /** True for an app of a team this account is a member of (src/team.ts): it can be read, not changed. */
+  shared?: true;
 }
 
 function projectJson(c: C, p: Project): ProjectJson {
+  const mine = !c.auth || p.account_id === c.auth.account.id;
   return {
     id: p.id ?? "",
     name: p.name,
@@ -466,20 +471,42 @@ function projectJson(c: C, p: Project): ProjectJson {
     created: p.created,
     last_event: p.last_event,
     first_event: p.first_event,
+    ...(mine ? {} : { shared: true as const }),
   };
 }
 
+/**
+ * The apps an account sees: its own, then those of the teams it is an active member of (src/team.ts activeOwners),
+ * each group by name. The second group is read-only for it: every write goes through ownedProject.
+ */
 export async function accountProjects(c: C, accountId: string): Promise<Project[]> {
   const r = await c.db
     .prepare(`SELECT ${PROJECT_COLUMNS} FROM projects WHERE account_id = ? AND id IS NOT NULL ORDER BY name COLLATE NOCASE, created`)
     .bind(accountId)
     .all<Project>();
-  return r.results ?? [];
+  const own = r.results ?? [];
+  const owners = await activeOwners(c.db, c.env, accountId, c.now);
+  if (!owners.length) return own;
+  const t = await c.db
+    .prepare(`SELECT ${PROJECT_COLUMNS} FROM projects WHERE account_id IN (${owners.map(() => "?").join(", ")}) AND id IS NOT NULL ORDER BY name COLLATE NOCASE, created`)
+    .bind(...owners)
+    .all<Project>();
+  return [...own, ...(t.results ?? [])];
 }
 
+/** An app of this account, by id: the only way to an app for anything that changes it. */
 export async function ownedProject(c: C, accountId: string, id: string): Promise<Project | null> {
   if (!PROJECT_ID_RE.test(id)) return null;
   return c.db.prepare(`SELECT ${PROJECT_COLUMNS} FROM projects WHERE id = ? AND account_id = ?`).bind(id, accountId).first<Project>();
+}
+
+/** An app this account may read, by id: its own, or one of a team it is an active member of (src/team.ts). */
+export async function readableProject(c: C, accountId: string, id: string): Promise<Project | null> {
+  if (!PROJECT_ID_RE.test(id)) return null;
+  const p = await c.db.prepare(`SELECT ${PROJECT_COLUMNS} FROM projects WHERE id = ? AND account_id IS NOT NULL`).bind(id).first<Project>();
+  if (!p) return null;
+  if (p.account_id === accountId) return p;
+  return (await activeOwners(c.db, c.env, accountId, c.now)).includes(p.account_id!) ? p : null;
 }
 
 // --------------------------------------------------------------------------------------------- challenges
@@ -1734,6 +1761,8 @@ async function deleteAccount(c: C): Promise<Response> {
     c.db.prepare("DELETE FROM auth_sessions WHERE account_id = ?").bind(id),
     c.db.prepare("DELETE FROM device_codes WHERE account_id = ?").bind(id),
     c.db.prepare("DELETE FROM challenges WHERE account_id = ?").bind(id),
+    // its team, its invite links and its memberships of other teams (src/team.ts)
+    ...forgetTeam(c.db, id),
     c.db.prepare("DELETE FROM accounts WHERE id = ?").bind(id),
   ]);
   for (const p of gone.results ?? []) forgetToken(p.token);
@@ -1771,7 +1800,13 @@ async function accountView(c: C, a: Auth): Promise<AccountView> {
       githubLogin: a.account.github_id ? a.account.github_login : null,
       created: a.account.created,
     },
-    projects: (await accountProjects(c, a.account.id)).map((p) => ({ ...projectJson(c, p), privateLink: !!p.private_link })),
+    projects: await (async () => {
+      const teams = new Map((await membershipsOf(c.db, c.env, a.account.id, c.now)).map((t) => [t.ownerId, t.email ?? (t.githubLogin ? `@${t.githubLogin}` : "a team")]));
+      return (await accountProjects(c, a.account.id)).map((p) => {
+        const mine = p.account_id === a.account.id;
+        return { ...projectJson(c, p), privateLink: mine && !!p.private_link, team: mine ? null : (teams.get(p.account_id ?? "") ?? "a team") };
+      });
+    })(),
     passkeys: rows(creds).map((r) => {
       let transports: string[] = [];
       try {
@@ -1982,14 +2017,17 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     if (!a) return signedOut();
     // the dashboard reads stats with the browser session; a CLI session was not approved for them
     if (a.via !== "cookie") return fail(403, "a command line session cannot read stats; open the dashboard in the browser");
-    const p = await ownedProject(c, a.account.id, stat[1]!);
+    // the account's own app, or one of a team it is a member of (src/team.ts)
+    const p = await readableProject(c, a.account.id, stat[1]!);
     if (!p) return fail(404, "not found");
-    // the dashboard comes with the account's plan (every plan today; src/plans.ts accountAccess)
-    const access = await accountAccess(c.db, a.account.id, env, c.now);
+    // the dashboard comes with the plan of the app's owner (every plan includes it; src/plans.ts projectAccess)
+    const access = await projectAccess(c.db, p, env, c.now);
     if (!hasDashboard(access)) return lockedJson(c);
-    // the ranges this account's plan shows; a longer one is answered with the longest it shows
+    // the ranges that plan shows; a longer one is answered with the longest it shows
     const range = pickRange(url.searchParams.get("range"), viewRanges(access.plan));
-    return json(200, await stats(c.db, p, range, c.now));
+    const s = await stats(c.db, p, range, c.now);
+    // visitor analytics are left out for a plan without them, and counted all the same (src/dashboard.ts stripAnalytics)
+    return json(200, hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` }));
   }
   const fun = /^\/api\/account\/projects\/([^/]+)\/funnels$/.exec(path);
   if (fun) {
@@ -1998,7 +2036,9 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     if (a instanceof Response) return a;
     const p = await ownedProject(c, a.account.id, fun[1]!);
     if (!p) return fail(404, "not found");
-    if (!hasDashboard(await accountAccess(c.db, a.account.id, env, c.now))) return lockedJson(c);
+    const access = await accountAccess(c.db, a.account.id, env, c.now);
+    if (!hasDashboard(access)) return lockedJson(c);
+    if (!hasAnalytics(access)) return upgradeJson(c, "funnels are part of visitor analytics", "analytics");
     return putFunnels(c.req, c.db, p.token);
   }
   const link = /^\/api\/account\/projects\/([^/]+)\/link$/.exec(path);
@@ -2015,15 +2055,17 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     if (!get) return method();
     const a = await webSession(c);
     if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/apps/${PROJECT_ID_RE.test(app[1]!) ? app[1] : ""}`)}`);
-    const p = await ownedProject(c, a.account.id, app[1]!);
+    // the account's own app, or one of a team it is a member of: that one is shown with its owner's plan, read-only
+    const p = await readableProject(c, a.account.id, app[1]!);
     if (!p) return page(404, (n) => appNotFoundPage(n));
+    const mine = p.account_id === a.account.id;
     const apps = (await accountProjects(c, a.account.id)).map((x) => ({ id: x.id!, name: x.name }));
-    const access = await accountAccess(c.db, a.account.id, env, c.now);
+    const access = await projectAccess(c.db, p, env, c.now);
     const base = {
       account: { apps, current: p.id!, email: a.account.email ?? (a.account.github_login ? `@${a.account.github_login}` : null), plan: access.plan.name },
       id: p.id!,
       firstEvent: p.first_event,
-      privateLink: !!p.private_link,
+      privateLink: mine && !!p.private_link,
       runtimeReady: runtimeHasTokens(env),
       endpoint: ownEndpoint(env),
       origin: c.cfg.origin,
@@ -2031,6 +2073,8 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     const project = { name: p.name, token: p.token, created: p.created, lastEvent: p.last_event };
     // locked (a plan file without the dashboard): the app's key and Connect panel, and the plans; no stats
     if (!hasDashboard(access)) return page(200, (n) => dashboardPage(n, project, { ...base, locked: true }));
+    // a member sees the owner's ranges; forwarding, export and their settings are the owner's alone
+    if (!mine) return page(200, (n) => dashboardPage(n, project, { ...base, ranges: viewRanges(access.plan), keepDays: keepDays(access.plan) }));
     // plan-dependent parts: ranges, retention, forwarding and export (src/billing-pages.ts)
     const extras = await appExtrasData(c.db, env, a.account.id, p, c.now);
     return page(200, (n) =>
@@ -2051,6 +2095,13 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
 export function lockedJson(c: { cfg: AuthConfig; env: Env }): Response {
   const url = `${c.cfg.origin}/account/billing`;
   return json(402, { ok: false, error: lockedError(c.env), locked: true, upgrade_url: url });
+}
+
+/** The 403 for something the account's plan leaves out: what it is, the first plan with it and where the plans are. */
+export function upgradeJson(c: { cfg: AuthConfig }, what: string, e: Parameters<typeof firstPlanWith>[0]): Response {
+  const url = `${c.cfg.origin}/account/billing`;
+  const plan = firstPlanWith(e);
+  return json(403, { ok: false, error: `${what}${plan ? `, which comes with the ${plan.name} plan` : ""}; see the plans at ${url}`, upgrade_url: url });
 }
 
 /** Why a dashboard's stats are locked. */
@@ -2091,5 +2142,7 @@ export async function authRetention(db: D1Like, now: Date): Promise<void> {
     // protected private links (src/link-lock.ts): expired unlocks, and what is left of deleted apps
     db.prepare("DELETE FROM link_sessions WHERE expires < ? OR token NOT IN (SELECT token FROM projects)").bind(iso),
     db.prepare("DELETE FROM link_credentials WHERE token NOT IN (SELECT token FROM projects)"),
+    // team invite links past their 7 days (src/team.ts)
+    db.prepare("DELETE FROM team_invites WHERE expires < ?").bind(iso),
   ]);
 }

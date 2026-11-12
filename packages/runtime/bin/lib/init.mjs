@@ -28,12 +28,12 @@ const REPO = "https://github.com/genclass-dev/GenClass/blob/main";
 export const TELEMETRY_URL = `${REPO}/packages/runtime/TELEMETRY.md`;
 export const INTERCEPTION_URL = "https://genclass.dev/docs/interception";
 export const PRIVACY_URL = `${REPO}/PRIVACY.md`;
-/** The plans page: forwarding to Sentry, PostHog and Datadog is not part of the free runtime; the genclass.dev collector does it on every plan. */
+/** The plans page: forwarding to Sentry, PostHog and Datadog is not part of the free runtime; the genclass.dev collector does it on the Team and Enterprise plans. */
 export const PRICING_URL = "https://genclass.dev/pricing";
-/** What a dashboard shows, said under every dashboard link the CLI prints: analytics are free on every plan. */
+/** What a dashboard shows, said under every dashboard link the CLI prints: the problems are free, visitor analytics come with Team. */
 export const FREE_LINES = [
-  "Free for every app: what GenClass found, on which pages, and what it did, and (with analytics: true)",
-  `how visitors use each page. Print this link again any time: ${CMD} dashboard`,
+  "Free for every app: what GenClass found, on which pages, and what it did, for the last 7 days. How visitors",
+  `use each page (analytics: true) shows on the Team plan. Print this link again any time: ${CMD} dashboard`,
 ];
 
 export const USAGE = `Usage:
@@ -56,8 +56,8 @@ remove   takes out exactly what init added (the lines and blocks marked "${MARK}
   --token <gc_...> use this app token (no network). By default, on a new setup and only once you
                    approve the changes (or pass --yes), init creates one at genclass.dev (sending
                    package.json's name), writes it into what it adds, and saves the token and your
-                   private dashboard link in ${LOCAL_FILE} (the dashboard is free, analytics
-                   included; \`dashboard\` prints the link again). Signed in (\`login\`), init first asks
+                   private dashboard link in ${LOCAL_FILE} (the dashboard is free; visitor analytics
+                   come with the Team plan; \`dashboard\` prints the link again). Signed in (\`login\`), init first asks
                    whether the new app goes into your GenClass account instead (--yes: it does)
   --no-token       no token, no network (no dashboard; you can add one later: ${START_URL})
   --no-telemetry   turn off GenClass's anonymous diagnostics (on by default; see TELEMETRY.md and
