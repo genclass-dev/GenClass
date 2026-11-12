@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **genclass.dev has a Team plan, and the CLI says what is free** (plans changed on 2026-11-11; nothing in the
+  runtime changes, and no plan limits it). The dashboard's problems stay free for every app: what GenClass found, on
+  which pages and what it did, for the last 7 days and up to 3 apps in an account. Visitor analytics
+  (`analytics: true`), forwarding, export, 90 days of history and team members come with Team, US$15 a developer a
+  month; your own classifier with Enterprise. The runtime sends the same as before whatever the plan: an app with
+  analytics on has them counted, and they show once its plan includes them.
+  - `init`, `dashboard` and the help text no longer say analytics are included in the free dashboard.
+  - When genclass.dev refuses a request because of the account's plan (a fourth app on Free), the CLI prints the
+    server's own sentence as `upgrade needed: ...`, with the page that has the plans, instead of a bare HTTP status.
+  - No model-visible text changed (`situation-v2.3`). Tests: `test/install/account.test.ts`.
+
 ## 0.3.0-beta.6 (2026-11-11)
 
 One fix in the user-action observer, found by running a public app's own test suite with the runtime on its pages,

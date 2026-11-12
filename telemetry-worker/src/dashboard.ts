@@ -980,6 +980,34 @@ export interface Stats {
   agent: AgentStats;
   /** The recorded demo's estimate stands in for the measured counts (src/demo.ts). */
   demo?: boolean;
+  /** What the app's plan leaves out of this answer (stripAnalytics); absent when it leaves nothing out. */
+  locked?: StatsLock;
+}
+
+/** Why a part of the stats is missing: the first plan that includes it (null: none does) and where the plans are. */
+export interface StatsLock {
+  analytics: { plan: string | null; upgrade_url: string };
+}
+
+/**
+ * The stats as a plan without visitor analytics sees them (src/plans.ts hasAnalytics): every ix_* total, breakdown and
+ * distinct count, the page-view and visit series, the visits and the funnels are left out, and `locked.analytics` says
+ * which plan shows them. Nothing is deleted: the counters stay in D1, so the same request answers in full once the
+ * app's plan includes analytics. Pure; the detections, checks, pages and agent reports are untouched.
+ */
+export function stripAnalytics(s: Stats, lock: StatsLock["analytics"]): Stats {
+  const keep = <T>(o: Record<string, T>): Record<string, T> => Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith("ix_")));
+  return {
+    ...s,
+    totals: keep(s.totals),
+    breakdowns: keep(s.breakdowns),
+    distinct: keep(s.distinct),
+    series: s.series.map((r) => ({ ...r, ix_views: 0, ix_sessions: 0 })),
+    previous: { ...s.previous, ix_views: 0, ix_sessions: 0 },
+    visits: { sessions: 0, pages: 0, bounces: 0, entry: [], exit: [] },
+    funnels: [],
+    locked: { ...(s.locked ?? {}), analytics: lock },
+  };
 }
 
 // --------------------------------------------------------------------------------------------- visits and funnels

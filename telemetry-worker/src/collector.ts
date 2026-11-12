@@ -25,7 +25,7 @@
 // its webhook, its pages and the link between a repository and an app. Off, and every route above unchanged, until
 // the app's secrets are set (src/github/config.ts).
 
-import { lockedError, routeAuth, runtimeHasTokens } from "./auth.js";
+import { authConfig, lockedError, routeAuth, runtimeHasTokens } from "./auth.js";
 import {
   AGENT_MAX_BODY,
   agentReport,
@@ -40,11 +40,13 @@ import {
   sanitizeName,
   sha256Hex,
   stats,
+  stripAnalytics,
   TOKEN_RE,
   type D1Like,
   type Range,
 } from "./dashboard.js";
 import { routeBilling } from "./billing.js";
+import { routeTeam } from "./team-routes.js";
 import type { GithubEnv } from "./github/config.js";
 import { routeGithub } from "./github/http.js";
 import { json, readCapped } from "./http.js";
@@ -52,7 +54,7 @@ import { afterBatch } from "./paid.js";
 import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, setupCommand, setupPage, startPage } from "./pages.js";
 import { lockedLink } from "./locked.js";
 import { applyLock, linkSession, linkUnlocked, lockKind, lockedJson, readBody, readLock, routeLink, startPasskeyOptions, unlockPage } from "./link-lock.js";
-import { hasDashboard, projectAccess } from "./plans.js";
+import { firstPlanWith, hasAnalytics, hasDashboard, pickRange, projectAccess, viewRanges } from "./plans.js";
 import { SAMPLE_PROJECT, SAMPLE_SECRET, sampleStats } from "./sample.js";
 
 export const SCHEMA = "genclass-telemetry/1";
@@ -117,6 +119,8 @@ export interface Env extends GithubEnv {
    * billing/plans.json (none today) use Stripe Managed Payments (Stripe, through Link, is the merchant of record).
    * Unset or "off" sells every plan on standard Checkout (src/stripe.ts managedPayments). */
   MANAGED_PAYMENTS?: string;
+  /** "open": every account has the grant plan, nothing is locked (a self-hosted collector; src/plans.ts planGatesOpen). */
+  PLAN_GATES?: string;
   /** Export pages per account per minute (src/billing.ts); without it the export is not rate-limited. */
   EXPORT_LIMIT?: RateLimiterLike;
   /** 32 bytes, base64: encrypts forwarding settings at rest (src/forward.ts). Without it they cannot be saved. */
@@ -225,6 +229,9 @@ export async function handle(request: Request, env: Env, opts: HandleOptions = {
   if (github) return github;
   const billing = await routeBilling(request, url, path, env, opts);
   if (billing) return billing;
+  // teams (src/team-routes.ts): /api/team and the invite page /account/join/<code>, before the account routes
+  const team = await routeTeam(request, url, path, env, opts);
+  if (team) return team;
   const account = await routeAuth(request, url, path, env, opts);
   if (account) return account;
   const site = await routeSite(request, url, path, env, opts);
@@ -338,6 +345,14 @@ function html(status: number, body: string, nonce: string): Response {
 }
 
 /** Why a new anonymous app must wait, or null: the per-client limiter (a hash of the IP, never stored), then a global ceiling. */
+/** Where the plans are, for an answer that says a plan leaves something out. */
+const upgradeUrl = (env: Env): string => `${authConfig(env).origin}/account/billing`;
+/** Why a private link's funnels cannot be changed on a plan without visitor analytics. */
+const analyticsError = (env: Env): string => {
+  const plan = firstPlanWith("analytics");
+  return `funnels are part of visitor analytics${plan ? `, which comes with the ${plan.name} plan` : ""}; see the plans at ${upgradeUrl(env)}`;
+};
+
 async function creationLimited(request: Request, db: D1Like, env: Env, now: Date): Promise<string | null> {
   const busy = "too many projects created; try again in a minute";
   if (env.CREATE_LIMITER) {
@@ -461,7 +476,9 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     const p = env.DB ? await projectBySecret(env.DB, funnelApi[1]!) : null;
     if (!p || !env.DB) return json(404, { ok: false, error: "not found" });
     if (!(await linkUnlocked(request, env, env.DB, p.token, now))) return lockedJson();
-    if (!hasDashboard(await projectAccess(env.DB, p, env, now))) return json(402, { ok: false, error: lockedError(env), locked: true });
+    const access = await projectAccess(env.DB, p, env, now);
+    if (!hasDashboard(access)) return json(402, { ok: false, error: lockedError(env), locked: true });
+    if (!hasAnalytics(access)) return json(403, { ok: false, error: analyticsError(env), upgrade_url: upgradeUrl(env) });
     return putFunnels(request, env.DB, p.token);
   }
 
@@ -482,10 +499,12 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     const p = env.DB ? await projectBySecret(env.DB, api[1]!) : null;
     if (!p || !env.DB) return json(404, { ok: false, error: "not found" });
     if (!(await linkUnlocked(request, env, env.DB, p.token, now))) return lockedJson();
-    if (!hasDashboard(await projectAccess(env.DB, p, env, now))) return json(402, { ok: false, error: lockedError(env), locked: true });
-    const r = url.searchParams.get("range") as Range | null;
-    const range: Range = r && RANGES.includes(r) ? r : "7d";
-    return json(200, await stats(env.DB, p, range, now));
+    const access = await projectAccess(env.DB, p, env, now);
+    if (!hasDashboard(access)) return json(402, { ok: false, error: lockedError(env), locked: true });
+    // a private link shows the ranges of the app's plan (Free's for an app without an account), never past 30 days
+    const range = pickRange(url.searchParams.get("range"), viewRanges(access.plan).filter((x) => RANGES.includes(x)));
+    const s = await stats(env.DB, p, range, now);
+    return json(200, hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: upgradeUrl(env) }));
   }
 
   if (path === "/start") {
@@ -535,9 +554,12 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     const lk = await lockKind(env.DB, p.token);
     if (lk && !(await linkUnlocked(request, env, env.DB, p.token, now))) return accountHtml(200, unlockPage(nonce, { secret: dash[1]!, kind: lk, next: `/dashboard/${dash[1]!}` }), nonce);
     // locked only while the app's plan leaves the dashboard out (none does today): sign in, add it, see the plans
-    if (!hasDashboard(await projectAccess(env.DB, p, env, now))) return lockedLink(request, url, env, opts, p);
+    const access = await projectAccess(env.DB, p, env, now);
+    if (!hasDashboard(access)) return lockedLink(request, url, env, opts, p);
     const link = { locked: !!lk };
-    return html(200, dashboardPage(nonce, { name: p.name, token: p.token, created: p.created, lastEvent: p.last_event }, { runtimeReady, endpoint: ownEndpoint(env), link }), nonce);
+    // the range buttons are the ones the stats answer (the app's plan, never past 30 days on a private link)
+    const ranges = viewRanges(access.plan).filter((x) => RANGES.includes(x));
+    return html(200, dashboardPage(nonce, { name: p.name, token: p.token, created: p.created, lastEvent: p.last_event }, { runtimeReady, endpoint: ownEndpoint(env), link, ranges }), nonce);
   }
 
   if (path.startsWith("/api/")) return json(404, { ok: false, error: "not found" });

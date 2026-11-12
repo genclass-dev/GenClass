@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **`genclass_analytics {source: "production"}` says what the app's plan leaves out.** Since 2026-11-11 a dashboard
+  on the Free plan shows 7 days and no visitor analytics (they come with Team). The tool now prints one line for
+  each (`Showing 7d, not 30d: ...`, `Upgrade needed for visitor analytics ...`) with the plans page, so the agent
+  tells the developer instead of reading it as no data. The local tools (findings, explore, replay, the regression
+  test, scan) are unchanged and need no plan.
 - **The pinned runtime is `@genclass/runtime@0.3.0-beta.6`.** `genclass_scan`'s `npx`, `genclass_setup`'s install line,
   the skill, `llms-install.md` and the READMEs name it (`npm run sync`, with the runtime's version bump). That runtime
   fixes an error its submit listener threw into the page on a form with a control named `id`. This reaches users with

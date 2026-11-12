@@ -1619,6 +1619,8 @@ describe("GET /account/billing", () => {
       cancel_at_period_end: false,
       on_sale: true,
       access: null,
+      // the fixture's plans set no seats: no limit
+      seats: null,
     });
     setPlan(sql, a.account.id, "custom", { subscription_id: "sub_c000000001", subscription_status: "active", current_period_end: "2026-11-13T12:00:00.000Z" });
     const html = await (await call(env, "GET", "/account/billing", { cookie: a.cookie })).text();

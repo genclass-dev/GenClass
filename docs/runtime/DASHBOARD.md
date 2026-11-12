@@ -12,8 +12,13 @@ diagnostics and for accounts (what is collected and stored, how long it is kept,
 Each web app gets a **project key** (token: `gc_` + 22 letters and digits) that groups its diagnostics on a
 dashboard at genclass.dev. The key is public: it ships in your page and can only add telemetry to its app. Keep the
 dashboards in a GenClass account, or use one private link per app without an account. The dashboard is free for every
-app, with 90 days of history (1 year on Enterprise), and so is your own classifier, which a person from GenClass trains
-on your app's traffic, bug reports or labelled examples once you ask ([pricing](https://genclass.dev/pricing)).
+app: what GenClass found, on which pages and what it did, for the last 7 days and up to 3 apps in an account. The Team
+plan (US$15 a developer a month) adds visitor analytics, forwarding, export, 90 days of history, unlimited apps and
+members, who open your apps' dashboards with their own sign-in (Plan and billing, Team: make an invite link and send
+it; it works once, for 7 days). Enterprise adds a year of history and your own classifier, which a person from
+GenClass trains on your app's traffic, bug reports or labelled examples ([pricing](https://genclass.dev/pricing)).
+Data is kept 90 days on every plan, and visitor analytics are counted while a plan leaves them out, so an upgrade
+shows what was there before it. A collector you host yourself locks nothing.
 
 The dashboard reads the same anonymous diagnostics the runtime sends by default; it gets nothing while telemetry is
 off ([Why does my dashboard show no data?](#why-does-my-dashboard-show-no-data)).

@@ -450,7 +450,8 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
         if (!target) out.push("", "Production: set GENCLASS_DASHBOARD to the dashboard's private link (https://genclass.dev/dashboard/<secret>) in the MCP server's environment; \"sample\" reads the public sample.");
         else {
           try {
-            out.push("", ...prodLines(await fetchProduction(target, String(args.range ?? "7d"), ctx.fetch ?? fetch), typeof args.route === "string" ? args.route : undefined));
+            const asked = String(args.range ?? "7d");
+            out.push("", ...prodLines(await fetchProduction(target, asked, ctx.fetch ?? fetch), typeof args.route === "string" ? args.route : undefined, asked));
           } catch (e) {
             out.push("", `Production: ${clean(e instanceof Error ? e.message : String(e), 200)}`);
           }
@@ -536,8 +537,21 @@ function localAnalytics(a: LocalAnalytics): string[] {
   return out;
 }
 
-function prodLines(p: ProdStats, route?: string): string[] {
+/**
+ * The production numbers as text. `asked`: the range the caller asked for; when the dashboard answered with a shorter
+ * one, or left visitor analytics out (ProdStats.locked), a line says so and names the plans page, so the agent tells
+ * the developer what the app's plan shows instead of reading it as no data.
+ */
+export function prodLines(p: ProdStats, route?: string, asked?: string): string[] {
   const out: string[] = [`Production (GenClass dashboard ${clean(p.name, 60)}, ${clean(p.range, 6)}; last event ${clean(p.lastEvent ?? "none", 30)}):`];
+  // what the app's plan leaves out, said once so the agent can tell the developer instead of reading it as "no data"
+  const plans = p.locked?.analytics?.upgrade_url;
+  const where = typeof plans === "string" && /^https:\/\/[^\s]{1,200}$/.test(plans) ? plans : "https://genclass.dev/pricing";
+  if (asked && p.range && asked !== p.range) out.push(`Showing ${clean(p.range, 6)}, not ${clean(asked, 6)}: the longest this dashboard link gives on the app's plan (a private link never goes past 30d). Plans: ${where}`);
+  if (p.locked?.analytics) {
+    const plan = p.locked.analytics.plan;
+    out.push(`Upgrade needed for visitor analytics (page views, visits, funnels, clicks): ${plan ? `they come with the ${clean(plan, 30)} plan` : "they are not in this app's plan"}. Plans: ${where}`);
+  }
   const t = p.totals ?? {};
   const keys = ["sessions", "decisions", "detections", "possible", "acted", "ix_views"];
   out.push(keys.filter((k) => t[k] !== undefined).map((k) => `${k} ${t[k]}${p.previous?.[k] !== undefined ? ` (previous period ${p.previous[k]})` : ""}`).join(" · ") || "no totals");

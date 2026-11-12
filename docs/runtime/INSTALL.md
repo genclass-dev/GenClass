@@ -113,8 +113,8 @@ From `0.3.0-beta.1`, `init` also says after the second line that the dashboard i
 reads:
 
 ```
-  Free for every app: what GenClass found, on which pages, and what it did, and (with analytics: true)
-  how visitors use each page. Print this link again any time: npx @genclass/runtime dashboard
+  Free for every app: what GenClass found, on which pages, and what it did, for the last 7 days. How visitors
+  use each page (analytics: true) shows on the Team plan. Print this link again any time: npx @genclass/runtime dashboard
 ```
 
 The link is saved in `.genclass.local` (with the token) before init writes anything else, so a failed write cannot

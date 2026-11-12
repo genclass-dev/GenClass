@@ -164,9 +164,13 @@ Details: [TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packa
 
 The runtime and model are free, open source (Apache-2.0) and need no API key or server. The plans of the optional
 genclass.dev service are defined in `billing/plans.json`, which the collector and the pricing page read, and it
-defines two. Free includes the dashboard, data export, forwarding and your own classifier, which GenClass trains on
-request. Enterprise, agreed by email, adds GenClass's models in its cloud, a year of history and contract terms.
-Nothing is sold on the site. The pricing page shows the plans in force.
+defines three (since 2026-11-11). Free is what finds, shows and fixes the problems: the dashboard's problems for one
+person, 3 apps and the last 7 days, the coding-agent loop on your machine, and the GitHub App on public repositories.
+Team, US$15 a developer a month, adds the GitHub App on private repositories, visitor analytics, forwarding, data
+export, 90 days of history and members. Enterprise, agreed by email, adds your own classifier, which GenClass trains,
+GenClass's models in its cloud, a year of history and contract terms. Your data is kept 90 days on every plan, so an
+upgrade shows what was counted before it. A collector you host yourself locks nothing. The pricing page shows the
+plans in force.
 
 Details: [genclass.dev/pricing](https://genclass.dev/pricing),
 [billing/plans.json](https://github.com/genclass-dev/GenClass/blob/main/billing/plans.json).

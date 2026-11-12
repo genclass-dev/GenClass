@@ -54,8 +54,8 @@ connect  connects the app in this folder to your account: pick one of your apps,
 whoami   shows the signed-in account and its apps.
 logout   ends the CLI session at genclass.dev and deletes the saved file.
 dashboard
-         prints the link to this app's dashboard, free for every app: what GenClass found, on which pages,
-         what it did, and (with analytics: true) how visitors use each page. It reads the private link in
+         prints the link to this app's dashboard, free for every app: what GenClass found, on which pages
+         and what it did (how visitors use each page, with analytics: true, shows on the Team plan). It reads the private link in
          ${LOCAL_FILE} without contacting anything; signed in, it finds the app in your account (or lists
          your apps).
 

@@ -30,7 +30,7 @@
 //   names no customer, has its charge read for that): the check before any Stripe call uses the event itself and our
 //   database. From invoices, charges and disputes, which carry the buyer's details, only ids and amounts are read.
 // - GenClass stores the Stripe customer id, subscription id, status, period end, plan and the Stripe mode (test or
-//   live) those ids belong to. Never card data: payment details are typed into Stripe's own pages. A Managed Payments
+//   live) those ids belong to, and for a plan sold per seat the subscription's quantity (accounts.seats). Never card data: payment details are typed into Stripe's own pages. A Managed Payments
 //   checkout asks the buyer for a name and billing address (for the tax) and Stripe keeps them on the customer; the
 //   worker reads a customer only for its metadata and stores none of that.
 // - A plan is granted only once Stripe has the money: a subscription the account has not been granted yet counts only
@@ -62,12 +62,17 @@
 //   NOTIFY_WEBHOOK) only once Stripe reports that plan's price paid: the subscription's latest invoice (fetched with it)
 //   is paid and has a positive line on that price (a first invoice, which a switch from another plan is too), seen on
 //   invoice.paid or on the subscription's own events.
+// - A plan sold per seat (billing/plans.json per_seat: Team) is one subscription item whose quantity is the seats: the
+//   buyer picks it on GenClass's billing page (1 to MAX_SEATS), Checkout shows it and lets them change it there, and
+//   afterwards they change it in the Billing Portal (GenClass's configuration allows a quantity update for those
+//   products only, never a switch of price; scripts/stripe-setup.mjs). The webhook writes the quantity Stripe has now
+//   to accounts.seats with the plan, so seats follow the subscription like the plan does; src/team.ts reads them.
 // - Refunds and disputes of GenClass customers' charges are reported to the owner (NOTIFY_WEBHOOK), ids and amounts only.
 
 import type { Env } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like } from "./dashboard.js";
 import { json } from "./http.js";
-import { entitled, LIVE_STATUSES, LOOKUP_PREFIX, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
+import { cleanSeats, entitled, LIVE_STATUSES, LOOKUP_PREFIX, MAX_SEATS, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
 import { equalStrings } from "./webauthn.js";
 
 export const STRIPE_API = "https://api.stripe.com";
@@ -369,17 +374,24 @@ export function managedPayments(env: Env, plan: Plan): boolean {
 export async function checkoutSession(
   env: Env,
   f: Fetch,
-  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string },
+  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number },
 ): Promise<string> {
   const lookup = o.plan.stripe_lookup_keys.monthly;
   if (!lookup) throw new StripeError(`the ${o.plan.name} plan has no monthly price`, 400);
+  // a plan sold per seat: the quantity is the seats asked for, and the buyer can still change it on Stripe's page
+  const perSeat = o.plan.per_seat === true;
+  const seats = perSeat ? (cleanSeats(o.seats ?? 1) ?? 1) : 1;
   if (o.switchFrom !== undefined && !idOf(o.switchFrom)) throw new StripeError("not a subscription id", 400);
   const closed: string[] = [];
   if (!o.fresh) {
     const open = await stripe(env, f, "GET", "/v1/checkout/sessions", { customer: o.customer, status: "open", limit: 20 });
     for (const x of Array.isArray(open?.data) ? (open.data as Obj[]) : []) {
       if (typeof x?.id !== "string" || !SESSION_ID_RE.test(x.id) || !ownSession(x, o.account.id)) continue;
-      const same = x.metadata?.genclass_plan === o.plan.id && (x.metadata?.genclass_switch_from ?? undefined) === o.switchFrom && x.metadata?.genclass_trial !== "1";
+      const same =
+        x.metadata?.genclass_plan === o.plan.id &&
+        (x.metadata?.genclass_switch_from ?? undefined) === o.switchFrom &&
+        x.metadata?.genclass_trial !== "1" &&
+        (x.metadata?.genclass_seats ?? "1") === String(seats);
       if (same && typeof x.url === "string" && x.url.startsWith("https://")) return x.url;
       await stripe(env, f, "POST", `/v1/checkout/sessions/${encodeURIComponent(x.id)}/expire`, {});
       closed.push(x.id);
@@ -403,17 +415,17 @@ export async function checkoutSession(
         mode: "subscription",
         customer: o.customer,
         client_reference_id: o.account.id,
-        line_items: [{ price, quantity: 1 }],
+        line_items: [perSeat ? { price, quantity: seats, adjustable_quantity: { enabled: true, minimum: 1, maximum: MAX_SEATS } } : { price, quantity: 1 }],
         // back from a switch, the page waits for the new plan
         success_url: `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}`,
         cancel_url: `${o.origin}/account/billing`,
-        metadata: { ...mark, genclass_plan: o.plan.id },
+        metadata: { ...mark, genclass_plan: o.plan.id, ...(perSeat ? { genclass_seats: String(seats) } : {}) },
         // a card (or another payment method) up front
         payment_method_collection: "always",
         subscription_data: { metadata: mark, billing_mode: { type: "flexible" } },
         managed_payments: managedPayments(env, o.plan) ? { enabled: true } : undefined,
       },
-      `genclass-checkout-${o.account.id}-${o.plan.id}-${Math.floor(o.now.getTime() / 60_000)}${from}${after}`,
+      `genclass-checkout-${o.account.id}-${o.plan.id}${perSeat ? `-x${seats}` : ""}-${Math.floor(o.now.getTime() / 60_000)}${from}${after}`,
     );
   } catch (e) {
     priceCache.delete(lookup); // the cached price may have been replaced since
@@ -565,6 +577,8 @@ export interface SubscriptionState {
   lookupKey: string | null;
   periodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  /** For a plan sold per seat: the quantity of its subscription item (1 to MAX_SEATS; a larger one reads as MAX_SEATS). Else null. */
+  seats: number | null;
 }
 
 const isoOf = (s: unknown): string | null => (typeof s === "number" && Number.isFinite(s) && s > 0 ? new Date(s * 1000).toISOString() : null);
@@ -578,6 +592,7 @@ export function subscriptionState(sub: Obj, o: { pastDueSince?: string | null; n
   const items: Obj[] = Array.isArray(sub?.items?.data) ? sub.items.data : [];
   let priced: Plan | null = null;
   let lookupKey: string | null = null;
+  let quantity: unknown = null;
   for (const it of items) {
     const k = it?.price?.lookup_key;
     // a genclass_ lookup key and the product's genclass_plan metadata (a price the setup script replaced keeps its
@@ -586,6 +601,7 @@ export function subscriptionState(sub: Obj, o: { pastDueSince?: string | null; n
     if (p) {
       priced = p;
       lookupKey = typeof k === "string" ? k : null;
+      quantity = it?.quantity;
       break;
     }
     if (typeof k === "string" && !lookupKey) lookupKey = k;
@@ -603,6 +619,7 @@ export function subscriptionState(sub: Obj, o: { pastDueSince?: string | null; n
     lookupKey,
     periodEnd: isoOf(end),
     cancelAtPeriodEnd: status !== "canceled" && (sub?.cancel_at_period_end === true || typeof sub?.cancel_at === "number"),
+    seats: priced?.per_seat === true ? (cleanSeats(quantity) ?? (typeof quantity === "number" && quantity > MAX_SEATS ? MAX_SEATS : 1)) : null,
   };
 }
 
@@ -1008,9 +1025,10 @@ export async function applySubscription(x: EventContext, account: BillingAccount
   await x.db
     .prepare(
       "UPDATE accounts SET plan = ?, subscription_id = ?, subscription_status = ?, past_due_since = ?, current_period_end = ?, cancel_at_period_end = ?, " +
-        "stripe_mode = ? WHERE id = ? AND stripe_customer_id = ?",
+        "stripe_mode = ?, seats = ? WHERE id = ? AND stripe_customer_id = ?",
     )
-    .bind(s.plan, subId, s.status, pastDueSince, s.periodEnd, s.cancelAtPeriodEnd ? 1 : 0, stripeMode(x.env), account.id, customer)
+    // the seats follow the subscription like the plan: a plan that is not sold per seat, or that ended, has none
+    .bind(s.plan, subId, s.status, pastDueSince, s.periodEnd, s.cancelAtPeriodEnd ? 1 : 0, stripeMode(x.env), s.plan === "free" ? null : s.seats, account.id, customer)
     .run();
   return { status: "applied", ours: true, account: account.id, plan: s.plan };
 }

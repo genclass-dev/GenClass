@@ -172,7 +172,8 @@ showed it on the developer's fast backend, with no false report on the fixed pag
 GenClass's GitHub App puts what the runtime saw on the pull request it was seen in. Your Playwright tests run with
 the GenClass fixture, your workflow uploads the race files it writes, and the app posts one check and one comment:
 each finding with its test, the seeds it was flagged in and the evidence line. It reads those files and never your
-source code, it comments only where it is installed, and it is free, on public and private repositories.
+source code, it comments only where it is installed, and it is free on public repositories. Private repositories
+come with the Team plan (US$15 a developer a month; [pricing](https://genclass.dev/pricing)).
 
 > **Install** at <https://genclass.dev/github> (the app is GenClass.dev, <https://github.com/apps/genclass-dev>). With
 > no change to your tests, one workflow file is the whole setup: the check on your first pull request links to it,
@@ -217,7 +218,9 @@ export const submitOrder = protect("checkout submit", (cart) => fetch("/api/orde
 
 - **Token and dashboard.** A token (`gc_` plus 22 letters and digits, public) groups your app's diagnostics under a
   private dashboard link (`https://genclass.dev/dashboard/...`). The dashboard is free for every app, with or without
-  an account. Get a token at [genclass.dev/start](https://genclass.dev/start), or let `init` create it after you
+  an account: what GenClass found, where and what it did, for the last 7 days and up to 3 apps in an account. Visitor
+  analytics, forwarding, export, 90 days of history and team members come with the Team plan
+  ([pricing](https://genclass.dev/pricing)); the runtime itself is never limited by a plan. Get a token at [genclass.dev/start](https://genclass.dev/start), or let `init` create it after you
   approve its diff. To keep dashboards in an optional genclass.dev account, `npx @genclass/runtime@beta login` signs in
   from the terminal (device flow) and connects the app in the current folder; `connect`, `whoami` and `logout` do the
   rest, and `npx @genclass/runtime@beta dashboard` prints an app's link again (from `0.3.0-beta.2`). The dashboard

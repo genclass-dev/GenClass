@@ -16,6 +16,12 @@ from this note are in [section 10](#10-implementation-notes). First-load cost:
 [RESULTS.md section 15](RESULTS.md#analytics). Adopting them on genclass.dev itself is section 7: the site pinned
 0.2.2 when this was written, and its pages were unchanged as of 2026-10-25 (sections 10 and 11.3).
 
+**Plans (2026-11-11).** On genclass.dev the dashboard shows these analytics on the Team and Enterprise plans
+(`billing/plans.json`, the `analytics` entitlement). The collector counts them for every app that turns them on,
+whatever its plan, and leaves them out of the stats it serves to a plan without them
+(`telemetry-worker/src/dashboard.ts` stripAnalytics), so an upgrade shows what was counted before it. Nothing in the
+runtime changes with the plan, and a collector you host yourself shows them to everyone.
+
 **Where the genclass.dev paths are now.** Since 2026-10-18 the website and its admin (`site/`) live in the private
 repository `genclass-dev/genclass-site`, which includes this repository as its `lib/` submodule. The paths `site/...`
 in sections 6, 7 and 10 (`site/src/admin.js`, `site/src/worker.js`, `site/src/pages/privacy.html`) are in that
@@ -330,7 +336,7 @@ a consent banner (section 7 step 4).
 3. **Element key sources**: data attributes, then ids, then link targets, then stable class names, then a structural
    path. Recommended. The stricter alternative drops ids and class names (more `nth-of-type` paths, less readable).
 4. **Storage**: `interactions` events stored in R2 with the batch (90 days, 1 year on the Enterprise plan, and in
-   the data export, which was a paid feature when this was written and is on every plan since 2026-10-19), but never
+   the data export, which was a paid feature when this was written, on every plan from 2026-10-19 and part of Team and Enterprise since 2026-11-11), but never
    used for model training. The alternative strips them from R2 and keeps only the dashboard counters.
 5. **genclass.dev**: which of the two options in section 7 step 3, and how to handle consent for EU, EEA and UK
    visitors (section 7 step 4).

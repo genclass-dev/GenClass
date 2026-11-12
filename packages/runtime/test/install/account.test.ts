@@ -11,7 +11,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 // @ts-expect-error plain ESM module without types
-import { credentialsPath } from "../../bin/lib/account.mjs";
+import { credentialsPath, failure } from "../../bin/lib/account.mjs";
 // @ts-expect-error plain ESM module without types
 import { hostConfig } from "../../bin/lib/host.mjs";
 import { CMD } from "../../bin/lib/version.mjs";
@@ -632,5 +632,17 @@ describe("credentials file location", () => {
     expect(login.code).toBe(0);
     expect(login.out).toContain("--no-browser");
     expect(login.calls).toEqual([]);
+  });
+});
+
+describe("a request genclass.dev refuses because of the account's plan", () => {
+  it("is reported as an upgrade, in the server's own words: the plan, the limit and the page with the plans", () => {
+    const url = "https://genclass.dev/account/billing";
+    const limit = { status: 409, json: { ok: false, error: `the Free plan holds 3 apps; see the plans at ${url}`, upgrade_url: url } };
+    expect(failure(limit)).toBe(`upgrade needed: the Free plan holds 3 apps; see the plans at ${url}`);
+    expect(failure(limit, "creating the app")).toBe(`creating the app: upgrade needed: the Free plan holds 3 apps; see the plans at ${url}`);
+    // any other refusal reads as before
+    expect(failure({ status: 409, json: { ok: false, error: "an account can hold at most 200 apps" } })).toBe("the server answered HTTP 409: an account can hold at most 200 apps");
+    expect(failure({ status: 401, json: { upgrade_url: url, error: "x" } })).toBe("the CLI session is no longer valid (signed out, revoked or expired)");
   });
 });

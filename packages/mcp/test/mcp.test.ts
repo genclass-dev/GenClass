@@ -8,7 +8,7 @@ import { RUNTIME_VERSION } from "../src/clients.js";
 import { McpServer, PROTOCOL_VERSIONS } from "../src/mcp.js";
 import { serve, channelEvent, type Served } from "../src/server.js";
 import { VERSION } from "../src/http.js";
-import { INSTRUCTIONS, TOOLS, setupText } from "../src/tools.js";
+import { INSTRUCTIONS, TOOLS, prodLines, setupText } from "../src/tools.js";
 import { act, page, snap, tokenDir } from "./helpers.js";
 
 /** A client on in-memory streams: send requests, read replies and notifications. */
@@ -426,6 +426,20 @@ describe("mcp: tools against a live bridge", () => {
     expect(a.text).toContain("GET /api/cart: 12 · 80 ms · 240 ms · 25% · 0");
     expect(a.text).toContain("cart.total == sum");
     expect(a.text).toContain("set GENCLASS_DASHBOARD");
+  });
+
+  it("production: what the app's plan leaves out is said with the plans page, never read as no data", () => {
+    const base = { name: "shop", range: "7d", lastEvent: null, totals: { sessions: 40, detections: 3 } };
+    // everything in the plan: no upgrade line
+    expect(prodLines({ ...base, totals: { ...base.totals, ix_views: 90 } }, undefined, "7d").join("\n")).not.toMatch(/Upgrade needed|Showing/);
+    const locked = prodLines({ ...base, locked: { analytics: { plan: "Team", upgrade_url: "https://genclass.dev/account/billing" } } }, undefined, "30d");
+    expect(locked[1]).toBe("Showing 7d, not 30d: the longest this dashboard link gives on the app's plan (a private link never goes past 30d). Plans: https://genclass.dev/account/billing");
+    expect(locked[2]).toBe("Upgrade needed for visitor analytics (page views, visits, funnels, clicks): they come with the Team plan. Plans: https://genclass.dev/account/billing");
+    // the detections are still there
+    expect(locked.join("\n")).toContain("sessions 40 · detections 3");
+    // a plans address that is not an https URL is never printed: the pricing page stands in
+    const odd = prodLines({ ...base, locked: { analytics: { plan: null, upgrade_url: "javascript:alert(1)" } } }, undefined, "7d");
+    expect(odd[1]).toBe("Upgrade needed for visitor analytics (page views, visits, funnels, clicks): they are not in this app's plan. Plans: https://genclass.dev/pricing");
   });
 
   it("a page's text never becomes structure: control characters and quotes stay inside a quoted field", async () => {

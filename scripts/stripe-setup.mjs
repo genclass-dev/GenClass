@@ -87,6 +87,20 @@ function form(params) {
   return new URLSearchParams(out).toString();
 }
 
+/**
+ * The Billing Portal's subscription_update feature. Plans sold per seat (billing/plans.json per_seat) let the buyer
+ * change the seats there: a quantity update of that product's own prices and nothing else (never a switch of price),
+ * charged or credited at once. Only products and prices this run found or made (`made`: plan id to { product,
+ * planned, prices }); a product only planned in a dry run, or one with no price yet, is left out, and with none the
+ * feature stays off, as before per-seat plans.
+ */
+export function seatUpdate(plans, made = {}) {
+  const products = plans
+    .filter((p) => p.per_seat === true && made[p.id] && !made[p.id].planned && made[p.id].prices.length)
+    .map((p) => ({ product: made[p.id].product, prices: made[p.id].prices }));
+  return products.length ? { enabled: true, default_allowed_updates: ["quantity"], proration_behavior: "always_invoice", products } : { enabled: false };
+}
+
 function wranglerSecret(name, value) {
   return new Promise((done) => {
     const npx = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -311,7 +325,9 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
     say(`${SECRET_NAME} stored on the worker.`);
   }
 
-  async function portal(existing) {
+  async function portal(existing, made = {}) {
+    const update = seatUpdate(PLANS.plans, made);
+    if (update.enabled) say(`portal: seats can be changed for ${update.products.map((p) => p.product).join(", ")} (a quantity update, charged at once)`);
     const params = {
       business_profile: { headline: PORTAL_HEADLINE, privacy_policy_url: `${SITE}/privacy`, terms_of_service_url: `${SITE}/terms` },
       default_return_url: `${SITE}/account/billing`,
@@ -326,8 +342,9 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
           cancellation_reason: { enabled: true, options: ["too_expensive", "missing_features", "switched_service", "unused", "other"] },
         },
         // no plan switch here: a Managed Payments subscription cannot take another plan's price, and must not move
-        // onto a subscription outside Managed Payments; the billing page switches with a new Checkout
-        subscription_update: { enabled: false },
+        // onto a subscription outside Managed Payments; the billing page switches with a new Checkout. The one update
+        // allowed is the quantity of a per-seat plan's own price (the seats)
+        subscription_update: update,
       },
       metadata: { genclass: MARK },
     };
@@ -354,9 +371,9 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
   const state = await readPlans();
   const endpoints = (await readWebhooks()).filter((w) => w.description === WEBHOOK_DESCRIPTION);
   const existingPortal = await readPortal();
-  await products(state);
+  const made = await products(state);
   await webhook(endpoints);
-  await portal(existingPortal);
+  await portal(existingPortal, made);
   const dashboard = `
 Dashboard steps for GenClass's Stripe account, in this mode, before the worker gets its key (the reasons are in
 telemetry-worker/README.md, "Paid plans"):

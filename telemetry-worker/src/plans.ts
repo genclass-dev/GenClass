@@ -5,29 +5,39 @@
 // - The plans live in billing/plans.json at the repo root (genclass.dev's pricing page reads the same file). Change a
 //   price, a limit or an entitlement there, not here. Every check below reads the plan's entitlements and limits, so
 //   nothing here names a plan but Free and the grant's (plans.json grant_plan).
-// - Today there are two plans, Free and Enterprise, and every one includes the dashboard, analytics, export, forwarding
-//   and a classifier a person trains (custom_model; Free with 90 days of history). None is sold on the site (PAID_PLANS
-//   is empty; Individual, US$29 a month, ended on 2026-10-22, and a stored "individual" reads as Free, while its Stripe
-//   prices stay GenClass's: ownedPrice, plans.json retired_plans); the
-//   locked paths (hasDashboard false) are kept for a plan file that leaves one out, and the tests run them on a fixture
+// - Since plans.json version 3 (2026-11-11) there are three plans. Free is what finds, shows and fixes the problems: the
+//   dashboard's problems for one person, 3 apps and the last 7 days shown. Team (US$15 a month per seat, sold on Stripe
+//   Checkout) adds visitor analytics, forwarding, export, 90 days shown, private repositories for the GitHub App and
+//   members (src/team.ts). Enterprise (by agreement) adds the classifier a person trains (custom_model) and a year.
+//   Individual, US$29 a month, ended on 2026-10-22: a stored "individual" reads as Free, while its Stripe prices stay
+//   GenClass's (ownedPrice, plans.json retired_plans). Every plan includes the dashboard; the locked paths
+//   (hasDashboard false) are kept for a plan file that leaves it out, and the tests run them on a fixture
 //   (test/fixtures/plans-two-paid.json). There is no trial.
+// - Seats. A per_seat plan is paid per person: the subscription's quantity (accounts.seats, written by src/stripe.ts)
+//   is how many people the account holds, its owner included. A plan that is not per_seat holds limits.seats people
+//   (Free: 1; null: no limit), and a plan GenClass grants has no seat count, so no limit. seatsOf says it.
+// - PLAN_GATES = "open" (a self-hosted collector, wrangler.selfhost.toml): every account has the grant plan, so
+//   nothing is locked on a server that sells nothing (planGatesOpen, source "open").
 // - A plan comes from accounts.plan, which src/stripe.ts derives from the Stripe subscription. Entitlements follow the
 //   plan whatever the server's configuration, except that a plan bought in Stripe's test mode counts only while the
 //   key is a test key (inMode): a test purchase never carries over to live. A live plan always counts.
 // - A plan with a null monthly price (Enterprise) is not sold on the site: it is agreed by email, and an account gets
-//   it from GenClass's own grant (accounts.comp_until, set by hand to the end of the agreement), which gives
-//   plans.json grant_plan. When an account has both a paid plan and a grant, the plan listed later in plans.json
-//   applies (accessOf).
+//   it from GenClass's own grant (accounts.comp_until, set by hand to the end of the agreement), which gives the plan
+//   accounts.comp_plan names (plans.json grant_plan when it is empty or unknown). When an account has both a paid plan
+//   and a grant, the plan listed later in plans.json applies (accessOf).
 // - A price names a plan only when it is provably GenClass's: a lookup key starting with genclass_ AND a product whose
 //   metadata genclass_plan names a paid plan (planForPrice). GenClass now has a Stripe account of its own; this rule
 //   is kept from when it shared a Stripe account with another business, as a defence in depth.
 // - A plan whose payment is overdue ends here, whatever the Stripe account's retry settings: past_due keeps the plan
 //   for PAST_DUE_GRACE_DAYS (14) after GenClass first saw it past due, then it is Free (the webhook, and the daily
 //   sweep below); unpaid is Free at once.
-// - The Free plan's app limit (none today; the caller's abuse cap still applies) applies to every account without a
-//   plan or grant, whatever the Stripe key. Ingest collects for every app whatever its plan. With a test key only the
+// - The Free plan's app limit (3; the caller's abuse cap still applies) applies to every account without a plan or
+//   grant, whatever the Stripe key: no more apps are created past it, and the apps an account already has stay. Ingest
+//   collects for every app whatever its plan, visitor analytics included: a plan decides what is shown (stripAnalytics
+//   in src/dashboard.ts), never what is counted, so an upgrade shows what was counted before it. With a test key only the
 //   accounts in STRIPE_TEST_ACCOUNTS can buy (canBuy).
-// - Retention never deletes data newer than the plan allows, and never shortens what existing projects had: daily
+// - limits.history_days is what the dashboard shows (viewRanges), not what is kept. Retention never deletes data newer
+//   than the plan allows, and never shortens what existing projects had: daily
 //   counters, recent rows and stored batches are kept RETENTION_DAYS (90) for every project, and longer for the apps
 //   of accounts on a plan with more history or a grant (and for GRACE_DAYS after a paid plan ends, so a lapsed card
 //   does not cost a year of data at once).
@@ -40,7 +50,7 @@ import { exportSweep, type BucketOps } from "./export.js";
 const DAY = 86_400_000;
 export const GRACE_DAYS = 30;
 
-export type PlanId = "free" | "enterprise";
+export type PlanId = "free" | "team" | "enterprise";
 /** `github_private`: genclass-dev[bot] reviews the account's private repositories (src/github/entitlement.ts); public ones are free for everyone. */
 export type Entitlement = "dashboard" | "forwarding" | "export" | "analytics" | "custom_model" | "github_private";
 
@@ -55,7 +65,10 @@ export interface Plan {
   stripe_tax_code: string | null;
   /** Sold through Stripe Managed Payments (src/stripe.ts managedPayments): none today. */
   managed_payments: boolean;
-  limits: { apps: number | null; history_days: number };
+  /** Sold per person: the monthly price is for one seat, and the subscription's quantity is the seats (seatsOf). */
+  per_seat?: boolean;
+  /** `seats`: the people a plan that is not per_seat holds, the owner included (null or left out: no limit). */
+  limits: { apps: number | null; history_days: number; seats?: number | null };
   /** A key a plan leaves out counts as false (entitled). */
   entitlements: Partial<Record<Entitlement, boolean>> & Record<Exclude<Entitlement, "github_private">, boolean>;
   features: { text: string; available: boolean }[];
@@ -164,13 +177,24 @@ export function canBuy(env: Env, account: { id: string; email: string | null }):
   return list.some((x) => x === account.id || (!!email && x.toLowerCase() === email));
 }
 
-/** "$29 / month", "$0", or "By agreement" for a plan agreed by email. */
+/** "$29 / month", "$15 / developer / month" (a per_seat plan), "$0", or "By agreement" for a plan agreed by email. */
 export function priceText(plan: Plan): string {
   const c = plan.price_usd_cents.monthly;
   if (c === null) return "By agreement";
   if (!c) return "$0";
-  return `$${c % 100 ? (c / 100).toFixed(2) : String(c / 100)} / month`;
+  return `$${c % 100 ? (c / 100).toFixed(2) : String(c / 100)}${plan.per_seat === true ? " / developer" : ""} / month`;
 }
+
+/** The most seats one Checkout sells and one account holds on a per_seat plan; a larger team is agreed by email. */
+export const MAX_SEATS = 200;
+
+/** A seat count as asked for (Checkout) or as Stripe reports it (a subscription item's quantity): 1 to MAX_SEATS. */
+export function cleanSeats(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_SEATS ? v : null;
+}
+
+/** PLAN_GATES = "open": this server gives every account the grant plan (a self-hosted collector). */
+export const planGatesOpen = (env: Pick<Env, "PLAN_GATES">): boolean => /^open$/i.test((env.PLAN_GATES ?? "").trim());
 
 // --------------------------------------------------------------------------------------------- an account's plan
 
@@ -226,25 +250,49 @@ export async function accountBilling(db: D1Like, accountId: string, env?: Env): 
 
 // --------------------------------------------------------------------------------------------- access: plan, grant
 
-/** Why an account has a plan's entitlements now: a subscription, or GenClass's own grant (comp_until). */
-export type AccessSource = "paid" | "comp";
+/** Why an account has a plan's entitlements now: a subscription, GenClass's own grant (comp_until), or PLAN_GATES open. */
+export type AccessSource = "paid" | "comp" | "open";
 
 export interface Access {
   /** The plan whose entitlements apply now: the paid plan or the grant's (accessOf), else Free. */
   plan: Plan;
   /** Why; null on Free. */
   source: AccessSource | null;
+  /** How many people the account holds now, its owner included (seatsOf); null: no limit. */
+  seats: number | null;
 }
 
-/** The columns accountAccess reads (accounts, migrations 0004 and 0006). */
+/** The columns accountAccess reads (accounts, migrations 0004, 0006 and 0014). */
 export interface AccessRow {
   plan: string | null;
   stripe_mode: string | null;
   comp_until: string | null;
+  /** The plan GenClass's grant gives (migration 0014); empty or unknown: plans.json grant_plan. */
+  comp_plan?: string | null;
+  /** The paid seats of a per_seat plan: the subscription's quantity (migration 0014, src/stripe.ts). */
+  seats?: number | null;
 }
 
-export const ACCESS_COLUMNS = "plan, stripe_mode, comp_until";
-export const NO_ACCESS: Access = { plan: FREE, source: null };
+export const ACCESS_COLUMNS = "plan, stripe_mode, comp_until, comp_plan, seats";
+export const NO_ACCESS: Access = { plan: FREE, source: null, seats: FREE.limits.seats ?? null };
+/** What every account has on a server with PLAN_GATES open. */
+export const OPEN_ACCESS: Access = { plan: GRANT_PLAN, source: "open", seats: null };
+
+/**
+ * How many people an account on `plan` holds, its owner included (null: no limit). A paid per_seat plan: the seats
+ * paid for, at least 1. Any other plan, and every grant: the plan's own limits.seats (a grant of a per_seat plan has
+ * no seat count, so no limit).
+ */
+export function seatsOf(plan: Plan, source: AccessSource | null, paidSeats: number | null | undefined): number | null {
+  if (plan.per_seat === true) return source === "paid" ? Math.max(1, cleanSeats(paidSeats) ?? 1) : null;
+  return plan.limits.seats ?? null;
+}
+
+/** The plan a grant gives: the one accounts.comp_plan names when it is a plan above Free, else plans.json grant_plan. */
+export function grantPlan(compPlan: string | null | undefined): Plan {
+  const p = compPlan ? PLANS.find((x) => x.id === compPlan) : undefined;
+  return p && p.id !== "free" ? p : GRANT_PLAN;
+}
 
 const future = (iso: string | null | undefined, now: Date): boolean => {
   const t = iso ? Date.parse(iso) : NaN;
@@ -256,20 +304,24 @@ const rank = (plan: Plan): number => PLANS.indexOf(plan);
 
 /**
  * What an account may use at `now`: its paid plan (as the current Stripe key sees it, modeCounts) or GenClass's own
- * grant while comp_until is in the future, whichever is listed later in plans.json (the paid plan when they are the
- * same); otherwise Free. A null row (no account) is Free.
+ * grant while comp_until is in the future (grantPlan), whichever is listed later in plans.json (the paid plan when
+ * they are the same); otherwise Free. A null row (no account) is Free. With `open` (planGatesOpen), every account and
+ * every app without one has the grant plan.
  */
-export function accessOf(row: AccessRow | null | undefined, mode: StripeMode | null, now: Date): Access {
+export function accessOf(row: AccessRow | null | undefined, mode: StripeMode | null, now: Date, open = false): Access {
+  if (open) return OPEN_ACCESS;
   if (!row) return NO_ACCESS;
   const paid = modeCounts(row.stripe_mode, mode) ? planById(row.plan) : FREE;
   const comp = future(row.comp_until, now);
-  if (paid.id !== "free" && (!comp || rank(paid) >= rank(GRANT_PLAN))) return { plan: paid, source: "paid" };
-  if (comp) return { plan: GRANT_PLAN, source: "comp" };
+  const grant = grantPlan(row.comp_plan);
+  if (paid.id !== "free" && (!comp || rank(paid) >= rank(grant))) return { plan: paid, source: "paid", seats: seatsOf(paid, "paid", row.seats) };
+  if (comp) return { plan: grant, source: "comp", seats: seatsOf(grant, "comp", null) };
   return NO_ACCESS;
 }
 
 /** The account's access at `now` under the current Stripe key (accessOf). */
 export async function accountAccess(db: D1Like, accountId: string, env: Env, now: Date): Promise<Access> {
+  if (planGatesOpen(env)) return OPEN_ACCESS;
   const row = await db.prepare(`SELECT ${ACCESS_COLUMNS} FROM accounts WHERE id = ?`).bind(accountId).first<AccessRow>();
   return accessOf(row, stripeMode(env), now);
 }
@@ -282,10 +334,17 @@ export async function accountPlan(db: D1Like, accountId: string, env: Env, now: 
 /** This access opens dashboards (every plan in billing/plans.json today). */
 export const hasDashboard = (a: Access): boolean => entitled(a.plan, "dashboard");
 
+/** This access shows visitor analytics (Team and Enterprise); without it the stats are served with them left out. */
+export const hasAnalytics = (a: Access): boolean => entitled(a.plan, "analytics");
+
 /** The access behind an app: its account's, or Free's for an app known only by its private link. */
 export async function projectAccess(db: D1Like, project: { account_id?: string | null }, env: Env, now: Date): Promise<Access> {
+  if (planGatesOpen(env)) return OPEN_ACCESS;
   return project.account_id ? accountAccess(db, project.account_id, env, now) : NO_ACCESS;
 }
+
+/** The first plan in plans.json that includes `e` (the plan an upgrade message names), or null. */
+export const firstPlanWith = (e: Entitlement): Plan | null => PLANS.find((p) => entitled(p, e)) ?? null;
 
 // --------------------------------------------------------------------------------------------- apps
 
@@ -319,7 +378,7 @@ export function appLimitBody(lim: AppLimit, origin: string): { ok: false; error:
 /** Dashboard ranges an owned app can show, shortest first, with the days each one reaches back. */
 export const ACCOUNT_RANGES: Range[] = ["24h", "7d", "30d", "90d", "1y"];
 export const RANGE_DAYS: Record<Range, number> = { "24h": 1, "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
-/** The ranges this plan's dashboard shows (by its history_days; Free reaches 90 days). */
+/** The ranges this plan's dashboard shows (by its history_days: Free 7 days, Team 90, Enterprise a year). */
 export function viewRanges(plan: Plan): Range[] {
   const out = ACCOUNT_RANGES.filter((r) => RANGE_DAYS[r] <= plan.limits.history_days);
   return out.length ? out : ["24h"];

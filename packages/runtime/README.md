@@ -738,9 +738,11 @@ writes), the meta tag or the script tag.
 digits) that groups its diagnostics on a dashboard at genclass.dev, kept in a GenClass account (the CLI's `login`,
 then `connect`, `whoami`, `logout`) or behind one private link per app (anyone with the link can open it), which
 `init` saves in `.genclass.local` and `npx @genclass/runtime@beta dashboard` prints again (from `0.3.0-beta.2`;
-`--open` opens it). The dashboard is free for every app, with 90 days of history (1 year on Enterprise), and so are
-your own classifier, which a person from GenClass trains on your app's traffic, bug reports or labelled examples once
-you ask, and the `@genclass/mcp` server for coding agents ([pricing](https://genclass.dev/pricing)). It needs
+`--open` opens it). The dashboard is free for every app (what GenClass found, where and what it did, for the last 7
+days and up to 3 apps in an account), and so is the `@genclass/mcp` server for coding agents. Visitor analytics,
+forwarding, export, 90 days of history and team members come with the Team plan, US$15 a developer a month; your own
+classifier, which a person from GenClass trains, and a year of history with Enterprise
+([pricing](https://genclass.dev/pricing)). No plan limits the runtime. It needs
 telemetry on and a deployed host: local hosts do not send by default. Pass a key with `GenClass.init({ token })`,
 `data-token`, `token=` in the meta tag or `window.GENCLASS_CONFIG = { token }`. Accounts, the private link and what
 the CLI sends: [DASHBOARD.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/DASHBOARD.md).
