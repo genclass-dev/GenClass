@@ -1,7 +1,7 @@
 // `genclass dashboard` (src/app.mjs): the app's numbers as lines, and which app is shown.
 import { describe, expect, it } from "vitest";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
-import { dashboard, KINDS, render, spark } from "../src/app.mjs";
+import { dashboard, KINDS, render, signInAgain, spark } from "../src/app.mjs";
 import { ACCOUNT, fakeServer, HOST, isolate, overview, printed, project, SESSION, tempDir, viteApp } from "./helpers.js";
 
 isolate();
@@ -49,7 +49,7 @@ describe("genclass dashboard: the view (src/app.mjs render, spark)", () => {
     expect(said).toMatch(/Handled\s+3\s+Visual checks\s+9/);
     expect(said).toMatch(/12\s+duplicate\s+\/checkout\s+the same request went out twice/);
     expect(said).toMatch(/4\s+stale\s+\/orders\/:id\s+old data replaced newer data/);
-    expect(said).toContain("and 1 more: genclass dashboard --all");
+    expect(said).toContain("and 1 more: npx genclass dashboard --all");
     expect(said).not.toContain("odd-plugin-kind");
     expect(said).not.toContain("Possible problems");
     expect(said).toMatch(/6\s+text-overflow\s+\/pricing/);
@@ -57,7 +57,7 @@ describe("genclass dashboard: the view (src/app.mjs render, spark)", () => {
     expect(said).toContain("came in on / (201), /pricing (60)");
     expect(said).toMatch(/Coding agent\s+5 found · 3 reproduced · 2 fixed · 1 with a test/);
     expect(said).toMatch(/GitHub App\s+reviewing · 4 pull requests so far/);
-    expect(said).toMatch(/Suggestions\s+7 to do, 2 urgent · checked 2 days ago · genclass suggest/);
+    expect(said).toMatch(/Suggestions\s+7 to do, 2 urgent · checked 2 days ago · npx genclass suggest/);
     expect(said).toContain(`${HOST}/account/apps/proj000000000001`);
     expect(said.split("\n").length).toBeLessThan(30);
     // every row on request: a kind the model's vocabulary does not have is shown by its own name, with no made-up words
@@ -73,7 +73,7 @@ describe("genclass dashboard: the view (src/app.mjs render, spark)", () => {
     const said = await printed(() => render(empty as never, { steps: [{ id: "agent", state: "todo", detail: "" }] } as never, { now: NOW }));
     expect(said).toContain("Nothing received yet. GenClass sends nothing from localhost");
     expect(said).toContain(`visitor analytics come with the Team plan: ${HOST}/account/billing`);
-    expect(said).toContain("not connected yet: genclass setup");
+    expect(said).toContain("not connected yet: npx genclass setup");
     expect(said).not.toContain("Problems\n");
     const clean = await printed(() => render({ ...empty, lastEvent: APP.lastEvent, totals: { ...empty.totals, visits: 40 } } as never, { steps: [] } as never, { now: NOW }));
     expect(clean).toContain("No problems found in this period.");
@@ -87,12 +87,12 @@ describe("genclass dashboard: which app (src/app.mjs dashboard)", () => {
     let fell = 0;
     expect(await dashboard({ cwd: dir }, { runGit: () => null, fallback: async () => (fell++, 7) })).toBe(7);
     expect(fell).toBe(1);
-    expect(JSON.parse(await printed(async () => expect(await dashboard({ cwd: dir, json: true }, { runGit: () => null })).toBe(1)))).toEqual({ ok: false, error: "not signed in", run: "genclass login" });
+    expect(JSON.parse(await printed(async () => expect(await dashboard({ cwd: dir, json: true }, { runGit: () => null })).toBe(1)))).toEqual({ ok: false, error: "not signed in", run: "npx genclass login" });
     saveCredentials({ host: HOST, access_token: SESSION, account: ACCOUNT });
     const two = fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project(), project({ id: "proj000000000002", name: "blog", token: "gc_ZyXwVuTsRqPoNmLkJiHgFe" })] }) } });
     const which = await printed(async () => expect(await dashboard({ cwd: dir }, { runGit: () => null, fetchFn: two.fetchFn })).toBe(2));
-    expect(which).toContain('genclass dashboard --app "shop"');
-    expect(which).toContain('genclass dashboard --app "blog"');
+    expect(which).toContain('npx genclass dashboard --app "shop"');
+    expect(which).toContain('npx genclass dashboard --app "blog"');
     expect(two.calls.map((c) => c.path)).toEqual(["/api/cli/overview"]);
     // named: that app is asked for, by its id, with the period
     const named = fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project(), project({ id: "proj000000000002", name: "blog", token: "gc_ZyXwVuTsRqPoNmLkJiHgFe" })] }) }, "GET /api/cli/app": { json: { name: "blog", range: "30d", totals: { sessions: 5 }, series: [], breakdowns: {}, recent: [], visits: {}, agent: {}, dashboard_url: `${HOST}/account/apps/proj000000000002` } } });
@@ -108,5 +108,36 @@ describe("genclass dashboard: which app (src/app.mjs dashboard)", () => {
     // an address from the server that is not on its own host is never printed
     const evil = fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project()] }) }, "GET /api/cli/app": { json: { name: "shop", totals: {}, dashboard_url: "https://evil.example/x" } } });
     expect(await printed(async () => expect(await dashboard({ cwd: dir }, { runGit: () => null, fetchFn: evil.fetchFn })).toBe(0))).not.toContain("evil.example");
+  });
+});
+
+describe("genclass login: a sign-in from before dashboards is approved once more (src/app.mjs signInAgain)", () => {
+  it("signed out, or with a sign-in that can show dashboards, the usual login runs (null)", async () => {
+    expect(await signInAgain({}, { fetchFn: fakeServer({}).fetchFn })).toBeNull();
+    saveCredentials({ host: HOST, access_token: SESSION, account: ACCOUNT });
+    // the server looks at the sign-in before the app: a current one gets "not found" for the id no app has
+    const fine = fakeServer({ "GET /api/cli/app": { status: 404, json: { ok: false, error: "not found" } } });
+    let asked = 0;
+    expect(await signInAgain({}, { fetchFn: fine.fetchFn, signIn: async () => (asked++, "done") })).toBeNull();
+    expect(asked).toBe(0);
+    expect(fine.calls.map((c) => `${c.path}${c.query}`)).toEqual(["/api/cli/app?id=-&range=24h"]);
+    expect(fine.calls[0]!.auth).toBe(`Bearer ${SESSION}`);
+    // a server that cannot be reached, or one without the route, changes nothing either
+    const down = (async () => {
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+    expect(await signInAgain({}, { fetchFn: down, signIn: async () => (asked++, "done") })).toBeNull();
+    expect(asked).toBe(0);
+  });
+
+  it("an old sign-in is signed in again instead of answering 'already signed in'", async () => {
+    saveCredentials({ host: HOST, access_token: SESSION, account: ACCOUNT });
+    const old = fakeServer({ "GET /api/cli/app": { status: 403, json: { ok: false, error: "sign in again: npx genclass login", reauth: true } } });
+    const seen: object[] = [];
+    const said = await printed(async () => expect(await signInAgain({ noBrowser: true }, { fetchFn: old.fetchFn, signIn: async (o) => (seen.push(o), "done") })).toBe(0));
+    expect(seen).toEqual([{ noBrowser: true }]);
+    expect(said.replace(/\s+/g, " ")).toContain("One more approval in the browser");
+    // an approval that is not given is exit 1, and nothing else is tried
+    expect(await printed(async () => expect(await signInAgain({}, { fetchFn: old.fetchFn, signIn: async () => "skipped" })).toBe(1))).toContain("signed in");
   });
 });

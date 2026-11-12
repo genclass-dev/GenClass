@@ -15,19 +15,20 @@ import { BUILD } from "./assets.mjs";
 
 export const USAGE = `genclass: one way to set up GenClass, and what your app needs next
 
-  genclass                where this project stands; on a terminal it walks you through the next step
-  genclass setup          the guided setup  (--yes: no questions, for a coding agent)
-  genclass status         what is done, what is next  (--all: every part; --json: for a coding agent)
-  genclass suggest [url]  what your app is missing, most important first  (--json, --yes, --no-model, --all)
-  genclass dashboard      your app, whole: problems found, checks, visitors, agent, GitHub App
-                          (--range 24h|7d|30d, --all, --app <name>, --open, --json)
-  genclass scan <url>     23 visual checks on one page
-  genclass login          sign in  (logout, whoami)
-  genclass remove         take GenClass out of this app again
+  npx genclass                where this project stands; on a terminal it walks you through the next step
+  npx genclass setup          the guided setup  (--yes: no questions, for a coding agent)
+  npx genclass status         what is done, what is next  (--all: every part; --json: for a coding agent)
+  npx genclass suggest [url]  what your app is missing, most important first  (--json, --yes, --no-model, --all)
+  npx genclass dashboard      your app, whole: problems found, checks, visitors, agent, GitHub App
+                              (--range 24h|7d|30d, --all, --app <name>, --open, --json)
+  npx genclass scan <url>     23 visual checks on one page
+  npx genclass login          sign in  (logout, whoami)
+  npx genclass remove         take GenClass out of this app again
 
   Options: --cwd <dir>   --yes   --json   --no-browser   --help   --version
 
-  Every part GenClass sets up is listed by "genclass status --all". Docs: https://genclass.dev/docs`;
+  Run it in your web app's folder. npx runs it without installing; "npm install -g genclass" makes it just "genclass".
+  Every part GenClass sets up is listed by "npx genclass status --all". Docs: https://genclass.dev/docs/cli`;
 
 const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open" };
 const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range" };
@@ -56,6 +57,12 @@ export async function run(argv) {
   const args = cmd ? argv.slice(1) : argv;
 
   // the runtime CLI's own commands, with their own flags and help
+  if (cmd === "login" && !args.some((a) => a === "--help" || a === "-h")) {
+    // a sign-in from before the command could show dashboards: "already signed in" would be a dead end for
+    // `genclass dashboard`, which sends people here, so it is approved once more instead
+    const again = await (await import("./app.mjs")).signInAgain(parseArgs(args).o);
+    if (again !== null) return again;
+  }
   if (["login", "logout", "whoami", "connect"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
   if (cmd === "init" || cmd === "remove") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
   if (cmd === "scan" || cmd === "audit") {
@@ -104,6 +111,35 @@ export async function run(argv) {
   const { setup, status } = await import("./setup.mjs");
   if (cmd === "status") return status(o);
   if (cmd === "setup" || cmd === null) return setup(o, { runSuggest });
-  err(`genclass: unknown command ${c.bold(cmd)}\n\n${USAGE}`);
+  const near = nearest(cmd);
+  err(`genclass: unknown command ${c.bold(cmd)}${near ? `. Did you mean ${c.cyan(`npx genclass ${near}`)}?` : ""}\n\n${USAGE}`);
   return 2;
+}
+
+const COMMANDS = ["setup", "status", "suggest", "dashboard", "scan", "login", "logout", "whoami", "connect", "init", "remove", "help", "version"];
+
+/** The command a mistyped one is closest to (at most two edits away), or null. */
+export function nearest(word) {
+  const w = String(word).toLowerCase();
+  let best = null;
+  let bestD = 3;
+  for (const cmd of COMMANDS) {
+    const d = edits(w, cmd);
+    if (d < bestD) {
+      best = cmd;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/** Levenshtein distance. */
+function edits(a, b) {
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
 }

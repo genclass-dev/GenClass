@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { run as runInit } from "../../runtime/bin/lib/init.mjs";
-import { agentConfigs, genclassWorkflows, hasPlaywright, readState, stateJson, WORKFLOW_PATH } from "../src/state.mjs";
+import { status } from "../src/setup.mjs";
+import { agentConfigs, appsBelow, genclassWorkflows, hasPlaywright, readState, stateJson, WORKFLOW_PATH } from "../src/state.mjs";
 import { saveNotes } from "../src/store.mjs";
 import { ACCOUNT, fakeServer, HOST, isolate, overview, printed, project, SESSION, tempDir, TOKEN, viteApp, write } from "./helpers.js";
 
@@ -41,7 +42,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     const s = await readState({ cwd: dir }, { runGit: noGit, fetchFn: server.fetchFn });
     expect(server.calls).toEqual([]);
     expect(states(s)).toEqual({ account: "next", runtime: "todo", dashboard: "todo", workflow: "optional", "github-app": "optional", agent: "todo", suggestions: "todo" });
-    expect(s.steps[1]).toMatchObject({ run: "genclass init", detail: "Vite + React" });
+    expect(s.steps[1]).toMatchObject({ run: "npx genclass init", detail: "Vite + React" });
     expect(s.steps[3]!.detail).toBe("not a git repository yet");
     expect(s.app).toMatchObject({ name: "shop", framework: "Vite + React", isApp: true, token: null });
   });
@@ -66,7 +67,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     // the token is in the code but the account has no such app: connecting is next
     const without = await readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview() } }).fetchFn });
     expect(states(without)).toMatchObject({ account: "done", runtime: "next", dashboard: "todo" });
-    expect(without.steps[1]).toMatchObject({ run: "genclass connect", detail: "added, but this app is not in your account yet" });
+    expect(without.steps[1]).toMatchObject({ run: "npx genclass connect", detail: "added, but this app is not in your account yet" });
     expect(without.app.token).toBe(TOKEN);
     // in the account, nothing received yet: waiting on a deploy, which is no command, so the next step is after it
     const waiting = await readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project()] }) } }).fetchFn });
@@ -94,7 +95,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
 
     // no workflow file yet: it is the next step, and the app comes after it
     const none = await read();
-    expect(wf(none)).toMatchObject({ state: "next", title: "Test workflow", doing: "Add the test workflow", detail: "Playwright found · no workflow file yet", run: "genclass setup" });
+    expect(wf(none)).toMatchObject({ state: "next", title: "Test workflow", doing: "Add the test workflow", detail: "Playwright found · no workflow file yet", run: "npx genclass setup" });
     expect(pr(none)).toMatchObject({ state: "todo", title: "GitHub App", detail: "after the test workflow" });
     write(dir, { [WORKFLOW_PATH]: "name: genclass\njobs:\n  genclass:\n    steps:\n      - run: node genclass-playwright-run.mjs\n", ".github/workflows/ci.yml": "name: ci\n" });
     expect(genclassWorkflows(dir)).toEqual([WORKFLOW_PATH]);
@@ -154,7 +155,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     saveNotes(dir, { site: "https://shop.example", suggest: { at: "2026-11-10T12:00:00.000Z", failed: 7, urgent: 2, passed: 19, top: ["https"] } });
     const s = await readState({ cwd: dir }, { runGit: noGit, now: Date.parse("2026-11-12T12:00:00Z") });
     expect(s.steps.find((x) => x.id === "agent")).toMatchObject({ state: "done", detail: ".mcp.json, .cursor/mcp.json" });
-    expect(s.steps.find((x) => x.id === "suggestions")).toMatchObject({ state: "waiting", detail: "7 to do, 2 urgent · checked 2 days ago", human: "work through the list: genclass suggest" });
+    expect(s.steps.find((x) => x.id === "suggestions")).toMatchObject({ state: "waiting", detail: "7 to do, 2 urgent · checked 2 days ago", human: "work through the list: npx genclass suggest" });
     // with nothing left on the list it is done
     saveNotes(dir, { suggest: { at: "2026-11-12T11:00:00.000Z", failed: 0, urgent: 0, passed: 26, top: [] } });
     expect((await readState({ cwd: dir }, { runGit: noGit, now: Date.parse("2026-11-12T12:00:00Z") })).steps.find((x) => x.id === "suggestions")).toMatchObject({ state: "done", detail: "nothing to do · checked 1 hour ago" });
@@ -186,12 +187,50 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     const s = await readState({ cwd: dir, skip: ["account"] }, { runGit: noGit });
     expect(s.next?.id).toBe("runtime");
     const j = stateJson(s);
-    expect(j.next).toMatchObject({ id: "runtime", title: "Add GenClass to this app", run: "genclass init", human: null });
+    expect(j.next).toMatchObject({ id: "runtime", title: "Add GenClass to this app", run: "npx genclass init", human: null });
     // every step has a short name, what doing it is called, one sentence and a fuller one
     for (const x of s.steps) expect([x.title.length > 0, x.doing.length > 0, x.why.length > 0 && x.why.length < 100, x.more.length > 0], x.id).toEqual([true, true, true, true]);
     expect(j.steps.map((x) => x.id)).toEqual(["account", "runtime", "dashboard", "workflow", "github-app", "agent", "suggestions"]);
-    expect(j.steps[0]).toMatchObject({ state: "todo", run: "genclass login", human: "approve the sign-in in your browser" });
+    expect(j.steps[0]).toMatchObject({ state: "todo", run: "npx genclass login", human: "approve the sign-in in your browser" });
     expect(j.complete).toBe(false);
     expect(JSON.stringify(j)).not.toContain(SESSION);
+  });
+});
+
+describe("genclass: a folder that is not a web app (src/state.mjs appsBelow, src/setup.mjs show)", () => {
+  it("finds the web apps below it: three folders deep, not inside an app, build output or hidden folders", async () => {
+    const root = tempDir();
+    write(root, { "package.json": JSON.stringify({ name: "mono", private: true, workspaces: ["apps/*"] }) });
+    viteApp(join(root, "apps", "web"));
+    viteApp(join(root, "apps", "web", "examples", "inner")); // inside an app: not looked at
+    viteApp(join(root, "packages", "ui", "playground"));
+    viteApp(join(root, "node_modules", "some-app"));
+    viteApp(join(root, ".cache", "app"));
+    viteApp(join(root, "dist", "app"));
+    viteApp(join(root, "a", "b", "c", "too-deep"));
+    write(join(root, "packages", "lib"), { "package.json": JSON.stringify({ name: "lib", main: "index.js" }) });
+    expect(appsBelow(root)).toEqual({ apps: [{ dir: "apps/web", label: "Vite + React" }, { dir: "packages/ui/playground", label: "Vite + React" }], more: 0 });
+    // more than it names are counted, not listed
+    for (let i = 0; i < 4; i++) viteApp(join(root, "sites", `s${i}`));
+    expect(appsBelow(root, 3)).toMatchObject({ apps: [{ dir: "apps/web" }, { dir: "packages/ui/playground" }, { dir: "sites/s0" }], more: 3 });
+    expect(appsBelow(join(root, "nowhere"))).toEqual({ apps: [], more: 0 });
+  });
+
+  it("the view names them with the command that sets each one up; an app's own folder has no such list", async () => {
+    const root = tempDir();
+    write(root, { "package.json": JSON.stringify({ name: "mono", private: true }) });
+    viteApp(join(root, "apps", "web"));
+    const s = await readState({ cwd: root }, { runGit: noGit });
+    expect(s.app.below).toEqual({ apps: [{ dir: "apps/web", label: "Vite + React" }], more: 0 });
+    expect(stateJson(s).app.below.apps[0].dir).toBe("apps/web");
+    const said = (await printed(async () => expect(await status({ cwd: root })).toBe(0))).replace(/\s+/g, " ");
+    expect(said).toContain("No web app in this folder. There is one below it:");
+    expect(said).toContain("npx genclass --cwd apps/web");
+    expect(said).toContain("Vite + React");
+    const app = await readState({ cwd: join(root, "apps", "web") }, { runGit: noGit });
+    expect(app.app.below).toBeUndefined();
+    // nothing below either: where to run it
+    const empty = tempDir();
+    expect((await printed(async () => expect(await status({ cwd: empty })).toBe(0))).replace(/\s+/g, " ")).toContain("Run npx genclass inside your web app's folder, or name it: npx genclass --cwd <folder>");
   });
 });

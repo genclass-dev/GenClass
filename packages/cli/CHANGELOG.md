@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.3
+
+From using the command on a real site the morning after 0.2.2, and from watching its owner use it:
+
+- **A new first screen.** On a terminal the command opens with a welcome card: its name and version in the border,
+  "Welcome back, Ada!" (or, signed out, what GenClass does in two lines), the mark, and three quiet lines for the
+  app, the account and the folder. It fits a 58-column window, where the old block-letter wordmark never showed.
+  What comes next stands beside a green bar, and the question is one line under a rule: `❯ Enter to continue · d
+  every part · s skip · q stop`. Piped output and `--json` are as plain as before.
+- **Every command it names is one you can run.** The screens said `genclass suggest`, which is "command not found"
+  for anyone who started with `npx genclass` and has nothing installed. They now say `npx genclass suggest`, in the
+  views, the help and the `run` fields of `--json`. The help says how to get the short name
+  (`npm install -g genclass`).
+- **A folder that is not a web app is no longer a dead end.** In a monorepo's root, or the folder above the app, the
+  command lists the web apps it finds below (three folders deep, eight named) with the command for each, and on a
+  terminal it asks which one and carries on there. `status --json` carries the list as `app.below`.
+- A mistyped command names the nearest one: `genclass dashbord` says "Did you mean npx genclass dashboard?".
+- **`genclass login` signs in again when it has to.** With a sign-in from before the command could show dashboards,
+  `genclass dashboard` said "run genclass login" and `genclass login` answered "already signed in". It now says what
+  is missing and asks for one more approval in the browser.
+- **`genclass scan --local` works.** The command carries no copy of the runtime, so it uses the one installed in the
+  project (`node_modules/@genclass/runtime`, in this folder or one above it). When there is none it says what to
+  install, instead of naming a build step of GenClass's own repository.
+- **`genclass scan` waits for a scan of the same page that is already running** (someone else's, or yours a moment
+  ago) and prints that scan's report, instead of stopping with "try again in 20 s".
+- **A page check that could not finish says so next to the score.** On a heavy page the hosted check runs out of
+  time, and the report read "Score 83/100" with five of eight parts not measured further down. It now reads
+  "Score 83/100 over 3 of 8 parts", says which parts the score covers and why, and gives the command that runs the
+  visual checks on your computer with no time limit. With nothing measured it is one sentence, not a table of dashes.
+- The page check's help and messages say `genclass scan`, not `genclass-runtime scan`, the help says where the
+  check runs by default (on genclass.dev), and the full report's link is on genclass.dev.
+- The npm page links to the command's guide, genclass.dev/docs/cli.
+
 ## 0.2.2
 
 From a walk through the whole setup as a new user, against a local copy of genclass.dev:

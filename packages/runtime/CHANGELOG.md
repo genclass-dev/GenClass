@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **`scan` waits for a scan of the same page that is already running** on the hosted page check (the check answers
+  `in-progress` with how long to wait) and prints that scan's report, within the command's own time limit
+  (`--timeout`, 120 s by default); with no time left to wait it stops with the check's message as before
+  (`bin/lib/scan.mjs` `fetchHosted`).
+- **`scan`: a hosted report that covers only part of the check says so** (`bin/lib/scan.mjs` `hostedReport`,
+  `formatReport`): the score line reads "over 3 of 8 parts", one line says which parts and whether the check's time
+  ran out, with the command for a local run; "no problems found" is only said when everything was measured. The JSON
+  report gains `partial` (`{ measured, of, labels, timedOut }` or null), and `fullReport` is the report's page on
+  genclass.dev.
+- **`scan` inside the `genclass` command** finds the script-tag build of the runtime installed in the project
+  (`runtimeDist`: `node_modules/@genclass/runtime/dist`, this folder upwards), says what to install when there is
+  none, and names itself `genclass scan` (`genclass` 0.2.3). In this package's own bin nothing changes.
 - **`init --brief`**: the same facts in a few lines and a short ending, for a caller that has printed its own header
   (the `genclass` command's walk, `genclass` 0.2.2). The change is still shown in full, and the telemetry notice
   keeps its switch and its link. Without the flag `init` prints what it printed before.

@@ -72,7 +72,7 @@ describe("genclass against the collector (src/api.mjs, telemetry-worker/src/cli.
     expect(s.app).toMatchObject({ name: "shop", token: app.token, dashboardUrl: `${HOST}/account/apps/${app.id}` });
   });
 
-  it("genclass dashboard shows the app's own numbers from the real route, and an older sign-in is asked to sign in again", async () => {
+  it("npx genclass dashboard shows the app's own numbers from the real route, and an older sign-in is asked to sign in again", async () => {
     const { env, sql } = setup();
     setNow(new Date(Date.parse(CLI_DASHBOARD_FROM) + 3_600_000));
     const me = await account(env);
@@ -102,7 +102,7 @@ describe("genclass against the collector (src/api.mjs, telemetry-worker/src/cli.
     sql.db.exec(`UPDATE auth_sessions SET created = '${new Date(Date.parse(CLI_DASHBOARD_FROM) - 1000).toISOString()}' WHERE kind = 'cli'`);
     expect(await fetchApp(me.creds, app.id, "7d", deps)).toMatchObject({ ok: false, status: 403, reauth: true });
     const old = await printed(async () => expect(await dashboard({ cwd: dir }, deps)).toBe(1));
-    expect(old).toContain("genclass login");
+    expect(old).toContain("npx genclass login");
     expect(old).toContain(`${HOST}/account/apps/${app.id}`);
   });
 

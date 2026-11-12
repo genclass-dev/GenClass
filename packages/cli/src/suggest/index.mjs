@@ -124,7 +124,7 @@ export async function suggest(o = {}, deps = {}) {
   let planNote = null;
   if (o.noModel) planNote = "Ordered by the checks' own weights (--no-model: nothing was sent).";
   else if (!failed.length) planNote = null;
-  else if (!creds) planNote = `Ordered by the checks' own weights. Sign in (${c.cyan("genclass login")}) and the order and the reasons are written for your app.`;
+  else if (!creds) planNote = `Ordered by the checks' own weights. Sign in (${c.cyan("npx genclass login")}) and the order and the reasons are written for your app.`;
   else {
     let agreed = o.yes || notes.sendOk === true;
     if (!agreed && !quiet && interactive()) {
@@ -174,12 +174,12 @@ export async function suggest(o = {}, deps = {}) {
   const total = passed.length + failed.length;
   out(`  ${c.bold(`${passed.length} of ${total} checks pass.`)} ${failed.length ? `${failed.length} to do${failed.some((r) => r.weight >= 5) ? `, ${failed.filter((r) => r.weight >= 5).length} of them urgent` : ""}.` : c.green("Nothing to do.")}`);
   if (planNote) note(planNote);
-  if (!site?.reachable) note(url ? "The site could not be read, so only the repository was checked." : `Only the repository was checked. With the site's address there is more: ${c.cyan("genclass suggest https://your-site.com")}`);
+  if (!site?.reachable) note(url ? "The site could not be read, so only the repository was checked." : `Only the repository was checked. With the site's address there is more: ${c.cyan("npx genclass suggest https://your-site.com")}`);
   const fullCount = o.all ? items.length : 5;
   for (const i of items) printItem(i, i.open && i.n <= fullCount);
   if (items.some((i) => i.open && i.n > fullCount)) {
     out();
-    note(`Items ${fullCount + 1} and after are listed by title. ${c.cyan("genclass suggest --all")} prints each one's reason, first step and prompt.`);
+    note(`Items ${fullCount + 1} and after are listed by title. ${c.cyan("npx genclass suggest --all")} prints each one's reason, first step and prompt.`);
   }
   if (locked.length) {
     out();
@@ -193,7 +193,7 @@ export async function suggest(o = {}, deps = {}) {
   }
   out();
   if (failed.length) {
-    good("Fix one, then run genclass suggest again: it measures everything afresh.");
+    good("Fix one, then run npx genclass suggest again: it measures everything afresh.");
     note(`With a coding agent: paste an "Ask your agent" block, or tell it to run ${c.cyan("npx genclass suggest --json")} and work through the list.`);
   }
   out();
