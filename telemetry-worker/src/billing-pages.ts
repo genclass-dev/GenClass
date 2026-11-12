@@ -311,7 +311,7 @@ ${notice}${test}
     gcPost("/api/billing/projects/" + encodeURIComponent(cfg.project) + "/free", {}).then(function(){
       if (cfg.cli) {
         var box = document.getElementById("freebox");
-        box.className = "notice n-ok";
+        box.className = "free notice n-ok";
         box.textContent = "Free for now (limited). Go back to your terminal: it goes on by itself.";
       } else location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew ? "#connect" : "");
     }, function(e){ err.textContent = gcWhy(e); fr.disabled = false; });
@@ -335,7 +335,7 @@ ${notice}${test}
 })();`;
   const label = v.account.email ?? (v.account.githubLogin ? `@${v.account.githubLogin}` : "Your account");
   return studioPage(nonce, {
-    title: `A plan for ${v.project.name} | GenClass`,
+    title: `${paid || a.source === "comp" || a.source === "open" ? "The plan for" : "Choose a plan for"} ${v.project.name} | GenClass`,
     account: true,
     org: { name: orgName(label), plan: a.plan.name, href: "/account" },
     projects: v.apps,
@@ -343,7 +343,7 @@ ${notice}${test}
     user: { label, sub: orgName(label) },
     ...orgRail("billing"),
     railLabel: "Organization",
-    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".plan.big{max-width:560px;padding:34px 32px 30px}.plan.big h3{font-size:34px;letter-spacing:-.01em}.plan.big .price{font-size:22px;font-weight:600;margin-top:6px}.plan.big .sum{font-size:15px}.plan.big li{font-size:15px}.plan.big .act .btn{width:100%;justify-content:center;padding:15px 18px;font-size:17px}.free{margin-top:12px;font-size:11px;max-width:560px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}",
+    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".plan.big{max-width:560px;padding:34px 32px 30px}.plan.big h3{font-size:34px;letter-spacing:-.01em}.plan.big .price{font-size:22px;font-weight:600;margin-top:6px}.plan.big .sum{font-size:15px}.plan.big li{font-size:15px}.plan.big .act .btn{width:100%;justify-content:center;padding:15px 18px;font-size:17px}.free{margin-top:12px;font-size:11px;max-width:560px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}.free.notice{font-size:14px;text-align:left;margin-top:14px}",
     body,
     script: CLIENT_JS + script,
   });
