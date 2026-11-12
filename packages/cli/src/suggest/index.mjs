@@ -16,8 +16,9 @@ import { readCredentials } from "../../../runtime/bin/lib/account.mjs";
 import { inspectProject } from "../../../runtime/bin/lib/init.mjs";
 import { c, interactive, out, sym } from "../../../runtime/bin/lib/ui.mjs";
 import { requestPlan } from "../api.mjs";
+import { copyText, findAgents, startAgent } from "../fix.mjs";
 import { readNotes, saveNotes } from "../store.mjs";
-import { agree, clean, good, header, note, para, rule, spinner, typed, visible, warn, width, wrap } from "../tui.mjs";
+import { agree, clean, good, header, note, para, PROMPT, rule, spinner, typed, visible, warn, width, wrap } from "../tui.mjs";
 import { AREAS, runChecks } from "./checks.mjs";
 import { buildDigest, describeDigest } from "./digest.mjs";
 import { collectRepoFacts } from "./repo.mjs";
@@ -93,6 +94,59 @@ function printItem(i, full) {
  * @param {{ fetchFn?: typeof fetch, dns?: object, runGit?: Function }} [deps]
  * @returns {Promise<number>} the exit code: 0, or 1 when the site was named and could not be reached at all
  */
+/**
+ * The whole list as one prompt for a coding agent in the repository: each item with its reason, first step and
+ * prompt (the ones the plan shows), the rest by title, most important first, and how to check the work.
+ */
+export function suggestionsPrompt(items, url = null) {
+  const lines = [
+    `GenClass checked this repository${url ? ` and the live site ${url}` : ""} and found ${items.length} thing${items.length === 1 ? "" : "s"} to fix, most important first. Work through them one at a time, in this order. After each one, run \`npx genclass suggest --json\` and check that it no longer lists it.`,
+    "",
+  ];
+  for (const i of items) {
+    lines.push(`${i.n}. ${i.title}${i.evidence ? ` (found: ${i.evidence})` : ""}`);
+    if (i.open) {
+      if (i.why) lines.push(`   Why: ${i.why}`);
+      if (i.step) lines.push(`   First step: ${i.step}`);
+      if (i.prompt) lines.push(`   ${i.prompt}`);
+    } else lines.push("   Look at what this check measures and fix it the usual way for this framework.");
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
+
+/**
+ * After the list, on a terminal: hand every item to a coding agent in one go, as numbered choices (each agent
+ * installed here, copy the prompt, print it). The agent starts in this folder with the prompt and the terminal.
+ */
+async function handToAgent(items, url, cwd, o, deps, plan) {
+  const prompt = suggestionsPrompt(items, url);
+  const agents = (deps.agents ?? findAgents)(o.agent ?? null);
+  const locked = items.filter((i) => !i.open).length;
+  out();
+  rule();
+  out(`  ${c.bold(`Hand ${items.length === 1 ? "it" : `all ${items.length}`} to your coding agent?`)}`);
+  if (locked) note(`On ${plan?.plan?.name ?? "Free"} it gets the steps for ${items.length - locked} of them and the rest by title. Every step for every one: npx genclass upgrade`);
+  const choices = [
+    ...agents.map((a) => [`Start ${a.name} with the list`, async () => {
+      out(`  ${c.gray(sym.arrow)} Starting ${c.bold(a.name)} in this folder, with the list.`);
+      const code = await (deps.start ?? startAgent)(a, prompt, cwd);
+      if (code === null) {
+        warn(`${a.name} did not start. The prompt, to paste by hand:`);
+        out(prompt);
+      }
+    }]),
+    ["Copy the prompt", async () => ((await (deps.copy ?? copyText)(prompt)) ? good("Copied. Paste it into your coding agent.") : out(prompt))],
+    ["Print the prompt", async () => out(`\n${prompt}\n`)],
+  ];
+  choices.forEach(([label], i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${label}`));
+  if (!agents.length) note("No coding agent's command found here (claude, codex, cursor-agent, gemini).");
+  out();
+  const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("not now")}  `);
+  const pick = a !== null && /^\d+$/.test(a.trim()) ? choices[Number(a.trim()) - 1] : null;
+  if (pick) await pick[1]();
+}
+
 export async function suggest(o = {}, deps = {}) {
   const st = inspectProject({ cwd: o.cwd });
   const cwd = st.cwd;
@@ -209,6 +263,8 @@ export async function suggest(o = {}, deps = {}) {
     out(`    ${c.cyan("npx genclass suggest")}`);
     note(`With a coding agent: paste an "Ask your agent" block, or tell it to run ${c.cyan("npx genclass suggest --json")} and work through the list.`);
   }
+  // on a terminal: every item handed to a coding agent in one go (Claude Code, Codex, Cursor, Gemini CLI)
+  if (items.length && interactive() && !o.yes) await handToAgent(items, site?.reachable ? url : null, cwd, o, deps, plan);
   out();
   return url && site && !site.reachable && o.url ? 1 : 0;
 }

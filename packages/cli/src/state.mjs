@@ -380,7 +380,7 @@ export async function readState(o = {}, deps = {}) {
     cwd,
     host: host.overridden && !host.error ? host.host : null,
     app: { name: app?.name ?? project.name ?? null, framework: project.label || null, isApp, token: st.token ?? null, dashboardUrl: app?.dashboard_url ?? st.local?.dashboardUrl ?? null, site: notes.site ?? null, ...(isApp ? {} : { below: appsBelow(cwd) }) },
-    account: me ? { label: accountLabel(me.account), plan: me.plan, suggestions: me.suggestions, billingUrl: me.billingUrl, github: me.github } : null,
+    account: me ? { label: accountLabel(me.account), plan: me.plan, suggestions: me.suggestions, billingUrl: me.billingUrl, github: me.github, offer: me.offer ?? null } : null,
     signedIn: !!me,
     /** the account's apps as genclass.dev lists them ([] signed out) */
     projects: me?.projects ?? [],

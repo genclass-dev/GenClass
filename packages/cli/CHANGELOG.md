@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.5
+
+For onboarding paying customers:
+
+- **Every app chooses its plan on a page.** Once the app is in the account, the setup opens the app's plan page in
+  the browser: Team large, with its price and a Start button, and a very small "Try for free (limited)" under it.
+  The terminal shows the same card and waits for the choice made there (a payment, or Free for now). Plans are per
+  app now: Team is $15 a project a month with the whole team on it, Free covers 3 apps and 100 problems fixed live a
+  month per app. A fourth app has only Team. Before, the plan was a card in the terminal only, and a setup run
+  without a keyboard (`--yes`, a coding agent) chose Free without showing anything.
+- **`genclass` alone works.** A run through `npx genclass` on a terminal installs the command (`npm install -g
+  genclass`) and says so; `npm uninstall -g genclass` takes it out, `GENCLASS_NO_INSTALL=1` turns it off.
+- **Numbered choices.** The home lists its commands with numbers (type 3 for analytics), and "Which app?" is a
+  numbered list instead of commands to retype.
+- **`genclass profile`**: who is signed in, each app's plan, and numbered choices to upgrade, open billing or sign
+  out. **`genclass upgrade`** opens the plan page of this folder's app (`--app` for another).
+- On Free, every command ends with one line: the limits and the way up (`genclass upgrade`).
+- **`genclass suggest` hands the whole list to your coding agent**: after the list, one number starts Claude Code,
+  Codex, Cursor or Gemini CLI in the folder with every item, or copies or prints the prompt.
+- `genclass dashboard` shows the live fixes used this month, and says when an app on Free has used them all and
+  GenClass only observes until the month ends.
+- `genclass apps new` says when the new app needs a plan of its own, with its plan page.
+
 ## 0.3.4
 
 From a review of every setup path after a teammate hit the 0.3.2 bug:

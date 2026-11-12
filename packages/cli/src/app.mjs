@@ -16,7 +16,7 @@ import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { openBrowser, signIn } from "./actions.mjs";
 import { fetchApp, signInIsOld } from "./api.mjs";
 import { readState } from "./state.mjs";
-import { ago, bad, clean, header, note, typed, visible, warn, width, wrap } from "./tui.mjs";
+import { ago, bad, clean, header, note, PROMPT, typed, visible, warn, width, wrap } from "./tui.mjs";
 
 /** "Dec 1" for an ISO time (UTC). */
 const monthDay = (iso) => {
@@ -192,6 +192,10 @@ export async function dashboard(o = {}, deps = {}) {
 }
 
 /** How an app is named after --app: its name in quotes, or its id when another app has the same name. */
+/** An app as a choice in a list: its name, and its id's start when the name is shared or there is none. */
+export const appLabel = (p, projects) =>
+  p.name === "unnamed" || projects.filter((x) => x.name.toLowerCase() === p.name.toLowerCase()).length > 1 ? `${p.name === "unnamed" ? "unnamed app" : p.name} (${String(p.id).slice(0, 6)})` : p.name;
+
 export const appArg = (p, projects) => {
   const name = clean(p.name, 200);
   // a name that is shared, cut, or holds a quote is not typed: the id always works
@@ -221,6 +225,19 @@ export async function pickApp(o = {}, deps = {}, name = "dashboard") {
   // which app: --app by id or by name, else this folder's, else the account's only one
   const byId = o.app ? projects.filter((p) => p.id === o.app) : [];
   const wanted = byId.length ? byId : o.app ? projects.filter((p) => p.name.toLowerCase() === String(o.app).toLowerCase()) : state.app.token ? projects.filter((p) => p.token === state.app.token) : projects.length === 1 ? projects : [];
+  // on a terminal: the apps as numbered choices, and the number picks one
+  if (wanted.length !== 1 && projects.length && !o.json && !o.yes && interactive()) {
+    const list = (wanted.length > 1 ? wanted : projects).slice(0, 30);
+    header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+    note(wanted.length > 1 ? `More than one app is named "${clean(o.app, 40)}". Which one?` : o.app ? `No app named "${clean(o.app, 40)}". Which one?` : state.app.token ? "This folder's app is not in your account yet. Which app?" : "Which app?");
+    list.forEach((p, i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${c.bold(clean(appLabel(p, projects), 34))}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`));
+    out();
+    const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("back")}  `);
+    const i = a !== null && /^\d+$/.test(a.trim()) ? Number(a.trim()) - 1 : -1;
+    if (list[i]) return { state, creds, target: list[i] };
+    out();
+    return { code: 2 };
+  }
   if (wanted.length !== 1) {
     if (o.json) out(JSON.stringify({ ok: false, error: projects.length ? "which app" : "no app yet", apps: projects.map((p) => p.name) }));
     else {
