@@ -354,7 +354,19 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
       if (!DRY) await stripe("POST", `/v1/billing_portal/configurations/${existing.id}`, { ...params, active: true });
     } else {
       would("create GenClass's Billing Portal configuration (metadata genclass=1, not the default)");
-      if (!DRY) id = (await stripe("POST", "/v1/billing_portal/configurations", params)).id;
+      if (!DRY) {
+        let made = await stripe("POST", "/v1/billing_portal/configurations", params);
+        // An account that has no portal configuration yet makes its first one the default (seen on GenClass's own
+        // sandbox, 2026-11-11). The worker never opens an account's default configuration, and readPortal never
+        // reads it, so a second one, which Stripe leaves non-default, is made and used. The first stays as the
+        // account's default, carrying GenClass's mark, and nothing opens it.
+        if (made?.is_default === true) {
+          say(`Stripe made ${made.id} the account's default configuration (the account had none); creating a second one, not the default, for the worker`);
+          made = await stripe("POST", "/v1/billing_portal/configurations", params);
+          if (made?.is_default === true) fail(`Stripe made ${made.id} the account's default configuration too; set a default configuration in the Stripe dashboard (Settings, Billing, Customer portal), then run this again`);
+        }
+        id = made?.id;
+      }
     }
     would(`store its id as ${PORTAL_NAME} with wrangler (the worker opens the portal on that configuration only)`);
     if (DRY) return;

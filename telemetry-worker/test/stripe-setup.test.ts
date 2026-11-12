@@ -125,7 +125,8 @@ function account() {
       return ok({ data: [...portal.values()].filter((c) => d === null || String(c.is_default) === d), has_more: false });
     }
     if (method === "POST" && p === "/v1/billing_portal/configurations") {
-      const x = { id: `bpc_gc${String(++n).padStart(6, "0")}`, object: "billing_portal.configuration", is_default: false, active: true, metadata: meta(body), form: body };
+      // like Stripe: the first configuration of an account that has none becomes its default
+      const x = { id: `bpc_gc${String(++n).padStart(6, "0")}`, object: "billing_portal.configuration", is_default: ![...portal.values()].some((c) => c.is_default), active: true, metadata: meta(body), form: body };
       portal.set(x.id, x);
       return ok(x);
     }
@@ -173,6 +174,24 @@ function onlyGenClass(calls: { method: string; url: URL; body: Obj }[]) {
 }
 
 describe("scripts/stripe-setup.mjs on the shared Stripe account (shared with another business)", () => {
+  it("an account with no portal configuration yet: Stripe makes the first one its default, so a second is made and that one is stored", async () => {
+    const a = account();
+    // GenClass's own Stripe account: nobody else's configurations in it, and no default one yet
+    for (const id of [...a.portal.keys()]) a.portal.delete(id);
+    const r = await run(a);
+    const made = [...a.portal.values()];
+    expect(made.map((c) => c.is_default)).toEqual([true, false]);
+    for (const c of made) expect(c.metadata).toEqual({ genclass: "1" });
+    // the worker gets the one that is not the default (src/stripe.ts portalConfiguration refuses a default one)
+    expect(r.secrets).toContainEqual(["STRIPE_PORTAL_CONFIGURATION_TEST", made[1]!.id]);
+    expect(r.out).toContain(`Stripe made ${made[0]!.id} the account's default configuration (the account had none)`);
+    // a second run finds the non-default one, rewrites it and creates nothing
+    const again = await run(a);
+    expect(a.portal.size).toBe(2);
+    expect(again.secrets).toContainEqual(["STRIPE_PORTAL_CONFIGURATION_TEST", made[1]!.id]);
+    expect(again.calls.filter((c) => c.method === "POST" && c.url.pathname === "/v1/billing_portal/configurations")).toEqual([]);
+  });
+
   it("seatUpdate: the portal lets a buyer change the quantity of a per-seat plan's own prices, and nothing else", () => {
     const team = { id: "team", per_seat: true };
     const made = { team: { product: "genclass_team", planned: false, prices: ["price_team000001"] }, individual: { product: "genclass_individual", planned: false, prices: ["price_indiv00001"] } };
