@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2
+
+From the first run of 0.3.1 against production with a real account:
+
+- **An answer from `genclass ask` shows no Markdown marks.** The model writes page names as `` `/checkout` ``; the
+  backticks were printed as they were. Code is now cyan and bold is bold, with the marks taken out.
+- **`genclass team` says "1 person"**, not "1 people", on a plan with no seat count.
+- **`genclass apps` points at the app worth looking at:** this folder's, else the one that heard from its site last,
+  instead of the first by name (which was an empty test app).
+
 ## 0.3.1
 
 - **`genclass login` renews a sign-in that 0.3.0 asks to renew.** A sign-in approved before 0.3.0 can show
