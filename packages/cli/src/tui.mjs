@@ -66,11 +66,24 @@ export function para(text, indent = "  ", paint = (s) => s) {
 /** A horizontal rule as wide as the text. */
 export const rule = () => out(`  ${c.gray((unicode ? "─" : "-").repeat(width() - 4))}`);
 
+let homeApp = null;
+/** While the command's home is open on `app` ("" when it has none), views are not headed again; null ends it. */
+export const inHome = (app) => {
+  homeApp = app === null ? null : clean(app ?? "", 40);
+};
+
 /**
  * The header: the product, this app and its framework on one line, the account and its plan under it.
  * @param {{ app?: string | null, framework?: string | null, account?: string | null, plan?: string | null, host?: string | null }} h
  */
 export function header(h = {}) {
+  // in the command's home the card and the account were shown once, at the top: a view starts with a blank line,
+  // and names its app only when it is not the one the home is open on
+  if (homeApp !== null) {
+    out();
+    if (h.app && clean(h.app, 40) !== homeApp) out(`  ${c.bold(clean(h.app, 40))}`);
+    return;
+  }
   const left = `${c.bold(c.magenta("GenClass"))}${h.app ? ` ${c.gray(sym.dot)} ${c.bold(clean(h.app, 40))}` : ""}`;
   const right = h.framework ? c.gray(clean(h.framework, 40)) : "";
   const gap = Math.max(2, width() - 4 - visible(left) - visible(right));

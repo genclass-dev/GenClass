@@ -462,7 +462,7 @@ export function renderHealth(app, o = {}) {
   }
   const rv = b.runtime ?? [];
   if (rv.length) part("Runtime versions", `${rv.slice(0, 3).map((x) => clean(x.key, 30)).join(", ")}${rv.length > 1 ? ` ${sym.dot} more than one version is live` : ""}`);
-  const modes = b.mode ?? [];
+  const modes = (b.mode ?? []).filter((x) => x.key !== "(unknown)");
   if (modes.length) part("Mode", modes.map((x) => `${clean(x.key, 20)} ${pct(x.count, sum(modes))}`).join(", "));
   if (o.all) for (const [title, key] of BREAKDOWNS) bars(title, b[key] ?? [], { shown: 10 });
   out();
@@ -534,7 +534,10 @@ export function renderAgent(app, setup, o = {}) {
   head("The loop", "What the agent did with the findings, as it reported it.");
   if (!st.found && !app.more.agentLog.length) {
     out(`    ${c.gray("Nothing reported in this period.")}`);
-    if (setup && !setup.reports) out(`    ${c.gray("It reports once it has the link:")} ${c.cyan("npx genclass agent link")}`);
+    if (setup && !setup.reports) {
+      out(`    ${c.gray("It reports once it has the link:")}`);
+      out(`    ${c.cyan("npx genclass agent link")}`);
+    }
   } else {
     out(`    ${c.bold(n(st.found))} found ${c.gray(sym.arrow)} ${c.bold(n(st.reproduced))} reproduced`);
     out(`    ${c.gray(sym.arrow)} ${c.bold(n(st.fixed))} fix proven ${c.gray(sym.arrow)} ${c.bold(n(st.closed))} closed`);

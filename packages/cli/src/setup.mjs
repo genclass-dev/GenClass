@@ -163,13 +163,19 @@ export async function setup(o = {}, deps = {}) {
       // input that ended is a stop, never an Enter: nothing is started without someone at the keyboard
       const dot = c.gray("·");
       rule();
-      const keys = `  ${PROMPT()} ${c.bold("Enter")} ${c.gray("to continue")} ${dot} ${c.bold("d")} ${c.gray(details ? "less" : "every part")} ${dot} ${c.bold("s")} ${c.gray("skip")} ${dot} ${c.bold("q")} ${c.gray("stop")}  `;
+      const keys = `  ${PROMPT()} ${c.bold("Enter")} ${c.gray("to continue")} ${dot} ${c.bold("d")} ${c.gray(details ? "less" : "every part")} ${dot} ${c.bold("s")} ${c.gray("skip")} ${dot} ${c.bold("q")} ${c.gray(o.home !== false && deps.home ? "later" : "stop")}  `;
       const a = (await typed(keys)) ?? "q";
       if (/^d/i.test(a)) {
         details = !details;
         continue;
       }
       if (/^q/i.test(a)) {
+        // leaving the walk is not leaving the command: its other commands are one prompt away
+        if (o.home !== false && deps.home) {
+          out();
+          note("The setup waits here: setup continues it.");
+          return deps.home({ ...o, cwd: state.cwd, app: state.app.name ?? "" });
+        }
         out();
         note("Stopped. Run npx genclass again any time: it continues from here.");
         out();
@@ -188,7 +194,7 @@ export async function setup(o = {}, deps = {}) {
           out();
           for (const s of waiting) note(`${s.title}: ${s.human ?? s.detail}.`);
         }
-        return deps.home({ ...o, cwd: state.cwd });
+        return deps.home({ ...o, cwd: state.cwd, app: state.app.name ?? "" });
       }
       closing(state);
       break;

@@ -175,6 +175,9 @@ export async function dashboard(o = {}, deps = {}) {
   });
 }
 
+/** How an app is named after --app: its name in quotes, or its id when another app has the same name. */
+export const appArg = (p, projects) => (projects.filter((x) => x.name.toLowerCase() === p.name.toLowerCase()).length > 1 ? p.id : `"${clean(p.name, 40)}"`);
+
 /**
  * Which app a command is about, for a signed-in account: --app by name or id, else this folder's app, else the
  * account's only one. Returns { state, creds, target } or, when there is none to act on, { code } after saying why
@@ -195,16 +198,17 @@ export async function pickApp(o = {}, deps = {}, name = "dashboard") {
   }
   const { creds } = readCredentialsFor();
   const projects = state.projects;
-  // which app: --app by name, else this folder's, else the account's only one
-  const wanted = o.app ? projects.filter((p) => p.name.toLowerCase() === String(o.app).toLowerCase() || p.id === o.app) : state.app.token ? projects.filter((p) => p.token === state.app.token) : projects.length === 1 ? projects : [];
+  // which app: --app by id or by name, else this folder's, else the account's only one
+  const byId = o.app ? projects.filter((p) => p.id === o.app) : [];
+  const wanted = byId.length ? byId : o.app ? projects.filter((p) => p.name.toLowerCase() === String(o.app).toLowerCase()) : state.app.token ? projects.filter((p) => p.token === state.app.token) : projects.length === 1 ? projects : [];
   if (wanted.length !== 1) {
     if (o.json) out(JSON.stringify({ ok: false, error: projects.length ? "which app" : "no app yet", apps: projects.map((p) => p.name) }));
     else {
       header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
       if (!projects.length) note("No app in your account yet. Run npx genclass in your web app's folder: it adds GenClass and gives the app its dashboard.");
       else {
-        note(o.app ? `No app named "${clean(o.app, 40)}" in your account. Your apps:` : state.app.token ? "This folder's app is not in your account yet (genclass puts it there). Your apps:" : "Which app? Run this in the app's folder, or name one:");
-        for (const p of projects.slice(0, 30)) out(`    ${c.cyan(`npx genclass ${name} --app "${clean(p.name, 40)}"`)}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`);
+        note(wanted.length > 1 ? `More than one app is named "${clean(o.app, 40)}". Name it by its id:` : o.app ? `No app named "${clean(o.app, 40)}" in your account. Your apps:` : state.app.token ? "This folder's app is not in your account yet (genclass puts it there). Your apps:" : "Which app? Run this in the app's folder, or name one:");
+        for (const p of (wanted.length > 1 ? wanted : projects).slice(0, 30)) out(`    ${c.cyan(`npx genclass ${name} --app ${appArg(p, projects)}`)}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`);
       }
       out();
     }

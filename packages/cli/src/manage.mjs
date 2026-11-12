@@ -18,7 +18,7 @@ import { hostUrl } from "../../runtime/bin/lib/host.mjs";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { checkout, mcpServer, openBrowser } from "./actions.mjs";
 import { changeConnection, createInvite, fetchAccount, fetchApp, fetchConnections, fetchEvents, makeAgentLink, saveFunnels } from "./api.mjs";
-import { n, pickApp } from "./app.mjs";
+import { appArg, n, pickApp } from "./app.mjs";
 import { copyText, onPath } from "./fix.mjs";
 import { asking, refused } from "./session.mjs";
 import { readState } from "./state.mjs";
@@ -104,7 +104,7 @@ export async function apps(o = {}, deps = {}) {
   }
   if (!o.all && list.length > 20) out(`    ${c.gray(`and ${n(list.length - 20)} more: add --all`)}`);
   out();
-  out(`  ${c.gray("See one:")} ${c.cyan(`npx genclass dashboard --app "${clean(list[0].name, 40)}"`)}`);
+  out(`  ${c.gray("See one:")} ${c.cyan(`npx genclass dashboard --app ${appArg(list[0], list)}`)}`);
   out(`  ${c.gray("New one:")} ${c.cyan('npx genclass apps new "Name"')}`);
   out(`  ${c.gray("Delete one, in the browser:")} ${c.cyan(hostUrl("/account"))}`);
   out();
@@ -282,6 +282,10 @@ export async function connections(o = {}, deps = {}) {
         return 1;
       }
       top(state, target);
+      // the plan first: nobody is asked for a key that their plan cannot use
+      const can = await asking(o, creds, (cr) => fetchConnections(cr, target.id, deps), deps);
+      if (!can.ok) return refused(can, ctx("Sending alerts"));
+      if (!can.forwarding) return refused({ ok: false, upgradeUrl: can.upgradeUrl ?? hostUrl("/account/billing") }, { ...ctx("Sending alerts"), plan: can.plan });
       out(`  ${c.bold(`Send ${clean(target.name, 40)}'s new problems to ${destName(kind)}`)}`);
       note("Each new likely problem is sent once per kind and page an hour. What you type next is not shown, goes to genclass.dev over HTTPS, is stored encrypted there, and is not kept on this machine.");
       for (const [field, label, hidden] of DESTINATIONS[kind][1]) {

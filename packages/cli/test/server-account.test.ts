@@ -173,12 +173,12 @@ describe("genclass connections (src/manage.mjs connections)", () => {
     for (const d of ["Slack", "Sentry", "PostHog", "Datadog", "Webhook"]) expect(f).toContain(`${d} not set up`);
     expect(f).toContain("Alerts come with the Team plan. npx genclass plan");
     expect(f).toContain("Private link off");
-    // setting one up on Free: the plan is why, with the command that starts it
-    const no = await typing([SLACK], () => said(() => connections({ ...me.o, args: ["add", "slack"] }, me.deps)));
+    // setting one up on Free: the plan is why, said before anything is asked for, with the command that starts it
+    const no = await typing([], () => said(() => connections({ ...me.o, args: ["add", "slack"] }, me.deps)));
     expect(no.code).toBe(1);
     expect(flat(no.text)).toContain("Sending alerts comes with the Team plan.");
     expect(flat(no.text)).toContain("npx genclass plan");
-    expect(no.text).not.toContain("XXXXXXXXXXXX");
+    expect(no.text).not.toContain("Slack incoming webhook URL");
     // a destination that was never set up cannot be turned on: the server's own sentence
     const never = await said(() => connections({ ...me.o, args: ["on", "slack"] }, me.deps));
     expect(never.code).toBe(1);

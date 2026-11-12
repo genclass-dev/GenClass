@@ -103,12 +103,11 @@ export function pickProblem(list, word) {
 function listProblems(list, shown) {
   const top = list.slice(0, shown);
   const wNum = String(top.length).length;
-  const wCount = Math.max(...top.map((x) => n(x.count).length));
   top.forEach((x, i) => {
     const info = infoOf(x);
-    out(`    ${c.cyan(String(i + 1).padStart(wNum))}  ${c.bold(n(x.count).padStart(wCount))}  ${clean(info.name, 40)}${x.check ? c.gray("  visual check") : ""}`);
+    out(`    ${c.cyan(String(i + 1).padStart(wNum))}  ${c.bold(clean(info.name, 40))}  ${c.gray(`${n(x.count)} time${x.count === 1 ? "" : "s"}${x.check ? ", visual check" : ""}`)}`);
     const pages = x.where.slice(0, 3).map((w) => clean(w.route, 40)).join(", ");
-    if (pages) for (const l of wrap(`on ${pages}`, width() - 2 - 8 - wNum - wCount)) out(`    ${" ".repeat(wNum + wCount + 4)}${c.gray(l)}`);
+    if (pages) for (const l of wrap(`on ${pages}`, width() - 2 - 6 - wNum)) out(`    ${" ".repeat(wNum + 2)}${c.gray(l)}`);
   });
   if (list.length > shown) out(`    ${c.gray(`and ${n(list.length - shown)} more: add --all`)}`);
 }
@@ -182,7 +181,10 @@ export function fix(o = {}, deps = {}) {
       const prompt = promptFor(target, app, list, pick);
       const what = pick === "all" ? `all ${n(list.length)} kinds of problem` : infoOf(pick).name.toLowerCase();
       // the prompt's steps use GenClass's MCP server: say so when the agent does not have it here
-      if (here && !agentSetup(state.cwd, deps.home).files.length) note("Your agent needs GenClass's MCP server for the steps in this prompt. npx genclass setup adds it (the coding agent step).");
+      if (here && !agentSetup(state.cwd, deps.home).files.length) {
+        note("Your agent needs GenClass's MCP server for the steps in this prompt. npx genclass setup adds it (the coding agent step).");
+        out();
+      }
       if (o.copy) {
         if (await (deps.copy ?? copyText)(prompt)) {
           good(`Copied the prompt for ${what}.`);

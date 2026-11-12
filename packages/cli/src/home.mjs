@@ -12,7 +12,7 @@
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
 import { installGlobally, isShort, readPrefs, savePrefs, shortNameWorks, useShortName } from "./name.mjs";
-import { agree, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
+import { agree, inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
 
 /** The commands of the home, in the order they are listed: [what is typed, what it is, shown in the short list]. */
 export const COMMANDS = [
@@ -54,7 +54,11 @@ export function words(line) {
 export function read(line, known = NAMES) {
   const text = String(line ?? "").trim();
   if (!text) return { help: true };
-  const argv = words(text);
+  let argv = words(text);
+  // a command typed whole, as a screen printed it (npx genclass fix), is that command
+  if (argv[0] === "npx" && argv[1] === "genclass") argv = argv.slice(2);
+  else if (argv[0] === "genclass") argv = argv.slice(1);
+  if (!argv.length) return { help: true };
   const head = argv[0].toLowerCase();
   if (["q", "quit", "exit", "bye"].includes(head)) return { quit: true };
   if (head === "help" || head === "?" || head === "commands") return { help: true, all: true };
@@ -109,6 +113,7 @@ export async function home(o = {}, deps = {}) {
   if (!interactive()) return 0;
   await offerInstall(deps);
   menu();
+  inHome(o.app ?? "");
   for (;;) {
     out();
     const line = await typed(`  ${PROMPT()} `);
@@ -135,6 +140,7 @@ export async function home(o = {}, deps = {}) {
     }
     rule();
   }
+  inHome(null);
   out();
   note("Bye. Run npx genclass any time to come back here.");
   out();

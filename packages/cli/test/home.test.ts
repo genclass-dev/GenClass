@@ -104,6 +104,11 @@ describe("genclass: the home (src/home.mjs)", () => {
     expect(read("what is going wrong on my site")).toEqual({ question: "what is going wrong on my site" });
     expect(read("why?")).toEqual({ question: "why?" });
     expect(read("problms")).toEqual({ unknown: "problms" });
+    // a command typed whole, as a screen printed it, is that command and not a question
+    expect(read("npx genclass fix 2")).toEqual({ command: ["fix", "2"] });
+    expect(read("genclass problems")).toEqual({ command: ["problems"] });
+    expect(read("npx genclass dashbord")).toEqual({ unknown: "dashbord" });
+    expect(read("npx genclass")).toEqual({ help: true });
   });
 
   it("every command the home lists is one the command line runs, and the list fits 58 columns", async () => {
@@ -148,6 +153,41 @@ describe("genclass: the home (src/home.mjs)", () => {
       expect(errs.join("")).toContain("unknown option");
     } finally {
       spy.mockRestore();
+    }
+  });
+});
+
+describe("genclass: the walk leads into the home (src/setup.mjs)", () => {
+  it("q in the walk leaves the walk, not the command: the home opens, in the folder and on the app of the walk", async () => {
+    const { setup } = await import("../src/setup.mjs");
+    const { viteApp } = await import("./helpers.js");
+    const dir = tempDir();
+    viteApp(dir);
+    const opened: Record<string, unknown>[] = [];
+    type("q");
+    const said = await at58(async () => expect(await setup({ cwd: dir }, { home: async (o: Record<string, unknown>) => (opened.push(o), 0) })).toBe(0));
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({ cwd: dir, app: "shop" });
+    expect(said).toContain("q later");
+    expect(plainLines(said).join(" ")).toContain("The setup waits here: setup continues it.");
+    // run from inside the home, the walk ends as it always did (no home inside the home)
+    type("q");
+    const nested = await at58(async () => expect(await setup({ cwd: dir, home: false }, { home: async () => (opened.push({}), 0) })).toBe(0));
+    expect(opened).toHaveLength(1);
+    expect(nested).toContain("q stop");
+    expect(plainLines(nested).join(" ")).toContain("Stopped. Run npx genclass again any time");
+  });
+
+  it("in the home a view is not headed again, and names its app only when it is another one", async () => {
+    const { header, inHome } = await import("../src/tui.mjs");
+    const full = await at58(() => header({ app: "shop", account: "ada@example.com", plan: "Free" }));
+    expect(full).toContain("ada@example.com");
+    inHome("shop");
+    try {
+      expect(await at58(() => header({ app: "shop", account: "ada@example.com", plan: "Free" }))).toBe("\n");
+      expect(plainLines(await at58(() => header({ app: "blog", account: "ada@example.com" }))).join("|")).toBe("|  blog|");
+    } finally {
+      inHome(null);
     }
   });
 });
