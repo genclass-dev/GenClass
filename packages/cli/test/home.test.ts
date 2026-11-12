@@ -54,6 +54,9 @@ describe("genclass: how the command is typed here (src/name.mjs)", () => {
     expect(shorten("Run npx genclass fix, then npx genclass problems.")).toBe("Run genclass fix, then genclass problems.");
     expect(shorten("npm install -g genclass")).toBe("npm install -g genclass");
     expect(shorten("npx genclassic")).toBe("npx genclassic");
+    // in colour, the code just before it is not a letter of the word
+    expect(shorten("Every row: \u001b[36mnpx genclass dashboard --all\u001b[39m")).toBe("Every row: \u001b[36mgenclass dashboard --all\u001b[39m");
+    expect(shorten("xnpx genclass")).toBe("xnpx genclass");
     // what it remembers for the person sits next to the sign-in, not in a project
     expect(readPrefs()).toEqual({});
     expect(savePrefs({ installAsked: true })).toBe(true);
