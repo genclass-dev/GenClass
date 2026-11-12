@@ -52,6 +52,12 @@
 //   to the webhook handler as the JSON delivery it stands for (formDelivery). Only what GitHub sends is taken as a
 //   form: a body that is exactly one `payload` field. Anything else is refused (400), so that bytes GitHub signed as
 //   JSON for the app's webhook (a comment's text may hold "&payload=...") can never be read as a form that sets a plan.
+// - The callback asks again once, and only where a second try is safe: the code's exchange when the request itself got
+//   no answer (never after GitHub answered about the code, which is good once), and GitHub's answers about the person
+//   when GitHub refused a token it had just issued, did not answer, or this server could not save what it said. A
+//   rate limit, a refusal or a malformed answer is never asked twice, and nothing is asked again once the callback
+//   has taken RETRY_WITHIN_MS. When it still fails, the page names the step that failed (CONNECT_FAILED) and the log
+//   line names the step and how it failed: no token, no code, nothing of the person.
 // - The OAuth state is single use, kept server-side and named by a cookie that holds only its row id; the callback
 //   must arrive in the session that started it, or, for a start made signed out, in the browser that holds the cookie.
 // - What the account page says the app is doing on a repository (race files read, pull requests written on) is shown
@@ -80,6 +86,21 @@ const EVENTS = new Set(["ping", "installation", "installation_repositories", "pu
 const DELIVERY_RE = /^[0-9A-Fa-f-]{16,64}$/;
 const OAUTH_COOKIE = "gc_oauth_ghapp";
 const OAUTH_MS = 10 * 60_000;
+/** The pause before the callback asks GitHub the same things a second time. */
+export const RETRY_WAIT_MS = 1_000;
+/** No second try once the callback has taken this long: someone is looking at a blank tab. */
+export const RETRY_WITHIN_MS = 15_000;
+
+/** What the callback was doing: the code's exchange, then GitHub's answers about the person, then this server's own write. */
+type ConnectStep = "code" | "who" | "installations" | "repositories" | "save";
+/** What the page says when a step failed, so a person can say which one it was (this server keeps no request logs). */
+const CONNECT_FAILED: Record<ConnectStep, string> = {
+  code: "GitHub did not answer when asked to confirm your sign-in.",
+  who: "GitHub did not say who you are.",
+  installations: "GitHub did not say where the app is installed.",
+  repositories: "GitHub did not say which repositories the app is on.",
+  save: "GitHub answered, but GenClass could not save what it said.",
+};
 /** How long GitHub's answer about a person's repositories is good for linking. */
 export const GRANT_MS = 30 * 60_000;
 const MAX_INSTALLATIONS = 20;
@@ -283,29 +304,64 @@ async function connectCallback(c: C, cfg: GithubAppConfig, f: Fetch): Promise<Re
   const code = c.url.searchParams.get("code");
   if (!code || code.length > 2048) return bad(400, "GitHub did not send a code. Start again.");
 
+  // the step under way, for the page and the log line when it fails
+  const at: { step: ConnectStep } = { step: "code" };
+  const clock = c.opts.now ?? (() => new Date());
+  const began = clock().getTime();
+  const wait = c.opts.wait ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)));
+  let twice = false;
   let answer: Answer;
   try {
-    const r = await f(`${cfg.web}/login/oauth/access_token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json", "user-agent": "genclass.dev" },
-      body: new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, code, redirect_uri: `${cfg.origin}/github/callback` }).toString(),
-      signal: AbortSignal.timeout(10_000),
-    });
+    const exchange = (): Promise<Response> =>
+      f(`${cfg.web}/login/oauth/access_token`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json", "user-agent": "genclass.dev" },
+        body: new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, code, redirect_uri: `${cfg.origin}/github/callback` }).toString(),
+        signal: AbortSignal.timeout(10_000),
+      });
+    let r: Response;
+    try {
+      r = await exchange();
+      if (r.status >= 500) {
+        await r.body?.cancel().catch(() => undefined);
+        throw new GithubError("server", r.status, "GitHub's sign-in answered a server error");
+      }
+    } catch {
+      // The request itself got no answer (the network, a timeout, GitHub's own 5xx): handed in once more. An answer
+      // about the code is never asked for twice.
+      twice = true;
+      r = await exchange();
+    }
     const tok = ((await r.json().catch(() => null)) ?? {}) as Record<string, unknown>;
     if (!r.ok || typeof tok.access_token !== "string" || !tok.access_token) {
       // GitHub's own word for why (a short code such as bad_verification_code, never the token or the code itself),
       // so a failed connect can be told apart afterwards: this server keeps no request logs to look it up in
       const why = typeof tok.error === "string" && /^[a-z_]{1,60}$/.test(tok.error) ? tok.error : `http ${r.status}`;
-      console.log(`github connect: no token: ${why}`);
-      // a code is good once and for ten minutes: a page that was loaded twice, or left open, ends here
-      if (why === "bad_verification_code") return bad(400, "GitHub says this link was already used or has expired. Start again: it takes a few seconds.");
+      console.log(`github connect: no token: ${why}${twice ? " (asked twice)" : ""}`);
+      // A code is good once and for ten minutes: a page that was loaded twice, or left open, ends here. Not when this
+      // was the second try: then GitHub took the code the first time and its answer never arrived.
+      if (why === "bad_verification_code" && !twice) return bad(400, "GitHub says this link was already used or has expired. Start again: it takes a few seconds.");
       throw new Error("no token");
     }
-    answer = await readGrant(c, cfg, f, tok.access_token);
+    const token = tok.access_token;
+    try {
+      answer = await readGrant(c, cfg, f, token, at);
+    } catch (e) {
+      // Asked once more, after a pause, only where that can help: GitHub refused a token it issued a moment ago, did
+      // not answer (the client has already tried each request twice), or this server's own write failed.
+      const again = at.step === "save" || (e instanceof GithubError && (e.kind === "unauthorized" || e.kind === "network" || e.kind === "server"));
+      if (!again || clock().getTime() - began > RETRY_WITHIN_MS) throw e;
+      twice = true;
+      await wait(RETRY_WAIT_MS);
+      answer = await readGrant(c, cfg, f, token, at);
+    }
   } catch (e) {
     const what = e instanceof GithubError ? `${e.kind} ${e.status}` : e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError") ? "timeout" : "error";
-    console.log(`github connect: failed: ${what}`);
-    return bad(502, "GitHub did not answer the questions this page asks it. Start again in a minute.");
+    console.log(`github connect: failed: ${at.step}: ${what}${twice ? " (asked twice)" : ""}`);
+    // this server's own write is not GitHub's failure, and a rate limit does not pass in a minute
+    if (at.step === "save") return bad(500, `${CONNECT_FAILED.save} Start again in a minute.`);
+    if (e instanceof GithubError && e.kind === "rate_limited") return bad(502, "GitHub is limiting requests right now. Start again in a few minutes.");
+    return bad(502, `${CONNECT_FAILED[at.step]} Start again in a minute.`);
   }
   const to = "/account/github?connected=1";
   // signed in (also: signed in since, in this browser, for a start made signed out): the answer is this account's
@@ -350,14 +406,16 @@ const MAX_BRANCH_CHARS = 120;
  * can reach, and record those installations. `own` lists the ones on their own GitHub account, which keepAnswer
  * makes theirs to manage. The token goes no further than this function.
  */
-async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string): Promise<Answer> {
+async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string, at: { step: ConnectStep }): Promise<Answer> {
   const gh = userClient(cfg, f, () => c.now, token, 4 + MAX_INSTALLATIONS * 3);
+  at.step = "who";
   const me = (await gh.get<Record<string, unknown>>("/user")) ?? {};
   const id = posInt(me.id);
   // the person's own login: letters, digits, hyphens and, for an Enterprise Managed User, an underscore before the
   // short code ("mona-cat_octo"). It is only shown on the account page, through the page's escaping.
   const login = typeof me.login === "string" && /^[A-Za-z0-9_-]{1,39}$/.test(me.login) ? me.login : null;
   if (!id || !login) throw new GithubError("unexpected", 200, "GitHub did not say who this is");
+  at.step = "installations";
   const installs = await gh.list<Record<string, unknown>>("/user/installations", { max: 100, key: "installations" });
   const repos: GrantRepo[] = [];
   const own: number[] = [];
@@ -375,6 +433,7 @@ async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string): P
     const acctId = posInt(acct.id);
     const acctLogin = typeof acct.login === "string" && /^[A-Za-z0-9_-]{1,39}$/.test(acct.login) ? acct.login : null;
     if (!acctId || !acctLogin) continue;
+    at.step = "repositories";
     const mine = await gh.list<Record<string, unknown>>(`/user/installations/${iid}/repositories`, { max: MAX_GRANT_REPOS, key: "repositories" });
     for (const r of mine) {
       const rid = posInt(r.id);
@@ -391,6 +450,7 @@ async function readGrant(c: C, cfg: GithubAppConfig, f: Fetch, token: string): P
       repos.push({ id: rid, name, private: r.private !== false, installation: iid, push, ...(branch ? { branch } : {}) });
     }
     // the installation is recorded (its webhook may have been missed)
+    at.step = "save";
     await upsertInstallation(c.db, { id: iid, accountId: acctId, login: acctLogin, type: String(acct.type ?? "User"), selection: String(i.repository_selection ?? "selected"), suspended: !!i.suspended_at }, c.now);
     // Managed by the person's account only when the installation is on the GitHub account of the person connecting:
     // GitHub's own answer to who they are. What they can reach or push to in it proves nothing about the account it

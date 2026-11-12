@@ -158,9 +158,16 @@ Since then, on production (2026-11-10): the app was made public; pull request 17
 one of them written by an unmodified suite through `genclass-playwright-run`; and the form on `/github/setup` opened
 GitHub's new-file editor with the workflow file filled in.
 
-Not yet run against GitHub: Connect GitHub and Continue with GitHub (the button on `/github/setup`, which signs a
-person in through the app's own OAuth client), a pull request from a fork, a private repository, `issues: merge`, the
-fix workflow, a rate limit.
+Connect GitHub ran against GitHub for the first time on 2026-11-12, from the `genclass` command's GitHub App step:
+the first attempt ended on "GitHub was not connected" (HTTP 502) and the second, a minute later, connected. Why the
+first failed was never found: the page had one sentence for every step, and this server keeps no request logs. Since
+then the callback tries a failed step once more where that is safe, and the page and the log line name the step
+(`src/github/http.ts` `CONNECT_FAILED`; `test/github-link.test.ts` "when GitHub falters"). That second try has only
+run against the tests' GitHub, not the real one.
+
+Not yet run against GitHub: Continue with GitHub (the button on `/github/setup`, which signs a person in through the
+app's own OAuth client), a pull request from a fork, a private repository, `issues: merge`, the fix workflow, a rate
+limit.
 
 Without GitHub:
 
