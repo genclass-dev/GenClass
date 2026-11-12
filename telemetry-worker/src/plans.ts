@@ -12,7 +12,7 @@
 //   Individual, US$29 a month, ended on 2026-10-22: a stored "individual" reads as Free, while its Stripe prices stay
 //   GenClass's (ownedPrice, plans.json retired_plans). Every plan includes the dashboard; the locked paths
 //   (hasDashboard false) are kept for a plan file that leaves it out, and the tests run them on a fixture
-//   (test/fixtures/plans-two-paid.json). There is no trial.
+//   (test/fixtures/plans-two-paid.json). Team has a 3-day trial on an account's first subscription (trial_days).
 // - Seats. A per_seat plan is paid per person: the subscription's quantity (accounts.seats, written by src/stripe.ts)
 //   is how many people the account holds, its owner included. A plan that is not per_seat holds limits.seats people
 //   (Free: 1; null: no limit), and a plan GenClass grants has no seat count, so no limit. seatsOf says it.
@@ -69,6 +69,8 @@ export interface Plan {
   per_seat?: boolean;
   /** Sold per project (version 4): one subscription of quantity 1 for each app, its metadata naming the app. */
   per_project?: boolean;
+  /** Free days on an account's first subscription (src/stripe.ts checkoutSession trialDays); left out or 0: none. */
+  trial_days?: number;
   /**
    * `seats`: the people a plan that is not per_seat holds, the owner included (null or left out: no limit). `apps`
    * on Free: how many of an account's projects it covers (a later one is locked until it has a plan).

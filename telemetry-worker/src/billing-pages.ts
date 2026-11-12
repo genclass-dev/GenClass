@@ -280,7 +280,7 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const test = v.testMode && v.live ? '<p class="notice" role="note"><b>Stripe test mode.</b> No real money moves. Pay with card 4242 4242 4242 4242, any future date and any CVC.</p>' : "";
   const features = (offer?.features ?? []).filter((f) => f.available).map((f) => `<li>${esc(f.text)}</li>`).join("");
   const card = offer && !paid && a.source !== "open"
-    ? `<div class="plan pick big"><h3>${esc(offer.name)}</h3><p class="price">${esc(priceText(offer))}</p><p class="sum">${esc(offer.summary)}</p><ul>${features}</ul>
+    ? `<div class="plan pick big"><h3>${esc(offer.name)}</h3><p class="price">${esc(priceText(offer))}</p>${offer.trial_days ? `<p class="sum"><b>${offer.trial_days} days free</b> on your first paid project. Cancel any time.</p>` : ""}<p class="sum">${esc(offer.summary)}</p><ul>${features}</ul>
   <div class="act">${v.live ? `<button class="btn" type="button" data-plan="${esc(offer.id)}" data-pick><span>Start ${esc(offer.name)} for ${name}</span></button>` : '<span class="muted">Paid plans are not on sale yet.</span>'}</div></div>
   ${a.locked || a.source !== null ? "" : `<p class="free"><a href="#why" class="linkish" id="free">Try for free (limited)</a></p>
   <dialog id="why" class="why" aria-labelledby="whyh">

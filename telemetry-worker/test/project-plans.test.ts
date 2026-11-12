@@ -102,6 +102,25 @@ describe("checkout for one project (POST /api/billing/checkout { plan, project_i
   });
 });
 
+describe("Team's 3-day trial (plans.json trial_days), on an account's first subscription only", () => {
+  it("a customer with no subscription gets 3 free days; one that has had any (even cancelled) gets none", async () => {
+    const b = await buyer();
+    expect(PLANS.find((p) => p.id === "team")!.trial_days).toBe(3);
+    expect((await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: b.shop.id }, cookie: b.cookie, fetch: b.s.fetch })).status).toBe(200);
+    const first = b.s.calls.filter((c) => c.method === "POST" && c.url.pathname === "/v1/checkout/sessions").pop()!;
+    expect(first.form!.get("subscription_data[trial_period_days]")).toBe("3");
+    expect(first.form!.get("metadata[genclass_trial_days]")).toBe("3");
+    // a card is still taken up front
+    expect(first.form!.get("payment_method_collection")).toBe("always");
+    // the same customer once had a subscription for the other project, since cancelled
+    b.s.subs.set("sub_old0000001", projectSub("sub_old0000001", b.account.id, "cus_ada0000001", b.shop.id, "canceled"));
+    expect((await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: b.blog.id }, cookie: b.cookie, fetch: b.s.fetch })).status).toBe(200);
+    const later = b.s.calls.filter((c) => c.method === "POST" && c.url.pathname === "/v1/checkout/sessions").pop()!;
+    expect(later.form!.has("subscription_data[trial_period_days]")).toBe(false);
+    expect(later.form!.has("metadata[genclass_trial_days]")).toBe(false);
+  });
+});
+
 describe("the webhook writes a project's subscription to that project and touches nothing else", () => {
   it("two projects, two subscriptions: each project gets its plan, the account row stays, nothing is cancelled or refunded", async () => {
     const b = await buyer();

@@ -286,11 +286,13 @@ describe("no trial", () => {
     expect(pages[2]![1]).toContain('<p class="opt">Just trying it? <a href="/start">Create a dashboard without an account</a>.</p>');
   });
 
-  it("nothing in src/ asks Stripe for a trial or writes the trial's columns", () => {
+  it("nothing in src/ asks Stripe for a trial but Checkout's plan trial_days, or writes the old trial's columns", () => {
     const dir = new URL("../src/", import.meta.url);
     for (const f of readdirSync(dir).filter((x) => x.endsWith(".ts"))) {
       const code = readFileSync(new URL(f, dir), "utf8");
-      expect(code, f).not.toMatch(/trial_period_days|trial_settings|payment_intents|trial_started_at\s*=|trial_ends_at\s*=|trial_check_failures\s*=/);
+      // the one trial (2026-11-12, owner): Team's trial_days on a first subscription, in Checkout only (src/stripe.ts)
+      const rest = f === "stripe.ts" ? code.replace("...(trialDays ? { trial_period_days: trialDays } : {})", "") : code;
+      expect(rest, f).not.toMatch(/trial_period_days|trial_settings|payment_intents|trial_started_at\s*=|trial_ends_at\s*=|trial_check_failures\s*=/);
       expect(code, f).not.toMatch(/INSERT INTO accounts[^;`]*\b(trial_ends_at|trial_started_at|comp_until)\b/);
     }
     // TRIAL_DAYS is gone from the worker's configuration
