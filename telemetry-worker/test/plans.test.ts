@@ -95,7 +95,7 @@ describe("billing/plans.json: the one source of plans", () => {
     expect(viewRanges(team!)).toEqual(["24h", "7d", "30d", "90d"]);
     expect(viewRanges(enterprise!)).toEqual(["24h", "7d", "30d", "90d", "1y"]);
     expect((PLANS_JSON as any).version).toBe(3);
-    expect((PLANS_JSON as any).footer).toBe("Questions about Team, Enterprise, your own classifier, self-hosting or invoices? Email mehar@daybot.ca.");
+    expect((PLANS_JSON as any).footer).toBe("Questions about Team, Enterprise, your own classifier, self-hosting or invoices? Email mehar@genclass.dev.");
     expect((PLANS_JSON as any).grant_plan).toBe("enterprise");
     expect(PLANS_JSON).not.toHaveProperty("trial_days");
   });
@@ -314,7 +314,7 @@ describe("Team is the one plan sold on the site, per seat; Enterprise by email",
     for (const seats of [0, 201, 1.5, "3", null]) {
       const r = await call(env, "POST", "/api/billing/checkout", { body: { plan: "team", seats }, cookie, fetch: s.fetch });
       expect(r.status, String(seats)).toBe(400);
-      expect(((await r.json()) as any).error).toBe("seats is a whole number from 1 to 200; for a larger team email mehar@daybot.ca");
+      expect(((await r.json()) as any).error).toBe("seats is a whole number from 1 to 200; for a larger team email mehar@genclass.dev");
     }
     expect(s.calls).toEqual([]);
   });
@@ -395,9 +395,9 @@ describe("Team is the one plan sold on the site, per seat; Enterprise by email",
         expect(page).not.toContain('id="seats-team"');
       }
       expect(page).not.toMatch(/Individual|\$29|Payments are handled by Stripe/);
-      expect(page).toContain('<a class="btn ghost" href="mailto:mehar@daybot.ca?subject=GenClass%20Enterprise"><span>Talk to us</span></a>');
+      expect(page).toContain('<a class="btn ghost" href="mailto:mehar@genclass.dev?subject=GenClass%20Enterprise"><span>Talk to us</span></a>');
       expect(page).toContain('<p class="price">By agreement</p>');
-      expect(page).toContain('Questions about Team, Enterprise, your own classifier, self-hosting or invoices? Email <a href="mailto:mehar@daybot.ca">mehar@daybot.ca</a>.');
+      expect(page).toContain('Questions about Team, Enterprise, your own classifier, self-hosting or invoices? Email <a href="mailto:mehar@genclass.dev">mehar@genclass.dev</a>.');
       // the Team section says what Free is: one person, members with Team
       expect(page).toContain('<span class="aside">1 of 1 seat used</span>');
       expect(page).toContain("The Free plan is for one person. Members come with Team: one seat each, and they open the dashboards of your apps with their own sign-in.");

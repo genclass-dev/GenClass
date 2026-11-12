@@ -2,9 +2,9 @@
   "_about": "Test fixture, not GenClass's plans: billing/plans.json as it was on 2026-10-18 (Free without a dashboard, Pro and Custom on sale, Pro sold through Managed Payments) minus the trial, with Pro as the plan GenClass's own grant gives. The billing machinery's tests (switches and duplicates between two paid plans, Managed Payments, locked dashboards, plan-aware retention) load it in place of billing/plans.json with vi.mock, so they keep exercising code that the real plans no longer reach. The real plans are checked in test/plans.test.ts.",
   "version": 1,
   "currency": "usd",
-  "contact": "mehar@daybot.ca",
+  "contact": "mehar@genclass.dev",
   "grant_plan": "pro",
-  "footer": "Need self-hosting, SSO or invoices? Email mehar@daybot.ca.",
+  "footer": "Need self-hosting, SSO or invoices? Email mehar@genclass.dev.",
   "plans": [
     {
       "id": "free",
@@ -109,7 +109,7 @@
           "available": false
         },
         {
-          "text": "Email support from mehar@daybot.ca",
+          "text": "Email support from mehar@genclass.dev",
           "available": true
         }
       ]

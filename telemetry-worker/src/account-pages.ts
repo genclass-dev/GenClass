@@ -785,7 +785,7 @@ export function accountPage(nonce: string, v: AccountView): string {
   const google = v.providers.google || a.google
     ? `<tr><td>Google</td><td>${a.google ? "Linked" : '<span class="muted">Not linked</span>'}</td><td></td><td></td><td class="act">${a.google ? "" : '<a class="btn sm ghost" href="/auth/google?link=1">Link Google</a>'}</td></tr>`
     : "";
-  const recovery = esc(v.recovery ?? "mehar@daybot.ca");
+  const recovery = esc(v.recovery ?? "mehar@genclass.dev");
   const required = v.passkeys.length > 0;
   const passkeyRule = required ? "<b>Passkey at sign-in: on.</b>" : "<b>Passkey at sign-in: off.</b> Adding one turns it on.";
   const planBlock =

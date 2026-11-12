@@ -220,7 +220,7 @@ for it ([The passkey step](#the-passkey-step)).
 - **Email and password** ([Passwords](#passwords)), no owner setup. Sign-up: `POST /api/auth/password/signup`; the
   email, trimmed and lowercased, is the username (unique among passwords, never verified: GenClass has no email sender
   yet) and the account's email. Sign-in: `POST /api/auth/password/login`, a session at once or the passkey step.
-  `/login` links to `/login/forgot`, which says to write to mehar@daybot.ca from the address the account signs in
+  `/login` links to `/login/forgot`, which says to write to mehar@genclass.dev from the address the account signs in
   with ([Owner steps: a forgotten password](#owner-steps-a-forgotten-password)).
 - **Passkeys (WebAuthn)**, no owner setup. Signed out, `POST /api/auth/passkey/register/options` starts a passkey
   sign-up (a new account id as the user handle; the account and its passkey are stored together at verify, with a
@@ -272,7 +272,7 @@ session within the last 5 minutes (`FRESH_MS`): a passkey sign-in, the passkey s
 /api/auth/passkey/confirm/options` + `/confirm/verify` (browser session and our Origin), which the account page runs
 when the server answers `{ confirm: true }`. So a stolen session cookie can neither add its own passkey nor remove
 the owner's. Removing the last passkey turns the step off (an account with a password, Google or GitHub; a passkey-only
-account keeps at least one). Several passkeys are allowed. Lost every passkey: email mehar@daybot.ca (the page says
+account keeps at least one). Several passkeys are allowed. Lost every passkey: email mehar@genclass.dev (the page says
 so); the owner can delete the account's `credentials` rows after checking who is asking.
 
 **Linking rule.** A Google or GitHub identity is attached to an existing account only when that account is signed in
@@ -496,7 +496,7 @@ npx --yes wrangler@4 deploy
 
 ### Owner steps: a forgotten password
 
-GenClass cannot email a reset link yet, so `/login/forgot` asks the person to write to mehar@daybot.ca from the
+GenClass cannot email a reset link yet, so `/login/forgot` asks the person to write to mehar@genclass.dev from the
 address they sign in with. The address was never verified, so check that the mail really comes from it (the message's
 DKIM/SPF results in the mail client, and a reply to that address that they answer) before changing anything. An
 account with a passkey needs no help: after signing in with the passkey, Security, Change password takes a new password

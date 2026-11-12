@@ -8,7 +8,7 @@ state writes proceed. We take reports about it seriously.
 
 Please report security issues privately, not in public GitHub issues, discussions or pull requests.
 
-- **Email:** [mehar@daybot.ca](mailto:mehar@daybot.ca)
+- **Email:** [mehar@genclass.dev](mailto:mehar@genclass.dev)
 - **GitHub:** a private vulnerability report on the GenClass repository
   ([Security → Report a vulnerability](https://github.com/genclass-dev/GenClass/security/advisories/new)).
 

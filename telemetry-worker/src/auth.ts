@@ -109,7 +109,7 @@ export const MFA_MS = 5 * MINUTE;
 /** How recent a passkey assertion must be to add or remove a passkey. */
 export const FRESH_MS = 5 * MINUTE;
 /** Where to write about an account whose passkeys are all lost, or whose password is forgotten (no email reset yet). */
-export const RECOVERY_CONTACT = "mehar@daybot.ca";
+export const RECOVERY_CONTACT = "mehar@genclass.dev";
 /** Global ceiling on apps created in accounts per minute (anonymous creation has its own, collector.ts). */
 const MAX_ACCOUNT_PROJECTS_PER_MINUTE = 60;
 

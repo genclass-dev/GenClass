@@ -77,7 +77,7 @@ describe("Individual on Stripe Checkout, Enterprise by email", () => {
     const closed = await text(call(off.env, "GET", "/account/billing", { cookie: a.cookie }));
     // not on sale (no key): no Upgrade button, but Enterprise's Talk to us is a mailto link whatever the key
     expect(closed).not.toContain("data-plan=");
-    expect(closed).toContain('<a class="btn ghost" href="mailto:mehar@daybot.ca?subject=GenClass%20Enterprise"><span>Talk to us</span></a>');
+    expect(closed).toContain('<a class="btn ghost" href="mailto:mehar@genclass.dev?subject=GenClass%20Enterprise"><span>Talk to us</span></a>');
 
     const on = setup(LIVE);
     const b = await signedIn(on.env);
@@ -87,7 +87,7 @@ describe("Individual on Stripe Checkout, Enterprise by email", () => {
     expect(page).not.toContain('data-plan="enterprise"');
     expect(page).toContain("$29 / month");
     expect(page).toContain('<p class="price">By agreement</p>');
-    expect(page).toContain('Questions about Enterprise, self-hosting or invoices? Email <a href="mailto:mehar@daybot.ca">mehar@daybot.ca</a>.');
+    expect(page).toContain('Questions about Enterprise, self-hosting or invoices? Email <a href="mailto:mehar@genclass.dev">mehar@genclass.dev</a>.');
     expect(page).not.toMatch(/Switching between|To switch between/);
     expect(visible(page)).not.toMatch(/—|!/);
 

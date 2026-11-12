@@ -48,7 +48,7 @@ submitted.
 - **Logo.** `packages/mcp/plugin/.claude-plugin/icon.png` (the genclass.dev mark, 512 by 512, also at the root of
   genclass-plugin) is what the Anthropic directory reads the first time the plugin is saved in the portal. Cline
   wants a 400x400 PNG; Cursor a logo committed to the repository.
-- **Contact email** for the forms that ask (Anthropic, mcpservers.org). PRIVACY.md names mehar@daybot.ca.
+- **Contact email** for the forms that ask (Anthropic, mcpservers.org). PRIVACY.md names mehar@genclass.dev.
 - **GitHub topics.** `gemini-cli-extension` (Gemini gallery), `agent-skills` (`gh skill`), `claude-code-plugin`,
   `claude-plugin` and `codex-plugin` are set on genclass-plugin; GenClass carries `gemini-cli-extension`,
   `claude-code-plugin` and `mcp-server`. Gemini CLI and `gh skill` read the latest GitHub release before the default
@@ -159,7 +159,7 @@ support.claude.com "Anthropic Software Directory Policy".
   the icon passed without a code check. "MCP server command wasn't read" did not appear. The holds: "Runs a pinned npx
   or uvx package", one for `.mcp.json` and one for the hook. Listed on Claude Code and Cowork; the Claude apps surface
   was unticked because the skill says the chat app cannot run the server. Data handling: no personal data, no skill
-  sends data elsewhere, nothing retained, not for under-18s. Contact: mehar@daybot.ca. Auto-publish was switched on,
+  sends data elsewhere, nothing retained, not for under-18s. Contact: mehar@genclass.dev. Auto-publish was switched on,
   but the page says it does not apply until an Anthropic reviewer has published a version. Updates: the push webhook
   ("Set up push updates" on the plugin's page gives the payload URL and a secret shown once; "Rotate secret" on its
   Settings tab replaces it) was added to the repository the same day with

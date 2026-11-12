@@ -648,7 +648,7 @@ describe("POST /api/billing/webhook: the plan follows the subscription", () => {
     expect(page).toContain('id="portal"');
     const again = await call(t.env, "POST", "/api/billing/checkout", { body: { plan: "pro" }, cookie: t.cookie, fetch: t.s.fetch });
     expect(again.status).toBe(409);
-    expect(((await again.json()) as any).error).toBe("the last payment for your Pro plan did not go through; update your card in Manage billing to pay it, or email mehar@daybot.ca");
+    expect(((await again.json()) as any).error).toBe("the last payment for your Pro plan did not go through; update your card in Manage billing to pay it, or email mehar@genclass.dev");
     expect(t.s.calls.some((c) => c.method === "POST" && c.url.pathname === "/v1/checkout/sessions")).toBe(false);
     // paid after all: Pro again, and the next failure starts a new grace
     sub.status = "active";
@@ -904,7 +904,7 @@ describe("shared Stripe account (shared with another business): GenClass touches
     const portal = await call(t.env, "POST", "/api/billing/portal", { body: {}, cookie: t.cookie, fetch: t.s.fetch });
     expect(portal.status).toBe(409);
     expect(((await portal.json()) as any).error).toBe(
-      "this account's Stripe billing record holds something that is not GenClass's, so GenClass does not open it; email mehar@daybot.ca and we will sort it out",
+      "this account's Stripe billing record holds something that is not GenClass's, so GenClass does not open it; email mehar@genclass.dev and we will sort it out",
     );
     for (const plan of ["pro", "custom"]) expect((await call(t.env, "POST", "/api/billing/checkout", { body: { plan }, cookie: t.cookie, fetch: t.s.fetch })).status).toBe(409);
     expect(opened()).toEqual([]);
@@ -969,7 +969,7 @@ describe("shared Stripe account (shared with another business): GenClass touches
     const del = await call(t.env, "DELETE", "/api/account", { body: { confirm: "delete" }, cookie: t.cookie, fetch: t.s.fetch });
     log.mockRestore();
     expect(del.status).toBe(409);
-    expect(((await del.json()) as any).error).toBe("your paid plan could not be cancelled automatically, so the account was not deleted; email mehar@daybot.ca");
+    expect(((await del.json()) as any).error).toBe("your paid plan could not be cancelled automatically, so the account was not deleted; email mehar@genclass.dev");
     expect(t.s.calls.some((c) => c.method !== "GET")).toBe(false);
     expect(t.s.subs.get("sub_other0000001")!.status).toBe("active");
     expect(t.s.customers.get(OTHER)).toEqual(otherCustomer);
@@ -1432,13 +1432,13 @@ describe("Managed Payments for Pro, flexible billing mode, switching between Pro
     t.s.subs.get("sub_pro0000001")!.status = "paused";
     const paused = await call(t.env, "POST", "/api/billing/checkout", { body: { plan: "custom" }, cookie: t.cookie, fetch: t.s.fetch });
     expect(paused.status).toBe(409);
-    expect(((await paused.json()) as any).error).toBe("your Pro plan is paused; email mehar@daybot.ca to change it");
+    expect(((await paused.json()) as any).error).toBe("your Pro plan is paused; email mehar@genclass.dev to change it");
     t.s.subs.get("sub_pro0000001")!.status = "active";
     // the switch paid, its webhook not here yet: Stripe has both
     t.bought("sub_cus0000001", "custom");
     const busy = await call(t.env, "POST", "/api/billing/checkout", { body: { plan: "custom" }, cookie: t.cookie, fetch: t.s.fetch });
     expect(busy.status).toBe(409);
-    expect(((await busy.json()) as any).error).toBe("a plan change is already going through; reload this page in a minute, or email mehar@daybot.ca");
+    expect(((await busy.json()) as any).error).toBe("a plan change is already going through; reload this page in a minute, or email mehar@genclass.dev");
     expect(t.s.calls.some((c) => c.method === "POST" && c.url.pathname === "/v1/checkout/sessions")).toBe(false);
     // an open Checkout page of the account's, one GenClass did not make, and something else on the customer
     t.s.sessions.set("cs_test_own00001", { id: "cs_test_own00001", object: "checkout.session", status: "open", customer: "cus_sw00000001", metadata: { genclass: "1", genclass_account: t.account.id, genclass_plan: "pro" }, url: "https://checkout.stripe.com/c/pay/cs_test_own00001" });
@@ -1557,7 +1557,7 @@ describe("GET /account/billing", () => {
     expect(html).toContain("$99 / month");
     expect(html).toContain("$599 / month");
     expect(html).toContain("Interaction analytics (coming next)");
-    expect(html).toContain('Need self-hosting, SSO or invoices? Email <a href="mailto:mehar@daybot.ca">mehar@daybot.ca</a>.');
+    expect(html).toContain('Need self-hosting, SSO or invoices? Email <a href="mailto:mehar@genclass.dev">mehar@genclass.dev</a>.');
     // no footer of what is stored: that is in the privacy policy
     expect(html).not.toContain('class="dfoot"');
     expect(html).not.toContain("data-plan=");
@@ -1709,7 +1709,7 @@ describe("deleting an account with a paid plan", () => {
     const s = fakeStripe();
     const r = await call(off.env, "DELETE", "/api/account", { body: { confirm: "delete" }, cookie: a.cookie, fetch: s.fetch });
     expect(r.status).toBe(503);
-    expect(((await r.json()) as any).error).toMatch(/payments are switched off on this server, so the account was not deleted; email mehar@daybot.ca/);
+    expect(((await r.json()) as any).error).toMatch(/payments are switched off on this server, so the account was not deleted; email mehar@genclass.dev/);
     expect(off.sql.rows("SELECT COUNT(*) AS n FROM accounts")[0]!.n).toBe(1);
     // nothing live recorded (only a customer): deletion goes ahead
     setPlan(off.sql, a.account.id, "free", { subscription_status: "canceled" });
