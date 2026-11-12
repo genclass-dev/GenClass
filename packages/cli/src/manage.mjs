@@ -104,7 +104,10 @@ export async function apps(o = {}, deps = {}) {
   }
   if (!o.all && list.length > 20) out(`    ${c.gray(`and ${n(list.length - 20)} more: add --all`)}`);
   out();
-  out(`  ${c.gray("See one:")} ${c.cyan(`npx genclass dashboard --app ${appArg(list[0], list)}`)}`);
+  // the hint names the app worth looking at: this folder's, else the one that heard from its site last
+  const live = [...list].sort((a, b) => String(b.last_event ?? "").localeCompare(String(a.last_event ?? "")));
+  const show = list.find((p) => p.token === state.app.token) ?? live[0];
+  out(`  ${c.gray("See one:")} ${c.cyan(`npx genclass dashboard --app ${appArg(show, list)}`)}`);
   out(`  ${c.gray("New one:")} ${c.cyan('npx genclass apps new "Name"')}`);
   out(`  ${c.gray("Delete one, in the browser:")} ${c.cyan(hostUrl("/account"))}`);
   out();
@@ -204,7 +207,7 @@ export async function team(o = {}, deps = {}) {
   }
   top(state);
   const t = a.team;
-  out(`  ${c.bold("Team")}  ${c.gray(t.seats === null ? `${n(t.used)} people` : `${n(t.used)} of ${n(t.seats)} seat${t.seats === 1 ? "" : "s"} used`)}`);
+  out(`  ${c.bold("Team")}  ${c.gray(t.seats === null ? `${n(t.used)} ${t.used === 1 ? "person" : "people"}` : `${n(t.used)} of ${n(t.seats)} seat${t.seats === 1 ? "" : "s"} used`)}`);
   out(`    ${clean(state.account?.label ?? "you", 50)}  ${c.gray("owner")}`);
   for (const m of t.members) out(`    ${clean(m.label, 50)}  ${c.gray(`${m.joined ? `joined ${ago(m.joined, deps.now)}` : "member"}${m.active ? "" : ` ${sym.dot} over the seats, cannot open dashboards`}`)}`);
   for (const i of t.invites) out(`    ${c.gray(`an invite link is open${i.expires ? ` until ${day(i.expires)}` : ""}`)}`);

@@ -12,7 +12,7 @@ import { resetOwnerCache } from "../../../telemetry-worker/src/paid.js";
 import { resetStandIns } from "../../../telemetry-worker/src/suggest.js";
 import { cliToken, createApp, detection, now, resetClock, sendBatch, setNow, setPlan, setup, signedIn } from "../../../telemetry-worker/test/account-helpers.js";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
-import { ask, forget } from "../src/ask.mjs";
+import { answerLines, ask, forget, marks } from "../src/ask.mjs";
 import { askModel, fetchAccount, fetchConnections } from "../src/api.mjs";
 import { signInAgain } from "../src/app.mjs";
 import { agentLink, apps, claudeAdd, connections, exportEvents, funnels, plan, team } from "../src/manage.mjs";
@@ -166,6 +166,22 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(flat(over.text)).toContain("npx genclass plan");
     expect((await said(() => apps({ cwd: me.dir, args: ["new"] }, me.deps))).code).toBe(2);
     expect(JSON.parse((await said(() => apps({ cwd: me.dir, json: true }, me.deps))).text).apps.map((a: any) => a.name)).toEqual(["Blog two", "Shop", "Third"]);
+  });
+});
+
+describe("genclass apps and team: the small words (src/manage.mjs)", () => {
+  it("the hint names the app that heard from its site last; a plan with no seat count says person or people", async () => {
+    const { env, sql } = setup(LIVE);
+    const me = await account(env);
+    await createApp(env, me.cookie, "Another");
+    await createApp(env, me.cookie, "Aaa first by name");
+    await sendBatch(env, me.app.token, [{ t: "session", host: "shop.example", route: "/" }]);
+    expect((await said(() => apps({ cwd: me.dir }, me.deps))).text).toContain('npx genclass dashboard --app "Shop"');
+    // a plan GenClass granted has no seat count: one person is "1 person"
+    setPlan(sql, me.account.id, "free", { comp_until: new Date(now().getTime() + 86_400_000).toISOString(), comp_plan: "team" });
+    const one = flat((await said(() => team(me.o, me.deps))).text);
+    expect(one).toContain("Team 1 person");
+    expect(one).not.toContain("1 people");
   });
 });
 
@@ -376,6 +392,12 @@ describe("genclass ask (src/ask.mjs)", () => {
     // told once: the next question asks nothing
     const again = await said(() => ask({ ...me.o, question: "And now?" }, { ...deps, readPrefs: () => ({ askTold: true }) }));
     expect(again.text).not.toContain("OpenAI");
+  });
+
+  it("an answer's Markdown marks become the terminal's: no backticks or asterisks left on the screen", () => {
+    expect(marks("Fix `/` first, then **the slow** page")).toBe("Fix / first, then the slow page");
+    expect(answerLines("- Run `npx genclass fix` on **/checkout**, then look again", 40)).toEqual(["- Run npx genclass fix on /checkout,", "  then look again"]);
+    expect(marks("a ` b and ** c")).toBe("a ` b and ** c");
   });
 
   it("no model on the server, a sign-in from before, and no question each say the next step", async () => {

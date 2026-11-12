@@ -25,11 +25,21 @@ const turns = new Map();
 /** For the tests: forget every earlier question. */
 export const forget = () => turns.clear();
 
+/**
+ * A line of the model's answer with its Markdown marks turned into the terminal's: `code` in cyan and **strong** in
+ * bold, without the backticks and asterisks. Each word is painted on its own, so a span that wraps onto the next
+ * line leaves no colour open across the bar.
+ */
+export function marks(line) {
+  const paint = (text, f) => text.split(" ").map((w) => (w ? f(w) : w)).join(" ");
+  return line.replace(/`([^`]+)`/g, (_, x) => paint(x, c.cyan)).replace(/\*\*([^*]+)\*\*/g, (_, x) => paint(x, c.bold));
+}
+
 /** The model's answer as lines for the terminal: beside a bar, wrapped, list lines kept as list lines. */
 export function answerLines(text, cols = width() - 6) {
   const lines = [];
   for (const raw of String(text).split("\n")) {
-    const l = clean(raw, 600);
+    const l = marks(clean(raw, 600));
     if (!l) {
       if (lines.length && lines[lines.length - 1] !== "") lines.push("");
       continue;
