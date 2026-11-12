@@ -154,12 +154,12 @@ export async function readState(o = {}, deps = {}) {
   if (!isApp) Object.assign(pr, { state: "optional", detail: "" });
   else if (!git.repo) Object.assign(pr, { state: "optional", detail: "not a git repository yet" });
   else if (!git.github) Object.assign(pr, { state: "optional", detail: "the repository is not on GitHub" });
-  else if (!playwright && !workflows.length) Object.assign(pr, { state: "optional", detail: "no Playwright tests yet: add some and this step appears" });
-  else if (!workflows.length) Object.assign(pr, { state: "todo", detail: `Playwright found · ${WORKFLOW_PATH} is missing` });
-  else if (!me) Object.assign(pr, { state: "todo", detail: "workflow file in place · sign in to check the GitHub App" });
+  else if (!playwright && !workflows.length) Object.assign(pr, { state: "optional", detail: "no Playwright tests yet" });
+  else if (!workflows.length) Object.assign(pr, { state: "todo", detail: "Playwright found · no workflow file yet" });
+  else if (!me) Object.assign(pr, { state: "todo", detail: "workflow file in place · sign in to check the app" });
   else if (!repo || !repo.ok) {
-    Object.assign(pr, repo?.missing ? { state: "waiting", detail: "workflow file in place · see the app at genclass.dev/account/github", run: null } : { state: "todo", detail: `workflow file in place · could not check the app${repo ? ` (${repo.reason})` : ""}` });
-  } else if (!repo.known) Object.assign(pr, { state: "todo", detail: "workflow file in place · continue with GitHub to check the app", human: "install the GitHub App and continue with GitHub in your browser" });
+    Object.assign(pr, repo?.missing ? { state: "waiting", detail: "workflow file in place · app: genclass.dev/account/github", run: null } : { state: "todo", detail: `workflow file in place · could not check the app${repo ? ` (${repo.reason})` : ""}` });
+  } else if (!repo.known) Object.assign(pr, { state: "todo", detail: "workflow file in place · continue with GitHub", human: "install the GitHub App and continue with GitHub in your browser" });
   else if (!repo.installed) Object.assign(pr, { state: "todo", detail: `the GitHub App is not on ${git.github} yet`, human: "install the GitHub App on this repository" });
   else if (repo.needsPlan) Object.assign(pr, { state: "waiting", detail: "private repository: reviews come with the Team plan", run: null });
   else if (repo.paused) Object.assign(pr, { state: "waiting", detail: "paused on your GitHub page at genclass.dev", run: null });

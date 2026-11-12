@@ -9,7 +9,7 @@
 //   clean() before it is printed: control characters and escape sequences are removed, so nothing a site or a model
 //   writes can move the cursor, recolour the terminal or hide a line.
 
-import { c, out, sym } from "../../runtime/bin/lib/ui.mjs";
+import { ask, c, choose, confirm, inputClosed, out, sym } from "../../runtime/bin/lib/ui.mjs";
 
 const tty = () => !!process.stdout.isTTY;
 const unicode = process.platform !== "win32" || !!process.env.WT_SESSION || !!process.env.TERM_PROGRAM;
@@ -108,6 +108,27 @@ export function nextBlock(title, text) {
   out();
   out(`  ${c.cyan(c.bold("Next"))}  ${c.bold(title)}`);
   if (text) para(text, "        ", c.gray);
+}
+
+/**
+ * A yes/no question whose default can be yes. Input that has ended is never a yes: an empty answer counts as the
+ * default only while someone can still type. Null when stdin is not a terminal.
+ */
+export async function agree(question, def = true) {
+  const a = await confirm(question, def);
+  return inputClosed() ? false : a;
+}
+
+/** Pick one of `labels`; null when stdin is not a terminal, or when input has ended (no pick is assumed). */
+export async function pick(question, labels, def = 0) {
+  const i = await choose(question, labels, def);
+  return inputClosed() ? null : i;
+}
+
+/** One line typed at `question`; null when stdin is not a terminal or input has ended. */
+export async function typed(question) {
+  const a = await ask(question);
+  return a === null || (a === "" && inputClosed()) ? null : a;
 }
 
 /** A line of small print. */

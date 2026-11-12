@@ -9,13 +9,14 @@
 // - On a terminal each step waits for Enter (s skips it for this run, q stops). With --yes nothing is asked: every
 //   step that needs no person is done, and what only a person can do (approve a sign-in, install the GitHub App,
 //   deploy) is printed with its address. Without a terminal and without --yes nothing is done at all: the checklist
-//   and the next command are printed, which is what a coding agent reads.
+//   and the next command are printed, which is what a coding agent reads. Input that ends at a question (end of
+//   file) stops the walk: an empty answer is an Enter only while someone can still type.
 // - A step that fails or is skipped does not stop the ones after it that do not depend on it.
 
-import { ask, c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
+import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { addRuntime, connectAgent, setUpPullRequests, signIn, watchFirstPage } from "./actions.mjs";
 import { readState, stateJson } from "./state.mjs";
-import { checklist, header, nextBlock, note, rule } from "./tui.mjs";
+import { checklist, header, nextBlock, note, rule, typed } from "./tui.mjs";
 
 /** What the Next block calls each step. */
 const DOING = {
@@ -92,7 +93,8 @@ export async function setup(o = {}, deps = {}) {
     nextBlock(DOING[step.id] ?? step.title, step.why);
     out();
     if (!auto) {
-      const a = (await ask(`        ${c.bold("Enter")} ${c.gray("to continue,")} ${c.bold("s")} ${c.gray("to skip,")} ${c.bold("q")} ${c.gray("to stop")} `)) ?? "q";
+      // input that ended is a stop, never an Enter: nothing is started without someone at the keyboard
+      const a = (await typed(`        ${c.bold("Enter")} ${c.gray("to continue,")} ${c.bold("s")} ${c.gray("to skip,")} ${c.bold("q")} ${c.gray("to stop")} `)) ?? "q";
       if (/^q/i.test(a)) {
         out();
         note("Stopped. Run genclass again any time: it continues from here.");

@@ -92,7 +92,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     expect(hasPlaywright(dir, { has: () => false })).toBe(false);
 
     // no workflow file yet
-    expect(pr(await read())).toMatchObject({ state: "next", detail: `Playwright found · ${WORKFLOW_PATH} is missing`, run: "genclass setup" });
+    expect(pr(await read())).toMatchObject({ state: "next", detail: "Playwright found · no workflow file yet", run: "genclass setup" });
     write(dir, { [WORKFLOW_PATH]: "name: genclass\njobs:\n  genclass:\n    steps:\n      - run: node genclass-playwright-run.mjs\n", ".github/workflows/ci.yml": "name: ci\n" });
     expect(genclassWorkflows(dir)).toEqual([WORKFLOW_PATH]);
 
@@ -126,7 +126,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     const pr = async (runGit: (a: string[]) => string | null) => (await readState({ cwd: dir }, { runGit, fetchFn: f })).steps.find((x) => x.id === "pull-requests")!;
     expect(await pr(noGit)).toMatchObject({ state: "optional", detail: "not a git repository yet" });
     expect(await pr((a) => (a[1] === "--show-toplevel" ? dir : a[0] === "remote" ? "https://gitlab.com/acme/shop.git" : "main"))).toMatchObject({ state: "optional", detail: "the repository is not on GitHub" });
-    expect(await pr(onGithub(dir))).toMatchObject({ state: "optional", detail: "no Playwright tests yet: add some and this step appears" });
+    expect(await pr(onGithub(dir))).toMatchObject({ state: "optional", detail: "no Playwright tests yet" });
     write(dir, { "playwright.config.ts": "export default {};\n" });
     expect(await pr(onGithub(dir))).toMatchObject({ state: "todo" });
   });

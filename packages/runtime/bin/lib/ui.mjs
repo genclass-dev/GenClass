@@ -146,6 +146,12 @@ const typedAhead = [];
 let inputEnded = false;
 
 /**
+ * Whether the terminal's input has ended (end of file at a question). From then on every question resolves "" at
+ * once, which is not an answer: a caller that takes an empty answer as a yes checks this first.
+ */
+export const inputClosed = () => inputEnded;
+
+/**
  * Asks one question and resolves the line typed (trimmed), "" when input ends, or null when stdin is not a
  * terminal. Ctrl-C at a question ends the command (exit code 130); every command asks before it writes.
  */

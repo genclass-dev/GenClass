@@ -8,6 +8,8 @@
 //   so is printed.
 // - No secret is asked for or typed here. Signing in and installing the GitHub App happen in the browser; this
 //   process only waits for genclass.dev to say they happened.
+// - A question that gets no answer because input ended is a no (tui.mjs agree, pick): nothing is written, sent or
+//   opened on an empty answer unless someone could still have typed one.
 // - A browser is opened only for addresses on the host this CLI talks to, built here or checked against that host
 //   (api.mjs), never one taken from a file or a page.
 
@@ -18,11 +20,11 @@ import { pollDeviceLogin, readCredentials, saveCredentials, startDeviceLogin } f
 import { apiHost, hostConfig, hostUrl } from "../../runtime/bin/lib/host.mjs";
 import { accountLabel, run as runInit } from "../../runtime/bin/lib/init.mjs";
 import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
-import { c, choose, confirm, interactive, out, printChange, sym } from "../../runtime/bin/lib/ui.mjs";
+import { c, interactive, out, printChange, sym } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, WORKFLOW_FILE } from "./assets.mjs";
 import { WORKFLOW_PATH } from "./state.mjs";
-import { bad, good, note, para, spinner, warn } from "./tui.mjs";
+import { agree, bad, good, note, para, pick, spinner, warn } from "./tui.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -89,7 +91,7 @@ export async function watchFirstPage(state, o = {}) {
   const creds = readCredentials();
   if (!creds || !state.app.token) return "skipped";
   if (!o.yes && interactive()) {
-    const ok = await confirm("Is your site deployed with GenClass in it? I will watch for its first page for two minutes", false);
+    const ok = await agree("Is your site deployed with GenClass in it? I will watch for its first page for two minutes", false);
     if (!ok) {
       note("No problem. Deploy as you normally do, open the live site once, and run genclass again: this step turns green by itself.");
       return "skipped";
@@ -141,7 +143,7 @@ async function addWorkflow(state, o) {
       note(`Not a terminal: run ${c.cyan("genclass setup --yes")} to write it.`);
       return false;
     }
-    if (!(await confirm("Write this file?"))) return false;
+    if (!(await agree("Write this file?"))) return false;
   }
   try {
     mkdirSync(dirname(file), { recursive: true });
@@ -197,9 +199,9 @@ export async function setUpPullRequests(state, o = {}) {
     out(`  Then, on the page GitHub sends you to, press ${c.bold("Continue with GitHub")}. Already installed: ${c.cyan(connectUrl)}`);
     return "done";
   }
-  const pick = await choose("The GitHub App", [`Install it on ${repo} (opens GitHub; then press Continue with GitHub on the page that follows)`, "It is installed already: check with GitHub (opens genclass.dev)", "Skip for now"], 0);
-  if (pick === null || pick === 2) return "skipped";
-  const url = pick === 0 ? installUrl : connectUrl;
+  const chosen = await pick("The GitHub App", [`Install it on ${repo} (opens GitHub; then press Continue with GitHub on the page that follows)`, "It is installed already: check with GitHub (opens genclass.dev)", "Skip for now"], 0);
+  if (chosen === null || chosen === 2) return "skipped";
+  const url = chosen === 0 ? installUrl : connectUrl;
   out(`  ${c.gray(sym.arrow)} ${c.cyan(url)}`);
   openBrowser(url, o);
   return (await waitForApp(creds, repo)) ? "done" : "skipped";
@@ -253,7 +255,7 @@ export async function connectAgent(state, o = {}) {
       note(`Not a terminal: run ${c.cyan("genclass setup --yes")} to write it.`);
       return "skipped";
     }
-    if (!(await confirm("Write this change?"))) return "skipped";
+    if (!(await agree("Write this change?"))) return "skipped";
   }
   try {
     mkdirSync(dirname(plan.path), { recursive: true });

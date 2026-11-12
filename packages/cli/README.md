@@ -16,7 +16,7 @@ point and run it again: it continues from what is true now.
   ✔  Signed in                ada@example.com · Free plan
   ✔  GenClass is in this app  added · app "shop"
   ◌  First page seen          deploy, then open your site once
-  ●  Pull requests checked    Playwright found · .github/workflows/genclass.yml is missing
+  ●  Pull requests checked    Playwright found · no workflow file yet
   ○  Coding agent connected
   ○  Suggestions
 
