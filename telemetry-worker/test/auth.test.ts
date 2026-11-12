@@ -529,6 +529,8 @@ describe("accounts: device flow for the CLI (RFC 8628)", () => {
     // the approval page shows the code and the request; signed out it asks to sign in first
     const out = await (await call(env, "GET", `/login/device?code=${code.user_code.toLowerCase()}`, {})).text();
     expect(out).toContain("Sign in to continue");
+    // someone with no account yet is told how they get one, and comes back to this page
+    expect(out).toContain("Create a free account</a> with an email. You come back to this page.");
     expect(out).toContain(code.user_code);
     expect(out).toContain(encodeURIComponent(`/login/device?code=${code.user_code}`));
     expect(out).not.toContain("genclass-runtime 0.3.0"); // signed out, nothing about the request is shown

@@ -528,11 +528,11 @@ export function devicePage(nonce: string, v: DeviceView): string {
 <div class="eb">Command line sign-in</div>
 <h1>Sign in to continue</h1>
 <div class="ucode" aria-label="Code">${esc(v.code)}</div>
-<p class="lead">Check that your terminal shows this code, then sign in. This page then shows the request and asks you to approve or deny it.</p>
+<p class="lead">Check that your terminal shows this code, then sign in.${v.providers.github || v.providers.google ? ` New here? ${[v.providers.github ? "GitHub" : "", v.providers.google ? "Google" : ""].filter(Boolean).join(" or ")} makes your free account in one click.` : ""} This page then shows the request and asks you to approve or deny it.</p>
 <div class="ways">
 ${signInWays({ ...v.providers, next: v.next })}
 </div>
-<p class="swap"><a href="/signup${q(v.next)}">Create an account instead</a>, then come back here.</p>
+<p class="swap">New here? <a href="/signup${q(v.next)}">Create a free account</a> with an email. You come back to this page.</p>
 <script type="application/json" id="dcfg">${embed({ next: v.next })}</script>`;
   } else if (!v.request) {
     const bad = v.typed && (!v.code || !!v.signedIn);
