@@ -607,6 +607,8 @@ export const CHECKS = [
       const tests = workflows.find((w) => w.runsTests);
       if (tests) return fail(`${tests.file} runs tests, but not on pull requests`);
       const pulls = workflows.find((w) => w.onPullRequest);
+      // GenClass's own workflow runs the tests once more under GenClass in a job that is allowed to fail: it is no gate
+      if (pulls && /genclass/i.test(pulls.file) && workflows.length === 1) return fail(`no workflow runs your tests as a check on pull requests (${pulls.file} is GenClass's separate run, which never blocks a merge)`);
       if (pulls) return fail(`${pulls.file} runs on pull requests, but runs no tests`);
       return fail(`${plural(workflows.length, "workflow", "workflows")} in .github/workflows, none runs tests on pull requests`);
     },

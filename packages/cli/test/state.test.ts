@@ -117,6 +117,9 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     // a private repository without a plan, and a paused one, wait and say why
     expect(pr(await read(status({ private: true, needs_plan: true })))).toMatchObject({ state: "waiting", detail: "private repository: reviews come with the Team plan" });
     expect(pr(await read(status({ paused: true })))).toMatchObject({ state: "waiting" });
+    // a genclass.dev with no GitHub App (a collector someone hosts themselves): the step does not apply
+    const noApp = await readState({ cwd: dir }, { runGit: git, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project({ last_event: "2026-11-12T09:00:00.000Z" })], github: { app: false, install_url: null, connect_url: null } }) } }).fetchFn });
+    expect(pr(noApp)).toMatchObject({ state: "optional", detail: "this genclass.dev has no GitHub App" });
     // the repository's name went to the server as it is in the remote
     const server = fakeServer({ ...base, ...status({}) });
     await readState({ cwd: dir }, { runGit: git, fetchFn: server.fetchFn });

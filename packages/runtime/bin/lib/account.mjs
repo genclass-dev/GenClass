@@ -38,7 +38,12 @@ const USER_AGENT = `genclass-runtime-cli/${VERSION}`;
  * page and keeps it as the CLI session's label on the account page (PRIVACY.md). Only the package and its version:
  * nothing about the machine.
  */
-export const CLIENT_NAME = `genclass-runtime ${VERSION}`;
+export const CLIENT_NAME =
+  // the `genclass` command names itself, so the approval page shows what the person ran (a server that does not know
+  // that name shows "Unknown client", and the sign-in works the same)
+  globalThis.__GENCLASS_CLI__?.name === "genclass" && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[A-Za-z0-9.]{1,20})?$/.test(String(globalThis.__GENCLASS_CLI__.version ?? ""))
+    ? `genclass ${globalThis.__GENCLASS_CLI__.version}`
+    : `genclass-runtime ${VERSION}`;
 /** The longest poll interval the CLI accepts from a slow_down answer (seconds). */
 const MAX_INTERVAL_S = 300;
 

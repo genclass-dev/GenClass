@@ -507,7 +507,11 @@ export interface DeviceView {
   providers: { google: boolean; github: boolean };
 }
 
-const RUN = `<code>npx ${RUNTIME_PKG} login</code>`;
+/**
+ * The command the person ran, for the page's sentences: `npx genclass` (the one way in, and what a page with no
+ * request names), or the runtime CLI's own login when that is what asked for the code.
+ */
+const runOf = (client: string | null | undefined): string => (client?.startsWith("genclass-runtime ") ? `<code>npx ${RUNTIME_PKG} login</code>` : "<code>npx genclass</code>");
 
 export function devicePage(nonce: string, v: DeviceView): string {
   const entry = `
@@ -537,8 +541,8 @@ ${signInWays({ ...v.providers, next: v.next })}
 <h1>${bad ? (v.code ? "This code is not valid" : "This is not a sign-in code") : "Connect your terminal"}</h1>
 <p class="lead">${
       bad
-        ? `${v.code ? "It has expired, was already used, or was mistyped." : "Codes have 8 letters, like BCDF-GHJK."} Codes last 10 minutes. Run ${RUN} again for a new one, or type the code below.`
-        : `Run ${RUN} in your project folder. It opens this page with its code; you can also type the code here.`
+        ? `${v.code ? "It has expired, was already used, or was mistyped." : "Codes have 8 letters, like BCDF-GHJK."} Codes last 10 minutes. Run ${runOf(null)} again for a new one, or type the code below.`
+        : `Run ${runOf(null)} in your project folder. It opens this page with its code; you can also type the code here.`
     }</p>
 <div class="ways">${entry}</div>`;
   } else {
@@ -556,7 +560,7 @@ ${signInWays({ ...v.providers, next: v.next })}
   <dt>Account</dt><dd>${who}</dd>
 </dl>
 <p class="lead" id="scope">If you approve, the terminal that shows this code can list the apps in this account, create apps, add an app from its private dashboard link, write a project key into your project, and show your apps' dashboards (what GenClass found on your site), for 90 days or until you revoke it on your account page. It cannot change how you sign in.</p>
-<p class="caution" id="caution"><b>Approve only a sign-in you started.</b> If you did not run ${RUN} yourself just now, or someone sent you this link or code, choose Deny.</p>
+<p class="caution" id="caution"><b>Approve only a sign-in you started.</b> If you did not run ${runOf(r.client)} yourself just now, or someone sent you this link or code, choose Deny.</p>
 <div class="acts" id="acts"><button class="btn green" id="yes" type="button"><span>Approve</span></button><button class="btn ghost" id="no" type="button"><span>Deny</span></button></div>
 <p class="err" id="err" role="alert"></p>
 <p class="done hidden" id="done" role="status"></p>
@@ -586,7 +590,7 @@ ${signInWays({ ...v.providers, next: v.next })}
     ["caution", "scope"].forEach(function(id){ document.getElementById(id).classList.add("hidden"); });
     done.classList.remove("hidden"); done.textContent = text;
   }
-  function gone(){ finish("This code is no longer valid", "It expired or was already used. Run npx ${RUNTIME_PKG} login again for a new code."); }
+  function gone(){ finish("This code is no longer valid", "It expired or was already used. Run the command again for a new code."); }
   var left = Date.parse(cfg.expires) - Date.now();
   if (left > 0 && left < 3600000) timer = setTimeout(gone, left);
   function answer(ok){

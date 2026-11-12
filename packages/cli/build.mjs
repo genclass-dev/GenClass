@@ -15,6 +15,7 @@ const BUILD = {
   runtimeVersion: version("../runtime/package.json"),
   mcpVersion: version("../mcp/package.json"),
   workflow: readFileSync(here("../../docs/github-app/workflows/genclass.yml"), "utf8"),
+  skill: readFileSync(here("../mcp/plugin/skills/genclass/SKILL.md"), "utf8"),
 };
 
 await build({

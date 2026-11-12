@@ -1,5 +1,6 @@
 // What the build puts into the `genclass` command: its own version, the runtime and MCP server versions it installs,
-// and the text of the one workflow file. A checkout without a build reads the same values from the repository.
+// the text of the one workflow file and the text of the agent skill. A checkout without a build reads the same
+// values from the repository.
 //
 // Invariants:
 // - WORKFLOW_FILE is docs/github-app/workflows/genclass.yml, character for character (the build reads that file; the
@@ -13,7 +14,7 @@ import { readFileSync } from "node:fs";
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const version = (rel) => JSON.parse(read(rel)).version;
 
-/** @type {{ version: string, runtimeVersion: string, mcpVersion: string, workflow: string }} */
+/** @type {{ version: string, runtimeVersion: string, mcpVersion: string, workflow: string, skill: string }} */
 export const BUILD =
   typeof __GENCLASS_BUILD__ !== "undefined"
     ? __GENCLASS_BUILD__
@@ -22,6 +23,9 @@ export const BUILD =
         runtimeVersion: version("../../runtime/package.json"),
         mcpVersion: version("../../mcp/package.json"),
         workflow: read("../../../docs/github-app/workflows/genclass.yml"),
+        skill: read("../../mcp/plugin/skills/genclass/SKILL.md"),
       };
 
 export const WORKFLOW_FILE = BUILD.workflow;
+/** packages/mcp/plugin/skills/genclass/SKILL.md: the procedure a coding agent follows with GenClass's tools. */
+export const SKILL_FILE = BUILD.skill;

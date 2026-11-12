@@ -128,10 +128,11 @@ export const DEV_DEVICE_COOKIE = "gc_device";
 export const GOOGLE_COOKIE = "gc_oauth_google";
 export const GITHUB_COOKIE = "gc_oauth_github";
 /**
- * The only client names the approval page shows and the session list keeps: the CLI's own `genclass-runtime <version>`.
+ * The only client names the approval page shows and the session list keeps: the `genclass` command's
+ * `genclass <version>` and the runtime CLI's `genclass-runtime <version>`.
  * Anything else (free text a caller of POST /api/device/code chose) is shown as "Unknown client".
  */
-export const CLIENT_NAME_RE = /^genclass-runtime \d{1,4}\.\d{1,4}\.\d{1,4}(?:-[A-Za-z0-9.]{1,20})?$/;
+export const CLIENT_NAME_RE = /^genclass(?:-runtime)? \d{1,4}\.\d{1,4}\.\d{1,4}(?:-[A-Za-z0-9.]{1,20})?$/;
 
 /** CLI bearer token: `gcs_` + 32 random bytes as base64url. */
 export const CLI_TOKEN_RE = /^gcs_[A-Za-z0-9_-]{43}$/;

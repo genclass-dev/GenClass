@@ -161,6 +161,45 @@ let lastClosed = Promise.resolve();
  * Asks one question and resolves the line typed (trimmed), "" when input ends, or null when stdin is not a
  * terminal. Ctrl-C at a question ends the command (exit code 130); every command asks before it writes.
  */
+/**
+ * Lets the person stop a wait with Enter. Returns `{ signal, done }`: `signal` aborts when Enter is pressed (or when
+ * input ends), and `done()` must be called when the wait is over, whichever way; it resolves once the line reader is
+ * closed, so a question asked next reads its own answer. Where stdin is not a terminal the signal never aborts.
+ */
+export function stopOnEnter() {
+  const ctl = new AbortController();
+  if (!interactive() || inputEnded) return { signal: ctl.signal, done: async () => undefined };
+  let rl = null;
+  let over = false;
+  let closed;
+  const before = lastClosed;
+  const mine = new Promise((d) => (closed = d));
+  lastClosed = mine;
+  before.then(() => {
+    if (over) return closed();
+    // no output: whoever waits owns the line (a spinner); the terminal itself echoes the key
+    rl = createInterface({ input: process.stdin });
+    rl.on("line", () => ctl.abort());
+    rl.on("close", () => {
+      if (!over) {
+        inputEnded = true;
+        ctl.abort();
+      }
+      closed();
+    });
+  });
+  return {
+    signal: ctl.signal,
+    done: async () => {
+      over = true;
+      if (rl) rl.close();
+      await before;
+      if (!rl) closed();
+      await mine;
+    },
+  };
+}
+
 export async function ask(question) {
   if (!interactive()) return null;
   await lastClosed;

@@ -22,13 +22,28 @@ import { pollDeviceLogin, readCredentials, saveCredentials, startDeviceLogin } f
 import { apiHost, hostConfig, hostUrl } from "../../runtime/bin/lib/host.mjs";
 import { accountLabel, run as runInit } from "../../runtime/bin/lib/init.mjs";
 import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
-import { c, interactive, out, printChange, sym } from "../../runtime/bin/lib/ui.mjs";
+import { c, interactive, out, printChange, stopOnEnter, sym } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
-import { BUILD, WORKFLOW_FILE } from "./assets.mjs";
+import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "./assets.mjs";
 import { WORKFLOW_PATH } from "./state.mjs";
 import { agree, bad, good, note, spinner, warn } from "./tui.mjs";
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Resolves after `ms`, or at once when `signal` aborts. */
+const nap = (ms, signal) =>
+  new Promise((r) => {
+    if (signal?.aborted) return r();
+    const t = setTimeout(r, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(t);
+        r();
+      },
+      { once: true },
+    );
+  });
+/** What a wait's line ends with on a terminal: the person is never held by one. */
+const canStop = () => (interactive() ? c.gray(" (Enter to stop waiting)") : "");
 
 /** Opens `url` in the default browser when that makes sense here. Returns whether it tried; never throws. */
 export function openBrowser(url, o = {}) {
@@ -65,8 +80,14 @@ export async function signIn(o = {}) {
   out(`  Code  ${c.bold(dev.user_code)}  ${c.gray("(check that the page shows the same code, then approve)")}`);
   out();
   if (openBrowser(dev.verification_uri_complete, o)) note("Your browser is opening that page.");
-  const sp = spinner("Waiting for you to approve in the browser");
-  const r = await pollDeviceLogin(dev);
+  const stop = stopOnEnter();
+  const sp = spinner(`Waiting for you to approve in the browser${canStop()}`);
+  const r = await pollDeviceLogin(dev, { signal: stop.signal });
+  await stop.done();
+  if (!r.ok && r.error === "cancelled") {
+    sp.stop("warn", "Stopped waiting. Nothing was signed in; run genclass again when you want to.");
+    return "skipped";
+  }
   if (!r.ok) {
     sp.stop("bad", r.error === "access_denied" ? "The sign-in was denied in the browser." : r.error === "expired_token" ? "The code expired before it was approved. Run genclass again for a new one." : `The sign-in did not finish: ${r.reason}`);
     return "failed";
@@ -88,7 +109,8 @@ export function runtimeArgs(state, o = {}) {
   const connect = state.steps.find((s) => s.id === "runtime")?.run === "genclass connect";
   // signed in one step earlier, so the app goes into that account without asking again
   const args = ["--cwd", state.cwd, ...(o.yes ? ["--yes"] : []), ...(state.signedIn ? ["--in-account"] : [])];
-  return { cmd: connect ? "connect" : "init", args: connect ? args : [...args, "--no-devtools"] };
+  // --brief: the walk has its own header, so init says the same things in a few lines
+  return { cmd: connect ? "connect" : "init", args: connect ? args : [...args, "--no-devtools", "--brief"] };
 }
 
 /** Adds the runtime with the runtime CLI's own init (fresh project) or connect (added, not in the account). */
@@ -111,16 +133,20 @@ export async function watchFirstPage(state, o = {}) {
       return "skipped";
     }
   } else return "skipped";
-  const sp = spinner("Open your live site in a browser now. Watching for its first page");
+  const stop = stopOnEnter();
+  const sp = spinner(`Open your live site in a browser now. Watching for its first page${canStop()}`);
   const until = Date.now() + (o.seconds ?? 120) * 1000;
-  while (Date.now() < until) {
-    await sleep(5000);
+  while (Date.now() < until && !stop.signal.aborted) {
+    await nap(5000, stop.signal);
+    if (stop.signal.aborted) break;
     const me = await fetchOverview(creds);
     if (me.ok && me.projects.find((p) => p.token === state.app.token)?.last_event) {
+      await stop.done();
       sp.stop("ok", "GenClass received the first page from your site. Your dashboard is filling.");
       return "done";
     }
   }
+  await stop.done();
   sp.stop("warn", "Nothing arrived yet. GenClass sends nothing from localhost or a private address; run genclass again after the live site was opened.");
   return "skipped";
 }
@@ -176,18 +202,18 @@ export async function addWorkflow(state, o = {}) {
  * The last answer, or null when none passed in time.
  */
 async function waitForGithub(creds, repo, text, until, seconds) {
-  const sp = spinner(text);
+  const stop = stopOnEnter();
+  const sp = spinner(`${text}${canStop()}`);
   const end = Date.now() + seconds * 1000;
   let last = null;
-  while (Date.now() < end) {
-    await sleep(3000);
+  while (Date.now() < end && !stop.signal.aborted) {
+    await nap(3000, stop.signal);
+    if (stop.signal.aborted) break;
     const r = await fetchRepoStatus(creds, repo);
     if (r.ok) last = r;
-    if (r.ok && until(r)) {
-      sp.stop();
-      return r;
-    }
+    if (r.ok && until(r)) break;
   }
+  await stop.done();
   sp.stop();
   return last && until(last) ? last : null;
 }
@@ -201,6 +227,11 @@ export async function connectGithubApp(state, o = {}) {
   const creds = readCredentials();
   const repo = state.git.github;
   if (!creds || !repo) return "skipped";
+  // a genclass.dev with no GitHub App (a collector someone hosts themselves): nothing to connect, and no waiting
+  if (state.account?.github && state.account.github.app === false) {
+    note("This genclass.dev has no GitHub App, so there is nothing to connect here.");
+    return "skipped";
+  }
   let st = await fetchRepoStatus(creds, repo);
   if (!st.ok && st.missing) {
     note(`This genclass.dev cannot tell the command about the GitHub App. Check it in the browser: ${c.cyan(hostUrl("/account/github"))}`);
@@ -278,7 +309,35 @@ export function planAgentConfig(dir) {
   return { file, path, change: { file, kind: before === null ? "create" : "modify", before: before ?? "", after }, reason: null };
 }
 
-/** Adds the MCP server to the project's agent configuration after showing the change. */
+/** Where the skill goes in a project: Claude Code reads a project's skills from here, as `npx @genclass/mcp init` writes it. */
+export const SKILL_PATH = ".claude/skills/genclass/SKILL.md";
+const SKILL_MARK = "genclass:init";
+
+/**
+ * The skill file as this command writes it: the MCP package's own skill with a marker line after its front matter
+ * (the same marker `npx @genclass/mcp init` uses, so either command replaces the other's file and neither replaces
+ * one the person has made their own by removing the line).
+ */
+export function skillText(source = SKILL_FILE) {
+  const mark = `<!-- ${SKILL_MARK}: written by \`npx genclass\`; a rerun replaces this file while this line is here, so remove the line to keep your edits -->`;
+  const end = source.startsWith("---\n") ? source.indexOf("\n---\n", 4) : -1;
+  return end < 0 ? `${mark}\n\n${source}` : `${source.slice(0, end + 5)}${mark}\n${source.slice(end + 5)}`;
+}
+
+/** Writes the skill unless a file is there that does not carry the marker. Returns "written", "kept" or "failed". */
+export function writeSkill(dir) {
+  const file = join(dir, SKILL_PATH);
+  try {
+    if (existsSync(file) && !readFileSync(file, "utf8").includes(SKILL_MARK)) return "kept";
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, skillText());
+    return "written";
+  } catch {
+    return "failed";
+  }
+}
+
+/** Adds the MCP server to the project's agent configuration after showing the change, and the skill next to it. */
 export async function connectAgent(state, o = {}) {
   const plan = planAgentConfig(state.cwd);
   if (!plan.change) {
@@ -303,6 +362,9 @@ export async function connectAgent(state, o = {}) {
     return "failed";
   }
   good(`${plan.change.kind === "create" ? "Wrote" : "Updated"} ${c.bold(plan.file)} ${c.gray("(GenClass's MCP server)")}`);
-  note("Restart your coding agent in this folder and it has GenClass's tools.");
+  // the skill is the procedure the agent follows with those tools; a file the person made their own is left alone
+  const skill = writeSkill(state.cwd);
+  if (skill === "written") good(`Wrote ${c.bold(SKILL_PATH)} ${c.gray("(how the agent uses them)")}`);
+  note('Restart your coding agent in this folder, then ask it "is GenClass connected?". The first time, it shows two dev-only lines that connect your running app and adds them when you say yes.');
   return "done";
 }

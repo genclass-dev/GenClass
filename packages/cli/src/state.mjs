@@ -180,6 +180,8 @@ export async function readState(o = {}, deps = {}) {
   // 5. the GitHub App
   const gh = { state: /** @type {StepState} */ ("todo"), detail: "", run: /** @type {string | null} */ ("genclass setup"), human: /** @type {string | null} */ (null) };
   if (!isApp || !git.github) Object.assign(gh, { state: "optional", detail: !isApp ? "" : git.repo ? "the repository is not on GitHub" : "not a git repository yet" });
+  // a genclass.dev with no GitHub App (a collector someone hosts themselves): nothing to connect
+  else if (me?.github && me.github.app === false) Object.assign(gh, { state: "optional", detail: "this genclass.dev has no GitHub App" });
   else if (!workflows.length && !playwright) Object.assign(gh, { state: "optional", detail: "needs Playwright tests first" });
   else if (!workflows.length) Object.assign(gh, { detail: "after the test workflow" });
   else if (!me) Object.assign(gh, { detail: "sign in to check" });
@@ -207,8 +209,8 @@ export async function readState(o = {}, deps = {}) {
     doing: "Connect your coding agent",
     state: !isApp ? "optional" : agents.length ? "done" : "todo",
     detail: agents.length ? agents.join(", ") : "",
-    why: "Adds GenClass's tools to Claude Code, Cursor and other agents in this project.",
-    more: "It adds GenClass's MCP server to the project's agent configuration (.mcp.json). The server runs on your machine and lets an agent ask what went wrong on a page, replay it and check its fix.",
+    why: "Adds GenClass's tools and its skill to Claude Code, Cursor and other agents in this project.",
+    more: "It adds GenClass's MCP server to the project's agent configuration (.mcp.json) and the skill that tells the agent how to use it (.claude/skills/genclass/SKILL.md). The server runs on your machine and lets an agent ask what went wrong on a page, replay it and check its fix.",
     run: "genclass setup",
     human: null,
   });

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.2
+
+From a walk through the whole setup as a new user, against a local copy of genclass.dev:
+
+- **The runtime step is short.** Inside the walk, adding GenClass prints four lines before the change (the project,
+  what is added and in which mode, the anonymous diagnostics with their switch and the link to what is sent, where
+  the app goes) instead of a dozen rows, and three lines after it (`init --brief`). The change itself is still shown
+  in full before it is written.
+- **No wait holds you.** Enter stops waiting for the browser sign-in, for GitHub's answer and for the first page;
+  the step is then skipped for this run and the walk goes on.
+- **The coding agent step also writes the skill**, `.claude/skills/genclass/SKILL.md`: the procedure the agent
+  follows with GenClass's tools, as `npx @genclass/mcp init` writes it (same marker; a file you made your own is
+  kept). The step ends with what to say to the agent next.
+- **A genclass.dev with no GitHub App** (a collector you host yourself): the GitHub App step does not apply,
+  instead of waiting 90 seconds for an answer that cannot come.
+- **The sign-in page names what you ran.** The command names itself `genclass <version>`, so the approval page
+  shows that and says `npx genclass` (it showed the runtime package's name and login command).
+- Files the setup writes say `npx genclass` and `npx genclass remove` in their comment, and a note about a mostly
+  static site names `npx genclass scan`.
+- Suggestions: when the only workflow is GenClass's own, the check about tests on pull requests says that GenClass's
+  run is separate and never blocks a merge, instead of "genclass.yml runs no tests".
+
 ## 0.2.1
 
 - **Nothing is drawn on a page.** The runtime step adds GenClass without the developer overlay (`init

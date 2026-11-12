@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { WORKFLOW_FILE as COLLECTOR_WORKFLOW } from "../../../telemetry-worker/src/github/workflow-file.js";
-import { addWorkflow, connectAgent, connectGithubApp, mcpServer, planAgentConfig, runtimeArgs, workflowFor } from "../src/actions.mjs";
-import { BUILD, WORKFLOW_FILE } from "../src/assets.mjs";
+import { addWorkflow, connectAgent, connectGithubApp, mcpServer, planAgentConfig, runtimeArgs, SKILL_PATH, skillText, workflowFor, writeSkill } from "../src/actions.mjs";
+import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "../src/assets.mjs";
 import { parseArgs, run, USAGE } from "../src/cli.mjs";
 import { githubName, gitInfo } from "../src/git.mjs";
 import { WORKFLOW_PATH } from "../src/state.mjs";
@@ -96,6 +96,15 @@ describe("genclass: the one workflow file (src/assets.mjs, src/actions.mjs workf
     const older = await ask({});
     expect(older.result).toBe("skipped");
     expect(older.said).toContain(`${HOST}/account/github`);
+    // a genclass.dev with no GitHub App: nothing is asked of it and nothing is waited for
+    const none = fakeServer({});
+    vi.stubGlobal("fetch", none.fetchFn);
+    try {
+      const said = await printed(async () => expect(await connectGithubApp({ cwd: dir, git: { root: dir, github: "acme/shop" }, account: { github: { app: false } } } as never, {})).toBe("skipped"));
+      expect(said).toContain("has no GitHub App");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -104,13 +113,20 @@ describe("genclass: nothing is drawn on a page (src/actions.mjs runtimeArgs)", (
     const dir = tempDir();
     viteApp(dir);
     const fresh = { cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "genclass init" }] } as never;
-    expect(runtimeArgs(fresh, { yes: true })).toEqual({ cmd: "init", args: ["--cwd", dir, "--yes", "--in-account", "--no-devtools"] });
-    expect(runtimeArgs({ cwd: dir, signedIn: false, steps: [{ id: "runtime", run: "genclass init" }] } as never, {})).toEqual({ cmd: "init", args: ["--cwd", dir, "--no-devtools"] });
+    expect(runtimeArgs(fresh, { yes: true })).toEqual({ cmd: "init", args: ["--cwd", dir, "--yes", "--in-account", "--no-devtools", "--brief"] });
+    expect(runtimeArgs({ cwd: dir, signedIn: false, steps: [{ id: "runtime", run: "genclass init" }] } as never, {})).toEqual({ cmd: "init", args: ["--cwd", dir, "--no-devtools", "--brief"] });
     // an app that already has the runtime is only put in the account: nothing in its code is touched
     expect(runtimeArgs({ cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "genclass connect" }] } as never, {})).toEqual({ cmd: "connect", args: ["--cwd", dir, "--in-account"] });
     // init with those arguments: one import, and no line that mounts anything
     const { run: runInit } = await import("../../runtime/bin/lib/init.mjs");
-    await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--no-telemetry", "--no-devtools"])).toBe(0));
+    const said = await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--no-devtools", "--brief"])).toBe(0));
+    // --brief: the same facts in a few lines, and the telemetry disclosure with its switch and its link is still there
+    expect(said).toContain("Vite + React");
+    expect(said).toMatch(/Adds @genclass\/runtime \S+ in observe mode: it reports and never changes anything\./);
+    expect(said).toContain("Anonymous diagnostics are on");
+    expect(said).toContain("init --no-telemetry");
+    expect(said).toContain("What is sent: https://");
+    expect(said).not.toMatch(/✔ Version|✔ Packages|✔ Entry|GenClass • init/);
     const entry = readFileSync(join(dir, "src/main.jsx"), "utf8");
     expect(entry).toContain('import "@genclass/runtime/auto"');
     expect(entry).not.toMatch(/devtools|mountDevtools/);
@@ -145,10 +161,33 @@ describe("genclass: the coding agent's configuration (src/actions.mjs planAgentC
       expect(said).toContain('"genclass": {"command":"npx"');
       expect(readFileSync(join(d, ".mcp.json"), "utf8")).toBe(text);
     }
-    // --yes writes it
+    // --yes writes it, and the skill next to it
     const w = tempDir();
-    await printed(async () => expect(await connectAgent({ cwd: w } as never, { yes: true })).toBe("done"));
+    const wrote = await printed(async () => expect(await connectAgent({ cwd: w } as never, { yes: true })).toBe("done"));
     expect(JSON.parse(readFileSync(join(w, ".mcp.json"), "utf8"))).toEqual({ mcpServers: { genclass: mcpServer() } });
+    expect(wrote).toContain(SKILL_PATH);
+    expect(wrote.replace(/\s+/g, " ")).toContain('ask it "is GenClass connected?"');
+  });
+
+  it("the skill is the MCP package's own, with the marker both commands go by; a file the person made their own is kept", () => {
+    expect(SKILL_FILE).toBe(readFileSync(repo("packages/mcp/plugin/skills/genclass/SKILL.md"), "utf8"));
+    expect(SKILL_PATH).toBe(".claude/skills/genclass/SKILL.md");
+    const text = skillText();
+    // the front matter stays first, the marker line right after it, the rest unchanged
+    expect(text.startsWith("---\n")).toBe(true);
+    const lines = text.split("\n");
+    const mark = lines.findIndex((l) => l.includes("genclass:init"));
+    expect(lines[mark - 1]).toBe("---");
+    expect(lines[mark]).toContain("written by `npx genclass`");
+    expect(text.replace(`${lines[mark]}\n`, "")).toBe(SKILL_FILE);
+    const dir = tempDir();
+    expect(writeSkill(dir)).toBe("written");
+    expect(readFileSync(join(dir, SKILL_PATH), "utf8")).toBe(text);
+    // a rerun replaces a file that still has the marker, and leaves one without it
+    expect(writeSkill(dir)).toBe("written");
+    write(dir, { [SKILL_PATH]: "my own skill\n" });
+    expect(writeSkill(dir)).toBe("kept");
+    expect(readFileSync(join(dir, SKILL_PATH), "utf8")).toBe("my own skill\n");
   });
 });
 

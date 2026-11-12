@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { firstFile, htmlFiles, htmlModuleEntry, isDir, isFile, readText, walkSources, withExts } from "./detect.mjs";
+import { HOST_CLI } from "./version.mjs";
 import {
   AUTO,
   CONFIG_COMMENT,
@@ -27,7 +28,9 @@ import {
 } from "./edit.mjs";
 
 export { AUTO };
-const HEADER = `${MARK} start: GenClass Runtime, added by \`npx @genclass/runtime init\` (\`npx @genclass/runtime remove\` takes it out)`;
+// the `genclass` command names itself in the files it writes (HOST_CLI, version.mjs); `remove` goes by the marker
+const BY = HOST_CLI ? ["npx genclass", "npx genclass remove"] : ["npx @genclass/runtime init", "npx @genclass/runtime remove"];
+const HEADER = `${MARK} start: GenClass Runtime, added by \`${BY[0]}\` (\`${BY[1]}\` takes it out)`;
 const mark = (line) => `${line} // ${MARK}`;
 const posix = (p) => p.split(sep).join("/");
 
