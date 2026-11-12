@@ -1076,6 +1076,24 @@ describe("dashboard page: the Supabase Studio frame (src/studio.ts): header, rai
     await s.close();
   });
 
+  it("a member of the app's team: the same views, and none of the owner's controls (agent link, funnel editor, Delete project)", async () => {
+    const r = await render(sampleStats("7d", NOW), { account, id: "0123456789abcdef", member: true, firstEvent: "2026-10-12T09:00:00.000Z", runtimeReady: true });
+    expect(r.doc.querySelector("[data-mklink]")).toBeNull();
+    expect(r.doc.querySelector("[data-delproj]")).toBeNull();
+    expect(r.doc.querySelector('a[href="#delproj"]')).toBeNull();
+    expect(r.text("#mcp .alink-st")).toBe("The app's owner makes it.");
+    expect(r.text("#settings .alink-st")).toBe("The app's owner makes it.");
+    expect(r.text("#jsonurl")).toBe("Ask the app's owner for the agent link.");
+    // the Connect prompt's choices have no agent link to make
+    expect(r.doc.querySelector('#cchoices [data-choice="guard"]')).not.toBeNull();
+    expect(r.doc.querySelector('#cchoices [data-choice="agent"]')).toBeNull();
+    // the funnels are shown, their editor is not
+    expect([...r.doc.querySelectorAll("#ixfun h3")].map((h) => h.textContent)).toEqual(["Checkout", "Search to product"]);
+    expect(r.text("#ixfunedit")).toBe("");
+    expect(r.writes).toEqual([]);
+    await r.close();
+  });
+
   it("MCP in an account: no agent link until one is made; Create agent link posts, then the configuration names the new link", async () => {
     const r = await render(sampleStats("7d", NOW), { account, id: "0123456789abcdef", firstEvent: "2026-10-12T09:00:00.000Z", runtimeReady: true });
     const pre = () => r.doc.querySelector("#mcp [data-mcp] pre")!.textContent;

@@ -179,6 +179,16 @@ describe("a member reads the owner's dashboards with the owner's plan, and chang
     // no forwarding or export section: those are the owner's
     expect(html).not.toContain('id="forwarding"');
     expect(html).not.toContain('id="export"');
+    // nor the owner's controls: no Delete project, no agent link button; the page's script is told it is a member's
+    expect(html).not.toContain('id="delproj"');
+    expect(html).not.toContain('href="#delproj"');
+    expect(html).not.toContain('type="button" data-mklink');
+    expect(html).toContain("The app's owner makes it.");
+    expect(html).toContain('"member":true');
+    const ownerPage = await text(call(env, "GET", `/account/apps/${app.id}`, { cookie: owner.cookie }));
+    expect(ownerPage).toContain('id="delproj"');
+    expect(ownerPage).toContain('type="button" data-mklink');
+    expect(ownerPage).not.toContain('"member":true');
     const st = await json(call(env, "GET", `/api/account/projects/${app.id}/stats?range=90d`, { cookie: bob.cookie }));
     expect(st.range).toBe("90d");
     expect(st.locked).toBeUndefined();

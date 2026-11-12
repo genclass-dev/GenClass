@@ -2072,9 +2072,9 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     };
     const project = { name: p.name, token: p.token, created: p.created, lastEvent: p.last_event };
     // locked (a plan file without the dashboard): the app's key and Connect panel, and the plans; no stats
-    if (!hasDashboard(access)) return page(200, (n) => dashboardPage(n, project, { ...base, locked: true }));
+    if (!hasDashboard(access)) return page(200, (n) => dashboardPage(n, project, { ...base, locked: true, ...(mine ? {} : { member: true }) }));
     // a member sees the owner's ranges; forwarding, export and their settings are the owner's alone
-    if (!mine) return page(200, (n) => dashboardPage(n, project, { ...base, ranges: viewRanges(access.plan), keepDays: keepDays(access.plan) }));
+    if (!mine) return page(200, (n) => dashboardPage(n, project, { ...base, member: true, ranges: viewRanges(access.plan), keepDays: keepDays(access.plan) }));
     // plan-dependent parts: ranges, retention, forwarding and export (src/billing-pages.ts)
     const extras = await appExtrasData(c.db, env, a.account.id, p, c.now);
     return page(200, (n) =>
