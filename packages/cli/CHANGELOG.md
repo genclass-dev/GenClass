@@ -19,6 +19,11 @@ From using the command on a real site the morning after 0.2.2, and from watching
   with its own marker. An app that already has GenClass gets "Add two Vite settings" as its next step. A config it
   cannot edit without guessing (a function, one that sets `worker` itself, an app with workers of its own) is left
   alone and gets the two lines to add by hand. `remove` takes them out. Vite 8 needs nothing and gets nothing.
+- **`npx genclass dashboard`, after seeing it on a real account:** the list is largest first whatever order the
+  server sends, and leads with what happened in plain words ("old data replaced newer data", then the page) instead
+  of the kind's name and a cut-off explanation; `--all` adds the kind's own name. The first number is "Page loads",
+  the dashboard page's own word (it said "Visits watched" next to a different "visits" under Visitors). The chart of
+  problems has a line of its own and folds a long period to the window. Long lines fold; nothing ends in "…".
 - **`npx genclass remove` takes out everything GenClass put in the project.** After the runtime (the import, the
   config file, the package) it lists what the other steps wrote and removes it on one more yes: GenClass's entry
   in `.mcp.json` (your other servers stay; the file goes only when that entry was all it held), the skill (only
