@@ -197,6 +197,29 @@ async function modelError(res: Response): Promise<string> {
   return code || message ? ` (${[code, message].filter(Boolean).join(": ")})` : "";
 }
 
+/** Where the key's models are listed. */
+export const MODELS_URL = "https://api.openai.com/v1/models";
+
+/**
+ * The names of the general models the key can use, for the log: ids that start with gpt-, chatgpt- or o<digit>,
+ * never a fine-tuned model's id (it carries an organization's name). At most 80, newest first; "" when unreadable.
+ */
+async function modelNames(f: Fetch, key: string): Promise<string> {
+  try {
+    const res = await f(MODELS_URL, { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return `(the list answered HTTP ${res.status})`;
+    const j = (await res.json().catch(() => null)) as { data?: { id?: unknown; created?: unknown }[] } | null;
+    return (j?.data ?? [])
+      .filter((m) => typeof m.id === "string" && /^(?:gpt-|chatgpt-|o\d)[A-Za-z0-9.-]{0,60}$/.test(m.id))
+      .sort((a, b) => (Number(b.created) || 0) - (Number(a.created) || 0))
+      .slice(0, 80)
+      .map((m) => m.id as string)
+      .join(", ");
+  } catch {
+    return "(the list could not be read)";
+  }
+}
+
 export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, digest: Digest): Promise<PlanItem[] | null> {
   const key = (env.OPENAI_API_KEY ?? "").trim();
   if (!key || !digest.checks.length) return null;
@@ -216,7 +239,10 @@ export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL"
       signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
     });
     if (!res.ok) {
-      console.log(`suggest: the model answered HTTP ${res.status}${await modelError(res)}`);
+      const why = await modelError(res);
+      console.log(`suggest: the model answered HTTP ${res.status}${why}`);
+      // the key has no such model: say in the log which ones it has, so the name can be set right (SUGGEST_MODEL)
+      if (why.includes("model_not_found")) console.log(`suggest: models this key can use: ${await modelNames(f, key)}`);
       return null;
     }
     const j = (await res.json().catch(() => null)) as { choices?: { message?: { content?: unknown } }[] } | null;
