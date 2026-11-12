@@ -14,25 +14,52 @@ import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { c, err, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
 
-export const USAGE = `genclass: one way to set up GenClass, and what your app needs next
+export const USAGE = `genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.
 
-  npx genclass                where this project stands; on a terminal it walks you through the next step
+  npx genclass                where this project stands; on a terminal it walks you through the
+                              next step, then stays open for commands and questions
   npx genclass setup          the guided setup  (--yes: no questions, for a coding agent)
-  npx genclass status         what is done, what is next  (--all: every part; --json: for a coding agent)
-  npx genclass suggest [url]  what your app is missing, most important first  (--json, --yes, --no-model, --all)
+  npx genclass status         what is done, what is next  (--all: every part; --json)
+
+  See
   npx genclass dashboard      your app, whole: problems found, checks, visitors, agent, GitHub App
-                              (--range 24h|7d|30d, --all, --app <name>, --open, --json)
+  npx genclass problems       every problem found, by kind and page, and what GenClass did about it
+  npx genclass analytics      visitors: visits, pages, time, where they come from, what they click
+                              (one part in full: analytics pages | sources | devices | clicks | paths | funnels)
+  npx genclass events         the latest events, one per line  (--all: each one's mode and trigger)
+  npx genclass health         how GenClass itself runs on your pages  (--all: every breakdown)
+  npx genclass report         the period as Markdown  (--out report.md)
+  npx genclass export         every stored event, as a file  (--from, --to, --format csv, --out)
+
+  Act
+  npx genclass fix            hand a problem to your coding agent  (fix 2 | fix stale | fix all;
+                              --print, --copy, --agent claude | codex | cursor-agent | gemini)
+  npx genclass ask "..."      ask about your app in plain words; the model answers from its numbers
+  npx genclass suggest [url]  what your app is missing, most important first  (--yes, --no-model, --all)
   npx genclass scan <url>     23 visual checks on one page
+
+  Connect
+  npx genclass connections    where alerts go (Slack, Sentry, PostHog, Datadog, a webhook), GitHub, agent
+                              (connections add | test | on | off | remove <kind>)
+  npx genclass agent          your coding agent: is it connected, what it did  (agent link: give it
+                              the live site's numbers)
+  npx genclass funnels        funnels  (funnels add "Name" /a /b /c | funnels remove "Name")
+
+  Account
+  npx genclass apps           your apps  (apps new "Name")
+  npx genclass plan           your plan, its limits and what is used; start the paid plan  (--open)
+  npx genclass team           who is on the plan  (team invite)
   npx genclass login          sign in  (logout, whoami)
   npx genclass remove         take GenClass out of this app again
 
-  Options: --cwd <dir>   --yes   --json   --no-browser   --help   --version
+  Options: --app <name>   --range 24h|7d|30d|90d|1y   --all   --json   --cwd <dir>   --yes
+           --no-browser   --help   --version
 
   Run it in your web app's folder. npx runs it without installing; "npm install -g genclass" makes it just "genclass".
   Every part GenClass sets up is listed by "npx genclass status --all". Docs: https://genclass.dev/docs/cli`;
 
-const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open" };
-const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range" };
+const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open", print: "print", copy: "copy" };
+const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range", from: "from", to: "to", format: "format", out: "out", agent: "agent" };
 
 /** The flags this file knows, and what is left ({ o, rest }); an unknown flag stays in `rest` for the command it is for. */
 export function parseArgs(argv) {
@@ -52,8 +79,11 @@ export function parseArgs(argv) {
   return { o, rest };
 }
 
-/** Runs the command line. Returns the exit code. */
-export async function run(argv) {
+/**
+ * Runs the command line. Returns the exit code. `ctx.nested`: called from the home (home.mjs), so the setup walk
+ * does not open a second home when it ends.
+ */
+export async function run(argv, ctx = {}) {
   const cmd = argv[0] && !argv[0].startsWith("-") ? argv[0] : null;
   const args = cmd ? argv.slice(1) : argv;
 
@@ -101,8 +131,18 @@ export async function run(argv) {
     }
     return runSuggest({ ...o, url });
   }
-  if (rest.length) {
-    err(`genclass: unknown ${rest[0].startsWith("-") ? "option" : "command"} ${c.bold(rest[0])}\n\n${USAGE}`);
+  if (cmd !== null && !COMMANDS.includes(cmd)) {
+    const near = nearest(cmd);
+    err(`genclass: unknown command ${c.bold(cmd)}${near ? `. Did you mean ${c.cyan(`npx genclass ${near}`)}?` : ""}\n\n${USAGE}`);
+    return 2;
+  }
+  // the commands that take words after their name: sections, picks, subcommands, a question
+  const words = rest.filter((a) => !a.startsWith("-"));
+  const flags = rest.filter((a) => a.startsWith("-"));
+  const WORDY = ["analytics", "fix", "ask", "connections", "agent", "funnels", "apps", "team"];
+  if (flags.length || (words.length && !WORDY.includes(cmd))) {
+    const bad = flags[0] ?? words[0];
+    err(`genclass: unknown ${bad.startsWith("-") ? "option" : "command"} ${c.bold(bad)}\n\n${USAGE}`);
     return 2;
   }
   if (cmd === "dashboard") {
@@ -110,15 +150,42 @@ export async function run(argv) {
     const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", args);
     return (await import("./app.mjs")).dashboard(o, { fallback });
   }
+  if (["problems", "events", "health", "report"].includes(cmd)) return (await import("./views.mjs"))[cmd](o);
+  if (cmd === "analytics") {
+    const { analytics, ANALYTICS_SECTIONS } = await import("./views.mjs");
+    if (words[0] && !ANALYTICS_SECTIONS.includes(words[0])) {
+      err(`genclass analytics: there is no part ${c.bold(words[0])}. The parts: ${ANALYTICS_SECTIONS.join(", ")}`);
+      return 2;
+    }
+    return analytics({ ...o, section: words[0] ?? null });
+  }
+  if (cmd === "agent") {
+    if (words[0] === "link") return (await import("./manage.mjs")).agentLink(o);
+    if (words[0]) {
+      err(`genclass agent: there is no ${c.bold(words[0])}. Try ${c.cyan("npx genclass agent")} or ${c.cyan("npx genclass agent link")}`);
+      return 2;
+    }
+    return (await import("./views.mjs")).agent(o);
+  }
+  if (cmd === "fix") return (await import("./fix.mjs")).fix({ ...o, what: words.join(" ") || null });
+  if (cmd === "ask") return (await import("./ask.mjs")).ask({ ...o, question: words.join(" ") });
+  if (["apps", "plan", "team", "connections", "funnels"].includes(cmd)) return (await import("./manage.mjs"))[cmd]({ ...o, args: words });
+  if (cmd === "export") return (await import("./manage.mjs")).exportEvents(o);
   const { setup, status } = await import("./setup.mjs");
   if (cmd === "status") return status(o);
-  if (cmd === "setup" || cmd === null) return setup(o, { runSuggest });
-  const near = nearest(cmd);
-  err(`genclass: unknown command ${c.bold(cmd)}${near ? `. Did you mean ${c.cyan(`npx genclass ${near}`)}?` : ""}\n\n${USAGE}`);
+  if (cmd === "setup" || cmd === null) {
+    // on a terminal the command stays open when the walk ends: a prompt for commands and questions (home.mjs)
+    const home = async (ho) => (await import("./home.mjs")).home(ho, { runCommand: (a) => run(a, { nested: true }), nearest });
+    return setup({ ...o, ...(ctx.nested ? { home: false } : {}) }, { runSuggest, home });
+  }
   return 2;
 }
 
-const COMMANDS = ["setup", "status", "suggest", "dashboard", "scan", "login", "logout", "whoami", "connect", "init", "remove", "help", "version"];
+/** Every command, for the "did you mean" of a mistyped one. */
+export const COMMANDS = [
+  "setup", "status", "suggest", "dashboard", "problems", "analytics", "events", "health", "report", "export", "fix", "ask", "scan", "connections", "agent", "funnels",
+  "apps", "plan", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version",
+];
 
 /** The command a mistyped one is closest to (at most two edits away), or null. */
 export function nearest(word) {

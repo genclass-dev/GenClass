@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.3.0
+
+The command becomes the whole product in a terminal. Until now it set GenClass up and ended; what the dashboard
+shows, and everything an account can do, needed the browser.
+
+- **It stays open.** When the walk is done, or left with `q`, the command asks what next: type a command
+  (`problems`, `analytics`, `fix`, ...) or a sentence, which is a question about your app. `q` leaves. Inside it a
+  view is not headed again by the card. A command typed whole, as a screen printed it (`npx genclass fix`), works
+  there too.
+- **Just `genclass`.** `npx genclass` runs without installing, so `genclass` alone was "command not found". The
+  first time the home opens, the command offers to install itself (`npm install -g genclass`, shown first, asked
+  once, never in CI or with `--yes`). Once `genclass` is on the PATH every screen says `genclass` instead of
+  `npx genclass`.
+- **Every part of the dashboard.** `problems` (by kind, by page, each kind on each page, the measured visual
+  checks, what GenClass stopped on the visitor's screen, the change on the period before), `analytics` (visits,
+  page views, time on a page, pages, sources and campaigns, devices, browsers, systems, countries, new and
+  returning, clicks, rage clicks and dead clicks, paths, entry and exit pages, funnels; one part in full with
+  `analytics pages` and so on), `events` (the latest 50 as stored, with mode and trigger under `--all`), `health`
+  (model loads, where it ran, decision time, what was not checked, load errors, the visual checks' coverage, runtime
+  versions; `--all` adds every breakdown), `report` (the dashboard's Copy as Markdown), `export` (every stored
+  event as JSON Lines or CSV, page by page into one file). All of them fit a 58-column window, take `--range`,
+  `--app`, `--all` and `--json`, and follow the plan's rules like the browser does.
+- **`fix`: the problems, handed to your coding agent.** The list, a pick (a number, a kind, or all), and Enter starts
+  Claude Code, Codex, Cursor's agent or Gemini CLI in the project with the dashboard's own prompt for it: what, where,
+  the usual fix, and the steps that reproduce it and prove the fix with GenClass's MCP server. `c` copies, `p`
+  prints, `--print` prints and nothing else. GenClass changes no code and starts nothing without a key press.
+- **`ask`: talk to it.** A question in plain words is answered by genclass.dev's model from the app's dashboard
+  numbers; a follow-up carries the turn before it. Only the question leaves the machine; the first time, the command
+  says what goes to the model and waits for Enter. It shares a plan's daily model runs with `suggest`.
+- **The account's side.** `connections` (where alerts go: Slack, Sentry, PostHog, Datadog, a webhook; add, test,
+  turn off, remove, with what is typed never shown; plus the GitHub App, the coding agent and the private link),
+  `agent` (how the agent is connected here and what it did with the findings) and `agent link` (gives the agent the
+  live site's numbers, in your own agent settings, not in the repository), `funnels` (add and remove), `apps`
+  (list, new), `plan` (limits, what is used, what the plan leaves out, and Enter to start the paid plan), `team`
+  (who is on it, an invite link).
+- **A plan is chosen at the start of the setup.** For an account on Free the step after the sign-in shows the paid
+  plan, large, with its price and what it adds; Enter opens its checkout in the browser (one click less: the page
+  goes straight to Stripe), `f` is "Try free for now (limited)". Asked once per project.
+- **What a terminal may do is listed where it is approved.** The sign-in page now lists it line by line, and what
+  it never can: change how you sign in, pay, remove people, delete an app or the account. A sign-in from before
+  this version was approved for less: the first command that needs more says so and signs in again on Enter.
+- Notes and lists no longer run two columns past a 58-column window; a share of almost all is no longer rounded up
+  to "100%"; two apps with the same name can be told apart (`--app <id>`).
+
 ## 0.2.4
 
 - **A repository that was renamed on GitHub is found under its new name.** A checkout cloned before a rename still

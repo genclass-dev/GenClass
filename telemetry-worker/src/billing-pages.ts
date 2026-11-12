@@ -67,6 +67,8 @@ export interface BillingView {
   done: boolean;
   /** The plan chosen on the pricing page (?plan=<id>). */
   picked: string | null;
+  /** With a picked plan: open its checkout at once (?start=1, from the genclass command's plan step). */
+  go?: boolean;
   /** Back from a switch's Checkout (?to=<plan>): the plan it bought. */
   switchTo?: string | null;
   /** The names of the plans sold through Stripe Managed Payments (src/stripe.ts managedPayments). */
@@ -298,7 +300,7 @@ ${
 }
 ${teamSection(v)}
 </div>
-<script type="application/json" id="cfg">${embed({ want })}</script>`;
+<script type="application/json" id="cfg">${embed(v.go === true ? { want, go: true } : { want })}</script>`;
 
   const script = `
 (function(){
@@ -341,6 +343,9 @@ ${teamSection(v)}
   gone("[data-leave]", "data-leave", "/api/team/memberships/", "Confirm leave", "leaveerr");
   var pick = document.querySelector("[data-pick]");
   if (pick) pick.focus();
+  // sent here to start that plan (the address said so, and it is gone from the address bar by now, so a reload
+  // does not start it again): the same click a person would make, with the seats the page shows
+  if (pick && cfg.go) pick.click();
   var portal = document.getElementById("portal");
   if (portal) portal.addEventListener("click", function(){
     var err = document.getElementById("portalerr"); err.textContent = "";

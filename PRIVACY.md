@@ -229,6 +229,30 @@ command-line sign-in, the same counts the dashboard page on genclass.dev shows f
 page where a sign-in is approved says the terminal can do this; a sign-in approved before that page said so (before
 2026-11-12) cannot, and is asked to sign in again. Nothing new is collected or stored for it.
 
+**What a terminal can do** is what the page where its sign-in is approved lists, and nothing else: list and create
+apps, show the apps' dashboards, visitor analytics and stored events, ask the model about an app, show and change
+where an app's alerts are sent, its funnels and its private dashboard link, and show the plan and the team and make
+a team invite link. It cannot change how the account signs in, pay, remove people, or delete an app or the account.
+A sign-in approved before the page listed something cannot do it and is asked to sign in again. The views
+(`genclass problems`, `analytics`, `events`, `health`, `report`, `export`) read what the account's dashboard and
+its export already hold; nothing new is collected or stored for them. A destination's address or key typed at
+`genclass connections add` is not shown, is sent to genclass.dev once over HTTPS, is stored encrypted there like one
+typed on the dashboard, and is not kept on the developer's machine.
+
+**`genclass ask`** answers a question about an app in words. The question, and at most three earlier questions and
+answers of the same sitting, leave the developer's machine. On genclass.dev we add the numbers that account's
+dashboard already shows for the app and period (page paths, kinds of problem, counts, what the runtime did, what the
+coding agent reported and, where the plan has visitor analytics, visits, sources, devices, countries and the names
+of clicked elements) and pass both to a language model (OpenAI's API), then return its answer. No source code is
+involved: we have none. We do not store or log the question, the numbers sent or the answer; we keep the same one
+number as for suggestions, how many model runs an account used on a day, for 3 days. The command says this before
+the first question and waits for the developer's Enter. OpenAI processes it under its API terms, and nothing from it
+is used to train GenClass's own model.
+
+**`genclass fix`** hands a problem to the developer's own coding agent. It builds a prompt on their machine from the
+dashboard's numbers (the kind of problem, the pages, the counts) and starts the agent they have installed with it,
+or copies or prints it. The prompt is sent nowhere by us, and GenClass changes no code.
+
 **The GitHub App step** asks genclass.dev whether the app is on the project's repository, by the repository's name
 (`owner/name`, read from the git remote). When the answer is "not installed", the command also asks github.com where
 that name leads now (one `HEAD https://github.com/owner/name`, no sign-in, no cookies), because a repository renamed

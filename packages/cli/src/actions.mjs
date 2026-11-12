@@ -26,8 +26,9 @@ import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
 import { c, interactive, out, printChange, stopOnEnter, sym } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "./assets.mjs";
-import { WORKFLOW_PATH } from "./state.mjs";
-import { agree, bad, good, note, spinner, warn } from "./tui.mjs";
+import { freeLimits, WORKFLOW_PATH } from "./state.mjs";
+import { saveNotes } from "./store.mjs";
+import { agree, bad, good, note, planCard, PROMPT, spinner, typed, warn } from "./tui.mjs";
 import { planViteSettings } from "./vite.mjs";
 
 /** Resolves after `ms`, or at once when `signal` aborts. */
@@ -97,6 +98,69 @@ export async function signIn(o = {}) {
   saveCredentials({ host: apiHost(), access_token: r.access_token, account: r.account });
   sp.stop("ok", `Signed in as ${c.bold(accountLabel(r.account))}`);
   return "done";
+}
+
+// ------------------------------------------------------------------------------------------------ 1b. the plan
+
+/**
+ * The plan step, for an account on Free that can buy a plan here: the paid plan's card, then one question. Enter
+ * opens that plan's checkout in the browser (genclass.dev sends the person straight to Stripe) and waits for the
+ * payment; f goes on with Free for this project, and that choice is remembered so the project is asked once. With
+ * --yes, or with nobody at a terminal, nothing is bought and nothing is opened: it is Free for now, said in one line
+ * with where the plan starts. Returns "done", "skipped" (asked again next run) or "quit" (q: stop the walk).
+ * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
+ */
+export async function choosePlan(state, o = {}, deps = {}) {
+  const offer = state.steps.find((s) => s.id === "plan")?.offer;
+  if (!offer) return "skipped";
+  const free = offer.free.name;
+  const limits = freeLimits(offer.free);
+  const stayFree = (line) => {
+    saveNotes(state.cwd, { plan: "free", planAt: new Date().toISOString() });
+    note(line);
+    return "done";
+  };
+  if (o.yes || !interactive()) return stayFree(`${free} for now (limited${limits ? `: ${limits}` : ""}). ${offer.plan.name}, ${offer.price}: ${offer.checkoutUrl}`);
+  planCard(offer, state.app?.name ?? null);
+  // the small way on, in the owner's words
+  out(`  ${c.gray(`f  Try ${free.toLowerCase()} for now (limited)`)}`);
+  const dot = c.gray("·");
+  const a = await typed(`  ${PROMPT()} ${c.bold("Enter")} ${c.gray(`to start ${offer.plan.name}`)} ${dot} ${c.bold("f")} ${c.gray("free for now")} ${dot} ${c.bold("q")} ${c.gray("stop")}  `);
+  if (a === null || /^q/i.test(a)) return "quit";
+  if (/^[fs]/i.test(a)) return stayFree(`${free} for now. ${offer.plan.name} any time: ${offer.checkoutUrl}`);
+  if (await checkout(offer, o, deps)) return "done";
+  note(`This project goes on with ${free} for now.`);
+  return "skipped";
+}
+
+/**
+ * Opens a plan's checkout in the browser and waits for the payment (Enter stops the wait). The page is
+ * genclass.dev's, the payment is Stripe's; this command never sees a card. Returns whether the plan became active.
+ * @param {{ plan: { name: string }, checkoutUrl: string }} offer
+ * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
+ */
+export async function checkout(offer, o = {}, deps = {}) {
+  out();
+  out(`  Open  ${c.cyan(offer.checkoutUrl)}`);
+  if (openBrowser(offer.checkoutUrl, o)) note("Your browser is opening the checkout.");
+  const creds = readCredentials();
+  const stop = stopOnEnter();
+  const sp = spinner(`Waiting for the payment in the browser${canStop()}`);
+  const until = Date.now() + (deps.waitMs ?? 10 * 60_000);
+  let paid = false;
+  while (creds && !stop.signal.aborted && Date.now() < until) {
+    await nap(deps.everyMs ?? 3000, stop.signal);
+    if (stop.signal.aborted) break;
+    const me = await fetchOverview(creds, deps);
+    if (me.ok && me.plan && me.plan.id !== "free") {
+      paid = true;
+      break;
+    }
+  }
+  await stop.done();
+  if (paid) sp.stop("ok", `${offer.plan.name} is active. Thank you.`);
+  else sp.stop("warn", `No payment yet. ${offer.plan.name} starts the moment the payment goes through.`);
+  return paid;
 }
 
 // ------------------------------------------------------------------------------------------------ 2. the runtime

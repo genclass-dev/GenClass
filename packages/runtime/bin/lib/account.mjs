@@ -177,6 +177,8 @@ export function cleanProject(p, host = apiHost()) {
     dashboard_url: typeof p.dashboard_url === "string" && sameOrigin(p.dashboard_url, host) ? p.dashboard_url : null,
     created: typeof p.created === "string" ? p.created : null,
     last_event: typeof p.last_event === "string" ? p.last_event : null,
+    // an app of a team this account is a member of: it can be read, its owner changes it
+    ...(p.shared === true ? { shared: true } : {}),
   };
 }
 

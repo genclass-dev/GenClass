@@ -69,6 +69,15 @@ export function hasPlaywright(cwd, project) {
   return ["ts", "js", "mjs", "cjs", "mts"].some((e) => existsSync(join(cwd, `playwright.config.${e}`)));
 }
 
+/** Free's limits as a few words ("3 apps, 7 days of history, your top 3 suggestions"), from the numbers the server sent. */
+export function freeLimits(free) {
+  const parts = [];
+  if (free?.apps) parts.push(`${free.apps} app${free.apps === 1 ? "" : "s"}`);
+  if (free?.historyDays) parts.push(`${free.historyDays} days of history`);
+  if (free?.suggestionsShown) parts.push(`your top ${free.suggestionsShown} suggestion${free.suggestionsShown === 1 ? "" : "s"}`);
+  return parts.join(", ");
+}
+
 const NOT_APPS = new Set(["node_modules", "dist", "build", "out", "coverage", "vendor", "tmp", "target"]);
 
 /**
@@ -161,6 +170,8 @@ export async function readState(o = {}, deps = {}) {
 
   /** @type {Step[]} */
   const steps = [];
+  // what this command remembers about the project between runs (store.mjs): its site, the last suggestions, the plan chosen
+  const notes = readNotes(cwd);
   const isApp = !project.refused && !!project.framework;
 
   // 1. the account
@@ -182,6 +193,26 @@ export async function readState(o = {}, deps = {}) {
     more: "Your account is where your apps, their dashboards and your plan live. Nothing is typed in the terminal.",
     run: "npx genclass login",
     human: "approve the sign-in in your browser",
+  });
+
+  // 1b. the plan. An account on Free that can buy one here is asked once per project, right after the sign-in:
+  // the paid plan first, Free for now as the small way on. An account with a plan, a server that sells nothing and
+  // a signed-out person have nothing to choose, so the step does not show.
+  const offer = me?.offer ?? null;
+  const choseFree = notes.plan === "free";
+  steps.push({
+    id: "plan",
+    title: "Plan",
+    doing: "Choose a plan",
+    state: !offer ? "optional" : choseFree ? "done" : "todo",
+    detail: !me ? "" : !offer ? (me.plan ? `${me.plan.name} plan` : "") : choseFree ? `${offer.free.name} for now (limited) · ${offer.plan.name} is ${offer.price}` : `${offer.plan.name}, ${offer.price}`,
+    why: offer ? `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name} for now (limited).` : "The plan your account is on.",
+    more: offer
+      ? `${offer.plan.name} opens in your browser and is paid there, on Stripe. ${offer.free.name} keeps what finds, shows and fixes the problems${freeLimits(offer.free) ? `: ${freeLimits(offer.free)}` : ""}. You can change plan any time at genclass.dev/account/billing.`
+      : "Plans and prices: genclass.dev/pricing.",
+    run: "npx genclass setup",
+    human: offer && !choseFree ? `choose a plan in your browser: ${offer.checkoutUrl}` : null,
+    ...(offer ? { offer } : {}),
   });
 
   // 2. the runtime in this app
@@ -291,7 +322,6 @@ export async function readState(o = {}, deps = {}) {
   });
 
   // 7. suggestions
-  const notes = readNotes(cwd);
   const s = notes.suggest;
   steps.push({
     id: "suggestions",

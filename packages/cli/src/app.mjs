@@ -31,9 +31,9 @@ export const KINDS = {
   transient: "a one-off failure",
 };
 
-const RANGE_WORDS = { "24h": "last 24 hours", "7d": "last 7 days", "30d": "last 30 days", "90d": "last 90 days", "1y": "last year" };
+export const RANGE_WORDS = { "24h": "last 24 hours", "7d": "last 7 days", "30d": "last 30 days", "90d": "last 90 days", "1y": "last year" };
 const BARS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
-const n = (v) => Number(v).toLocaleString("en-US");
+export const n = (v) => Number(v).toLocaleString("en-US");
 const plural = (v, one, many = `${one}s`) => `${n(v)} ${v === 1 ? one : many}`;
 
 /** A row of bars for a series of counts: the tallest is the full block, zero is the lowest. "" for an empty series. */
@@ -167,37 +167,69 @@ export async function signInAgain(o = {}, deps = {}) {
  * @param {{ fetchFn?: typeof fetch, runGit?: Function, now?: number, fallback?: () => Promise<number> }} [deps]
  */
 export async function dashboard(o = {}, deps = {}) {
-  const range = ["24h", "7d", "30d", "90d", "1y"].includes(o.range) ? o.range : "7d";
-  let state = await readState({ cwd: o.cwd }, deps);
+  return appView(o, deps, {
+    name: "dashboard",
+    json: (app, state, target) => ({ ok: true, app: target.name, ...app, more: undefined, github_app: state.steps.find((s) => s.id === "github-app")?.detail ?? null }),
+    // the agent, GitHub App and suggestions lines are this folder's: shown when the app is this folder's app
+    show: (app, state, target) => render(app, state.app.token === target.token ? state : { steps: [] }, { all: o.all, now: deps.now }),
+  });
+}
+
+/** How an app is named after --app: its name in quotes, or its id when another app has the same name. */
+export const appArg = (p, projects) => (projects.filter((x) => x.name.toLowerCase() === p.name.toLowerCase()).length > 1 ? p.id : `"${clean(p.name, 40)}"`);
+
+/**
+ * Which app a command is about, for a signed-in account: --app by name or id, else this folder's app, else the
+ * account's only one. Returns { state, creds, target } or, when there is none to act on, { code } after saying why
+ * and what to type instead (signed out, no app yet, which app). `name`: the command, for those hints.
+ */
+export async function pickApp(o = {}, deps = {}, name = "dashboard") {
+  const state = await readState({ cwd: o.cwd }, deps);
   if (!state.signedIn) {
     // signed out, an app can still have a private dashboard link: the runtime CLI's own command knows it
-    if (!o.json && deps.fallback) return deps.fallback();
+    if (!o.json && deps.fallback) return { code: await deps.fallback() };
     if (o.json) out(JSON.stringify({ ok: false, error: "not signed in", run: "npx genclass login" }));
     else {
       header({ app: state.app.name, framework: state.app.framework, host: state.host });
       note(state.sessionProblem && state.sessionProblem !== "expired" ? `Could not reach genclass.dev (${state.sessionProblem}).` : "Sign in to see your app here: npx genclass login (or just npx genclass, which walks you through it).");
       out();
     }
-    return 1;
+    return { code: 1 };
   }
   const { creds } = readCredentialsFor();
   const projects = state.projects;
-  // which app: --app by name, else this folder's, else the account's only one
-  const wanted = o.app ? projects.filter((p) => p.name.toLowerCase() === String(o.app).toLowerCase() || p.id === o.app) : state.app.token ? projects.filter((p) => p.token === state.app.token) : projects.length === 1 ? projects : [];
+  // which app: --app by id or by name, else this folder's, else the account's only one
+  const byId = o.app ? projects.filter((p) => p.id === o.app) : [];
+  const wanted = byId.length ? byId : o.app ? projects.filter((p) => p.name.toLowerCase() === String(o.app).toLowerCase()) : state.app.token ? projects.filter((p) => p.token === state.app.token) : projects.length === 1 ? projects : [];
   if (wanted.length !== 1) {
     if (o.json) out(JSON.stringify({ ok: false, error: projects.length ? "which app" : "no app yet", apps: projects.map((p) => p.name) }));
     else {
       header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
       if (!projects.length) note("No app in your account yet. Run npx genclass in your web app's folder: it adds GenClass and gives the app its dashboard.");
       else {
-        note(o.app ? `No app named "${clean(o.app, 40)}" in your account. Your apps:` : state.app.token ? "This folder's app is not in your account yet (genclass puts it there). Your apps:" : "Which app? Run this in the app's folder, or name one:");
-        for (const p of projects.slice(0, 30)) out(`    ${c.cyan(`npx genclass dashboard --app "${clean(p.name, 40)}"`)}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`);
+        note(wanted.length > 1 ? `More than one app is named "${clean(o.app, 40)}". Name it by its id:` : o.app ? `No app named "${clean(o.app, 40)}" in your account. Your apps:` : state.app.token ? "This folder's app is not in your account yet (genclass puts it there). Your apps:" : "Which app? Run this in the app's folder, or name one:");
+        for (const p of (wanted.length > 1 ? wanted : projects).slice(0, 30)) out(`    ${c.cyan(`npx genclass ${name} --app ${appArg(p, projects)}`)}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`);
       }
       out();
     }
-    return projects.length ? 2 : 1;
+    return { code: projects.length ? 2 : 1 };
   }
-  const target = wanted[0];
+  return { state, creds, target: wanted[0] };
+}
+
+/**
+ * One view of one app (the dashboard, and views.mjs: analytics, problems, events). Finds which app is meant, reads
+ * its numbers, and hands them to `view.show(app, state, target)`; with --json prints `view.json(...)` instead.
+ * Everything that can go wrong on the way is said the same for every view: signed out, which app, an older
+ * sign-in, a server without the route. Exit code 0, 1 when the numbers could not be read, 2 when no app is named.
+ * @param {{ name: string, show: Function, json?: Function }} view
+ */
+export async function appView(o = {}, deps = {}, view) {
+  const range = ["24h", "7d", "30d", "90d", "1y"].includes(o.range) ? o.range : "7d";
+  const picked = await pickApp(o, deps, view.name);
+  if ("code" in picked) return picked.code;
+  let { state } = picked;
+  const { creds, target } = picked;
   if (o.open && target.dashboard_url) openBrowser(target.dashboard_url, o);
   let app = await fetchApp(creds, target.id, range, deps);
   if (!app.ok && app.reauth && !o.json && interactive()) {
@@ -215,7 +247,7 @@ export async function dashboard(o = {}, deps = {}) {
     if (o.json) out(JSON.stringify({ ok: false, error: app.reauth ? "sign in again" : app.reason, run: app.reauth ? "npx genclass login" : null, dashboard_url: target.dashboard_url }));
     else {
       header({ app: target.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
-      if (app.reauth) warn(`This sign-in is from before the command could show dashboards. Run ${c.cyan("npx genclass login")} once, then ${c.cyan("npx genclass dashboard")}.`);
+      if (app.reauth) warn(`This sign-in is from before the command could show dashboards. Run ${c.cyan("npx genclass login")} once, then ${c.cyan(`npx genclass ${view.name}`)}.`);
       else if (app.missing) note("This genclass.dev cannot show a dashboard in the terminal yet.");
       else bad(`Could not read the dashboard: ${clean(app.reason, 200)}`);
       if (target.dashboard_url) out(`  ${c.gray("In the browser")}  ${c.cyan(target.dashboard_url)}`);
@@ -225,11 +257,11 @@ export async function dashboard(o = {}, deps = {}) {
     return 1;
   }
   if (o.json) {
-    out(JSON.stringify({ ok: true, app: target.name, ...app, github_app: state.steps.find((s) => s.id === "github-app")?.detail ?? null }, null, 2));
+    out(JSON.stringify((view.json ?? ((a, st, t) => ({ ok: true, app: t.name, ...a })))(app, state, target), null, 2));
     return 0;
   }
-  header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
-  // the agent, GitHub App and suggestions lines are this folder's: shown when the app is this folder's app
-  render(app, state.app.token === target.token ? state : { steps: [] }, { all: o.all, now: deps.now });
-  return 0;
+  // a view whose output is meant to be piped or pasted (the report) has no card over it
+  if (!view.plain) header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+  const code = await view.show(app, state, target, readCredentialsFor().creds ?? creds);
+  return typeof code === "number" ? code : 0;
 }

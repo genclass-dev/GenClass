@@ -26,9 +26,11 @@
 // - Every state-changing request authenticated by a cookie must carry an Origin equal to the expected origin (else
 //   403); so must sign-in and sign-up, with or without a session. The JSON endpoints the pages call also require
 //   Content-Type application/json. Bearer requests (the CLI) carry no ambient credentials and need no Origin.
-// - A CLI bearer session can do what the CLI needs and the approval page says: read the account and its apps, create
-//   apps, add an app from its private link, and end itself. Stats, other sessions, passkeys, passwords, private links
-//   and the account itself need the browser session.
+// - A CLI bearer session can do what the approval page says and no more. On the routes here: read the account and its
+//   apps, create apps, add an app from its private link, and end itself. Through its own routes (src/cli.ts), each
+//   only for a session approved after the page began to say so: an app's dashboard, analytics and stored events,
+//   questions to the model, where an app's alerts are sent, its funnels and its private link, the plan and the team.
+//   Sign-in methods, other sessions, paying, removing people and deleting an app or the account need the browser.
 // - OAuth state (state, nonce, PKCE verifier, where to go next, which account and session a Link started from) is
 //   kept server-side in `challenges`; the cookie holds only that row's random id, so a planted cookie cannot name an
 //   account to link to. Session cookies use the __Host- prefix (no Domain, Path=/, Secure), except on plain-HTTP
@@ -1628,12 +1630,18 @@ async function claimProject(c: C): Promise<Response> {
 /**
  * POST /api/account/projects/<id>/link: a new private dashboard link for an owned app (the dashboard's "agent link",
  * which @genclass/mcp reads production numbers from as GENCLASS_DASHBOARD). 201 { dashboardUrl }, shown once: only
- * the new secret's hash is stored, so it replaces the hash of any link the app had and that link stops working. Only
- * the signed-in browser may make one (a CLI session cannot read stats, so it cannot mint a way to read them).
+ * the new secret's hash is stored, so it replaces the hash of any link the app had and that link stops working. Here
+ * only the signed-in browser makes one; a terminal approved for it does so through /api/cli/link (src/cli.ts).
  */
 async function makeLink(c: C, id: string): Promise<Response> {
   const a = await browserWriter(c, "an agent link can be made");
   if (a instanceof Response) return a;
+  return makeLinkFor(c, a.account.id, id);
+}
+
+/** makeLink for an account whose session the caller has already checked (above, and src/cli.ts for a terminal approved for it). */
+export async function makeLinkFor(c: C, accountId: string, id: string): Promise<Response> {
+  const a = { account: { id: accountId } };
   const p = await ownedProject(c, a.account.id, id);
   if (!p) return fail(404, "not found");
   const secret = newSecret();
