@@ -165,9 +165,12 @@ export async function routeBilling(request: Request, url: URL, path: string, env
     case "/account/billing": {
       if (!get) return method();
       const picked = pickedPlan(url.searchParams.get("plan"));
+      // ?start=1 with a plan: the person chose it a moment ago (in the genclass command's plan step), so the page
+      // opens that plan's checkout itself instead of waiting for one more click
+      const go = !!picked && url.searchParams.get("start") === "1";
       const a = await webSession(c);
       // the plan picked on the pricing page survives the sign-in
-      if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${picked.id}` : ""}`)}`);
+      if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${picked.id}${go ? "&start=1" : ""}` : ""}`)}`);
       const access = await accountAccess(c.db, a.account.id, env, c.now);
       const apps = (await accountProjects(c, a.account.id)).map((p) => ({ id: p.id!, name: p.name }));
       const b = await accountBilling(c.db, a.account.id, env);
@@ -185,6 +188,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
           testMode: stripeMode(env) === "test",
           done: url.searchParams.get("done") === "1",
           picked: picked?.id ?? null,
+          go,
           switchTo: pickedPlan(url.searchParams.get("to"))?.id ?? null,
           managedPlans: PAID_PLANS.filter((p) => managedPayments(env, p)).map((p) => p.name),
           now: c.now,

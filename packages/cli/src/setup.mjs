@@ -20,7 +20,7 @@
 import { join, resolve } from "node:path";
 import { detectProject } from "../../runtime/bin/lib/detect.mjs";
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
-import { addRuntime, addWorkflow, connectAgent, connectGithubApp, signIn, watchFirstPage } from "./actions.mjs";
+import { addRuntime, addWorkflow, choosePlan, connectAgent, connectGithubApp, signIn, watchFirstPage } from "./actions.mjs";
 import { brand, canDraw } from "./art.mjs";
 import { BUILD } from "./assets.mjs";
 import { appsBelow, readState, stateJson } from "./state.mjs";
@@ -152,6 +152,11 @@ export async function setup(o = {}, deps = {}) {
       show(state, details, !auto && !welcomed);
       welcomed = true;
       if (!step) break;
+      // the plan step is its own screen and asks its own question (the card, then Enter or f)
+      if (step.id === "plan" && !auto) {
+        go = true;
+        break;
+      }
       showNext(step, details);
       out();
       if (auto) break;
@@ -183,6 +188,15 @@ export async function setup(o = {}, deps = {}) {
     const so = { ...o, confirmed: true };
     let result = "skipped";
     if (step.id === "account") result = await signIn(so);
+    else if (step.id === "plan") {
+      result = await choosePlan(state, so);
+      if (result === "quit") {
+        out();
+        note("Stopped. Run npx genclass again any time: it continues from here.");
+        out();
+        return 0;
+      }
+    }
     else if (step.id === "runtime") result = await addRuntime(state, so);
     else if (step.id === "dashboard") result = await watchFirstPage(state, so);
     else if (step.id === "workflow") result = await addWorkflow(state, so);

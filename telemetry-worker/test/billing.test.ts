@@ -1598,6 +1598,15 @@ describe("GET /account/billing", () => {
     expect(html).toContain('<div class="plan pick"><h3>Custom</h3>');
     expect(html).toContain('<button class="btn" type="button" data-plan="custom" data-pick><span>Upgrade to Custom</span></button>');
     expect(html).toContain('data-plan="pro"><span>Upgrade to Pro</span>');
+    // ?start=1 with a plan (the genclass command's plan step): the page is told to open that plan's checkout itself.
+    // It survives the sign-in, means nothing without a plan, and a plain visit never starts anything
+    expect(html).not.toContain('"go"');
+    expect((await call(env, "GET", "/account/billing?plan=custom&start=1", {})).headers.get("location")).toBe("/login?next=%2Faccount%2Fbilling%3Fplan%3Dcustom%26start%3D1");
+    const going = await (await call(env, "GET", "/account/billing?plan=custom&start=1", { cookie: a.cookie })).text();
+    expect(going).toContain('"go":true');
+    expect(going).toContain("if (pick && cfg.go) pick.click();");
+    expect(await (await call(env, "GET", "/account/billing?start=1", { cookie: a.cookie })).text()).not.toContain('"go"');
+    expect(await (await call(env, "GET", "/account/billing?plan=enterprise&start=1", { cookie: a.cookie })).text()).not.toContain('"go"');
     // waiting for Stripe after paying: the plan still reads Free, and no button can start a second purchase
     const waiting = await (await call(env, "GET", "/account/billing?done=1&plan=pro", { cookie: a.cookie })).text();
     expect(waiting).toContain('id="donemsg"');

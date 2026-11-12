@@ -45,6 +45,30 @@ export async function fetchOverview(creds, opts = {}) {
     projects,
     github: j.github && typeof j.github === "object" ? { app: j.github.app === true, installUrl: sameOrigin(j.github.install_url, creds.host), connectUrl: sameOrigin(j.github.connect_url, creds.host) } : null,
     billingUrl: sameOrigin(j.billing_url, creds.host),
+    offer: offerOf(j.offer, creds.host),
+  };
+}
+
+/**
+ * The plan an account on Free can start, in the server's own words (its name, price and the lines of its card come
+ * from genclass.dev's plans, never from this command). Null when the server offers none, or when what it sent is
+ * not usable (no plan, no price, or a checkout address that is not on the server's own host).
+ */
+function offerOf(o, host) {
+  if (!o || typeof o !== "object" || !o.plan || typeof o.plan !== "object") return null;
+  const id = str(o.plan.id, 40);
+  const price = str(o.price, 60);
+  const checkoutUrl = sameOrigin(o.checkout_url, host);
+  if (!id || !price || !checkoutUrl) return null;
+  const num = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v) : null);
+  const f = o.free && typeof o.free === "object" ? o.free : {};
+  return {
+    plan: { id, name: str(o.plan.name, 40) ?? id },
+    price,
+    summary: str(o.summary, 200),
+    features: (Array.isArray(o.features) ? o.features : []).filter((x) => typeof x === "string" && x.trim()).slice(0, 12).map((x) => x.slice(0, 120)),
+    checkoutUrl,
+    free: { name: str(f.name, 40) ?? "Free", apps: num(f.apps), historyDays: num(f.history_days), suggestionsShown: num(f.suggestions_shown) },
   };
 }
 

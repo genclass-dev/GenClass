@@ -1,6 +1,7 @@
 // The routes the `genclass` command asks (packages/cli/src/api.mjs is the client). Checked before the account routes.
 //
-//   GET  /api/cli/overview              the account, its plan, its apps, what suggestions it has left today
+//   GET  /api/cli/overview              the account, its plan, its apps, what suggestions it has left today, and
+//                                       for an account on Free the plan it can start (the command's plan step)
 //   GET  /api/cli/github?repo=o/n       what genclass-dev[bot] is doing on one repository, from the account's own answer
 //   POST /api/cli/suggest               the plan for the checks that failed on an app (src/suggest.ts)
 //   GET  /api/cli/app?id=<app>&range=7d the app's dashboard as data: what the browser dashboard reads (`genclass dashboard`)
@@ -28,7 +29,7 @@ import { stats, stripAnalytics } from "./dashboard.js";
 import { githubApp } from "./github/config.js";
 import { repoStatusForAccount } from "./github/http.js";
 import { json } from "./http.js";
-import { accountAccess, firstPlanWith, hasAnalytics, hasDashboard, pickRange, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, PAID_PLANS, pickRange, priceText, projectAccess, viewRanges, type Access } from "./plans.js";
 import { askModel, byWeight, claimRun, hasModel, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem } from "./suggest.js";
 
 /** A repository's full name as GitHub writes one. */
@@ -47,7 +48,27 @@ async function overview(c: C): Promise<Response> {
     projects: (await accountProjects(c, a.account.id)).map((p) => projectJson(c, p)),
     github: { app: gh !== null, install_url: gh ? `${c.cfg.origin}/github/install` : null, connect_url: gh?.clientId ? `${c.cfg.origin}/github/connect` : null },
     billing_url: `${c.cfg.origin}/account/billing`,
+    offer: offerFor(c, a.account, access),
   });
+}
+
+/**
+ * What an account on Free can start from the terminal (the genclass command's plan step): the first plan sold on
+ * the site in its own words (billing/plans.json: name, price, the lines of its card), the address that opens its
+ * checkout, and Free's limits in numbers. Null for an account that has a plan or a grant, on a server that sells
+ * nothing, and for an account that cannot buy here (a test key and an account not on its list).
+ */
+function offerFor(c: C, account: { id: string; email: string | null }, access: Access): Record<string, unknown> | null {
+  const plan = PAID_PLANS[0];
+  if (!plan || access.plan.id !== FREE.id || access.source !== null || !canBuy(c.env, account)) return null;
+  return {
+    plan: { id: plan.id, name: plan.name },
+    price: priceText(plan),
+    summary: plan.summary,
+    features: plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text)).map((f) => f.text).slice(0, 12),
+    checkout_url: `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1`,
+    free: { name: FREE.name, apps: FREE.limits.apps, history_days: FREE.limits.history_days, suggestions_shown: suggestionLimits(FREE).shown },
+  };
 }
 
 async function github(c: C): Promise<Response> {

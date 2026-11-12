@@ -10,7 +10,7 @@
 //   writes can move the cursor, recolour the terminal or hide a line.
 
 import { homedir } from "node:os";
-import { ask, c, choose, confirm, inputClosed, out, sym } from "../../runtime/bin/lib/ui.mjs";
+import { ask, c, choose, confirm, inputClosed, out, sym, useColor } from "../../runtime/bin/lib/ui.mjs";
 import { brand, markRows } from "./art.mjs";
 
 const tty = () => !!process.stdout.isTTY;
@@ -146,6 +146,44 @@ export function card(h = {}) {
   }
   out();
 }
+
+/**
+ * The plan step's card: the paid plan, large. Its name in capitals with the price on the same line, what it is in
+ * one sentence, and the lines of its card on genclass.dev, each with a tick. As wide as the welcome card. Every word
+ * of it is the server's (the plans file), cleaned like any text that is not this program's.
+ * @param {{ plan: { name: string }, price: string, summary?: string | null, features: string[] }} offer
+ * @param {string | null} [app] the project it is chosen for
+ */
+export function planCard(offer, app) {
+  const inner = width() - 6;
+  const B = unicode ? { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" } : { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" };
+  const title = ` ${c.bold(app ? `A plan for ${clean(app, 30)}` : "A plan for this project")} `;
+  const row = (text = "") => out(`  ${brand(B.v)}   ${text}${" ".repeat(Math.max(0, inner - 3 - visible(text)))}${brand(B.v)}`);
+  const room = inner - 6;
+  out();
+  out(`  ${brand(B.tl + B.h)}${title}${brand(B.h.repeat(Math.max(0, inner - 1 - visible(title))))}${brand(B.tr)}`);
+  row();
+  // the name, large: capitals with air between the letters, the price at the far end of the line
+  const name = badge(clean(offer.plan.name, 20).toUpperCase().split("").join(" "));
+  const price = c.bold(clean(offer.price, 40));
+  if (visible(name) + 2 + visible(price) <= room) row(`${name}${" ".repeat(room - visible(name) - visible(price))}${price}`);
+  else {
+    row(name);
+    row(price);
+  }
+  if (offer.summary) for (const l of wrap(clean(offer.summary, 200), room)) row(c.gray(l));
+  row();
+  for (const f of offer.features) {
+    const [first = "", ...rest] = wrap(clean(f, 120), room - 2);
+    row(`${c.green(sym.ok)} ${first}`);
+    for (const l of rest) row(`  ${l}`);
+  }
+  row();
+  out(`  ${brand(B.bl + B.h.repeat(inner) + B.br)}`);
+}
+
+/** `text` as a filled label in the brand's green (bold; plain bold where there is no colour). */
+const badge = (text) => (useColor ? `${String.fromCharCode(27)}[7m${c.bold(brand(` ${text} `))}${String.fromCharCode(27)}[27m` : c.bold(` ${text} `));
 
 /** The bar that stands beside a note. */
 const BAR = () => brand(unicode ? "▎" : "|");

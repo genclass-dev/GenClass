@@ -58,6 +58,26 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     expect(j.projects.map((p: any) => [p.id, p.name, p.token, p.last_event])).toEqual([[app.id, "Shop", app.token, null]]);
     expect(j.github).toEqual({ app: true, install_url: "https://genclass.dev/github/install", connect_url: "https://genclass.dev/github/connect" });
     expect(j.billing_url).toBe("https://genclass.dev/account/billing");
+    // a server that sells nothing offers nothing
+    expect(j.offer).toBeNull();
+    // one that sells: an account on Free is told the first paid plan in the plans file's own words, with the address
+    // that opens its checkout, and Free's limits in numbers (the command's plan step)
+    const selling = { ...env, STRIPE_SECRET_KEY: "sk_live_fake" };
+    const offered = (await (await call(selling, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any;
+    const teamPlan = PLANS.find((p) => p.id === "team")!;
+    expect(offered.offer).toEqual({
+      plan: { id: "team", name: "Team" },
+      price: "$15 / developer / month",
+      summary: teamPlan.summary,
+      features: teamPlan.features.filter((f) => f.available && !/^Everything in /.test(f.text)).map((f) => f.text),
+      checkout_url: "https://genclass.dev/account/billing?plan=team&start=1",
+      free: { name: "Free", apps: 3, history_days: 7, suggestions_shown: 3 },
+    });
+    expect(offered.offer.features).toContain("Visitor analytics");
+    expect(offered.offer.features.join(" ")).not.toContain("Everything in Free");
+    // a test key sells only to the accounts on its list
+    expect(((await (await call({ ...env, STRIPE_SECRET_KEY: "sk_test_fake" }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
+    expect(((await (await call({ ...env, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_TEST_ACCOUNTS: "ada@example.com" }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer.plan.id).toBe("team");
     // the browser session reads it too; nothing else is a method of it
     expect((await call(env, "GET", "/api/cli/overview", { cookie: me.cookie, origin: null })).status).toBe(200);
     expect((await call(env, "POST", "/api/cli/overview", { bearer: me.bearer, body: {} })).status).toBe(405);
@@ -67,6 +87,8 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     const team = (await (await call({ ...env, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any;
     expect(team.plan).toEqual({ id: "team", name: "Team" });
     expect(team.suggestions).toEqual({ per_day: 30, shown: null, used_today: 0, model: true });
+    // an account that has a plan (here GenClass's grant) is offered none, whatever the server sells
+    expect(((await (await call({ ...selling, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
     expect(JSON.stringify(team)).not.toContain(KEY);
   });
 
