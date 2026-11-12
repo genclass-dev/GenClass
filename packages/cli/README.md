@@ -11,7 +11,7 @@ Run it in your web app's folder. It shows where the project stands and walks you
 per step. Stop at any point and run it again: it continues from what is true now.
 
 ```text
-  ╭─ GenClass ────────────────────────────────────────────── v0.3.0 ─╮
+  ╭─ GenClass ────────────────────────────────────────────── v0.3.5 ─╮
   │                                                                  │
   │                        Welcome back, Ada!                        │
   │                                                                  │
@@ -50,34 +50,36 @@ it, and `d` again to fold it back.
 When the walk is done (or you press `q` to leave it for later), the command does not end. It asks what next:
 
 ```text
-  What next? A command, or a question about your app.
-    dashboard    what GenClass found on your live site
-    problems     every problem, by kind and page
-    analytics    visitors, pages, sources, clicks
-    events       the latest events, one per line
-    fix          hand a problem to your coding agent
-    ask          ask about your app (or just type it)
-    connections  alerts, GitHub, your coding agent
-    suggest      what your app is missing
-    help         every command   q leave
+  What next? A number, a command, or a question.
+   1  dashboard    what GenClass found on your live site
+   2  problems     every problem, by kind and page
+   3  analytics    visitors, pages, sources, clicks
+   4  events       the latest events, one per line
+   5  fix          hand a problem to your coding agent
+   6  ask          ask about your app (or just type it)
+   7  connections  alerts, GitHub, your coding agent
+   8  suggest      what your app is missing
+   9  profile      your account and plan, and upgrade
+      help         every command   q leave
 
   ❯ which page loses the most visitors?
 ```
 
-Type a command, or a sentence: a sentence is a question about your app. `q` leaves. Everything here is also a
+Type a number, a command, or a sentence: a sentence is a question about your app. `q` leaves. On Free, each command
+ends with one line on Free's limits and `genclass upgrade`. Everything here is also a
 command of its own (`npx genclass problems`), so scripts and coding agents use the same things.
 
-**Just `genclass`.** `npx` runs the command without installing it, so `genclass` alone is not a command yet. The
-first time the home opens it offers to install it (`npm install -g genclass`, shown before it runs, asked once).
-After that you type `genclass`, and every screen says `genclass` instead of `npx genclass`.
+**Just `genclass`.** `npx` runs the command without installing it, so the first run on a terminal installs it
+(`npm install -g genclass`, said on screen; `npm uninstall -g genclass` takes it out, `GENCLASS_NO_INSTALL=1` turns
+it off). After that you type `genclass`, and every screen says `genclass` instead of `npx genclass`.
 
 ## Every part, in order
 
 | Part | What the step does | What it changes |
 |---|---|---|
 | Account | Opens genclass.dev in your browser; you approve a short code there. | A session file in your user config folder. Nothing is typed in the terminal. |
-| Plan | On Free, shows the paid plan first: Enter opens its checkout in your browser, `f` goes on with Free for now. Asked once per project. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
 | Runtime | Adds GenClass to the app: one import (or script tag) and the package. It watches the page in your users' browsers for lost edits, double submits and old data shown over new, and only reports, to the console and your dashboard. Nothing is drawn on your pages. | Your entry file and `package.json`; you see the change first. `genclass remove` undoes it. |
+| Plan | Once the app is in your account, its plan page opens in your browser: Team, or Free for now (limited) after saying what stops you from paying. Each app has its own plan. The setup goes on once it has one. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
 | Dashboard | Waits for your live site to be opened once. GenClass sends nothing from localhost. | Nothing. |
 | Test workflow | Runs your Playwright tests once more per pull request with slow and reordered responses. | One new file, `.github/workflows/genclass.yml`, which you commit. |
 | GitHub App | Comments on a pull request when a page ends up wrong, with the steps to see it. The command opens GitHub's install page and waits for the answer. A repository that was renamed on GitHub is looked up under its new name. | Nothing in your project. The app cannot read or change your code. |
@@ -189,7 +191,8 @@ App is doing on the repository, whether your coding agent is connected, and whet
 ## Account
 
 `npx genclass apps` lists your apps (`apps new "Name"` makes one). `npx genclass plan` shows your plan, its limits
-and what is used; on Free it shows the paid plan and Enter opens its checkout. `npx genclass team` shows who is on
+and what is used, and each app's plan. `npx genclass profile` shows your account and each app's plan with numbered
+choices (upgrade, billing, sign out); `npx genclass upgrade` opens the plan page of this folder's app. `npx genclass team` shows who is on
 the plan (`team invite` makes a single-use invite link).
 
 **What a terminal may do** is listed on the page where you approve its sign-in, and nothing else: read your apps'
@@ -229,8 +232,8 @@ prompt) is shown for the first three items on Free and for all of them on Team, 
 
 ## Commands
 
-`npx` runs the command without installing it. To type just `genclass`, install it once: `npm install -g genclass`
-(the command offers to, the first time its home opens).
+`npx` runs the command without installing it. The first run on a terminal installs it, so you can type just
+`genclass` (by hand: `npm install -g genclass`).
 
 | | |
 |---|---|
@@ -246,12 +249,13 @@ prompt) is shown for the first three items on Free and for all of them on Team, 
 | `npx genclass export` | every stored event as a file (`--from`, `--to`, `--format csv`, `--out`) |
 | `npx genclass fix [number, kind or all]` | hand a problem to your coding agent (`--print`, `--copy`, `--agent <name>`) |
 | `npx genclass ask "..."` | a question about your app, answered from its numbers |
-| `npx genclass suggest [url]` | what your app is missing (`--yes`, `--no-model`, `--all`) |
+| `npx genclass suggest [url]` | what your app is missing, then one number hands the list to your coding agent (`--yes`, `--no-model`, `--all`) |
 | `npx genclass scan <url>` | 23 visual checks on one page |
 | `npx genclass connections` | alerts, GitHub App, coding agent (`add`, `test`, `on`, `off`, `remove` a destination) |
 | `npx genclass agent` | your coding agent and what it did (`agent link`) |
 | `npx genclass funnels` | funnels (`add "Name" /a /b`, `remove "Name"`) |
 | `npx genclass apps`, `plan`, `team` | your apps, your plan, the people on it |
+| `npx genclass profile`, `upgrade` | your account and each app's plan; Team for this app |
 | `npx genclass login`, `logout`, `whoami` | your account |
 | `npx genclass remove` | take GenClass out of the app again |
 
