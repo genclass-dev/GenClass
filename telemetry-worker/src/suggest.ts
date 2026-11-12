@@ -178,6 +178,25 @@ export function planFromAnswer(text: unknown, digest: Digest): PlanItem[] | null
  * Asks the model for the plan. Null when there is no key, the request fails or times out, or the answer does not
  * pass planFromAnswer. The reason is logged as a word or a status code, never a body.
  */
+/**
+ * Why the model's API refused, for the worker's log: its error code and the start of its message, with anything
+ * shaped like a key taken out (an authentication error quotes part of the key). Never the request, never the key.
+ */
+async function modelError(res: Response): Promise<string> {
+  const j = (await res.json().catch(() => null)) as { error?: { code?: unknown; type?: unknown; message?: unknown } } | null;
+  const e = j?.error;
+  if (!e) return "";
+  const clean = (v: unknown, max: number) =>
+    String(typeof v === "string" ? v : "")
+      .replace(/sk-[A-Za-z0-9_*.-]+/g, "[key]")
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f]+/g, " ")
+      .slice(0, max);
+  const code = clean(e.code, 60) || clean(e.type, 60);
+  const message = clean(e.message, 200);
+  return code || message ? ` (${[code, message].filter(Boolean).join(": ")})` : "";
+}
+
 export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, digest: Digest): Promise<PlanItem[] | null> {
   const key = (env.OPENAI_API_KEY ?? "").trim();
   if (!key || !digest.checks.length) return null;
@@ -197,7 +216,7 @@ export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL"
       signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
     });
     if (!res.ok) {
-      console.log(`suggest: the model answered HTTP ${res.status}`);
+      console.log(`suggest: the model answered HTTP ${res.status}${await modelError(res)}`);
       return null;
     }
     const j = (await res.json().catch(() => null)) as { choices?: { message?: { content?: unknown } }[] } | null;
