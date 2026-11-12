@@ -1,7 +1,7 @@
 // `genclass dashboard` (src/app.mjs): the app's numbers as lines, and which app is shown.
 import { describe, expect, it } from "vitest";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
-import { dashboard, KINDS, render, signInAgain, spark } from "../src/app.mjs";
+import { dashboard, fit, KINDS, render, signInAgain, spark } from "../src/app.mjs";
 import { ACCOUNT, fakeServer, HOST, isolate, overview, printed, project, SESSION, tempDir, viteApp } from "./helpers.js";
 
 isolate();
@@ -42,13 +42,36 @@ describe("genclass dashboard: the view (src/app.mjs render, spark)", () => {
     expect(spark([])).toBe("");
   });
 
+  it("a long period's chart is folded to the window, and rows come largest first whatever order the server sent", async () => {
+    expect(fit([1, 2, 3], 5)).toEqual([1, 2, 3]);
+    expect(fit([1, 2, 3, 4, 5, 6, 7], 3)).toEqual([6, 15, 7]);
+    const cols = process.stdout.columns;
+    try {
+      process.stdout.columns = 58;
+      const long = { ...APP, range: "90d", series: Array.from({ length: 90 }, (_, i) => i), problems: [{ key: "stale\t/", count: 3 }, { key: "scroll_lock\t/a/very/long/page/address/that/goes/on", count: 151 }, { key: "duplicate\t/", count: 164 }] };
+      const said = await printed(() => render(long as never, { steps: [] } as never, { now: NOW }));
+      const lines = said.split("\n").map((l) => l.replace(/\u001b\[[0-9;]*m/g, ""));
+      // an address is the one thing that cannot be folded
+      expect(Math.max(...lines.filter((l) => !l.includes("https://")).map((l) => l.length))).toBeLessThanOrEqual(58);
+      const order = ["the same request went out twice", "scroll_lock", "old data replaced newer data"].map((w) => said.indexOf(w));
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+      expect(order[0]).toBeGreaterThan(-1);
+    } finally {
+      process.stdout.columns = cols;
+    }
+  });
+
   it("short by default: the numbers, the top five problems in plain words, one line per other part", async () => {
     const said = await printed(() => render(APP as never, STATE as never, { now: NOW }));
     expect(said).toContain("last 7 days · last page 3 hours ago");
-    expect(said).toMatch(/Visits watched\s+1,204\s+Problems found\s+17\s+▁▃▂▇▅▁█/);
+    expect(said).toMatch(/Page loads\s+1,204\s+Problems found\s+17\n/);
+    expect(said).toMatch(/Problems\s+▁▃▂▇▅▁█\s+over the period/);
     expect(said).toMatch(/Handled\s+3\s+Visual checks\s+9/);
-    expect(said).toMatch(/12\s+duplicate\s+\/checkout\s+the same request went out twice/);
-    expect(said).toMatch(/4\s+stale\s+\/orders\/:id\s+old data replaced newer data/);
+    // what happened in plain words first, then the page; largest first
+    expect(said).toMatch(/12\s+the same request went out twice\s+\/checkout\n/);
+    expect(said).toMatch(/4\s+old data replaced newer data\s+\/orders\/:id\n/);
+    expect(said.indexOf("the same request went out twice")).toBeLessThan(said.indexOf("old data replaced newer data"));
+    expect(said).not.toContain("…");
     expect(said).toContain("and 1 more: npx genclass dashboard --all");
     expect(said).not.toContain("odd-plugin-kind");
     expect(said).not.toContain("Possible problems");
@@ -59,12 +82,14 @@ describe("genclass dashboard: the view (src/app.mjs render, spark)", () => {
     expect(said).toMatch(/GitHub App\s+reviewing · 4 pull requests so far/);
     expect(said).toMatch(/Suggestions\s+7 to do, 2 urgent · checked 2 days ago · npx genclass suggest/);
     expect(said).toContain(`${HOST}/account/apps/proj000000000001`);
-    expect(said.split("\n").length).toBeLessThan(30);
+    expect(said.split("\n").length).toBeLessThan(31);
     // every row on request: a kind the model's vocabulary does not have is shown by its own name, with no made-up words
     const all = await printed(() => render(APP as never, STATE as never, { now: NOW, all: true }));
     expect(all).toMatch(/1\s+odd-plugin-kind\s+\(page unknown\)\n/);
     expect(all).toContain("Possible problems (lower confidence)");
     expect(all).toMatch(/1 hour ago\s+duplicate\s+\/checkout\s+handled/);
+    // with every row, the kind's own name follows the page
+    expect(all).toMatch(/12\s+the same request went out twice\s+\/checkout\s+duplicate\n/);
     expect(Object.keys(KINDS)).toEqual(["stale", "conflict", "duplicate", "inconsistent", "failing", "slow", "overload", "unusual", "transient"]);
   });
 
@@ -72,7 +97,7 @@ describe("genclass dashboard: the view (src/app.mjs render, spark)", () => {
     const empty = { ...APP, lastEvent: null, totals: { visits: 0, found: 0, handled: 0, possible: 0, checks: 0, pageViews: 0 }, series: [0, 0], problems: [], possible: [], checks: [], recent: [], visitors: null, visitorsPlan: { plan: "Team", upgradeUrl: `${HOST}/account/billing` }, agent: { found: 0, reproduced: 0, fixed: 0, closed: 0, open: 0, last: null } };
     const said = await printed(() => render(empty as never, { steps: [{ id: "agent", state: "todo", detail: "" }] } as never, { now: NOW }));
     expect(said).toContain("Nothing received yet. GenClass sends nothing from localhost");
-    expect(said).toContain(`visitor analytics come with the Team plan: ${HOST}/account/billing`);
+    expect(said.replace(/\s+/g, " ")).toContain(`visitor analytics come with the Team plan: ${HOST}/account/billing`);
     expect(said).toContain("not connected yet: npx genclass setup");
     expect(said).not.toContain("Problems\n");
     const clean = await printed(() => render({ ...empty, lastEvent: APP.lastEvent, totals: { ...empty.totals, visits: 40 } } as never, { steps: [] } as never, { now: NOW }));

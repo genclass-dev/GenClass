@@ -16,7 +16,7 @@ import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { openBrowser, signIn } from "./actions.mjs";
 import { fetchApp, signInIsOld } from "./api.mjs";
 import { readState } from "./state.mjs";
-import { ago, bad, clean, header, note, typed, warn, width } from "./tui.mjs";
+import { ago, bad, clean, header, note, typed, visible, warn, width, wrap } from "./tui.mjs";
 
 /** The model's default kinds in plain words (packages/runtime/src/situation/questions.ts DEFAULT_DIAGNOSES). */
 export const KINDS = {
@@ -51,33 +51,57 @@ const rows = (list) =>
     return { kind: clean(i < 0 ? x.key : x.key.slice(0, i), 40), page: clean(i < 0 ? "" : x.key.slice(i + 1), 60), count: x.count };
   });
 
-function table(title, list, shown, describe) {
+/**
+ * A list of counts, largest first: how many, what happened in plain words (a kind the model's vocabulary does not
+ * have keeps its own name), and the page. Nothing is cut short: a row that does not fit puts the page on the line
+ * under it. With `all`, the kind's own name follows the page.
+ */
+function table(title, list, shown, describe, all = false) {
   if (!list.length) return;
   out();
   out(`  ${c.bold(title)}`);
-  const top = list.slice(0, shown).map((r) => ({ ...r, page: r.page || "(page unknown)" }));
+  const top = [...list]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, shown)
+    .map((r) => ({ ...r, page: r.page || "(page unknown)", what: describe?.[r.kind] ?? r.kind }));
   const wCount = Math.max(...top.map((r) => n(r.count).length));
-  const wKind = Math.min(22, Math.max(...top.map((r) => r.kind.length)));
-  const wPage = Math.min(28, Math.max(4, ...top.map((r) => r.page.length)));
+  const room = width() - 4 - wCount - 2;
+  const wWhat = Math.max(...top.map((r) => r.what.length));
   for (const r of top) {
-    const what = describe ? (describe[r.kind] ?? "") : "";
-    const left = `    ${c.bold(n(r.count).padStart(wCount))}  ${r.kind.padEnd(wKind)}  ${c.cyan(clean(r.page, wPage).padEnd(wPage))}`;
-    const room = width() - 4 - wCount - wKind - wPage - 8;
-    out(`${left}${what && room > 16 ? `  ${c.gray(clean(what, room))}` : ""}`.trimEnd());
+    const lead = `    ${c.bold(n(r.count).padStart(wCount))}  `;
+    const tail = `${c.cyan(r.page)}${all && describe?.[r.kind] ? c.gray(`  ${r.kind}`) : ""}`;
+    const row = `${r.what.padEnd(wWhat)}  ${tail}`;
+    if (visible(row) <= room) out(`${lead}${row}`.trimEnd());
+    else {
+      out(`${lead}${r.what}`);
+      out(`${" ".repeat(4 + wCount + 2)}${tail}`);
+    }
   }
   if (list.length > shown) out(`    ${c.gray(`and ${n(list.length - shown)} more: npx genclass dashboard --all`)}`);
+}
+
+/** A series folded into at most `max` buckets (each the sum of its part), so its chart fits the window. */
+export function fit(series, max) {
+  if (series.length <= max || max < 1) return series;
+  const size = Math.ceil(series.length / max);
+  const out = [];
+  for (let i = 0; i < series.length; i += size) out.push(series.slice(i, i + size).reduce((a, b) => a + b, 0));
+  return out;
 }
 
 /** The app's numbers as the lines of the view. Exported for the tests: pure, prints with out(). */
 export function render(app, state, o = {}) {
   const all = !!o.all;
   const t = app.totals;
-  const line = spark(app.series);
+  // the chart is as wide as the window allows and never wider
+  const line = spark(fit(app.series, Math.max(8, width() - 4 - 15 - 17)));
   const cell = (label, value) => `${c.gray(label.padEnd(15))}${c.bold(String(value).padEnd(9))}`;
   out(`  ${c.gray(RANGE_WORDS[app.range] ?? app.range)}${app.lastEvent ? c.gray(` · last page ${ago(app.lastEvent, o.now)}`) : ""}`);
   out();
-  out(`  ${cell("Visits watched", n(t.visits))}  ${cell("Problems found", n(t.found))}${line ? `  ${c.green(line)}` : ""}`.trimEnd());
+  // the dashboard page's own words: a page load is one page GenClass watched
+  out(`  ${cell("Page loads", n(t.visits))}  ${cell("Problems found", n(t.found))}`.trimEnd());
   out(`  ${cell("Handled", n(t.handled))}  ${cell("Visual checks", n(t.checks))}`.trimEnd());
+  if (line) out(`  ${c.gray("Problems".padEnd(15))}${c.green(line)}  ${c.gray("over the period")}`);
 
   if (!t.visits && !t.found && !t.checks) {
     out();
@@ -86,9 +110,9 @@ export function render(app, state, o = {}) {
     out();
     out(`  ${c.green(sym.ok)} No problems found in this period.`);
   }
-  table("Problems", rows(app.problems), all ? 200 : 5, KINDS);
-  if (all) table("Possible problems (lower confidence)", rows(app.possible), 200, KINDS);
-  table("Visual checks", rows(app.checks), all ? 200 : 3, null);
+  table("Problems", rows(app.problems), all ? 200 : 5, KINDS, all);
+  if (all) table("Possible problems (lower confidence)", rows(app.possible), 200, KINDS, all);
+  table("Visual checks", rows(app.checks), all ? 200 : 3, null, all);
   if (all && app.recent.length) {
     out();
     out(`  ${c.bold("Latest")}`);
@@ -97,12 +121,16 @@ export function render(app, state, o = {}) {
 
   // one line per other part of GenClass
   out();
-  const part = (label, text) => out(`  ${c.bold(label.padEnd(15))}${text}`);
+  const part = (label, text) => {
+    const [first = "", ...rest] = wrap(text, width() - 4 - 15);
+    out(`  ${c.bold(label.padEnd(15))}${first}`);
+    for (const l of rest) out(`  ${" ".repeat(15)}${l}`);
+  };
   if (app.visitors) {
     const v = app.visitors;
     const bounce = v.visits ? ` · ${Math.round((v.bounces / v.visits) * 100)}% left after one page` : "";
     part("Visitors", v.visits ? `${plural(v.visits, "visit")} · ${plural(v.pages, "page view")}${bounce}` : c.gray("none counted in this period (analytics is opt-in: genclass.dev/docs)"));
-    if (v.visits && v.entry.length) out(`  ${" ".repeat(15)}${c.gray(`came in on ${v.entry.slice(0, all ? 10 : 3).map((e) => `${clean(e.key, 30)} (${n(e.count)})`).join(", ")}`)}`);
+    if (v.visits && v.entry.length) for (const l of wrap(`came in on ${v.entry.slice(0, all ? 10 : 3).map((e) => `${clean(e.key, 30)} (${n(e.count)})`).join(", ")}`, width() - 4 - 15)) out(`  ${" ".repeat(15)}${c.gray(l)}`);
   } else if (app.visitorsPlan) part("Visitors", c.gray(`visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Team", 20)} plan${app.visitorsPlan.upgradeUrl ? `: ${app.visitorsPlan.upgradeUrl}` : ""}`));
   const a = app.agent;
   const agentStep = state?.steps?.find((s) => s.id === "agent");
@@ -112,8 +140,8 @@ export function render(app, state, o = {}) {
   const sg = state?.steps?.find((s) => s.id === "suggestions");
   if (sg) part("Suggestions", sg.detail ? (sg.state === "done" ? clean(sg.detail, 60) : `${clean(sg.detail, 60)}${c.gray(" · npx genclass suggest")}`) : c.gray("not run yet: npx genclass suggest"));
   out();
-  if (app.dashboardUrl) out(`  ${c.gray("In the browser")}  ${c.cyan(app.dashboardUrl)}  ${c.gray("(npx genclass dashboard --open)")}`);
-  if (!all) out(`  ${c.gray("Every row: npx genclass dashboard --all · another period: --range 24h, 7d or 30d")}`);
+  if (app.dashboardUrl) out(`  ${c.gray("In the browser")}  ${c.cyan(app.dashboardUrl)}`);
+  if (!all) out(`  ${c.gray("Every row:")} ${c.cyan("npx genclass dashboard --all")}`);
   out();
 }
 

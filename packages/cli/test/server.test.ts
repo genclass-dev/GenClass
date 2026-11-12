@@ -90,8 +90,8 @@ describe("genclass against the collector (src/api.mjs, telemetry-worker/src/cli.
     expect(code).toBe(0);
     expect(view).toContain("last 7 days");
     expect(view).toMatch(/Problems found\s+2/);
-    expect(view).toMatch(/1\s+duplicate\s+\/checkout\s+the same request went out twice/);
-    expect(view).toMatch(/1\s+stale\s+\/orders\/:id/);
+    expect(view).toMatch(/1\s+the same request went out twice\s+\/checkout/);
+    expect(view).toMatch(/1\s+old data replaced newer data\s+\/orders\/:id/);
     expect(view).toContain("visitor analytics come with the Team plan");
     expect(view).toContain(`${HOST}/account/apps/${app.id}`);
     expect(view).not.toContain("SECRET PAGE TEXT");
