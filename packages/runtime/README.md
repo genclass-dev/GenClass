@@ -80,6 +80,7 @@ with a beta number (`0.3.0-beta.2`, say) is not in the betas before it.
 [What it looks for](#what-it-looks-for) · [Safety and cost](#safety-and-cost-measured) ·
 [Model quality](#model-quality) · [Costs](#costs) · [Privacy and telemetry](#privacy-and-telemetry) ·
 [Known limitations](#known-limitations) · [Install](#install) ·
+[Lite install](#lite-install-after-the-page-has-loaded) ·
 [For AI coding agents](#for-ai-coding-agents-installing-genclass) · [Audit a page](#audit-a-page) ·
 [Your coding agent](#your-coding-agent-replay-and-explore) ·
 [protect()](#function-specific-protect) · [Your dashboard](#your-dashboard) ·
@@ -339,7 +340,8 @@ The `0.1.0-beta.3` "no measurable change" leaves out loading GenClass's code, wh
 `0.3.0-beta.0` column includes it. What made the first long task longer (running the entry before hydration, or the
 runtime's own install work) was not measured. To ship no GenClass code in builds that do not use it, see
 [Only in some builds (Next.js)](#only-in-some-builds-nextjs): `?genclass=off`, `enabled: false` and `model: false`
-stop work, not the download.
+stop work, not the download. To keep it out of the page load and still run it on some page loads, see the
+[lite install](#lite-install-after-the-page-has-loaded).
 
 **On phones** the memory and the download are what matter. **By default the model is not loaded on devices that
 report 2 GB of memory or less, nor on Save-Data connections** (since `0.3.0`; `model.loadIf` defaults to
@@ -455,6 +457,8 @@ observing with no download and no worker.
 Pick one; all start the same runtime, in observe mode unless you choose otherwise. Every `init` and `remove` flag, the
 token and dashboard `init` creates, page configuration and the tested setups:
 [INSTALL.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/INSTALL.md).
+For a site whose performance budget has no room in the page load, there is the
+[lite install](#lite-install-after-the-page-has-loaded): GenClass after the page has loaded, on a share of page loads.
 
 **1. One command.** `init` finds your framework and package manager, installs the package, adds one import as the
 first line of your entry file (plus a dev-only devtools line), and shows you the diff before writing anything.
@@ -601,6 +605,95 @@ value, or none, builds without GenClass. Like every `NEXT_PUBLIC_*` value, it is
 - **Measured in one app** (Next.js 16.3, Turbopack): built without the variable, the app had no GenClass files and
   was 64 B gzip larger than before GenClass was added (the empty `instrumentation-client` hook). Not checked with
   `next build --webpack`.
+
+## Lite install: after the page has loaded
+
+This is for a site with a strict performance budget. Every install above puts GenClass first, so its code is part of
+each page's first load (about 108 KB gzip) and runs before your app. The lite install keeps it out of the page load:
+a few lines in your entry file wait for the `load` event and an idle moment, then load GenClass on a share of page
+loads (1 in 20 below). It is the same runtime, later and on fewer page loads, not a smaller one, and it sees less
+([what it does not see](#what-the-lite-install-does-not-see)).
+
+**With a bundler** (`npm install @genclass/runtime@beta`), anywhere in your client entry file:
+
+```ts
+// GenClass, lite install: 1 page load in 20, once the page has loaded and the browser is idle
+if (typeof window !== "undefined" && Math.random() < 0.05) {
+  const start = () => {
+    // any GenClass.init() option goes here; "lazy": the model downloads only at the first situation worth a decision
+    (globalThis as { GENCLASS_CONFIG?: object }).GENCLASS_CONFIG = { model: { preload: "lazy" } };
+    void import("@genclass/runtime/auto");
+  };
+  const idle = () => ("requestIdleCallback" in window ? requestIdleCallback(start, { timeout: 10000 }) : setTimeout(start, 3000));
+  if (document.readyState === "complete") idle();
+  else addEventListener("load", idle);
+}
+```
+
+The bundler puts the runtime in files of its own, which only those page loads fetch, from your own origin.
+
+**With the script tag** (no package in your build, or no build step: put the loader in a `<script>` at the end of
+`<body>`), `start` adds the tag instead:
+
+```js
+const start = () => {
+  const s = document.createElement("script");
+  s.src = "https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.6"; // keep the version pinned
+  s.setAttribute("data-mode", "observe");
+  s.setAttribute("data-preload", "lazy");
+  document.head.appendChild(s);
+};
+```
+
+Your dashboard token goes in the same place as any other option: `token: "gc_..."` in `GENCLASS_CONFIG`, or
+`data-token` on the tag. A Content-Security-Policy needs what the other installs need
+([Content-Security-Policy and self-hosting](#content-security-policy-and-self-hosting)), and for the tag
+`https://cdn.jsdelivr.net` in `script-src`. `init` does not write this install: add the lines yourself.
+
+**What it costs (measured).** One app, the [Angular starter](https://github.com/genclass-dev/GenClass/tree/main/templates/angular)
+(Angular 22, server rendering, production build), `0.3.0-beta.6` in observe mode, headless Chromium at a phone
+viewport with 4× CPU throttling, medians of 9 page loads per column
+([RESULTS.md §28](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#lite-install)). Read
+them as one small app's numbers on a fast machine, not a bound:
+
+| | no GenClass | first-line import | lite install, `import()` | lite install, script tag | lite install, a page load not sampled |
+|---|---|---|---|---|---|
+| JavaScript in the first load (gzip) | 78.3 KB | 186.3 KB | 78.2 KB | 78.6 KB | 78.2 and 78.6 KB |
+| Fetched after `load` (gzip) | none | none | 108.2 KB, one file from the app's own origin | 129.3 KB from jsDelivr | none |
+| Load event | 94.2 ms | 159.0 ms | 94.0 ms | 92.7 ms | 92.3 and 93.5 ms |
+| LCP | 40 ms | 40 ms | 40 ms | 40 ms | 40 ms |
+| Blocking time before `load` (long tasks' time beyond 50 ms) | 5 ms | 70 ms | 5 ms | 5 ms | 5 ms |
+| Long tasks (50 ms or more) after `load` | none | none | none | one of 68 ms | none |
+| Script time up to 6 s after `load` | 18.2 ms | 84.5 ms | 60.1 ms | 87.0 ms | 17.9 and 18.5 ms |
+| Script time while typing six keys (six requests) | 23.3 ms | 49.1 ms | 48.5 ms | 48.7 ms | 23.8 and 21.7 ms |
+| Slowest input event | 16 ms | 32 ms | 32 ms | 32 ms | 16 ms |
+| Main-thread JS heap | 2.6 MB | 3.3 MB | 3.3 MB | 3.3 MB | 2.6 MB |
+| The app's six requests that GenClass saw | | 6 | 6 | 6 | |
+
+A page load the loader leaves out is the page without GenClass. On a sampled one nothing moves before `load`; the cost
+comes after it: the download, about 42 ms of script with `import()` (in tasks under 50 ms) or 69 ms with the script
+tag (one task of 68 ms), and from then on the same work per interaction as the first-line import (about 4 ms of
+script per keystroke and its request here). Not measured: the download's time on a real network, the model (it never
+loaded in these runs) and slow phones, where that script time is longer.
+
+### What the lite install does not see
+
+- **Anything before it starts**: the page load's own requests and errors, and whatever happens before the browser is
+  idle. Code that saved its own reference to `fetch` before GenClass loaded stays unseen.
+- **Your app's state, so no stale responses.** [Automatic state discovery](#automatic-state-discovery) needs GenClass
+  on the page before React loads and before Redux and Zustand stores are created. Started late it finds no React
+  state and no store created before it, which in practice is all of the app's state, and without state it cannot
+  tell that a late response overwrote newer data. What is left comes from the network and user input: duplicate
+  submits, failure storms, retries and stalls.
+- **The page loads it was not on.** At 1 in 20, findings arrive at a twentieth of the rate, and a rare problem takes
+  that much longer to show up. Raise `0.05` as far as your budget allows.
+- **The first situation of a page load, at full confidence.** With `preload: "lazy"` the model starts downloading
+  at the first situation worth a decision, and observe reports what it decides that late at the possible tier at most
+  ([Modes](#modes)). Leave the option out and the model loads at idle on every sampled page load instead: about 13 MB
+  on a first visit and its memory ([Costs](#costs)).
+
+Measured in observe mode, in Chromium, on that one app; `guard` and `heal` started late are not measured, and
+neither are React, Vue or Svelte apps, real phones, Firefox and Safari.
 
 ## For AI coding agents installing GenClass
 

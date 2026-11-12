@@ -40,6 +40,7 @@ round 1, `r17-v2a` to `r17-v2c` and model 0.1.0 (`r17-v2b`) are superseded and k
 | First-load JavaScript, minified and gzipped | 0.3.0-beta.0 (the published build, tag `v0.3.0-beta.0`): 108.25 KB for `/auto`, 100.13 KB for the main entry, 128.56 KB for the script tag. 0.2.2: 99.17 / 91.70 KB. With the interaction-analytics stub (branch `feat/interaction-analytics`, train VM, 2026-10-18, since merged into `main` and released in 0.3.0-beta.1; the later builds' sizes are in the limit rows further down): 108.529 / 100.395 KB | §9, §10, §15 |
 | Model files and speed | q8 10.16 MB (WASM), fp16 13.57 MB (WebGPU with `shader-f16`); 8.8M parameters; about 182 / 330 / 599 ms per pass at 500 / 780 / 1,170 tokens on one WASM thread (a least-squares fit over runs of onnxruntime-web 1.30 in Node on the training VM, not in a browser; `training/ortweb/validate.mjs`) | §2 |
 | Browser cost on a pilot app (0.1.0-beta.3, model 0.2.0, 4× CPU throttling) | +190 to 280 MB renderer memory while the model is loaded; 12.7 MB downloaded on a first visit on WASM (the READMEs say about 13 MB); no measurable change to the load event, LCP or long tasks | §17 |
+| Lite install: GenClass loaded after the `load` event, on a share of page loads (0.3.0-beta.6, observe, one Angular starter, headless Chromium, 4× CPU throttling; cost only) | load event 94.0 ms with the late `import()` and 92.7 ms with the late script tag, against 94.2 ms without GenClass and 159.0 ms with the first-line import; after `load` it fetches 108.2 KB (import) or 129.3 KB (tag) and runs with no long task (import) or one of 68 ms (tag); a page load the loader leaves out matches the build without GenClass; it saw all 6 of the app's requests; it discovers no state, so it reports no stale responses | §28 |
 | Telemetry volume, one tab at the model's maximum decision rate for an hour (scripted decider, observe mode, situation text off as by default; release review commit `9d567a0`, not the published build) | 251.9 KB in 165 requests when every decision is routine; 2,068.5 KB in 361 requests when every decision is a detection | §10 |
 | Measured visual checks (deterministic, not the model) | fixture pages: 35 of 35 planted faults found, 0 false reports. Bench: 0 false reports and 0 fixes in 128 page views of the demos, templates and compat apps; recall 1.00 on 20 of 23 planted fault kinds (run 4), 19 of 23 (run 5); public sites: 8 findings in 96 loads in run 4 (5 confirmed real, 0 check errors, 3 unconfirmed), 6 findings in 97 loads in run 5 (after the review; not looked at) | §13, §14 |
 | Flow expectations (opt-in) | false-report rate not measured yet | §5 |
@@ -1560,3 +1561,97 @@ Also: five adjacent `[redacted]` in a state value against 199 characters took ov
 **Report text.** On the hunts' Notes at 900 ms the sample before named "2m", "8", "3m", "Loading..." and never the differing "Maple note" row; the lists are now in reading order and the headline names the row. On planted pages the headline names the planted line in **48 of 48** sessions with a verdict (that it shows "Last synced 3 days ago", which the baseline does not; that form field "el-id-*-33" is "default one"; that requests sent to "POST /api/save" are "(absent)", "1" in the baseline). The Notes report itself cannot be shown again without its app.
 
 Caveats: one machine, seeds 1 to 6 only, other agents running on it (load 4 to 11). The stored rescoring reads text, not the runs: the limits above apply, and it says nothing about the new baseline. A page check is the hunt's own and narrow: a run it calls right can differ for a real reason (`rename-two`, `new-session`), and "false" means by that check. Real apps with the new baseline: OpenCode only, one build, the review's four scenarios. Not run: n8n, Open WebUI and Langflow with the new load (no installs, no room), the demos (each has its own runtime and shell on the page, so the harness's injected one would make two), the model suite, `realapps/`.
+
+<a id="lite-install"></a>
+
+## 28. Lite install: GenClass loaded after the page (train VM, 2026-11-11, `@genclass/runtime` 0.3.0-beta.6)
+
+**Cost only.** Observe mode took no action and nothing here is a detection rate, so no recall or false-intervention
+rate applies. What a page pays when GenClass is not in its first load but loaded after the `load` event, in an idle
+callback, on a share of page loads (the package README's "Lite install"), against the first-line import and against no
+GenClass. Harness: `bench/late-load/run.mjs`.
+
+**Method.** One app, `templates/angular` (Angular 22.2.6, server rendering and hydration, `HttpClient` on its fetch
+backend, production build with `ng build`, served by its own Express server), with `@genclass/runtime` 0.3.0-beta.6
+from npm. Four builds that differ only in `src/main.ts`: no GenClass; the template's first-line
+`import "@genclass/runtime/auto"`; the README's loader with `import("@genclass/runtime/auto")`; the same loader adding
+the script tag (the jsDelivr URL, answered from the installed package's `dist/`). The loaders carry two
+`performance.mark` calls and a handle on the runtime for the harness. The loader's draw (`Math.random() < 0.05`) is
+forced each way, so each loader build is visited sampled and not sampled: six kinds of visit. Every GenClass arm ran
+observe mode with `model: { preload: "lazy" }`, and the model never loaded (no situation was salient; every other
+host was blocked and none was asked for). Playwright 1.63.0, headless Chromium 153.0.8010.12, a 390×844 viewport,
+4× CPU throttling, a new browser context (cold cache) per visit, one discarded visit per arm, then 9 visits per arm
+in turn; medians, with the range in brackets. The page is opened under a name that is not a development host
+(`bench.example.com`, mapped to the loopback address and treated as a secure origin), so the runtime's
+development-host defaults do not apply. A visit: load, wait 6 s, read the numbers, then type three letters twice
+into the starter's search box (six keystrokes 80 ms apart, six requests answered in 50 to 900 ms each), wait, read
+again. Node 24.22.3 on the train VM (64 cores, so 4× throttling is not a slow phone).
+
+**Builds** (browser JavaScript, gzip -9; KB are 1,024 bytes, as in §10):
+
+| | no GenClass | first-line import | loader with `import()` | loader with the script tag |
+|---|---|---|---|---|
+| first load (the one file the page names) | 80,182 B (78.30 KB) | 190,785 B (186.31 KB, +108.01 KB) | 80,108 B (78.23 KB) | 80,448 B (78.56 KB, +266 B) |
+| every file the build wrote | 80,182 B in 1 file | 353,768 B in 13 files | 353,947 B in 14 files | 80,448 B in 1 file |
+| fetched after `load` on a sampled visit | | | 110,831 B (108.23 KB), 1 file, the app's origin | 132,385 B (129.28 KB; 387,715 B minified), `genclass.global.min.js` |
+
+The `import()` build's first load came out 74 B smaller than the build without GenClass although it holds the
+loader's lines: with a lazy chunk in the build the bundler names things differently, and that moves the gzip size by
+more than the loader adds. Read it as "within 0.3 KB either way".
+
+**Visits** (ms unless said; the two "not sampled" columns are the loader builds on a visit the draw leaves out):
+
+| | no GenClass | first-line import | `import()`, sampled | `import()`, not sampled | script tag, sampled | script tag, not sampled |
+|---|---|---|---|---|---|---|
+| load event | 94.2 [91.2..98.8] | 159.0 [158.1..163.4] | 94.0 [91.5..96.7] | 92.3 [90.7..94.5] | 92.7 [92.0..95.2] | 93.5 [90.4..95.5] |
+| LCP (and FCP) | 40 [40..44] | 40 [40..44] | 40 [40..44] | 40 [40..44] | 40 [40..40] | 40 [40..44] |
+| blocking time before `load` (long tasks' time beyond 50 ms) | 5 [3..8] | 70 [68..72] | 5 [4..7] | 5 [4..5] | 5 [4..6] | 5 [3..5] |
+| long tasks after `load`, before the typing | 0 | 0 | 0 | 0 | 1, of 68 [67..68] | 0 |
+| script time up to 6 s after `load` | 18.2 [16.5..20.5] | 84.5 [82.1..85.8] | 60.1 [59.2..62.1] | 17.9 [16.8..18.7] | 87.0 [86.1..88.3] | 18.5 [17.1..19.3] |
+| the loader starts / GenClass is installed, after navigation | | | 100.8 / 154.7 | | 100.2 / 182.1 | |
+| JavaScript files before / after `load` | 1 / 0 | 1 / 0 | 1 / 1 | 1 / 0 | 1 / 1 | 1 / 0 |
+| script time while typing (six keys, six requests) | 23.3 [21.0..26.0] | 49.1 [45.2..50.9] | 48.5 [47.6..50.8] | 23.8 [22.5..43.2] | 48.7 [44.1..50.0] | 21.7 [20.8..23.6] |
+| slowest input event (Event Timing, 8 ms steps) | 16 | 32 | 32 | 16 [16..24] | 32 | 16 |
+| long tasks while typing | 0 | 0 | 0 | 0 | 0 | 0 |
+| main-thread JS heap after GC | 2.6 MB | 3.3 MB | 3.3 MB | 2.6 MB | 3.3 MB | 2.6 MB |
+| requests in `summary().requests`, of the app's 6 | | 6 (6 answered 2xx) | 6 (6) | | 6 (6) | |
+| detections, likely and possible | | 0 | 0 | | 0 | |
+| diagnostics requests to genclass.dev | 0 | 1 | 1 | 0 | 1 | 0 |
+
+Script and heap figures are Chromium's `Performance.getMetrics` (`ScriptDuration`, `JSHeapUsedSize`); long tasks, LCP
+and input events come from `PerformanceObserver` in the page; `summary().requests` was read after every cost number
+(it needs the measured checks' chunk, loaded by `rt.checkNow()`).
+
+What the tables say:
+
+- **A visit the loader leaves out is the build without GenClass**, in every row.
+- **On a sampled visit nothing moves before `load`** (load event, LCP, blocking time, the one file fetched). The
+  first-line import moves the load event by about 65 ms here and adds 65 ms of blocking time.
+- **The cost comes after `load`**: 41.9 ms more script than without GenClass up to 6 s after `load` with `import()`,
+  in tasks under 50 ms, and 68.8 ms with the script tag, 68 of them in one task (the first-line import: 66.3 ms,
+  before `load`). The script-tag file is larger than the `/auto` chunk (129.28 against 108.23 KB) and is one classic
+  script.
+- **Interactions cost the same as with the first-line import** once GenClass is installed: about 25 ms more script
+  over the six keystrokes and their requests (about 4 ms each at 4× throttling), and the slowest input event at 32 ms
+  against 16 ms.
+- **Started late, the runtime saw every request** the app sent after it (6 of 6, `HttpClient` on fetch), with no
+  console error and no runtime error in any visit. Nothing was detected in any GenClass arm: the starter's stale
+  typeahead writes to an Angular signal, and signals are not discovered with any install (package README,
+  "Automatic state discovery").
+
+Two earlier runs of four of these arms the same day (the script-tag loader written with `dataset`, 9 visits each)
+agree: load event 88.2 / 149.2 / 87.5 ms and 87.3 / 148.2 / 87.2 ms for no GenClass / first-line import / script tag
+sampled, the long task after `load` 63 and 62 ms.
+
+**What a late start cannot see, by design, not measured here.** Requests and errors before it starts. A `fetch`
+reference the app saved before GenClass loaded. The app's state: automatic state discovery hooks React when
+`react-dom` is evaluated and Redux and Zustand stores when they are created (`src/discover/react.ts`, `redux.ts`), so
+a runtime started after them finds none, and without state there is no stale-response detection; what is left comes
+from the network and user input. The visits the draw leaves out.
+
+**Not measured.** The download's time on a real network (the files were answered locally) and the 13 MB model
+download and its memory when a situation does load it (§25). Real phones and slow devices, where the script time is
+longer and the script tag's task with it. React, Vue, Svelte and plain-HTML apps, a larger app (this one ships 78 KB
+of JavaScript and loads in under 100 ms throttled), Firefox and Safari. `guard` and `heal` started late. Whether
+GenClass finds anything on a late start in an app whose state it can see: recall and false reports are not measured
+for this install.
