@@ -52,6 +52,8 @@ export interface CallOpts {
   origin?: string | null;
   headers?: Record<string, string>;
   fetch?: Fetch;
+  /** The pause the handler asks for before a second try (default: no wait at all). */
+  wait?: (ms: number) => Promise<void>;
 }
 
 export async function call(env: Env, method: string, path: string, o: CallOpts = {}): Promise<Response> {
@@ -62,7 +64,7 @@ export async function call(env: Env, method: string, path: string, o: CallOpts =
   if (o.cookie) headers.cookie = o.cookie;
   if (o.bearer) headers.authorization = `Bearer ${o.bearer}`;
   const body = o.body === undefined ? undefined : typeof o.body === "string" ? o.body : JSON.stringify(o.body);
-  return handle(new Request(`${ORIGIN}${path}`, { method, headers, body }), env, { now: () => clock, fetch: o.fetch });
+  return handle(new Request(`${ORIGIN}${path}`, { method, headers, body }), env, { now: () => clock, fetch: o.fetch, wait: o.wait ?? (async () => undefined) });
 }
 
 /** The password the helper accounts sign up with. */

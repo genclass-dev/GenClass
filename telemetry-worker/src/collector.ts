@@ -210,6 +210,8 @@ export interface HandleOptions {
   uuid?: () => string;
   /** Outgoing requests to Google and GitHub during sign-in (the global fetch in production; tests mock it). */
   fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+  /** The pause before GitHub is asked a second time (github/http.ts connectCallback): a timer in production; tests do not wait. */
+  wait?: (ms: number) => Promise<void>;
   /** ctx.waitUntil in production (it holds ingest if the client goes away; aggregation runs after the response); tests await inline. */
   waitUntil?: (p: Promise<unknown>) => void;
   /** Requests on genclass.dev that this worker does not serve go on to the site (fetch in production). */
