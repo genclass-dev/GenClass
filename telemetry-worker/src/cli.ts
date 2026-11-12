@@ -169,10 +169,12 @@ async function suggest(c: C): Promise<Response> {
 
 /**
  * CLI sessions created from this time on were approved on a page that lists what the routes below do (the scope
- * list in src/account-pages.ts). That list must be live before this time: when this file is deployed later than
- * the time here, move the time to the deploy first, or a terminal approved under the older text would gain them.
+ * list in src/account-pages.ts). That list went live at 2026-11-12T17:50:21Z (the deploy of 976a8744); this is a
+ * few minutes after it. A route added later gets its own line on that page and its own time, set the same way:
+ * deploy the page first, then a time that is not before that deploy, or a terminal approved under the older text
+ * would gain the route.
  */
-export const CLI_ACCOUNT_FROM = "2026-11-13T00:00:00.000Z";
+export const CLI_ACCOUNT_FROM = "2026-11-12T17:53:00.000Z";
 
 const method = (): Response => fail(405, "method not allowed");
 
