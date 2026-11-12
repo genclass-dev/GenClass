@@ -106,7 +106,9 @@ The worker tolerates the other order too: with the tables missing, the app's own
 
 `wrangler.toml` gained one route, `genclass.dev/github*`, three vars (`GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_REPOS`
 and `GITHUB_APP_WORKFLOW_LINK`, which is [step 7](#7-the-link-that-adds-the-workflow-file)) and a second cron trigger,
-`*/20 * * * *`.
+`*/20 * * * *`. A fourth var, `GITHUB_APP_OWN_ACCOUNTS`, names your own GitHub accounts (separated by commas): installs
+and uninstalls on them are counted apart in the daily counts (`github_install_days`, migration 0016), so your test
+installs are not read as someone else's. It changes nothing else.
 
 The second trigger runs the app's sweep and nothing else: every 20 minutes it reviews the pull requests whose review
 has been owed for more than an hour (a job that failed or was stopped, an hourly limit, a check that waits), at most
@@ -264,7 +266,11 @@ tunnel's origin, because GitHub sends the browser back to the callback URL in th
   stopped the review, with its own number.
 - **A request to delete data.** Uninstalling deletes everything kept for an installation. For one repository:
   `DELETE FROM github_prs WHERE repo_id = ?`, `DELETE FROM github_repos WHERE repo_id = ?` and
-  `DELETE FROM github_repo_facts WHERE repo_id = ?`.
+  `DELETE FROM github_repo_facts WHERE repo_id = ?`. The daily counts (`github_install_days`) hold no account,
+  installation or repository, so there is nothing of a person in them to delete.
+- **Installs and uninstalls over time.**
+  `SELECT day, own, installs, uninstalls FROM github_install_days ORDER BY day DESC` (migration 0016). An uninstall
+  deletes the installation's rows, so this count is the only record that one happened.
 
 ## Plans and private repositories
 

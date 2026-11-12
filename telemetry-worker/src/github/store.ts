@@ -1,5 +1,6 @@
 // What the GitHub App keeps in D1 (migrations/0013_github_app.sql): installations, linked repositories, what it did
 // once per repository, what it posted per pull request, webhook deliveries, hourly review counts and Marketplace plans.
+// And (migrations/0016_github_install_days.sql) how many installations were added and removed on each UTC day.
 //
 // Invariants:
 // - Nothing here holds code, diffs, race files or tokens. A pull request's row holds ids, hashes and the short titles
@@ -7,6 +8,11 @@
 // - Removing the app removes its rows: an uninstall deletes the installation, its repositories' links, pauses and
 //   once-only marks and its pull-request rows at once (deleteInstallation); repositories taken out of an installation
 //   go the same way.
+// - The daily counts (github_install_days) hold no installation, account or repository: only a day, whether the
+//   account was one of the operator's own, and two numbers. An install is counted when the installation's row is
+//   made and an uninstall when it is deleted, each in the row's own transaction, so an event handled twice counts
+//   once and the counts are never ahead of the rows. The count never decides whether the row is written: on a
+//   database without the table the install or uninstall goes through without it (withDayCount).
 // - An installation's managing account (`owner`) is written for the person whose own GitHub account the installation
 //   is on (http.ts readGrant), or by the server's operator by hand (docs/github-app/SETUP.md). Being able to reach or
 //   push to one of its repositories never sets it: the owner's plan decides whether its private repositories are read
@@ -148,23 +154,45 @@ const FACT_COLUMNS = "repo_id, installation_id, evidence, intro, plan_notice, is
 // --------------------------------------------------------------------------------------------- installations
 
 /**
+ * Run `rest` in one transaction with `count`, a statement that adds to the day's install counts. Only when the
+ * database has no github_install_days (migration 0016 is not applied) `rest` runs alone: an install or an uninstall
+ * never waits on, or fails for, its count. Any other failure is thrown as it is.
+ */
+async function withDayCount(db: D1Like, count: D1Stmt, rest: D1Stmt[]): Promise<void> {
+  try {
+    await db.batch([count, ...rest]);
+  } catch (e) {
+    if (!/no such table: github_install_days/i.test(e instanceof Error ? e.message : String(e))) throw e;
+    await db.batch(rest);
+  }
+}
+
+/**
  * Record an installation as GitHub describes it (created, or seen again). The managing account is kept. A `selection`
  * that is neither "all" nor "selected" is stored as "unknown" and never replaces one GitHub already gave.
+ * The first time an installation is recorded, the day's install count goes up by one (github_install_days; the row
+ * for the operator's own accounts when `own`), in the same transaction: seen again, it counts nothing.
  */
 export async function upsertInstallation(
   db: D1Like,
-  i: { id: number; accountId: number; login: string; type: string; selection: string; suspended?: boolean },
+  i: { id: number; accountId: number; login: string; type: string; selection: string; suspended?: boolean; own?: boolean },
   now: Date,
 ): Promise<void> {
   const iso = now.toISOString();
-  await db
+  const count = db
+    .prepare(
+      "INSERT INTO github_install_days (day, own, installs, uninstalls) SELECT ?1, ?2, 1, 0 WHERE NOT EXISTS (SELECT 1 FROM github_installations WHERE id = ?3) " +
+        "ON CONFLICT (day, own) DO UPDATE SET installs = installs + 1",
+    )
+    .bind(iso.slice(0, 10), i.own ? 1 : 0, i.id);
+  const upsert = db
     .prepare(
       "INSERT INTO github_installations (id, account_id, account_login, account_type, selection, suspended, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
         "ON CONFLICT (id) DO UPDATE SET account_id = excluded.account_id, account_login = excluded.account_login, account_type = excluded.account_type, " +
         "selection = CASE WHEN excluded.selection = 'unknown' THEN github_installations.selection ELSE excluded.selection END, suspended = excluded.suspended, updated = excluded.updated",
     )
-    .bind(i.id, i.accountId, i.login, i.type === "Organization" ? "Organization" : "User", i.selection === "all" ? "all" : i.selection === "selected" ? "selected" : "unknown", i.suspended ? iso : null, iso, iso)
-    .run();
+    .bind(i.id, i.accountId, i.login, i.type === "Organization" ? "Organization" : "User", i.selection === "all" ? "all" : i.selection === "selected" ? "selected" : "unknown", i.suspended ? iso : null, iso, iso);
+  await withDayCount(db, count, [upsert]);
 }
 
 /** GitHub's answer to whether an installation covers all repositories or selected ones. */
@@ -200,9 +228,20 @@ export async function installationsOf(db: D1Like, accountId: string): Promise<In
   return r.results ?? [];
 }
 
-/** Everything kept for an installation goes with it. */
-export async function deleteInstallation(db: D1Like, id: number): Promise<void> {
-  await db.batch([
+/**
+ * Everything kept for an installation goes with it. If it was recorded, the day's uninstall count goes up by one in
+ * the same transaction (github_install_days): the row for the operator's own accounts when its account is one of
+ * `ownAccounts` (lower case), else the other. The count keeps nothing of the installation.
+ */
+export async function deleteInstallation(db: D1Like, id: number, now: Date, ownAccounts: string[] = []): Promise<void> {
+  const own = ownAccounts.length ? `CASE WHEN lower(account_login) IN (${marks(ownAccounts.length)}) THEN 1 ELSE 0 END` : "0";
+  const count = db
+    .prepare(
+      `INSERT INTO github_install_days (day, own, installs, uninstalls) SELECT ?, ${own}, 0, 1 FROM github_installations WHERE id = ? ` +
+        "ON CONFLICT (day, own) DO UPDATE SET uninstalls = uninstalls + 1",
+    )
+    .bind(now.toISOString().slice(0, 10), ...ownAccounts, id);
+  await withDayCount(db, count, [
     db.prepare("DELETE FROM github_prs WHERE installation_id = ?").bind(id),
     db.prepare("DELETE FROM github_repos WHERE installation_id = ?").bind(id),
     db.prepare("DELETE FROM github_repo_facts WHERE installation_id = ?").bind(id),

@@ -1113,7 +1113,7 @@ A private repository is reviewed only when `GITHUB_APP_PRIVATE_REPOS` is `open`,
 `github_private`, or the GitHub account has a paid Marketplace plan (src/github/entitlement.ts); otherwise nothing of
 it is read and the repository gets one neutral check that says so, once (`github_repo_facts.plan_notice`).
 
-### Tables (migration 0013)
+### Tables (migrations 0013 and 0016)
 
 | table | columns | notes |
 |---|---|---|
@@ -1124,6 +1124,14 @@ it is read and the repository gets one neutral check that says so, once (`github
 | `github_deliveries` | `id` PK, `event`, `received`, `done` | 7 days |
 | `github_usage` | (`installation_id`, `hour`) PK, `reviews`, `outside` | 2 days |
 | `github_marketplace` | `account_id` PK (GitHub's), `login`, `plan_id`, `plan_name`, `monthly_cents`, `unit_count`, `free_trial_ends`, `pending`, `updated` | deleted on `cancelled` |
+| `github_install_days` (0016) | (`day`, `own`) PK, `installs`, `uninstalls` | counts per UTC day, kept; no installation, account or repository in it |
+
+`github_install_days` is the only thing that outlives an uninstall, and it is two numbers: an installation counts as
+an install the first time its row is made (its `created` event, the first other event of one whose `created` never
+arrived, or Connect GitHub) and as an uninstall when its row is deleted, each in the row's own transaction, so a
+delivery handled twice counts once. `own` is 1 for an installation on one of `GITHUB_APP_OWN_ACCOUNTS`: the operator's
+own installs are counted in a row of their own. Counting starts when 0016 is applied (installations already there are
+not counted as installs); until then installs and uninstalls go through without a count.
 
 Never stored: code, diffs, file contents, race files, tokens. Installation tokens are asked for one repository at a
 time and cached in memory until 5 minutes before they expire.
@@ -1140,6 +1148,7 @@ time and cached in memory until 5 minutes before they expire.
 | `GITHUB_APP_SLUG` | var | the app's URL name (`genclass`): its bot is `<slug>[bot]` and its commands start with `@<slug>` |
 | `GITHUB_APP_PRIVATE_REPOS` | var | `plan` (default) or `open` |
 | `GITHUB_APP_WORKFLOW_LINK` | var | `on`: the check with no race files, and `/github/setup`, link to GitHub's new-file editor with `docs/github-app/workflows/genclass.yml` filled in. Anything else: off |
+| `GITHUB_APP_OWN_ACCOUNTS` | var | the operator's own GitHub accounts, separated by commas. Only chooses which daily count an install or uninstall adds to (`github_install_days.own`). Unset: none |
 | `GITHUB_API_URL`, `GITHUB_WEB_URL` | vars | a GitHub Enterprise Server (untested) |
 
 ## The genclass command
