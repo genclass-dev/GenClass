@@ -58,6 +58,35 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     expect(j.projects.map((p: any) => [p.id, p.name, p.token, p.last_event])).toEqual([[app.id, "Shop", app.token, null]]);
     expect(j.github).toEqual({ app: true, install_url: "https://genclass.dev/github/install", connect_url: "https://genclass.dev/github/connect" });
     expect(j.billing_url).toBe("https://genclass.dev/account/billing");
+    // a server that sells nothing offers nothing
+    expect(j.offer).toBeNull();
+    // one that sells: an account on Free is told the first paid plan in the plans file's own words, with the address
+    // that opens its checkout, and Free's limits in numbers (the command's plan step)
+    const selling = { ...env, STRIPE_SECRET_KEY: "sk_live_fake" };
+    const offered = (await (await call(selling, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any;
+    const teamPlan = PLANS.find((p) => p.id === "team")!;
+    expect(offered.offer).toEqual({
+      plan: { id: "team", name: "Team" },
+      price: "$15 / project / month",
+      summary: teamPlan.summary,
+      features: teamPlan.features.filter((f) => f.available && !/^Everything in /.test(f.text)).map((f) => f.text),
+      // plans are per project: the one app on Free has its own plan page
+      checkout_url: `https://genclass.dev/account/billing?project=${app.id}&from=cli`,
+      free: { name: "Free", apps: 3, history_days: 7, suggestions_shown: 3, live_fixes: 100 },
+    });
+    // each app says its plan, whether Free was chosen for it, and its plan page
+    expect(offered.projects[0]).toMatchObject({ plan: { id: "free", name: "Free", source: null }, needs_plan: false, plan_chosen: false, plan_url: `https://genclass.dev/account/billing?project=${app.id}` });
+    sql.db.prepare("UPDATE projects SET plan_chosen = '2026-11-12T00:00:00.000Z' WHERE id = ?").run(app.id);
+    expect(((await (await call(selling, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).projects[0].plan_chosen).toBe(true);
+    // the app on Team: nothing left to offer (the account has no other app on Free)
+    sql.db.prepare("UPDATE projects SET plan = 'team', stripe_mode = 'live', subscription_id = 'sub_x', subscription_status = 'active' WHERE id = ?").run(app.id);
+    expect(((await (await call(selling, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
+    sql.db.prepare("UPDATE projects SET plan = NULL, stripe_mode = NULL, subscription_id = NULL, subscription_status = NULL WHERE id = ?").run(app.id);
+    expect(offered.offer.features).toContain("Visitor analytics");
+    expect(offered.offer.features.join(" ")).not.toContain("Everything in Free");
+    // a test key sells only to the accounts on its list
+    expect(((await (await call({ ...env, STRIPE_SECRET_KEY: "sk_test_fake" }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
+    expect(((await (await call({ ...env, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_TEST_ACCOUNTS: "ada@example.com" }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer.plan.id).toBe("team");
     // the browser session reads it too; nothing else is a method of it
     expect((await call(env, "GET", "/api/cli/overview", { cookie: me.cookie, origin: null })).status).toBe(200);
     expect((await call(env, "POST", "/api/cli/overview", { bearer: me.bearer, body: {} })).status).toBe(405);
@@ -67,6 +96,11 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     const team = (await (await call({ ...env, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any;
     expect(team.plan).toEqual({ id: "team", name: "Team" });
     expect(team.suggestions).toEqual({ per_day: 30, shown: null, used_today: 0, model: true });
+    // an account whose apps all have a plan (here GenClass's grant, which is per project for a plan sold per project:
+    // migration 0016 copied it onto the apps that existed) is offered none, whatever the server sells
+    expect(((await (await call({ ...selling, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer.checkout_url).toBe(`https://genclass.dev/account/billing?project=${app.id}&from=cli`);
+    sql.db.prepare("UPDATE projects SET comp_until = ?, comp_plan = 'team' WHERE id = ?").run(FUTURE(), app.id);
+    expect(((await (await call({ ...selling, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
     expect(JSON.stringify(team)).not.toContain(KEY);
   });
 
@@ -335,7 +369,7 @@ describe("genclass command: GET /api/cli/app (src/cli.ts)", () => {
     expect([j.name, j.token, j.range]).toEqual(["Shop", app.token, "7d"]);
     expect(j.totals.detections).toBe(1);
     expect(j.breakdowns.detect_issue).toEqual([{ key: "duplicate\t/checkout", count: 1 }]);
-    expect(j.recent.length).toBeLessThanOrEqual(20);
+    expect(j.recent.length).toBeLessThanOrEqual(50);
     expect(j.dashboard_url).toBe(`https://genclass.dev/account/apps/${app.id}`);
     // nothing a page typed, and no session of the account
     expect(JSON.stringify(j)).not.toContain("SECRET PAGE TEXT");

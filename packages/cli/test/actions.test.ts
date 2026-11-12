@@ -2,7 +2,7 @@
 // workflow file, the agent configuration, cleaned text, git remotes and the command line.
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { WORKFLOW_FILE as COLLECTOR_WORKFLOW } from "../../../telemetry-worker/src/github/workflow-file.js";
@@ -112,11 +112,13 @@ describe("genclass: nothing is drawn on a page (src/actions.mjs runtimeArgs)", (
   it("the runtime is added without the developer overlay, and what init then writes has no overlay line", async () => {
     const dir = tempDir();
     viteApp(dir);
-    const fresh = { cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "genclass init" }] } as never;
+    const fresh = { cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "npx genclass init" }] } as never;
     expect(runtimeArgs(fresh, { yes: true })).toEqual({ cmd: "init", args: ["--cwd", dir, "--yes", "--in-account", "--no-devtools", "--brief"] });
-    expect(runtimeArgs({ cwd: dir, signedIn: false, steps: [{ id: "runtime", run: "genclass init" }] } as never, {})).toEqual({ cmd: "init", args: ["--cwd", dir, "--no-devtools", "--brief"] });
+    expect(runtimeArgs({ cwd: dir, signedIn: false, steps: [{ id: "runtime", run: "npx genclass init" }] } as never, {})).toEqual({ cmd: "init", args: ["--cwd", dir, "--no-devtools", "--brief"] });
     // an app that already has the runtime is only put in the account: nothing in its code is touched
-    expect(runtimeArgs({ cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "genclass connect" }] } as never, {})).toEqual({ cmd: "connect", args: ["--cwd", dir, "--in-account"] });
+    // connect takes only its own options: it asks which app of the signed-in account this is
+    expect(runtimeArgs({ cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "npx genclass connect" }] } as never, {})).toEqual({ cmd: "connect", args: ["--cwd", dir] });
+    expect(runtimeArgs({ cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "npx genclass connect" }] } as never, { yes: true })).toEqual({ cmd: "connect", args: ["--cwd", dir, "--yes"] });
     // init with those arguments: one import, and no line that mounts anything
     const { run: runInit } = await import("../../runtime/bin/lib/init.mjs");
     const said = await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--no-devtools", "--brief"])).toBe(0));
@@ -248,6 +250,9 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
     expect(await printed(async () => expect(await run(["--help"])).toBe(0))).toContain(USAGE);
     expect(await printed(async () => expect(await run(["version"])).toBe(0))).toBe(`genclass ${BUILD.version} (installs @genclass/runtime ${BUILD.runtimeVersion}, @genclass/mcp ${BUILD.mcpVersion})\n`);
     expect(await run(["frobnicate"])).toBe(2);
+    // the form that runs without installing, everywhere a command is named
+    expect(USAGE).toContain("npx genclass dashboard");
+    expect(USAGE).not.toMatch(/^ {2}genclass /m);
     expect(await run(["status", "--frob"])).toBe(2);
     expect(USAGE).not.toMatch(/[—–]/);
   });
@@ -255,19 +260,21 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
   it("the real entry names itself to the runtime CLI's modules: its commands say genclass, not the runtime package", () => {
     const dir = tempDir();
     viteApp(dir);
-    const env = { ...process.env, NO_COLOR: "1", GENCLASS_HOST: "" };
+    // a machine with genclass installed would print the short name: the PATH here has none
+    const PATH = String(process.env.PATH ?? "").split(delimiter).filter((d) => d && !existsSync(join(d, "genclass"))).join(delimiter);
+    const env = { ...process.env, PATH, NO_COLOR: "1", GENCLASS_HOST: "" };
     const main = fileURLToPath(new URL("../src/main.mjs", import.meta.url));
     const status = execFileSync(process.execPath, [main, "status", "--cwd", dir], { env, encoding: "utf8" });
     expect(status).toContain("GenClass");
     expect(status).toContain("shop");
     expect(status).toContain("Next  Sign in");
     expect(status).toContain("Later    Runtime");
-    expect(status).toContain("Every part: genclass status --all");
+    expect(status).toContain("Every part: npx genclass status --all");
     // the full list on request: every part of GenClass by name
     const all = execFileSync(process.execPath, [main, "status", "--all", "--cwd", dir], { env, encoding: "utf8" });
     for (const part of ["Account", "Runtime", "Dashboard", "Test workflow", "GitHub App", "Coding agent", "Suggestions"]) expect(all, part).toContain(part);
     expect(all).not.toContain("Every part:");
-    expect(status).toContain("Run genclass login");
+    expect(status).toContain("Run npx genclass login");
     // a command handed to the runtime CLI's own code prints this command's name
     // (signed out, whoami says how to sign in and exits 1)
     const ran = spawnSync(process.execPath, [main, "whoami"], { env, encoding: "utf8" });
@@ -276,12 +283,41 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
     expect(who).toContain("npx genclass login");
     expect(who).not.toContain("@genclass/runtime");
     const json = JSON.parse(execFileSync(process.execPath, [main, "status", "--json", "--cwd", dir], { env, encoding: "utf8" }));
-    expect(json.next).toMatchObject({ id: "account", run: "genclass login" });
+    expect(json.next).toMatchObject({ id: "account", run: "npx genclass login" });
     // without a terminal, `genclass` alone changes nothing and prints the checklist
     const bare = execFileSync(process.execPath, [main, "--cwd", dir], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     expect(bare).toContain("Next  Sign in");
     // the art is for a terminal only: nothing piped holds it
     expect(bare).not.toContain("█");
     expect(existsSync(join(dir, ".mcp.json"))).toBe(false);
+  });
+});
+
+describe("genclass: the runtime step hands the runtime CLI only options it takes (src/actions.mjs runtimeArgs)", () => {
+  // genclass 0.2.x to 0.3.2 passed --in-account to connect, which refused it, printed its usage, and the walk went
+  // on: a project already set up but not in the account could never be put there (seen on a real project,
+  // 2026-11-12). Each command is run with exactly what the step would pass, signed out: it must get past its own
+  // option parser (signed out it stops at "not signed in" or does its local part, never at "unknown option").
+  it("for init and for connect, signed in or not, with --yes or not", async () => {
+    const { run: runLogin } = await import("../../runtime/bin/lib/login.mjs");
+    const { run: runInit } = await import("../../runtime/bin/lib/init.mjs");
+    const dir = tempDir();
+    const errs: string[] = [];
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation(((s: unknown) => (errs.push(String(s)), true)) as never);
+    try {
+      for (const run of ["npx genclass connect", "npx genclass init"])
+        for (const signedIn of [true, false])
+          for (const yes of [true, false]) {
+            const { cmd, args } = runtimeArgs({ cwd: dir, signedIn, steps: [{ id: "runtime", run }] } as never, { yes });
+            errs.length = 0;
+            const said = await printed(async () => {
+              const code = cmd === "connect" ? await runLogin("connect", args) : await runInit("init", [...args, "--no-install", "--no-network", "--dry-run"]);
+              expect([cmd, signedIn, yes, code]).not.toEqual([cmd, signedIn, yes, 2]);
+            });
+            expect(`${said}${errs.join("")}`).not.toMatch(/unknown option/);
+          }
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

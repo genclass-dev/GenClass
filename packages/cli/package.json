@@ -1,7 +1,7 @@
 {
   "name": "genclass",
-  "version": "0.2.2",
-  "description": "GenClass CLI: one command that signs you in, adds GenClass to your app, connects the GitHub App and your coding agent, shows your app in the terminal and tells you what it is missing.",
+  "version": "0.3.5",
+  "description": "GenClass CLI: one command that sets GenClass up, shows your app in the terminal (problems, analytics, events), hands problems to your coding agent, answers questions about your app and tells you what it is missing.",
   "type": "module",
   "license": "Apache-2.0",
   "repository": {

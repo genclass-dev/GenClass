@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+// Seats are tested on billing/plans.json version 3 (2026-11-11), where Team was sold per seat: since version 4 Team is
+// per project and holds everyone, and the seat rules (src/team.ts) stay for any plan sold per seat.
+vi.mock("../../billing/plans.json", async () => ({ default: (await import("./fixtures/plans-v3-seats.json")).default }));
 import { authRetention } from "../src/auth.js";
 import { resetTokenCache } from "../src/dashboard.js";
 import { resetOwnerCache } from "../src/paid.js";
@@ -43,7 +46,7 @@ describe("invite links: who can make one, and how many", () => {
     expect(r.status).toBe(403);
     expect(await r.json()).toEqual({
       ok: false,
-      error: `the Free plan is for one person; members come with a plan sold per developer; see the plans at ${PLANS_URL}`,
+      error: `the Free plan is for one person; members come with Team; see the plans at ${PLANS_URL}`,
       upgrade_url: PLANS_URL,
     });
     expect(sql.rows("SELECT id FROM team_invites")).toEqual([]);

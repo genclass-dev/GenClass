@@ -217,7 +217,10 @@ export function projectDir(o) {
 }
 
 const posix = (p) => p.split(sep).join("/");
-const REF_RE = /(?:from\s+|import\s*\(?\s*|require\s*\(\s*)['"]@genclass\/runtime(?:\/[\w/-]+)?['"]|genclass\.global(?:\.min)?\.js/;
+// GenClass in a file outside init's markers: the runtime imported or required, the script-tag build, or one of the
+// framework integrations (@genclass/nuxt in nuxt.config, @genclass/astro in astro.config), which add the runtime
+// themselves
+const REF_RE = /(?:from\s+|import\s*\(?\s*|require\s*\(\s*)['"]@genclass\/(?:runtime(?:\/[\w/-]+)?|nuxt|astro)['"]|['"]@genclass\/nuxt['"]|genclass\.global(?:\.min)?\.js/;
 
 /** Files that use GenClass outside init's markers (a hand-written setup). */
 function manualRefs(files) {
@@ -412,9 +415,23 @@ function briefTelemetry(cfg) {
     out(`  ${c.gray("Anonymous diagnostics are off (--no-telemetry).")}`);
     return;
   }
-  out(`  ${c.gray("Anonymous diagnostics are on: counts and decisions go to GenClass's maintainers, with no page text,")}`);
-  out(`  ${c.gray(`cookies or IP addresses, and never from localhost. Off: ${CMD} init --no-telemetry`)}`);
+  briefLines("Anonymous diagnostics are on: counts and decisions go to GenClass's maintainers, with no page text, cookies or IP addresses, and never from localhost.");
+  // the command and the address each stay whole on a line of their own, so they can be copied
+  out(`  ${c.gray(`Off: ${CMD} init --no-telemetry`)}`);
   out(`  ${c.gray(`What is sent: ${TELEMETRY_URL}`)}`);
+}
+
+/** A grey sentence of the compact (--brief) output, folded to the window (40 to 100 columns), every line indented. */
+function briefLines(text, paint = c.gray) {
+  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || 100)) - 4;
+  let line = "";
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    if (line && line.length + 1 + word.length > cols) {
+      out(`  ${paint(line)}`);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) out(`  ${paint(line)}`);
 }
 
 /** Where to put the self-hosted model: the folder the framework serves as-is. */
@@ -436,7 +453,8 @@ function cspAdvice(project, files, cfg) {
     if (!csp.cdnMentioned) out(`    says so once in the console). Self-host it instead:`);
     else out(`    Or self-host it (no third-party origin at all):`);
     const pub = publicDir(project);
-    out(`      1. ${c.cyan(`${CMD} fetch-model ${pub}/genclass-model`)} ${c.gray("(model and ONNX Runtime files: about 64 MB; --variant q8 --ort wasm: about 24 MB)")}`);
+    // fetch-model is the runtime package's own command (bin/genclass-runtime.mjs), not one of a host CLI's
+    out(`      1. ${c.cyan(`${HOST_CLI ? `npx ${PKG}@beta` : CMD} fetch-model ${pub}/genclass-model`)} ${c.gray("(model and ONNX Runtime files: about 64 MB; --variant q8 --ort wasm: about 24 MB)")}`);
     out(`      2. ${c.cyan(`${CMD} init --model-url /genclass-model/`)} ${c.gray("(writes model.baseUrl and ortWasmPaths)")}`);
     out(`    or add https://cdn.jsdelivr.net to connect-src.`);
   } else {
@@ -671,6 +689,13 @@ function tokenRow(tk) {
   }
   if (tk.failed) {
     row("Token", `none: could not create one (${tk.why})`, c.yellow(sym.warn));
+    // the account's plan is why (its app limit): signing in again would hit the same limit, so the way on is one of
+    // the apps it has, or more room
+    if (tk.account && /^upgrade needed/.test(String(tk.why))) {
+      out(`             GenClass works without it; you only miss the dashboard. Use one of your apps instead:`);
+      out(`             ${c.cyan(`${CMD} connect`)} and pick it, or make room at ${c.cyan(hostUrl("/account"))}`);
+      return;
+    }
     out(`             GenClass works without it; you only miss the dashboard. ${tk.account ? `Run ${c.cyan(`${CMD} login`)} again, then` : `Get a token at ${c.cyan(START_URL)}`}`);
     out(`             ${tk.account ? c.cyan(`${CMD} connect`) : `and run ${c.cyan(`${CMD} init --token gc_...`)}`}`);
     return;
@@ -756,8 +781,12 @@ export async function versionNotice(o) {
   const from = st.tag ? c.gray(` (npm dist-tag ${st.tag})`) : asked ? "" : c.gray(" (npm dist-tags not checked)");
   row("Version", `${PKG} ${VERSION}${from}`);
   if (st.newer) {
-    const run = st.newer.tag === "latest" ? `npx ${PKG}` : `npx ${PKG}@${st.newer.tag}`;
-    row("Newer", `${PKG} ${st.newer.version} is on npm (dist-tag ${st.newer.tag}): run ${c.cyan(`${run} init`)} instead`, c.yellow(sym.warn));
+    // inside a host CLI (genclass), that CLI pins the runtime it installs: the way to the newer one is a newer CLI
+    if (HOST_CLI) row("Newer", `${PKG} ${st.newer.version} is on npm (dist-tag ${st.newer.tag}): the newest ${HOST_CLI.name ?? "command"} installs it (${c.cyan(`npx ${HOST_CLI.name ?? "genclass"}@latest`)})`, c.yellow(sym.warn));
+    else {
+      const run = st.newer.tag === "latest" ? `npx ${PKG}` : `npx ${PKG}@${st.newer.tag}`;
+      row("Newer", `${PKG} ${st.newer.version} is on npm (dist-tag ${st.newer.tag}): run ${c.cyan(`${run} init`)} instead`, c.yellow(sym.warn));
+    }
   }
 }
 
@@ -776,7 +805,9 @@ export function inspectProject(o) {
   const marked = files.filter((f) => hasMarker(readText(f) ?? ""));
   const manual = marked.length ? [] : manualRefs(files);
   const local = readLocal(cwd);
-  return { cwd, project, files, marked, handWritten: !marked.length && manual.length > 0, fresh: !marked.length && !manual.length, token: tokenInFiles(marked) ?? local?.token ?? null, local };
+  // the key: in init's markers, else in a hand-written setup's files (GenClass.init({ token }), a meta tag, the
+  // integrations' options), else in .genclass.local
+  return { cwd, project, files, marked, handWritten: !marked.length && manual.length > 0, fresh: !marked.length && !manual.length, token: tokenInFiles(marked) ?? tokenInFiles(manual) ?? local?.token ?? null, local };
 }
 
 /**
@@ -914,7 +945,8 @@ export async function init(o, ctx = {}) {
     return spawn(...installArgs(project.pm, spec), cwd) ? 0 : 1;
   }
 
-  const devtools = !o.noDevtools;
+  // nothing GenClass sets up through a host CLI (genclass) is drawn on a page: the overlay is left out there
+  const devtools = !o.noDevtools && !HOST_CLI;
   const planFor = (config) => planInit(project, { mode: o.mode, devtools, cdn: o.cdn, sri: !o.noSri, sync: !!o.sync, strategy: o.strategy, config }, { pkgDir: PKG_DIR, version: VERSION });
   const plan = planFor(cfg);
   if (plan.manual || !plan.changes.length) {
@@ -932,11 +964,11 @@ export async function init(o, ctx = {}) {
   if (brief) {
     out();
     out(`  ${c.bold(project.name)} ${c.gray(`${sym.dot} ${project.label}${project.pm ? ` ${sym.dot} ${project.pm}` : ""} ${sym.dot} ${posix(relative(cwd, plan.entry))}`)}`);
-    out(`  Adds ${PKG} ${VERSION} in ${c.bold(o.mode ?? "observe")} mode${o.mode ? "" : ": it reports and never changes anything"}.`);
+    briefLines(`Adds ${PKG} ${VERSION} in ${o.mode ?? "observe"} mode${o.mode ? "" : ": it reports and never changes anything"}.`, (l) => l);
     briefTelemetry(cfg);
   } else telemetryNotice(cfg, cfgAt);
   if (!ctx.creds) tk = await offerAccount(o, tk);
-  if (brief && tk.pending && tk.account) out(`  ${c.gray(`The app goes into your account (${accountLabel(tk.account.account)}) as "${String(tk.name ?? "").slice(0, 80) || "unnamed"}".`)}`);
+  if (brief && tk.pending && tk.account) briefLines(`The app goes into your account (${accountLabel(tk.account.account)}) as "${String(tk.name ?? "").slice(0, 80) || "unnamed"}".`);
   else tokenRow(tk);
   sinksNotice(cfg, cfgAt);
   cspAdvice(project, files, cfg);
@@ -1008,9 +1040,11 @@ export async function init(o, ctx = {}) {
   // --brief, with the app in the person's account (no private link to show once): three lines, and the walk goes on
   if (brief && (tk.created?.account || tk.app)) {
     out(`  ${c.green(sym.ok)} ${c.bold("GenClass is in your app.")} ${c.gray(`(${changes.map((ch) => ch.rel).join(", ")})`)}`);
-    out(`  ${c.gray("What it finds shows in the browser console as [GenClass] lines, and on your dashboard once the site is deployed.")}`);
+    briefLines("What it finds shows in the browser console as [GenClass] lines, and on your dashboard once the site is deployed.");
     printMoneyAdvice(money, cfgAt);
-    out(`  ${c.gray(`Off for one page: ?genclass=off. Undo: ${CMD} remove`)}`);
+    // the address part and the command each stay whole on a line of their own
+    out(`  ${c.gray("Off for one page: ?genclass=off")}`);
+    out(`  ${c.gray(`Undo: ${CMD} remove`)}`);
     out();
     return 0;
   }
@@ -1123,6 +1157,11 @@ async function remove(o) {
   return 0;
 }
 
+/** The name this command goes by: the host CLI's (`npx genclass`) when one runs it, else the runtime package's own. */
+const SELF = HOST_CLI ? CMD : "genclass-runtime";
+/** The usage text, with the commands written the way they are typed here. */
+const usage = () => (HOST_CLI ? USAGE.replace(/^ {2}genclass-runtime /gm, `  ${CMD} `) : USAGE);
+
 /** Entry from bin/genclass-runtime.mjs. Returns the exit code. */
 export async function run(cmd, argv) {
   let o;
@@ -1130,18 +1169,18 @@ export async function run(cmd, argv) {
     o = parse(argv);
   } catch (e) {
     if (e instanceof UsageError) {
-      err(`genclass-runtime ${cmd}: ${e.message}\n\n${USAGE}`);
+      err(`${SELF} ${cmd}: ${e.message}\n\n${usage()}`);
       return 2;
     }
     throw e;
   }
   if (o.help) {
-    out(USAGE);
+    out(usage());
     return 0;
   }
   const h = hostConfig();
   if (cmd === "init" && h.error) {
-    err(`genclass-runtime ${cmd}: ${h.error}`);
+    err(`${SELF} ${cmd}: ${h.error}`);
     return 2;
   }
   return cmd === "remove" ? remove(o) : init(o);

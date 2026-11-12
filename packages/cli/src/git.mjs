@@ -38,3 +38,24 @@ export function gitInfo(cwd, run = runGit) {
   const branch = run(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
   return { repo: true, root, remote, github: githubName(remote), branch: branch && branch !== "HEAD" ? branch : null };
 }
+
+/**
+ * The name GitHub has now for `repo` ("owner/name") when it was renamed or moved since this checkout was cloned:
+ * github.com answers the old address with a redirect to the new one. Null when it was not renamed, when the
+ * repository is private (GitHub answers 404 to a visitor) or when the question could not be asked. One HEAD request
+ * to github.com, four seconds at most; nothing but the repository's own address is sent.
+ * @param {string} repo
+ * @param {{ fetchFn?: typeof fetch }} [opts]
+ */
+export async function renamedRepo(repo, opts = {}) {
+  const f = opts.fetchFn ?? globalThis.fetch;
+  if (typeof f !== "function" || !/^[A-Za-z0-9_.-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/.test(repo)) return null;
+  try {
+    const r = await f(`https://github.com/${repo}`, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(4000), headers: { "user-agent": "genclass-cli" } });
+    if (r.status !== 301) return null;
+    const m = /^https:\/\/github\.com\/([A-Za-z0-9_.-]{1,39}\/[A-Za-z0-9_.-]{1,100})\/?$/.exec(r.headers.get("location") ?? "");
+    return m && m[1].toLowerCase() !== repo.toLowerCase() ? m[1] : null;
+  } catch {
+    return null;
+  }
+}

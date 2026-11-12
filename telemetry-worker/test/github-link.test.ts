@@ -2,8 +2,9 @@
 // installing, "Connect GitHub" (GitHub says who is asking and what they can reach) and the account's settings.
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { D1Like, D1Stmt } from "../src/dashboard.js";
+import { RETRY_WAIT_MS, RETRY_WITHIN_MS } from "../src/github/http.js";
 import { workflowLink, workflowLinkData } from "../src/github/workflow-file.js";
 import { advance, call, cliToken, createApp, now, refusingLimiter, resetClock, setPlan, signedIn } from "./account-helpers.js";
 import { APP_ID, CLIENT_ID, deliver, fakeGithub, githubSetup, INSTALLATION, installationCreated, OWNER, pullRequest, REPO, result, SHA1, SHA2, signature, WEBHOOK_SECRET } from "./github-helpers.js";
@@ -307,7 +308,9 @@ describe("github app: Connect GitHub", () => {
     const fourth = await call(s.env, "GET", "/github/connect", { cookie: me.cookie, origin: null });
     const st4 = new URL(fourth.headers.get("location")!).searchParams.get("state")!;
     const refused = await back(`code=bad-code&state=${encodeURIComponent(st4)}`, `${me.cookie}; ${cookieOf(fourth, "gc_oauth_ghapp")!}`);
-    expect(refused.status).toBe(502);
+    // GitHub's own word for it (bad_verification_code): the person is told the link was used or has expired
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain("this link was already used or has expired");
     expect(s.sql.rows("SELECT * FROM challenges WHERE kind = 'ghapp:grant'")).toEqual([]);
   });
 
@@ -440,7 +443,7 @@ describe("github app: Continue with GitHub, from a browser that is not signed in
     expect(gh.calls).toEqual([]);
     // a code GitHub does not accept
     const third = await begin();
-    expect((await back(`code=bad-code&state=${third.state}`, third.oauth)).status).toBe(502);
+    expect((await back(`code=bad-code&state=${third.state}`, third.oauth)).status).toBe(400);
     // a person GitHub does not name properly gets no account
     const fourth = await begin();
     gh.user.login = "dependabot[bot]";
@@ -964,6 +967,217 @@ describe("github app: the worker still bundles for Workers", () => {
     for (const path of ["/github", "/github/setup", "/account/github"]) {
       const html = await (await call(env, "GET", path, { cookie: me.cookie, origin: null })).text();
       for (const m of html.matchAll(/<script nonce="[^"]+">([\s\S]*?)<\/script>/g)) expect(m[1], path).not.toContain("__name(");
+    }
+  });
+});
+
+describe("github app: Connect GitHub when GitHub falters (http.ts connectCallback: one more try, and the step is named)", () => {
+  const EXCHANGE = "/login/oauth/access_token";
+  type GithubFetch = ReturnType<typeof fakeGithub>["fetch"];
+  const json = (status: number, body: unknown, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+  const pathOf = (input: string) => new URL(input).pathname;
+  const grants = (sql: ReturnType<typeof githubSetup>["sql"]) => sql.rows("SELECT * FROM challenges WHERE kind = 'ghapp:grant'").length;
+  /** The callback's own log lines (they name a step and a kind of failure, never a token or a code). */
+  const watch = () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    return { last: () => log.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("github connect:")).at(-1), all: () => log.mock.calls.map((c) => String(c[0])).join("\n"), done: () => log.mockRestore() };
+  };
+  /** Connect GitHub for a signed-in session with GitHub played by `fetch`: the callback's answer and the pauses it asked for. */
+  async function comeBack(env: Parameters<typeof call>[0], me: { cookie: string }, fetch: GithubFetch, code = "good-code") {
+    const start = await call(env, "GET", "/github/connect", { cookie: me.cookie, origin: null });
+    const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+    const waits: number[] = [];
+    const back = await call(env, "GET", `/github/callback?code=${code}&state=${encodeURIComponent(state)}`, {
+      cookie: `${me.cookie}; ${cookieOf(start, "gc_oauth_ghapp")!}`,
+      origin: null,
+      fetch,
+      wait: async (ms) => void waits.push(ms),
+    });
+    return { back, waits };
+  }
+
+  it("the code is handed in once more when the request itself gets no answer, and never after GitHub answered about the code", async () => {
+    const log = watch();
+    try {
+      const s = githubSetup();
+      const gh = fakeGithub();
+      person(gh);
+      const me = await signedIn(s.env);
+      // the network fails once: the second try connects, with no pause (nothing was answered yet)
+      let n = 0;
+      const flaky: GithubFetch = async (input, init) => {
+        if (pathOf(input) === EXCHANGE && ++n === 1) throw new TypeError("network");
+        return gh.fetch(input, init);
+      };
+      const first = await comeBack(s.env, me, flaky);
+      expect(first.back.status).toBe(302);
+      expect(first.back.headers.get("location")).toBe("/account/github?connected=1");
+      expect(n).toBe(2);
+      expect(first.waits).toEqual([]);
+      expect(grants(s.sql)).toBe(1);
+      // GitHub's own 503, once
+      n = 0;
+      const down: GithubFetch = async (input, init) => (pathOf(input) === EXCHANGE && ++n === 1 ? new Response("unavailable", { status: 503 }) : gh.fetch(input, init));
+      expect((await comeBack(s.env, me, down)).back.status).toBe(302);
+      expect(n).toBe(2);
+      // no answer twice: twice is all, and the page and the log name the step
+      n = 0;
+      const dead: GithubFetch = async (input, init) => {
+        if (pathOf(input) !== EXCHANGE) return gh.fetch(input, init);
+        n++;
+        throw new DOMException("The operation timed out.", "TimeoutError");
+      };
+      const third = await comeBack(s.env, me, dead);
+      expect(third.back.status).toBe(502);
+      const html = await third.back.text();
+      expect(html).toContain("GitHub was not connected");
+      expect(html).toContain("GitHub did not answer when asked to confirm your sign-in. Start again in a minute.");
+      expect(n).toBe(2);
+      expect(log.last()).toBe("github connect: failed: code: timeout (asked twice)");
+      // the first try got no answer but GitHub had taken the code: the second try's "already used" is not the person's doing
+      n = 0;
+      const taken: GithubFetch = async (input, init) => {
+        if (pathOf(input) !== EXCHANGE) return gh.fetch(input, init);
+        if (++n === 1) throw new TypeError("network");
+        return json(200, { error: "bad_verification_code" });
+      };
+      const fourth = await comeBack(s.env, me, taken);
+      expect(fourth.back.status).toBe(502);
+      const said = await fourth.back.text();
+      expect(said).toContain("GitHub did not answer when asked to confirm your sign-in.");
+      expect(said).not.toContain("already used");
+      // GitHub answered about the code (one it does not accept): asked once, and told as before
+      const before = gh.calls.length;
+      const fifth = await comeBack(s.env, me, gh.fetch, "bad-code");
+      expect(fifth.back.status).toBe(400);
+      expect(await fifth.back.text()).toContain("this link was already used or has expired");
+      expect(gh.calls.slice(before).filter((c) => c.path === EXCHANGE)).toHaveLength(1);
+      // nothing in a log line but the step and the kind
+      expect(log.all()).not.toMatch(/good-code|bad-code|ghu_/);
+    } finally {
+      log.done();
+    }
+  });
+
+  it("GitHub's answers about the person are asked for once more, after a pause, when it refuses a token it just issued or does not answer", async () => {
+    const log = watch();
+    try {
+      const s = githubSetup();
+      const me = await signedIn(s.env);
+      // 401 to the first question, once: the second pass connects, and the code was handed in once only
+      let refused = 0;
+      const gh = fakeGithub({ answer: (c) => (c.path === "/user" && ++refused === 1 ? json(401, { message: "Bad credentials" }) : undefined) });
+      person(gh);
+      const first = await comeBack(s.env, me, gh.fetch);
+      expect(first.back.status).toBe(302);
+      expect(first.waits).toEqual([RETRY_WAIT_MS]);
+      expect(gh.calls.filter((c) => c.path === "/user")).toHaveLength(2);
+      expect(gh.calls.filter((c) => c.path === EXCHANGE)).toHaveLength(1);
+      expect(grants(s.sql)).toBe(1);
+      // refused both times: one pause, two passes, and the step is named
+      const gh2 = fakeGithub({ answer: (c) => (c.path === "/user/installations" ? json(401, { message: "Bad credentials" }) : undefined) });
+      person(gh2);
+      const second = await comeBack(s.env, me, gh2.fetch);
+      expect(second.back.status).toBe(502);
+      expect(await second.back.text()).toContain("GitHub did not say where the app is installed. Start again in a minute.");
+      expect(second.waits).toEqual([RETRY_WAIT_MS]);
+      expect(gh2.calls.filter((c) => c.path === "/user/installations")).toHaveLength(2);
+      expect(log.last()).toBe("github connect: failed: installations: unauthorized 401 (asked twice)");
+      // GitHub's 503 on an installation's repositories: the client's own second request each pass, then the page
+      const gh3 = fakeGithub({ answer: (c) => (c.path === `/user/installations/${INSTALLATION}/repositories` ? json(503, { message: "Service unavailable" }) : undefined) });
+      person(gh3);
+      const third = await comeBack(s.env, me, gh3.fetch);
+      expect(third.back.status).toBe(502);
+      expect(await third.back.text()).toContain("GitHub did not say which repositories the app is on. Start again in a minute.");
+      expect(third.waits).toEqual([RETRY_WAIT_MS]);
+      expect(gh3.calls.filter((c) => c.path.endsWith("/repositories"))).toHaveLength(4);
+      expect(log.last()).toBe("github connect: failed: repositories: server 503 (asked twice)");
+    } finally {
+      log.done();
+    }
+  });
+
+  it("a refusal, a rate limit or an answer that names nobody is asked for once, and nothing is asked again once the callback has taken too long", async () => {
+    const log = watch();
+    try {
+      const s = githubSetup();
+      const me = await signedIn(s.env);
+      const once = async (gh: ReturnType<typeof fakeGithub>, path: string) => {
+        person(gh);
+        const r = await comeBack(s.env, me, gh.fetch);
+        expect(r.waits, path).toEqual([]);
+        expect(gh.calls.filter((c) => c.path === path), path).toHaveLength(1);
+        return { status: r.back.status, html: await r.back.text() };
+      };
+      const forbidden = await once(fakeGithub({ answer: (c) => (c.path === "/user" ? json(403, { message: "Resource not accessible by integration" }) : undefined) }), "/user");
+      expect(forbidden.status).toBe(502);
+      expect(forbidden.html).toContain("GitHub did not say who you are. Start again in a minute.");
+      expect(log.last()).toBe("github connect: failed: who: forbidden 403");
+      const limited = await once(fakeGithub({ answer: (c) => (c.path === "/user/installations" ? json(429, { message: "API rate limit exceeded" }, { "retry-after": "60" }) : undefined) }), "/user/installations");
+      expect(limited.status).toBe(502);
+      expect(limited.html).toContain("GitHub is limiting requests right now. Start again in a few minutes.");
+      expect(log.last()).toBe("github connect: failed: installations: rate_limited 429");
+      const nobody = fakeGithub();
+      nobody.user.login = "dependabot[bot]";
+      const unnamed = await once(nobody, "/user");
+      expect(unnamed.status).toBe(502);
+      expect(unnamed.html).toContain("GitHub did not say who you are.");
+      // a 401 that would be asked again, but the callback has already taken longer than RETRY_WITHIN_MS
+      const slow = await once(
+        fakeGithub({
+          answer: (c) => {
+            if (c.path !== "/user") return undefined;
+            advance(RETRY_WITHIN_MS + 1);
+            return json(401, { message: "Bad credentials" });
+          },
+        }),
+        "/user",
+      );
+      expect(slow.status).toBe(502);
+      expect(log.last()).toBe("github connect: failed: who: unauthorized 401");
+      expect(grants(s.sql)).toBe(0);
+    } finally {
+      log.done();
+    }
+  });
+
+  it("this server's own write failing is tried once more, and is not called GitHub's failure", async () => {
+    const log = watch();
+    try {
+      const s = githubSetup();
+      const gh = fakeGithub();
+      person(gh);
+      const me = await signedIn(s.env);
+      // the same database, with the installation's row refusing to be written `fails` times, sent alone (run) or in a
+      // batch (the stand-in's batch runs each statement with all(): store.ts writes the row with the day's count)
+      let fails = 0;
+      const refused = (text: string) => text.startsWith("INSERT INTO github_installations") && fails-- > 0;
+      const lost = () => Promise.reject(new Error("D1_ERROR: Network connection lost."));
+      const wrap = (text: string, st: D1Stmt): D1Stmt => ({
+        bind: (...v: unknown[]) => wrap(text, st.bind(...v)),
+        first: <T>() => st.first<T>(),
+        all: <T>() => (refused(text) ? lost() : st.all<T>()),
+        run: () => (refused(text) ? lost() : st.run()),
+      });
+      const db: D1Like = { prepare: (text) => wrap(text, s.sql.api.prepare(text)), batch: (stmts) => s.sql.api.batch(stmts) };
+      const env = { ...s.env, DB: db };
+      fails = 1;
+      const first = await comeBack(env, me, gh.fetch);
+      expect(first.back.status).toBe(302);
+      expect(first.waits).toEqual([RETRY_WAIT_MS]);
+      expect(grants(s.sql)).toBe(1);
+      // the failed try wrote no count: the installation is counted once
+      expect(s.sql.rows("SELECT SUM(installs) AS n FROM github_install_days")).toEqual([{ n: 1 }]);
+      fails = 99;
+      const second = await comeBack(env, me, gh.fetch);
+      expect(second.back.status).toBe(500);
+      const html = await second.back.text();
+      expect(html).toContain("GitHub answered, but GenClass could not save what it said. Start again in a minute.");
+      expect(html).not.toContain("GitHub did not");
+      expect(second.waits).toEqual([RETRY_WAIT_MS]);
+      expect(log.last()).toBe("github connect: failed: save: error (asked twice)");
+    } finally {
+      log.done();
     }
   });
 });

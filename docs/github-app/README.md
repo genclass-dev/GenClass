@@ -246,6 +246,20 @@ changed files serve.
 2. Pick the GenClass app for a repository. You need write access to the repository and the app must be in your
    account.
 
+If connecting ends on "GitHub was not connected", the sentence under it says which step failed. GenClass has already
+tried that step a second time where a second try is safe, so start again; if the same sentence comes back, send it
+to us (the server keeps no request logs, so the sentence is how we tell the steps apart).
+
+| The page says | What failed |
+|---|---|
+| GitHub says this link was already used or has expired. | The page was loaded twice or left open more than ten minutes. Start again. |
+| GitHub did not answer when asked to confirm your sign-in. | GitHub's sign-in gave no answer for the code it sent you back with. |
+| GitHub did not say who you are. | GitHub's API refused or did not answer the first question. |
+| GitHub did not say where the app is installed. | The list of the app's installations you can reach. |
+| GitHub did not say which repositories the app is on. | The list of an installation's repositories. |
+| GitHub is limiting requests right now. | A rate limit on GitHub's side. Wait a few minutes. |
+| GitHub answered, but GenClass could not save what it said. | GenClass's own database, not GitHub. |
+
 Taking a link away needs less: the account that owns the linked app can always do it, also after it lost write access
 to the repository. The page lists the repositories linked to one of your apps that GitHub's answer does not list (this
 page has not asked GitHub in the last 30 minutes, or you can no longer reach them), each with **Unlink**; a private

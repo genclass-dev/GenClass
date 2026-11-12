@@ -16,8 +16,9 @@ import { readCredentials } from "../../../runtime/bin/lib/account.mjs";
 import { inspectProject } from "../../../runtime/bin/lib/init.mjs";
 import { c, interactive, out, sym } from "../../../runtime/bin/lib/ui.mjs";
 import { requestPlan } from "../api.mjs";
+import { copyText, findAgents, startAgent } from "../fix.mjs";
 import { readNotes, saveNotes } from "../store.mjs";
-import { agree, clean, good, header, note, para, rule, spinner, typed, warn, width, wrap } from "../tui.mjs";
+import { agree, clean, good, header, note, para, PROMPT, rule, spinner, typed, visible, warn, width, wrap } from "../tui.mjs";
 import { AREAS, runChecks } from "./checks.mjs";
 import { buildDigest, describeDigest } from "./digest.mjs";
 import { collectRepoFacts } from "./repo.mjs";
@@ -69,8 +70,18 @@ const dots = (weight) => (weight >= 5 ? c.red("urgent") : weight >= 4 ? c.yellow
 /** Prints one item of the plan. */
 function printItem(i, full) {
   out();
-  out(`  ${c.bold(String(i.n).padStart(2))}  ${c.bold(clean(i.title, 90))}  ${c.gray(`${AREAS[i.area] ?? i.area} ${sym.dot}`)} ${dots(i.weight)}`);
-  for (const e of i.evidence ?? []) out(`      ${c.gray(`${sym.arrow} ${clean(e, width() - 10)}`)}`);
+  const title = `  ${c.bold(String(i.n).padStart(2))}  ${c.bold(clean(i.title, 90))}`;
+  const tag = `${c.gray(`${AREAS[i.area] ?? i.area} ${sym.dot}`)} ${dots(i.weight)}`;
+  if (visible(title) + 2 + visible(tag) <= width()) out(`${title}  ${tag}`);
+  else {
+    out(title);
+    out(`      ${tag}`);
+  }
+  for (const e of i.evidence ?? []) {
+    const [first = "", ...rest] = wrap(clean(e, 400), width() - 10);
+    out(`      ${c.gray(`${sym.arrow} ${first}`)}`);
+    for (const l of rest) out(`        ${c.gray(l)}`);
+  }
   if (!full) return;
   para(clean(i.why, 600), "      ");
   out(`      ${c.cyan("Do")}  ${wrap(clean(i.step, 400), width() - 12).join("\n          ")}`);
@@ -83,6 +94,59 @@ function printItem(i, full) {
  * @param {{ fetchFn?: typeof fetch, dns?: object, runGit?: Function }} [deps]
  * @returns {Promise<number>} the exit code: 0, or 1 when the site was named and could not be reached at all
  */
+/**
+ * The whole list as one prompt for a coding agent in the repository: each item with its reason, first step and
+ * prompt (the ones the plan shows), the rest by title, most important first, and how to check the work.
+ */
+export function suggestionsPrompt(items, url = null) {
+  const lines = [
+    `GenClass checked this repository${url ? ` and the live site ${url}` : ""} and found ${items.length} thing${items.length === 1 ? "" : "s"} to fix, most important first. Work through them one at a time, in this order. After each one, run \`npx genclass suggest --json\` and check that it no longer lists it.`,
+    "",
+  ];
+  for (const i of items) {
+    lines.push(`${i.n}. ${i.title}${i.evidence ? ` (found: ${i.evidence})` : ""}`);
+    if (i.open) {
+      if (i.why) lines.push(`   Why: ${i.why}`);
+      if (i.step) lines.push(`   First step: ${i.step}`);
+      if (i.prompt) lines.push(`   ${i.prompt}`);
+    } else lines.push("   Look at what this check measures and fix it the usual way for this framework.");
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
+
+/**
+ * After the list, on a terminal: hand every item to a coding agent in one go, as numbered choices (each agent
+ * installed here, copy the prompt, print it). The agent starts in this folder with the prompt and the terminal.
+ */
+async function handToAgent(items, url, cwd, o, deps, plan) {
+  const prompt = suggestionsPrompt(items, url);
+  const agents = (deps.agents ?? findAgents)(o.agent ?? null);
+  const locked = items.filter((i) => !i.open).length;
+  out();
+  rule();
+  out(`  ${c.bold(`Hand ${items.length === 1 ? "it" : `all ${items.length}`} to your coding agent?`)}`);
+  if (locked) note(`On ${plan?.plan?.name ?? "Free"} it gets the steps for ${items.length - locked} of them and the rest by title. Every step for every one: npx genclass upgrade`);
+  const choices = [
+    ...agents.map((a) => [`Start ${a.name} with the list`, async () => {
+      out(`  ${c.gray(sym.arrow)} Starting ${c.bold(a.name)} in this folder, with the list.`);
+      const code = await (deps.start ?? startAgent)(a, prompt, cwd);
+      if (code === null) {
+        warn(`${a.name} did not start. The prompt, to paste by hand:`);
+        out(prompt);
+      }
+    }]),
+    ["Copy the prompt", async () => ((await (deps.copy ?? copyText)(prompt)) ? good("Copied. Paste it into your coding agent.") : out(prompt))],
+    ["Print the prompt", async () => out(`\n${prompt}\n`)],
+  ];
+  choices.forEach(([label], i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${label}`));
+  if (!agents.length) note("No coding agent's command found here (claude, codex, cursor-agent, gemini).");
+  out();
+  const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("not now")}  `);
+  const pick = a !== null && /^\d+$/.test(a.trim()) ? choices[Number(a.trim()) - 1] : null;
+  if (pick) await pick[1]();
+}
+
 export async function suggest(o = {}, deps = {}) {
   const st = inspectProject({ cwd: o.cwd });
   const cwd = st.cwd;
@@ -99,7 +163,7 @@ export async function suggest(o = {}, deps = {}) {
   if (!quiet) header({ app: repo.name ?? st.project.name, framework: st.project.label || null, account: readCredentials()?.account?.email ?? null });
   if (!url && !quiet && !o.yes && interactive()) {
     para("Where is this app live? With its address GenClass also checks what search engines, AI assistants and visitors get from it.", "  ");
-    const a = await typed(`  ${c.bold("Address")} ${c.gray("(https://example.com, or Enter to check the repository only)")} `);
+    const a = await typed(`  ${c.bold("Address")} ${c.gray("(or Enter for the repository only)")} `);
     url = siteAddress(a);
     if (a && !url) warn("That is not a site address, so only the repository is checked this time.");
   }
@@ -124,12 +188,12 @@ export async function suggest(o = {}, deps = {}) {
   let planNote = null;
   if (o.noModel) planNote = "Ordered by the checks' own weights (--no-model: nothing was sent).";
   else if (!failed.length) planNote = null;
-  else if (!creds) planNote = `Ordered by the checks' own weights. Sign in (${c.cyan("genclass login")}) and the order and the reasons are written for your app.`;
+  else if (!creds) planNote = `Ordered by the checks' own weights. Sign in (${c.cyan("npx genclass login")}) and the order and the reasons are written for your app.`;
   else {
     let agreed = o.yes || notes.sendOk === true;
     if (!agreed && !quiet && interactive()) {
       out();
-      out(`  ${c.bold("To write the plan for your app, this is sent to genclass.dev:")}`);
+      out(`  ${c.bold("To write your plan, this is sent to genclass.dev:")}`);
       for (const l of describeDigest(digest)) para(l, "    ", c.gray);
       agreed = (await agree("Send it?")) === true;
       if (agreed) saveNotes(cwd, { sendOk: true });
@@ -174,12 +238,12 @@ export async function suggest(o = {}, deps = {}) {
   const total = passed.length + failed.length;
   out(`  ${c.bold(`${passed.length} of ${total} checks pass.`)} ${failed.length ? `${failed.length} to do${failed.some((r) => r.weight >= 5) ? `, ${failed.filter((r) => r.weight >= 5).length} of them urgent` : ""}.` : c.green("Nothing to do.")}`);
   if (planNote) note(planNote);
-  if (!site?.reachable) note(url ? "The site could not be read, so only the repository was checked." : `Only the repository was checked. With the site's address there is more: ${c.cyan("genclass suggest https://your-site.com")}`);
+  if (!site?.reachable) note(url ? "The site could not be read, so only the repository was checked." : `Only the repository was checked. With the site's address there is more: ${c.cyan("npx genclass suggest https://your-site.com")}`);
   const fullCount = o.all ? items.length : 5;
   for (const i of items) printItem(i, i.open && i.n <= fullCount);
   if (items.some((i) => i.open && i.n > fullCount)) {
     out();
-    note(`Items ${fullCount + 1} and after are listed by title. ${c.cyan("genclass suggest --all")} prints each one's reason, first step and prompt.`);
+    note(`Items ${fullCount + 1} and after are listed by title. ${c.cyan("npx genclass suggest --all")} prints each one's reason, first step and prompt.`);
   }
   if (locked.length) {
     out();
@@ -189,13 +253,18 @@ export async function suggest(o = {}, deps = {}) {
   }
   if (unknown.length) {
     out();
-    note(`Not checked (${unknown.length}): ${unknown.map((r) => r.id).join(", ")}.`);
+    // without the site's address these could not be measured: a count is enough, the line above says how to get them
+    if (!site?.reachable) note(`${unknown.length} more checks need your live site${url ? "" : `: ${c.cyan("npx genclass suggest https://your-site.com")}`}.`);
+    else note(`${unknown.length} check${unknown.length === 1 ? "" : "s"} could not be measured on this site this time.`);
   }
   out();
   if (failed.length) {
-    good("Fix one, then run genclass suggest again: it measures everything afresh.");
+    good("Fix one, then run it again: everything is measured afresh.");
+    out(`    ${c.cyan("npx genclass suggest")}`);
     note(`With a coding agent: paste an "Ask your agent" block, or tell it to run ${c.cyan("npx genclass suggest --json")} and work through the list.`);
   }
+  // on a terminal: every item handed to a coding agent in one go (Claude Code, Codex, Cursor, Gemini CLI)
+  if (items.length && interactive() && !o.yes) await handToAgent(items, site?.reachable ? url : null, cwd, o, deps, plan);
   out();
   return url && site && !site.reachable && o.url ? 1 : 0;
 }

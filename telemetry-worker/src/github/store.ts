@@ -1,6 +1,6 @@
 // What the GitHub App keeps in D1 (migrations/0013_github_app.sql): installations, linked repositories, what it did
 // once per repository, what it posted per pull request, webhook deliveries, hourly review counts and Marketplace plans.
-// And (migrations/0016_github_install_days.sql) how many installations were added and removed on each UTC day.
+// And (migrations/0018_github_install_days.sql) how many installations were added and removed on each UTC day.
 //
 // Invariants:
 // - Nothing here holds code, diffs, race files or tokens. A pull request's row holds ids, hashes and the short titles
@@ -155,7 +155,7 @@ const FACT_COLUMNS = "repo_id, installation_id, evidence, intro, plan_notice, is
 
 /**
  * Run `rest` in one transaction with `count`, a statement that adds to the day's install counts. Only when the
- * database has no github_install_days (migration 0016 is not applied) `rest` runs alone: an install or an uninstall
+ * database has no github_install_days (migration 0018 is not applied) `rest` runs alone: an install or an uninstall
  * never waits on, or fails for, its count. Any other failure is thrown as it is.
  */
 async function withDayCount(db: D1Like, count: D1Stmt, rest: D1Stmt[]): Promise<void> {

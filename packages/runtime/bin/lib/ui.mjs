@@ -2,6 +2,7 @@
 // No dependencies (Node >= 20).
 
 import { createInterface } from "node:readline";
+import { Writable } from "node:stream";
 
 const env = process.env;
 const tty = !!process.stdout.isTTY;
@@ -200,12 +201,14 @@ export function stopOnEnter() {
   };
 }
 
-export async function ask(question) {
+export async function ask(question, opts = {}) {
   if (!interactive()) return null;
   await lastClosed;
+  // `hidden`: what is typed is a secret (a key, a webhook address): it is never written back to the terminal
+  const hidden = !!opts.hidden;
   if (typedAhead.length) {
     const a = typedAhead.shift();
-    process.stdout.write(`${question}${a}\n`);
+    process.stdout.write(`${question}${hidden ? "" : a}\n`);
     return a.trim();
   }
   if (inputEnded) {
@@ -213,7 +216,14 @@ export async function ask(question) {
     return "";
   }
   return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    let mute = false;
+    const quiet = new Writable({
+      write(chunk, enc, done) {
+        if (!mute) process.stdout.write(chunk, enc);
+        done();
+      },
+    });
+    const rl = createInterface(hidden ? { input: process.stdin, output: quiet, terminal: true } : { input: process.stdin, output: process.stdout });
     let answered = false;
     let closing = false;
     let closed;
@@ -222,7 +232,8 @@ export async function ask(question) {
     rl.on("line", (line) => typedAhead.push(line));
     rl.question(question, (line) => {
       // piped output (a log): keep the answer on the question's line
-      if (!process.stdout.isTTY) process.stdout.write(`${line}\n`);
+      if (hidden) process.stdout.write("\n");
+      else if (!process.stdout.isTTY) process.stdout.write(`${line}\n`);
       answered = true;
       resolve(line.trim());
       setImmediate(() => {
@@ -230,6 +241,7 @@ export async function ask(question) {
         rl.close();
       });
     });
+    mute = hidden; // the question is on the screen; what follows is the secret
     rl.on("SIGINT", () => {
       process.stdout.write("\n");
       err(`  Cancelled.`);

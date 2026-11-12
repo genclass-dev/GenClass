@@ -9,7 +9,9 @@
 //   clean() before it is printed: control characters and escape sequences are removed, so nothing a site or a model
 //   writes can move the cursor, recolour the terminal or hide a line.
 
-import { ask, c, choose, confirm, inputClosed, out, sym } from "../../runtime/bin/lib/ui.mjs";
+import { homedir } from "node:os";
+import { ask, c, choose, confirm, inputClosed, out, sym, useColor } from "../../runtime/bin/lib/ui.mjs";
+import { brand, markRows } from "./art.mjs";
 
 const tty = () => !!process.stdout.isTTY;
 const unicode = process.platform !== "win32" || !!process.env.WT_SESSION || !!process.env.TERM_PROGRAM;
@@ -56,19 +58,32 @@ export function wrap(text, cols = width() - 4) {
   return lines;
 }
 
-/** Prints `text` wrapped, every line behind `indent`. */
+/** Prints `text` wrapped, every line behind `indent`, none longer than the narrowest window the command draws for (width() less 2). */
 export function para(text, indent = "  ", paint = (s) => s) {
-  for (const l of wrap(text, width() - indent.length)) out(`${indent}${paint(l)}`);
+  for (const l of wrap(text, width() - 2 - indent.length)) out(`${indent}${paint(l)}`);
 }
 
 /** A horizontal rule as wide as the text. */
 export const rule = () => out(`  ${c.gray((unicode ? "─" : "-").repeat(width() - 4))}`);
+
+let homeApp = null;
+/** While the command's home is open on `app` ("" when it has none), views are not headed again; null ends it. */
+export const inHome = (app) => {
+  homeApp = app === null ? null : clean(app ?? "", 40);
+};
 
 /**
  * The header: the product, this app and its framework on one line, the account and its plan under it.
  * @param {{ app?: string | null, framework?: string | null, account?: string | null, plan?: string | null, host?: string | null }} h
  */
 export function header(h = {}) {
+  // in the command's home the card and the account were shown once, at the top: a view starts with a blank line,
+  // and names its app only when it is not the one the home is open on
+  if (homeApp !== null) {
+    out();
+    if (h.app && clean(h.app, 40) !== homeApp) out(`  ${c.bold(clean(h.app, 40))}`);
+    return;
+  }
   const left = `${c.bold(c.magenta("GenClass"))}${h.app ? ` ${c.gray(sym.dot)} ${c.bold(clean(h.app, 40))}` : ""}`;
   const right = h.framework ? c.gray(clean(h.framework, 40)) : "";
   const gap = Math.max(2, width() - 4 - visible(left) - visible(right));
@@ -79,6 +94,120 @@ export function header(h = {}) {
   if (h.host) out(`  ${c.yellow(sym.warn)} ${c.gray(`talking to ${clean(h.host, 60)} (GENCLASS_HOST is set: for tests only)`)}`);
   rule();
 }
+
+/** `text` (which may hold colour codes) in the middle of `cols` columns. */
+const centre = (text, cols) => {
+  const pad = Math.max(0, cols - visible(text));
+  const left = Math.floor(pad / 2);
+  return `${" ".repeat(left)}${text}${" ".repeat(pad - left)}`;
+};
+
+/** A folder as a person writes it: the home folder as ~, and only its end when it is longer than `max`. */
+export function folderName(dir, max = 48, home = homedir()) {
+  const d = String(dir ?? "");
+  const short = home && (d === home || d.startsWith(`${home}/`)) ? `~${d.slice(home.length)}` : d;
+  return short.length > max ? `…${short.slice(short.length - max + 1)}` : short;
+}
+
+/** What to call the person on the card: the start of their email address or their GitHub name, else nothing. */
+export function firstName(label) {
+  const l = clean(label ?? "", 80);
+  const raw = /^GitHub (\S+)$/.exec(l)?.[1] ?? (l.includes("@") ? l.split("@")[0].split(/[._+-]/)[0] : "");
+  const name = raw.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 24);
+  return name ? name[0].toUpperCase() + name.slice(1) : null;
+}
+
+/**
+ * The welcome card, the first thing the command shows on a terminal: the product's name in the border with the
+ * version, a welcome, the mark, and three quiet lines (the app, the account, the folder). As wide as the rule under
+ * the other screens, so everything below lines up with it.
+ * @param {{ app?: string | null, framework?: string | null, account?: string | null, plan?: string | null, host?: string | null, cwd?: string | null, version?: string | null }} h
+ */
+export function card(h = {}) {
+  const inner = width() - 6;
+  const B = unicode ? { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" } : { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" };
+  // the name as the logo writes it: the first half plain, the second in the logo's green
+  const title = ` ${c.bold("Gen")}${c.bold(brand("Class"))} `;
+  const version = h.version ? ` ${c.gray(`v${clean(h.version, 20)}`)} ` : "";
+  const row = (text = "") => out(`  ${brand(B.v)}${centre(text, inner)}${brand(B.v)}`);
+  const fit = (text) => clean(text, inner - 4);
+  const name = h.account ? firstName(h.account) : null;
+  out();
+  out(`  ${brand(B.tl + B.h)}${title}${brand(B.h.repeat(Math.max(0, inner - 2 - visible(title) - visible(version))))}${version}${brand(B.h + B.tr)}`);
+  row();
+  row(c.bold(h.account ? `Welcome back${name ? `, ${name}` : ""}!` : "Welcome to GenClass"));
+  if (!h.account) {
+    row();
+    // one line where it fits, else two halves that read as halves (never one word alone on the second line)
+    const halves = ["Finds what breaks in your web app,", "and tells you what it needs next."];
+    for (const l of halves.join(" ").length <= inner - 6 ? [halves.join(" ")] : halves) row(c.gray(l));
+  }
+  row();
+  if (unicode) {
+    for (const m of markRows()) row(m);
+    row();
+  }
+  const app = [h.app ? clean(h.app, 40) : null, h.framework ? clean(h.framework, 40) : null].filter(Boolean).join(` ${sym.dot} `);
+  if (app) row(c.gray(fit(app)));
+  row(c.gray(fit([h.account ? clean(h.account, 50) : "not signed in", h.plan ? `${clean(h.plan, 20)} plan` : null].filter(Boolean).join(` ${sym.dot} `))));
+  if (h.cwd) row(c.gray(folderName(h.cwd, inner - 4)));
+  row();
+  out(`  ${brand(B.bl + B.h.repeat(inner) + B.br)}`);
+  if (h.host) {
+    out();
+    out(`  ${c.yellow(sym.warn)} ${c.gray(`talking to ${clean(h.host, 60)} (GENCLASS_HOST is set: for tests only)`)}`);
+  }
+  out();
+}
+
+/**
+ * The plan step's card: the paid plan, large. Its name in capitals with the price on the same line, what it is in
+ * one sentence, and the lines of its card on genclass.dev, each with a tick. As wide as the welcome card. Every word
+ * of it is the server's (the plans file), cleaned like any text that is not this program's.
+ * @param {{ plan: { name: string }, price: string, summary?: string | null, features: string[] }} offer
+ * @param {string | null} [app] the project it is chosen for
+ */
+export function planCard(offer, app) {
+  const inner = width() - 6;
+  const B = unicode ? { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" } : { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" };
+  const title = ` ${c.bold(app ? `A plan for ${clean(app, 30)}` : "A plan for this project")} `;
+  const row = (text = "") => out(`  ${brand(B.v)}   ${text}${" ".repeat(Math.max(0, inner - 3 - visible(text)))}${brand(B.v)}`);
+  const room = inner - 6;
+  out();
+  out(`  ${brand(B.tl + B.h)}${title}${brand(B.h.repeat(Math.max(0, inner - 1 - visible(title))))}${brand(B.tr)}`);
+  row();
+  // the name, large: capitals with air between the letters, the price at the far end of the line
+  const name = badge(clean(offer.plan.name, 20).toUpperCase().split("").join(" "));
+  const price = c.bold(clean(offer.price, 40));
+  if (visible(name) + 2 + visible(price) <= room) row(`${name}${" ".repeat(room - visible(name) - visible(price))}${price}`);
+  else {
+    row(name);
+    row(price);
+  }
+  if (offer.summary) for (const l of wrap(clean(offer.summary, 200), room)) row(c.gray(l));
+  row();
+  for (const f of offer.features) {
+    const [first = "", ...rest] = wrap(clean(f, 120), room - 2);
+    row(`${c.green(sym.ok)} ${first}`);
+    for (const l of rest) row(`  ${l}`);
+  }
+  row();
+  out(`  ${brand(B.bl + B.h.repeat(inner) + B.br)}`);
+}
+
+/** `text` as a filled label in the brand's green (bold; plain bold where there is no colour). */
+const badge = (text) => (useColor ? `${String.fromCharCode(27)}[7m${c.bold(brand(` ${text} `))}${String.fromCharCode(27)}[27m` : c.bold(` ${text} `));
+
+/** The bar that stands beside a note. */
+const BAR = () => brand(unicode ? "▎" : "|");
+
+/** `text` wrapped, every line beside the bar. */
+export function barPara(text, paint = c.gray) {
+  for (const l of wrap(text, width() - 6)) out(`  ${BAR()} ${paint(l)}`);
+}
+
+/** The mark a question starts with. */
+export const PROMPT = () => brand(unicode ? "❯" : ">");
 
 const MARK = {
   done: () => c.green(sym.ok),
@@ -111,24 +240,40 @@ export function checklist(steps) {
  */
 export function summary(steps) {
   const room = width() - 4 - 3 - 9;
-  const names = (list) => clean(list.map((s) => s.title).join(` ${sym.dot} `), room);
-  const line = (mark, label, text) => out(`  ${mark}  ${label}${text}`);
+  // a list of names that does not fit goes on under itself, never cut short with an ellipsis
+  const names = (list) => {
+    const lines = [];
+    let line = "";
+    for (const t of list.map((s) => s.title)) {
+      if (line && visible(line) + 3 + t.length > room) {
+        lines.push(`${line} ${sym.dot}`);
+        line = t;
+      } else line = line ? `${line} ${sym.dot} ${t}` : t;
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
+  const line = (mark, label, text) => {
+    const [first = "", ...rest] = Array.isArray(text) ? text : [text];
+    out(`  ${mark}  ${label}${Array.isArray(text) ? c.gray(first) : first}`);
+    for (const l of rest) out(`  ${" ".repeat(12)}${c.gray(l)}`);
+  };
   const pad = (label) => label.padEnd(9);
   const done = steps.filter((s) => s.state === "done");
   const next = steps.find((s) => s.state === "next");
   const later = steps.filter((s) => s.state === "todo");
-  if (done.length) line(MARK.done(), pad("Done"), c.gray(names(done)));
+  if (done.length) line(MARK.done(), pad("Done"), names(done));
   for (const b of steps.filter((s) => s.state === "blocked")) line(MARK.blocked(), pad(b.title), c.gray(clean(b.detail ?? "", room)));
   if (next) line(MARK.next(), c.bold(pad("Next")), c.bold(clean(next.doing ?? next.title, room)));
   for (const w of steps.filter((s) => s.state === "waiting")) line(MARK.waiting(), pad("Waiting"), c.gray(clean(`${w.title}: ${w.detail ?? ""}`, room)));
-  if (later.length) line(MARK.todo(), c.gray(pad("Later")), c.gray(names(later)));
+  if (later.length) line(MARK.todo(), c.gray(pad("Later")), names(later));
 }
 
 /** The block under the checklist that says what comes next and why, in plain words. */
 export function nextBlock(title, text) {
   out();
-  out(`  ${c.cyan(c.bold("Next"))}  ${c.bold(title)}`);
-  if (text) para(text, "        ", c.gray);
+  out(`  ${BAR()} ${c.cyan(c.bold("Next"))}  ${c.bold(title)}`);
+  if (text) barPara(text);
 }
 
 /**
@@ -149,6 +294,12 @@ export async function pick(question, labels, def = 0) {
 /** One line typed at `question`; null when stdin is not a terminal or input has ended. */
 export async function typed(question) {
   const a = await ask(question);
+  return a === null || (a === "" && inputClosed()) ? null : a;
+}
+
+/** One line typed at `question` that is never shown (a key, a webhook address); null when stdin is not a terminal or input has ended. */
+export async function secret(question) {
+  const a = await ask(question, { hidden: true });
   return a === null || (a === "" && inputClosed()) ? null : a;
 }
 

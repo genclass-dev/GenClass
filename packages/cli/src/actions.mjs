@@ -19,14 +19,17 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { pollDeviceLogin, readCredentials, saveCredentials, startDeviceLogin } from "../../runtime/bin/lib/account.mjs";
+import { detectProject } from "../../runtime/bin/lib/detect.mjs";
 import { apiHost, hostConfig, hostUrl } from "../../runtime/bin/lib/host.mjs";
-import { accountLabel, run as runInit } from "../../runtime/bin/lib/init.mjs";
+import { accountLabel, inspectProject, run as runInit } from "../../runtime/bin/lib/init.mjs";
 import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
 import { c, interactive, out, printChange, stopOnEnter, sym } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "./assets.mjs";
-import { WORKFLOW_PATH } from "./state.mjs";
-import { agree, bad, good, note, spinner, warn } from "./tui.mjs";
+import { freeLimits, WORKFLOW_PATH } from "./state.mjs";
+import { saveNotes } from "./store.mjs";
+import { agree, bad, clean, good, note, planCard, PROMPT, spinner, typed, warn } from "./tui.mjs";
+import { planViteSettings } from "./vite.mjs";
 
 /** Resolves after `ms`, or at once when `signal` aborts. */
 const nap = (ms, signal) =>
@@ -77,7 +80,7 @@ export async function signIn(o = {}) {
   }
   out();
   out(`  Open  ${c.cyan(dev.verification_uri_complete)}`);
-  out(`  Code  ${c.bold(dev.user_code)}  ${c.gray("(check that the page shows the same code, then approve)")}`);
+  out(`  Code  ${c.bold(dev.user_code)}  ${c.gray("(the page must show the same code)")}`);
   out();
   if (openBrowser(dev.verification_uri_complete, o)) note("Your browser is opening that page.");
   const stop = stopOnEnter();
@@ -85,16 +88,121 @@ export async function signIn(o = {}) {
   const r = await pollDeviceLogin(dev, { signal: stop.signal });
   await stop.done();
   if (!r.ok && r.error === "cancelled") {
-    sp.stop("warn", "Stopped waiting. Nothing was signed in; run genclass again when you want to.");
+    sp.stop("warn", "Stopped waiting. Nothing was signed in; run npx genclass again when you want to.");
     return "skipped";
   }
   if (!r.ok) {
-    sp.stop("bad", r.error === "access_denied" ? "The sign-in was denied in the browser." : r.error === "expired_token" ? "The code expired before it was approved. Run genclass again for a new one." : `The sign-in did not finish: ${r.reason}`);
+    sp.stop("bad", r.error === "access_denied" ? "The sign-in was denied in the browser." : r.error === "expired_token" ? "The code expired before it was approved (codes last ten minutes)." : `The sign-in did not finish: ${r.reason}`);
     return "failed";
   }
   saveCredentials({ host: apiHost(), access_token: r.access_token, account: r.account });
   sp.stop("ok", `Signed in as ${c.bold(accountLabel(r.account))}`);
   return "done";
+}
+
+// ------------------------------------------------------------------------------------------------ 1b. the plan
+
+/**
+ * The plan step, for an account on Free that can buy a plan here: the paid plan's card, then one question. Enter
+ * opens that plan's checkout in the browser (genclass.dev sends the person straight to Stripe) and waits for the
+ * payment; f goes on with Free for this project, and that choice is remembered so the project is asked once. With
+ * --yes, or with nobody at a terminal, nothing is bought and nothing is opened: it is Free for now, said in one line
+ * with where the plan starts. Returns "done", "skipped" (asked again next run) or "quit" (q: stop the walk).
+ * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
+ */
+export async function choosePlan(state, o = {}, deps = {}) {
+  const offer = state.steps.find((s) => s.id === "plan")?.offer;
+  if (!offer) return "skipped";
+  // plans per project: the choice is made on the app's own plan page
+  if (offer.project) return projectPlan(offer, o, deps);
+  const free = offer.free.name;
+  const limits = freeLimits(offer.free);
+  const stayFree = (line) => {
+    saveNotes(state.cwd, { plan: "free", planAt: new Date().toISOString() });
+    note(line);
+    return "done";
+  };
+  if (o.yes || !interactive()) return stayFree(`${free} for now (limited${limits ? `: ${limits}` : ""}). ${offer.plan.name}, ${offer.price}: ${offer.checkoutUrl}`);
+  planCard(offer, state.app?.name ?? null);
+  // the small way on, in the owner's words
+  out(`  ${c.gray(`f  Try ${free.toLowerCase()} for now (limited)`)}`);
+  const dot = c.gray("·");
+  const a = await typed(`  ${PROMPT()} ${c.bold("Enter")} ${c.gray(`to start ${offer.plan.name}`)} ${dot} ${c.bold("f")} ${c.gray("free for now")} ${dot} ${c.bold("q")} ${c.gray("stop")}  `);
+  if (a === null || /^q/i.test(a)) return "quit";
+  if (/^[fs]/i.test(a)) return stayFree(`${free} for now. ${offer.plan.name} any time: ${offer.checkoutUrl}`);
+  if (await checkout(offer, o, deps)) return "done";
+  note(`This project goes on with ${free} for now.`);
+  return "skipped";
+}
+
+/**
+ * Opens a plan's checkout in the browser and waits for the payment (Enter stops the wait). The page is
+ * genclass.dev's, the payment is Stripe's; this command never sees a card. Returns whether the plan became active.
+ * @param {{ plan: { name: string }, checkoutUrl: string }} offer
+ * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
+ */
+export async function checkout(offer, o = {}, deps = {}) {
+  return (await waitForPlan(offer, o, deps)) === "paid";
+}
+
+/**
+ * One app's plan, on its page in the browser (genclass.dev/account/billing?project=<id>): the paid plan large, with
+ * its price and what it has, and a very small "Try for free (limited)" under it (none for an app past the ones Free
+ * covers). The command opens the page and waits for the choice made there: a payment, or Free for now. Without a
+ * terminal (--yes, a coding agent) it opens the page and goes on, and the step stays open until the choice is made.
+ * Returns "done" once the app has its plan; "quit" when the wait ended without a choice (the setup stops there);
+ * "skipped" without a terminal.
+ * @param {{ plan: { name: string }, price: string, free: { name: string, apps: number | null }, checkoutUrl: string, project: { id: string, name: string, token: string }, needs: boolean }} offer
+ */
+export async function projectPlan(offer, o = {}, deps = {}) {
+  const name = clean(offer.project.name, 30);
+  planCard(offer, offer.project.name);
+  note(offer.needs ? `Free covers ${offer.free.apps ?? 3} apps and this is one more: it needs ${offer.plan.name}, ${offer.price}.` : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`);
+  if (o.yes || !interactive()) {
+    out(`  Open  ${c.cyan(offer.checkoutUrl)}`);
+    if (openBrowser(offer.checkoutUrl, o)) note("Your browser is opening its plan page. Run npx genclass again once it is chosen.");
+    return "skipped";
+  }
+  const got = await waitForPlan(offer, o, deps);
+  if (got) return "done";
+  // the setup goes on only once the app has its plan: Team, or Free with what stops the person from paying (the
+  // owner's call, 2026-11-12)
+  note(`The setup goes on once ${name} has its plan: ${offer.needs ? offer.plan.name : `${offer.plan.name}, or ${offer.free.name} for now`}, on ${offer.checkoutUrl}`);
+  return "quit";
+}
+
+/**
+ * Opens a plan's page in the browser and waits (Enter stops the wait): for the account's plan (a server from before
+ * plans per project), or for one app's: its payment, or Free chosen for it on the page. The page is genclass.dev's,
+ * the payment is Stripe's; this command never sees a card. Returns "paid", "free" or null.
+ */
+async function waitForPlan(offer, o = {}, deps = {}) {
+  const app = offer.project ? clean(offer.project.name, 30) : null;
+  out();
+  out(`  Open  ${c.cyan(offer.checkoutUrl)}`);
+  if (openBrowser(offer.checkoutUrl, o)) note(app ? `Your browser is opening the plan page for ${app}.` : "Your browser is opening the checkout.");
+  const creds = readCredentials();
+  const stop = stopOnEnter();
+  const sp = spinner(`${app && !offer.needs ? "Waiting for your choice in the browser" : "Waiting for the payment in the browser"}${canStop()}`);
+  const until = Date.now() + (deps.waitMs ?? 10 * 60_000);
+  let got = null;
+  while (creds && !stop.signal.aborted && Date.now() < until) {
+    await nap(deps.everyMs ?? 3000, stop.signal);
+    if (stop.signal.aborted) break;
+    const me = await fetchOverview(creds, deps);
+    if (!me.ok) continue;
+    if (offer.project) {
+      const p = me.projects.find((x) => x.token === offer.project.token);
+      if (p?.plan && (p.plan.id !== "free" || p.plan.source)) got = "paid";
+      else if (p?.planChosen && !offer.needs) got = "free";
+    } else if (me.plan && me.plan.id !== "free") got = "paid";
+    if (got) break;
+  }
+  await stop.done();
+  if (got === "paid") sp.stop("ok", `${offer.plan.name} is active${app ? ` for ${app}` : ""}. Thank you.`);
+  else if (got === "free") sp.stop("ok", `${app} is on ${offer.free.name} for now (limited).`);
+  else sp.stop("warn", app && !offer.needs ? "No choice yet." : `No payment yet. ${offer.plan.name} starts the moment the payment goes through.`);
+  return got;
 }
 
 // ------------------------------------------------------------------------------------------------ 2. the runtime
@@ -106,18 +214,68 @@ export async function signIn(o = {}) {
  * to the browser console, the dashboard and `genclass dashboard`.
  */
 export function runtimeArgs(state, o = {}) {
-  const connect = state.steps.find((s) => s.id === "runtime")?.run === "genclass connect";
-  // signed in one step earlier, so the app goes into that account without asking again
-  const args = ["--cwd", state.cwd, ...(o.yes ? ["--yes"] : []), ...(state.signedIn ? ["--in-account"] : [])];
-  // --brief: the walk has its own header, so init says the same things in a few lines
-  return { cmd: connect ? "connect" : "init", args: connect ? args : [...args, "--no-devtools", "--brief"] };
+  const connect = state.steps.find((s) => s.id === "runtime")?.run === "npx genclass connect";
+  const args = ["--cwd", state.cwd, ...(o.yes ? ["--yes"] : [])];
+  // connect takes only its own options (packages/runtime/bin/lib/login.mjs SPECS.connect): it asks which app of the
+  // account this is, and the account is the one signed in. init gets --in-account (signed in one step earlier, so
+  // the app goes into that account without asking again), --no-devtools and --brief (the walk has its own header,
+  // so init says the same things in a few lines)
+  return connect ? { cmd: "connect", args } : { cmd: "init", args: [...args, ...(state.signedIn ? ["--in-account"] : []), "--no-devtools", "--brief"] };
 }
 
-/** Adds the runtime with the runtime CLI's own init (fresh project) or connect (added, not in the account). */
+/**
+ * Adds the runtime with the runtime CLI's own init (fresh project) or connect (added, not in the account), then the
+ * two build settings an app on Vite 7 or earlier needs with it (vite.mjs). When those settings are all that is
+ * missing (the step says so), only they are written.
+ */
 export async function addRuntime(state, o = {}) {
-  const { cmd, args } = runtimeArgs(state, o);
-  const code = cmd === "connect" ? await runLogin("connect", args) : await runInit("init", args);
-  return code === 0 ? "done" : "failed";
+  if (!state.steps.find((s) => s.id === "runtime")?.vite) {
+    const { cmd, args } = runtimeArgs(state, o);
+    const code = cmd === "connect" ? await runLogin("connect", args) : await runInit("init", args);
+    if (code !== 0) return "failed";
+    // init returns 0 when the person says no to its change: then there is no GenClass to add Vite settings for
+    if (inspectProject({ cwd: state.cwd }).fresh) return "skipped";
+  }
+  return (await addViteSettings(state, o)) === "failed" ? "failed" : "done";
+}
+
+/** Shows the two Vite settings and writes them on a yes (--yes, or one question on a terminal). */
+export async function addViteSettings(state, o = {}) {
+  let plan = null;
+  try {
+    plan = planViteSettings(state.cwd, detectProject(state.cwd));
+  } catch {
+    plan = null;
+  }
+  if (!plan) return "done";
+  out();
+  if (plan.note) {
+    warn(plan.note);
+    return "skipped";
+  }
+  warn(`Vite ${plan.major} needs two settings for the model's worker.`);
+  note('Without them "vite build" fails.');
+  out();
+  printChange(plan.change);
+  if (!o.yes) {
+    if (!interactive()) {
+      note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write them.`);
+      return "skipped";
+    }
+    if (!(await agree("Add them?"))) {
+      note("Left as it is. The two lines are above when you want them.");
+      return "skipped";
+    }
+  }
+  try {
+    writeFileSync(plan.change.path, plan.change.after);
+  } catch (e) {
+    bad(`Could not write ${plan.change.file}: ${e?.message ?? e}`);
+    return "failed";
+  }
+  good(`${plan.change.kind === "create" ? "Wrote" : "Updated"} ${c.bold(plan.change.file)} ${c.gray("(your build and dev server now handle the model's worker)")}`);
+  note("Vite 8 needs neither setting. npx genclass remove takes them out again.");
+  return "done";
 }
 
 // ------------------------------------------------------------------------------------------------ 3. first page
@@ -125,7 +283,10 @@ export async function addRuntime(state, o = {}) {
 /** Waits (up to `seconds`) for genclass.dev to have received a first event from this app. */
 export async function watchFirstPage(state, o = {}) {
   const creds = readCredentials();
-  if (!creds || !state.app.token) return "skipped";
+  if (!creds || !state.app.token) {
+    note(!creds ? "Sign in first: npx genclass login. The first page is looked for in your account." : "Put this app in your account first: npx genclass connect");
+    return "skipped";
+  }
   if (!o.yes && interactive()) {
     const ok = await agree("Is your site deployed with GenClass in it? I will watch for its first page for two minutes", false);
     if (!ok) {
@@ -147,7 +308,7 @@ export async function watchFirstPage(state, o = {}) {
     }
   }
   await stop.done();
-  sp.stop("warn", "Nothing arrived yet. GenClass sends nothing from localhost or a private address; run genclass again after the live site was opened.");
+  sp.stop("warn", "Nothing arrived yet. GenClass sends nothing from localhost or a private address; run npx genclass again after the live site was opened.");
   return "skipped";
 }
 
@@ -179,7 +340,7 @@ export async function addWorkflow(state, o = {}) {
   const file = join(root, WORKFLOW_PATH);
   if (!o.yes && !o.confirmed) {
     if (!interactive()) {
-      note(`Not a terminal: run ${c.cyan("genclass setup --yes")} to write ${WORKFLOW_PATH}.`);
+      note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write ${WORKFLOW_PATH}.`);
       return "skipped";
     }
     if (!(await agree(`Write ${WORKFLOW_PATH}?`))) return "skipped";
@@ -226,7 +387,10 @@ async function waitForGithub(creds, repo, text, until, seconds) {
 export async function connectGithubApp(state, o = {}) {
   const creds = readCredentials();
   const repo = state.git.github;
-  if (!creds || !repo) return "skipped";
+  if (!creds || !repo) {
+    note(!creds ? "Sign in first: npx genclass login. The GitHub App is connected to your account." : "This folder is not a repository on GitHub, so there is nothing to connect.");
+    return "skipped";
+  }
   // a genclass.dev with no GitHub App (a collector someone hosts themselves): nothing to connect, and no waiting
   if (state.account?.github && state.account.github.app === false) {
     note("This genclass.dev has no GitHub App, so there is nothing to connect here.");
@@ -259,7 +423,7 @@ export async function connectGithubApp(state, o = {}) {
       return "done";
     }
     if (!st.ok || !st.known) {
-      warn(`No answer yet. Make sure the browser is signed in to the same GenClass account as this command, then run genclass again.`);
+      warn(`No answer yet. Make sure the browser is signed in to the same GenClass account as this command, then run npx genclass again.`);
       return "skipped";
     }
   }
@@ -311,7 +475,7 @@ export function planAgentConfig(dir) {
 
 /** Where the skill goes in a project: Claude Code reads a project's skills from here, as `npx @genclass/mcp init` writes it. */
 export const SKILL_PATH = ".claude/skills/genclass/SKILL.md";
-const SKILL_MARK = "genclass:init";
+export const SKILL_MARK = "genclass:init";
 
 /**
  * The skill file as this command writes it: the MCP package's own skill with a marker line after its front matter
@@ -349,7 +513,7 @@ export async function connectAgent(state, o = {}) {
     out();
     printChange(plan.change);
     if (!interactive()) {
-      note(`Not a terminal: run ${c.cyan("genclass setup --yes")} to write it.`);
+      note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write it.`);
       return "skipped";
     }
     if (!(await agree("Write this change?"))) return "skipped";

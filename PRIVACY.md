@@ -142,11 +142,11 @@ and invite links.
 
 ## Paid plans, payments and Stripe
 
-Free costs nothing, Team is sold on genclass.dev per developer (since 11 November 2026), and Enterprise is agreed by
+Free costs nothing, Team is sold on genclass.dev per project (since 12 November 2026; per developer from 11 November), and Enterprise is agreed by
 email. A plan decides what your dashboard shows, never what is collected: an app that turned visitor analytics on has
 them counted on Free too, and they show once its plan includes them. A paid plan (Team; the Individual plan was one
 until 22 October 2026) is paid through Stripe, which processes payments
-for us. We keep the number of seats your subscription pays for, next to its status. When you upgrade, we send Stripe
+for us. We keep which app a subscription pays for (or, for a plan bought per developer, the number of seats), next to its status. When you choose Free for an app, we keep when, the reason you picked and anything you wrote (at most 500 characters), and we read them to improve our plans. When you upgrade, we send Stripe
 your account's email (if it has one) and your GenClass account id, and you type your card or other payment details
 into Stripe's own checkout page: they go to Stripe and never reach GenClass. Stripe handles them under its own privacy
 policy (stripe.com/privacy) and keeps your invoices and receipts, which you can see under Manage billing on your
@@ -232,6 +232,36 @@ their machine to do that. The files stay there.
 command-line sign-in, the same counts the dashboard page on genclass.dev shows for that app, and nothing else. The
 page where a sign-in is approved says the terminal can do this; a sign-in approved before that page said so (before
 2026-11-12) cannot, and is asked to sign in again. Nothing new is collected or stored for it.
+
+**What a terminal can do** is what the page where its sign-in is approved lists, and nothing else: list and create
+apps, show the apps' dashboards, visitor analytics and stored events, ask the model about an app, show and change
+where an app's alerts are sent, its funnels and its private dashboard link, and show the plan and the team and make
+a team invite link. It cannot change how the account signs in, pay, remove people, or delete an app or the account.
+A sign-in approved before the page listed something cannot do it and is asked to sign in again. The views
+(`genclass problems`, `analytics`, `events`, `health`, `report`, `export`) read what the account's dashboard and
+its export already hold; nothing new is collected or stored for them. A destination's address or key typed at
+`genclass connections add` is not shown, is sent to genclass.dev once over HTTPS, is stored encrypted there like one
+typed on the dashboard, and is not kept on the developer's machine.
+
+**`genclass ask`** answers a question about an app in words. The question, and at most three earlier questions and
+answers of the same sitting, leave the developer's machine. On genclass.dev we add the numbers that account's
+dashboard already shows for the app and period (page paths, kinds of problem, counts, what the runtime did, what the
+coding agent reported and, where the plan has visitor analytics, visits, sources, devices, countries and the names
+of clicked elements) and pass both to a language model (OpenAI's API), then return its answer. No source code is
+involved: we have none. We do not store or log the question, the numbers sent or the answer; we keep the same one
+number as for suggestions, how many model runs an account used on a day, for 3 days. The command says this before
+the first question and waits for the developer's Enter. OpenAI processes it under its API terms, and nothing from it
+is used to train GenClass's own model.
+
+**`genclass fix`** hands a problem to the developer's own coding agent. It builds a prompt on their machine from the
+dashboard's numbers (the kind of problem, the pages, the counts) and starts the agent they have installed with it,
+or copies or prints it. The prompt is sent nowhere by us, and GenClass changes no code.
+
+**The GitHub App step** asks genclass.dev whether the app is on the project's repository, by the repository's name
+(`owner/name`, read from the git remote). When the answer is "not installed", the command also asks github.com where
+that name leads now (one `HEAD https://github.com/owner/name`, no sign-in, no cookies), because a repository renamed
+on GitHub is known to genclass.dev under its new name. Nothing but the repository's address is sent, and a private
+repository answers "not found" and is left as it is.
 
 **`genclass suggest`** measures the project and its live site against a list of checks. Two things leave the machine:
 

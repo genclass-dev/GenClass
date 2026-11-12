@@ -539,8 +539,12 @@ describe("accounts: device flow for the CLI (RFC 8628)", () => {
     expect(page).toContain("genclass-runtime 0.3.0");
     // the warning comes before the buttons, and the scope says what a CLI session can and cannot do
     expect(page.indexOf("Approve only a sign-in you started")).toBeLessThan(page.indexOf('id="yes"'));
-    expect(page).toContain("show your apps' dashboards");
-    expect(page).toContain("It cannot change how you sign in.");
+    // what the terminal can do is a list, each line something a route does for it (src/cli.ts), and what it never can
+    expect(page).toContain("show your apps' dashboards, visitor analytics and stored events");
+    expect(page).toContain("your question and the app's numbers go to the model");
+    expect(page).toContain("show and change where an app's alerts are sent, its funnels, and its private dashboard link");
+    expect(page).toContain("make a team invite link");
+    expect(page).toContain("It cannot change how you sign in, pay for anything, remove people, or delete an app or your account.");
     // the page names the command that asked: the runtime CLI's login here, `npx genclass` for the genclass command
     expect(page).toContain("If you did not run <code>npx @genclass/runtime@beta login</code> yourself just now");
     const cli = (await (await call(env, "POST", "/api/device/code", { body: { client_name: "genclass 0.2.2" }, origin: null })).json()) as any;
@@ -2053,7 +2057,8 @@ describe("accounts: the agent link (POST /api/account/projects/<id>/link) and St
     expect(html).toContain('<form class="pnl newp" id="new-app" novalidate>');
     expect(html).toContain("<option>ada&#39;s Org</option>");
     expect(html).toContain('gcPost("/api/account/projects", { name: name.value })');
-    expect(html).toContain('"/account/apps/" + encodeURIComponent(j.project.id) + "#connect"');
+    // a new app goes to its plan page first (Team large, Free small), which goes on to Connect
+    expect(html).toContain('"/account/billing?project=" + encodeURIComponent(j.project.id) + "&new=1"');
     expect(html).toContain('<a class="btn ghost" href="/account">Cancel</a>');
     // the Projects page offers it, and lists each project as a card
     await call(env, "POST", "/api/account/projects", { body: { name: "Shop" }, cookie });
@@ -2634,7 +2639,7 @@ describe("POST /start signed in: the one click puts the app in the account", () 
     const cookie = sessionOf(up.res);
     const form = await call(env, "POST", "/start", { cookie });
     expect(form.status).toBe(303);
-    expect(form.headers.get("location")).toMatch(/^\/account\/apps\/[^/]+#connect$/);
+    expect(form.headers.get("location")).toMatch(/^\/account\/billing\?project=[^&/]+&new=1$/);
     const owned = sql.rows("SELECT token, account_id, private_link FROM projects");
     expect(owned).toHaveLength(1);
     expect(owned[0]).toMatchObject({ account_id: up.json.account.id, private_link: 0 });

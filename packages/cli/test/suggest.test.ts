@@ -8,7 +8,7 @@ import { readState } from "../src/state.mjs";
 import { readNotes } from "../src/store.mjs";
 import { CHECKS, runChecks } from "../src/suggest/checks.mjs";
 import { buildDigest, describeDigest } from "../src/suggest/digest.mjs";
-import { FREE_SHOWN, layOut, siteAddress, suggest } from "../src/suggest/index.mjs";
+import { FREE_SHOWN, layOut, siteAddress, suggest, suggestionsPrompt } from "../src/suggest/index.mjs";
 import { HOST, isolate, printed, tempDir, viteApp, write } from "./helpers.js";
 
 isolate();
@@ -185,7 +185,7 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     const out = await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true }, deps(w)));
     expect(out).toContain("The plan is written for your app.");
     expect(out.match(/^ {6}Ask your agent$/gm)).toHaveLength(5);
-    expect(out).toContain("genclass suggest --all");
+    expect(out).toContain("npx genclass suggest --all");
     expect(out).not.toContain("come with the Team plan");
     const all = await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true, all: true }, deps(w)));
     expect(all.match(/^ {6}Ask your agent$/gm)).toHaveLength(j.failed.length);
@@ -197,7 +197,7 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     const w = world(env);
     const out = await printed(async () => suggest({ cwd: dir, url: "https://shop.example" }, deps(w)));
     expect(w.toGenclass()).toEqual([]);
-    expect(out).toContain("genclass login");
+    expect(out).toContain("npx genclass login");
     // signed in, no --yes, no terminal: asking is impossible, so it is not sent
     await account(env);
     const w2 = world(env);
@@ -228,5 +228,21 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     }
     expect(new Set(CHECKS.map((c: { id: string }) => c.id)).size).toBe(CHECKS.length);
     expect(CHECKS.length).toBeLessThanOrEqual(60);
+  });
+});
+
+describe("genclass suggest: every item to a coding agent in one prompt (src/suggest/index.mjs suggestionsPrompt)", () => {
+  it("each item the plan shows with its reason, step and prompt, the rest by title, in order, with how to check", () => {
+    const items = [
+      { n: 1, title: "No sitemap", evidence: "GET /sitemap.xml 404", open: true, why: "Search engines miss pages.", step: "Add a sitemap.", prompt: "Add a sitemap.xml that lists every page." },
+      { n: 2, title: "No error page", evidence: null, open: false },
+    ];
+    const p = suggestionsPrompt(items, "https://shop.example");
+    expect(p).toContain("GenClass checked this repository and the live site https://shop.example and found 2 things to fix");
+    expect(p).toContain("run `npx genclass suggest --json`");
+    expect(p).toContain("1. No sitemap (found: GET /sitemap.xml 404)\n   Why: Search engines miss pages.\n   First step: Add a sitemap.\n   Add a sitemap.xml that lists every page.");
+    expect(p).toContain("2. No error page\n   Look at what this check measures");
+    expect(p.indexOf("1. No sitemap")).toBeLessThan(p.indexOf("2. No error page"));
+    expect(suggestionsPrompt([items[0]!])).toContain("GenClass checked this repository and found 1 thing to fix");
   });
 });

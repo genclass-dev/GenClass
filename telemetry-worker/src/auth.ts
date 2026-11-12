@@ -26,9 +26,11 @@
 // - Every state-changing request authenticated by a cookie must carry an Origin equal to the expected origin (else
 //   403); so must sign-in and sign-up, with or without a session. The JSON endpoints the pages call also require
 //   Content-Type application/json. Bearer requests (the CLI) carry no ambient credentials and need no Origin.
-// - A CLI bearer session can do what the CLI needs and the approval page says: read the account and its apps, create
-//   apps, add an app from its private link, and end itself. Stats, other sessions, passkeys, passwords, private links
-//   and the account itself need the browser session.
+// - A CLI bearer session can do what the approval page says and no more. On the routes here: read the account and its
+//   apps, create apps, add an app from its private link, and end itself. Through its own routes (src/cli.ts), each
+//   only for a session approved after the page began to say so: an app's dashboard, analytics and stored events,
+//   questions to the model, where an app's alerts are sent, its funnels and its private link, the plan and the team.
+//   Sign-in methods, other sessions, paying, removing people and deleting an app or the account need the browser.
 // - OAuth state (state, nonce, PKCE verifier, where to go next, which account and session a Link started from) is
 //   kept server-side in `challenges`; the cookie holds only that row's random id, so a planted cookie cannot name an
 //   account to link to. Session cookies use the __Host- prefix (no Domain, Path=/, Secure), except on plain-HTTP
@@ -36,6 +38,7 @@
 // - Nothing is logged; the client IP is only a rate-limit key (hashed), never stored.
 // Routes: see telemetry-worker/README.md ("Accounts").
 
+import { liveFixUsage } from "./usage.js";
 import type { Env, HandleOptions } from "./collector.js";
 import {
   accountPage,
@@ -78,7 +81,7 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, appLimit, appLimitBody, firstPlanWith, hasAnalytics, hasDashboard, keepDays, pickRange, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, keepDays, PAID_PLANS, pickRange, projectAccess, viewRanges } from "./plans.js";
 import { activeOwners, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
 import {
@@ -1569,12 +1572,14 @@ const appCount = async (c: C, accountId: string): Promise<number> =>
   Number((await c.db.prepare("SELECT COUNT(*) AS n FROM projects WHERE account_id = ?").bind(accountId).first<{ n: number }>())?.n ?? 0);
 const tooManyApps = (): Response => fail(409, `an account can hold at most ${MAX_APPS_PER_ACCOUNT} apps`);
 
-/** The 409 when one more app would pass the plan's limit (src/plans.ts) or the abuse cap, else null. */
+/**
+ * The 409 when one more app would pass the abuse cap, else null. Plans are per project (billing/plans.json version 4):
+ * an app past the ones Free covers is created all the same and waits for a plan (src/plans.ts projectAccess), so
+ * adding a project and choosing its plan is one flow.
+ */
 async function overAppLimit(c: C, accountId: string): Promise<Response | null> {
   const n = await appCount(c, accountId);
   if (n >= MAX_APPS_PER_ACCOUNT) return tooManyApps();
-  const lim = await appLimit(c.db, c.env, accountId, c.now);
-  if (lim.max !== null && n >= lim.max) return json(409, appLimitBody(lim, c.cfg.origin));
   return null;
 }
 
@@ -1628,12 +1633,18 @@ async function claimProject(c: C): Promise<Response> {
 /**
  * POST /api/account/projects/<id>/link: a new private dashboard link for an owned app (the dashboard's "agent link",
  * which @genclass/mcp reads production numbers from as GENCLASS_DASHBOARD). 201 { dashboardUrl }, shown once: only
- * the new secret's hash is stored, so it replaces the hash of any link the app had and that link stops working. Only
- * the signed-in browser may make one (a CLI session cannot read stats, so it cannot mint a way to read them).
+ * the new secret's hash is stored, so it replaces the hash of any link the app had and that link stops working. Here
+ * only the signed-in browser makes one; a terminal approved for it does so through /api/cli/link (src/cli.ts).
  */
 async function makeLink(c: C, id: string): Promise<Response> {
   const a = await browserWriter(c, "an agent link can be made");
   if (a instanceof Response) return a;
+  return makeLinkFor(c, a.account.id, id);
+}
+
+/** makeLink for an account whose session the caller has already checked (above, and src/cli.ts for a terminal approved for it). */
+export async function makeLinkFor(c: C, accountId: string, id: string): Promise<Response> {
+  const a = { account: { id: accountId } };
   const p = await ownedProject(c, a.account.id, id);
   if (!p) return fail(404, "not found");
   const secret = newSecret();
@@ -1680,6 +1691,11 @@ async function deleteProject(c: C, id: string): Promise<Response> {
   if (body.confirm !== "delete") return fail(400, 'send { "confirm": "delete" } to delete this project');
   const p = await ownedProject(c, a.account.id, id);
   if (!p) return fail(404, "not found");
+  // a project that is paid for is not deleted while its subscription still bills: nobody pays for an app that is gone
+  const paid = await c.db.prepare("SELECT subscription_status FROM projects WHERE id = ?").bind(id).first<{ subscription_status: string | null }>();
+  if (paid?.subscription_status && ["active", "trialing", "past_due", "unpaid"].includes(paid.subscription_status)) {
+    return fail(409, `${p.name} has a paid plan: cancel it in Manage billing (${c.cfg.origin}/account/billing) first, then delete the project`);
+  }
   await c.db.batch([
     c.db.prepare("DELETE FROM integrations WHERE project_id = ?").bind(id),
     c.db.prepare("DELETE FROM forward_log WHERE project_id = ?").bind(id),
@@ -1901,7 +1917,8 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       }
       const p = await createProject(c.db, name, c.now, a.account.id);
       const to = `/account/apps/${p.id}#connect`;
-      return json201 ? json(201, { url: to, copiedUrl: to, token: p.token, command: setupCommand(p.token) }) : redirect(to, [], 303);
+      // the form's way on is the new app's plan page first (it then goes on to the app's setup)
+      return json201 ? json(201, { url: to, copiedUrl: to, token: p.token, command: setupCommand(p.token) }) : redirect(`/account/billing?project=${encodeURIComponent(p.id ?? "")}&new=1`, [], 303);
     }
     case "/signup":
     case "/login": {
@@ -2047,12 +2064,13 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     if (!p) return fail(404, "not found");
     // the dashboard comes with the plan of the app's owner (every plan includes it; src/plans.ts projectAccess)
     const access = await projectAccess(c.db, p, env, c.now);
-    if (!hasDashboard(access)) return lockedJson(c);
+    if (!hasDashboard(access)) return lockedJson(c, access, p.id);
     // the ranges that plan shows; a longer one is answered with the longest it shows
     const range = pickRange(url.searchParams.get("range"), viewRanges(access.plan));
     const s = await stats(c.db, p, range, c.now);
+    const usage = await liveFixUsage(c.db, p.token, access.plan, c.now).catch(() => null);
     // visitor analytics are left out for a plan without them, and counted all the same (src/dashboard.ts stripAnalytics)
-    return json(200, hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` }));
+    return json(200, { ...(hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` })), usage, plan: { id: access.plan.id, name: access.plan.name, source: access.source }, plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
   }
   const fun = /^\/api\/account\/projects\/([^/]+)\/funnels$/.exec(path);
   if (fun) {
@@ -2061,8 +2079,8 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     if (a instanceof Response) return a;
     const p = await ownedProject(c, a.account.id, fun[1]!);
     if (!p) return fail(404, "not found");
-    const access = await accountAccess(c.db, a.account.id, env, c.now);
-    if (!hasDashboard(access)) return lockedJson(c);
+    const access = await projectAccess(c.db, p, env, c.now);
+    if (!hasDashboard(access)) return lockedJson(c, access, p.id);
     if (!hasAnalytics(access)) return upgradeJson(c, "funnels are part of visitor analytics", "analytics");
     return putFunnels(c.req, c.db, p.token);
   }
@@ -2086,6 +2104,12 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     const mine = p.account_id === a.account.id;
     const apps = (await accountProjects(c, a.account.id)).map((x) => ({ id: x.id!, name: x.name }));
     const access = await projectAccess(c.db, p, env, c.now);
+    // plans per project: the account's own app on Free, where the paid plan is sold, opens its plan page until one is
+    // chosen there, Team or Free with what stops the person from paying (the owner's call, 2026-11-12)
+    if (mine && access.source === null && access.plan.id === FREE.id && PAID_PLANS[0]?.per_project === true && canBuy(env, a.account)) {
+      const row = await c.db.prepare("SELECT plan_chosen FROM projects WHERE id = ?").bind(p.id).first<{ plan_chosen: string | null }>();
+      if (!row?.plan_chosen) return redirect(`/account/billing?project=${encodeURIComponent(p.id!)}`);
+    }
     const base = {
       account: { apps, current: p.id!, email: a.account.email ?? (a.account.github_login ? `@${a.account.github_login}` : null), plan: access.plan.name },
       id: p.id!,
@@ -2116,8 +2140,15 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
   return null;
 }
 
-/** The answer to a stats request for an app whose plan has no dashboard (a plan file without it). */
-export function lockedJson(c: { cfg: AuthConfig; env: Env }): Response {
+/**
+ * The answer to a stats request for an app whose plan has no dashboard: a project past the ones Free covers (it waits
+ * for a plan of its own: `upgrade_url` opens that project's plan page), or a plan file without dashboards.
+ */
+export function lockedJson(c: { cfg: AuthConfig; env: Env }, access?: { locked?: string } | null, projectId?: string | null): Response {
+  if (access?.locked === "free_projects" && projectId) {
+    const url = `${c.cfg.origin}/account/billing?project=${encodeURIComponent(projectId)}`;
+    return json(402, { ok: false, error: `Free covers ${FREE.limits.apps} projects, and this one is past them: it needs a plan of its own; choose it at ${url}`, locked: true, needs_plan: true, upgrade_url: url });
+  }
   const url = `${c.cfg.origin}/account/billing`;
   return json(402, { ok: false, error: lockedError(c.env), locked: true, upgrade_url: url });
 }

@@ -25,6 +25,7 @@
 // its webhook, its pages and the link between a repository and an app. Off, and every route above unchanged, until
 // the app's secrets are set (src/github/config.ts).
 
+import { OBSERVE_HEADER, OBSERVE_REASON, observeOnly } from "./usage.js";
 import { authConfig, lockedError, routeAuth, runtimeHasTokens } from "./auth.js";
 import {
   AGENT_MAX_BODY,
@@ -141,12 +142,14 @@ const CORS: Record<string, string> = {
   "access-control-allow-methods": "POST, GET, OPTIONS",
   "access-control-allow-headers": "content-type",
   "access-control-max-age": "86400",
+  // the runtime reads this one header of ingest's reply (src/usage.ts): observe only, past the plan's live-fix limit
+  "access-control-expose-headers": OBSERVE_HEADER,
 };
 
-export function reply(status: number, body: unknown): Response {
+export function reply(status: number, body: unknown, extra?: Record<string, string>): Response {
   return new Response(body === null ? null : JSON.stringify(body), {
     status,
-    headers: { ...CORS, "content-type": "application/json", "cache-control": "no-store" },
+    headers: { ...CORS, "content-type": "application/json", "cache-control": "no-store", ...(extra ?? {}) },
   });
 }
 
@@ -210,6 +213,8 @@ export interface HandleOptions {
   uuid?: () => string;
   /** Outgoing requests to Google and GitHub during sign-in (the global fetch in production; tests mock it). */
   fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+  /** The pause before GitHub is asked a second time (github/http.ts connectCallback): a timer in production; tests do not wait. */
+  wait?: (ms: number) => Promise<void>;
   /** ctx.waitUntil in production (it holds ingest if the client goes away; aggregation runs after the response); tests await inline. */
   waitUntil?: (p: Promise<unknown>) => void;
   /** Requests on genclass.dev that this worker does not serve go on to the site (fetch in production). */
@@ -319,8 +324,11 @@ async function ingest(request: Request, env: Env, opts: HandleOptions): Promise<
     return reply(503, { ok: false, error: "storage unavailable" });
   }
 
-  // Dashboard aggregation for a known token. Never affects the response (failures are swallowed).
+  // Past its plan's live fixes for the month, the runtime is told to observe only (src/usage.ts): read before this
+  // batch is counted (cached a minute), so the batch itself is stored and counted the same either way.
   const db = env.DB;
+  const observe = batch.token && db ? await observeOnly(db, env, batch.token, now).catch(() => false) : false;
+  // Dashboard aggregation for a known token. Never affects the response (failures are swallowed).
   if (batch.token && db) {
     const token = batch.token;
     const task = (async () => {
@@ -333,7 +341,7 @@ async function ingest(request: Request, env: Env, opts: HandleOptions): Promise<
     if (opts.waitUntil) opts.waitUntil(task);
     else await task;
   }
-  return reply(202, { ok: true, accepted: batch.events.length });
+  return reply(202, { ok: true, accepted: batch.events.length }, observe ? { [OBSERVE_HEADER]: OBSERVE_REASON } : undefined);
 }
 
 // ------------------------------------------------------------------------------------------ tokens and dashboards

@@ -24,6 +24,7 @@ import { createRequire } from "node:module";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { c, err, out, sym } from "./ui.mjs";
+import { CMD, HOST_CLI } from "./version.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = resolve(HERE, "..", "..");
@@ -37,6 +38,8 @@ const VERSION = (() => {
 
 /** The hosted page check. GENCLASS_SCAN_HOSTED points the CLI at a test copy (tests use a local mock). */
 export const HOSTED = "https://genclass-scan.mehar-144.workers.dev";
+/** Where a person reads a hosted report: genclass.dev shows the page check's reports under its own name. */
+export const REPORT_PAGE = "https://genclass.dev/scan";
 /** The virtual same-origin path the runtime's dist/ is served on inside the scanned page. */
 export const RUNTIME_PATH = "/__genclass_scan__/";
 export const INSTALL_LINE = "npx playwright install chromium";
@@ -56,20 +59,31 @@ const FOUR_LEVEL = { high: "serious", medium: "moderate", low: "minor" };
 const CRITICAL_KINDS = new Set(["page-blank", "pointer-events-leak", "scroll-lock-stuck"]);
 const SCORE_BASIS = "the visual checks scored like the Visual bugs category of the genclass.dev page check (scan-score/4)";
 
+/** How this command is called: `genclass` inside the genclass command, `genclass-runtime` in this package's own bin. */
+const NAME = HOST_CLI ? "genclass" : "genclass-runtime";
+
 export const USAGE = `Usage:
-  genclass-runtime scan <url> [--json] [--phone] [--timeout <s>] [--hosted | --local]
-  genclass-runtime audit <url> ...   (the same command)
+  ${NAME} scan <url> [--json] [--phone] [--timeout <s>] [--hosted | --local]
+  ${NAME} audit <url> ...   (the same command)
 
 Audits one page with GenClass's 23 measured visual checks (unreadable text, broken images, fonts and
 stylesheets, sideways scrolling, layers that swallow clicks, covered dialogs, template leaks, ...) and prints
 a score and each problem with the element, its selector and a suggested CSS fix, worst first.
 
-By default it runs on this computer: headless Chromium through Playwright, at desktop (1280x800) and phone
+${
+  HOST_CLI
+    ? `By default the page is checked by the genclass.dev page check (${HOSTED}),
+which also runs accessibility, speed and security audits; localhost and private addresses are never sent there.
+With --local it runs on this computer: headless Chromium through Playwright, at desktop (1280x800) and phone
+(390x844) sizes, with the runtime injected in observe mode (telemetry off, no model; nothing is sent). That
+needs both in the project: npm i -D @genclass/runtime@beta playwright && ${INSTALL_LINE}`
+    : `By default it runs on this computer: headless Chromium through Playwright, at desktop (1280x800) and phone
 (390x844) sizes, with the runtime injected in observe mode (telemetry off, no model; nothing is sent). It
 needs Playwright's Chromium: npm i -D playwright && ${INSTALL_LINE}
 Without it, or with --hosted, the page is checked remotely by the genclass.dev page check
 (${HOSTED}), which also runs accessibility, speed and security audits; localhost and private
-addresses are never sent there.
+addresses are never sent there.`
+}
 
   --json         the report as JSON on stdout (nothing else on stdout)
   --phone        the phone size only
@@ -372,10 +386,30 @@ const summaryOf = (findings) => {
   return s;
 };
 
+const hasBuild = (dir) => existsSync(join(dir, "genclass.global.min.js")) && existsSync(join(dir, "visual", "index.js"));
+
+/**
+ * The runtime's dist/ with the script-tag build the scan puts on the page: this package's own, else (inside the
+ * genclass command, which carries no copy) the one installed in the project at `cwd`. Null when there is none.
+ */
+export function runtimeDist(cwd, own = join(PKG_DIR, "dist")) {
+  if (hasBuild(own)) return own;
+  // the package has no "require" export, so it is found the way Node finds it: node_modules, this folder upwards
+  for (let dir = resolve(cwd), i = 0; i < 40; i++) {
+    const d = join(dir, "node_modules", "@genclass", "runtime", "dist");
+    if (hasBuild(d)) return d;
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  return null;
+}
+
 async function scanLocal(pw, url, o, notes) {
-  const distDir = join(PKG_DIR, "dist");
-  if (!existsSync(join(distDir, "genclass.global.min.js")) || !existsSync(join(distDir, "visual", "index.js"))) {
-    throw new Error(`${distDir} has no script-tag build (genclass.global.min.js and visual/index.js); run npm run build -w @genclass/runtime`);
+  const distDir = runtimeDist(o.cwd);
+  if (!distDir) {
+    if (HOST_CLI) return { missing: true, reason: "@genclass/runtime is not installed in this folder", install: "npm i -D @genclass/runtime@beta" };
+    throw new Error(`${join(PKG_DIR, "dist")} has no script-tag build (genclass.global.min.js and visual/index.js); run npm run build -w @genclass/runtime`);
   }
   const mod = await import(pathToFileURL(pw.path).href);
   const chromium = mod.chromium ?? mod.default?.chromium;
@@ -473,31 +507,44 @@ async function readStream(res, onProgress) {
   }
 }
 
-/** POST /api/scan on the hosted check: its report (a cache hit or the end of the stream), or { error }. */
+/**
+ * POST /api/scan on the hosted check: its report (a cache hit or the end of the stream), or { error }. When a scan of
+ * the same page is already running there (someone else's, or one of yours a moment ago), it waits as long as the
+ * check says and asks again, within the command's own time limit: that scan's report is then the answer.
+ */
 async function fetchHosted(url, o, progress) {
   const base = (process.env.GENCLASS_SCAN_HOSTED || HOSTED).replace(/\/+$/, "");
-  let res;
-  try {
-    res = await fetch(`${base}/api/scan`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, application/x-ndjson", "user-agent": `genclass-runtime-cli/${VERSION}` },
-      body: JSON.stringify({ url }),
-      signal: AbortSignal.timeout((o.timeout ?? 120) * 1000),
-    });
-  } catch (e) {
-    return { error: `could not reach the hosted page check at ${base}: ${e?.cause?.code || e?.cause?.message || e?.message || e}` };
+  const until = Date.now() + (o.timeout ?? 120) * 1000;
+  for (;;) {
+    let res;
+    try {
+      res = await fetch(`${base}/api/scan`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, application/x-ndjson", "user-agent": `genclass-runtime-cli/${VERSION}` },
+        body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(Math.max(1000, until - Date.now())),
+      });
+    } catch (e) {
+      return { error: `could not reach the hosted page check at ${base}: ${e?.cause?.code || e?.cause?.message || e?.message || e}` };
+    }
+    const type = res.headers.get("content-type") || "";
+    if (type.includes("ndjson") && res.body) return readStream(res, progress);
+    let j = null;
+    try {
+      j = await res.json();
+    } catch {
+      j = null;
+    }
+    if (j && j.ok && j.report) return { report: j.report };
+    const retry = res.headers.get("retry-after");
+    const wait = Math.min(30, Math.max(1, Number(retry) || 0)) * 1000;
+    if (j?.code === "in-progress" && retry && Date.now() + wait < until) {
+      progress("a scan of this page is already running; waiting for it");
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    return { error: `${j?.message || `the hosted page check answered HTTP ${res.status}`}${j?.code ? ` (${j.code})` : ""}${retry ? `; try again in ${retry} s` : ""}` };
   }
-  const type = res.headers.get("content-type") || "";
-  if (type.includes("ndjson") && res.body) return readStream(res, progress);
-  let j = null;
-  try {
-    j = await res.json();
-  } catch {
-    j = null;
-  }
-  if (j && j.ok && j.report) return { report: j.report };
-  const retry = res.headers.get("retry-after");
-  return { error: `${j?.message || `the hosted page check answered HTTP ${res.status}`}${j?.code ? ` (${j.code})` : ""}${retry ? `; try again in ${retry} s` : ""}` };
 }
 
 /** The common report shape from the hosted check's report (scan-worker src/report.ts Report). */
@@ -530,19 +577,54 @@ export function hostedReport(url, r, base) {
     runtime: r.runtime || null,
     browser: r.chrome ? `Chromium ${r.chrome} (genclass.dev page check)` : "genclass.dev page check",
     score: { value: r.score?.value ?? null, basis: `the genclass.dev page check's overall score (${r.score?.version || "scan-score"})` },
-    categories: (r.score?.categories || []).map((cat) => ({ id: cat.id, label: cat.label, value: cat.value, measured: cat.measured, count: cat.count })),
+    categories: (r.score?.categories || []).map((cat) => ({ id: cat.id, label: cat.label, value: cat.value, measured: cat.measured, count: cat.count, ...(cat.measured ? {} : { why: r.notMeasured?.[cat.id] ?? null }) })),
     top: (r.top || []).map((t) => ({ rule: t.rule, category: t.category, what: t.what, severity: t.severity, count: t.count, points: t.points })),
     summary: summaryOf(findings),
     views: (r.views || []).map((v) => ({ id: v.id, width: v.width, height: v.height, status: v.status ?? null, ok: !!v.ok, ms: v.ms ?? null, error: v.error ?? null })),
     findings,
     blocked: r.blocked ? r.blocked.message : null,
-    fullReport: `${base}/scan?url=${encodeURIComponent(url)}`,
+    fullReport: `${base === HOSTED ? REPORT_PAGE : `${base}/scan`}?url=${encodeURIComponent(url)}`,
     scannedAt: r.scannedAt || null,
+    // a score over part of the page check is said as one: how many parts were measured, and whether time ran out
+    partial: partialOf(r),
     notes,
   };
 }
 
+/** `{ measured, of, labels, timedOut }` when the hosted check could not measure every part of its score, else null. */
+function partialOf(r) {
+  const why = r.notMeasured && typeof r.notMeasured === "object" ? r.notMeasured : {};
+  // a part that had nothing to try on this page (no search box and no form for the race probe) did not fail
+  const cats = (Array.isArray(r.score?.categories) ? r.score.categories : []).filter((cat) => cat.measured || !/nothing to try/i.test(String(why[cat.id] ?? "")));
+  const done = cats.filter((cat) => cat.measured);
+  if (!cats.length || done.length === cats.length) return null;
+  return { measured: done.length, of: cats.length, labels: done.map((cat) => String(cat.label)), timedOut: r.timedOut === true };
+}
+
 // ---------------------------------------------------------------------------------------------- printing
+
+/** The width long lines fold to: the window's, kept between 50 and 110 columns (100 when there is no window). */
+const cols = () => Math.max(50, Math.min(110, Number(process.stdout.columns) || 100));
+
+/** `text` folded to the window, every line after the first behind `indent`. Words longer than a line stay whole. */
+function fold(text, indent, first = indent.length) {
+  const out = [];
+  for (const para of String(text).split(/\n+/)) {
+    let line = "";
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      const room = cols() - (out.length ? indent.length : first);
+      if (line && line.length + 1 + word.length > room) {
+        out.push(line);
+        line = word;
+      } else line = line ? `${line} ${word}` : word;
+    }
+    if (line) out.push(line);
+  }
+  return out.join(`\n${indent}`);
+}
+
+/** "a", "a and b", "a, b and c". */
+const list = (items) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
 
 const SEV_COLOR = { critical: c.red, high: c.red, serious: c.red, medium: c.yellow, moderate: c.yellow, low: c.gray, minor: c.gray };
 
@@ -553,18 +635,30 @@ export function formatReport(rep) {
   p();
   p(`  ${c.bold(c.magenta("GenClass scan"))} ${c.gray(sym.dot)} ${c.bold(rep.url)}`);
   const sizes = rep.views.map((v) => `${v.id} ${v.width}x${v.height}`).join(", ");
-  if (rep.ranAt === "local") p(c.gray(`  ran locally: ${rep.browser}, ${sizes}; @genclass/runtime ${rep.runtime} visual checks in observe mode (no telemetry, no model, nothing sent)`));
-  else p(c.gray(`  ran remotely on the genclass.dev page check (${sizes || "desktop and phone"}): the page was loaded by its browser, not this computer`));
+  if (rep.ranAt === "local") p(c.gray(`  ${fold(`ran locally: ${rep.browser}, ${sizes}; @genclass/runtime ${rep.runtime} visual checks in observe mode (no telemetry, no model, nothing sent)`, "  ")}`));
+  else p(c.gray(`  ${fold(`ran remotely on the genclass.dev page check (${sizes || "desktop and phone"}): the page was loaded by its browser, not this computer`, "  ")}`));
   for (const v of rep.views) if (v.error) p(`  ${c.yellow(sym.warn)} ${v.id}: ${v.error}`);
   p();
   const n = rep.findings.length;
   const counts = SEVERITIES.filter((s) => rep.summary[s]).map((s) => `${rep.summary[s]} ${s}`).join(", ");
-  const score = rep.score.value === null ? "no score" : `${rep.ranAt === "local" ? "Visual score" : "Score"} ${c.bold(`${rep.score.value}/100`)}`;
-  p(`  ${score}  ${c.gray(sym.dot)}  ${n === 0 ? c.green(`${sym.ok} no problems found`) : `${n} problem${n === 1 ? "" : "s"} (${counts})`}`);
+  const part = rep.partial ?? null;
+  const score = rep.score.value === null ? "no score" : `${rep.ranAt === "local" ? "Visual score" : "Score"} ${c.bold(`${rep.score.value}/100`)}${part ? c.yellow(` over ${part.measured} of ${part.of} parts`) : ""}`;
+  // nothing found means something only when everything was looked at
+  const nothing = !!part && part.measured === 0;
+  const found = nothing ? "nothing was measured" : n === 0 ? (part ? `no problems in what was measured` : c.green(`${sym.ok} no problems found`)) : `${n} problem${n === 1 ? "" : "s"} (${counts})`;
+  p(`  ${score}  ${c.gray(sym.dot)}  ${found}`);
   if (rep.blocked) p(`  ${c.yellow(sym.warn)} ${rep.blocked}`);
-  if (rep.categories?.length) {
+  if (part && !rep.blocked) {
+    const why = part.timedOut ? "The page was still loading when the page check's time ran out" : "The page check could not finish every part on this page";
+    const what = part.measured ? `the score covers ${list(part.labels)} only` : "nothing could be scored";
+    p(`  ${c.yellow(sym.warn)} ${fold(`${why}, so ${what}.`, "    ", 4)}`);
+    p(`    ${fold("The visual checks can run on this computer instead, with no time limit:", "    ")}`);
+    p(`    ${c.cyan(`${CMD} scan ${rep.url} --local`)}`);
+  }
+  // with nothing measured, eight lines of "not measured" and eight notes saying why add nothing to the sentence above
+  if (rep.categories?.length && !nothing) {
     p();
-    for (const cat of rep.categories) p(`  ${cat.label.padEnd(20)} ${cat.measured ? String(cat.value).padStart(3) : "  -"}${cat.measured ? "" : c.gray("  not measured")}`);
+    for (const cat of rep.categories) p(`  ${cat.label.padEnd(20)} ${cat.measured ? String(cat.value).padStart(3) : "  -"}${cat.measured ? "" : c.gray(/nothing to try/i.test(String(cat.why ?? "")) ? "  nothing to try on this page" : "  not measured")}`);
   }
   if (rep.top?.length) {
     p();
@@ -583,13 +677,13 @@ export function formatReport(rep) {
     if (f.target) p(`      ${f.target}${f.selector ? c.gray(`  ${f.selector}`) : ""}`);
     else if (f.selector) p(`      ${c.gray(f.selector)}`);
     const msg = f.message;
-    const indent = (t) => String(t).replace(/\n+/g, "\n        ");
-    if (msg && msg !== f.target) p(`      ${indent(msg)}`);
-    if (f.fix) p(`      ${c.green("fix:")} ${indent(f.fix)}${f.fixNote ? c.gray(`  (${f.fixNote})`) : ""}`);
+    if (msg && msg !== f.target) p(`      ${fold(msg, "        ", 6)}`);
+    if (f.fix) p(`      ${c.green("fix:")} ${fold(f.fix, "        ", 11)}${f.fixNote ? c.gray(`  (${f.fixNote})`) : ""}`);
   }
-  if (rep.notes?.length) {
+  const notes = (rep.notes ?? []).filter((note) => !(nothing && / not measured: /.test(note)));
+  if (notes.length) {
     p();
-    for (const note of rep.notes) p(c.gray(`  note: ${note}`));
+    for (const note of notes) p(c.gray(`  note: ${fold(note, "        ", 8)}`));
   }
   p();
   if (rep.ranAt === "local") p(c.gray(`  Score: ${rep.score.basis}. Accessibility, speed and security too: add --hosted.`));
@@ -615,7 +709,7 @@ export async function run(cmd, argv) {
     url = normaliseUrl(o.url);
   } catch (e) {
     if (e instanceof UsageError) {
-      err(`genclass-runtime ${cmd}: ${e.message}\n\n${USAGE}`);
+      err(`${NAME} ${cmd}: ${e.message}\n\n${USAGE}`);
       return 2;
     }
     throw e;
@@ -628,20 +722,23 @@ export async function run(cmd, argv) {
     if (!hosted) {
       const pw = findPlaywright(o.cwd);
       let missing = pw ? null : "Playwright is not installed here";
+      let install = `npm i -D playwright && ${INSTALL_LINE}`;
       if (pw) {
         const r = await scanLocal(pw, url, o, notes);
-        if (r.missing) missing = r.reason;
-        else rep = localReport(url, r.views, r.browser, notes);
+        if (r.missing) {
+          missing = r.reason;
+          if (r.install) install = r.install;
+        } else rep = localReport(url, r.views, r.browser, notes);
       }
       if (missing) {
         err(`${c.yellow(sym.warn)} ${missing}, so this scan cannot run on this computer. To run it locally:`);
-        err(`    npm i -D playwright && ${INSTALL_LINE}`);
+        err(`    ${install}`);
         if (o.local) {
-          err(`genclass-runtime ${cmd}: --local: not scanned (without --local, a public page is checked on the genclass.dev page check instead).`);
+          err(`${NAME} ${cmd}: --local: not scanned (without --local, a public page is checked on the genclass.dev page check instead).`);
           return 2;
         }
         if (privateHost(url)) {
-          err(`genclass-runtime ${cmd}: ${new URL(url).host} is a local address, which the hosted page check cannot reach (and is never sent to it); install Playwright as above.`);
+          err(`${NAME} ${cmd}: ${new URL(url).host} is a local address, which the hosted page check cannot reach (and is never sent to it); install Playwright as above.`);
           return 2;
         }
         say(`  Checking it on the genclass.dev page check instead (the URL is sent to ${HOSTED.replace(/^https:\/\//, "")}; it runs more checks, takes about a minute).`);
@@ -650,7 +747,8 @@ export async function run(cmd, argv) {
     }
     if (hosted) {
       if (privateHost(url)) {
-        err(`genclass-runtime ${cmd}: ${new URL(url).host} is a local address: the hosted page check cannot reach it and it is never sent there. Run without --hosted (needs Playwright's Chromium: ${INSTALL_LINE}).`);
+        // a host CLI (genclass) asks for the hosted check itself, so the way to a local run there is --local
+        err(`${NAME} ${cmd}: ${new URL(url).host} is a local address: the hosted page check cannot reach it and it is never sent there. ${HOST_CLI ? "Add --local" : "Run without --hosted"} to check it on this machine (needs Playwright's Chromium: ${INSTALL_LINE}).`);
         return 2;
       }
       const tty = process.stderr.isTTY;
@@ -659,19 +757,20 @@ export async function run(cmd, argv) {
       });
       if (tty && !o.json) process.stderr.write("\r\x1b[K");
       if (got.error) {
-        err(`genclass-runtime ${cmd}: ${got.error}`);
+        err(`${NAME} ${cmd}: ${got.error}`);
         return 2;
       }
       rep = hostedReport(url, got.report, (process.env.GENCLASS_SCAN_HOSTED || HOSTED).replace(/\/+$/, ""));
     }
   } catch (e) {
-    err(`genclass-runtime ${cmd}: ${e?.message || e}`);
+    err(`${NAME} ${cmd}: ${e?.message || e}`);
     return 2;
   }
   if (o.json) out(JSON.stringify(rep, null, 2));
   else out(formatReport(rep));
   if (rep.blocked || !rep.views.some((v) => v.ok)) {
-    if (!o.json) err(`genclass-runtime ${cmd}: nothing was measured${rep.blocked ? "" : `: ${rep.views.map((v) => v.error).filter(Boolean)[0] || "the page did not load"}`}`);
+    const why = rep.views.map((v) => v.error).filter(Boolean)[0] || (rep.partial?.timedOut ? "the page did not finish loading within the page check's time" : "the page did not load");
+    if (!o.json) err(`${NAME} ${cmd}: nothing was measured${rep.blocked ? "" : `: ${why}`}`);
     return 2;
   }
   return rep.findings.length ? 1 : 0;

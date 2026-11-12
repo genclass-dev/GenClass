@@ -1,4 +1,4 @@
-// The GitHub App's daily counts of installs and uninstalls (migrations/0016_github_install_days.sql; src/github/store.ts
+// The GitHub App's daily counts of installs and uninstalls (migrations/0018_github_install_days.sql; src/github/store.ts
 // header): through the worker's real handler, with the D1 migrations under node:sqlite. What is checked: a count per
 // UTC day and nothing else is kept, each install and uninstall counts once, the operator's own accounts are counted
 // apart, and the count never decides whether an install or an uninstall goes through.
@@ -199,7 +199,7 @@ describe("github app: installs and uninstalls per day (src/github/store.ts heade
   });
 });
 
-describe("github app: a database without the daily counts (migrations/0016, \"Until it is applied\")", () => {
+describe("github app: a database without the daily counts (migrations/0018, \"Until it is applied\")", () => {
   it("installs and uninstalls go through as before, without a count", async () => {
     const { env, sql } = githubSetup();
     const gh = fakeGithub();
@@ -229,7 +229,7 @@ describe("github app: a database without the daily counts (migrations/0016, \"Un
   it("applied to a database that has installations: none is counted as an install, and one that leaves counts as an uninstall", async () => {
     const s = githubSetup();
     const sql = d1({
-      before: "0016",
+      before: "0018",
       seed: (db) =>
         db
           .prepare("INSERT INTO github_installations (id, account_id, account_login, account_type, selection, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?)")

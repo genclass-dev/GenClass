@@ -12,6 +12,9 @@ import { BUILD } from "./assets.mjs";
 globalThis.__GENCLASS_CLI__ = { name: "genclass", brand: "GenClass", cmd: "npx genclass", version: BUILD.version, runtimeVersion: BUILD.runtimeVersion, mcpVersion: BUILD.mcpVersion };
 
 try {
+  // once `genclass` is installed, every screen says `genclass`; until then, `npx genclass` (name.mjs)
+  const { shortNameWorks, useShortName } = await import("./name.mjs");
+  if (shortNameWorks()) useShortName();
   const { run } = await import("./cli.mjs");
   process.exitCode = await run(process.argv.slice(2));
 } catch (e) {
