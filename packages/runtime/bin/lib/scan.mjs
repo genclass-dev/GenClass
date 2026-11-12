@@ -24,6 +24,7 @@ import { createRequire } from "node:module";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { c, err, out, sym } from "./ui.mjs";
+import { HOST_CLI } from "./version.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = resolve(HERE, "..", "..");
@@ -56,20 +57,31 @@ const FOUR_LEVEL = { high: "serious", medium: "moderate", low: "minor" };
 const CRITICAL_KINDS = new Set(["page-blank", "pointer-events-leak", "scroll-lock-stuck"]);
 const SCORE_BASIS = "the visual checks scored like the Visual bugs category of the genclass.dev page check (scan-score/4)";
 
+/** How this command is called: `genclass` inside the genclass command, `genclass-runtime` in this package's own bin. */
+const NAME = HOST_CLI ? "genclass" : "genclass-runtime";
+
 export const USAGE = `Usage:
-  genclass-runtime scan <url> [--json] [--phone] [--timeout <s>] [--hosted | --local]
-  genclass-runtime audit <url> ...   (the same command)
+  ${NAME} scan <url> [--json] [--phone] [--timeout <s>] [--hosted | --local]
+  ${NAME} audit <url> ...   (the same command)
 
 Audits one page with GenClass's 23 measured visual checks (unreadable text, broken images, fonts and
 stylesheets, sideways scrolling, layers that swallow clicks, covered dialogs, template leaks, ...) and prints
 a score and each problem with the element, its selector and a suggested CSS fix, worst first.
 
-By default it runs on this computer: headless Chromium through Playwright, at desktop (1280x800) and phone
+${
+  HOST_CLI
+    ? `By default the page is checked by the genclass.dev page check (${HOSTED}),
+which also runs accessibility, speed and security audits; localhost and private addresses are never sent there.
+With --local it runs on this computer: headless Chromium through Playwright, at desktop (1280x800) and phone
+(390x844) sizes, with the runtime injected in observe mode (telemetry off, no model; nothing is sent). That
+needs both in the project: npm i -D @genclass/runtime@beta playwright && ${INSTALL_LINE}`
+    : `By default it runs on this computer: headless Chromium through Playwright, at desktop (1280x800) and phone
 (390x844) sizes, with the runtime injected in observe mode (telemetry off, no model; nothing is sent). It
 needs Playwright's Chromium: npm i -D playwright && ${INSTALL_LINE}
 Without it, or with --hosted, the page is checked remotely by the genclass.dev page check
 (${HOSTED}), which also runs accessibility, speed and security audits; localhost and private
-addresses are never sent there.
+addresses are never sent there.`
+}
 
   --json         the report as JSON on stdout (nothing else on stdout)
   --phone        the phone size only
@@ -372,10 +384,30 @@ const summaryOf = (findings) => {
   return s;
 };
 
+const hasBuild = (dir) => existsSync(join(dir, "genclass.global.min.js")) && existsSync(join(dir, "visual", "index.js"));
+
+/**
+ * The runtime's dist/ with the script-tag build the scan puts on the page: this package's own, else (inside the
+ * genclass command, which carries no copy) the one installed in the project at `cwd`. Null when there is none.
+ */
+export function runtimeDist(cwd, own = join(PKG_DIR, "dist")) {
+  if (hasBuild(own)) return own;
+  // the package has no "require" export, so it is found the way Node finds it: node_modules, this folder upwards
+  for (let dir = resolve(cwd), i = 0; i < 40; i++) {
+    const d = join(dir, "node_modules", "@genclass", "runtime", "dist");
+    if (hasBuild(d)) return d;
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  return null;
+}
+
 async function scanLocal(pw, url, o, notes) {
-  const distDir = join(PKG_DIR, "dist");
-  if (!existsSync(join(distDir, "genclass.global.min.js")) || !existsSync(join(distDir, "visual", "index.js"))) {
-    throw new Error(`${distDir} has no script-tag build (genclass.global.min.js and visual/index.js); run npm run build -w @genclass/runtime`);
+  const distDir = runtimeDist(o.cwd);
+  if (!distDir) {
+    if (HOST_CLI) return { missing: true, reason: "@genclass/runtime is not installed in this folder", install: "npm i -D @genclass/runtime@beta" };
+    throw new Error(`${join(PKG_DIR, "dist")} has no script-tag build (genclass.global.min.js and visual/index.js); run npm run build -w @genclass/runtime`);
   }
   const mod = await import(pathToFileURL(pw.path).href);
   const chromium = mod.chromium ?? mod.default?.chromium;
@@ -473,31 +505,44 @@ async function readStream(res, onProgress) {
   }
 }
 
-/** POST /api/scan on the hosted check: its report (a cache hit or the end of the stream), or { error }. */
+/**
+ * POST /api/scan on the hosted check: its report (a cache hit or the end of the stream), or { error }. When a scan of
+ * the same page is already running there (someone else's, or one of yours a moment ago), it waits as long as the
+ * check says and asks again, within the command's own time limit: that scan's report is then the answer.
+ */
 async function fetchHosted(url, o, progress) {
   const base = (process.env.GENCLASS_SCAN_HOSTED || HOSTED).replace(/\/+$/, "");
-  let res;
-  try {
-    res = await fetch(`${base}/api/scan`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, application/x-ndjson", "user-agent": `genclass-runtime-cli/${VERSION}` },
-      body: JSON.stringify({ url }),
-      signal: AbortSignal.timeout((o.timeout ?? 120) * 1000),
-    });
-  } catch (e) {
-    return { error: `could not reach the hosted page check at ${base}: ${e?.cause?.code || e?.cause?.message || e?.message || e}` };
+  const until = Date.now() + (o.timeout ?? 120) * 1000;
+  for (;;) {
+    let res;
+    try {
+      res = await fetch(`${base}/api/scan`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, application/x-ndjson", "user-agent": `genclass-runtime-cli/${VERSION}` },
+        body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(Math.max(1000, until - Date.now())),
+      });
+    } catch (e) {
+      return { error: `could not reach the hosted page check at ${base}: ${e?.cause?.code || e?.cause?.message || e?.message || e}` };
+    }
+    const type = res.headers.get("content-type") || "";
+    if (type.includes("ndjson") && res.body) return readStream(res, progress);
+    let j = null;
+    try {
+      j = await res.json();
+    } catch {
+      j = null;
+    }
+    if (j && j.ok && j.report) return { report: j.report };
+    const retry = res.headers.get("retry-after");
+    const wait = Math.min(30, Math.max(1, Number(retry) || 0)) * 1000;
+    if (j?.code === "in-progress" && retry && Date.now() + wait < until) {
+      progress("a scan of this page is already running; waiting for it");
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    return { error: `${j?.message || `the hosted page check answered HTTP ${res.status}`}${j?.code ? ` (${j.code})` : ""}${retry ? `; try again in ${retry} s` : ""}` };
   }
-  const type = res.headers.get("content-type") || "";
-  if (type.includes("ndjson") && res.body) return readStream(res, progress);
-  let j = null;
-  try {
-    j = await res.json();
-  } catch {
-    j = null;
-  }
-  if (j && j.ok && j.report) return { report: j.report };
-  const retry = res.headers.get("retry-after");
-  return { error: `${j?.message || `the hosted page check answered HTTP ${res.status}`}${j?.code ? ` (${j.code})` : ""}${retry ? `; try again in ${retry} s` : ""}` };
 }
 
 /** The common report shape from the hosted check's report (scan-worker src/report.ts Report). */
@@ -615,7 +660,7 @@ export async function run(cmd, argv) {
     url = normaliseUrl(o.url);
   } catch (e) {
     if (e instanceof UsageError) {
-      err(`genclass-runtime ${cmd}: ${e.message}\n\n${USAGE}`);
+      err(`${NAME} ${cmd}: ${e.message}\n\n${USAGE}`);
       return 2;
     }
     throw e;
@@ -628,20 +673,23 @@ export async function run(cmd, argv) {
     if (!hosted) {
       const pw = findPlaywright(o.cwd);
       let missing = pw ? null : "Playwright is not installed here";
+      let install = `npm i -D playwright && ${INSTALL_LINE}`;
       if (pw) {
         const r = await scanLocal(pw, url, o, notes);
-        if (r.missing) missing = r.reason;
-        else rep = localReport(url, r.views, r.browser, notes);
+        if (r.missing) {
+          missing = r.reason;
+          if (r.install) install = r.install;
+        } else rep = localReport(url, r.views, r.browser, notes);
       }
       if (missing) {
         err(`${c.yellow(sym.warn)} ${missing}, so this scan cannot run on this computer. To run it locally:`);
-        err(`    npm i -D playwright && ${INSTALL_LINE}`);
+        err(`    ${install}`);
         if (o.local) {
-          err(`genclass-runtime ${cmd}: --local: not scanned (without --local, a public page is checked on the genclass.dev page check instead).`);
+          err(`${NAME} ${cmd}: --local: not scanned (without --local, a public page is checked on the genclass.dev page check instead).`);
           return 2;
         }
         if (privateHost(url)) {
-          err(`genclass-runtime ${cmd}: ${new URL(url).host} is a local address, which the hosted page check cannot reach (and is never sent to it); install Playwright as above.`);
+          err(`${NAME} ${cmd}: ${new URL(url).host} is a local address, which the hosted page check cannot reach (and is never sent to it); install Playwright as above.`);
           return 2;
         }
         say(`  Checking it on the genclass.dev page check instead (the URL is sent to ${HOSTED.replace(/^https:\/\//, "")}; it runs more checks, takes about a minute).`);
@@ -650,7 +698,7 @@ export async function run(cmd, argv) {
     }
     if (hosted) {
       if (privateHost(url)) {
-        err(`genclass-runtime ${cmd}: ${new URL(url).host} is a local address: the hosted page check cannot reach it and it is never sent there. Run without --hosted (needs Playwright's Chromium: ${INSTALL_LINE}).`);
+        err(`${NAME} ${cmd}: ${new URL(url).host} is a local address: the hosted page check cannot reach it and it is never sent there. Run without --hosted (needs Playwright's Chromium: ${INSTALL_LINE}).`);
         return 2;
       }
       const tty = process.stderr.isTTY;
@@ -659,19 +707,19 @@ export async function run(cmd, argv) {
       });
       if (tty && !o.json) process.stderr.write("\r\x1b[K");
       if (got.error) {
-        err(`genclass-runtime ${cmd}: ${got.error}`);
+        err(`${NAME} ${cmd}: ${got.error}`);
         return 2;
       }
       rep = hostedReport(url, got.report, (process.env.GENCLASS_SCAN_HOSTED || HOSTED).replace(/\/+$/, ""));
     }
   } catch (e) {
-    err(`genclass-runtime ${cmd}: ${e?.message || e}`);
+    err(`${NAME} ${cmd}: ${e?.message || e}`);
     return 2;
   }
   if (o.json) out(JSON.stringify(rep, null, 2));
   else out(formatReport(rep));
   if (rep.blocked || !rep.views.some((v) => v.ok)) {
-    if (!o.json) err(`genclass-runtime ${cmd}: nothing was measured${rep.blocked ? "" : `: ${rep.views.map((v) => v.error).filter(Boolean)[0] || "the page did not load"}`}`);
+    if (!o.json) err(`${NAME} ${cmd}: nothing was measured${rep.blocked ? "" : `: ${rep.views.map((v) => v.error).filter(Boolean)[0] || "the page did not load"}`}`);
     return 2;
   }
   return rep.findings.length ? 1 : 0;

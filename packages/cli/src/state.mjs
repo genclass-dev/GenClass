@@ -131,7 +131,7 @@ export async function readState(o = {}, deps = {}) {
     doing: st.fresh ? "Add GenClass to this app" : "Put this app in your account",
     state: !isApp ? "blocked" : st.fresh ? "todo" : linked ? "done" : "todo",
     detail: !isApp
-      ? (project.refused ?? "no web app in this folder (no package.json with a browser app, no HTML page)")
+      ? (project.refused ?? "no web app in this folder")
       : st.fresh
         ? project.label
         : !st.token

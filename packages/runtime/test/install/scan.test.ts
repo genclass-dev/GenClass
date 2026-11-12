@@ -4,7 +4,7 @@
 // when Playwright's Chromium is installed (skipped otherwise; CI's main job has none). No test reaches the network.
 
 import { execFile } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import type { AddressInfo } from "node:net";
@@ -13,7 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // @ts-expect-error plain ESM module without types
-import { formatReport, hostedReport, localReport, mergeFindings, normaliseUrl, privateHost, visualScore } from "../../bin/lib/scan.mjs";
+import { formatReport, hostedReport, localReport, mergeFindings, normaliseUrl, privateHost, runtimeDist, visualScore } from "../../bin/lib/scan.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BIN = resolve(HERE, "..", "..", "bin", "genclass-runtime.mjs");
@@ -137,6 +137,35 @@ describe("scan: report pieces (bin/lib/scan.mjs)", () => {
   });
 });
 
+describe("scan: where the script-tag build comes from (runtimeDist)", () => {
+  it("this package's own build, else the one installed in the project or a folder above it, else none", () => {
+    const root = mkdtempSync(join(tmpdir(), "gc-dist-"));
+    try {
+      const build = (dir: string) => {
+        mkdirSync(join(dir, "visual"), { recursive: true });
+        writeFileSync(join(dir, "genclass.global.min.js"), "");
+        writeFileSync(join(dir, "visual", "index.js"), "");
+        return dir;
+      };
+      const none = join(root, "no-build");
+      const app = join(root, "repo", "apps", "web");
+      mkdirSync(app, { recursive: true });
+      expect(runtimeDist(app, none)).toBeNull();
+      // a workspace keeps node_modules at the repository root: found from the app's folder
+      const installed = build(join(root, "repo", "node_modules", "@genclass", "runtime", "dist"));
+      expect(runtimeDist(app, none)).toBe(installed);
+      // the package's own build wins when it is there (the runtime CLI run from its own package)
+      const own = build(join(root, "own"));
+      expect(runtimeDist(app, own)).toBe(own);
+      // half a build is no build
+      rmSync(join(installed, "visual"), { recursive: true });
+      expect(runtimeDist(app, none)).toBeNull();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("scan: the CLI with a mock hosted page check", () => {
   let hosted: { server: Server; url: string };
   const seen: { method?: string; path?: string; body: string; ua?: string }[] = [];
@@ -211,6 +240,30 @@ describe("scan: the CLI with a mock hosted page check", () => {
     expect(r.code).toBe(0);
     const j = JSON.parse(r.stdout);
     expect(j).toMatchObject({ format: "genclass-scan/1", ranAt: "hosted", findings: [], score: { value: 100 } });
+  });
+
+  it("a scan of the same page that is already running is waited for; with no time to wait the refusal is the answer", async () => {
+    seen.length = 0;
+    let n = 0;
+    const busyThenDone = (res: ServerResponse) => {
+      if (n++ === 0) {
+        res.writeHead(409, { "content-type": "application/json", "retry-after": "1" });
+        res.end(JSON.stringify({ ok: false, code: "in-progress", message: "A scan of this page is already running." }));
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, cached: true, report: { ...HOSTED_REPORT, findings: [], top: [], score: { ...HOSTED_REPORT.score, value: 100 } } }));
+    };
+    answer = busyThenDone;
+    const r = await cli(env(), "scan", "https://example.com/", "--hosted", "--json");
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.stdout)).toMatchObject({ ranAt: "hosted", score: { value: 100 } });
+    expect(seen).toHaveLength(2);
+    n = 0;
+    const late = await cli(env(), "scan", "https://example.com/", "--hosted", "--timeout", "1");
+    expect(late.code).toBe(2);
+    expect(late.stderr).toContain("already running. (in-progress); try again in 1 s");
+    expect(seen).toHaveLength(3);
   });
 
   it("errors are exit 2: a refusal with retry-after, an error line in the stream, a blocked page, an unreachable check", async () => {

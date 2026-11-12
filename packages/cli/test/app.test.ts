@@ -1,7 +1,7 @@
 // `genclass dashboard` (src/app.mjs): the app's numbers as lines, and which app is shown.
 import { describe, expect, it } from "vitest";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
-import { dashboard, KINDS, render, spark } from "../src/app.mjs";
+import { dashboard, KINDS, render, signInAgain, spark } from "../src/app.mjs";
 import { ACCOUNT, fakeServer, HOST, isolate, overview, printed, project, SESSION, tempDir, viteApp } from "./helpers.js";
 
 isolate();
@@ -108,5 +108,36 @@ describe("genclass dashboard: which app (src/app.mjs dashboard)", () => {
     // an address from the server that is not on its own host is never printed
     const evil = fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project()] }) }, "GET /api/cli/app": { json: { name: "shop", totals: {}, dashboard_url: "https://evil.example/x" } } });
     expect(await printed(async () => expect(await dashboard({ cwd: dir }, { runGit: () => null, fetchFn: evil.fetchFn })).toBe(0))).not.toContain("evil.example");
+  });
+});
+
+describe("genclass login: a sign-in from before dashboards is approved once more (src/app.mjs signInAgain)", () => {
+  it("signed out, or with a sign-in that can show dashboards, the usual login runs (null)", async () => {
+    expect(await signInAgain({}, { fetchFn: fakeServer({}).fetchFn })).toBeNull();
+    saveCredentials({ host: HOST, access_token: SESSION, account: ACCOUNT });
+    // the server looks at the sign-in before the app: a current one gets "not found" for the id no app has
+    const fine = fakeServer({ "GET /api/cli/app": { status: 404, json: { ok: false, error: "not found" } } });
+    let asked = 0;
+    expect(await signInAgain({}, { fetchFn: fine.fetchFn, signIn: async () => (asked++, "done") })).toBeNull();
+    expect(asked).toBe(0);
+    expect(fine.calls.map((c) => `${c.path}${c.query}`)).toEqual(["/api/cli/app?id=-&range=24h"]);
+    expect(fine.calls[0]!.auth).toBe(`Bearer ${SESSION}`);
+    // a server that cannot be reached, or one without the route, changes nothing either
+    const down = (async () => {
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+    expect(await signInAgain({}, { fetchFn: down, signIn: async () => (asked++, "done") })).toBeNull();
+    expect(asked).toBe(0);
+  });
+
+  it("an old sign-in is signed in again instead of answering 'already signed in'", async () => {
+    saveCredentials({ host: HOST, access_token: SESSION, account: ACCOUNT });
+    const old = fakeServer({ "GET /api/cli/app": { status: 403, json: { ok: false, error: "sign in again: genclass login", reauth: true } } });
+    const seen: object[] = [];
+    const said = await printed(async () => expect(await signInAgain({ noBrowser: true }, { fetchFn: old.fetchFn, signIn: async (o) => (seen.push(o), "done") })).toBe(0));
+    expect(seen).toEqual([{ noBrowser: true }]);
+    expect(said.replace(/\s+/g, " ")).toContain("One more approval in the browser");
+    // an approval that is not given is exit 1, and nothing else is tried
+    expect(await printed(async () => expect(await signInAgain({}, { fetchFn: old.fetchFn, signIn: async () => "skipped" })).toBe(1))).toContain("signed in");
   });
 });

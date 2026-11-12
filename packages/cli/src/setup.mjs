@@ -32,7 +32,15 @@ export function show(state, details = false) {
   header({ app: state.app.name, framework: state.app.framework, account: state.account?.label ?? null, plan: state.account?.plan?.name ?? null, host: state.host });
   if (details) checklist(state.steps);
   else summary(state.steps);
+  // the wrong folder is the first thing to know, whatever step comes next
+  const blocked = state.steps.find((s) => s.state === "blocked");
+  if (blocked) {
+    out();
+    note(`${upper(blocked.detail)}. Run genclass inside your web app's folder, or name it: ${c.cyan("genclass --cwd <folder>")}`);
+  }
 }
+
+const upper = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
 
 /** What comes next, in one sentence; with `details`, the fuller explanation under it. */
 function showNext(step, details) {
@@ -45,8 +53,9 @@ function closing(state) {
   out();
   const waiting = state.steps.filter((s) => s.state === "waiting");
   const blocked = state.steps.find((s) => s.state === "blocked");
-  if (blocked) note(`${blocked.title}: ${blocked.detail}. Run genclass inside your web app's folder (or pass --cwd).`);
-  else if (state.complete) out(`  ${c.green("Everything is set up.")}`);
+  if (blocked) {
+    /* show() has said where to run it */
+  } else if (state.complete) out(`  ${c.green("Everything is set up.")}`);
   else if (waiting.length) {
     out(`  ${c.bold("Nothing more to do here right now.")}`);
     for (const s of waiting) note(`${s.title}: ${s.human ?? s.detail}.`);

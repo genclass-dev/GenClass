@@ -17,7 +17,7 @@ per step. Stop at any point and run it again: it continues from what is true now
   ╚██████╔╝███████╗██║ ╚████║╚██████╗███████╗██║  ██║███████║███████║
    ╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝
 
-  Finds what breaks in your web app, and tells you what it needs next.  v0.2.2
+  Finds what breaks in your web app, and tells you what it needs next.  v0.2.3
 
   GenClass • shop                                                Vite + React
   ada@example.com • Free plan

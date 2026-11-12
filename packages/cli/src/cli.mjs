@@ -56,6 +56,12 @@ export async function run(argv) {
   const args = cmd ? argv.slice(1) : argv;
 
   // the runtime CLI's own commands, with their own flags and help
+  if (cmd === "login" && !args.some((a) => a === "--help" || a === "-h")) {
+    // a sign-in from before the command could show dashboards: "already signed in" would be a dead end for
+    // `genclass dashboard`, which sends people here, so it is approved once more instead
+    const again = await (await import("./app.mjs")).signInAgain(parseArgs(args).o);
+    if (again !== null) return again;
+  }
   if (["login", "logout", "whoami", "connect"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
   if (cmd === "init" || cmd === "remove") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
   if (cmd === "scan" || cmd === "audit") {

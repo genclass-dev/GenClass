@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.3
+
+From using the command on a real site the morning after 0.2.2:
+
+- **`genclass login` signs in again when it has to.** With a sign-in from before the command could show dashboards,
+  `genclass dashboard` said "run genclass login" and `genclass login` answered "already signed in". It now says what
+  is missing and asks for one more approval in the browser.
+- **`genclass scan --local` works.** The command carries no copy of the runtime, so it uses the one installed in the
+  project (`node_modules/@genclass/runtime`, in this folder or one above it). When there is none it says what to
+  install, instead of naming a build step of GenClass's own repository.
+- **`genclass scan` waits for a scan of the same page that is already running** (someone else's, or yours a moment
+  ago) and prints that scan's report, instead of stopping with "try again in 20 s".
+- The page check's help and messages say `genclass scan`, not `genclass-runtime scan`, and the help says where the
+  check runs by default (on genclass.dev).
+- **A folder with no web app says what to do**, right under the steps: run the command in the app's folder, or name
+  it with `--cwd`. The line in the list is short enough to read.
+- The npm page links to the command's guide, genclass.dev/docs/cli.
+
 ## 0.2.2
 
 From a walk through the whole setup as a new user, against a local copy of genclass.dev:

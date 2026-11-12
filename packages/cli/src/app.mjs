@@ -11,10 +11,10 @@
 // - Text from the server (app names, page routes, kinds) is data: it goes through tui.mjs clean() before printing.
 
 import { readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
-import { hostUrl } from "../../runtime/bin/lib/host.mjs";
+import { hostConfig, hostUrl } from "../../runtime/bin/lib/host.mjs";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { openBrowser, signIn } from "./actions.mjs";
-import { fetchApp } from "./api.mjs";
+import { fetchApp, signInIsOld } from "./api.mjs";
 import { readState } from "./state.mjs";
 import { ago, bad, clean, header, note, typed, warn, width } from "./tui.mjs";
 
@@ -115,6 +115,22 @@ export function render(app, state, o = {}) {
   if (app.dashboardUrl) out(`  ${c.gray("In the browser")}  ${c.cyan(app.dashboardUrl)}  ${c.gray("(genclass dashboard --open)")}`);
   if (!all) out(`  ${c.gray("Every row: genclass dashboard --all · another period: --range 24h, 7d or 30d")}`);
   out();
+}
+
+/**
+ * `genclass login` when the saved sign-in is from before the command could show dashboards: says so and signs in
+ * again (one approval in the browser). Returns the exit code, or null when the sign-in is fine, missing or cannot be
+ * checked, and the usual login command should run.
+ * @param {{ noBrowser?: boolean }} o
+ * @param {{ fetchFn?: typeof fetch, signIn?: (o: object) => Promise<string> }} [deps]
+ */
+export async function signInAgain(o = {}, deps = {}) {
+  if (hostConfig().error) return null;
+  const { creds } = readCredentialsFor();
+  if (!creds || !(await signInIsOld(creds, deps))) return null;
+  out();
+  note("You are signed in, from before the command could show dashboards. One more approval in the browser adds that.");
+  return (await (deps.signIn ?? signIn)(o)) === "done" ? 0 : 1;
 }
 
 /**

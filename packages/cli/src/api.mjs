@@ -109,6 +109,16 @@ const pairs = (list, max) =>
     .map((x) => ({ key: x.key.slice(0, 300), count: count(x.count) }));
 
 /**
+ * True when the saved sign-in works but was approved before the command could show dashboards, so the server asks
+ * for one more approval (403 with `reauth`). Asked with an id no app has: the server checks the sign-in first.
+ * False for anything else, including a server that cannot be reached.
+ */
+export async function signInIsOld(creds, opts = {}) {
+  const r = await request("/api/cli/app?id=-&range=24h", { token: creds.access_token, host: creds.host, fetchFn: opts.fetchFn });
+  return !r.ok && r.status === 403 && r.json?.reauth === true;
+}
+
+/**
  * One app's dashboard as data, for `genclass dashboard`: the counts the browser dashboard shows, for the period.
  * `reauth` is true when this sign-in was approved before the command could show dashboards (sign in again);
  * `missing` when the server has no such route; `locked` when the app's plan leaves the dashboard out.
