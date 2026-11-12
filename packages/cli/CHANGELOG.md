@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- **Fixed: the guided setup ended at the suggestions step's address question.** A question asked right after another
+  one (with nothing in between that waits) had its input paused when the earlier question's reader closed, and the
+  command ended at the prompt. Each question now waits for the one before it to have closed
+  (`packages/runtime/bin/lib/ui.mjs` `ask`). Found on the first real run of 0.1.0.
+- The README no longer says the package is not on npm.
+
 ## 0.1.0
 
 The first version: one command for everything GenClass sets up.

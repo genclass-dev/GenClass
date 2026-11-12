@@ -30,6 +30,17 @@ take a prerelease. Both lines load the same model. AI coding agents working on t
 ## Quick start
 
 ```bash
+npx genclass   # signs you in, adds GenClass to your app and walks you through the rest
+```
+
+Run it in your web app's folder. It shows where the project stands (signed in, GenClass in the app, first page seen,
+pull requests checked, coding agent connected, suggestions) and does the next step; run it again any time and it
+continues from there. `npx genclass suggest` tells you what your app is missing, most important first
+([`packages/cli`](packages/cli/README.md)).
+
+To add only the runtime, with no account:
+
+```bash
 npx @genclass/runtime@beta init   # finds your framework and shows the diff before it writes anything
 ```
 

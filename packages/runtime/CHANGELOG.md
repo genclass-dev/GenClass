@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Fixed in the CLI: a question asked right after another one could end the command at the prompt.** The reader of
+  one question closes a turn after its answer; a question asked before that had its input paused by the close. Each
+  question now waits for the one before it to have closed (`bin/lib/ui.mjs` `ask`). `init` and `login` always had
+  something that waits between their questions, so they were not affected; the `genclass` command was
+  (`genclass` 0.1.1). Tests: `packages/cli/test/prompt.test.ts`.
 - **The CLI's modules can run inside the `genclass` command** (`packages/cli`, `npx genclass`, not on npm yet;
   nothing in the runtime changes, and `npx @genclass/runtime@beta init` and its other commands behave as before).
   `genclass` bundles `bin/lib` into its own file and names itself before those modules load: `version.mjs`,
