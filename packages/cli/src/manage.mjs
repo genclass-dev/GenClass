@@ -16,8 +16,8 @@ import { resolve } from "node:path";
 import { createAccountProject, readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
 import { hostUrl } from "../../runtime/bin/lib/host.mjs";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
-import { checkout, mcpServer, openBrowser } from "./actions.mjs";
-import { changeConnection, createInvite, fetchAccount, fetchApp, fetchConnections, fetchEvents, makeAgentLink, saveFunnels } from "./api.mjs";
+import { checkout, mcpServer, openBrowser, projectPlan } from "./actions.mjs";
+import { changeConnection, createInvite, fetchAccount, fetchApp, fetchOverview, fetchConnections, fetchEvents, makeAgentLink, saveFunnels } from "./api.mjs";
 import { appArg, n, pickApp } from "./app.mjs";
 import { copyText, onPath } from "./fix.mjs";
 import { asking, refused } from "./session.mjs";
@@ -79,6 +79,13 @@ export async function apps(o = {}, deps = {}) {
       } else {
         good(`Made ${c.bold(clean(r.name, 60))}.`);
         row("Project key", r.token);
+        // plans are per project: an app past the ones Free covers needs its own, and its page says so
+        const me = await fetchOverview(creds, deps).catch(() => null);
+        const made = me?.ok ? me.projects.find((p) => p.token === r.token) : null;
+        if (made?.needsPlan && made.planUrl) {
+          warn("Free covers 3 apps: this one needs a paid plan.");
+          out(`  ${c.gray("Its plan:")} ${c.cyan(made.planUrl)}`);
+        } else if (made?.plan?.id === "free" && made.planUrl) out(`  ${c.gray("On Free (limited). Its plan:")} ${c.cyan(made.planUrl)}`);
         note("To put GenClass into that app's code, run npx genclass in its folder and pick this app.");
       }
       out();
@@ -124,10 +131,14 @@ export async function plan(o = {}, deps = {}) {
   if ("code" in s) return s.code;
   const { state, creds } = s;
   const a = await asking(o, creds, (cr) => fetchAccount(cr, deps), deps);
-  // an older sign-in or an older server: what the overview knows is still an answer
-  const offer = a.ok ? a.offer : (state.steps.find((x) => x.id === "plan")?.offer ?? null);
+  // plans per project: this folder's app's plan (the setup's plan step), else, from a server from before them, the
+  // account's; an older sign-in or an older server: what the overview knows is still an answer
+  const step = state.steps.find((x) => x.id === "plan");
+  const mine = (state.projects ?? []).filter((p) => p.plan);
+  const offer = step?.offer ?? (mine.length ? null : a.ok ? a.offer : null);
   if (o.json) {
-    out(JSON.stringify(a.ok ? { ok: true, plan: a.plan, access: a.access, limits: a.limits, used: a.used, includes: a.includes, subscription: a.subscription, billing_url: a.billingUrl, offer: a.offer } : { ok: true, plan: state.account?.plan ?? null, billing_url: state.account?.billingUrl ?? null, offer, partial: a.reauth ? "sign in again for the limits: npx genclass login" : "this genclass.dev says no more" }, null, 2));
+    const apps = mine.map((p) => ({ id: p.id, name: p.name, plan: p.plan, needs_plan: p.needsPlan, plan_url: p.planUrl, this_folder: p.token === state.app?.token }));
+    out(JSON.stringify(a.ok ? { ok: true, plan: a.plan, access: a.access, limits: a.limits, used: a.used, includes: a.includes, subscription: a.subscription, billing_url: a.billingUrl, offer, apps } : { ok: true, plan: state.account?.plan ?? null, billing_url: state.account?.billingUrl ?? null, offer, partial: a.reauth ? "sign in again for the limits: npx genclass login" : "this genclass.dev says no more" }, null, 2));
     return 0;
   }
   top(state);
@@ -149,9 +160,23 @@ export async function plan(o = {}, deps = {}) {
     if (has.length) row("Includes", has.join(", "));
     if (lacks.length) row("Not included", lacks.join(", "));
   }
+  // each app with its plan
+  if (mine.length) {
+    out();
+    out(`  ${c.bold("Apps and their plans")}`);
+    for (const p of mine) {
+      const what = p.needsPlan ? c.yellow("needs a plan") : p.plan.id === "free" ? c.gray("Free") : c.bold(clean(p.plan.name, 20));
+      out(`    ${clean(p.name, 24).padEnd(24)}  ${what}${p.token === state.app?.token ? c.gray("  this folder") : ""}`);
+    }
+  }
   if (!offer) {
     out();
     out(`  ${c.gray("Billing, in the browser")}  ${c.cyan(billingUrl)}`);
+    out();
+    return 0;
+  }
+  if (offer.project) {
+    await projectPlan(offer, o, deps);
     out();
     return 0;
   }

@@ -96,8 +96,10 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(f).toContain("Not included visitor analytics, alerts to Slack, Sentry and others, the stored events as a file, private repositories");
     // the paid plan's card, in the server's words, and (nobody at a terminal) where it starts
     expect(f).toContain("T E A M");
-    expect(f).toContain("$15 / developer / month");
-    expect(text).toContain(`${HOST}/account/billing?plan=team&start=1`);
+    expect(f).toContain("$15 / project / month");
+    // plans are per project: the account's one app on Free has its own plan page
+    expect(text).toContain(`${HOST}/account/billing?project=${me.app.id}&from=cli`);
+    expect(f).toContain("Apps and their plans Shop Free");
     expect(JSON.parse((await said(() => plan({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: true, plan: { id: "free" }, limits: { apps: 3 }, offer: { plan: { id: "team" } } });
   });
 
@@ -106,9 +108,11 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     const me = await account(env);
     team3(sql, me.account.id);
     const f = flat((await said(() => plan(me.o, me.deps))).text);
-    expect(f).toContain("Plan Team $15 / developer / month");
+    expect(f).toContain("Plan Team $15 / project / month");
     expect(f).toContain("Renews 2026-12-13");
-    expect(f).toContain("People 1 of 3");
+    // Team is per project, everyone on it included
+    expect(f).toContain("People 1 • no limit");
+    expect(f).toContain("Apps and their plans Shop Team");
     expect(f).toContain("Apps 1 • no limit");
     expect(f).toContain("Includes visitor analytics, alerts to Slack, Sentry and others, the stored events as a file, private repositories");
     expect(f).not.toContain("T E A M");
@@ -142,7 +146,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(link).toBeTruthy();
     expect(flat(made.text)).toContain("It works once");
     const list = flat((await said(() => team(me.o, me.deps))).text);
-    expect(list).toContain("Team 1 of 3 seats used");
+    expect(list).toContain("Team 1 person");
     expect(list).toContain("ada@example.com owner");
     expect(list).toContain("an invite link is open until");
     expect(list).toContain("npx genclass team invite");
@@ -162,10 +166,12 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(flat(made.text)).toMatch(/Made Blog two\. Project key gc_[A-Za-z0-9]{22}/);
     await said(() => apps({ cwd: me.dir, args: ["new", "Third"] }, me.deps));
     const over = await said(() => apps({ cwd: me.dir, args: ["new", "Fourth"] }, me.deps));
-    expect(over.code).toBe(1);
-    expect(flat(over.text)).toContain("npx genclass plan");
+    // a fourth app is made, and needs a plan of its own
+    expect(over.code).toBe(0);
+    expect(flat(over.text)).toContain("Free covers 3 apps: this one needs a paid plan.");
+    expect(over.text).toMatch(/account\/billing\?project=[0-9a-f]+/);
     expect((await said(() => apps({ cwd: me.dir, args: ["new"] }, me.deps))).code).toBe(2);
-    expect(JSON.parse((await said(() => apps({ cwd: me.dir, json: true }, me.deps))).text).apps.map((a: any) => a.name)).toEqual(["Blog two", "Shop", "Third"]);
+    expect(JSON.parse((await said(() => apps({ cwd: me.dir, json: true }, me.deps))).text).apps.map((a: any) => a.name)).toEqual(["Blog two", "Fourth", "Shop", "Third"]);
   });
 });
 

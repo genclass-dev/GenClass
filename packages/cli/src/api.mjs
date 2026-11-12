@@ -32,7 +32,7 @@ export async function fetchOverview(creds, opts = {}) {
   if (!r.ok && r.status === 404) r = await request("/api/me", base);
   if (!r.ok) return { ok: false, status: r.status, reason: failure(r) };
   const j = r.json ?? {};
-  const projects = (Array.isArray(j.projects) ? j.projects : []).map((p) => cleanProject(p, creds.host)).filter(Boolean);
+  const projects = (Array.isArray(j.projects) ? j.projects : []).map((p) => withPlan(cleanProject(p, creds.host), p, creds.host)).filter(Boolean);
   const account = j.account && typeof j.account === "object" ? { id: String(j.account.id ?? ""), email: str(j.account.email), github_login: str(j.account.github_login, 60) } : creds.account;
   if (!full) return { ok: true, account, plan: null, suggestions: null, projects, github: null, billingUrl: null };
   const s = j.suggestions && typeof j.suggestions === "object" ? j.suggestions : null;
@@ -47,6 +47,16 @@ export async function fetchOverview(creds, opts = {}) {
     billingUrl: sameOrigin(j.billing_url, creds.host),
     offer: offerOf(j.offer, creds.host),
   };
+}
+
+/**
+ * An app with its plan, when the server says it (plans are per project since genclass.dev's billing/plans.json
+ * version 4): `plan` { id, name, source }, `needsPlan` for an app past the ones Free covers, `planChosen` once Free
+ * was chosen for it on its plan page, `planUrl` that page (on the server's own host, or none).
+ */
+function withPlan(app, p, host) {
+  if (!app || !p?.plan || typeof p.plan !== "object" || !str(p.plan.id, 40)) return app;
+  return { ...app, plan: { id: str(p.plan.id, 40), name: str(p.plan.name, 40) ?? str(p.plan.id, 40), source: str(p.plan.source, 20) }, needsPlan: p.needs_plan === true, planChosen: p.plan_chosen === true, planUrl: sameOrigin(p.plan_url, host) };
 }
 
 /**
@@ -68,7 +78,7 @@ function offerOf(o, host) {
     summary: str(o.summary, 200),
     features: (Array.isArray(o.features) ? o.features : []).filter((x) => typeof x === "string" && x.trim()).slice(0, 12).map((x) => x.slice(0, 120)),
     checkoutUrl,
-    free: { name: str(f.name, 40) ?? "Free", apps: num(f.apps), historyDays: num(f.history_days), suggestionsShown: num(f.suggestions_shown) },
+    free: { name: str(f.name, 40) ?? "Free", apps: num(f.apps), historyDays: num(f.history_days), suggestionsShown: num(f.suggestions_shown), liveFixes: num(f.live_fixes) },
   };
 }
 
@@ -147,6 +157,13 @@ export async function signInIsOld(creds, opts = {}) {
   return old(await ask("/api/cli/app?id=-&range=24h"));
 }
 
+/** The live-fix count the server sent with an app's dashboard (src/usage.ts there), or null. */
+function liveUsage(u) {
+  if (!u || typeof u !== "object" || !Number.isFinite(Number(u.used))) return null;
+  const lim = u.limit === null || u.limit === undefined || !Number.isFinite(Number(u.limit)) ? null : Math.max(0, Math.round(Number(u.limit)));
+  return { used: Math.max(0, Math.round(Number(u.used))), limit: lim, observeOnly: u.observe_only === true, resets: str(u.resets, 40) };
+}
+
 /**
  * One app's dashboard as data, for `genclass dashboard`: the counts the browser dashboard shows, for the period.
  * `reauth` is true when this sign-in was approved before the command could show dashboards (sign in again);
@@ -186,6 +203,10 @@ export async function fetchApp(creds, id, range = "7d", opts = {}) {
     visitorsPlan: lock ? { plan: str(lock.plan, 40), upgradeUrl: sameOrigin(lock.upgrade_url, creds.host) } : null,
     agent: { found: count(st.found), reproduced: count(st.reproduced), fixed: count(st.fixed), closed: count(st.closed), open: count(st.open), last: str(j.agent?.last, 40) },
     dashboardUrl: sameOrigin(j.dashboard_url, creds.host),
+    /** the problems fixed live this month against the app's plan: past its limit GenClass observes only */
+    usage: liveUsage(j.usage),
+    /** the app's plan page (plans per project) */
+    planUrl: sameOrigin(j.plan_url, creds.host),
     /** the recorded demo's numbers stand in for measured ones (the server's sample app) */
     demo: j.demo === true,
     // The rest of what the dashboard page reads, for the other views (views.mjs): every total and breakdown by the

@@ -71,7 +71,7 @@ async function overview(c: C): Promise<Response> {
     projects: await withPlans(c, a.account.id),
     github: { app: gh !== null, install_url: gh ? `${c.cfg.origin}/github/install` : null, connect_url: gh?.clientId ? `${c.cfg.origin}/github/connect` : null },
     billing_url: `${c.cfg.origin}/account/billing`,
-    offer: offerFor(c, a.account, access),
+    offer: offerFor(c, a.account, access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
   });
 }
 
@@ -82,10 +82,11 @@ async function overview(c: C): Promise<Response> {
  */
 async function withPlans(c: C, accountId: string): Promise<Record<string, unknown>[]> {
   const access = new Map((await accountProjectsAccess(c.db, accountId, c.env, c.now)).map((x) => [x.row.token, x.access]));
+  const chosen = new Set(((await c.db.prepare("SELECT token FROM projects WHERE account_id = ? AND plan_chosen IS NOT NULL").bind(accountId).all<{ token: string }>()).results ?? []).map((r) => r.token));
   return (await accountProjects(c, accountId)).map((p) => {
     const j: Record<string, unknown> = { ...projectJson(c, p) };
     const a = p.account_id === accountId ? access.get(p.token) : undefined;
-    if (a) Object.assign(j, { plan: { id: a.plan.id, name: a.plan.name, source: a.source }, needs_plan: a.locked === "free_projects", plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
+    if (a) Object.assign(j, { plan: { id: a.plan.id, name: a.plan.name, source: a.source }, needs_plan: a.locked === "free_projects", plan_chosen: chosen.has(p.token), plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
     return j;
   });
 }
@@ -96,16 +97,21 @@ async function withPlans(c: C, accountId: string): Promise<Record<string, unknow
  * checkout, and Free's limits in numbers. Null for an account that has a plan or a grant, on a server that sells
  * nothing, and for an account that cannot buy here (a test key and an account not on its list).
  */
-function offerFor(c: C, account: { id: string; email: string | null }, access: Access): Record<string, unknown> | null {
+function offerFor(c: C, account: { id: string; email: string | null }, access: Access, projects?: { row: { id?: string | null }; access: Access }[]): Record<string, unknown> | null {
   const plan = PAID_PLANS[0];
-  if (!plan || access.plan.id !== FREE.id || access.source !== null || !canBuy(c.env, account)) return null;
+  if (!plan || !canBuy(c.env, account)) return null;
+  // a plan sold per project is offered while one of the account's apps is on Free, and only once it has one (the
+  // command asks right after the app is in the account); one sold for the whole account, while the account is on Free
+  const open = (projects ?? []).filter((x) => x.row.id && x.access.plan.id === FREE.id && x.access.source === null);
+  if (plan.per_project === true && projects ? !open.length : access.plan.id !== FREE.id || access.source !== null) return null;
+  const one = plan.per_project === true && open.length === 1 ? open[0]!.row.id! : null;
   return {
     plan: { id: plan.id, name: plan.name },
     price: priceText(plan),
     summary: plan.summary,
     features: plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text)).map((f) => f.text).slice(0, 12),
-    checkout_url: `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1`,
-    free: { name: FREE.name, apps: FREE.limits.apps, history_days: FREE.limits.history_days, suggestions_shown: suggestionLimits(FREE).shown },
+    checkout_url: one ? `${c.cfg.origin}/account/billing?project=${encodeURIComponent(one)}&from=cli` : `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1`,
+    free: { name: FREE.name, apps: FREE.limits.apps, history_days: FREE.limits.history_days, suggestions_shown: suggestionLimits(FREE).shown, live_fixes: FREE.limits.live_fixes_per_month ?? null },
   };
 }
 
@@ -231,7 +237,7 @@ async function account(c: C): Promise<Response> {
       memberships: memberships.map((x) => ({ email: x.email, github_login: x.githubLogin, joined: x.joined, active: x.active })),
     },
     billing_url: `${c.cfg.origin}/account/billing`,
-    offer: offerFor(c, a.account, access),
+    offer: offerFor(c, a.account, access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
   });
 }
 

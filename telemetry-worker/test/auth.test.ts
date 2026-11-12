@@ -2057,7 +2057,8 @@ describe("accounts: the agent link (POST /api/account/projects/<id>/link) and St
     expect(html).toContain('<form class="pnl newp" id="new-app" novalidate>');
     expect(html).toContain("<option>ada&#39;s Org</option>");
     expect(html).toContain('gcPost("/api/account/projects", { name: name.value })');
-    expect(html).toContain('"/account/apps/" + encodeURIComponent(j.project.id) + "#connect"');
+    // a new app goes to its plan page first (Team large, Free small), which goes on to Connect
+    expect(html).toContain('"/account/billing?project=" + encodeURIComponent(j.project.id) + "&new=1"');
     expect(html).toContain('<a class="btn ghost" href="/account">Cancel</a>');
     // the Projects page offers it, and lists each project as a card
     await call(env, "POST", "/api/account/projects", { body: { name: "Shop" }, cookie });
@@ -2638,7 +2639,7 @@ describe("POST /start signed in: the one click puts the app in the account", () 
     const cookie = sessionOf(up.res);
     const form = await call(env, "POST", "/start", { cookie });
     expect(form.status).toBe(303);
-    expect(form.headers.get("location")).toMatch(/^\/account\/apps\/[^/]+#connect$/);
+    expect(form.headers.get("location")).toMatch(/^\/account\/billing\?project=[^&/]+&new=1$/);
     const owned = sql.rows("SELECT token, account_id, private_link FROM projects");
     expect(owned).toHaveLength(1);
     expect(owned[0]).toMatchObject({ account_id: up.json.account.id, private_link: 0 });

@@ -6,6 +6,8 @@
 --   its account (src/plans.ts projectAccess), so nobody who pays loses anything;
 -- - GenClass's grant per project: every app of an account that had a grant gets the same grant (the owner's choice,
 --   2026-11-12: "every project they have"); apps added later choose a plan like everyone else's;
+-- - when Free was chosen for a project on its plan page ("Try for free (limited)"): the genclass command's plan
+--   step waits for this or a payment;
 -- Live fixes per project and month need no table: they are read from the daily counters (src/usage.ts).
 -- Apply before deploying the worker that reads them:
 --   npx --yes wrangler@4 d1 migrations apply genclass-dashboard --remote
@@ -18,6 +20,7 @@ ALTER TABLE projects ADD COLUMN cancel_at_period_end INTEGER;
 ALTER TABLE projects ADD COLUMN stripe_mode TEXT;              -- the Stripe mode the subscription belongs to
 ALTER TABLE projects ADD COLUMN comp_until TEXT;               -- GenClass's own grant for this app, until then
 ALTER TABLE projects ADD COLUMN comp_plan TEXT;                -- the plan that grant gives
+ALTER TABLE projects ADD COLUMN plan_chosen TEXT;              -- when Free was chosen on the project's plan page
 CREATE INDEX projects_subscription ON projects (subscription_id);
 
 UPDATE projects

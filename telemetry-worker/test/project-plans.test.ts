@@ -190,22 +190,65 @@ describe("Free covers 3 projects; a fourth waits for a plan of its own", () => {
     expect(page).toContain(`<tr><td>Shop</td><td>Free</td>`);
     expect(page).toContain("Needs a plan");
     const one = await text(call(t.env, "GET", `/account/billing?project=${apps[0]!.id}&from=cli`, { cookie: a.cookie }));
-    expect(one).toContain("<h1>A plan for Shop</h1>");
+    expect(one).toContain("<h1>Choose a plan for Shop</h1>");
     expect(one).toContain("<b>Shop</b> is on <b>Free</b>.");
     expect(one).toContain('<div class="plan pick big"><h3>Team</h3><p class="price">$15 / project / month</p>');
     expect(one).toContain('data-plan="team" data-pick><span>Start Team for Shop</span>');
-    expect(one).toContain(`<a href="/account/apps/${apps[0]!.id}">Try free for now (limited)</a>`);
-    expect(one).toContain("<b>Shop</b> is in your account. Choose its plan.");
+    // Free is the small way on, a very small button under the big card
+    expect(one).toContain('<p class="free" id="freebox"><button class="linkish" type="button" id="free">Try for free (limited)</button></p>');
+    expect(one).toContain(".linkish{background:none;border:0;padding:0;font:inherit;font-size:11px");
+    expect(one).toContain("<b>Shop</b> is in your account. Choose its plan to go on.");
     // the fourth: no free way on
     const fourth = await text(call(t.env, "GET", `/account/billing?project=${apps[3]!.id}`, { cookie: a.cookie }));
     expect(fourth).toContain("needs a plan: Free covers 3 projects");
-    expect(fourth).not.toContain("Try free for now");
+    expect(fourth).not.toContain("Try for free");
     // signed out: through the sign-in, back to the same page
     const out = await call(t.env, "GET", `/account/billing?project=${apps[0]!.id}&start=1&from=cli`, {});
     expect(out.status).toBe(302);
     expect(out.headers.get("location")).toBe(`/login?next=${encodeURIComponent(`/account/billing?project=${apps[0]!.id}&start=1&from=cli`)}`);
     // the page waits for its payment with this
     expect(await json(call(t.env, "GET", `/api/billing?project=${apps[0]!.id}`, { cookie: a.cookie }))).toEqual({ project: { id: apps[0]!.id, plan: "free", source: null, locked: null } });
+  });
+
+  it("Try for free (limited) records the choice for that app only; the fourth cannot, and it is a browser write", async () => {
+    const t = setup(LIVE);
+    const a = await signedIn(t.env);
+    const apps = [];
+    for (const n of ["Shop", "Blog", "Docs", "Extra"]) apps.push(await createApp(t.env, a.cookie, n));
+    const chosen = (id: string) => t.sql.db.prepare("SELECT plan_chosen FROM projects WHERE id = ?").get(id) as { plan_chosen: string | null };
+    expect(chosen(apps[0]!.id).plan_chosen).toBeNull();
+    const r = await call(t.env, "POST", `/api/billing/projects/${apps[0]!.id}/free`, { cookie: a.cookie, body: {} });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ ok: true, plan: "free" });
+    expect(chosen(apps[0]!.id).plan_chosen).toMatch(/^20\d\d-\d\d-\d\dT/);
+    expect(chosen(apps[1]!.id).plan_chosen).toBeNull();
+    // the fourth has only the paid plan
+    expect((await call(t.env, "POST", `/api/billing/projects/${apps[3]!.id}/free`, { cookie: a.cookie, body: {} })).status).toBe(409);
+    expect(chosen(apps[3]!.id).plan_chosen).toBeNull();
+    // another account's app, and no app at all
+    const b = await signedIn(t.env, "bob@example.com");
+    expect((await call(t.env, "POST", `/api/billing/projects/${apps[1]!.id}/free`, { cookie: b.cookie, body: {} })).status).toBe(404);
+    expect(chosen(apps[1]!.id).plan_chosen).toBeNull();
+    // signed out, and a GET
+    expect((await call(t.env, "POST", `/api/billing/projects/${apps[1]!.id}/free`, { body: {} })).status).toBe(401);
+    expect((await call(t.env, "GET", `/api/billing/projects/${apps[1]!.id}/free`, { cookie: a.cookie })).status).toBe(405);
+  });
+
+  it("an older plan link (?plan=team&start=1, from the pricing page or an older genclass command) opens the first app on Free", async () => {
+    const t = setup(LIVE);
+    const a = await signedIn(t.env);
+    // no app yet: the billing page, which says to add one first
+    const none = await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: a.cookie });
+    expect(none.status).toBe(200);
+    expect(await none.text()).toContain("Add a project first");
+    const shop = await createApp(t.env, a.cookie, "Shop");
+    const blog = await createApp(t.env, a.cookie, "Blog");
+    const r = await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: a.cookie });
+    expect(r.status).toBe(302);
+    expect(r.headers.get("location")).toBe(`/account/billing?project=${shop.id}&from=cli`);
+    // Shop on Team: Blog is the one
+    t.sql.db.prepare("UPDATE projects SET plan = 'team', stripe_mode = 'live', subscription_id = 'sub_s', subscription_status = 'active' WHERE id = ?").run(shop.id);
+    expect((await call(t.env, "GET", "/account/billing?plan=team", { cookie: a.cookie })).headers.get("location")).toBe(`/account/billing?project=${blog.id}`);
   });
 
   it("a project that is paid for is not deleted while it bills", async () => {

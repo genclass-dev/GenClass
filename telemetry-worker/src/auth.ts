@@ -1917,7 +1917,8 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       }
       const p = await createProject(c.db, name, c.now, a.account.id);
       const to = `/account/apps/${p.id}#connect`;
-      return json201 ? json(201, { url: to, copiedUrl: to, token: p.token, command: setupCommand(p.token) }) : redirect(to, [], 303);
+      // the form's way on is the new app's plan page first (it then goes on to the app's setup)
+      return json201 ? json(201, { url: to, copiedUrl: to, token: p.token, command: setupCommand(p.token) }) : redirect(`/account/billing?project=${encodeURIComponent(p.id ?? "")}&new=1`, [], 303);
     }
     case "/signup":
     case "/login": {

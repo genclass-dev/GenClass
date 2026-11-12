@@ -227,6 +227,10 @@ export interface ProjectPlanView {
   go: boolean;
   /** The project was just added from the genclass command (?from=cli). */
   fromCli: boolean;
+  /** Just added on the website (?new=1): after the choice, the app's setup. */
+  isNew?: boolean;
+  /** Free was chosen for it on this page before (projects.plan_chosen). */
+  chosen?: boolean;
   now: Date;
 }
 
@@ -258,23 +262,23 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const notice = v.done && !paid
     ? '<p class="notice n-ok" role="status" id="donemsg"><b>Thanks.</b> This page changes as soon as Stripe confirms your payment, usually within a minute.</p>'
     : v.done
-      ? `<p class="notice n-ok" role="status"><b>Thanks.</b> ${name} is on ${esc(a.plan.name)} now.</p>`
-      : v.fromCli && !paid
-        ? `<p class="notice" role="status"><b>${name}</b> is in your account. Choose its plan.</p>`
+      ? `<p class="notice n-ok" role="status"><b>Thanks.</b> ${name} is on ${esc(a.plan.name)} now. <a href="/account/apps/${encodeURIComponent(v.project.id)}">Open its dashboard</a>, or go back to your terminal if you started there: it goes on by itself.</p>`
+      : (v.fromCli || v.isNew) && !paid && a.source === null
+        ? `<p class="notice" role="status"><b>${name}</b> is in your account. Choose its plan to go on.</p>`
         : "";
   const test = v.testMode && v.live ? '<p class="notice" role="note"><b>Stripe test mode.</b> No real money moves. Pay with card 4242 4242 4242 4242, any future date and any CVC.</p>' : "";
   const features = (offer?.features ?? []).filter((f) => f.available).map((f) => `<li>${esc(f.text)}</li>`).join("");
   const card = offer && !paid && a.source !== "open"
     ? `<div class="plan pick big"><h3>${esc(offer.name)}</h3><p class="price">${esc(priceText(offer))}</p><p class="sum">${esc(offer.summary)}</p><ul>${features}</ul>
   <div class="act">${v.live ? `<button class="btn" type="button" data-plan="${esc(offer.id)}" data-pick><span>Start ${esc(offer.name)} for ${name}</span></button>` : '<span class="muted">Paid plans are not on sale yet.</span>'}</div></div>
-  ${a.locked ? "" : `<p class="free"><a href="/account/apps/${encodeURIComponent(v.project.id)}">Try free for now (limited)</a></p>`}`
+  ${a.locked || a.source !== null ? "" : `<p class="free" id="freebox"><button class="linkish" type="button" id="free">Try for free (limited)</button></p>`}`
     : paid
       ? `<div class="acct-form"><button class="btn ghost" type="button" id="portal"><span>Manage billing</span></button></div><p class="err" id="portalerr" role="alert"></p>`
       : "";
   const body = `
 <div class="sb-page" id="mc" tabindex="-1">
 <header class="sb-ph" id="top"><div>
-  <h1>A plan for ${name}</h1>
+  <h1>${paid || a.source === "comp" || a.source === "open" ? `The plan for ${name}` : `Choose a plan for ${name}`}</h1>
   <p class="status" id="status">${status}</p>
   ${usage}
 </div></header>
@@ -285,7 +289,7 @@ ${notice}${test}
   <p class="intro"><a href="/account/billing#projects">All your projects and their plans</a></p>
 </section>
 </div>
-<script type="application/json" id="cfg">${embed({ project: v.project.id, go: v.go && !paid && v.live, wait: v.done && !paid })}</script>`;
+<script type="application/json" id="cfg">${embed({ project: v.project.id, go: v.go && !paid && v.live, wait: v.done && !paid, cli: v.fromCli, isNew: !!v.isNew })}</script>`;
   const script = `
 (function(){
   gcDropQuery(["project"]);
@@ -299,6 +303,19 @@ ${notice}${test}
   if (b) b.focus();
   // sent here by the genclass command to start the plan: the same click a person would make
   if (b && cfg.go) b.click();
+  // the small way on: Free for this app, for now. The genclass command waits for this choice or a payment
+  var fr = document.getElementById("free");
+  if (fr) fr.addEventListener("click", function(){
+    var err = document.getElementById("planerr"); err.textContent = "";
+    fr.disabled = true;
+    gcPost("/api/billing/projects/" + encodeURIComponent(cfg.project) + "/free", {}).then(function(){
+      if (cfg.cli) {
+        var box = document.getElementById("freebox");
+        box.className = "notice n-ok";
+        box.textContent = "Free for now (limited). Go back to your terminal: it goes on by itself.";
+      } else location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew ? "#connect" : "");
+    }, function(e){ err.textContent = gcWhy(e); fr.disabled = false; });
+  });
   var portal = document.getElementById("portal");
   if (portal) portal.addEventListener("click", function(){
     var err = document.getElementById("portalerr"); err.textContent = "";
@@ -326,7 +343,7 @@ ${notice}${test}
     user: { label, sub: orgName(label) },
     ...orgRail("billing"),
     railLabel: "Organization",
-    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".plan.big{max-width:520px;padding:28px}.plan.big h3{font-size:26px}.plan.big .price{font-size:16px}.free{margin-top:14px;font-size:13px}.free a{color:var(--ink3)}",
+    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".plan.big{max-width:560px;padding:34px 32px 30px}.plan.big h3{font-size:34px;letter-spacing:-.01em}.plan.big .price{font-size:22px;font-weight:600;margin-top:6px}.plan.big .sum{font-size:15px}.plan.big li{font-size:15px}.plan.big .act .btn{width:100%;justify-content:center;padding:15px 18px;font-size:17px}.free{margin-top:12px;font-size:11px;max-width:560px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}",
     body,
     script: CLIENT_JS + script,
   });

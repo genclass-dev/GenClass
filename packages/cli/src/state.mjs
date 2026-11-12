@@ -75,6 +75,7 @@ export function freeLimits(free) {
   if (free?.apps) parts.push(`${free.apps} app${free.apps === 1 ? "" : "s"}`);
   if (free?.historyDays) parts.push(`${free.historyDays} days of history`);
   if (free?.suggestionsShown) parts.push(`your top ${free.suggestionsShown} suggestion${free.suggestionsShown === 1 ? "" : "s"}`);
+  if (free?.liveFixes) parts.push(`${free.liveFixes} live fixes a month`);
   return parts.join(", ");
 }
 
@@ -195,26 +196,6 @@ export async function readState(o = {}, deps = {}) {
     human: "approve the sign-in in your browser",
   });
 
-  // 1b. the plan. An account on Free that can buy one here is asked once per project, right after the sign-in:
-  // the paid plan first, Free for now as the small way on. An account with a plan, a server that sells nothing and
-  // a signed-out person have nothing to choose, so the step does not show.
-  const offer = me?.offer ?? null;
-  const choseFree = notes.plan === "free";
-  steps.push({
-    id: "plan",
-    title: "Plan",
-    doing: "Choose a plan",
-    state: !offer ? "optional" : choseFree ? "done" : "todo",
-    detail: !me ? "" : !offer ? (me.plan ? `${me.plan.name} plan` : "") : choseFree ? `${offer.free.name} for now (limited) · ${offer.plan.name} is ${offer.price}` : `${offer.plan.name}, ${offer.price}`,
-    why: offer ? `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name} for now (limited).` : "The plan your account is on.",
-    more: offer
-      ? `${offer.plan.name} opens in your browser and is paid there, on Stripe. ${offer.free.name} keeps what finds, shows and fixes the problems${freeLimits(offer.free) ? `: ${freeLimits(offer.free)}` : ""}. You can change plan any time at genclass.dev/account/billing.`
-      : "Plans and prices: genclass.dev/pricing.",
-    run: "npx genclass setup",
-    human: offer && !choseFree ? `choose a plan in your browser: ${offer.checkoutUrl}` : null,
-    ...(offer ? { offer } : {}),
-  });
-
   // 2. the runtime in this app
   const linked = !!st.token && (!me || !!app);
   // added and in the account, but on Vite 7 or earlier without the build setting the model's worker needs (vite.mjs)
@@ -249,6 +230,61 @@ export async function readState(o = {}, deps = {}) {
     more: "The runtime watches the page in your users' browsers for lost edits, double submits and old data shown over new. It only reports, to the browser console and your dashboard: it never holds, delays or changes anything your app does, and it puts nothing on the page.",
     run: st.fresh ? "npx genclass init" : vite ? "npx genclass setup" : "npx genclass connect",
     human: null,
+  });
+
+  // 2b. the plan of this app. Plans are per project (genclass.dev's billing/plans.json version 4): once the app is in
+  // the account, the command opens the app's plan page in the browser, the paid plan large and "Try for free
+  // (limited)" small under it, and waits for the choice there. An app past the ones Free covers has only the paid
+  // plan. An app with a plan, an app of a team the account is in (its owner chooses), a server that sells nothing
+  // and a signed-out person have nothing to choose, so the step does not show. A server from before plans per
+  // project answers for the whole account: the plan is then chosen once, in the terminal, as it was.
+  const own = app && !app.shared ? app : null;
+  const pp = own?.plan ?? null;
+  const needs = own?.needsPlan === true;
+  const hasPlan = pp ? pp.id !== "free" || !!pp.source : !!me?.plan && me.plan.id !== "free";
+  const offer =
+    me?.offer && !hasPlan && !app?.shared && (!pp || own.planUrl)
+      ? pp
+        ? { ...me.offer, checkoutUrl: `${own.planUrl}&from=cli`, project: { id: own.id, name: own.name, token: own.token }, needs }
+        : me.offer
+      : null;
+  const choseFree = pp ? own.planChosen === true && !needs : notes.plan === "free";
+  const limits = offer ? freeLimits(offer.free) : "";
+  steps.push({
+    id: "plan",
+    title: "Plan",
+    doing: offer?.project ? "Choose this app's plan" : "Choose a plan",
+    state: !offer ? "optional" : choseFree ? "done" : "todo",
+    detail: !me
+      ? ""
+      : !offer
+        ? pp
+          ? `${pp.name}${pp.source === "comp" ? " (set up by GenClass)" : ""}`
+          : app?.shared
+            ? "the team's owner chooses it"
+            : me.plan
+              ? `${me.plan.name} plan`
+              : ""
+        : needs
+          ? `Free covers ${offer.free.apps ?? 3} apps: this one needs ${offer.plan.name}`
+          : choseFree
+            ? `${offer.free.name} for now (limited) · ${offer.plan.name} is ${offer.price}`
+            : `${offer.plan.name}, ${offer.price}`,
+    why: !offer
+      ? pp ? "This app's plan." : "The plan your account is on."
+      : needs
+        ? `Free covers ${offer.free.apps ?? 3} apps and this is one more. ${offer.plan.name} is ${offer.price}.`
+        : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name} for now (limited).`,
+    more: !offer
+      ? "Plans and prices: genclass.dev/pricing."
+      : offer.project
+        ? `The app's plan page opens in your browser: ${offer.plan.name}, paid there on Stripe, or ${offer.free.name} for now${limits ? ` (${limits})` : ""}. Every app has its own plan: genclass.dev/account/billing.`
+        : `${offer.plan.name} opens in your browser and is paid there, on Stripe. ${offer.free.name} keeps what finds, shows and fixes the problems${limits ? `: ${limits}` : ""}. You can change plan any time at genclass.dev/account/billing.`,
+    run: "npx genclass setup",
+    human: offer && !choseFree ? `choose ${offer.project ? "this app's plan" : "a plan"} in your browser: ${offer.checkoutUrl}` : null,
+    ...(offer ? { offer } : {}),
+    // the plan is the app's: the walk asks once the app is in the account
+    after: "runtime",
   });
 
   // 3. the dashboard: the first page seen

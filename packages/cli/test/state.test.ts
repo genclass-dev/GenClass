@@ -217,7 +217,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     expect(j.next).toMatchObject({ id: "runtime", title: "Add GenClass to this app", run: "npx genclass init", human: null });
     // every step has a short name, what doing it is called, one sentence and a fuller one
     for (const x of s.steps) expect([x.title.length > 0, x.doing.length > 0, x.why.length > 0 && x.why.length < 100, x.more.length > 0], x.id).toEqual([true, true, true, true]);
-    expect(j.steps.map((x) => x.id)).toEqual(["account", "plan", "runtime", "dashboard", "workflow", "github-app", "agent", "suggestions"]);
+    expect(j.steps.map((x) => x.id)).toEqual(["account", "runtime", "plan", "dashboard", "workflow", "github-app", "agent", "suggestions"]);
     expect(j.steps[0]).toMatchObject({ state: "todo", run: "npx genclass login", human: "approve the sign-in in your browser" });
     expect(j.complete).toBe(false);
     expect(JSON.stringify(j)).not.toContain(SESSION);
@@ -338,7 +338,7 @@ describe("genclass: the plan step (src/state.mjs, src/actions.mjs choosePlan, sr
   };
   const plain = (t: string) => t.replace(/\u001b\[[0-9;]*m/g, "");
 
-  it("an account on Free that can buy is asked right after the sign-in; one with a plan, or signed out, is not", async () => {
+  it("an account on Free that can buy is asked once the app is in it; one with a plan, or signed out, is not", async () => {
     const dir = tempDir();
     viteApp(dir);
     // signed out: nothing to choose yet
@@ -346,10 +346,12 @@ describe("genclass: the plan step (src/state.mjs, src/actions.mjs choosePlan, sr
     signIn();
     const offered = fakeServer({ "GET /api/cli/overview": { json: overview({ offer: OFFER }) } });
     const s = await readState({ cwd: dir }, { runGit: noGit, fetchFn: offered.fetchFn });
-    expect(s.steps.map((x) => x.id).slice(0, 3)).toEqual(["account", "plan", "runtime"]);
-    expect(s.next?.id).toBe("plan");
+    // the plan is the app's: it comes after the runtime puts the app in the account
+    expect(s.steps.map((x) => x.id).slice(0, 3)).toEqual(["account", "runtime", "plan"]);
+    expect(s.next?.id).toBe("runtime");
+    expect(s.steps.find((x) => x.id === "plan")).toMatchObject({ state: "todo", after: "runtime" });
     const step = s.steps.find((x) => x.id === "plan")!;
-    expect(step).toMatchObject({ state: "next", doing: "Choose a plan", detail: "Team, $15 / developer / month", why: "Team is $15 / developer / month. Or try Free for now (limited)." });
+    expect(step).toMatchObject({ state: "todo", doing: "Choose a plan", detail: "Team, $15 / developer / month", why: "Team is $15 / developer / month. Or try Free for now (limited)." });
     expect(step.more).toContain("3 apps, 7 days of history, your top 3 suggestions");
     expect(step.human).toBe(`choose a plan in your browser: ${HOST}/account/billing?plan=team&start=1`);
     // a paid account, or a server that sells nothing, has no offer: the step does not show
@@ -376,9 +378,40 @@ describe("genclass: the plan step (src/state.mjs, src/actions.mjs choosePlan, sr
     // another project of the same account is asked for itself
     const other = tempDir();
     viteApp(other);
-    expect((await readState({ cwd: other }, { runGit: noGit, fetchFn: offered.fetchFn })).next?.id).toBe("plan");
+    expect((await readState({ cwd: other }, { runGit: noGit, fetchFn: offered.fetchFn })).steps.find((x) => x.id === "plan")!.state).toBe("todo");
     // no offer: nothing to do
     expect(await choosePlan({ cwd: dir, steps: [{ id: "plan" }] } as never, { yes: true })).toBe("skipped");
+  });
+
+  it("plans per project: the app's own plan page, Free chosen there or a payment closes the step, a fourth app has only the paid plan", async () => {
+    const dir = tempDir();
+    viteApp(dir);
+    await addRuntime(dir);
+    signIn();
+    const url = `${HOST}/account/billing?project=p1`;
+    const app = (extra: object) => project({ id: "p1", plan: { id: "free", name: "Free", source: null }, needs_plan: false, plan_chosen: false, plan_url: url, ...extra });
+    const read = async (p: object, offer: object | null = { ...OFFER, price: "$15 / project / month" }) =>
+      readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ offer, projects: [p] }) } }).fetchFn });
+    const s = await read(app({}));
+    expect(s.next?.id).toBe("plan");
+    const step = s.steps.find((x) => x.id === "plan")!;
+    expect(step).toMatchObject({ doing: "Choose this app's plan", detail: "Team, $15 / project / month", human: `choose this app's plan in your browser: ${url}&from=cli` });
+    expect(step.offer).toMatchObject({ checkoutUrl: `${url}&from=cli`, project: { id: "p1" }, needs: false });
+    expect(step.more).toContain("The app's plan page opens in your browser");
+    // Free chosen on the page: done, and the next run does not ask
+    expect((await read(app({ plan_chosen: true }))).steps.find((x) => x.id === "plan")).toMatchObject({ state: "done", detail: "Free for now (limited) · Team is $15 / project / month" });
+    // on Team, or granted: nothing to choose
+    expect((await read(app({ plan: { id: "team", name: "Team", source: "paid" } }), null)).steps.find((x) => x.id === "plan")).toMatchObject({ state: "optional", detail: "Team" });
+    expect((await read(app({ plan: { id: "team", name: "Team", source: "comp" } }), null)).steps.find((x) => x.id === "plan")).toMatchObject({ state: "optional", detail: "Team (set up by GenClass)" });
+    // a fourth app: only the paid plan, and choosing Free on the page does not close it
+    const fourth = (await read(app({ needs_plan: true, plan_chosen: true }))).steps.find((x) => x.id === "plan")!;
+    expect(fourth).toMatchObject({ state: "next", detail: "Free covers 3 apps: this one needs Team" });
+    expect(fourth.offer.needs).toBe(true);
+    // with nobody at a terminal the page is opened (here: it cannot be) and the step stays open
+    const said = await printed(async () => expect(await choosePlan(await read(app({})), { yes: true, noBrowser: true })).toBe("skipped"));
+    expect(said.replace(/\s+/g, " ")).toContain(`Open ${url}&from=cli`);
+    // an app of a team the account is in: its owner chooses
+    expect((await read(project({ shared: true }))).steps.find((x) => x.id === "plan")).toMatchObject({ state: "optional", detail: "the team's owner chooses it" });
   });
 
   it("the card is the paid plan, large, in the server's words, as wide as the welcome card", async () => {

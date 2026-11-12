@@ -41,6 +41,7 @@ import {
   cleanSeats,
   entitled,
   MAX_SEATS,
+  FREE,
   PAID_PLANS,
   PLANS,
   PLANS_FILE,
@@ -182,12 +183,13 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       if (pid) {
         const start = url.searchParams.get("start") === "1";
         const fromCli = url.searchParams.get("from") === "cli";
+        const isNew = url.searchParams.get("new") === "1";
         const a = await webSession(c);
-        if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing?project=${encodeURIComponent(pid)}${start ? "&start=1" : ""}${fromCli ? "&from=cli" : ""}`)}`);
+        if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing?project=${encodeURIComponent(pid)}${start ? "&start=1" : ""}${fromCli ? "&from=cli" : ""}${isNew ? "&new=1" : ""}`)}`);
         const p = await ownedProject(c, a.account.id, pid);
         if (!p || !p.id) return redirect("/account/billing#projects");
         const access = await projectAccess(c.db, p, env, c.now);
-        const row = await c.db.prepare("SELECT subscription_status, current_period_end, cancel_at_period_end FROM projects WHERE id = ?").bind(p.id).first<{ subscription_status: string | null; current_period_end: string | null; cancel_at_period_end: number | null }>();
+        const row = await c.db.prepare("SELECT subscription_status, current_period_end, cancel_at_period_end, plan_chosen FROM projects WHERE id = ?").bind(p.id).first<{ subscription_status: string | null; current_period_end: string | null; cancel_at_period_end: number | null; plan_chosen: string | null }>();
         const apps = (await accountProjects(c, a.account.id)).map((x) => ({ id: x.id!, name: x.name }));
         const usage = await liveFixUsage(c.db, p.token, access.plan, c.now).catch(() => null);
         return page(200, (n) =>
@@ -203,6 +205,8 @@ export async function routeBilling(request: Request, url: URL, path: string, env
             done: url.searchParams.get("done") === "1",
             go: start,
             fromCli,
+            isNew,
+            chosen: !!row?.plan_chosen,
             now: c.now,
           }),
         );
@@ -214,6 +218,13 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       const a = await webSession(c);
       // the plan picked on the pricing page survives the sign-in
       if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${picked.id}${go ? "&start=1" : ""}` : ""}`)}`);
+      // a plan sold per project, picked on the pricing page or started from an older genclass command: the plan page
+      // of the account's first app still on Free, where it is bought for that app
+      if (picked?.per_project === true) {
+        const open = (await accountProjectsAccess(c.db, a.account.id, env, c.now)).find((x) => x.row.id && x.access.plan.id === FREE.id && x.access.source === null && !x.access.locked)
+          ?? (await accountProjectsAccess(c.db, a.account.id, env, c.now)).find((x) => x.row.id && x.access.locked);
+        if (open) return redirect(`/account/billing?project=${encodeURIComponent(open.row.id!)}${go ? "&from=cli" : ""}`);
+      }
       const access = await accountAccess(c.db, a.account.id, env, c.now);
       const apps = (await accountProjects(c, a.account.id)).map((p) => ({ id: p.id!, name: p.name }));
       const b = await accountBilling(c.db, a.account.id, env);
@@ -242,6 +253,8 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       );
     }
   }
+  const free = /^\/api\/billing\/projects\/([^/]+)\/free$/.exec(path);
+  if (free) return m === "POST" ? chooseFree(c, free[1]!) : method();
   if (integ) return integrations(c, f, integ[1]!, integ[2] ?? null, !!integ[3]);
   if (events) return exportEvents(c, events[1]!);
   if (keys) return exportKeys(c, keys[1] ?? null);
@@ -249,6 +262,22 @@ export async function routeBilling(request: Request, url: URL, path: string, env
 }
 
 // --------------------------------------------------------------------------------------------- Checkout, portal
+
+/**
+ * POST /api/billing/projects/<id>/free: Free chosen for one app for now, on its plan page (the small "Try for free
+ * (limited)"). It writes when (projects.plan_chosen), which the genclass command's plan step waits for, and changes
+ * nothing else: the app is on Free either way. An app past the ones Free covers has only the paid plan (409).
+ */
+async function chooseFree(c: C, id: string): Promise<Response> {
+  const a = await browserWrite(c, "a plan is chosen");
+  if (a instanceof Response) return a;
+  const p = await ownedProject(c, a.account.id, id);
+  if (!p || !p.id) return fail(404, "not found");
+  const access = await projectAccess(c.db, p, c.env, c.now);
+  if (access.locked) return fail(409, `Free covers ${FREE.limits.apps ?? 3} projects, and this one is past them: it needs a paid plan`);
+  await c.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ? AND account_id = ?").bind(c.now.toISOString(), p.id, a.account.id).run();
+  return json(200, { ok: true, plan: access.plan.id });
+}
 
 /**
  * GenClass opens no Stripe page for, and starts no Checkout on, a stored customer that is not provably its own or that
