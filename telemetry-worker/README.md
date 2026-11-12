@@ -1135,10 +1135,46 @@ time and cached in memory until 5 minutes before they expire.
 | `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | secrets | the app; all three or it is off |
 | `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET` | secrets | Connect GitHub; without them repositories cannot be linked |
 | `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | secret | the listing's webhook. Set it to a value of its own once the listing exists; unset, that endpoint accepts the app's webhook secret |
+| `OPENAI_API_KEY` | secret | `genclass suggest`: the key of the model that writes the plan ([The genclass command](#the-genclass-command)). Without it the plan is ordered by the checks' own weights |
+| `SUGGEST_MODEL` | var | the model asked (default `gpt-5-mini`) |
 | `GITHUB_APP_SLUG` | var | the app's URL name (`genclass`): its bot is `<slug>[bot]` and its commands start with `@<slug>` |
 | `GITHUB_APP_PRIVATE_REPOS` | var | `plan` (default) or `open` |
 | `GITHUB_APP_WORKFLOW_LINK` | var | `on`: the check with no race files, and `/github/setup`, link to GitHub's new-file editor with `docs/github-app/workflows/genclass.yml` filled in. Anything else: off |
 | `GITHUB_API_URL`, `GITHUB_WEB_URL` | vars | a GitHub Enterprise Server (untested) |
+
+## The genclass command
+
+The `genclass` command (`packages/cli`, `npx genclass`) is the one way to set GenClass up: sign in, add the runtime,
+check pull requests, connect a coding agent, and `genclass suggest`. It uses the account routes above (the device
+sign-in, `/api/me`, `/api/account/projects`) and three of its own (`src/cli.ts`; the client is
+`packages/cli/src/api.mjs`, and `packages/cli/test/server.test.ts` runs it against this worker in process):
+
+| Route | |
+|---|---|
+| `GET /api/cli/overview` | CLI session or browser session: the account, its plan `{ id, name }`, its apps, `suggestions: { per_day, shown, used_today, model }` and where the GitHub App's install and connect pages are |
+| `GET /api/cli/github?repo=owner/name` | CLI session or browser session: what the GitHub App is doing on that repository (`known`, `installed`, `evidence`, `prs`, `last`, `private`, `needs_plan`, `paused`). GitHub is asked nothing: the answer comes from what GitHub told this account in the last 30 minutes (Connect GitHub, or Continue with GitHub after installing). Without such an answer: `known: false` and `connect_url` |
+| `POST /api/cli/suggest` | CLI session only. The body is a digest of the checks that failed on an app (`src/suggest.ts` `readDigest`: at most 60 checks, each an id, area, title, weight and at most 3 evidence lines of 160 characters, plus the app's name, framework, address, payment provider and host; at most 64 KB; anything else is dropped). The answer is the plan: `items` in order, each `{ id, why, step, prompt }`, `locked_ids` for the items the account's plan does not show, `source` (`model` or `checks`), `remaining_today` |
+
+What decides the answer:
+
+- **The model.** With the secret `OPENAI_API_KEY`, the digest is sent to the model named by `SUGGEST_MODEL`
+  (default `gpt-5-mini`; check the name against your OpenAI account) with a fixed instruction and a strict JSON
+  schema. The model orders and explains: only ids the request named come back, each once, cut to length and cleaned
+  of control characters, and ids it leaves out follow in weight order. Without the key, when the day's runs are used
+  up, or when the model fails, is slow (40 seconds) or answers something else, the plan is the checks by their own
+  weights and `source` is `checks`. The route never fails because of the model.
+- **The plan's numbers** (`billing/plans.json` `suggestions`): `per_day`, model runs an account has a UTC day (Free
+  3, Team 30, Enterprise 100), and `shown`, how many items of the plan come back in full (Free 3, the others all).
+  The checks themselves run on the person's machine and are free for everyone.
+- **What is stored: a count.** `suggest_usage` (migration 0015) holds runs per account and day, for 3 days. Nothing
+  of a digest or an answer is stored or logged; the key is never returned or logged. On a database without the
+  table there is no count, so no model run, and the route still answers.
+
+### Migration 0015 (`migrations/0015_suggest_usage.sql`)
+
+One new table, `suggest_usage`. Additive; apply it before or after the deploy:
+`npx --yes wrangler@4 d1 migrations apply genclass-dashboard --remote`. Then set the key, as a secret, from your own
+terminal: `npx --yes wrangler@4 secret put OPENAI_API_KEY`.
 
 ## Self-host the collector (private mode)
 

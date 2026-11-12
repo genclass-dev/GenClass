@@ -74,6 +74,11 @@ GITHUB_APP_WORKFLOW_LINK = "on"
 # on this worker changes. They are not the GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET above, which belong to the OAuth
 # app behind "Sign in with GitHub".
 
+# `genclass suggest` (README "The genclass command"; src/suggest.ts), a Worker secret: OPENAI_API_KEY, the key of the
+# model that orders and explains the checks that failed on someone's app. Without it no model is asked and the plan is
+# ordered by the checks' own weights. SUGGEST_MODEL (a var) names the model; unset, src/suggest.ts DEFAULT_MODEL.
+# Migration 0015 (suggest_usage) holds each account's runs per day; without it there is no model run either.
+
 [observability]
 enabled = false
 

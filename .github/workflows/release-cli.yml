@@ -1,0 +1,128 @@
+name: Release genclass
+
+# Publishes genclass (packages/cli, `npx genclass`) to npm from a tag `cli-v<version>` whose version equals
+# packages/cli/package.json (e.g. cli-v0.1.0), with npm provenance, the same way release-playwright.yml publishes
+# @genclass/playwright. Authentication: npm trusted publishing (OIDC, `id-token: write`); no npm token is stored in
+# the repository.
+#
+# Owner setup:
+# - First version only: npm configures trusted publishing from a package's own settings page, so the package must exist
+#   before this workflow can publish it. Push the tag once: the run builds, tests and uploads the tarball as the
+#   `cli-tarball` artifact, and its publish step fails without a trusted publisher. Publish that exact tarball once
+#   from your own npm login (`npm publish genclass-<version>.tgz --access public`), then on npmjs.com: genclass →
+#   Settings → Trusted publishing → GitHub Actions: organization genclass-dev, repository GenClass, workflow filename
+#   release-cli.yml, environment npm-publish. Later versions publish from here.
+# - The npm-publish GitHub environment (shared with the other release workflows) asks its reviewers to approve each
+#   run, and has to allow the tag rule `cli-v*`.
+#
+# The command installs @genclass/runtime and @genclass/mcp at the versions this repository holds when it is built
+# (packages/cli/build.mjs), so the run checks first that npm serves both.
+# Before the first release: the collector with the command's routes (telemetry-worker/src/cli.ts, migration 0015)
+# should be deployed, or `genclass suggest` orders by the checks' own weights and `genclass` cannot say what the
+# GitHub App is doing. After it: the README's install line and genclass.dev can name `npx genclass`.
+
+on:
+  push:
+    tags: ["cli-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: "genclass: verify, build, test, publish with provenance"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing and the provenance attestation
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # trusted publishing needs npm >= 11.5.1 (Node 22 ships npm 10)
+      - name: npm 11
+        run: npm install -g npm@11 && npm --version
+
+      - name: The tag names the package version, and npm serves what the command installs
+        run: |
+          TAG="${GITHUB_REF_NAME#cli-v}"
+          PKG=$(node -p "require('./packages/cli/package.json').version")
+          echo "tag $TAG, package.json $PKG"
+          test "$TAG" = "$PKG"
+          grep -qF "## $PKG" packages/cli/CHANGELOG.md
+          RT=$(node -p "require('./packages/runtime/package.json').version")
+          MCP=$(node -p "require('./packages/mcp/package.json').version")
+          test "$(npm view "@genclass/runtime@$RT" version)" = "$RT"
+          test "$(npm view "@genclass/mcp@$MCP" version)" = "$MCP"
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build -w genclass
+
+      - name: Unit tests
+        working-directory: packages/cli
+        run: npx vitest run
+
+      - name: Pack
+        id: pack
+        working-directory: packages/cli
+        run: |
+          FILE=$(npm pack --silent | tail -1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          sha512sum "$FILE"
+          tar -tzf "$FILE" | sort > "$FILE.files.txt"
+          cat "$FILE.files.txt"
+          # one bundle, the bin that runs it, and the documents; no sources, no tests
+          printf 'package/CHANGELOG.md\npackage/LICENSE\npackage/README.md\npackage/bin/genclass.mjs\npackage/dist/genclass.mjs\npackage/package.json\n' | diff - "$FILE.files.txt"
+
+      - name: The packed command runs from an empty folder, with nothing else installed
+        run: |
+          mkdir -p "$RUNNER_TEMP/try" && cd "$RUNNER_TEMP/try"
+          tar -xzf "$GITHUB_WORKSPACE/packages/cli/${{ steps.pack.outputs.file }}"
+          node package/bin/genclass.mjs --version
+          node package/bin/genclass.mjs status --json | grep '"id": "account"'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-tarball
+          path: |
+            packages/cli/${{ steps.pack.outputs.file }}
+            packages/cli/${{ steps.pack.outputs.file }}.files.txt
+          if-no-files-found: error
+
+      - name: Publish with provenance
+        working-directory: packages/cli
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          case "$VERSION" in
+            *-*) DIST_TAG=$(echo "${VERSION#*-}" | cut -d. -f1) ;;
+            *) DIST_TAG=latest ;;
+          esac
+          npm publish "${{ steps.pack.outputs.file }}" --provenance --access public --tag "$DIST_TAG"
+
+      - name: Verify the registry signature and provenance
+        run: |
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          mkdir -p "$RUNNER_TEMP/verify" && cd "$RUNNER_TEMP/verify"
+          npm init -y > /dev/null
+          for i in $(seq 1 40); do npm view "genclass@$VERSION" version --prefer-online && break; sleep 20; done
+          for i in $(seq 1 10); do npm install --no-audit --no-fund --ignore-scripts "genclass@$VERSION" && break; sleep 30; done
+          for i in $(seq 1 20); do npm audit signatures && break; echo "attestations not served yet, retry $i"; sleep 30; done
+          npx --no-install genclass --version

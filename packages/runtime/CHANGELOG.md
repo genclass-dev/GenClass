@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **The CLI's modules can run inside the `genclass` command** (`packages/cli`, `npx genclass`, not on npm yet;
+  nothing in the runtime changes, and `npx @genclass/runtime@beta init` and its other commands behave as before).
+  `genclass` bundles `bin/lib` into its own file and names itself before those modules load: `version.mjs`,
+  `account.mjs` and `ui.mjs` then take the runtime version to install, the command people type again
+  (`npx genclass`) and the banner's name from it, instead of reading this package's `package.json`. Without that name
+  (this package's own bin) everything comes from `package.json` as before. No model-visible text changed
+  (`situation-v2.3`). Tests: `packages/cli/test/`.
 - **A lite install is documented: GenClass after the page has loaded, on a share of page loads** (README "Lite
   install"; nothing in the runtime changes). For a site whose performance budget has no room in the page load: a few
   lines in the entry file wait for the `load` event and an idle callback, then run `import("@genclass/runtime/auto")`

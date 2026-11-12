@@ -461,7 +461,7 @@ export interface ProjectJson {
   shared?: true;
 }
 
-function projectJson(c: C, p: Project): ProjectJson {
+export function projectJson(c: C, p: Project): ProjectJson {
   const mine = !c.auth || p.account_id === c.auth.account.id;
   return {
     id: p.id ?? "",
@@ -1768,6 +1768,8 @@ async function deleteAccount(c: C): Promise<Response> {
   const gone = await c.db.prepare("SELECT token FROM projects WHERE account_id = ? AND private_link = 0").bind(id).all<{ token: string }>();
   const own = "SELECT token FROM projects WHERE account_id = ? AND private_link = 0";
   const owned = "SELECT id FROM projects WHERE account_id = ?";
+  // `genclass suggest`'s count of model runs goes with the account (on its own: its table comes with migration 0015)
+  await c.db.prepare("DELETE FROM suggest_usage WHERE account_id = ?").bind(id).run().catch(() => undefined);
   await c.db.batch([
     // paid features of every app in the account (apps that keep a private link leave without them)
     c.db.prepare(`DELETE FROM integrations WHERE project_id IN (${owned})`).bind(id),

@@ -1,0 +1,84 @@
+name: genclass command
+
+# genclass (packages/cli): the one command that sets GenClass up. Builds the published bundle (one file, no
+# dependencies), runs its unit tests (the state of a project, what the guided setup writes, the suggestion checks on
+# hand-built facts and on stand-in sites) and its tests against the collector in process (telemetry-worker), then
+# runs the built command once. A separate workflow from ci.yml so it never blocks the main CI job. It reaches no
+# network: genclass.dev, the model and every site are stand-ins.
+
+on:
+  push:
+    paths:
+      - "packages/cli/**"
+      - "packages/runtime/bin/**"
+      - "telemetry-worker/src/cli.ts"
+      - "telemetry-worker/src/suggest.ts"
+      - "telemetry-worker/src/github/workflow-file.ts"
+      - "docs/github-app/workflows/genclass.yml"
+      - "billing/plans.json"
+      - "package-lock.json"
+      - ".github/workflows/cli.yml"
+  pull_request:
+    paths:
+      - "packages/cli/**"
+      - "packages/runtime/bin/**"
+      - "telemetry-worker/src/cli.ts"
+      - "telemetry-worker/src/suggest.ts"
+      - "telemetry-worker/src/github/workflow-file.ts"
+      - "docs/github-app/workflows/genclass.yml"
+      - "billing/plans.json"
+      - "package-lock.json"
+      - ".github/workflows/cli.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: "genclass: build, unit tests, the collector in process"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build (dist/genclass.mjs)
+        run: npm run build -w genclass
+
+      - name: Unit tests
+        working-directory: packages/cli
+        run: npx vitest run
+
+      - name: The built command runs, and names itself
+        run: |
+          node packages/cli/bin/genclass.mjs --version
+          node packages/cli/bin/genclass.mjs --help
+          node packages/cli/bin/genclass.mjs status --json --cwd templates/react-vite
+
+      - name: The package holds one bundle and no dependency
+        working-directory: packages/cli
+        run: |
+          npm pack --dry-run --json > "$RUNNER_TEMP/pack.json"
+          node -e '
+            const p = JSON.parse(require("fs").readFileSync(process.env.RUNNER_TEMP + "/pack.json", "utf8"))[0];
+            const files = p.files.map((f) => f.path).sort();
+            console.log(files.join("\n"), "\n", (p.size / 1024).toFixed(0), "KB packed");
+            const want = ["CHANGELOG.md", "LICENSE", "README.md", "bin/genclass.mjs", "dist/genclass.mjs", "package.json"];
+            if (JSON.stringify(files) !== JSON.stringify(want)) { console.error("unexpected files in the package"); process.exit(1); }
+            const pkg = require("./package.json");
+            if (pkg.dependencies && Object.keys(pkg.dependencies).length) { console.error("genclass must have no dependencies"); process.exit(1); }
+          '

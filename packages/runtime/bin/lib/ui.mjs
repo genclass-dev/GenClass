@@ -34,8 +34,10 @@ export const out = (s = "") => process.stdout.write(`${s}\n`);
 export const err = (s = "") => process.stderr.write(`${s}\n`);
 
 export function banner(title) {
+  // "GenClass" under the `genclass` command (packages/cli sets the name before these modules load)
+  const brand = typeof globalThis.__GENCLASS_CLI__?.brand === "string" ? globalThis.__GENCLASS_CLI__.brand : "GenClass Runtime";
   out();
-  out(`  ${c.bold(c.magenta("GenClass Runtime"))} ${c.gray(sym.dot)} ${c.bold(title)}`);
+  out(`  ${c.bold(c.magenta(brand))} ${c.gray(sym.dot)} ${c.bold(title)}`);
   out();
 }
 

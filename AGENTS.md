@@ -21,6 +21,7 @@ Default mode is `observe` (report only); `guard` is opt-in; `heal` is experiment
 | `training/` | vocabulary pruning, curriculum (`curriculum/rt.py` mirrors the runtime's situation renderer), Azure training, ONNX export, `EVAL.md` |
 | `demos/` | six demo apps with a chaos backend and Playwright trials; `bench/heal/` runs them per mode |
 | `packages/mcp/` | `@genclass/mcp`: the MCP server for coding agents (bridge on 127.0.0.1:47357, store, explore verdicts, replays, regression-test generation, 9 tools incl. `genclass_scan`, which runs the runtime CLI's `scan`); no runtime deps; `test/e2e/race.e2e.mjs` is the real-browser check (not in CI's main job). `plugin/` is the Claude Code plugin (also an Agent Plugins package); `server.json`, the plugin, `.claude-plugin/`, `.cursor-plugin/`, `gemini-extension.json`, `llms-install.md` and the READMEs pin its version (`npm run sync -w @genclass/mcp` after a version bump; `test/manifests.test.ts` fails otherwise); `scripts/plugin-repo.mjs` assembles genclass-dev/genclass-plugin (the plugin at a repository root with its marketplace files and the released server vendored from npm under `server/`, which `.mcp.json` and the hook there run with `node` from `${CLAUDE_PLUGIN_ROOT}`, for the Claude directory's 50 MiB archive limit and its holds on `npx` launchers and lockfiles, Codex, Gemini CLI, `gh skill`; that repository re-syncs daily from main and is never edited by hand) |
+| `packages/cli/` | `genclass` (`npx genclass`): the one way to set GenClass up, and `genclass suggest`. Plain ESM `.mjs` in `src/` (`main.mjs` names the command to the runtime CLI's modules, which it reuses from `packages/runtime/bin/lib`: sign-in, project detection, `init`; `state.mjs` reads the six steps of a project from disk and from genclass.dev; `setup.mjs` and `actions.mjs` walk them: sign in, add the runtime, first page seen, the workflow file and the GitHub App, the agent's MCP config; `suggest/` measures the repository and the live site (`repo.mjs`, `site.mjs`), runs the catalog of checks (`checks.mjs`) and asks genclass.dev to order and explain what failed (`digest.mjs` is everything that is sent); `tui.mjs` is the look); `build.mjs` bundles it into one file with no dependencies (`dist/genclass.mjs`) with the runtime and MCP versions it installs; tests in `test/` (`server.test.ts` runs it against the collector in process). The server side is `telemetry-worker/src/cli.ts` and `suggest.ts` (rule 11). Not on npm yet |
 | `packages/sv/` | `@genclass/sv`: the Svelte CLI community add-on (`npx sv add @genclass`): adds the runtime, the `/auto` import first in `src/hooks.client`, the dev-only overlay and (default) the telemetry opt-out meta in `src/app.html`, all with the `genclass:init` marker so `remove` undoes it; bundles `@sveltejs/sv-utils`, `sv` is a peer; `test/e2e/` runs sv's add-on harness (pnpm, Chromium) |
 | `packages/playwright/` | `@genclass/playwright`: the fixture (`src/fixture.ts`, `install.ts`, `page.ts`, `chaos.ts`, `races.ts`: puts the runtime's script-tag build on every `page` in observe mode with telemetry off, seeded chaos that holds matched fetch/XHR requests with `page.route` and `route.fallback()`, witnesses through the agent entry with every hold off, one `genclass-races/1` file per test in `test-results/genclass/`, with where the test is declared (`location`), which the GitHub App's inline comments use) and the reporter + pure summariser that read those files and write `genclass-report.md` for the PR; peer deps only (`@playwright/test`, `@genclass/runtime`); zero-edit mode (`src/register.ts`, `wrap.ts`, `worker.ts`, `run.ts`: the command `genclass-playwright-run` gives an unmodified suite the same instrumentation by wrapping public Playwright objects in the worker process; `docs/github-app/workflows/genclass.yml` is the one file a repository adds); `test/e2e/run.mjs` is the real-browser check of both (its own workflow) |
 | `packages/nuxt/`, `packages/astro/` | `@genclass/nuxt` (a Nuxt module, `@nuxt/kit`, built with `@nuxt/module-builder`) and `@genclass/astro` (an Astro integration, `injectScript("page", ...)`): from options `{ mode, token?, telemetry?, devtools? }` they generate the runtime's own one line (`/auto` or `/auto/guard`) plus a `window.GENCLASS_CONFIG` module imported before it; browser only, nothing on the server; `@genclass/runtime` is a peer dependency. The generated code is pure (`src/source.ts`, `src/index.ts`) and the tests check it exactly, then build one fixture app. Workflow: `integrations.yml` (Node 24) |
@@ -57,6 +58,11 @@ needs both packages built: `node packages/mcp/test/e2e/race.e2e.mjs`.
 `playwright-reporter.yml` (typecheck, build, vitest; then the fixture's e2e in Chromium; never blocks `ci.yml`):
 `npm run typecheck -w @genclass/playwright && npm run build -w @genclass/playwright && (cd packages/playwright && npx vitest run)`;
 the e2e needs the runtime built too: `node packages/playwright/test/e2e/run.mjs`.
+
+`packages/cli/` (`genclass`, the one command) has its own workflow, `cli.yml` (never blocks `ci.yml`):
+`npm run build -w genclass && (cd packages/cli && npx vitest run)`; the tests need no network (genclass.dev is the
+collector in process or a stand-in, the model and the sites are stand-ins). Its sources are plain `.mjs` and are not
+type-checked.
 
 `packages/sv/` (`@genclass/sv`, the Svelte CLI add-on) has its own workflow, `sv-addon.yml` (never blocks `ci.yml`):
 `npm run typecheck -w @genclass/sv && npm run build -w @genclass/sv && (cd packages/sv && npx vitest run --project unit)`;
@@ -120,6 +126,19 @@ Azure, `git push`, `npm publish`.
    that is gone is "not flagged now", never "fixed". It has no contents permission and reads its settings from the
    default branch only. Asking GitHub for another permission, storing more than the ids, hashes and titles in
    `migrations/0013_github_app.sql`, or reading a private repository without a plan needs the owner's OK, like rule 8.
+
+11. **`genclass suggest` reports measured checks, and sends a digest, never code** (`packages/cli/src/suggest/`,
+   `telemetry-worker/src/suggest.ts`; owner request, 2026-11-12). Every line it prints about an app is a check's
+   result on a fact measured on the person's machine or from their own site. The model on genclass.dev (the owner's
+   OpenAI key, a Worker secret that no code prints, logs or returns) only orders the failed checks and words the
+   reasons: the server drops any id that was not sent, so it cannot add a finding. What leaves the machine is the
+   digest in `digest.mjs` (failed checks with at most three evidence lines each, and the app's name, framework,
+   address, payment provider and host): no source code, no file contents, no secret's value (a check that finds a key
+   reports its kind, file and line). It is shown before the first send for a project, `--no-model` sends nothing, and
+   the server stores a count per account and day and nothing else. Sending more than the digest holds, storing a
+   digest or an answer, or changing who the digest goes to needs the owner's OK and a change to PRIVACY.md, like
+   rule 8. The checks are free for everyone; a plan decides how many items of the model's plan are shown and how
+   many runs a day (`billing/plans.json` `suggestions`).
 
 ## Conventions and definition of done
 
