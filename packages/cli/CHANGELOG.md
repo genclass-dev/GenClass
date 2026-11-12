@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- **Nothing is drawn on a page.** The runtime step adds GenClass without the developer overlay (`init
+  --no-devtools`), so an app set up by this command shows its own layout and nothing of GenClass's, on localhost as
+  on the deployed site. What GenClass finds goes to the browser console, the dashboard and `genclass dashboard`.
+  (On a deployed site nothing was ever drawn; the overlay appeared only on localhost.) An app set up by 0.2.0 or
+  earlier keeps its dev-only overlay line until it is removed by hand or with `genclass remove` and a new setup.
+
 ## 0.2.0
 
 - **`genclass dashboard` shows the app in the terminal**: problems found on the live site by kind and page, measured

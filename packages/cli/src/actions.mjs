@@ -10,6 +10,8 @@
 //   process only waits for genclass.dev to say they happened.
 // - A question that gets no answer because input ended is a no (tui.mjs agree, pick): nothing is written, sent or
 //   opened on an empty answer unless someone could still have typed one.
+// - Nothing this command sets up is drawn on a page: the runtime is added without the developer overlay
+//   (runtimeArgs), so a site's visitors and its developer see their own layout and nothing of GenClass's.
 // - A browser is opened only for addresses on the host this CLI talks to, built here or checked against that host
 //   (api.mjs), never one taken from a file or a page.
 
@@ -76,12 +78,23 @@ export async function signIn(o = {}) {
 
 // ------------------------------------------------------------------------------------------------ 2. the runtime
 
-/** Adds the runtime with the runtime CLI's own init (fresh project) or connect (added, not in the account). */
-export async function addRuntime(state, o = {}) {
-  const step = state.steps.find((s) => s.id === "runtime");
+/**
+ * The arguments the runtime step hands to the runtime CLI's `init` (a fresh project) or `connect` (added, not in
+ * the account yet). `init` gets --no-devtools: GenClass set up by this command draws nothing on a page, not on the
+ * deployed site (it never did) and not on localhost either (the developer overlay is left out). What it finds goes
+ * to the browser console, the dashboard and `genclass dashboard`.
+ */
+export function runtimeArgs(state, o = {}) {
+  const connect = state.steps.find((s) => s.id === "runtime")?.run === "genclass connect";
   // signed in one step earlier, so the app goes into that account without asking again
   const args = ["--cwd", state.cwd, ...(o.yes ? ["--yes"] : []), ...(state.signedIn ? ["--in-account"] : [])];
-  const code = step?.run === "genclass connect" ? await runLogin("connect", args) : await runInit("init", args);
+  return { cmd: connect ? "connect" : "init", args: connect ? args : [...args, "--no-devtools"] };
+}
+
+/** Adds the runtime with the runtime CLI's own init (fresh project) or connect (added, not in the account). */
+export async function addRuntime(state, o = {}) {
+  const { cmd, args } = runtimeArgs(state, o);
+  const code = cmd === "connect" ? await runLogin("connect", args) : await runInit("init", args);
   return code === 0 ? "done" : "failed";
 }
 

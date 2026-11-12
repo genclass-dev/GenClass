@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { WORKFLOW_FILE as COLLECTOR_WORKFLOW } from "../../../telemetry-worker/src/github/workflow-file.js";
-import { addWorkflow, connectAgent, connectGithubApp, mcpServer, planAgentConfig, workflowFor } from "../src/actions.mjs";
+import { addWorkflow, connectAgent, connectGithubApp, mcpServer, planAgentConfig, runtimeArgs, workflowFor } from "../src/actions.mjs";
 import { BUILD, WORKFLOW_FILE } from "../src/assets.mjs";
 import { parseArgs, run, USAGE } from "../src/cli.mjs";
 import { githubName, gitInfo } from "../src/git.mjs";
@@ -96,6 +96,25 @@ describe("genclass: the one workflow file (src/assets.mjs, src/actions.mjs workf
     const older = await ask({});
     expect(older.result).toBe("skipped");
     expect(older.said).toContain(`${HOST}/account/github`);
+  });
+});
+
+describe("genclass: nothing is drawn on a page (src/actions.mjs runtimeArgs)", () => {
+  it("the runtime is added without the developer overlay, and what init then writes has no overlay line", async () => {
+    const dir = tempDir();
+    viteApp(dir);
+    const fresh = { cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "genclass init" }] } as never;
+    expect(runtimeArgs(fresh, { yes: true })).toEqual({ cmd: "init", args: ["--cwd", dir, "--yes", "--in-account", "--no-devtools"] });
+    expect(runtimeArgs({ cwd: dir, signedIn: false, steps: [{ id: "runtime", run: "genclass init" }] } as never, {})).toEqual({ cmd: "init", args: ["--cwd", dir, "--no-devtools"] });
+    // an app that already has the runtime is only put in the account: nothing in its code is touched
+    expect(runtimeArgs({ cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "genclass connect" }] } as never, {})).toEqual({ cmd: "connect", args: ["--cwd", dir, "--in-account"] });
+    // init with those arguments: one import, and no line that mounts anything
+    const { run: runInit } = await import("../../runtime/bin/lib/init.mjs");
+    await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--no-telemetry", "--no-devtools"])).toBe(0));
+    const entry = readFileSync(join(dir, "src/main.jsx"), "utf8");
+    expect(entry).toContain('import "@genclass/runtime/auto"');
+    expect(entry).not.toMatch(/devtools|mountDevtools/);
+    expect(readFileSync(join(dir, "index.html"), "utf8")).not.toMatch(/devtools|genclass/i);
   });
 });
 

@@ -139,8 +139,8 @@ export async function readState(o = {}, deps = {}) {
           : me && !app
             ? "added, but this app is not in your account yet"
             : `${st.handWritten ? "added by hand" : "added"}${app ? ` · app "${app.name}"` : ""}`,
-    why: st.fresh ? "One import and the package. You see the change before it is written." : "Gives the app its place in your account, so what it finds shows on your dashboard.",
-    more: "The runtime watches the page in your users' browsers for lost edits, double submits and old data shown over new. It only reports: it never holds, delays or changes anything your app does.",
+    why: st.fresh ? "One import and the package. You see the change first. Nothing is drawn on your pages." : "Gives the app its place in your account, so what it finds shows on your dashboard.",
+    more: "The runtime watches the page in your users' browsers for lost edits, double submits and old data shown over new. It only reports, to the browser console and your dashboard: it never holds, delays or changes anything your app does, and it puts nothing on the page.",
     run: st.fresh ? "genclass init" : "genclass connect",
     human: null,
   });
