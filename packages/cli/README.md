@@ -17,7 +17,7 @@ per step. Stop at any point and run it again: it continues from what is true now
   ╚██████╔╝███████╗██║ ╚████║╚██████╗███████╗██║  ██║███████║███████║
    ╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝
 
-  Finds what breaks in your web app, and tells you what it needs next.  v0.2.0
+  Finds what breaks in your web app, and tells you what it needs next.  v0.2.1
 
   GenClass • shop                                                Vite + React
   ada@example.com • Free plan
@@ -41,7 +41,7 @@ it, and `d` again to fold it back.
 | Part | What the step does | What it changes |
 |---|---|---|
 | Account | Opens genclass.dev in your browser; you approve a short code there. | A session file in your user config folder. Nothing is typed in the terminal. |
-| Runtime | Adds GenClass to the app: one import (or script tag) and the package. It watches the page in your users' browsers for lost edits, double submits and old data shown over new, and only reports. | Your entry file and `package.json`; you see the change first. `genclass remove` undoes it. |
+| Runtime | Adds GenClass to the app: one import (or script tag) and the package. It watches the page in your users' browsers for lost edits, double submits and old data shown over new, and only reports, to the console and your dashboard. Nothing is drawn on your pages. | Your entry file and `package.json`; you see the change first. `genclass remove` undoes it. |
 | Dashboard | Waits for your live site to be opened once. GenClass sends nothing from localhost. | Nothing. |
 | Test workflow | Runs your Playwright tests once more per pull request with slow and reordered responses. | One new file, `.github/workflows/genclass.yml`, which you commit. |
 | GitHub App | Comments on a pull request when a page ends up wrong, with the steps to see it. The command opens GitHub's install page and waits for the answer. | Nothing in your project. The app cannot read or change your code. |
