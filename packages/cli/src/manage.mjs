@@ -373,7 +373,7 @@ export async function team(o = {}, deps = {}) {
   out();
   if (t.seats !== null && t.seats <= 1) {
     out(`  ${c.bold(`${clean(a.plan.name, 20)} is for one person.`)}`);
-    note("A team comes with Team: everyone you invite opens the same dashboards.");
+    note("A team comes with Pro: everyone you invite opens the same dashboards.");
     out(`    ${c.cyan("npx genclass plan")}`);
   } else {
     out(`  ${c.gray("Invite someone:")} ${c.cyan("npx genclass team invite")}`);
@@ -518,7 +518,7 @@ export async function connections(o = {}, deps = {}) {
     }
     if (!r.forwarding) {
       out();
-      out(`  ${c.bold(`Alerts come with the ${clean(r.plan ?? "Team", 20)} plan.`)}  ${c.cyan("npx genclass plan")}`);
+      out(`  ${c.bold(`Alerts come with the ${clean(r.plan ?? "Pro", 20)} plan.`)}  ${c.cyan("npx genclass plan")}`);
     } else {
       out();
       out(`  ${c.gray("Set one up:")} ${c.cyan("npx genclass connections add slack")}`);
@@ -577,7 +577,7 @@ export async function exportEvents(o = {}, deps = {}) {
     if (!r.ok) {
       sp?.stop(null);
       if (toStd && !o.json) {
-        process.stderr.write(`genclass export: ${r.reauth ? "sign in again: npx genclass login" : r.upgradeUrl ? "the stored events as a file come with the Team plan: npx genclass plan" : (r.reason ?? "it did not work")}\n`);
+        process.stderr.write(`genclass export: ${r.reauth ? "sign in again: npx genclass login" : r.upgradeUrl ? "the stored events as a file come with Pro: npx genclass plan" : (r.reason ?? "it did not work")}\n`);
         return 1;
       }
       return refused(r, { what: "The stored events as a file", command: ["export", o.from ? `--from ${o.from}` : "", o.to ? `--to ${o.to}` : "", o.format ? `--format ${o.format}` : "", o.out ? `--out ${o.out}` : ""].filter(Boolean).join(" "), browserUrl: target.dashboard_url, json: o.json });

@@ -43,16 +43,16 @@
 
 import { answer, appDigest, MAX_ASK_BYTES, readQuestion } from "./ask.js";
 import { accountContext, accountJson, accountProjects, authenticate, fail, lockedJson, makeLinkFor, ownedProject, projectJson, readableProject, readJson, upgradeJson, type Auth, type C } from "./auth.js";
-import { exportFor, integrationsFor, overBudget, tooMany } from "./billing.js";
+import { exportFor, integrationsFor, overBudget, tooMany, trialFor } from "./billing.js";
 import type { Env, HandleOptions } from "./collector.js";
-import { putFunnels, stats, stripAnalytics } from "./dashboard.js";
+import { putFunnels, stats, stripAnalytics, stripProblems } from "./dashboard.js";
 import { isKind, KINDS } from "./forward.js";
 import { githubApp } from "./github/config.js";
 import { repoStatusForAccount } from "./github/http.js";
 import { json } from "./http.js";
-import { accountAccess, accountBilling, accountProjectsAccess, canBuy, entitled, firstPlanWith, FREE, hasAnalytics, hasDashboard, PAID_PLANS, pickRange, priceText, projectAccess, viewRanges, type Access } from "./plans.js";
+import { accountAccess, accountBilling, accountProjectsAccess, canBuy, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
 import { liveFixUsage } from "./usage.js";
-import { askModel, byWeight, claimRun, hasModel, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem } from "./suggest.js";
+import { appKey, askModel, byWeight, claimRun, hasModel, keepAnswer, lastAnswer, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem, type SuggestAnswer } from "./suggest.js";
 import { createInvite, isTeamError, membershipsOf, teamOf } from "./team.js";
 
 /** A repository's full name as GitHub writes one. */
@@ -71,7 +71,7 @@ async function overview(c: C): Promise<Response> {
     projects: await withPlans(c, a.account.id),
     github: { app: gh !== null, install_url: gh ? `${c.cfg.origin}/github/install` : null, connect_url: gh?.clientId ? `${c.cfg.origin}/github/connect` : null },
     billing_url: `${c.cfg.origin}/account/billing`,
-    offer: offerFor(c, a.account, access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
+    offer: await offerFor(c, a.account, access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
   });
 }
 
@@ -97,7 +97,7 @@ async function withPlans(c: C, accountId: string): Promise<Record<string, unknow
  * checkout, and Free's limits in numbers. Null for an account that has a plan or a grant, on a server that sells
  * nothing, and for an account that cannot buy here (a test key and an account not on its list).
  */
-function offerFor(c: C, account: { id: string; email: string | null }, access: Access, projects?: { row: { id?: string | null }; access: Access }[]): Record<string, unknown> | null {
+async function offerFor(c: C, account: { id: string; email: string | null }, access: Access, projects?: { row: { id?: string | null }; access: Access }[]): Promise<Record<string, unknown> | null> {
   const plan = PAID_PLANS[0];
   if (!plan || !canBuy(c.env, account)) return null;
   // a plan sold per project is offered while one of the account's apps is on Free, and only once it has one (the
@@ -111,6 +111,7 @@ function offerFor(c: C, account: { id: string; email: string | null }, access: A
     summary: plan.summary,
     features: plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text)).map((f) => f.text).slice(0, 12),
     checkout_url: one ? `${c.cfg.origin}/account/billing?project=${encodeURIComponent(one)}&from=cli` : `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1`,
+    trial_days: (await trialFor(c.db, account.id, plan)) || null,
     free: { name: FREE.name, apps: FREE.limits.apps, history_days: FREE.limits.history_days, suggestions_shown: suggestionLimits(FREE).shown, live_fixes: FREE.limits.live_fixes_per_month ?? null },
   };
 }
@@ -145,7 +146,10 @@ async function app(c: C): Promise<Response> {
   if (!hasDashboard(access)) return lockedJson(c, access, p.id);
   const range = pickRange(c.url.searchParams.get("range"), viewRanges(access.plan));
   const s = await stats(c.db, p, range, c.now);
-  const view = hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` });
+  const planUrl = `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}`;
+  const seen = hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` });
+  // Free sees the totals only: the problems, pages, activity and fix prompts come with Pro (the browser's rule too)
+  const view = hasProblems(access) ? seen : stripProblems(seen, problemsLock(planUrl));
   const usage = await liveFixUsage(c.db, p.token, access.plan, c.now).catch(() => null);
   return json(200, { ...view, recent: view.recent.slice(0, APP_RECENT), dashboard_url: projectJson(c, p).dashboard_url, usage, plan: { id: access.plan.id, name: access.plan.name, source: access.source }, plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
 }
@@ -160,20 +164,37 @@ async function suggest(c: C): Promise<Response> {
   if (typeof digest === "string") return fail(400, digest);
   const access = await accountAccess(c.db, a.account.id, c.env, c.now);
   const lim = suggestionLimits(access.plan);
+  // Free (a plan that shows part of the answer) is shown the answer it got the first time for this app, again, until
+  // the account pays (the owner's call, 2026-11-12): no new model run, the same first item and the same counts
+  const partial = lim.shown !== null;
+  const key = await appKey(digest);
+  const kept = partial ? await lastAnswer(c.db, a.account.id, key) : null;
 
-  // the model, when the server has one and the account has a run left today; the checks' own order otherwise
-  let plan: PlanItem[] | null = null;
+  let answer: (SuggestAnswer & { created?: string }) | null = kept;
+  let created: string | null = kept?.created ?? null;
   let used: number | null = null;
   let limited = false;
-  if (hasModel(c.env) && digest.checks.length) {
+  if (!answer && hasModel(c.env) && (digest.checks.length || digest.app.site || digest.app.about)) {
     used = await claimRun(c.db, a.account.id, c.now, lim.per_day);
-    if (used === null) limited = (await usedToday(c.db, a.account.id, c.now)) >= lim.per_day;
-    else plan = await askModel(c.env, c.opts.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i)), digest);
+    if (used === null) {
+      limited = (await usedToday(c.db, a.account.id, c.now)) >= lim.per_day;
+      // the day's runs are used up: the last answer kept for this app, if there is one
+      answer = await lastAnswer(c.db, a.account.id, key);
+      created = answer?.created ?? null;
+    } else {
+      answer = await askModel(c.env, c.opts.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i)), digest);
+      if (answer) await keepAnswer(c.db, a.account.id, key, answer, c.now);
+    }
   }
-  const source = plan ? "model" : "checks";
-  const order: PlanItem[] = plan ?? byWeight(digest.checks).map((x) => ({ id: x.id, why: null, step: null, prompt: null }));
+  const source = answer?.source ?? "checks";
+  const order: PlanItem[] = answer?.items.length ? answer.items : byWeight(digest.checks).map((x) => ({ id: x.id, why: null, step: null, prompt: null }));
+  const ideas = answer?.ideas ?? [];
+  const designs = answer?.designs ?? [];
   const shown = lim.shown === null ? order.length : Math.min(order.length, lim.shown);
   const locked = order.slice(shown);
+  // what Free does not see is counted, never sent: the ideas and designs come back as numbers only
+  const hidden = partial ? ideas.length + designs.length : 0;
+  const pro = firstPaidWith("problems");
   return json(200, {
     ok: true,
     source,
@@ -182,7 +203,14 @@ async function suggest(c: C): Promise<Response> {
     items: order.slice(0, shown),
     locked: locked.length,
     locked_ids: locked.map((x) => x.id),
-    upgrade_url: locked.length || limited ? `${c.cfg.origin}/account/billing` : null,
+    ideas: partial ? [] : ideas,
+    designs: partial ? [] : designs,
+    ideas_locked: partial ? ideas.length : 0,
+    designs_locked: partial ? designs.length : 0,
+    // the answer was kept from an earlier run (Free sees it again; a plan out of runs for the day sees its last)
+    cached_at: created,
+    upgrade_url: locked.length || hidden || limited ? `${c.cfg.origin}/account/billing?plan=team&from=cli` : null,
+    upgrade_plan: pro ? { name: pro.name, price: priceText(pro), trial_days: pro.trial_days ?? null } : null,
     remaining_today: used === null ? Math.max(0, lim.per_day - (await usedToday(c.db, a.account.id, c.now))) : Math.max(0, lim.per_day - used),
     limited,
   });
@@ -237,7 +265,7 @@ async function account(c: C): Promise<Response> {
       memberships: memberships.map((x) => ({ email: x.email, github_login: x.githubLogin, joined: x.joined, active: x.active })),
     },
     billing_url: `${c.cfg.origin}/account/billing`,
-    offer: offerFor(c, a.account, access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
+    offer: await offerFor(c, a.account, access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
   });
 }
 
@@ -303,6 +331,11 @@ async function ask(c: C, f: Fetch): Promise<Response> {
   // the numbers the model gets are the ones this account's dashboard shows for the app: the same plan rules
   const access = await projectAccess(c.db, p, c.env, c.now);
   if (!hasDashboard(access)) return lockedJson(c, access, p.id);
+  // asking about the app comes with Pro (plans.json entitlement `ask`): Free is told which plan, and where
+  if (!hasAsk(access)) {
+    const lock = problemsLock(`${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}`);
+    return json(403, { ok: false, error: `asking about your app comes with ${lock.plan ?? "a paid plan"}`, locked: true, needs_plan: true, plan: lock.plan, upgrade_url: lock.upgrade_url, trial_days: lock.trial_days, price: lock.price });
+  }
   const mine = await accountAccess(c.db, a.account.id, c.env, c.now);
   const lim = suggestionLimits(mine.plan);
   const left = async (): Promise<number> => Math.max(0, lim.per_day - (await usedToday(c.db, a.account.id, c.now)));

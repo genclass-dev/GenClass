@@ -51,8 +51,13 @@ const DAY = 86_400_000;
 export const GRACE_DAYS = 30;
 
 export type PlanId = "free" | "team" | "enterprise";
-/** `github_private`: genclass-dev[bot] reviews the account's private repositories (src/github/entitlement.ts); public ones are free for everyone. */
-export type Entitlement = "dashboard" | "forwarding" | "export" | "analytics" | "custom_model" | "github_private";
+/**
+ * `github_private`: genclass-dev[bot] reviews the account's private repositories (src/github/entitlement.ts); public
+ * ones are free for everyone. `problems` (2026-11-12): the problem lists, the pages they happen on, the activity and
+ * the fix prompts, on the dashboard and in the genclass command (Free shows the totals only); `ask`: genclass ask. A
+ * plan file without `problems` or `ask` gives them (hasProblems, hasAsk).
+ */
+export type Entitlement = "dashboard" | "forwarding" | "export" | "analytics" | "custom_model" | "github_private" | "problems" | "ask";
 
 export interface Plan {
   id: PlanId;
@@ -69,6 +74,8 @@ export interface Plan {
   per_seat?: boolean;
   /** Sold per project (version 4): one subscription of quantity 1 for each app, its metadata naming the app. */
   per_project?: boolean;
+  /** Days free at Checkout before the first payment (Pro: 3), once per account; left out: no trial. */
+  trial_days?: number;
   /**
    * `seats`: the people a plan that is not per_seat holds, the owner included (null or left out: no limit). `apps`
    * on Free: how many of an account's projects it covers (a later one is locked until it has a plan).
@@ -82,7 +89,7 @@ export interface Plan {
    */
   suggestions?: { per_day: number; shown: number | null };
   /** A key a plan leaves out counts as false (entitled). */
-  entitlements: Partial<Record<Entitlement, boolean>> & Record<Exclude<Entitlement, "github_private">, boolean>;
+  entitlements: Partial<Record<Entitlement, boolean>> & Record<Exclude<Entitlement, "github_private" | "problems" | "ask">, boolean>;
   features: { text: string; available: boolean }[];
 }
 
@@ -390,6 +397,17 @@ export const hasDashboard = (a: Access): boolean => entitled(a.plan, "dashboard"
 
 /** This access shows visitor analytics (Team and Enterprise); without it the stats are served with them left out. */
 export const hasAnalytics = (a: Access): boolean => entitled(a.plan, "analytics");
+/** The problem lists, pages, activity and fix prompts (not only the totals); a plan file without the key gives them. */
+export const hasProblems = (a: Access): boolean => a.plan.entitlements.problems !== false;
+/** genclass ask; a plan file without the key gives it. */
+export const hasAsk = (a: Access): boolean => a.plan.entitlements.ask !== false;
+/** What a stats answer says when the problems are left out: the plan that shows them, its trial, and where to start it. */
+export const problemsLock = (upgradeUrl: string): { plan: string | null; upgrade_url: string; trial_days: number | null; price: string | null } => {
+  const p = firstPaidWith("problems");
+  return { plan: p?.name ?? null, upgrade_url: upgradeUrl, trial_days: p?.trial_days ?? null, price: p ? priceText(p) : null };
+};
+/** The first plan on sale with an entitlement a plan file can leave out (problems, ask): for "comes with Pro". */
+export const firstPaidWith = (e: "problems" | "ask"): Plan | null => PAID_PLANS.find((p) => p.entitlements[e] !== false) ?? null;
 
 /** The access behind an app: its account's, or Free's for an app known only by its private link. */
 /**

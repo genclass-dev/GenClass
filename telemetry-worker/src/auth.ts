@@ -70,6 +70,7 @@ import {
   sha256Hex,
   stats,
   stripAnalytics,
+  stripProblems,
   type D1Like,
   type Project,
 } from "./dashboard.js";
@@ -81,7 +82,7 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, keepDays, PAID_PLANS, pickRange, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, problemsLock, projectAccess, viewRanges } from "./plans.js";
 import { activeOwners, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
 import {
@@ -1787,6 +1788,7 @@ async function deleteAccount(c: C): Promise<Response> {
   const owned = "SELECT id FROM projects WHERE account_id = ?";
   // `genclass suggest`'s count of model runs goes with the account (on its own: its table comes with migration 0015)
   await c.db.prepare("DELETE FROM suggest_usage WHERE account_id = ?").bind(id).run().catch(() => undefined);
+  await c.db.prepare("DELETE FROM suggest_results WHERE account_id = ?").bind(id).run().catch(() => undefined);
   await c.db.batch([
     // paid features of every app in the account (apps that keep a private link leave without them)
     c.db.prepare(`DELETE FROM integrations WHERE project_id IN (${owned})`).bind(id),
@@ -2070,7 +2072,9 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     const s = await stats(c.db, p, range, c.now);
     const usage = await liveFixUsage(c.db, p.token, access.plan, c.now).catch(() => null);
     // visitor analytics are left out for a plan without them, and counted all the same (src/dashboard.ts stripAnalytics)
-    return json(200, { ...(hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` })), usage, plan: { id: access.plan.id, name: access.plan.name, source: access.source }, plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
+    const planUrl = `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}`;
+    const shown = hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` });
+    return json(200, { ...(hasProblems(access) ? shown : stripProblems(shown, problemsLock(planUrl))), usage, plan: { id: access.plan.id, name: access.plan.name, source: access.source }, plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
   }
   const fun = /^\/api\/account\/projects\/([^/]+)\/funnels$/.exec(path);
   if (fun) {

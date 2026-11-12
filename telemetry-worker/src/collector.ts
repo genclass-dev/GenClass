@@ -42,6 +42,7 @@ import {
   sha256Hex,
   stats,
   stripAnalytics,
+  stripProblems,
   TOKEN_RE,
   type D1Like,
   type Range,
@@ -56,7 +57,7 @@ import { afterBatch } from "./paid.js";
 import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, setupCommand, setupPage, startPage } from "./pages.js";
 import { lockedLink } from "./locked.js";
 import { applyLock, linkSession, linkUnlocked, lockKind, lockedJson, readBody, readLock, routeLink, startPasskeyOptions, unlockPage } from "./link-lock.js";
-import { firstPlanWith, hasAnalytics, hasDashboard, pickRange, projectAccess, viewRanges } from "./plans.js";
+import { firstPlanWith, hasAnalytics, hasDashboard, hasProblems, pickRange, problemsLock, projectAccess, viewRanges } from "./plans.js";
 import { SAMPLE_PROJECT, SAMPLE_SECRET, sampleStats } from "./sample.js";
 
 export const SCHEMA = "genclass-telemetry/1";
@@ -521,7 +522,9 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     // a private link shows the ranges of the app's plan (Free's for an app without an account), never past 30 days
     const range = pickRange(url.searchParams.get("range"), viewRanges(access.plan).filter((x) => RANGES.includes(x)));
     const s = await stats(env.DB, p, range, now);
-    return json(200, hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: upgradeUrl(env) }));
+    const seen = hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: upgradeUrl(env) });
+    // a private link's app has no account, so Free's rule: the totals only, and the way to an account with Pro
+    return json(200, hasProblems(access) ? seen : stripProblems(seen, problemsLock(upgradeUrl(env))));
   }
 
   if (path === "/start") {

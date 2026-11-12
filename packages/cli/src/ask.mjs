@@ -108,7 +108,7 @@ export async function ask(o = {}, deps = {}) {
   if (r.answer === null) {
     if (r.why === "limit") {
       warn(`Today's ${r.perDay === null ? "" : `${n(r.perDay)} `}model runs are used (ask and suggest share them). They come back tomorrow.`);
-      if (r.upgradeUrl) out(`  ${c.gray("More a day with the Team plan:")} ${c.cyan("npx genclass plan")}`);
+      if (r.upgradeUrl) out(`  ${c.gray("More a day with Pro:")} ${c.cyan("npx genclass upgrade")}`);
     } else if (r.why === "no-model") note("This genclass.dev has no model to ask, so there is no answer in words.");
     else warn("The model did not answer this time. Asking again in a moment usually works.");
     out(`  ${c.gray("The numbers themselves:")} ${c.cyan("npx genclass problems")}`);

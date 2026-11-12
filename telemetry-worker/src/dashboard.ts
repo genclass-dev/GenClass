@@ -987,6 +987,8 @@ export interface Stats {
 /** Why a part of the stats is missing: the first plan that includes it (null: none does) and where the plans are. */
 export interface StatsLock {
   analytics: { plan: string | null; upgrade_url: string };
+  /** The problem lists, pages, activity and fix prompts (plans.json entitlement `problems`): Free has the totals only. */
+  problems?: { plan: string | null; upgrade_url: string; trial_days: number | null; price: string | null };
 }
 
 /**
@@ -1007,6 +1009,23 @@ export function stripAnalytics(s: Stats, lock: StatsLock["analytics"]): Stats {
     visits: { sessions: 0, pages: 0, bounces: 0, entry: [], exit: [] },
     funnels: [],
     locked: { ...(s.locked ?? {}), analytics: lock },
+  };
+}
+
+/**
+ * The stats as a plan without the `problems` entitlement sees them (Free since 2026-11-12, the owner's "limit free
+ * fully"): the totals, the previous period's totals and the series stay; every breakdown but visitor analytics' (which
+ * its own entitlement decides), the latest events and the agent's log are left out, and `locked.problems` says which
+ * plan shows them. Nothing is deleted: the same request answers in full once the app's plan includes them. Pure.
+ */
+export function stripProblems(s: Stats, lock: NonNullable<StatsLock["problems"]>): Stats {
+  return {
+    ...s,
+    breakdowns: Object.fromEntries(Object.entries(s.breakdowns).filter(([k]) => k.startsWith("ix_"))),
+    // the chart keeps its bars, one kind: how many, not which
+    typeSeries: s.typeSeries.map((b) => ({ bucket: b.bucket, counts: { problems: Object.values(b.counts).reduce((x, y) => x + y, 0) } })),
+    recent: [],
+    locked: { ...(s.locked ?? { analytics: undefined as never }), problems: lock } as StatsLock,
   };
 }
 

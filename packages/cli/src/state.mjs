@@ -330,7 +330,7 @@ export async function readState(o = {}, deps = {}) {
   else if (!repo || !repo.ok) Object.assign(gh, repo?.missing ? { state: "waiting", detail: "check it at genclass.dev/account/github", run: null } : { detail: `could not check${repo ? ` (${repo.reason})` : ""}` });
   else if (!repo.known) Object.assign(gh, { detail: "continue with GitHub to check", human: "install the GitHub App and continue with GitHub in your browser" });
   else if (!repo.installed) Object.assign(gh, { detail: `not on ${git.github} yet`, human: "install the GitHub App on this repository" });
-  else if (repo.needsPlan) Object.assign(gh, { state: "waiting", detail: "private repository: reviews come with the Team plan", run: null });
+  else if (repo.needsPlan) Object.assign(gh, { state: "waiting", detail: "private repository: reviews come with Pro", run: null });
   else if (repo.paused) Object.assign(gh, { state: "waiting", detail: "paused on your GitHub page at genclass.dev", run: null });
   else if (repo.evidence) Object.assign(gh, { state: "done", detail: repo.prs ? `reviewing · ${repo.prs} pull request${repo.prs === 1 ? "" : "s"} so far` : "reviewing" });
   else Object.assign(gh, { state: "waiting", detail: "installed · open a pull request and the first review appears", run: null, human: workflows.length ? "commit the workflow file and open a pull request" : "open a pull request" });

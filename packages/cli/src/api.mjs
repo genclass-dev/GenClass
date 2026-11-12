@@ -79,6 +79,7 @@ function offerOf(o, host) {
     features: (Array.isArray(o.features) ? o.features : []).filter((x) => typeof x === "string" && x.trim()).slice(0, 12).map((x) => x.slice(0, 120)),
     checkoutUrl,
     free: { name: str(f.name, 40) ?? "Free", apps: num(f.apps), historyDays: num(f.history_days), suggestionsShown: num(f.suggestions_shown), liveFixes: num(f.live_fixes) },
+    trialDays: num(o.trial_days),
   };
 }
 
@@ -114,7 +115,8 @@ export async function fetchRepoStatus(creds, repo, opts = {}) {
  * @returns {Promise<{ ok: true, source: "model" | "checks", plan: { id: string, name: string } | null, total: number, items: { id: string, why: string | null, step: string | null, prompt: string | null }[], locked: number, lockedIds: string[], upgradeUrl: string | null, remainingToday: number | null, limited: boolean } | { ok: false, status: number, reason: string, missing?: true }>}
  */
 export async function requestPlan(creds, digest, opts = {}) {
-  const r = await request("/api/cli/suggest", { method: "POST", token: creds.access_token, host: creds.host, body: digest, fetchFn: opts.fetchFn, timeoutMs: opts.timeoutMs ?? 45_000 });
+  // the model works through the checks, its own ideas and three website designs: up to 90 seconds on the server
+  const r = await request("/api/cli/suggest", { method: "POST", token: creds.access_token, host: creds.host, body: digest, fetchFn: opts.fetchFn, timeoutMs: opts.timeoutMs ?? 120_000 });
   if (!r.ok) return { ok: false, status: r.status, reason: failure(r), ...(r.status === 404 ? { missing: true } : {}) };
   const j = r.json ?? {};
   const items = (Array.isArray(j.items) ? j.items : [])
@@ -132,6 +134,20 @@ export async function requestPlan(creds, digest, opts = {}) {
     upgradeUrl: sameOrigin(j.upgrade_url, creds.host),
     remainingToday: Number.isFinite(Number(j.remaining_today)) && j.remaining_today !== null ? Number(j.remaining_today) : null,
     limited: j.limited === true,
+    /** the model's own ideas (not measured) and website designs: Pro gets them, Free their counts */
+    ideas: (Array.isArray(j.ideas) ? j.ideas : [])
+      .filter((i) => i && typeof i === "object" && str(i.title, 120))
+      .slice(0, 20)
+      .map((i) => ({ title: str(i.title, 120), why: str(i.why, 600), step: str(i.step, 400), prompt: str(i.prompt, 1200) })),
+    designs: (Array.isArray(j.designs) ? j.designs : [])
+      .filter((d) => d && typeof d === "object" && str(d.title, 120) && /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/\S*)?$/i.test(String(d.inspired_by ?? "")) && str(d.prompt, 4000))
+      .slice(0, 4)
+      .map((d) => ({ title: str(d.title, 120), inspiredBy: String(d.inspired_by).slice(0, 200), why: str(d.why, 600), prompt: str(d.prompt, 4000) })),
+    ideasLocked: Number.isFinite(Number(j.ideas_locked)) ? Math.max(0, Number(j.ideas_locked)) : 0,
+    designsLocked: Number.isFinite(Number(j.designs_locked)) ? Math.max(0, Number(j.designs_locked)) : 0,
+    /** this answer was kept from an earlier run (Free sees its first one again until it pays) */
+    cachedAt: str(j.cached_at, 40),
+    upgradePlan: j.upgrade_plan && typeof j.upgrade_plan === "object" ? { plan: str(j.upgrade_plan.name, 40), price: str(j.upgrade_plan.price, 60), trialDays: Number.isInteger(j.upgrade_plan.trial_days) && j.upgrade_plan.trial_days > 0 ? j.upgrade_plan.trial_days : null } : null,
   };
 }
 
@@ -155,6 +171,13 @@ export async function signInIsOld(creds, opts = {}) {
   if (old(newest)) return true;
   if (newest.ok || newest.status !== 404) return false;
   return old(await ask("/api/cli/app?id=-&range=24h"));
+}
+
+/** A part the plan leaves out, as the server said it: { plan, trialDays, price, upgradeUrl }, or null. */
+function lockOf(l, host) {
+  if (!l || typeof l !== "object") return null;
+  const days = Number(l.trial_days);
+  return { plan: str(l.plan, 40), trialDays: Number.isInteger(days) && days > 0 ? days : null, price: str(l.price, 60), upgradeUrl: sameOrigin(l.upgrade_url, host) };
 }
 
 /** The live-fix count the server sent with an app's dashboard (src/usage.ts there), or null. */
@@ -203,6 +226,8 @@ export async function fetchApp(creds, id, range = "7d", opts = {}) {
     visitorsPlan: lock ? { plan: str(lock.plan, 40), upgradeUrl: sameOrigin(lock.upgrade_url, creds.host) } : null,
     agent: { found: count(st.found), reproduced: count(st.reproduced), fixed: count(st.fixed), closed: count(st.closed), open: count(st.open), last: str(j.agent?.last, 40) },
     dashboardUrl: sameOrigin(j.dashboard_url, creds.host),
+    /** Free sees the totals only: the plan that shows the problems, its trial and price, and its page */
+    problemsPlan: lockOf(j.locked?.problems, creds.host),
     /** the problems fixed live this month against the app's plan: past its limit GenClass observes only */
     usage: liveUsage(j.usage),
     /** the app's plan page (plans per project) */
@@ -282,6 +307,8 @@ const refused = (r, host, what) => ({
   ...(r.status === 404 && (typeof r.json?.error !== "string" || r.json.error === "not found") ? { missing: true } : {}),
   ...(r.json?.reauth === true ? { reauth: true } : {}),
   ...(sameOrigin(r.json?.upgrade_url, host) ? { upgradeUrl: sameOrigin(r.json.upgrade_url, host) } : {}),
+  // a part of the paid plan: which plan, its trial and price (the Pro box)
+  ...(r.json?.locked === true ? { lock: lockOf(r.json, host) } : {}),
 });
 const numOrNull = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v) : null);
 const person = (x) => ({ label: str(x?.email, 120) ?? (str(x?.github_login, 60) ? `@${str(x.github_login, 60)}` : "a GenClass account"), joined: str(x?.joined, 40), active: x?.active !== false });

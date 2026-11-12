@@ -16,7 +16,15 @@ import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { openBrowser, signIn } from "./actions.mjs";
 import { fetchApp, signInIsOld } from "./api.mjs";
 import { readState } from "./state.mjs";
-import { ago, bad, clean, header, note, PROMPT, typed, visible, warn, width, wrap } from "./tui.mjs";
+import { ago, bad, clean, header, note, proBox, PROMPT, typed, visible, warn, width, wrap } from "./tui.mjs";
+
+/** The views a Free app does not have (the server sends their data to Pro only), and what the Pro box says about each. */
+const PRO_VIEWS = {
+  problems: "Every problem, the pages it happens on and what GenClass did come with Pro.",
+  events: "The latest events, one per line, come with Pro.",
+  report: "The period as Markdown comes with Pro.",
+  fix: "Handing problems to your coding agent, with a fix prompt for each, comes with Pro.",
+};
 
 /** "Dec 1" for an ISO time (UTC). */
 const monthDay = (iso) => {
@@ -124,7 +132,9 @@ export function render(app, state, o = {}) {
     out();
     out(`  ${c.green(sym.ok)} No problems found in this period.`);
   }
-  table("Problems", rows(app.problems), all ? 200 : 5, KINDS, all);
+  // Free: the totals above, and the way to the rest
+  if (app.problemsPlan) proBox("The problems, the pages they happen on and a fix prompt for each come with Pro. Free shows the totals.", app.problemsPlan);
+  else table("Problems", rows(app.problems), all ? 200 : 5, KINDS, all);
   if (all) table("Possible problems (lower confidence)", rows(app.possible), 200, KINDS, all);
   table("Visual checks", rows(app.checks), all ? 200 : 3, null, all);
   if (all && app.recent.length) {
@@ -145,7 +155,7 @@ export function render(app, state, o = {}) {
     const bounce = v.visits ? ` · ${Math.round((v.bounces / v.visits) * 100)}% left after one page` : "";
     part("Visitors", v.visits ? `${plural(v.visits, "visit")} · ${plural(v.pages, "page view")}${bounce}` : c.gray("none counted in this period (analytics is opt-in: genclass.dev/docs)"));
     if (v.visits && v.entry.length) for (const l of wrap(`came in on ${v.entry.slice(0, all ? 10 : 3).map((e) => `${clean(e.key, 30)} (${n(e.count)})`).join(", ")}`, width() - 4 - 15)) out(`  ${" ".repeat(15)}${c.gray(l)}`);
-  } else if (app.visitorsPlan) part("Visitors", c.gray(`visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Team", 20)} plan${app.visitorsPlan.upgradeUrl ? `: ${app.visitorsPlan.upgradeUrl}` : ""}`));
+  } else if (app.visitorsPlan) part("Visitors", c.gray(`visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Pro", 20)} plan${app.visitorsPlan.upgradeUrl ? `: ${app.visitorsPlan.upgradeUrl}` : ""}`));
   if (u && u.limit !== null) part("Live fixes", u.observeOnly ? c.yellow(`${n(u.used)} of ${n(u.limit)} this month · observing only`) : `${n(u.used)} of ${n(u.limit)} this month`);
   else if (u?.used) part("Live fixes", `${n(u.used)} this month · no limit`);
   const a = app.agent;
@@ -294,7 +304,18 @@ export async function appView(o = {}, deps = {}, view) {
     return 1;
   }
   if (o.json) {
+    if (app.problemsPlan && PRO_VIEWS[view.name]) {
+      out(JSON.stringify({ ok: false, locked: true, error: `${PRO_VIEWS[view.name]}`, plan: app.problemsPlan.plan, trial_days: app.problemsPlan.trialDays, upgrade_url: app.problemsPlan.upgradeUrl, run: "npx genclass upgrade" }, null, 2));
+      return 0;
+    }
     out(JSON.stringify((view.json ?? ((a, st, t) => ({ ok: true, app: t.name, ...a })))(app, state, target), null, 2));
+    return 0;
+  }
+  // Free sees the totals only (the server left the rest out): these views are Pro's, and say so with the way to it
+  if (app.problemsPlan && PRO_VIEWS[view.name]) {
+    header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+    proBox(PRO_VIEWS[view.name], app.problemsPlan);
+    out();
     return 0;
   }
   // a view whose output is meant to be piped or pasted (the report) has no card over it

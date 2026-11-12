@@ -167,6 +167,20 @@ export function card(h = {}) {
  * @param {{ plan: { name: string }, price: string, summary?: string | null, features: string[] }} offer
  * @param {string | null} [app] the project it is chosen for
  */
+/**
+ * The Pro box: what comes with the paid plan, its trial and price, and the command that starts it. `lock` is what
+ * the server said ({ plan, trialDays, price, upgradeUrl }); every part of it is cleaned before it is printed.
+ */
+export function proBox(what, lock = {}) {
+  const plan = clean(lock.plan ?? "Pro", 20);
+  out();
+  out(`  ${badge(plan.toUpperCase())}`);
+  for (const l of wrap(clean(what, 300), width() - 6)) out(`    ${c.bold(l)}`);
+  const terms = lock.trialDays ? `${lock.trialDays} days free, then ${clean(lock.price ?? "the monthly price", 40)}. Cancel any time.` : lock.price ? `${clean(lock.price, 40)}.` : "";
+  for (const l of wrap(`${terms ? `${terms} ` : ""}Start: npx genclass upgrade`, width() - 6)) out(`    ${l}`);
+  if (lock.upgradeUrl) out(`    ${c.cyan(clean(lock.upgradeUrl, 200))}`);
+}
+
 export function planCard(offer, app) {
   const inner = width() - 6;
   const B = unicode ? { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" } : { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" };
@@ -185,6 +199,8 @@ export function planCard(offer, app) {
     row(price);
   }
   if (offer.summary) for (const l of wrap(clean(offer.summary, 200), room)) row(c.gray(l));
+  // the trial, when this account has one: said before anything else is
+  if (offer.trialDays) for (const l of wrap(`${offer.trialDays} days free, then ${clean(offer.price, 40)}. Cancel any time.`, room)) row(c.green(l));
   row();
   for (const f of offer.features) {
     const [first = "", ...rest] = wrap(clean(f, 120), room - 2);

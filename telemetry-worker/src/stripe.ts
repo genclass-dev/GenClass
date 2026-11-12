@@ -391,7 +391,7 @@ export function managedPayments(env: Env, plan: Plan): boolean {
 export async function checkoutSession(
   env: Env,
   f: Fetch,
-  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string } },
+  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string }; trialDays?: number },
 ): Promise<string> {
   const lookup = o.plan.stripe_lookup_keys.monthly;
   if (!lookup) throw new StripeError(`the ${o.plan.name} plan has no monthly price`, 400);
@@ -446,7 +446,8 @@ export async function checkoutSession(
         payment_method_collection: "always",
         // the "Add promotion code" field: codes made in the Stripe dashboard (Product catalog, Coupons) for GenClass's prices
         allow_promotion_codes: true,
-        subscription_data: { metadata: mark, billing_mode: { type: "flexible" } },
+        // a first plan starts with the plan's trial (billing.ts trialFor): the card is taken now and charged when it ends
+        subscription_data: { metadata: mark, billing_mode: { type: "flexible" }, ...(o.trialDays ? { trial_period_days: o.trialDays } : {}) },
         managed_payments: managedPayments(env, o.plan) ? { enabled: true } : undefined,
       },
       `genclass-checkout-${o.account.id}${o.project ? `-p-${o.project.id}` : ""}-${o.plan.id}${perSeat ? `-x${seats}` : ""}-${Math.floor(o.now.getTime() / 60_000)}${from}${after}`,

@@ -879,6 +879,7 @@ table.dt td .bdg{margin-left:8px;vertical-align:middle}
 .ucard svg{margin-top:auto;width:100%;height:110px;display:block}
 .ucard .ax{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--ink3);margin-top:6px}
 .uh{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:48px 0 16px}
+.prolock{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;border:1px solid var(--accent-b,var(--rule));background:var(--accent-t,transparent);border-radius:12px;padding:16px 18px;margin:0 0 24px}.prolock p{margin:4px 0 0;color:var(--ink2);max-width:640px}
 .uh h2{font-size:18px;color:var(--ink2)}
 .uh h2 b{color:var(--ink);font-weight:400}
 .getc{border:1px dashed var(--rule2);border-radius:6px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--s75)}
@@ -1198,7 +1199,7 @@ const DASH_JS = `
     var d = delta(problemsOf(S), (prev.detections || 0) + (prev.checks || 0));
     host.appendChild(stat("Problems found", fmt(problemsOf(S)) + (S.demo ? "+" : ""), S.demo ? "detected in production" : d));
     var seenPages = count(S, "page_route");
-    host.appendChild(stat("Pages affected", fmt(problemPages(S)), seenPages ? "of " + plural(seenPages, "page", "pages") : ""));
+    host.appendChild(stat("Pages affected", S.locked && S.locked.problems ? "Pro" : fmt(problemPages(S)), seenPages ? "of " + plural(seenPages, "page", "pages") : ""));
     if (S.demo) host.appendChild(stat("Fixed live", fmt(T0.interventions), ""));
     else host.appendChild(stat("Stopped by GenClass", fmt((T0.interventions || 0) + fixed), acting ? (applied ? Math.round(100 * undone / applied) + "% undone" : "") : "Observe mode"));
     host.appendChild(stat("Model loaded", share(ready, ready + failed), ready ? "average " + (T0.modelLoadAvgMs >= 1000 ? (T0.modelLoadAvgMs / 1000).toFixed(1) + " s" : fmt(T0.modelLoadAvgMs) + " ms") : ""));
@@ -1748,6 +1749,21 @@ const DASH_JS = `
     });
     var fig = el("figure", "mt-l"), plot = el("div", "plot"); plot.appendChild(g); fig.appendChild(plot);
     host.appendChild(fig);
+  }
+  // Free sees the totals only (src/dashboard.ts stripProblems): the problem sections give way to one banner with the
+  // way to Pro, so an empty list never reads as "no problems"
+  function proLock(S){
+    var lock = S.locked && S.locked.problems, b = document.getElementById("prolock");
+    if (b) b.classList.toggle("hidden", !lock);
+    if (!lock) return;
+    ["found", "possible-s", "where", "recent-s", "advisor", "adv-s", "fixall2"].forEach(function(id){ var e = document.getElementById(id); if (e) e.classList.add("hidden"); });
+    var h = document.getElementById("advn"); if (h && h.parentNode) h.parentNode.classList.add("hidden");
+    var m = document.getElementById("prolockmsg"), a = document.getElementById("prolocka"), plan = lock.plan || "Pro";
+    if (m) m.textContent = "Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with " + plan + "." + (lock.trial_days ? " " + lock.trial_days + " days free, then cancel any time." : "");
+    if (a) {
+      if (typeof lock.upgrade_url === "string" && lock.upgrade_url.indexOf("https://") === 0) a.href = lock.upgrade_url;
+      var t = a.querySelector("span"); if (t) t.textContent = lock.trial_days ? "Start your " + lock.trial_days + "-day free trial" : "Upgrade to " + plan;
+    }
   }
   var IX_SECTIONS = ["clicks", "ix-sources", "ix-devices", "ix-sessions", "ix-entry", "ix-funnels"];
   function visits(S){
@@ -2349,7 +2365,7 @@ const DASH_JS = `
     document.getElementById("content").classList.toggle("hidden", !live);
     ["period", "mdcopy", "verdict"].forEach(function(id){ var n = document.getElementById(id); if (n) n.classList.toggle("hidden", !live); });
     if (!live) return;
-    verdict(S); tiles(S); usage(S); advisor(S); fixAll(S); trend(S); possibleTrend(S); cards(S); possibleCards(S); pages(S); acted(S); health(S); stages(S); agentLog(S); loop(S); recent(S); visits(S); advanced(S);
+    verdict(S); tiles(S); usage(S); advisor(S); fixAll(S); trend(S); possibleTrend(S); cards(S); possibleCards(S); pages(S); acted(S); health(S); stages(S); agentLog(S); loop(S); recent(S); visits(S); advanced(S); proLock(S);
     var B2 = S.breakdowns, T2 = S.totals;
     function put(id, t){ var n = document.getElementById(id); if (n) n.textContent = t; }
     put("c-trend", fmt(problemsOf(S)));
@@ -2983,6 +2999,7 @@ ${connect}
   </ol>
 </section>
 <div id="content" class="hidden">
+<div class="prolock hidden" id="prolock"><div class="minw0"><b>Free shows the totals</b><p id="prolockmsg"></p></div><a class="btn" id="prolocka" href="/account/billing"><span>Start your free trial</span></a></div>
 <div class="ovtop" data-v="overview">
   <div class="minw0">
     <div class="statrow" id="tiles" data-tour="52|Key numbers|Problems found, pages affected, and what GenClass stopped." data-tour-view="top"></div>

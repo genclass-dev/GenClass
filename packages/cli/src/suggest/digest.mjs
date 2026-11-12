@@ -27,6 +27,8 @@ export function buildDigest(app, results) {
       site: app.site ? clean(app.site, 200) : null,
       payments: app.payments ? clean(app.payments, 30) : null,
       hosting: app.hosting ? clean(app.hosting, 30) : null,
+      // what the site says it is about (its title and meta description): the design ideas fit the company with it
+      about: app.about ? clean(app.about, 300) : null,
     },
     checks: failed.map((r) => ({ id: r.id, area: r.area, title: clean(r.title, 100), weight: r.weight, evidence: (r.evidence ?? []).slice(0, 3).map((e) => clean(e, 160)).filter(Boolean) })),
     passed: results.filter((r) => r.status === "pass").length,
@@ -36,10 +38,10 @@ export function buildDigest(app, results) {
 
 /** The lines that say, in plain words, what a digest holds (shown before it is sent). */
 export function describeDigest(d) {
-  const about = [d.app.name && "its name", d.app.framework && "its framework", d.app.site && "its address", d.app.payments && "its payment provider", d.app.hosting && "its host"].filter(Boolean);
+  const about = [d.app.name && "its name", d.app.framework && "its framework", d.app.site && "its address", d.app.about && "its site's title and description", d.app.payments && "its payment provider", d.app.hosting && "its host"].filter(Boolean);
   return [
     `The ${d.checks.length} check${d.checks.length === 1 ? "" : "s"} that failed, each with its title and the evidence lines printed below.`,
     about.length ? `About the app: ${about.join(", ")}.` : null,
-    "No source code, no file contents and no secrets. genclass.dev passes this to the model that writes the plan and keeps none of it.",
+    "No source code, no file contents and no secrets. genclass.dev passes this to the model that writes the plan, and keeps the plan it writes for this app, not what was sent.",
   ].filter(Boolean);
 }
