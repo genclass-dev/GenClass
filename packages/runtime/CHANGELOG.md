@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **A lite install is documented: GenClass after the page has loaded, on a share of page loads** (README "Lite
+  install"; nothing in the runtime changes). For a site whose performance budget has no room in the page load: a few
+  lines in the entry file wait for the `load` event and an idle callback, then run `import("@genclass/runtime/auto")`
+  (or add the script tag) on 1 page load in 20, with the model on `preload: "lazy"`. Measured on the Angular starter
+  (0.3.0-beta.6, observe, headless Chromium, 4× CPU throttling; RESULTS.md §28, `bench/late-load/run.mjs`): the load
+  event at 94.0 ms with the late import against 94.2 ms without GenClass and 159.0 ms with the first-line import; a
+  page load the loader leaves out matches the build without GenClass; the cost moves after `load` (108.2 KB fetched,
+  about 42 ms of script in tasks under 50 ms; with the script tag 129.3 KB and one task of 68 ms), and interactions
+  cost the same as with the first-line import. It sees less: nothing before it starts, and none of the app's state
+  (state discovery needs GenClass before the framework), so no stale responses. One small app on a fast machine;
+  `guard` and `heal` started late are not measured. `init` does not write it.
 - **genclass.dev has a Team plan, and the CLI says what is free** (plans changed on 2026-11-11; nothing in the
   runtime changes, and no plan limits it). The dashboard's problems stay free for every app: what GenClass found, on
   which pages and what it did, for the last 7 days and up to 3 apps in an account. Visitor analytics

@@ -1,0 +1,3245 @@
+{
+ "versions": {
+  "node": "v24.22.3",
+  "chromium": "153.0.8010.12",
+  "runtime": "0.3.0-beta.6",
+  "angular": "22.2.6",
+  "throttle": 4,
+  "runs": 9
+ },
+ "size": {
+  "control": {
+   "files": 1,
+   "allGzip": 80182,
+   "initialFiles": 1,
+   "initialGzip": 80182
+  },
+  "first": {
+   "files": 13,
+   "allGzip": 353768,
+   "initialFiles": 1,
+   "initialGzip": 190785
+  },
+  "late-import": {
+   "files": 14,
+   "allGzip": 353947,
+   "initialFiles": 1,
+   "initialGzip": 80108
+  },
+  "late-tag": {
+   "files": 1,
+   "allGzip": 80448,
+   "initialFiles": 1,
+   "initialGzip": 80448
+  }
+ },
+ "tag": {
+  "gzip": 132385,
+  "raw": 387715
+ },
+ "summary": {
+  "control": {
+   "load": {
+    "median": 94.20000000001164,
+    "range": [
+     91.19999999995343,
+     98.79999999993015
+    ]
+   },
+   "dcl": {
+    "median": 94.20000000001164,
+    "range": [
+     91.19999999995343,
+     98.79999999993015
+    ]
+   },
+   "fcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "lcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "ltBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tbtBeforeLoad": {
+    "median": 5,
+    "range": [
+     3,
+     8
+    ]
+   },
+   "ltAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "tbtAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "longestAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "scriptMsToIdle": {
+    "median": 18.242,
+    "range": [
+     16.514,
+     20.513
+    ]
+   },
+   "taskMsToIdle": {
+    "median": 100.577,
+    "range": [
+     98.885,
+     105.82
+    ]
+   },
+   "inject": {
+    "median": null,
+    "range": null
+   },
+   "loaded": {
+    "median": null,
+    "range": null
+   },
+   "jsBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "jsAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "jsAfterLoadGzip": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "scriptMsTyping": {
+    "median": 23.260999999999996,
+    "range": [
+     20.997000000000003,
+     25.982
+    ]
+   },
+   "taskMsTyping": {
+    "median": 109.95900000000002,
+    "range": [
+     107.485,
+     126.279
+    ]
+   },
+   "worstEventMs": {
+    "median": 16,
+    "range": [
+     16,
+     16
+    ]
+   },
+   "ltTyping": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "results": {
+    "median": 2,
+    "range": [
+     2,
+     7
+    ]
+   },
+   "requests": {
+    "median": null,
+    "range": null
+   },
+   "ok2xx": {
+    "median": null,
+    "range": null
+   },
+   "detections": {
+    "median": null,
+    "range": null
+   },
+   "possible": {
+    "median": null,
+    "range": null
+   },
+   "rtErrors": {
+    "median": null,
+    "range": null
+   },
+   "heapMB": {
+    "median": 2.6160621643066406,
+    "range": [
+     2.5970611572265625,
+     2.618438720703125
+    ]
+   },
+   "telemetry": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "tagFiles": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "hasRuntime": "0/9",
+   "blocked": [],
+   "errors": [],
+   "model": [
+    null
+   ],
+   "seenError": []
+  },
+  "first": {
+   "load": {
+    "median": 159,
+    "range": [
+     158.09999999997672,
+     163.40000000002328
+    ]
+   },
+   "dcl": {
+    "median": 158.40000000002328,
+    "range": [
+     157.40000000002328,
+     163.40000000002328
+    ]
+   },
+   "fcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "lcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "ltBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tbtBeforeLoad": {
+    "median": 70,
+    "range": [
+     68,
+     72
+    ]
+   },
+   "ltAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "tbtAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "longestAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "scriptMsToIdle": {
+    "median": 84.492,
+    "range": [
+     82.093,
+     85.842
+    ]
+   },
+   "taskMsToIdle": {
+    "median": 174.897,
+    "range": [
+     171.848,
+     177.559
+    ]
+   },
+   "inject": {
+    "median": null,
+    "range": null
+   },
+   "loaded": {
+    "median": null,
+    "range": null
+   },
+   "jsBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "jsAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "jsAfterLoadGzip": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "scriptMsTyping": {
+    "median": 49.145999999999994,
+    "range": [
+     45.17800000000001,
+     50.94099999999999
+    ]
+   },
+   "taskMsTyping": {
+    "median": 140.98800000000003,
+    "range": [
+     134.328,
+     147.43499999999997
+    ]
+   },
+   "worstEventMs": {
+    "median": 32,
+    "range": [
+     32,
+     32
+    ]
+   },
+   "ltTyping": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "results": {
+    "median": 2,
+    "range": [
+     2,
+     7
+    ]
+   },
+   "requests": {
+    "median": 6,
+    "range": [
+     6,
+     6
+    ]
+   },
+   "ok2xx": {
+    "median": 6,
+    "range": [
+     6,
+     6
+    ]
+   },
+   "detections": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "possible": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "rtErrors": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "heapMB": {
+    "median": 3.277729034423828,
+    "range": [
+     3.258747100830078,
+     3.3227462768554688
+    ]
+   },
+   "telemetry": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tagFiles": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "hasRuntime": "9/9",
+   "blocked": [],
+   "errors": [],
+   "model": [
+    "off"
+   ],
+   "seenError": []
+  },
+  "late-import": {
+   "load": {
+    "median": 94,
+    "range": [
+     91.5,
+     96.70000000001164
+    ]
+   },
+   "dcl": {
+    "median": 93.20000000001164,
+    "range": [
+     91.09999999997672,
+     95.89999999999418
+    ]
+   },
+   "fcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "lcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "ltBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tbtBeforeLoad": {
+    "median": 5,
+    "range": [
+     4,
+     7
+    ]
+   },
+   "ltAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "tbtAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "longestAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "scriptMsToIdle": {
+    "median": 60.134,
+    "range": [
+     59.19,
+     62.127
+    ]
+   },
+   "taskMsToIdle": {
+    "median": 153.18499999999997,
+    "range": [
+     151.469,
+     155.37
+    ]
+   },
+   "inject": {
+    "median": 100.79999999998836,
+    "range": [
+     98.20000000006985,
+     104.39999999999418
+    ]
+   },
+   "loaded": {
+    "median": 154.69999999995343,
+    "range": [
+     150.59999999997672,
+     160.20000000001164
+    ]
+   },
+   "jsBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "jsAfterLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "jsAfterLoadGzip": {
+    "median": 110831,
+    "range": [
+     110831,
+     110831
+    ]
+   },
+   "scriptMsTyping": {
+    "median": 48.489,
+    "range": [
+     47.646,
+     50.788
+    ]
+   },
+   "taskMsTyping": {
+    "median": 142.79099999999997,
+    "range": [
+     138.93100000000004,
+     145.926
+    ]
+   },
+   "worstEventMs": {
+    "median": 32,
+    "range": [
+     32,
+     32
+    ]
+   },
+   "ltTyping": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "results": {
+    "median": 2,
+    "range": [
+     2,
+     7
+    ]
+   },
+   "requests": {
+    "median": 6,
+    "range": [
+     6,
+     6
+    ]
+   },
+   "ok2xx": {
+    "median": 6,
+    "range": [
+     6,
+     6
+    ]
+   },
+   "detections": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "possible": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "rtErrors": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "heapMB": {
+    "median": 3.271648406982422,
+    "range": [
+     3.270416259765625,
+     3.2883644104003906
+    ]
+   },
+   "telemetry": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tagFiles": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "hasRuntime": "9/9",
+   "blocked": [],
+   "errors": [],
+   "model": [
+    "off"
+   ],
+   "seenError": []
+  },
+  "late-import-unsampled": {
+   "load": {
+    "median": 92.29999999998836,
+    "range": [
+     90.69999999995343,
+     94.5
+    ]
+   },
+   "dcl": {
+    "median": 92.29999999998836,
+    "range": [
+     90.69999999995343,
+     94.5
+    ]
+   },
+   "fcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "lcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "ltBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tbtBeforeLoad": {
+    "median": 5,
+    "range": [
+     4,
+     5
+    ]
+   },
+   "ltAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "tbtAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "longestAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "scriptMsToIdle": {
+    "median": 17.94,
+    "range": [
+     16.757,
+     18.699
+    ]
+   },
+   "taskMsToIdle": {
+    "median": 101.19,
+    "range": [
+     98.009,
+     104.275
+    ]
+   },
+   "inject": {
+    "median": null,
+    "range": null
+   },
+   "loaded": {
+    "median": null,
+    "range": null
+   },
+   "jsBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "jsAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "jsAfterLoadGzip": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "scriptMsTyping": {
+    "median": 23.828000000000003,
+    "range": [
+     22.460000000000004,
+     43.196
+    ]
+   },
+   "taskMsTyping": {
+    "median": 112.513,
+    "range": [
+     105.23000000000002,
+     129.501
+    ]
+   },
+   "worstEventMs": {
+    "median": 16,
+    "range": [
+     16,
+     24
+    ]
+   },
+   "ltTyping": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "results": {
+    "median": 2,
+    "range": [
+     2,
+     7
+    ]
+   },
+   "requests": {
+    "median": null,
+    "range": null
+   },
+   "ok2xx": {
+    "median": null,
+    "range": null
+   },
+   "detections": {
+    "median": null,
+    "range": null
+   },
+   "possible": {
+    "median": null,
+    "range": null
+   },
+   "rtErrors": {
+    "median": null,
+    "range": null
+   },
+   "heapMB": {
+    "median": 2.6160545349121094,
+    "range": [
+     2.5972671508789062,
+     2.6200523376464844
+    ]
+   },
+   "telemetry": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "tagFiles": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "hasRuntime": "0/9",
+   "blocked": [],
+   "errors": [],
+   "model": [
+    null
+   ],
+   "seenError": []
+  },
+  "late-tag": {
+   "load": {
+    "median": 92.70000000006985,
+    "range": [
+     92,
+     95.20000000001164
+    ]
+   },
+   "dcl": {
+    "median": 92.59999999997672,
+    "range": [
+     91.79999999998836,
+     94.90000000002328
+    ]
+   },
+   "fcp": {
+    "median": 40,
+    "range": [
+     40,
+     40
+    ]
+   },
+   "lcp": {
+    "median": 40,
+    "range": [
+     40,
+     40
+    ]
+   },
+   "ltBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tbtBeforeLoad": {
+    "median": 5,
+    "range": [
+     4,
+     6
+    ]
+   },
+   "ltAfterLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tbtAfterLoad": {
+    "median": 18,
+    "range": [
+     17,
+     18
+    ]
+   },
+   "longestAfterLoad": {
+    "median": 68,
+    "range": [
+     67,
+     68
+    ]
+   },
+   "scriptMsToIdle": {
+    "median": 87.03099999999999,
+    "range": [
+     86.071,
+     88.252
+    ]
+   },
+   "taskMsToIdle": {
+    "median": 179.123,
+    "range": [
+     174.72199999999998,
+     181.244
+    ]
+   },
+   "inject": {
+    "median": 100.19999999995343,
+    "range": [
+     98.89999999990687,
+     101.90000000002328
+    ]
+   },
+   "loaded": {
+    "median": 182.09999999997672,
+    "range": [
+     180.70000000006985,
+     184.90000000002328
+    ]
+   },
+   "jsBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "jsAfterLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "jsAfterLoadGzip": {
+    "median": 132385,
+    "range": [
+     132385,
+     132385
+    ]
+   },
+   "scriptMsTyping": {
+    "median": 48.69599999999999,
+    "range": [
+     44.105000000000004,
+     49.95000000000001
+    ]
+   },
+   "taskMsTyping": {
+    "median": 137.53700000000003,
+    "range": [
+     134.064,
+     141.78
+    ]
+   },
+   "worstEventMs": {
+    "median": 32,
+    "range": [
+     32,
+     32
+    ]
+   },
+   "ltTyping": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "results": {
+    "median": 2,
+    "range": [
+     2,
+     7
+    ]
+   },
+   "requests": {
+    "median": 6,
+    "range": [
+     6,
+     6
+    ]
+   },
+   "ok2xx": {
+    "median": 6,
+    "range": [
+     6,
+     6
+    ]
+   },
+   "detections": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "possible": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "rtErrors": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "heapMB": {
+    "median": 3.2647132873535156,
+    "range": [
+     3.2473716735839844,
+     3.324432373046875
+    ]
+   },
+   "telemetry": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tagFiles": {
+    "median": 2,
+    "range": [
+     2,
+     2
+    ]
+   },
+   "hasRuntime": "9/9",
+   "blocked": [],
+   "errors": [],
+   "model": [
+    "off"
+   ],
+   "seenError": []
+  },
+  "late-tag-unsampled": {
+   "load": {
+    "median": 93.5,
+    "range": [
+     90.40000000002328,
+     95.5
+    ]
+   },
+   "dcl": {
+    "median": 93.40000000002328,
+    "range": [
+     90.40000000002328,
+     95.5
+    ]
+   },
+   "fcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "lcp": {
+    "median": 40,
+    "range": [
+     40,
+     44
+    ]
+   },
+   "ltBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "tbtBeforeLoad": {
+    "median": 5,
+    "range": [
+     3,
+     5
+    ]
+   },
+   "ltAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "tbtAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "longestAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "scriptMsToIdle": {
+    "median": 18.459,
+    "range": [
+     17.124,
+     19.258
+    ]
+   },
+   "taskMsToIdle": {
+    "median": 103.03099999999999,
+    "range": [
+     97.922,
+     104.879
+    ]
+   },
+   "inject": {
+    "median": null,
+    "range": null
+   },
+   "loaded": {
+    "median": null,
+    "range": null
+   },
+   "jsBeforeLoad": {
+    "median": 1,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "jsAfterLoad": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "jsAfterLoadGzip": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "scriptMsTyping": {
+    "median": 21.735999999999997,
+    "range": [
+     20.758000000000003,
+     23.628999999999998
+    ]
+   },
+   "taskMsTyping": {
+    "median": 110.68599999999999,
+    "range": [
+     104.14599999999999,
+     129.079
+    ]
+   },
+   "worstEventMs": {
+    "median": 16,
+    "range": [
+     16,
+     16
+    ]
+   },
+   "ltTyping": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "results": {
+    "median": 2,
+    "range": [
+     2,
+     7
+    ]
+   },
+   "requests": {
+    "median": null,
+    "range": null
+   },
+   "ok2xx": {
+    "median": null,
+    "range": null
+   },
+   "detections": {
+    "median": null,
+    "range": null
+   },
+   "possible": {
+    "median": null,
+    "range": null
+   },
+   "rtErrors": {
+    "median": null,
+    "range": null
+   },
+   "heapMB": {
+    "median": 2.617168426513672,
+    "range": [
+     2.5986862182617188,
+     2.6213455200195312
+    ]
+   },
+   "telemetry": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "tagFiles": {
+    "median": 0,
+    "range": [
+     0,
+     0
+    ]
+   },
+   "hasRuntime": "0/9",
+   "blocked": [],
+   "errors": [],
+   "model": [
+    null
+   ],
+   "seenError": []
+  }
+ },
+ "runs": [
+  {
+   "arm": "control",
+   "load": 95.30000000001746,
+   "dcl": 94.5,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.242,
+   "taskMsToIdle": 100.577,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 22.239999999999995,
+   "taskMsTyping": 108.56299999999999,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.5986328125,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "first",
+   "load": 163.40000000002328,
+   "dcl": 163.40000000002328,
+   "fcp": 44,
+   "lcp": 44,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 71,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 85.842,
+   "taskMsToIdle": 177.559,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 49.145999999999994,
+   "taskMsTyping": 145.24800000000002,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.277729034423828,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import",
+   "load": 96.70000000001164,
+   "dcl": 95.89999999999418,
+   "fcp": 44,
+   "lcp": 44,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 62.127,
+   "taskMsToIdle": 155.37,
+   "inject": 104.39999999999418,
+   "loaded": 160.20000000001164,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 110831,
+   "scriptMsTyping": 47.821000000000005,
+   "taskMsTyping": 141.777,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2717208862304688,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import-unsampled",
+   "load": 91.70000000001164,
+   "dcl": 91.70000000001164,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.23,
+   "taskMsToIdle": 98.009,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 24.230999999999998,
+   "taskMsTyping": 105.51899999999999,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6160545349121094,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag",
+   "load": 93.5,
+   "dcl": 93.09999999997672,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 1,
+   "tbtAfterLoad": 17,
+   "longestAfterLoad": 67,
+   "scriptMsToIdle": 86.071,
+   "taskMsToIdle": 175.21,
+   "inject": 100.89999999996508,
+   "loaded": 182.09999999997672,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 132385,
+   "scriptMsTyping": 47.59400000000001,
+   "taskMsTyping": 141.78,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.247692108154297,
+   "telemetry": 1,
+   "tagFiles": 2,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag-unsampled",
+   "load": 91,
+   "dcl": 91,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 3,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 17.761,
+   "taskMsToIdle": 97.922,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 21.735999999999997,
+   "taskMsTyping": 107.836,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.5986862182617188,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "control",
+   "load": 95,
+   "dcl": 94.89999999996508,
+   "fcp": 44,
+   "lcp": 44,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.339000000000002,
+   "taskMsToIdle": 103.41,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 25.982,
+   "taskMsTyping": 113.449,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.616802215576172,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "first",
+   "load": 162.89999999996508,
+   "dcl": 162.89999999996508,
+   "fcp": 44,
+   "lcp": 44,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 72,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 84.532,
+   "taskMsToIdle": 176.811,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 48.552000000000014,
+   "taskMsTyping": 147.43499999999997,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2932395935058594,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import",
+   "load": 95.19999999995343,
+   "dcl": 94.39999999996508,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 6,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 61.363,
+   "taskMsToIdle": 151.469,
+   "inject": 101.79999999998836,
+   "loaded": 155.09999999997672,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 110831,
+   "scriptMsTyping": 50.788,
+   "taskMsTyping": 144.788,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.270416259765625,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import-unsampled",
+   "load": 94.39999999996508,
+   "dcl": 94.39999999996508,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.699,
+   "taskMsToIdle": 104.275,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 43.196,
+   "taskMsTyping": 129.501,
+   "worstEventMs": 24,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.615978240966797,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag",
+   "load": 92,
+   "dcl": 91.79999999998836,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 1,
+   "tbtAfterLoad": 18,
+   "longestAfterLoad": 68,
+   "scriptMsToIdle": 87.22,
+   "taskMsToIdle": 179.123,
+   "inject": 99,
+   "loaded": 181,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 132385,
+   "scriptMsTyping": 49.797,
+   "taskMsTyping": 134.064,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.324432373046875,
+   "telemetry": 1,
+   "tagFiles": 2,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag-unsampled",
+   "load": 94,
+   "dcl": 94,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.595,
+   "taskMsToIdle": 103.574,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 22.788000000000004,
+   "taskMsTyping": 113.11399999999999,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6168746948242188,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "control",
+   "load": 94.20000000001164,
+   "dcl": 94.20000000001164,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 17.082,
+   "taskMsToIdle": 100.29599999999999,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 25.140000000000004,
+   "taskMsTyping": 119.84700000000001,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.618438720703125,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "first",
+   "load": 158.20000000001164,
+   "dcl": 157.40000000002328,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 69,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 83.259,
+   "taskMsToIdle": 174.897,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 48.342,
+   "taskMsTyping": 135.819,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.258747100830078,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import",
+   "load": 94,
+   "dcl": 93.20000000001164,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 61.162,
+   "taskMsToIdle": 153.958,
+   "inject": 100.79999999998836,
+   "loaded": 154.29999999998836,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 110831,
+   "scriptMsTyping": 50.308,
+   "taskMsTyping": 139.06799999999998,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2866973876953125,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import-unsampled",
+   "load": 94.29999999998836,
+   "dcl": 94.19999999995343,
+   "fcp": 44,
+   "lcp": 44,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.267,
+   "taskMsToIdle": 101.19,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 23.828000000000003,
+   "taskMsTyping": 110.13300000000001,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6129074096679688,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag",
+   "load": 94.09999999997672,
+   "dcl": 93,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 6,
+   "ltAfterLoad": 1,
+   "tbtAfterLoad": 18,
+   "longestAfterLoad": 68,
+   "scriptMsToIdle": 87.03099999999999,
+   "taskMsToIdle": 179.365,
+   "inject": 101.40000000002328,
+   "loaded": 183.70000000001164,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 132385,
+   "scriptMsTyping": 48.69599999999999,
+   "taskMsTyping": 137.53700000000003,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2473716735839844,
+   "telemetry": 1,
+   "tagFiles": 2,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag-unsampled",
+   "load": 95,
+   "dcl": 95,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 17.581,
+   "taskMsToIdle": 103.03099999999999,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 22.567999999999998,
+   "taskMsTyping": 129.079,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.620086669921875,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "control",
+   "load": 94.60000000003492,
+   "dcl": 94.5,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.088,
+   "taskMsToIdle": 104.247,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 23.260999999999996,
+   "taskMsTyping": 108.425,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.5970611572265625,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "first",
+   "load": 158.10000000003492,
+   "dcl": 158.10000000003492,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 70,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 84.492,
+   "taskMsToIdle": 171.848,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 49.270999999999994,
+   "taskMsTyping": 141.32899999999998,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2774314880371094,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import",
+   "load": 92.59999999997672,
+   "dcl": 92.5,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 60.023,
+   "taskMsToIdle": 152.096,
+   "inject": 100.5,
+   "loaded": 154.69999999995343,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 110831,
+   "scriptMsTyping": 48.489,
+   "taskMsTyping": 143.665,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2715721130371094,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import-unsampled",
+   "load": 92.29999999998836,
+   "dcl": 92.29999999998836,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 16.757,
+   "taskMsToIdle": 100.29599999999999,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 23.061999999999998,
+   "taskMsTyping": 110.88300000000001,
+   "worstEventMs": 24,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6200523376464844,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag",
+   "load": 95.20000000001164,
+   "dcl": 94.90000000002328,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 6,
+   "ltAfterLoad": 1,
+   "tbtAfterLoad": 18,
+   "longestAfterLoad": 68,
+   "scriptMsToIdle": 86.81899999999999,
+   "taskMsToIdle": 178.05599999999998,
+   "inject": 101.90000000002328,
+   "loaded": 184.90000000002328,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 132385,
+   "scriptMsTyping": 49.95000000000001,
+   "taskMsTyping": 139.94299999999998,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2647132873535156,
+   "telemetry": 1,
+   "tagFiles": 2,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag-unsampled",
+   "load": 91.5,
+   "dcl": 91.5,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 19.258,
+   "taskMsToIdle": 101.523,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 21.611999999999995,
+   "taskMsTyping": 104.14599999999999,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.616382598876953,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "control",
+   "load": 94.20000000001164,
+   "dcl": 94.10000000003492,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.648,
+   "taskMsToIdle": 103.15599999999999,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 22.450000000000003,
+   "taskMsTyping": 126.279,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.59783935546875,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "first",
+   "load": 159,
+   "dcl": 158.40000000002328,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 68,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 84.625,
+   "taskMsToIdle": 175.074,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 50.94099999999999,
+   "taskMsTyping": 142.225,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2782630920410156,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import",
+   "load": 95.30000000004657,
+   "dcl": 94.40000000002328,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 6,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 60.981,
+   "taskMsToIdle": 153.47,
+   "inject": 102.30000000004657,
+   "loaded": 156.20000000006985,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 110831,
+   "scriptMsTyping": 50.657000000000004,
+   "taskMsTyping": 145.926,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2863235473632812,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import-unsampled",
+   "load": 93.5,
+   "dcl": 93.5,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 17.647,
+   "taskMsToIdle": 102.95899999999999,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 24.388,
+   "taskMsTyping": 105.23000000000002,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.5972671508789062,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag",
+   "load": 92.5,
+   "dcl": 92.30000000004657,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 1,
+   "tbtAfterLoad": 18,
+   "longestAfterLoad": 68,
+   "scriptMsToIdle": 87.53,
+   "taskMsToIdle": 180.703,
+   "inject": 99.20000000006985,
+   "loaded": 180.70000000006985,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 132385,
+   "scriptMsTyping": 48.47599999999999,
+   "taskMsTyping": 139.24599999999998,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2808265686035156,
+   "telemetry": 1,
+   "tagFiles": 2,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag-unsampled",
+   "load": 90.40000000002328,
+   "dcl": 90.40000000002328,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 3,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.459,
+   "taskMsToIdle": 98.966,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 22.487000000000002,
+   "taskMsTyping": 106.44400000000002,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6213455200195312,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "control",
+   "load": 91.69999999995343,
+   "dcl": 91.69999999995343,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 19.467000000000002,
+   "taskMsToIdle": 99.86399999999999,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 23.567,
+   "taskMsTyping": 109.95900000000002,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.617504119873047,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "first",
+   "load": 160.10000000009313,
+   "dcl": 160.10000000009313,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 70,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 83.758,
+   "taskMsToIdle": 172.393,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 47.99900000000002,
+   "taskMsTyping": 140.98800000000003,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.3227462768554688,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import",
+   "load": 94.5,
+   "dcl": 93.5,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 7,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 60.134,
+   "taskMsToIdle": 154.208,
+   "inject": 101.20000000006985,
+   "loaded": 154.80000000004657,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 110831,
+   "scriptMsTyping": 47.646,
+   "taskMsTyping": 143.21299999999997,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.271648406982422,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import-unsampled",
+   "load": 94.5,
+   "dcl": 94.5,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.389,
+   "taskMsToIdle": 104.259,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 22.460000000000004,
+   "taskMsTyping": 112.81599999999999,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.616241455078125,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag",
+   "load": 94,
+   "dcl": 93.39999999990687,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 1,
+   "tbtAfterLoad": 18,
+   "longestAfterLoad": 68,
+   "scriptMsToIdle": 88.252,
+   "taskMsToIdle": 181.244,
+   "inject": 100.19999999995343,
+   "loaded": 183,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 132385,
+   "scriptMsTyping": 48.9,
+   "taskMsTyping": 137.55100000000002,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2625083923339844,
+   "telemetry": 1,
+   "tagFiles": 2,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag-unsampled",
+   "load": 95.09999999997672,
+   "dcl": 95,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 19.015,
+   "taskMsToIdle": 104.879,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 21.730999999999998,
+   "taskMsTyping": 112.862,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.617168426513672,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "control",
+   "load": 98.79999999993015,
+   "dcl": 98.79999999993015,
+   "fcp": 44,
+   "lcp": 44,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 8,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 20.513,
+   "taskMsToIdle": 105.82,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 25.549,
+   "taskMsTyping": 109.72300000000001,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6160621643066406,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "first",
+   "load": 160.89999999990687,
+   "dcl": 160.89999999990687,
+   "fcp": 44,
+   "lcp": 44,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 70,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 84.65899999999999,
+   "taskMsToIdle": 175.93200000000002,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 49.57199999999999,
+   "taskMsTyping": 138.04999999999998,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2943687438964844,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import",
+   "load": 91.5,
+   "dcl": 91.09999999997672,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 59.924,
+   "taskMsToIdle": 151.989,
+   "inject": 98.20000000006985,
+   "loaded": 151.70000000006985,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 110831,
+   "scriptMsTyping": 47.676,
+   "taskMsTyping": 142.79099999999997,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2883644104003906,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import-unsampled",
+   "load": 90.69999999995343,
+   "dcl": 90.69999999995343,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 17.826,
+   "taskMsToIdle": 98.89,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 23.735,
+   "taskMsTyping": 112.513,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.5980262756347656,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag",
+   "load": 92.70000000006985,
+   "dcl": 92.59999999997672,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 1,
+   "tbtAfterLoad": 18,
+   "longestAfterLoad": 68,
+   "scriptMsToIdle": 86.256,
+   "taskMsToIdle": 175.683,
+   "inject": 100.59999999997672,
+   "loaded": 184.09999999997672,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 132385,
+   "scriptMsTyping": 47.58499999999999,
+   "taskMsTyping": 137.522,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.264568328857422,
+   "telemetry": 1,
+   "tagFiles": 2,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag-unsampled",
+   "load": 91.40000000002328,
+   "dcl": 91.40000000002328,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.159000000000002,
+   "taskMsToIdle": 99.993,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 21.421999999999997,
+   "taskMsTyping": 110.13999999999999,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6183815002441406,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "control",
+   "load": 92.69999999995343,
+   "dcl": 92.59999999997672,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 16.514,
+   "taskMsToIdle": 100.403,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 20.997000000000003,
+   "taskMsTyping": 112.72500000000001,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 7,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.5987510681152344,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "first",
+   "load": 158.10000000009313,
+   "dcl": 158,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 69,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 82.093,
+   "taskMsToIdle": 174.42,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 50.095,
+   "taskMsTyping": 139.294,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.276020050048828,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import",
+   "load": 92.30000000004657,
+   "dcl": 92.09999999997672,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 59.568000000000005,
+   "taskMsToIdle": 153.18499999999997,
+   "inject": 99,
+   "loaded": 151.90000000002328,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 110831,
+   "scriptMsTyping": 49.6,
+   "taskMsTyping": 142.56500000000003,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2707176208496094,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import-unsampled",
+   "load": 91.19999999995343,
+   "dcl": 91.19999999995343,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 17.094,
+   "taskMsToIdle": 99.715,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 23.711,
+   "taskMsTyping": 115.423,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6163711547851562,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag",
+   "load": 92.39999999990687,
+   "dcl": 92.29999999993015,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 1,
+   "tbtAfterLoad": 17,
+   "longestAfterLoad": 67,
+   "scriptMsToIdle": 87.80399999999999,
+   "taskMsToIdle": 174.72199999999998,
+   "inject": 98.89999999990687,
+   "loaded": 181.89999999990687,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 132385,
+   "scriptMsTyping": 49.397999999999996,
+   "taskMsTyping": 136.44100000000003,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2803611755371094,
+   "telemetry": 1,
+   "tagFiles": 2,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag-unsampled",
+   "load": 95.5,
+   "dcl": 95.5,
+   "fcp": 44,
+   "lcp": 44,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 18.5,
+   "taskMsToIdle": 104.39800000000001,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 20.758000000000003,
+   "taskMsTyping": 110.68599999999999,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6191024780273438,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "control",
+   "load": 91.19999999995343,
+   "dcl": 91.19999999995343,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 3,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 17.35,
+   "taskMsToIdle": 98.885,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 22.392,
+   "taskMsTyping": 107.485,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.617992401123047,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "first",
+   "load": 158.09999999997672,
+   "dcl": 158.09999999997672,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 69,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 84.214,
+   "taskMsToIdle": 173.443,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 45.17800000000001,
+   "taskMsTyping": 134.328,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.2772979736328125,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import",
+   "load": 92.70000000006985,
+   "dcl": 92.40000000002328,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 59.19,
+   "taskMsToIdle": 152.134,
+   "inject": 99.09999999997672,
+   "loaded": 150.59999999997672,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 110831,
+   "scriptMsTyping": 48.271,
+   "taskMsTyping": 138.93100000000004,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.270793914794922,
+   "telemetry": 1,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-import-unsampled",
+   "load": 91.5,
+   "dcl": 90.80000000004657,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 17.94,
+   "taskMsToIdle": 104.137,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 26.354,
+   "taskMsTyping": 113.49900000000001,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.6189498901367188,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag",
+   "load": 92.59999999997672,
+   "dcl": 92.5,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 5,
+   "ltAfterLoad": 1,
+   "tbtAfterLoad": 18,
+   "longestAfterLoad": 68,
+   "scriptMsToIdle": 86.42099999999999,
+   "taskMsToIdle": 180.399,
+   "inject": 99.5,
+   "loaded": 181.70000000006985,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 1,
+   "jsAfterLoadGzip": 132385,
+   "scriptMsTyping": 44.105000000000004,
+   "taskMsTyping": 136.947,
+   "worstEventMs": 32,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": true,
+   "requests": 6,
+   "ok2xx": 6,
+   "detections": 0,
+   "possible": 0,
+   "model": "off",
+   "rtErrors": 0,
+   "seenError": null,
+   "heapMB": 3.280902862548828,
+   "telemetry": 1,
+   "tagFiles": 2,
+   "blocked": [],
+   "errors": []
+  },
+  {
+   "arm": "late-tag-unsampled",
+   "load": 93.5,
+   "dcl": 93.40000000002328,
+   "fcp": 40,
+   "lcp": 40,
+   "ltBeforeLoad": 1,
+   "tbtBeforeLoad": 4,
+   "ltAfterLoad": 0,
+   "tbtAfterLoad": 0,
+   "longestAfterLoad": 0,
+   "scriptMsToIdle": 17.124,
+   "taskMsToIdle": 103.227,
+   "inject": null,
+   "loaded": null,
+   "jsBeforeLoad": 1,
+   "jsAfterLoad": 0,
+   "jsAfterLoadGzip": 0,
+   "scriptMsTyping": 23.628999999999998,
+   "taskMsTyping": 113.438,
+   "worstEventMs": 16,
+   "ltTyping": 0,
+   "results": 2,
+   "hasRuntime": false,
+   "requests": null,
+   "ok2xx": null,
+   "detections": null,
+   "possible": null,
+   "model": null,
+   "rtErrors": null,
+   "seenError": null,
+   "heapMB": 2.616851806640625,
+   "telemetry": 0,
+   "tagFiles": 0,
+   "blocked": [],
+   "errors": []
+  }
+ ]
+}

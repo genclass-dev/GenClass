@@ -189,6 +189,15 @@ const rt = GenClass.init(); // observe; GenClass.init({ mode: "guard" }) to let 
 
 The unscoped `genclass-runtime` alias is deprecated; use `@genclass/runtime`.
 
+## How do I keep it out of the page load? (lite install)
+
+Every install above puts GenClass first, in each page's first load. For a site whose performance budget has no room
+there, the lite install loads it after the `load` event and an idle moment, on a share of page loads: a few lines in
+your entry file, with a dynamic `import("@genclass/runtime/auto")` or the script tag. It is the same runtime, later
+and on fewer page loads, and it sees less: nothing before it starts and none of the app's state, so no stale
+responses. The lines, what they cost (measured) and what they do not see:
+[Lite install](../../packages/runtime/README.md#lite-install-after-the-page-has-loaded). `init` does not write it.
+
 ## Which attributes does the script tag take?
 
 The script tag reads these `data-*` attributes; `<meta name="genclass" content="key=value, ...">` in `<head>` takes

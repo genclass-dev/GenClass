@@ -58,6 +58,12 @@ Or with no build step, first in `<head>`:
   ([state it can protect](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#state-it-can-protect)).
   `GenClass.init()` is the explicit setup; it discovers state only if you import `@genclass/runtime/discover` first
   and pass `autoState: true`.
+- **A strict performance budget?** The
+  [lite install](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#lite-install-after-the-page-has-loaded)
+  loads GenClass after the page has loaded, on a share of page loads. In the one app measured the load event did not
+  move (94.0 ms against 94.2 ms without GenClass and 159.0 ms with the first-line import;
+  [RESULTS.md §28](docs/runtime/RESULTS.md#lite-install)). It sees less: nothing before it starts and none of the
+  app's state, so no stale responses.
 - **Pin the version in the script tag**, as above: the unversioned URL serves `latest`, and the CDN cache may serve an
   older release.
 - **Keep `@beta` while `0.3.0` is in beta.** A bare `npm install @genclass/runtime` or `npx @genclass/runtime init`
