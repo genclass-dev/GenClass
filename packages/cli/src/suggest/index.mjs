@@ -17,7 +17,7 @@ import { inspectProject } from "../../../runtime/bin/lib/init.mjs";
 import { c, interactive, out, sym } from "../../../runtime/bin/lib/ui.mjs";
 import { requestPlan } from "../api.mjs";
 import { readNotes, saveNotes } from "../store.mjs";
-import { agree, clean, good, header, note, para, rule, spinner, typed, warn, width, wrap } from "../tui.mjs";
+import { agree, clean, good, header, note, para, rule, spinner, typed, visible, warn, width, wrap } from "../tui.mjs";
 import { AREAS, runChecks } from "./checks.mjs";
 import { buildDigest, describeDigest } from "./digest.mjs";
 import { collectRepoFacts } from "./repo.mjs";
@@ -69,8 +69,18 @@ const dots = (weight) => (weight >= 5 ? c.red("urgent") : weight >= 4 ? c.yellow
 /** Prints one item of the plan. */
 function printItem(i, full) {
   out();
-  out(`  ${c.bold(String(i.n).padStart(2))}  ${c.bold(clean(i.title, 90))}  ${c.gray(`${AREAS[i.area] ?? i.area} ${sym.dot}`)} ${dots(i.weight)}`);
-  for (const e of i.evidence ?? []) out(`      ${c.gray(`${sym.arrow} ${clean(e, width() - 10)}`)}`);
+  const title = `  ${c.bold(String(i.n).padStart(2))}  ${c.bold(clean(i.title, 90))}`;
+  const tag = `${c.gray(`${AREAS[i.area] ?? i.area} ${sym.dot}`)} ${dots(i.weight)}`;
+  if (visible(title) + 2 + visible(tag) <= width()) out(`${title}  ${tag}`);
+  else {
+    out(title);
+    out(`      ${tag}`);
+  }
+  for (const e of i.evidence ?? []) {
+    const [first = "", ...rest] = wrap(clean(e, 400), width() - 10);
+    out(`      ${c.gray(`${sym.arrow} ${first}`)}`);
+    for (const l of rest) out(`        ${c.gray(l)}`);
+  }
   if (!full) return;
   para(clean(i.why, 600), "      ");
   out(`      ${c.cyan("Do")}  ${wrap(clean(i.step, 400), width() - 12).join("\n          ")}`);
@@ -99,7 +109,7 @@ export async function suggest(o = {}, deps = {}) {
   if (!quiet) header({ app: repo.name ?? st.project.name, framework: st.project.label || null, account: readCredentials()?.account?.email ?? null });
   if (!url && !quiet && !o.yes && interactive()) {
     para("Where is this app live? With its address GenClass also checks what search engines, AI assistants and visitors get from it.", "  ");
-    const a = await typed(`  ${c.bold("Address")} ${c.gray("(https://example.com, or Enter to check the repository only)")} `);
+    const a = await typed(`  ${c.bold("Address")} ${c.gray("(or Enter for the repository only)")} `);
     url = siteAddress(a);
     if (a && !url) warn("That is not a site address, so only the repository is checked this time.");
   }
@@ -129,7 +139,7 @@ export async function suggest(o = {}, deps = {}) {
     let agreed = o.yes || notes.sendOk === true;
     if (!agreed && !quiet && interactive()) {
       out();
-      out(`  ${c.bold("To write the plan for your app, this is sent to genclass.dev:")}`);
+      out(`  ${c.bold("To write your plan, this is sent to genclass.dev:")}`);
       for (const l of describeDigest(digest)) para(l, "    ", c.gray);
       agreed = (await agree("Send it?")) === true;
       if (agreed) saveNotes(cwd, { sendOk: true });
@@ -189,11 +199,14 @@ export async function suggest(o = {}, deps = {}) {
   }
   if (unknown.length) {
     out();
-    note(`Not checked (${unknown.length}): ${unknown.map((r) => r.id).join(", ")}.`);
+    // without the site's address these could not be measured: a count is enough, the line above says how to get them
+    if (!site?.reachable) note(`${unknown.length} more checks need your live site${url ? "" : `: ${c.cyan("npx genclass suggest https://your-site.com")}`}.`);
+    else note(`${unknown.length} check${unknown.length === 1 ? "" : "s"} could not be measured on this site this time.`);
   }
   out();
   if (failed.length) {
-    good("Fix one, then run npx genclass suggest again: it measures everything afresh.");
+    good("Fix one, then run it again: everything is measured afresh.");
+    out(`    ${c.cyan("npx genclass suggest")}`);
     note(`With a coding agent: paste an "Ask your agent" block, or tell it to run ${c.cyan("npx genclass suggest --json")} and work through the list.`);
   }
   out();

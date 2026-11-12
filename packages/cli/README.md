@@ -14,11 +14,14 @@ per step. Stop at any point and run it again: it continues from what is true now
   │                                                                  │
   │                        Welcome back, Ada!                        │
   │                                                                  │
-  │                             ▄▄████▄▄                             │
-  │                            ██▀    ▀▀                             │
-  │                            ██   ▄▄▄▄                             │
-  │                            ██▄    ██                             │
-  │                             ▀▀████▀▀                             │
+  │                              ▄▄▄▄█▄                              │
+  │                           ▄█████████                             │
+  │                         ▄███▀▀  ▀▀                               │
+  │                         ███▀     ▄▄▄▄▄                           │
+  │                         ███▄     ▀█████                          │
+  │                         ▀███▄ ▄▄  ▄███▀                          │
+  │                           ▀▀▄████████▀                           │
+  │                              ▀▀█▀▀▀                              │
   │                                                                  │
   │                       shop • Vite + React                        │
   │                   ada@example.com • Free plan                    │
@@ -32,7 +35,7 @@ per step. Stop at any point and run it again: it continues from what is true now
   ○  Later    GitHub App • Coding agent • Suggestions
 
   ▎ Next  Add the test workflow
-  ▎ One new file, .github/workflows/genclass.yml. Your tests are not changed.
+  ▎ One new file, .github/workflows/genclass.yml.
 
   ────────────────────────────────────────────────────────────────────
   ❯ Enter to continue · d every part · s skip · q stop

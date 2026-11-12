@@ -158,7 +158,10 @@ describe("scan: report pieces (bin/lib/scan.mjs)", () => {
     expect(text).toContain("Score 83/100 over 2 of 3 parts");
     expect(text).toContain("no problems in what was measured");
     expect(text).not.toContain("no problems found");
-    expect(text).toContain("still loading when the page check's time ran out, so the score covers Speed and Security only");
+    // long lines fold to the window, so the sentence is compared with its line breaks taken out
+    const flat = (t: string) => t.replace(/\s+/g, " ");
+    expect(flat(text)).toContain("still loading when the page check's time ran out, so the score covers Speed and Security only");
+    expect(Math.max(...text.split("\n").map((l) => l.length))).toBeLessThanOrEqual(100);
     // nothing measured at all: one sentence, not a table of dashes and a note per part
     const dead = hostedReport("https://example.com/", { ...HOSTED_REPORT, views: [], findings: [], top: [], timedOut: true, notMeasured: { visual: "No view loaded.", speed: "No view loaded." }, score: { ...none, value: null, categories: none.categories.map((cat) => ({ ...cat, measured: false, value: null })) } }, "https://scan.example");
     const empty = formatReport(dead);
@@ -167,6 +170,17 @@ describe("scan: report pieces (bin/lib/scan.mjs)", () => {
     expect(empty).toContain("so nothing could be scored");
     expect(empty).not.toContain("not measured");
     expect(empty).toContain("Full report: https://scan.example/scan?url=");
+    // a part with nothing to try on this page (no search box, no form) is not a part that failed
+    const quiet = { ...HOSTED_REPORT.score, value: 91, categories: [{ id: "visual", label: "Visual bugs", measured: true, value: 100, count: 0 }, { id: "races", label: "Races", measured: false, value: null, count: 0 }] };
+    const plain = hostedReport("https://example.com/", { ...HOSTED_REPORT, findings: [], top: [], notMeasured: { races: "The page has no search box and no form that posts, so the race probe had nothing to try." }, score: quiet }, "https://scan.example");
+    expect(plain.partial).toBeNull();
+    const calm = formatReport(plain);
+    expect(calm).toContain("Score 91/100");
+    expect(calm).not.toContain("parts");
+    expect(calm).toContain("no problems found");
+    expect(calm).toMatch(/Races\s+-\s+nothing to try on this page/);
+    // and the same part when the probe did not run at all is one that failed
+    expect(hostedReport("https://example.com/", { ...HOSTED_REPORT, findings: [], top: [], notMeasured: { races: "The race probe did not run." }, score: quiet }, "https://scan.example").partial).toMatchObject({ measured: 1, of: 2 });
   });
 });
 

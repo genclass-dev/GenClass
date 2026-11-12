@@ -4,9 +4,10 @@
 // Invariants:
 // - One way in: `genclass` with no command shows where the project stands and, on a terminal, walks the next step.
 //   Every other command is a part of that walk that can also be run alone.
-// - `login`, `logout`, `whoami`, `connect`, `init`, `remove` and `scan` are the runtime CLI's own commands,
-//   unchanged: this file hands them their arguments. `dashboard` is this command's own view (app.mjs); signed out it
-//   falls back to the runtime CLI's, which knows an app's private dashboard link.
+// - `login`, `logout`, `whoami`, `connect`, `init` and `scan` are the runtime CLI's own commands, unchanged: this
+//   file hands them their arguments. `remove` is the runtime CLI's, followed by what this command's other steps wrote
+//   (remove.mjs). `dashboard` is this command's own view (app.mjs); signed out it falls back to the runtime CLI's,
+//   which knows an app's private dashboard link.
 // - Nothing here reads a file or the network: it parses and dispatches.
 
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
@@ -64,7 +65,8 @@ export async function run(argv) {
     if (again !== null) return again;
   }
   if (["login", "logout", "whoami", "connect"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
-  if (cmd === "init" || cmd === "remove") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
+  if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
+  if (cmd === "init") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
   if (cmd === "scan" || cmd === "audit") {
     // this command carries no copy of the runtime's script-tag build, so the page check runs on genclass.dev unless asked otherwise
     const withHost = args.includes("--local") || args.includes("--hosted") || args.includes("--help") ? args : [...args, "--hosted"];

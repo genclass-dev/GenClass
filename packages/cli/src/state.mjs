@@ -160,7 +160,7 @@ export async function readState(o = {}, deps = {}) {
           : otherHost
             ? `the saved session is for ${otherHost}`
             : "",
-    why: "Opens genclass.dev in your browser. You approve a short code there.",
+    why: "Opens genclass.dev in your browser. New here? Your free account is made there.",
     more: "Your account is where your apps, their dashboards and your plan live. Nothing is typed in the terminal.",
     run: "npx genclass login",
     human: "approve the sign-in in your browser",

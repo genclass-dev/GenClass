@@ -412,9 +412,23 @@ function briefTelemetry(cfg) {
     out(`  ${c.gray("Anonymous diagnostics are off (--no-telemetry).")}`);
     return;
   }
-  out(`  ${c.gray("Anonymous diagnostics are on: counts and decisions go to GenClass's maintainers, with no page text,")}`);
-  out(`  ${c.gray(`cookies or IP addresses, and never from localhost. Off: ${CMD} init --no-telemetry`)}`);
+  briefLines("Anonymous diagnostics are on: counts and decisions go to GenClass's maintainers, with no page text, cookies or IP addresses, and never from localhost.");
+  // the command and the address each stay whole on a line of their own, so they can be copied
+  out(`  ${c.gray(`Off: ${CMD} init --no-telemetry`)}`);
   out(`  ${c.gray(`What is sent: ${TELEMETRY_URL}`)}`);
+}
+
+/** A grey sentence of the compact (--brief) output, folded to the window (40 to 100 columns), every line indented. */
+function briefLines(text, paint = c.gray) {
+  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || 100)) - 4;
+  let line = "";
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    if (line && line.length + 1 + word.length > cols) {
+      out(`  ${paint(line)}`);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) out(`  ${paint(line)}`);
 }
 
 /** Where to put the self-hosted model: the folder the framework serves as-is. */
@@ -932,11 +946,11 @@ export async function init(o, ctx = {}) {
   if (brief) {
     out();
     out(`  ${c.bold(project.name)} ${c.gray(`${sym.dot} ${project.label}${project.pm ? ` ${sym.dot} ${project.pm}` : ""} ${sym.dot} ${posix(relative(cwd, plan.entry))}`)}`);
-    out(`  Adds ${PKG} ${VERSION} in ${c.bold(o.mode ?? "observe")} mode${o.mode ? "" : ": it reports and never changes anything"}.`);
+    briefLines(`Adds ${PKG} ${VERSION} in ${o.mode ?? "observe"} mode${o.mode ? "" : ": it reports and never changes anything"}.`, (l) => l);
     briefTelemetry(cfg);
   } else telemetryNotice(cfg, cfgAt);
   if (!ctx.creds) tk = await offerAccount(o, tk);
-  if (brief && tk.pending && tk.account) out(`  ${c.gray(`The app goes into your account (${accountLabel(tk.account.account)}) as "${String(tk.name ?? "").slice(0, 80) || "unnamed"}".`)}`);
+  if (brief && tk.pending && tk.account) briefLines(`The app goes into your account (${accountLabel(tk.account.account)}) as "${String(tk.name ?? "").slice(0, 80) || "unnamed"}".`);
   else tokenRow(tk);
   sinksNotice(cfg, cfgAt);
   cspAdvice(project, files, cfg);
@@ -1008,9 +1022,11 @@ export async function init(o, ctx = {}) {
   // --brief, with the app in the person's account (no private link to show once): three lines, and the walk goes on
   if (brief && (tk.created?.account || tk.app)) {
     out(`  ${c.green(sym.ok)} ${c.bold("GenClass is in your app.")} ${c.gray(`(${changes.map((ch) => ch.rel).join(", ")})`)}`);
-    out(`  ${c.gray("What it finds shows in the browser console as [GenClass] lines, and on your dashboard once the site is deployed.")}`);
+    briefLines("What it finds shows in the browser console as [GenClass] lines, and on your dashboard once the site is deployed.");
     printMoneyAdvice(money, cfgAt);
-    out(`  ${c.gray(`Off for one page: ?genclass=off. Undo: ${CMD} remove`)}`);
+    // the address part and the command each stay whole on a line of their own
+    out(`  ${c.gray("Off for one page: ?genclass=off")}`);
+    out(`  ${c.gray(`Undo: ${CMD} remove`)}`);
     out();
     return 0;
   }

@@ -77,7 +77,7 @@ export async function signIn(o = {}) {
   }
   out();
   out(`  Open  ${c.cyan(dev.verification_uri_complete)}`);
-  out(`  Code  ${c.bold(dev.user_code)}  ${c.gray("(check that the page shows the same code, then approve)")}`);
+  out(`  Code  ${c.bold(dev.user_code)}  ${c.gray("(the page must show the same code)")}`);
   out();
   if (openBrowser(dev.verification_uri_complete, o)) note("Your browser is opening that page.");
   const stop = stopOnEnter();
@@ -89,7 +89,7 @@ export async function signIn(o = {}) {
     return "skipped";
   }
   if (!r.ok) {
-    sp.stop("bad", r.error === "access_denied" ? "The sign-in was denied in the browser." : r.error === "expired_token" ? "The code expired before it was approved. Run npx genclass again for a new one." : `The sign-in did not finish: ${r.reason}`);
+    sp.stop("bad", r.error === "access_denied" ? "The sign-in was denied in the browser." : r.error === "expired_token" ? "The code expired before it was approved (codes last ten minutes)." : `The sign-in did not finish: ${r.reason}`);
     return "failed";
   }
   saveCredentials({ host: apiHost(), access_token: r.access_token, account: r.account });
@@ -311,7 +311,7 @@ export function planAgentConfig(dir) {
 
 /** Where the skill goes in a project: Claude Code reads a project's skills from here, as `npx @genclass/mcp init` writes it. */
 export const SKILL_PATH = ".claude/skills/genclass/SKILL.md";
-const SKILL_MARK = "genclass:init";
+export const SKILL_MARK = "genclass:init";
 
 /**
  * The skill file as this command writes it: the MCP package's own skill with a marker line after its front matter

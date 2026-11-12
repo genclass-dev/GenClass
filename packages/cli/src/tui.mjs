@@ -113,7 +113,8 @@ export function firstName(label) {
 export function card(h = {}) {
   const inner = width() - 6;
   const B = unicode ? { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" } : { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" };
-  const title = ` ${c.bold(brand("GenClass"))} `;
+  // the name as the logo writes it: the first half plain, the second in the logo's green
+  const title = ` ${c.bold("Gen")}${c.bold(brand("Class"))} `;
   const version = h.version ? ` ${c.gray(`v${clean(h.version, 20)}`)} ` : "";
   const row = (text = "") => out(`  ${brand(B.v)}${centre(text, inner)}${brand(B.v)}`);
   const fit = (text) => clean(text, inner - 4);
@@ -189,7 +190,18 @@ export function checklist(steps) {
 export function summary(steps) {
   const room = width() - 4 - 3 - 9;
   // a list of names that does not fit goes on under itself, never cut short with an ellipsis
-  const names = (list) => wrap(list.map((s) => s.title).join(` ${sym.dot} `), room);
+  const names = (list) => {
+    const lines = [];
+    let line = "";
+    for (const t of list.map((s) => s.title)) {
+      if (line && visible(line) + 3 + t.length > room) {
+        lines.push(`${line} ${sym.dot}`);
+        line = t;
+      } else line = line ? `${line} ${sym.dot} ${t}` : t;
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
   const line = (mark, label, text) => {
     const [first = "", ...rest] = Array.isArray(text) ? text : [text];
     out(`  ${mark}  ${label}${Array.isArray(text) ? c.gray(first) : first}`);
