@@ -421,6 +421,7 @@ export function startPage(nonce: string, opts: { error?: string; name?: string }
     <button class="btn green xl" id="go" type="submit">Create dashboard</button>
   </form>
   <p class="st-alt">Have an account? <a href="/login">Sign in</a></p>
+  <p class="st-alt">Or set everything up with one command in your app's folder: <code>npx genclass</code>. <a href="https://genclass.dev/docs/cli">How it works</a></p>
 </div>
 <style nonce="${nonce}">${START_CSS}</style>`;
   return shell(nonce, "Create your dashboard | GenClass", body, START_JS, { account: true, nav: QUIET_NAV, lock: true });

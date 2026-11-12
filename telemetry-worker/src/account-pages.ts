@@ -775,7 +775,7 @@ export function accountPage(nonce: string, v: AccountView): string {
     ? `<ul class="pgrid" id="pgrid">${cards}
 <li><a class="pnew" href="/account/new">${icon("plus", 18)}New project</a></li></ul>
 <p class="quiet hidden" id="pnone">No project matches your search.</p>`
-    : `<div class="pgrid"><div class="empty-p"><h2>Create your first project</h2><a class="btn" href="/account/new">${icon("plus", 14)}<span>New project</span></a></div></div>`;
+    : `<div class="pgrid"><div class="empty-p"><h2>Create your first project</h2><p>Fastest: run <code>npx genclass</code> in your app's folder. It creates the project here and sets GenClass up.</p><a class="btn" href="/account/new">${icon("plus", 14)}<span>New project</span></a></div></div>`;
   // with the GitHub App set up on this server, its page sits next to New project (src/github/pages.ts)
   const newBtn = `<a class="btn sm" href="/account/new" id="newproj">${icon("plus", 14)}<span>New project</span></a>`;
   const newProject = v.githubApp ? `<div class="row"><a class="btn sm ghost" href="/account/github" id="ghapp">${icon("bot", 14)}<span>GitHub</span></a>${newBtn}</div>` : newBtn;
