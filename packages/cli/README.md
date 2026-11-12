@@ -25,9 +25,6 @@ point and run it again: it continues from what is true now.
         reordered responses, and comments when a page ends up wrong, with the steps to see it.
 ```
 
-> **Status:** `genclass` is not on npm yet. From a checkout of this repository:
-> `npm run build -w genclass && node packages/cli/bin/genclass.mjs` in your app's folder.
-
 ## The six steps
 
 | Step | What it does | What it changes |

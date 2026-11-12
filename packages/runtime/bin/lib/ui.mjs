@@ -151,12 +151,19 @@ let inputEnded = false;
  */
 export const inputClosed = () => inputEnded;
 
+// The interface of one question closes a turn of the event loop after its answer, so that lines typed ahead in the
+// same chunk are kept. A question asked before that close has happened (two questions with nothing between them that
+// waits) would have its input paused by it, and with nothing else pending the process ends at the prompt. So each
+// question first waits for the one before it to have closed.
+let lastClosed = Promise.resolve();
+
 /**
  * Asks one question and resolves the line typed (trimmed), "" when input ends, or null when stdin is not a
  * terminal. Ctrl-C at a question ends the command (exit code 130); every command asks before it writes.
  */
 export async function ask(question) {
   if (!interactive()) return null;
+  await lastClosed;
   if (typedAhead.length) {
     const a = typedAhead.shift();
     process.stdout.write(`${question}${a}\n`);
@@ -170,6 +177,8 @@ export async function ask(question) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     let answered = false;
     let closing = false;
+    let closed;
+    lastClosed = new Promise((done) => (closed = done));
     // lines after the answer in the same chunk of input
     rl.on("line", (line) => typedAhead.push(line));
     rl.question(question, (line) => {
@@ -194,6 +203,7 @@ export async function ask(question) {
         if (!process.stdout.isTTY) process.stdout.write("\n");
         resolve("");
       }
+      closed();
     });
   });
 }
