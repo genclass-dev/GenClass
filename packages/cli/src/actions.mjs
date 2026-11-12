@@ -24,7 +24,7 @@ import { c, interactive, out, printChange, sym } from "../../runtime/bin/lib/ui.
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, WORKFLOW_FILE } from "./assets.mjs";
 import { WORKFLOW_PATH } from "./state.mjs";
-import { agree, bad, good, note, para, pick, spinner, warn } from "./tui.mjs";
+import { agree, bad, good, note, spinner, warn } from "./tui.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -79,7 +79,8 @@ export async function signIn(o = {}) {
 /** Adds the runtime with the runtime CLI's own init (fresh project) or connect (added, not in the account). */
 export async function addRuntime(state, o = {}) {
   const step = state.steps.find((s) => s.id === "runtime");
-  const args = ["--cwd", state.cwd, ...(o.yes ? ["--yes"] : [])];
+  // signed in one step earlier, so the app goes into that account without asking again
+  const args = ["--cwd", state.cwd, ...(o.yes ? ["--yes"] : []), ...(state.signedIn ? ["--in-account"] : [])];
   const code = step?.run === "genclass connect" ? await runLogin("connect", args) : await runInit("init", args);
   return code === 0 ? "done" : "failed";
 }
@@ -124,87 +125,111 @@ export function workflowFor(sub) {
   return withDir.includes(`working-directory: ${sub}`) && withDir.includes(`path: ${sub}/test-results/genclass`) ? withDir : null;
 }
 
-/** Writes the workflow file at the repository's root after showing where it goes. */
-async function addWorkflow(state, o) {
+/**
+ * Writes the workflow file at the repository's root. On a terminal the step's Enter is the yes (`o.confirmed`);
+ * `--yes` writes too; otherwise it asks.
+ */
+export async function addWorkflow(state, o = {}) {
   const root = state.git.root;
   const sub = relative(root, state.cwd).split(sep).join("/");
   const text = workflowFor(sub);
   if (text === null) {
     warn(`This app's folder (${sub}) has a name the workflow cannot use as it is. Copy docs/github-app/workflows/genclass.yml from the GenClass repository and set its working directory by hand.`);
-    return false;
+    return "skipped";
   }
   const file = join(root, WORKFLOW_PATH);
-  out();
-  out(`  ${c.bold(WORKFLOW_PATH)} ${c.gray("(")}${c.green("new file")}${c.gray(`, ${text.split("\n").length - 1} lines)`)}`);
-  para("A job of its own, allowed to fail, so it never blocks a pull request. It installs your dependencies, runs your Playwright tests under two seeds with GenClass on the pages they open, and uploads the small race files. It needs no secret and changes nothing in your tests.", "    ", c.gray);
-  out();
-  if (!o.yes) {
+  if (!o.yes && !o.confirmed) {
     if (!interactive()) {
-      note(`Not a terminal: run ${c.cyan("genclass setup --yes")} to write it.`);
-      return false;
+      note(`Not a terminal: run ${c.cyan("genclass setup --yes")} to write ${WORKFLOW_PATH}.`);
+      return "skipped";
     }
-    if (!(await agree("Write this file?"))) return false;
+    if (!(await agree(`Write ${WORKFLOW_PATH}?`))) return "skipped";
   }
   try {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, text, { flag: "wx" });
   } catch (e) {
     bad(`Could not write ${WORKFLOW_PATH}: ${e?.code === "EEXIST" ? "a file with that name is already there" : (e?.message ?? e)}`);
-    return false;
+    return e?.code === "EEXIST" ? "skipped" : "failed";
   }
-  good(`Wrote ${c.bold(WORKFLOW_PATH)}`);
+  good(`Wrote ${c.bold(WORKFLOW_PATH)} ${c.gray(`(new file, ${text.split("\n").length - 1} lines)`)}`);
   note("It is not committed. When you are ready:");
   out(`    ${c.cyan(`git add ${WORKFLOW_PATH} && git commit -m "Add GenClass to pull requests" && git push`)}`);
-  return true;
+  return "done";
 }
 
-/** Waits (up to `seconds`) until genclass.dev knows the GitHub App is on `repo`. */
-async function waitForApp(creds, repo, seconds = 180) {
-  const sp = spinner("Waiting for GitHub's answer (finish in the browser, then come back here)");
-  const until = Date.now() + seconds * 1000;
-  while (Date.now() < until) {
-    await sleep(4000);
+/**
+ * Waits (up to `seconds`) for genclass.dev to have an answer from GitHub about `repo` that passes `until`.
+ * The last answer, or null when none passed in time.
+ */
+async function waitForGithub(creds, repo, text, until, seconds) {
+  const sp = spinner(text);
+  const end = Date.now() + seconds * 1000;
+  let last = null;
+  while (Date.now() < end) {
+    await sleep(3000);
     const r = await fetchRepoStatus(creds, repo);
-    if (r.ok && r.known && r.installed) {
-      sp.stop("ok", `The GenClass GitHub App is on ${c.bold(repo)}.`);
+    if (r.ok) last = r;
+    if (r.ok && until(r)) {
+      sp.stop();
       return r;
     }
-    if (r.ok && r.known && r.installed === false) sp.update(`GitHub lists no installation on ${repo} yet. Waiting`);
   }
-  sp.stop("warn", "No answer yet. Finish in the browser and run genclass again: this step picks up where it stopped.");
-  return null;
+  sp.stop();
+  return last && until(last) ? last : null;
 }
 
-/** The workflow file, then the GitHub App on this repository. */
-export async function setUpPullRequests(state, o = {}) {
-  if (!state.workflows.length && !(await addWorkflow(state, o))) return "skipped";
+/**
+ * The GitHub App on this repository, with as little asked as possible: genclass.dev is asked what GitHub says; when
+ * it has no answer the browser is opened to get one (Continue with GitHub), and when the answer is that the app is
+ * not on the repository the browser is opened on GitHub's install page. This process only waits for the answer.
+ */
+export async function connectGithubApp(state, o = {}) {
   const creds = readCredentials();
   const repo = state.git.github;
-  if (!creds || !repo) return "done";
-  const st = await fetchRepoStatus(creds, repo);
+  if (!creds || !repo) return "skipped";
+  let st = await fetchRepoStatus(creds, repo);
   if (!st.ok && st.missing) {
-    note(`This genclass.dev cannot tell the CLI about the GitHub App yet. Check it in the browser: ${c.cyan(hostUrl("/account/github"))}`);
-    return "done";
+    note(`This genclass.dev cannot tell the command about the GitHub App. Check it in the browser: ${c.cyan(hostUrl("/account/github"))}`);
+    return "skipped";
   }
-  if (st.ok && st.known && st.installed) {
+  const on = (r) => r.known && r.installed === true;
+  if (st.ok && on(st)) {
     good(`The GenClass GitHub App is on ${c.bold(repo)}.`);
     return "done";
   }
   const installUrl = (st.ok && st.installUrl) || hostUrl("/github/install");
   const connectUrl = (st.ok && st.connectUrl) || hostUrl("/github/connect");
-  out();
-  para(`The GenClass GitHub App posts the review on your pull requests. It reads the race files that workflow uploads and nothing else: it has no permission to read or change your code.`, "  ");
   if (o.yes || !interactive()) {
-    out(`  Install it on ${c.bold(repo)}:  ${c.cyan(installUrl)}`);
+    out(`  Install the GenClass GitHub App on ${c.bold(repo)}:  ${c.cyan(installUrl)}`);
     out(`  Then, on the page GitHub sends you to, press ${c.bold("Continue with GitHub")}. Already installed: ${c.cyan(connectUrl)}`);
+    return "skipped";
+  }
+  // 1. no answer from GitHub yet: get one. The page asks GitHub which repositories the app is on and comes back.
+  if (!st.ok || !st.known) {
+    out(`  ${c.gray(sym.arrow)} Asking GitHub which repositories the app is on: ${c.cyan(connectUrl)}`);
+    openBrowser(connectUrl, o);
+    st = (await waitForGithub(creds, repo, "Waiting for GitHub's answer (approve in the browser if it asks)", (r) => r.known, 90)) ?? st;
+    if (st.ok && on(st)) {
+      good(`The GenClass GitHub App is on ${c.bold(repo)}.`);
+      return "done";
+    }
+    if (!st.ok || !st.known) {
+      warn(`No answer yet. Make sure the browser is signed in to the same GenClass account as this command, then run genclass again.`);
+      return "skipped";
+    }
+  }
+  // 2. GitHub's answer does not list the repository: install the app on it
+  out(`  ${c.gray(sym.arrow)} The app is not on ${c.bold(repo)} yet. Opening GitHub to install it: ${c.cyan(installUrl)}`);
+  note("Pick this repository on GitHub's page. On the page that follows, press Continue with GitHub.");
+  openBrowser(installUrl, o);
+  const done = await waitForGithub(creds, repo, `Waiting for the app to be installed on ${repo}`, on, 240);
+  if (done) {
+    good(`The GenClass GitHub App is on ${c.bold(repo)}.`);
     return "done";
   }
-  const chosen = await pick("The GitHub App", [`Install it on ${repo} (opens GitHub; then press Continue with GitHub on the page that follows)`, "It is installed already: check with GitHub (opens genclass.dev)", "Skip for now"], 0);
-  if (chosen === null || chosen === 2) return "skipped";
-  const url = chosen === 0 ? installUrl : connectUrl;
-  out(`  ${c.gray(sym.arrow)} ${c.cyan(url)}`);
-  openBrowser(url, o);
-  return (await waitForApp(creds, repo)) ? "done" : "skipped";
+  warn("Not installed yet. Finish on GitHub and run genclass again: this step picks up where it stopped.");
+  return "skipped";
 }
 
 // ------------------------------------------------------------------------------------------------ 5. coding agent
@@ -248,9 +273,9 @@ export async function connectAgent(state, o = {}) {
     out(`    ${c.cyan(`"genclass": ${JSON.stringify(mcpServer())}`)}`);
     return "skipped";
   }
-  out();
-  printChange(plan.change);
-  if (!o.yes) {
+  if (!o.yes && !o.confirmed) {
+    out();
+    printChange(plan.change);
     if (!interactive()) {
       note(`Not a terminal: run ${c.cyan("genclass setup --yes")} to write it.`);
       return "skipped";
@@ -264,7 +289,7 @@ export async function connectAgent(state, o = {}) {
     bad(`Could not write ${plan.file}: ${e?.message ?? e}`);
     return "failed";
   }
-  good(`Wrote ${c.bold(plan.file)}`);
-  note("Restart your coding agent in this folder and it has GenClass's tools: what went wrong on a page, a replay of it, and a check of the fix.");
+  good(`${plan.change.kind === "create" ? "Wrote" : "Updated"} ${c.bold(plan.file)} ${c.gray("(GenClass's MCP server)")}`);
+  note("Restart your coding agent in this folder and it has GenClass's tools.");
   return "done";
 }

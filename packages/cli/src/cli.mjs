@@ -4,8 +4,9 @@
 // Invariants:
 // - One way in: `genclass` with no command shows where the project stands and, on a terminal, walks the next step.
 //   Every other command is a part of that walk that can also be run alone.
-// - `login`, `logout`, `whoami`, `connect`, `dashboard`, `init`, `remove` and `scan` are the runtime CLI's own
-//   commands, unchanged: this file hands them their arguments.
+// - `login`, `logout`, `whoami`, `connect`, `init`, `remove` and `scan` are the runtime CLI's own commands,
+//   unchanged: this file hands them their arguments. `dashboard` is this command's own view (app.mjs); signed out it
+//   falls back to the runtime CLI's, which knows an app's private dashboard link.
 // - Nothing here reads a file or the network: it parses and dispatches.
 
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
@@ -16,19 +17,20 @@ export const USAGE = `genclass: one way to set up GenClass, and what your app ne
 
   genclass                where this project stands; on a terminal it walks you through the next step
   genclass setup          the guided setup  (--yes: no questions, for a coding agent)
-  genclass status         the checklist  (--json: for a coding agent)
+  genclass status         what is done, what is next  (--all: every part; --json: for a coding agent)
   genclass suggest [url]  what your app is missing, most important first  (--json, --yes, --no-model, --all)
-  genclass dashboard      this app's dashboard  (--open)
+  genclass dashboard      your app, whole: problems found, checks, visitors, agent, GitHub App
+                          (--range 24h|7d|30d, --all, --app <name>, --open, --json)
   genclass scan <url>     23 visual checks on one page
   genclass login          sign in  (logout, whoami)
   genclass remove         take GenClass out of this app again
 
   Options: --cwd <dir>   --yes   --json   --no-browser   --help   --version
 
-  Everything GenClass sets up is listed by "genclass status". Docs: https://genclass.dev/docs`;
+  Every part GenClass sets up is listed by "genclass status --all". Docs: https://genclass.dev/docs`;
 
 const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open" };
-const VALUE = { cwd: "cwd", url: "url" };
+const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range" };
 
 /** The flags this file knows, and what is left ({ o, rest }); an unknown flag stays in `rest` for the command it is for. */
 export function parseArgs(argv) {
@@ -54,7 +56,7 @@ export async function run(argv) {
   const args = cmd ? argv.slice(1) : argv;
 
   // the runtime CLI's own commands, with their own flags and help
-  if (["login", "logout", "whoami", "connect", "dashboard"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
+  if (["login", "logout", "whoami", "connect"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
   if (cmd === "init" || cmd === "remove") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
   if (cmd === "scan" || cmd === "audit") {
     // this command carries no copy of the runtime's script-tag build, so the page check runs on genclass.dev unless asked otherwise
@@ -93,6 +95,11 @@ export async function run(argv) {
   if (rest.length) {
     err(`genclass: unknown ${rest[0].startsWith("-") ? "option" : "command"} ${c.bold(rest[0])}\n\n${USAGE}`);
     return 2;
+  }
+  if (cmd === "dashboard") {
+    // signed out, the runtime CLI's own command still knows an app's private dashboard link
+    const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", args);
+    return (await import("./app.mjs")).dashboard(o, { fallback });
   }
   const { setup, status } = await import("./setup.mjs");
   if (cmd === "status") return status(o);

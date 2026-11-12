@@ -224,6 +224,11 @@ comments on your own pull requests.
 account in the browser, adds GenClass to their app and shows where the setup stands. It reads the project's files on
 their machine to do that. The files stay there.
 
+**`genclass dashboard`** shows a developer their own app's dashboard in the terminal. It reads, with their
+command-line sign-in, the same counts the dashboard page on genclass.dev shows for that app, and nothing else. The
+page where a sign-in is approved says the terminal can do this; a sign-in approved before that page said so (before
+2026-11-12) cannot, and is asked to sign in again. Nothing new is collected or stored for it.
+
 **`genclass suggest`** measures the project and its live site against a list of checks. Two things leave the machine:
 
 - **Requests to the developer's own site:** its home page, `robots.txt`, `sitemap.xml`, `llms.txt`, one address that

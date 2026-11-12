@@ -1146,7 +1146,7 @@ time and cached in memory until 5 minutes before they expire.
 
 The `genclass` command (`packages/cli`, `npx genclass`) is the one way to set GenClass up: sign in, add the runtime,
 check pull requests, connect a coding agent, and `genclass suggest`. It uses the account routes above (the device
-sign-in, `/api/me`, `/api/account/projects`) and three of its own (`src/cli.ts`; the client is
+sign-in, `/api/me`, `/api/account/projects`) and four of its own (`src/cli.ts`; the client is
 `packages/cli/src/api.mjs`, and `packages/cli/test/server.test.ts` runs it against this worker in process):
 
 | Route | |
@@ -1154,6 +1154,7 @@ sign-in, `/api/me`, `/api/account/projects`) and three of its own (`src/cli.ts`;
 | `GET /api/cli/overview` | CLI session or browser session: the account, its plan `{ id, name }`, its apps, `suggestions: { per_day, shown, used_today, model }` and where the GitHub App's install and connect pages are |
 | `GET /api/cli/github?repo=owner/name` | CLI session or browser session: what the GitHub App is doing on that repository (`known`, `installed`, `evidence`, `prs`, `last`, `private`, `needs_plan`, `paused`). GitHub is asked nothing: the answer comes from what GitHub told this account in the last 30 minutes (Connect GitHub, or Continue with GitHub after installing). Without such an answer: `known: false` and `connect_url` |
 | `POST /api/cli/suggest` | CLI session only. The body is a digest of the checks that failed on an app (`src/suggest.ts` `readDigest`: at most 60 checks, each an id, area, title, weight and at most 3 evidence lines of 160 characters, plus the app's name, framework, address, payment provider and host; at most 64 KB; anything else is dropped). The answer is the plan: `items` in order, each `{ id, why, step, prompt }`, `locked_ids` for the items the account's plan does not show, `source` (`model` or `checks`), `remaining_today` |
+| `GET /api/cli/app?id=<app id>&range=7d` | CLI session or browser session: one app's dashboard as data, for `genclass dashboard`. It is what `/api/account/projects/<id>/stats` answers (same plan rules: the ranges a plan shows, visitor analytics left out without them, `402` when the plan has no dashboard), with the 20 most recent findings and `dashboard_url`. The app is the account's own or one of a team it is in; anything else is `404`. A CLI session reads it only if it was created at or after `CLI_DASHBOARD_FROM` (`src/cli.ts`), when the approval page began to say "show your apps' dashboards"; an older one gets `403` with `reauth: true`, and the command asks the person to sign in again. `/api/account/projects/<id>/stats` and the export stay browser only |
 
 What decides the answer:
 

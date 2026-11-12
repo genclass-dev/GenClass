@@ -3,7 +3,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { askModel, byWeight, DEFAULT_MODEL, MODEL_URL, planFromAnswer, readDigest, suggestRetention, suggestionLimits } from "../src/suggest.js";
 import { PLANS } from "../src/plans.js";
-import { advance, call, cliToken, createApp, now, resetClock, setPlan, setup, signedIn } from "./account-helpers.js";
+import { CLI_DASHBOARD_FROM } from "../src/cli.js";
+import { advance, call, cliToken, createApp, detection, now, resetClock, sendBatch, setNow, setPlan, setup, signedIn } from "./account-helpers.js";
 import { APP_ID, fakeGithub, githubSetup, INSTALLATION, OWNER, REPO } from "./github-helpers.js";
 
 beforeEach(() => {
@@ -314,6 +315,48 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
     expect([j.source, j.limited, j.total]).toEqual(["checks", false, 5]);
     expect(model.calls).toEqual([]);
     expect(((await (await call(s.env, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).suggestions.used_today).toBe(0);
+  });
+});
+
+describe("genclass command: GET /api/cli/app (src/cli.ts)", () => {
+  it("a CLI session reads its own app's dashboard, cut by the plan like the browser's; one approved before the approval page said so signs in again", async () => {
+    const { env, sql } = setup();
+    setNow(new Date(Date.parse(CLI_DASHBOARD_FROM) + 3_600_000));
+    const me = await cliUser(env);
+    const app = await createApp(env, me.cookie, "Shop");
+    await sendBatch(env, app.token, [{ t: "session", host: "shop.example", route: "/" }, ...detection("duplicate", "/checkout")]);
+    const path = `/api/cli/app?id=${app.id}&range=7d`;
+    expect((await call(env, "GET", path, { origin: null })).status).toBe(401);
+    expect((await call(env, "POST", path, { bearer: me.bearer, origin: null })).status).toBe(405);
+    const r = await call(env, "GET", path, { bearer: me.bearer, origin: null });
+    expect(r.status).toBe(200);
+    const j = (await r.json()) as any;
+    expect([j.name, j.token, j.range]).toEqual(["Shop", app.token, "7d"]);
+    expect(j.totals.detections).toBe(1);
+    expect(j.breakdowns.detect_issue).toEqual([{ key: "duplicate\t/checkout", count: 1 }]);
+    expect(j.recent.length).toBeLessThanOrEqual(20);
+    expect(j.dashboard_url).toBe(`https://genclass.dev/account/apps/${app.id}`);
+    // nothing a page typed, and no session of the account
+    expect(JSON.stringify(j)).not.toContain("SECRET PAGE TEXT");
+    expect(JSON.stringify(j)).not.toContain(me.bearer);
+    // the Free plan has no visitor analytics: left out here as on the dashboard, with the plan that shows them
+    expect(j.locked.analytics).toEqual({ plan: "Team", upgrade_url: "https://genclass.dev/account/billing" });
+    expect(j.visits).toEqual({ sessions: 0, pages: 0, bounces: 0, entry: [], exit: [] });
+    // a range the plan does not show is answered with one it does
+    expect(((await (await call(env, "GET", `/api/cli/app?id=${app.id}&range=1y`, { bearer: me.bearer, origin: null })).json()) as any).range).not.toBe("1y");
+    // the browser session of the account reads the same
+    expect((await call(env, "GET", path, { cookie: me.cookie, origin: null })).status).toBe(200);
+    // another account's command line gets nothing, and an id that is no app's is the same answer
+    const other = await cliUser(env, "bob@example.com");
+    expect((await call(env, "GET", path, { bearer: other.bearer, origin: null })).status).toBe(404);
+    expect((await call(env, "GET", "/api/cli/app?id=nope", { bearer: me.bearer, origin: null })).status).toBe(404);
+    // a session approved while the page still said "It cannot read your apps' stats" is told to sign in again
+    sql.db.exec(`UPDATE auth_sessions SET created = '${new Date(Date.parse(CLI_DASHBOARD_FROM) - 1000).toISOString()}' WHERE kind = 'cli'`);
+    const old = await call(env, "GET", path, { bearer: me.bearer, origin: null });
+    expect(old.status).toBe(403);
+    expect(await old.json()).toMatchObject({ ok: false, reauth: true });
+    // and the route the dashboard page reads is still the browser's only
+    expect((await call(env, "GET", `/api/account/projects/${app.id}/stats`, { bearer: me.bearer, origin: null })).status).toBe(403);
   });
 });
 
