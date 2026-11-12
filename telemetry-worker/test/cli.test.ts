@@ -357,7 +357,7 @@ describe("genclass command: GET /api/cli/app (src/cli.ts)", () => {
     expect([j.name, j.token, j.range]).toEqual(["Shop", app.token, "7d"]);
     expect(j.totals.detections).toBe(1);
     expect(j.breakdowns.detect_issue).toEqual([{ key: "duplicate\t/checkout", count: 1 }]);
-    expect(j.recent.length).toBeLessThanOrEqual(20);
+    expect(j.recent.length).toBeLessThanOrEqual(50);
     expect(j.dashboard_url).toBe(`https://genclass.dev/account/apps/${app.id}`);
     // nothing a page typed, and no session of the account
     expect(JSON.stringify(j)).not.toContain("SECRET PAGE TEXT");

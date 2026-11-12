@@ -82,6 +82,8 @@ body.mesh .auth>:nth-child(2){animation-delay:.05s}body.mesh .auth>:nth-child(3)
 dl.req{display:grid;grid-template-columns:minmax(110px,auto) minmax(0,1fr);border-top:1px solid var(--rule2);margin-top:24px}
 dl.req dt,dl.req dd{padding:11px 0;border-bottom:1px solid var(--rule);font-size:14.5px;min-width:0;overflow-wrap:anywhere}
 dl.req dt{font:500 12.5px var(--mono);color:var(--ink3);padding-top:13px;padding-right:16px}
+ul.scope{margin:10px 0 0;padding-left:20px;font-size:14.5px;line-height:1.5;color:var(--ink2)}
+ul.scope li{margin-top:5px}
 .acts{display:flex;gap:10px;margin-top:22px}
 .acts .btn{flex:1}
 .step{margin-top:26px;padding-top:18px;border-top:1px solid var(--rule);display:grid;gap:10px;justify-items:start}
@@ -559,7 +561,15 @@ ${signInWays({ ...v.providers, next: v.next })}
   <dt>Code expires</dt><dd id="exp">${time(r.expires, "time")}</dd>
   <dt>Account</dt><dd>${who}</dd>
 </dl>
-<p class="lead" id="scope">If you approve, the terminal that shows this code can list the apps in this account, create apps, add an app from its private dashboard link, write a project key into your project, and show your apps' dashboards (what GenClass found on your site), for 90 days or until you revoke it on your account page. It cannot change how you sign in.</p>
+<p class="lead" id="scope">If you approve, the terminal that shows this code can do this, for 90 days or until you revoke it on your account page:</p>
+<ul class="scope" id="scopelist">
+  <li>list and create apps, add an app from its private dashboard link, and write a project key into your project</li>
+  <li>show your apps' dashboards, visitor analytics and stored events</li>
+  <li>ask GenClass's model about an app (your question and the app's numbers go to the model)</li>
+  <li>show and change where an app's alerts are sent, its funnels, and its private dashboard link</li>
+  <li>show your plan and your team, and make a team invite link</li>
+</ul>
+<p class="lead" id="never">It cannot change how you sign in, pay for anything, remove people, or delete an app or your account.</p>
 <p class="caution" id="caution"><b>Approve only a sign-in you started.</b> If you did not run ${runOf(r.client)} yourself just now, or someone sent you this link or code, choose Deny.</p>
 <div class="acts" id="acts"><button class="btn green" id="yes" type="button"><span>Approve</span></button><button class="btn ghost" id="no" type="button"><span>Deny</span></button></div>
 <p class="err" id="err" role="alert"></p>
@@ -587,7 +597,7 @@ ${signInWays({ ...v.providers, next: v.next })}
   function finish(title, text){
     if (timer) clearTimeout(timer);
     h.textContent = title; acts.classList.add("hidden"); err.textContent = "";
-    ["caution", "scope"].forEach(function(id){ document.getElementById(id).classList.add("hidden"); });
+    ["caution", "scope", "scopelist", "never"].forEach(function(id){ var e = document.getElementById(id); if (e) e.classList.add("hidden"); });
     done.classList.remove("hidden"); done.textContent = text;
   }
   function gone(){ finish("This code is no longer valid", "It expired or was already used. Run the command again for a new code."); }

@@ -18,8 +18,9 @@
 //                                                       bearer token, or the browser session
 //   GET|POST /api/account/export-keys, DELETE /api/account/export-keys/<id> export keys (browser session)
 //
-// A command line session (the CLI's bearer token) is refused on every route here: the approval page promises it
-// cannot read stats, and billing and settings belong to the browser. The routes that call Stripe or send to another
+// A command line session (the CLI's bearer token) is refused on every route here: paying belongs to the browser, and
+// what a terminal may read or change it does through its own routes (src/cli.ts), which check that the terminal was
+// approved for it and then use the same code as these (integrationsFor, exportFor). The routes that call Stripe or send to another
 // server (checkout, portal, Send test, new export keys) take AUTH_LIMIT's budget per account, and the export
 // EXPORT_LIMIT's.
 
@@ -343,6 +344,18 @@ async function integrations(c: C, f: Fetch, projectId: string, kindRaw: string |
   const write = m !== "GET" && m !== "HEAD";
   const a = write ? await browserWrite(c, "forwarding can be changed") : await browserRead(c);
   if (a instanceof Response) return a;
+  return integrationsFor(c, f, a.account.id, projectId, kindRaw, test);
+}
+
+/**
+ * The forwarding settings of one app, for an account whose session the caller has already checked: this file's
+ * browser routes, and the genclass command's (src/cli.ts, a terminal approved for it). Owner only, the plan's rules
+ * and the limits are the same for both.
+ */
+export async function integrationsFor(c: C, f: Fetch, accountId: string, projectId: string, kindRaw: string | null, test: boolean): Promise<Response> {
+  const m = c.req.method;
+  const write = m !== "GET" && m !== "HEAD";
+  const a = { account: { id: accountId } };
   const p = await ownedProject(c, a.account.id, projectId);
   if (!p || !p.id) return fail(404, "not found");
   // a grant gives its plan's forwarding too (src/plans.ts accountAccess)
@@ -451,6 +464,16 @@ async function exportEvents(c: C, projectId: string): Promise<Response> {
   if (m !== "GET" && m !== "HEAD") return method();
   const who = await exportAuth(c);
   if (who instanceof Response) return who;
+  return exportFor(c, who.accountId, projectId);
+}
+
+/**
+ * One page of an app's stored events, for an account the caller has already identified: an export key or the
+ * browser session (above), or the genclass command's session (src/cli.ts, a terminal approved for it). Owner only;
+ * the plan's rule, its history and the per-minute limit are the same for all three.
+ */
+export async function exportFor(c: C, accountId: string, projectId: string): Promise<Response> {
+  const who = { accountId };
   const p = await ownedProject(c, who.accountId, projectId);
   if (!p) return fail(404, "not found");
   const plan: Plan = await accountPlan(c.db, who.accountId, c.env, c.now);

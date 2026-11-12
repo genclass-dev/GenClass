@@ -238,58 +238,70 @@ const standIns = new Map<string, string>();
 export const resetStandIns = (): void => standIns.clear();
 
 /**
- * Asks the model to order and explain the failed checks. Null when there is no key, nothing failed, the request
- * failed or timed out, or the answer was not the JSON asked for: the caller then uses the checks' own order.
- * When the key has no model of the configured name, the newest model it has of the same family and tier is asked
- * instead (standIn), and the log says which; the configured name is tried again by the next isolate, so a key that
- * gains it starts using it without a change here. The key is never logged.
+ * One question to the model, and the text of its answer. `body(model)` is the request without the key; `tag` starts
+ * every log line ("suggest", "ask"). Null when there is no key, the request failed or timed out, or the answer holds
+ * no text. When the key has no model of the configured name, the newest model it has of the same family and tier is
+ * asked instead (standIn), and the log says which; the configured name is tried again by the next isolate, so a key
+ * that gains it starts using it without a change here. The key is never logged, nor is anything sent or answered.
  */
-export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, digest: Digest): Promise<PlanItem[] | null> {
+export async function modelText(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, tag: string, body: (model: string) => Record<string, unknown>, timeoutMs = MODEL_TIMEOUT_MS): Promise<string | null> {
   const key = (env.OPENAI_API_KEY ?? "").trim();
-  if (!key || !digest.checks.length) return null;
+  if (!key) return null;
   const wanted = modelName(env);
   const call = (model: string) =>
     f(MODEL_URL, {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: JSON.stringify({ app: digest.app, passed: digest.passed, not_checked: digest.unknown, failed: digest.checks }) },
-        ],
-        response_format: { type: "json_schema", json_schema: { name: "genclass_plan", strict: true, schema: SCHEMA } },
-        max_completion_tokens: 8000,
-      }),
-      signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+      body: JSON.stringify(body(model)),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   try {
     let res = await call(standIns.get(wanted) ?? wanted);
     if (!res.ok) {
       const why = await modelError(res);
-      console.log(`suggest: the model answered HTTP ${res.status}${why}`);
+      console.log(`${tag}: the model answered HTTP ${res.status}${why}`);
       if (!why.includes("model_not_found") || standIns.has(wanted)) return null;
       // the key has no such model: ask the newest one it has of the same family and tier, and say so in the log
       const models = await keyModels(f, key);
-      console.log(`suggest: models this key can use: ${models.map((m) => m.id).join(", ") || "(the list could not be read)"}`);
+      console.log(`${tag}: models this key can use: ${models.map((m) => m.id).join(", ") || "(the list could not be read)"}`);
       const other = standIn(wanted, models);
       if (!other) return null;
-      console.log(`suggest: asking ${other} in place of ${wanted}`);
+      console.log(`${tag}: asking ${other} in place of ${wanted}`);
       res = await call(other);
       if (!res.ok) {
-        console.log(`suggest: the model answered HTTP ${res.status}${await modelError(res)}`);
+        console.log(`${tag}: the model answered HTTP ${res.status}${await modelError(res)}`);
         return null;
       }
       standIns.set(wanted, other);
     }
     const j = (await res.json().catch(() => null)) as { choices?: { message?: { content?: unknown } }[] } | null;
-    const plan = planFromAnswer(j?.choices?.[0]?.message?.content, digest);
-    if (!plan) console.log("suggest: the model's answer did not pass the checks");
-    return plan;
+    const text = j?.choices?.[0]?.message?.content;
+    return typeof text === "string" ? text : null;
   } catch (e) {
-    console.log(`suggest: the model request failed: ${e instanceof Error && e.name === "TimeoutError" ? "timeout" : "error"}`);
+    console.log(`${tag}: the model request failed: ${e instanceof Error && e.name === "TimeoutError" ? "timeout" : "error"}`);
     return null;
   }
+}
+
+/**
+ * Asks the model to order and explain the failed checks. Null when there is no key, nothing failed, the request
+ * failed or timed out, or the answer was not the JSON asked for: the caller then uses the checks' own order.
+ */
+export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, digest: Digest): Promise<PlanItem[] | null> {
+  if (!hasModel(env) || !digest.checks.length) return null;
+  const text = await modelText(env, f, "suggest", (model) => ({
+    model,
+    messages: [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: JSON.stringify({ app: digest.app, passed: digest.passed, not_checked: digest.unknown, failed: digest.checks }) },
+    ],
+    response_format: { type: "json_schema", json_schema: { name: "genclass_plan", strict: true, schema: SCHEMA } },
+    max_completion_tokens: 8000,
+  }));
+  if (text === null) return null;
+  const plan = planFromAnswer(text, digest);
+  if (!plan) console.log("suggest: the model's answer did not pass the checks");
+  return plan;
 }
 
 const dayOf = (now: Date): string => now.toISOString().slice(0, 10);
