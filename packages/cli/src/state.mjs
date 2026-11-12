@@ -262,6 +262,8 @@ export async function readState(o = {}, deps = {}) {
     more: "GenClass sends nothing from localhost, so the dashboard starts with your deployed site. Deploy as you normally do, open the site, and run npx genclass again.",
     run: null,
     human: "deploy your app and open the live site once",
+    // nothing to watch for until the app is in the account: the walk does not offer it before
+    after: "runtime",
   });
 
   // 4. the test workflow
@@ -336,7 +338,9 @@ export async function readState(o = {}, deps = {}) {
     human: s?.failed ? "work through the list: npx genclass suggest" : null,
   });
 
-  const next = steps.find((x) => x.state === "todo" && !(o.skip ?? []).includes(x.id)) ?? null;
+  // the first step to do that is not skipped and does not wait on a step that is not done (dashboard: the runtime)
+  const ready = (x) => !x.after || steps.find((y) => y.id === x.after)?.state === "done";
+  const next = steps.find((x) => x.state === "todo" && !(o.skip ?? []).includes(x.id) && ready(x)) ?? null;
   if (next) next.state = "next";
   return {
     cwd,

@@ -173,10 +173,12 @@ export async function checkout(offer, o = {}, deps = {}) {
  */
 export function runtimeArgs(state, o = {}) {
   const connect = state.steps.find((s) => s.id === "runtime")?.run === "npx genclass connect";
-  // signed in one step earlier, so the app goes into that account without asking again
-  const args = ["--cwd", state.cwd, ...(o.yes ? ["--yes"] : []), ...(state.signedIn ? ["--in-account"] : [])];
-  // --brief: the walk has its own header, so init says the same things in a few lines
-  return { cmd: connect ? "connect" : "init", args: connect ? args : [...args, "--no-devtools", "--brief"] };
+  const args = ["--cwd", state.cwd, ...(o.yes ? ["--yes"] : [])];
+  // connect takes only its own options (packages/runtime/bin/lib/login.mjs SPECS.connect): it asks which app of the
+  // account this is, and the account is the one signed in. init gets --in-account (signed in one step earlier, so
+  // the app goes into that account without asking again), --no-devtools and --brief (the walk has its own header,
+  // so init says the same things in a few lines)
+  return connect ? { cmd: "connect", args } : { cmd: "init", args: [...args, ...(state.signedIn ? ["--in-account"] : []), "--no-devtools", "--brief"] };
 }
 
 /**

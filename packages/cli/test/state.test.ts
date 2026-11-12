@@ -184,6 +184,27 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     expect(old.account?.plan).toBeNull();
   });
 
+  it("GenClass in the app but the app not in the account: putting it there is next, and the first page is not offered before it", async () => {
+    // a project set up earlier (by someone else, or before an account) with a key this account does not have
+    const dir = tempDir();
+    viteApp(dir);
+    await addRuntime(dir);
+    signIn();
+    const server = fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project({ token: "gc_SomeoneElsesKey0000000" })] }) } });
+    const s = await readState({ cwd: dir }, { runGit: noGit, fetchFn: server.fetchFn });
+    expect(s.next?.id).toBe("runtime");
+    expect(s.next?.run).toBe("npx genclass connect");
+    expect(s.steps.find((x) => x.id === "runtime")!.detail).toBe("added, but this app is not in your account yet");
+    // that step skipped (or failed) in this run: the next one is not "See your first page", which has nothing to
+    // watch for until the app is in the account
+    const after = await readState({ cwd: dir, skip: ["runtime"] }, { runGit: noGit, fetchFn: server.fetchFn });
+    expect(after.next?.id).not.toBe("dashboard");
+    expect(after.next?.id).toBe("agent");
+    // once it is in the account, the first page is next
+    const linked = fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project()] }) } });
+    expect((await readState({ cwd: dir }, { runGit: noGit, fetchFn: linked.fetchFn })).steps.find((x) => x.id === "dashboard")!.state).toBe("waiting");
+  });
+
   it("a step skipped for this run is not the next one, and --json says what to run and what only a person can do", async () => {
     const dir = tempDir();
     viteApp(dir);

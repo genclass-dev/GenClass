@@ -116,7 +116,9 @@ describe("genclass: nothing is drawn on a page (src/actions.mjs runtimeArgs)", (
     expect(runtimeArgs(fresh, { yes: true })).toEqual({ cmd: "init", args: ["--cwd", dir, "--yes", "--in-account", "--no-devtools", "--brief"] });
     expect(runtimeArgs({ cwd: dir, signedIn: false, steps: [{ id: "runtime", run: "npx genclass init" }] } as never, {})).toEqual({ cmd: "init", args: ["--cwd", dir, "--no-devtools", "--brief"] });
     // an app that already has the runtime is only put in the account: nothing in its code is touched
-    expect(runtimeArgs({ cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "npx genclass connect" }] } as never, {})).toEqual({ cmd: "connect", args: ["--cwd", dir, "--in-account"] });
+    // connect takes only its own options: it asks which app of the signed-in account this is
+    expect(runtimeArgs({ cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "npx genclass connect" }] } as never, {})).toEqual({ cmd: "connect", args: ["--cwd", dir] });
+    expect(runtimeArgs({ cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "npx genclass connect" }] } as never, { yes: true })).toEqual({ cmd: "connect", args: ["--cwd", dir, "--yes"] });
     // init with those arguments: one import, and no line that mounts anything
     const { run: runInit } = await import("../../runtime/bin/lib/init.mjs");
     const said = await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--no-devtools", "--brief"])).toBe(0));
@@ -286,5 +288,34 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
     // the art is for a terminal only: nothing piped holds it
     expect(bare).not.toContain("█");
     expect(existsSync(join(dir, ".mcp.json"))).toBe(false);
+  });
+});
+
+describe("genclass: the runtime step hands the runtime CLI only options it takes (src/actions.mjs runtimeArgs)", () => {
+  // genclass 0.2.x to 0.3.2 passed --in-account to connect, which refused it, printed its usage, and the walk went
+  // on: a project already set up but not in the account could never be put there (seen on a real project,
+  // 2026-11-12). Each command is run with exactly what the step would pass, signed out: it must get past its own
+  // option parser (signed out it stops at "not signed in" or does its local part, never at "unknown option").
+  it("for init and for connect, signed in or not, with --yes or not", async () => {
+    const { run: runLogin } = await import("../../runtime/bin/lib/login.mjs");
+    const { run: runInit } = await import("../../runtime/bin/lib/init.mjs");
+    const dir = tempDir();
+    const errs: string[] = [];
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation(((s: unknown) => (errs.push(String(s)), true)) as never);
+    try {
+      for (const run of ["npx genclass connect", "npx genclass init"])
+        for (const signedIn of [true, false])
+          for (const yes of [true, false]) {
+            const { cmd, args } = runtimeArgs({ cwd: dir, signedIn, steps: [{ id: "runtime", run }] } as never, { yes });
+            errs.length = 0;
+            const said = await printed(async () => {
+              const code = cmd === "connect" ? await runLogin("connect", args) : await runInit("init", [...args, "--no-install", "--no-network", "--dry-run"]);
+              expect([cmd, signedIn, yes, code]).not.toEqual([cmd, signedIn, yes, 2]);
+            });
+            expect(`${said}${errs.join("")}`).not.toMatch(/unknown option/);
+          }
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
