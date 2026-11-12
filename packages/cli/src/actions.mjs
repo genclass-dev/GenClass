@@ -19,6 +19,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { pollDeviceLogin, readCredentials, saveCredentials, startDeviceLogin } from "../../runtime/bin/lib/account.mjs";
+import { detectProject } from "../../runtime/bin/lib/detect.mjs";
 import { apiHost, hostConfig, hostUrl } from "../../runtime/bin/lib/host.mjs";
 import { accountLabel, run as runInit } from "../../runtime/bin/lib/init.mjs";
 import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
@@ -27,6 +28,7 @@ import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "./assets.mjs";
 import { WORKFLOW_PATH } from "./state.mjs";
 import { agree, bad, good, note, spinner, warn } from "./tui.mjs";
+import { planViteSettings } from "./vite.mjs";
 
 /** Resolves after `ms`, or at once when `signal` aborts. */
 const nap = (ms, signal) =>
@@ -77,7 +79,7 @@ export async function signIn(o = {}) {
   }
   out();
   out(`  Open  ${c.cyan(dev.verification_uri_complete)}`);
-  out(`  Code  ${c.bold(dev.user_code)}  ${c.gray("(check that the page shows the same code, then approve)")}`);
+  out(`  Code  ${c.bold(dev.user_code)}  ${c.gray("(the page must show the same code)")}`);
   out();
   if (openBrowser(dev.verification_uri_complete, o)) note("Your browser is opening that page.");
   const stop = stopOnEnter();
@@ -89,7 +91,7 @@ export async function signIn(o = {}) {
     return "skipped";
   }
   if (!r.ok) {
-    sp.stop("bad", r.error === "access_denied" ? "The sign-in was denied in the browser." : r.error === "expired_token" ? "The code expired before it was approved. Run npx genclass again for a new one." : `The sign-in did not finish: ${r.reason}`);
+    sp.stop("bad", r.error === "access_denied" ? "The sign-in was denied in the browser." : r.error === "expired_token" ? "The code expired before it was approved (codes last ten minutes)." : `The sign-in did not finish: ${r.reason}`);
     return "failed";
   }
   saveCredentials({ host: apiHost(), access_token: r.access_token, account: r.account });
@@ -113,11 +115,57 @@ export function runtimeArgs(state, o = {}) {
   return { cmd: connect ? "connect" : "init", args: connect ? args : [...args, "--no-devtools", "--brief"] };
 }
 
-/** Adds the runtime with the runtime CLI's own init (fresh project) or connect (added, not in the account). */
+/**
+ * Adds the runtime with the runtime CLI's own init (fresh project) or connect (added, not in the account), then the
+ * two build settings an app on Vite 7 or earlier needs with it (vite.mjs). When those settings are all that is
+ * missing (the step says so), only they are written.
+ */
 export async function addRuntime(state, o = {}) {
-  const { cmd, args } = runtimeArgs(state, o);
-  const code = cmd === "connect" ? await runLogin("connect", args) : await runInit("init", args);
-  return code === 0 ? "done" : "failed";
+  if (!state.steps.find((s) => s.id === "runtime")?.vite) {
+    const { cmd, args } = runtimeArgs(state, o);
+    const code = cmd === "connect" ? await runLogin("connect", args) : await runInit("init", args);
+    if (code !== 0) return "failed";
+  }
+  return (await addViteSettings(state, o)) === "failed" ? "failed" : "done";
+}
+
+/** Shows the two Vite settings and writes them on a yes (--yes, or one question on a terminal). */
+export async function addViteSettings(state, o = {}) {
+  let plan = null;
+  try {
+    plan = planViteSettings(state.cwd, detectProject(state.cwd));
+  } catch {
+    plan = null;
+  }
+  if (!plan) return "done";
+  out();
+  if (plan.note) {
+    warn(plan.note);
+    return "skipped";
+  }
+  warn(`Vite ${plan.major} needs two settings for the model's worker.`);
+  note('Without them "vite build" fails.');
+  out();
+  printChange(plan.change);
+  if (!o.yes) {
+    if (!interactive()) {
+      note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write them.`);
+      return "skipped";
+    }
+    if (!(await agree("Add them?"))) {
+      note("Left as it is. The two lines are above when you want them.");
+      return "skipped";
+    }
+  }
+  try {
+    writeFileSync(plan.change.path, plan.change.after);
+  } catch (e) {
+    bad(`Could not write ${plan.change.file}: ${e?.message ?? e}`);
+    return "failed";
+  }
+  good(`${plan.change.kind === "create" ? "Wrote" : "Updated"} ${c.bold(plan.change.file)} ${c.gray("(your build and dev server now handle the model's worker)")}`);
+  note("Vite 8 needs neither setting. npx genclass remove takes them out again.");
+  return "done";
 }
 
 // ------------------------------------------------------------------------------------------------ 3. first page
@@ -311,7 +359,7 @@ export function planAgentConfig(dir) {
 
 /** Where the skill goes in a project: Claude Code reads a project's skills from here, as `npx @genclass/mcp init` writes it. */
 export const SKILL_PATH = ".claude/skills/genclass/SKILL.md";
-const SKILL_MARK = "genclass:init";
+export const SKILL_MARK = "genclass:init";
 
 /**
  * The skill file as this command writes it: the MCP package's own skill with a marker line after its front matter

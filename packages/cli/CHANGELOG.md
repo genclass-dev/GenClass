@@ -5,10 +5,35 @@
 From using the command on a real site the morning after 0.2.2, and from watching its owner use it:
 
 - **A new first screen.** On a terminal the command opens with a welcome card: its name and version in the border,
-  "Welcome back, Ada!" (or, signed out, what GenClass does in two lines), the mark, and three quiet lines for the
-  app, the account and the folder. It fits a 58-column window, where the old block-letter wordmark never showed.
+  "Welcome back, Ada!" (or, signed out, what GenClass does in two lines), GenClass's logo as pixel art (the green
+  arrow over the top, the red arrow underneath, in the logo's own two greens and two reds), and three quiet lines for
+  the app, the account and the folder. It fits a 58-column window, where the old block-letter wordmark never showed.
   What comes next stands beside a green bar, and the question is one line under a rule: `❯ Enter to continue · d
   every part · s skip · q stop`. Piped output and `--json` are as plain as before.
+- **An app on Vite 7 or earlier builds again.** Found by installing into a fresh Vite 7 app and running its
+  build: `vite build` failed with `Invalid value "iife" for option "worker.format"` once GenClass was in it, because
+  Vite before 8 bundles a worker as one classic script and the model's worker cannot be one. Every app in GenClass's
+  own repository is on Vite 8, so this was never seen. The runtime step now shows and writes the two settings such
+  an app needs (`worker: { format: "es" }` for the build, `optimizeDeps: { exclude: ["@genclass/runtime"] }` so the
+  dev server runs the model in a worker instead of on the page's thread), as the first keys of your Vite config,
+  with its own marker. An app that already has GenClass gets "Add two Vite settings" as its next step. A config it
+  cannot edit without guessing (a function, one that sets `worker` itself, an app with workers of its own) is left
+  alone and gets the two lines to add by hand. `remove` takes them out. Vite 8 needs nothing and gets nothing.
+- **`npx genclass remove` takes out everything GenClass put in the project.** After the runtime (the import, the
+  config file, the package) it lists what the other steps wrote and removes it on one more yes: GenClass's entry
+  in `.mcp.json` (your other servers stay; the file goes only when that entry was all it held), the skill (only
+  while it still carries its marker), the pull-request workflow (only while it is exactly the file this command
+  wrote) and `.genclass/`, where the coding agent's tools keep what they recorded. What you made your own is kept
+  and named. Your app stays in your account.
+- **From walking the whole setup as a new user, twice, on a real terminal at 80 and 58 columns:**
+  - A sign-in that did not finish (the code expired, the browser said no) is offered once more instead of the walk
+    moving on without an account.
+  - The sign-in step says where a new person's account comes from ("New here? Your free account is made there").
+  - Nothing runs past a narrow window any more: the runtime step's lines, the suggestions (a long evidence line
+    wraps instead of ending in "…"), the list of steps, the day-to-day commands. A command or an address is never
+    split across two lines.
+  - Suggestions no longer list the internal names of checks that need your site ("Not checked (20): https,
+    www-joined, ..."); it says how many there are and how to get them.
 - **Every command it names is one you can run.** The screens said `genclass suggest`, which is "command not found"
   for anyone who started with `npx genclass` and has nothing installed. They now say `npx genclass suggest`, in the
   views, the help and the `run` fields of `--json`. The help says how to get the short name
@@ -25,6 +50,8 @@ From using the command on a real site the morning after 0.2.2, and from watching
   install, instead of naming a build step of GenClass's own repository.
 - **`genclass scan` waits for a scan of the same page that is already running** (someone else's, or yours a moment
   ago) and prints that scan's report, instead of stopping with "try again in 20 s".
+- **A normal page is not told its check "could not finish".** A page with no search box and no form gives the race
+  probe nothing to try; that row now reads "nothing to try on this page" and does not count as a part that failed.
 - **A page check that could not finish says so next to the score.** On a heavy page the hosted check runs out of
   time, and the report read "Score 83/100" with five of eight parts not measured further down. It now reads
   "Score 83/100 over 3 of 8 parts", says which parts the score covers and why, and gives the command that runs the

@@ -1,7 +1,7 @@
 // The welcome card and its mark (src/art.mjs, src/tui.mjs card): rows that line up, the right words for who is
 // there, and never drawn where it cannot be.
 import { describe, expect, it } from "vitest";
-import { canDraw, MARK } from "../src/art.mjs";
+import { canDraw, COLOURS, MARK, markRows } from "../src/art.mjs";
 import { nearest } from "../src/cli.mjs";
 import { card, firstName, folderName, nextBlock } from "../src/tui.mjs";
 import { isolate, printed } from "./helpers.js";
@@ -11,10 +11,18 @@ isolate();
 const plain = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, "");
 
 describe("genclass: the welcome card (src/art.mjs header, src/tui.mjs card)", () => {
-  it("the mark is five rows of one width, made of block characters only", () => {
-    expect(MARK).toHaveLength(5);
-    expect(new Set(MARK.map((r) => [...r].length))).toEqual(new Set([9]));
-    expect(MARK.join("")).toMatch(/^[ █▀▄]+$/);
+  it("the mark is the logo in sixteen rows of sixteen cells, two greens and two reds, drawn as eight lines of one width", () => {
+    expect(MARK).toHaveLength(16);
+    expect(new Set(MARK.map((r) => r.length))).toEqual(new Set([16]));
+    expect(MARK.join("")).toMatch(/^[.GgRr]+$/);
+    // green is the upper arrow, red the lower one: no red above the middle, every colour used
+    expect(MARK.slice(0, 7).join("")).not.toMatch(/[Rr]/);
+    for (const k of Object.keys(COLOURS)) expect(MARK.join(""), k).toContain(k);
+    expect(Object.keys(COLOURS).sort()).toEqual(["G", "R", "g", "r"]);
+    const lines = markRows().map(plain);
+    expect(lines).toHaveLength(8);
+    expect(new Set(lines.map((l) => [...l].length))).toEqual(new Set([16]));
+    expect(lines.join("")).toMatch(/^[ █▀▄]+$/);
   });
 
   it("is drawn only on a terminal that has the characters and the room", () => {

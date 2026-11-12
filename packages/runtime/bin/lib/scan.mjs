@@ -577,7 +577,7 @@ export function hostedReport(url, r, base) {
     runtime: r.runtime || null,
     browser: r.chrome ? `Chromium ${r.chrome} (genclass.dev page check)` : "genclass.dev page check",
     score: { value: r.score?.value ?? null, basis: `the genclass.dev page check's overall score (${r.score?.version || "scan-score"})` },
-    categories: (r.score?.categories || []).map((cat) => ({ id: cat.id, label: cat.label, value: cat.value, measured: cat.measured, count: cat.count })),
+    categories: (r.score?.categories || []).map((cat) => ({ id: cat.id, label: cat.label, value: cat.value, measured: cat.measured, count: cat.count, ...(cat.measured ? {} : { why: r.notMeasured?.[cat.id] ?? null }) })),
     top: (r.top || []).map((t) => ({ rule: t.rule, category: t.category, what: t.what, severity: t.severity, count: t.count, points: t.points })),
     summary: summaryOf(findings),
     views: (r.views || []).map((v) => ({ id: v.id, width: v.width, height: v.height, status: v.status ?? null, ok: !!v.ok, ms: v.ms ?? null, error: v.error ?? null })),
@@ -593,13 +593,35 @@ export function hostedReport(url, r, base) {
 
 /** `{ measured, of, labels, timedOut }` when the hosted check could not measure every part of its score, else null. */
 function partialOf(r) {
-  const cats = Array.isArray(r.score?.categories) ? r.score.categories : [];
+  const why = r.notMeasured && typeof r.notMeasured === "object" ? r.notMeasured : {};
+  // a part that had nothing to try on this page (no search box and no form for the race probe) did not fail
+  const cats = (Array.isArray(r.score?.categories) ? r.score.categories : []).filter((cat) => cat.measured || !/nothing to try/i.test(String(why[cat.id] ?? "")));
   const done = cats.filter((cat) => cat.measured);
   if (!cats.length || done.length === cats.length) return null;
   return { measured: done.length, of: cats.length, labels: done.map((cat) => String(cat.label)), timedOut: r.timedOut === true };
 }
 
 // ---------------------------------------------------------------------------------------------- printing
+
+/** The width long lines fold to: the window's, kept between 50 and 110 columns (100 when there is no window). */
+const cols = () => Math.max(50, Math.min(110, Number(process.stdout.columns) || 100));
+
+/** `text` folded to the window, every line after the first behind `indent`. Words longer than a line stay whole. */
+function fold(text, indent, first = indent.length) {
+  const out = [];
+  for (const para of String(text).split(/\n+/)) {
+    let line = "";
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      const room = cols() - (out.length ? indent.length : first);
+      if (line && line.length + 1 + word.length > room) {
+        out.push(line);
+        line = word;
+      } else line = line ? `${line} ${word}` : word;
+    }
+    if (line) out.push(line);
+  }
+  return out.join(`\n${indent}`);
+}
 
 /** "a", "a and b", "a, b and c". */
 const list = (items) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
@@ -613,8 +635,8 @@ export function formatReport(rep) {
   p();
   p(`  ${c.bold(c.magenta("GenClass scan"))} ${c.gray(sym.dot)} ${c.bold(rep.url)}`);
   const sizes = rep.views.map((v) => `${v.id} ${v.width}x${v.height}`).join(", ");
-  if (rep.ranAt === "local") p(c.gray(`  ran locally: ${rep.browser}, ${sizes}; @genclass/runtime ${rep.runtime} visual checks in observe mode (no telemetry, no model, nothing sent)`));
-  else p(c.gray(`  ran remotely on the genclass.dev page check (${sizes || "desktop and phone"}): the page was loaded by its browser, not this computer`));
+  if (rep.ranAt === "local") p(c.gray(`  ${fold(`ran locally: ${rep.browser}, ${sizes}; @genclass/runtime ${rep.runtime} visual checks in observe mode (no telemetry, no model, nothing sent)`, "  ")}`));
+  else p(c.gray(`  ${fold(`ran remotely on the genclass.dev page check (${sizes || "desktop and phone"}): the page was loaded by its browser, not this computer`, "  ")}`));
   for (const v of rep.views) if (v.error) p(`  ${c.yellow(sym.warn)} ${v.id}: ${v.error}`);
   p();
   const n = rep.findings.length;
@@ -629,13 +651,14 @@ export function formatReport(rep) {
   if (part && !rep.blocked) {
     const why = part.timedOut ? "The page was still loading when the page check's time ran out" : "The page check could not finish every part on this page";
     const what = part.measured ? `the score covers ${list(part.labels)} only` : "nothing could be scored";
-    p(`  ${c.yellow(sym.warn)} ${why}, so ${what}.`);
-    p(`    The visual checks can run on this computer instead, with no time limit: ${c.cyan(`${CMD} scan ${rep.url} --local`)}`);
+    p(`  ${c.yellow(sym.warn)} ${fold(`${why}, so ${what}.`, "    ", 4)}`);
+    p(`    ${fold("The visual checks can run on this computer instead, with no time limit:", "    ")}`);
+    p(`    ${c.cyan(`${CMD} scan ${rep.url} --local`)}`);
   }
   // with nothing measured, eight lines of "not measured" and eight notes saying why add nothing to the sentence above
   if (rep.categories?.length && !nothing) {
     p();
-    for (const cat of rep.categories) p(`  ${cat.label.padEnd(20)} ${cat.measured ? String(cat.value).padStart(3) : "  -"}${cat.measured ? "" : c.gray("  not measured")}`);
+    for (const cat of rep.categories) p(`  ${cat.label.padEnd(20)} ${cat.measured ? String(cat.value).padStart(3) : "  -"}${cat.measured ? "" : c.gray(/nothing to try/i.test(String(cat.why ?? "")) ? "  nothing to try on this page" : "  not measured")}`);
   }
   if (rep.top?.length) {
     p();
@@ -654,14 +677,13 @@ export function formatReport(rep) {
     if (f.target) p(`      ${f.target}${f.selector ? c.gray(`  ${f.selector}`) : ""}`);
     else if (f.selector) p(`      ${c.gray(f.selector)}`);
     const msg = f.message;
-    const indent = (t) => String(t).replace(/\n+/g, "\n        ");
-    if (msg && msg !== f.target) p(`      ${indent(msg)}`);
-    if (f.fix) p(`      ${c.green("fix:")} ${indent(f.fix)}${f.fixNote ? c.gray(`  (${f.fixNote})`) : ""}`);
+    if (msg && msg !== f.target) p(`      ${fold(msg, "        ", 6)}`);
+    if (f.fix) p(`      ${c.green("fix:")} ${fold(f.fix, "        ", 11)}${f.fixNote ? c.gray(`  (${f.fixNote})`) : ""}`);
   }
   const notes = (rep.notes ?? []).filter((note) => !(nothing && / not measured: /.test(note)));
   if (notes.length) {
     p();
-    for (const note of notes) p(c.gray(`  note: ${note}`));
+    for (const note of notes) p(c.gray(`  note: ${fold(note, "        ", 8)}`));
   }
   p();
   if (rep.ranAt === "local") p(c.gray(`  Score: ${rep.score.basis}. Accessibility, speed and security too: add --hosted.`));

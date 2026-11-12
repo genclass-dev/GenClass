@@ -11,6 +11,15 @@
   ran out, with the command for a local run; "no problems found" is only said when everything was measured. The JSON
   report gains `partial` (`{ measured, of, labels, timedOut }` or null), and `fullReport` is the report's page on
   genclass.dev.
+- **`scan`: the report folds to the window** (50 to 110 columns; 100 when piped), so a long finding or note no
+  longer runs off a narrow terminal, and a part the page gave nothing to try (the race probe on a page with no
+  search box and no form) reads "nothing to try on this page" and is not counted as unmeasured (`partial` stays
+  null for it).
+- **Known limitation, now written down: Vite 7 and earlier need `worker: { format: "es" }`** or `vite build` fails
+  with the runtime installed, and `optimizeDeps: { exclude: ["@genclass/runtime"] }` for the model to run in a worker
+  in dev (README "Known limitations", `src/model/README.md`). The `genclass` command writes both (0.2.3); this
+  package's own `init` does not yet.
+- **`init --brief`** folds its sentences to the window and keeps each command and address whole on its own line.
 - **`scan` inside the `genclass` command** finds the script-tag build of the runtime installed in the project
   (`runtimeDist`: `node_modules/@genclass/runtime/dist`, this folder upwards), says what to install when there is
   none, and names itself `genclass scan` (`genclass` 0.2.3). In this package's own bin nothing changes.

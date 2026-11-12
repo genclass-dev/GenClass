@@ -102,9 +102,9 @@ function closing(state) {
   }
   out();
   out(`  ${c.gray("Day to day")}`);
-  out(`    ${c.cyan("npx genclass".padEnd(24))}${c.gray("where things stand and what comes next")}`);
-  out(`    ${c.cyan("npx genclass suggest".padEnd(24))}${c.gray("what your app is missing, most important first")}`);
-  if (state.app.token) out(`    ${c.cyan("npx genclass dashboard".padEnd(24))}${c.gray("what GenClass found on your live site, here in the terminal")}`);
+  out(`    ${c.cyan("npx genclass".padEnd(23))}${c.gray("where things stand")}`);
+  out(`    ${c.cyan("npx genclass suggest".padEnd(23))}${c.gray("what your app is missing")}`);
+  if (state.app.token) out(`    ${c.cyan("npx genclass dashboard".padEnd(23))}${c.gray("what it found on your site")}`);
   out();
 }
 
@@ -141,6 +141,7 @@ export async function setup(o = {}, deps = {}) {
   let details = !!o.all;
   if (!auto) o = { ...o, cwd: await whichApp(o.cwd) };
   let welcomed = false;
+  let signInTries = 0;
   for (let turn = 0; turn < 14; turn++) {
     const state = await readState({ cwd: o.cwd, skip });
     const step = state.next;
@@ -194,8 +195,11 @@ export async function setup(o = {}, deps = {}) {
       } else result = (await deps.runSuggest({ cwd: o.cwd, fromSetup: true })) === 0 ? "done" : "failed";
     }
     if (result === "failed") failed = true;
-    // done or not, the step is not offered twice in one run: the next reading of the state says where it stands
-    skip.push(step.id);
+    // done or not, a step is not offered twice in one run: the next reading of the state says where it stands. The
+    // one exception is a sign-in that did not finish (the code expired, the browser said no) while someone is at the
+    // keyboard: everything after it is better with an account, so it is offered once more
+    if (step.id === "account" && result === "failed" && !auto && signInTries++ < 1) note("Enter tries the sign-in again with a new code.");
+    else skip.push(step.id);
     out();
     rule();
   }

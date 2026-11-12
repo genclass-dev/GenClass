@@ -29,7 +29,7 @@ export function write(dir: string, files: Record<string, string>): void {
 /** A small Vite + React app the runtime CLI recognises. */
 export function viteApp(dir: string, pkg: Record<string, unknown> = {}): void {
   write(dir, {
-    "package.json": JSON.stringify({ name: "shop", private: true, type: "module", dependencies: { react: "^19.0.0", "react-dom": "^19.0.0" }, devDependencies: { vite: "^7.0.0", "@vitejs/plugin-react": "^5.0.0" }, ...pkg }, null, 2),
+    "package.json": JSON.stringify({ name: "shop", private: true, type: "module", dependencies: { react: "^19.0.0", "react-dom": "^19.0.0" }, devDependencies: { vite: "^8.0.0", "@vitejs/plugin-react": "^5.0.0" }, ...pkg }, null, 2),
     "index.html": '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <title>Shop</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.jsx"></script>\n  </body>\n</html>\n',
     "src/main.jsx": 'import { createRoot } from "react-dom/client";\n\ncreateRoot(document.getElementById("root")).render(<h1>Shop</h1>);\n',
   });
