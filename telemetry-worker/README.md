@@ -947,7 +947,8 @@ An Individual buyer's email, for the notice above:
 
 ### Owner steps for Team (plans.json version 3), in order
 
-Nothing here has been run. Each step is the owner's, and the Stripe ones need a yes of their own:
+All of it was run on 2026-11-11 and Team has been on sale since then (kept as the record, and as the order for a
+new collector). Each step is the owner's, and the Stripe ones need a yes of their own:
 
 1. `npx --yes wrangler@4 d1 migrations apply genclass-dashboard --remote` (0014: `accounts.seats`,
    `accounts.comp_plan`, `team_members`, `team_invites`). Before the deploy: the new worker reads both columns for
@@ -968,9 +969,11 @@ Nothing here has been run. Each step is the owner's, and the Stripe ones need a 
    the worker's settings.
    In the live account (`acct_1UQIFDKdAcQCxrpH`) the same was made the same way on 2026-11-11, on the owner's yes:
    the product `genclass_team`, the price `price_1UaoDhKdAcQCxrpHINiYv5uX` and two portal configurations, of which
-   `bpc_1UaoDyKdAcQCxrpH3NEpehi1` is the one that is not the default. No webhook endpoint and no worker secret
-   exist yet, so nothing is on sale: the script, run with the live key, reports the product, price and portal as
-   unchanged and adds both.
+   `bpc_1UaoDyKdAcQCxrpH3NEpehi1` is the one that is not the default. The owner then ran the script with the
+   live key: it reported the product and the price as unchanged, made the webhook endpoint
+   (`we_1UaomaKdAcQCxrpHQPhM5PW3`) and stored `STRIPE_WEBHOOK_SECRET`, `STRIPE_PORTAL_CONFIGURATION` and then
+   `STRIPE_SECRET_KEY` on the worker. A live Checkout page for one seat opened from `/account/billing`; no payment
+   has been made yet, so the webhook and the portal are still unproven in live mode.
 4. `npx --yes wrangler@4 deploy`. From then: Free shows 7 days and no visitor analytics, export or forwarding; a
    fourth app is refused; the GitHub App needs Team for private repositories (`GITHUB_APP_PRIVATE_REPOS = "plan"`
    in `wrangler.toml`). With a live `STRIPE_SECRET_KEY` Team is on sale to everyone; with a test key only to
