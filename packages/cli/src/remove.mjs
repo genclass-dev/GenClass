@@ -125,7 +125,9 @@ export async function remove(args, deps = {}) {
   const code = await runtime();
   if (code !== 0) return code;
   const o = flags(args);
-  const plan = planLeftovers(o.cwd, deps);
+  // from a folder inside the app, the app's own folder (the runtime's remove walks up the same way)
+  const { projectDir } = await import("../../runtime/bin/lib/init.mjs");
+  const plan = planLeftovers(projectDir({ cwd: args.some((a) => a === "--cwd" || a.startsWith("--cwd=")) ? o.cwd : undefined }), deps);
   if (!plan.changes.length && !plan.kept.length) return 0;
   out(`  ${c.bold("Also set up by this command")}`);
   for (const ch of plan.changes) out(`    ${ch.kind === "delete" ? c.red("delete") : c.yellow("edit  ")}  ${c.bold(ch.file)}  ${c.gray(ch.what)}`);

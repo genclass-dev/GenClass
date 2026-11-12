@@ -290,8 +290,6 @@ export async function readState(o = {}, deps = {}) {
   if (!isApp || !git.github) Object.assign(gh, { state: "optional", detail: !isApp ? "" : git.repo ? "the repository is not on GitHub" : "not a git repository yet" });
   // a genclass.dev with no GitHub App (a collector someone hosts themselves): nothing to connect
   else if (me?.github && me.github.app === false) Object.assign(gh, { state: "optional", detail: "this genclass.dev has no GitHub App" });
-  else if (!workflows.length && !playwright) Object.assign(gh, { state: "optional", detail: "needs Playwright tests first" });
-  else if (!workflows.length) Object.assign(gh, { detail: "after the test workflow" });
   else if (!me) Object.assign(gh, { detail: "sign in to check" });
   else if (!repo || !repo.ok) Object.assign(gh, repo?.missing ? { state: "waiting", detail: "check it at genclass.dev/account/github", run: null } : { detail: `could not check${repo ? ` (${repo.reason})` : ""}` });
   else if (!repo.known) Object.assign(gh, { detail: "continue with GitHub to check", human: "install the GitHub App and continue with GitHub in your browser" });
@@ -299,7 +297,7 @@ export async function readState(o = {}, deps = {}) {
   else if (repo.needsPlan) Object.assign(gh, { state: "waiting", detail: "private repository: reviews come with the Team plan", run: null });
   else if (repo.paused) Object.assign(gh, { state: "waiting", detail: "paused on your GitHub page at genclass.dev", run: null });
   else if (repo.evidence) Object.assign(gh, { state: "done", detail: repo.prs ? `reviewing · ${repo.prs} pull request${repo.prs === 1 ? "" : "s"} so far` : "reviewing" });
-  else Object.assign(gh, { state: "waiting", detail: "installed · open a pull request and the first review appears", run: null, human: "commit the workflow file and open a pull request" });
+  else Object.assign(gh, { state: "waiting", detail: "installed · open a pull request and the first review appears", run: null, human: workflows.length ? "commit the workflow file and open a pull request" : "open a pull request" });
   steps.push({
     id: "github-app",
     title: "GitHub App",
@@ -362,14 +360,17 @@ export async function readState(o = {}, deps = {}) {
 }
 
 /** The state as plain data for `--json`: what a coding agent reads to know where things stand and what to run. */
+/** The command for a step as a coding agent runs it: without a terminal the walk does a step only with --yes. */
+const forAgent = (run) => (run === "npx genclass setup" ? "npx genclass setup --yes" : run);
+
 export function stateJson(s) {
   return {
     app: s.app,
     signed_in: s.signedIn,
     account: s.account ? { label: s.account.label, plan: s.account.plan } : null,
     github: s.git.github,
-    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.state, detail: x.detail, run: x.state === "done" ? null : x.run, human: x.state === "done" ? null : x.human })),
-    next: s.next ? { id: s.next.id, title: s.next.doing, run: s.next.run, human: s.next.human, why: s.next.why } : null,
+    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.state, detail: x.detail, run: x.state === "done" ? null : forAgent(x.run), human: x.state === "done" ? null : x.human })),
+    next: s.next ? { id: s.next.id, title: s.next.doing, run: forAgent(s.next.run), human: s.next.human, why: s.next.why } : null,
     complete: s.complete,
   };
 }

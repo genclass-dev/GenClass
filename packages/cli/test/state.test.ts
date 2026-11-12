@@ -99,7 +99,9 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     // no workflow file yet: it is the next step, and the app comes after it
     const none = await read();
     expect(wf(none)).toMatchObject({ state: "next", title: "Test workflow", doing: "Add the test workflow", detail: "Playwright found · no workflow file yet", run: "npx genclass setup" });
-    expect(pr(none)).toMatchObject({ state: "todo", title: "GitHub App", detail: "after the test workflow" });
+    // the GitHub App does not wait for the workflow: it also comments production findings, which need no tests
+    expect(pr(none).state).not.toBe("optional");
+    expect(pr(none).detail).not.toBe("after the test workflow");
     write(dir, { [WORKFLOW_PATH]: "name: genclass\njobs:\n  genclass:\n    steps:\n      - run: node genclass-playwright-run.mjs\n", ".github/workflows/ci.yml": "name: ci\n" });
     expect(genclassWorkflows(dir)).toEqual([WORKFLOW_PATH]);
 
@@ -142,7 +144,8 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     expect(await pr((a) => (a[1] === "--show-toplevel" ? dir : a[0] === "remote" ? "https://gitlab.com/acme/shop.git" : "main"))).toMatchObject({ state: "optional", detail: "the repository is not on GitHub" });
     expect(await pr(onGithub(dir))).toMatchObject({ state: "optional", detail: "no Playwright tests yet" });
     expect(await app(noGit)).toMatchObject({ state: "optional", detail: "not a git repository yet" });
-    expect(await app(onGithub(dir))).toMatchObject({ state: "optional", detail: "needs Playwright tests first" });
+    // without Playwright the test workflow does not apply, the GitHub App still does (production findings on pull requests)
+    expect((await app(onGithub(dir))).state).not.toBe("optional");
     write(dir, { "playwright.config.ts": "export default {};\n" });
     expect(await pr(onGithub(dir))).toMatchObject({ state: "todo" });
   });
@@ -398,5 +401,45 @@ describe("genclass: the plan step (src/state.mjs, src/actions.mjs choosePlan, sr
     } finally {
       process.stdout.columns = cols;
     }
+  });
+});
+
+describe("genclass: setups made without init's markers (review, 2026-11-12)", () => {
+  it("a hand-written setup whose key is in the account is done, not 'Put this app in your account' forever", async () => {
+    const dir = tempDir();
+    viteApp(dir);
+    write(dir, { "src/main.jsx": `import "@genclass/runtime/auto";\nwindow.GENCLASS_CONFIG = { token: "${TOKEN}" };\n` });
+    signIn();
+    const server = fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project()] }) } });
+    const s = await readState({ cwd: dir }, { runGit: noGit, fetchFn: server.fetchFn });
+    expect(s.steps.find((x) => x.id === "runtime")).toMatchObject({ state: "done" });
+    expect(s.steps.find((x) => x.id === "runtime")!.detail).toContain("added by hand");
+    expect(s.next?.id).not.toBe("runtime");
+  });
+
+  it("an app set up with @genclass/nuxt or @genclass/astro is not fresh: GenClass is not added a second time", async () => {
+    for (const [dep, file, text] of [
+      ["nuxt", "nuxt.config.ts", `export default defineNuxtConfig({ modules: [["@genclass/nuxt", { token: "${TOKEN}" }]] });\n`],
+      ["astro", "astro.config.mjs", `import genclass from "@genclass/astro";\nexport default { integrations: [genclass({ token: "${TOKEN}" })] };\n`],
+    ] as const) {
+      const dir = tempDir();
+      write(dir, { "package.json": JSON.stringify({ name: "site", dependencies: { [dep]: "^5.0.0", [`@genclass/${dep}`]: "^0.1.0" } }), [file]: text });
+      const s = await readState({ cwd: dir }, { runGit: noGit });
+      const rt = s.steps.find((x) => x.id === "runtime")!;
+      expect([dep, rt.run]).not.toEqual([dep, "npx genclass init"]);
+      expect([dep, s.app.token]).toEqual([dep, TOKEN]);
+    }
+  });
+
+  it("for a coding agent the command of a step is the one that runs without a terminal", async () => {
+    const { stateJson } = await import("../src/state.mjs");
+    const dir = tempDir();
+    viteApp(dir);
+    await addRuntime(dir);
+    signIn();
+    const server = fakeServer({ "GET /api/cli/overview": { json: overview({ projects: [project()] }) } });
+    const j = stateJson(await readState({ cwd: dir }, { runGit: noGit, fetchFn: server.fetchFn }));
+    for (const x of j.steps) expect([x.id, x.run]).not.toEqual([x.id, "npx genclass setup"]);
+    expect(j.next?.run === null || !/^npx genclass setup$/.test(j.next!.run ?? "")).toBe(true);
   });
 });

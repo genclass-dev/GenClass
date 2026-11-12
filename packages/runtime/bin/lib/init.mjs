@@ -217,7 +217,10 @@ export function projectDir(o) {
 }
 
 const posix = (p) => p.split(sep).join("/");
-const REF_RE = /(?:from\s+|import\s*\(?\s*|require\s*\(\s*)['"]@genclass\/runtime(?:\/[\w/-]+)?['"]|genclass\.global(?:\.min)?\.js/;
+// GenClass in a file outside init's markers: the runtime imported or required, the script-tag build, or one of the
+// framework integrations (@genclass/nuxt in nuxt.config, @genclass/astro in astro.config), which add the runtime
+// themselves
+const REF_RE = /(?:from\s+|import\s*\(?\s*|require\s*\(\s*)['"]@genclass\/(?:runtime(?:\/[\w/-]+)?|nuxt|astro)['"]|['"]@genclass\/nuxt['"]|genclass\.global(?:\.min)?\.js/;
 
 /** Files that use GenClass outside init's markers (a hand-written setup). */
 function manualRefs(files) {
@@ -450,7 +453,8 @@ function cspAdvice(project, files, cfg) {
     if (!csp.cdnMentioned) out(`    says so once in the console). Self-host it instead:`);
     else out(`    Or self-host it (no third-party origin at all):`);
     const pub = publicDir(project);
-    out(`      1. ${c.cyan(`${CMD} fetch-model ${pub}/genclass-model`)} ${c.gray("(model and ONNX Runtime files: about 64 MB; --variant q8 --ort wasm: about 24 MB)")}`);
+    // fetch-model is the runtime package's own command (bin/genclass-runtime.mjs), not one of a host CLI's
+    out(`      1. ${c.cyan(`${HOST_CLI ? `npx ${PKG}@beta` : CMD} fetch-model ${pub}/genclass-model`)} ${c.gray("(model and ONNX Runtime files: about 64 MB; --variant q8 --ort wasm: about 24 MB)")}`);
     out(`      2. ${c.cyan(`${CMD} init --model-url /genclass-model/`)} ${c.gray("(writes model.baseUrl and ortWasmPaths)")}`);
     out(`    or add https://cdn.jsdelivr.net to connect-src.`);
   } else {
@@ -777,8 +781,12 @@ export async function versionNotice(o) {
   const from = st.tag ? c.gray(` (npm dist-tag ${st.tag})`) : asked ? "" : c.gray(" (npm dist-tags not checked)");
   row("Version", `${PKG} ${VERSION}${from}`);
   if (st.newer) {
-    const run = st.newer.tag === "latest" ? `npx ${PKG}` : `npx ${PKG}@${st.newer.tag}`;
-    row("Newer", `${PKG} ${st.newer.version} is on npm (dist-tag ${st.newer.tag}): run ${c.cyan(`${run} init`)} instead`, c.yellow(sym.warn));
+    // inside a host CLI (genclass), that CLI pins the runtime it installs: the way to the newer one is a newer CLI
+    if (HOST_CLI) row("Newer", `${PKG} ${st.newer.version} is on npm (dist-tag ${st.newer.tag}): the newest ${HOST_CLI.name ?? "command"} installs it (${c.cyan(`npx ${HOST_CLI.name ?? "genclass"}@latest`)})`, c.yellow(sym.warn));
+    else {
+      const run = st.newer.tag === "latest" ? `npx ${PKG}` : `npx ${PKG}@${st.newer.tag}`;
+      row("Newer", `${PKG} ${st.newer.version} is on npm (dist-tag ${st.newer.tag}): run ${c.cyan(`${run} init`)} instead`, c.yellow(sym.warn));
+    }
   }
 }
 
@@ -797,7 +805,9 @@ export function inspectProject(o) {
   const marked = files.filter((f) => hasMarker(readText(f) ?? ""));
   const manual = marked.length ? [] : manualRefs(files);
   const local = readLocal(cwd);
-  return { cwd, project, files, marked, handWritten: !marked.length && manual.length > 0, fresh: !marked.length && !manual.length, token: tokenInFiles(marked) ?? local?.token ?? null, local };
+  // the key: in init's markers, else in a hand-written setup's files (GenClass.init({ token }), a meta tag, the
+  // integrations' options), else in .genclass.local
+  return { cwd, project, files, marked, handWritten: !marked.length && manual.length > 0, fresh: !marked.length && !manual.length, token: tokenInFiles(marked) ?? tokenInFiles(manual) ?? local?.token ?? null, local };
 }
 
 /**
@@ -935,7 +945,8 @@ export async function init(o, ctx = {}) {
     return spawn(...installArgs(project.pm, spec), cwd) ? 0 : 1;
   }
 
-  const devtools = !o.noDevtools;
+  // nothing GenClass sets up through a host CLI (genclass) is drawn on a page: the overlay is left out there
+  const devtools = !o.noDevtools && !HOST_CLI;
   const planFor = (config) => planInit(project, { mode: o.mode, devtools, cdn: o.cdn, sri: !o.noSri, sync: !!o.sync, strategy: o.strategy, config }, { pkgDir: PKG_DIR, version: VERSION });
   const plan = planFor(cfg);
   if (plan.manual || !plan.changes.length) {
@@ -1146,6 +1157,11 @@ async function remove(o) {
   return 0;
 }
 
+/** The name this command goes by: the host CLI's (`npx genclass`) when one runs it, else the runtime package's own. */
+const SELF = HOST_CLI ? CMD : "genclass-runtime";
+/** The usage text, with the commands written the way they are typed here. */
+const usage = () => (HOST_CLI ? USAGE.replace(/^ {2}genclass-runtime /gm, `  ${CMD} `) : USAGE);
+
 /** Entry from bin/genclass-runtime.mjs. Returns the exit code. */
 export async function run(cmd, argv) {
   let o;
@@ -1153,18 +1169,18 @@ export async function run(cmd, argv) {
     o = parse(argv);
   } catch (e) {
     if (e instanceof UsageError) {
-      err(`genclass-runtime ${cmd}: ${e.message}\n\n${USAGE}`);
+      err(`${SELF} ${cmd}: ${e.message}\n\n${usage()}`);
       return 2;
     }
     throw e;
   }
   if (o.help) {
-    out(USAGE);
+    out(usage());
     return 0;
   }
   const h = hostConfig();
   if (cmd === "init" && h.error) {
-    err(`genclass-runtime ${cmd}: ${h.error}`);
+    err(`${SELF} ${cmd}: ${h.error}`);
     return 2;
   }
   return cmd === "remove" ? remove(o) : init(o);

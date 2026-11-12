@@ -147,7 +147,7 @@ export async function run(argv, ctx = {}) {
   }
   if (cmd === "dashboard") {
     // signed out, the runtime CLI's own command still knows an app's private dashboard link
-    const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", args);
+    const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", [...(o.cwd ? ["--cwd", o.cwd] : []), ...(o.open ? ["--open"] : [])]);
     return (await import("./app.mjs")).dashboard(o, { fallback });
   }
   if (["problems", "events", "health", "report"].includes(cmd)) return (await import("./views.mjs"))[cmd](o);

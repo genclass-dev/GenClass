@@ -109,6 +109,8 @@ describe("genclass: the home (src/home.mjs)", () => {
     expect(read("genclass problems")).toEqual({ command: ["problems"] });
     expect(read("npx genclass dashbord")).toEqual({ unknown: "dashbord" });
     expect(read("npx genclass")).toEqual({ help: true });
+    // every command the command line has, including the runtime's own, is a command here and never a question
+    for (const cmd of ["connect", "init", "audit"]) expect(read(`${cmd} --name shop now`)).toEqual({ command: [cmd, "--name", "shop", "now"] });
   });
 
   it("every command the home lists is one the command line runs, and the list fits 58 columns", async () => {

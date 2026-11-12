@@ -39,7 +39,7 @@ export const COMMANDS = [
   ["remove", "take GenClass out of this app", false],
 ];
 
-const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "version"];
+const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "version", "connect", "init", "audit"];
 
 /** A typed line as arguments: spaces separate, single or double quotes keep words together. */
 export function words(line) {

@@ -244,7 +244,7 @@ const POSTHOG = { us: "https://us.i.posthog.com", eu: "https://eu.i.posthog.com"
  * `genclass connections add|test|on|off|remove <slack|sentry|posthog|datadog|webhook>` changes one destination.
  */
 export async function connections(o = {}, deps = {}) {
-  const picked = await pickApp(o, deps, "connections");
+  const picked = await pickApp(o, deps, ["connections", ...(o.args ?? [])].join(" "));
   if ("code" in picked) return picked.code;
   const { state, creds, target } = picked;
   const dash = target.dashboard_url ?? hostUrl("/account");
@@ -422,7 +422,7 @@ export async function exportEvents(o = {}, deps = {}) {
         process.stderr.write(`genclass export: ${r.reauth ? "sign in again: npx genclass login" : r.upgradeUrl ? "the stored events as a file come with the Team plan: npx genclass plan" : (r.reason ?? "it did not work")}\n`);
         return 1;
       }
-      return refused(r, { what: "The stored events as a file", command: "export", browserUrl: target.dashboard_url, json: o.json });
+      return refused(r, { what: "The stored events as a file", command: ["export", o.from ? `--from ${o.from}` : "", o.to ? `--to ${o.to}` : "", o.format ? `--format ${o.format}` : "", o.out ? `--out ${o.out}` : ""].filter(Boolean).join(" "), browserUrl: target.dashboard_url, json: o.json });
     }
     parts.push(r.text);
     pages++;
@@ -476,7 +476,7 @@ export async function exportEvents(o = {}, deps = {}) {
  * a page ending in * matches everything that starts with it); `genclass funnels remove "Name"` removes one.
  */
 export async function funnels(o = {}, deps = {}) {
-  const picked = await pickApp(o, deps, "funnels");
+  const picked = await pickApp(o, deps, ["funnels", ...(o.args ?? []).map((w) => (/\s/.test(w) ? `"${w}"` : w))].join(" "));
   if ("code" in picked) return picked.code;
   const { state, creds, target } = picked;
   const [sub, name, ...steps] = o.args ?? [];
@@ -514,7 +514,7 @@ export async function funnels(o = {}, deps = {}) {
     return 2;
   }
   const r = await asking(o, creds, (cr) => saveFunnels(cr, target.id, next, deps), deps);
-  if (!r.ok) return refused(r, { what: "Funnels (part of visitor analytics)", command: `funnels ${sub}`, browserUrl: target.dashboard_url, json: o.json });
+  if (!r.ok) return refused(r, { what: "Funnels (part of visitor analytics)", command: ["funnels", sub, name ? `"${name}"` : "", ...steps].filter(Boolean).join(" "), browserUrl: target.dashboard_url, json: o.json });
   if (o.json) out(JSON.stringify({ ok: true, funnels: r.funnels }));
   else {
     good(sub === "add" ? `Saved the funnel ${c.bold(clean(name, 60))}: ${steps.map((x) => clean(x, 30)).join(` ${sym.arrow} `)}` : `Removed the funnel ${c.bold(clean(name, 60))}.`);
