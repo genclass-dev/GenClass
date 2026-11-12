@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.4
+
+From a review of every setup path after a teammate hit the 0.3.2 bug:
+
+- **The GitHub App step is offered for every repository on GitHub.** It waited for Playwright tests, so a project
+  without them (most) never saw it. The app also comments production findings on pull requests, which need no tests.
+- **A hand-written setup is no longer stuck at "Put this app in your account".** Its key (`GenClass.init({ token })`,
+  `GENCLASS_CONFIG`, a meta tag) was not read, so the step came back on every run even with the app in the account.
+- **An app set up with `@genclass/nuxt` or `@genclass/astro` is not treated as new**, so the walk no longer adds a
+  second runtime import and a second app.
+- **`--yes` no longer replaces a key that is not the account's** (a teammate's): `connect` says which options name
+  the app instead.
+- `setup --yes --json` prints only JSON on stdout; `status --json` names `npx genclass setup --yes` where a step
+  needs it, so a coding agent no longer loops on `npx genclass setup`.
+- Saying no to the runtime's change no longer leads to the Vite settings; signed out, the first-page and GitHub App
+  steps say why they do nothing.
+- Commands now run as the screen prints them: the signed-out `dashboard` with `--all`, `--range` or `--app`;
+  `connect`, `init` and `audit` typed at the home prompt (they were sent to the model as questions); the CSP advice's
+  `fetch-model`; `scan` of a local address; `--app` with a long or quoted name; "which app" and "sign in again" hints
+  that dropped what was typed after the command.
+- `remove` run from a folder inside the app finds GenClass's other files.
+- `init` and `connect` run through `genclass` add no developer overlay, name themselves `npx genclass` in their help
+  and errors, and point a newer runtime at `npx genclass@latest`.
+
 ## 0.3.3
 
 - **"Put this app in your account" works.** For an app that already has GenClass in it but is not in the signed-in

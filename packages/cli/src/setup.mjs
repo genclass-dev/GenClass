@@ -11,7 +11,8 @@
 //   by another tool counts.
 // - On a terminal a step starts on Enter, and Enter is the yes for what the step's sentence says it will write (s
 //   skips it for this run, q stops). With --yes nothing is asked: every step that needs no person is done, and what
-//   only a person can do (approve a sign-in, install the GitHub App, deploy) is printed with its address. Without a
+//   only a person can do (install the GitHub App, deploy) is printed with its address; the sign-in prints its link
+//   and code and waits for the approval (up to ten minutes), so a coding agent can hand them to the person. Without a
 //   terminal and without --yes nothing is done at all: the view and the next command are printed, which is what a
 //   coding agent reads. Input that ends at a question (end of file) stops the walk: an empty answer is an Enter only
 //   while someone can still type.
@@ -136,6 +137,22 @@ export async function status(o = {}) {
 export async function setup(o = {}, deps = {}) {
   const auto = !!o.yes;
   if (!auto && !interactive()) return status(o);
+  // --json: the walk's view goes to stderr, so stdout is the JSON alone and parses
+  if (o.json) {
+    const write = process.stdout.write;
+    process.stdout.write = process.stderr.write.bind(process.stderr);
+    try {
+      return await walk({ ...o, json: false }, deps, auto);
+    } finally {
+      process.stdout.write = write;
+      out(JSON.stringify(stateJson(await readState({ cwd: o.cwd })), null, 2));
+    }
+  }
+  return walk(o, deps, auto);
+}
+
+/** The walk itself (setup): every step in order until nothing is left that this machine can do. */
+async function walk(o, deps, auto) {
   const skip = [];
   let failed = false;
   let details = !!o.all;
@@ -240,6 +257,5 @@ export async function setup(o = {}, deps = {}) {
     out();
     rule();
   }
-  if (o.json) out(JSON.stringify(stateJson(await readState({ cwd: o.cwd })), null, 2));
   return failed ? 1 : 0;
 }

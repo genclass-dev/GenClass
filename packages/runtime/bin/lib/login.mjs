@@ -32,7 +32,7 @@ import { FREE_LINES, UsageError, accountLabel, hostNotice, init, inspectProject,
 import { AUTO } from "./plan.mjs";
 import { LOCAL_FILE, tokenInFiles } from "./token.mjs";
 import { banner, c, choose, confirm, err, interactive, out, row, sym } from "./ui.mjs";
-import { CMD } from "./version.mjs";
+import { CMD, HOST_CLI } from "./version.mjs";
 
 export const USAGE = `Usage:
   genclass-runtime login   [--yes] [--no-browser] [--no-connect] [--app <id|name>] [--name <name>]
@@ -260,6 +260,17 @@ async function connectApp(o, creds, st, me) {
       return init({ ...o, token: st.token }, { banner: false, cmd: "connect", creds, app: { ...app, token: st.token } });
     }
     out();
+  }
+
+  // a key that is none of this account's apps (a teammate's, or one from another account) is replaced only when the
+  // person says with what: on a terminal by picking, or with --app or --name. --yes alone does not choose for them.
+  // (a key from this machine's .genclass.local is the person's own app made without an account, not someone else's)
+  if (st.token && !current && st.local?.token !== st.token && o.yes && !o.app && !o.name && !o.dryRun) {
+    err(`  ${c.red(sym.cross)} This app's project key ${st.token} is not one of your account's apps (it may be a teammate's).`);
+    out(`    Say which app it is: ${c.cyan(`${CMD} connect`)} on a terminal and pick, or ${c.cyan(`${CMD} connect --app <id or name>`)}`);
+    out(`    for one of yours, or ${c.cyan(`${CMD} connect --name <name>`)} for a new one. Nothing was changed.`);
+    out();
+    return 1;
   }
 
   // pick one of the account's apps or a new one; a new app is created only once the changes are approved
@@ -575,11 +586,16 @@ async function logout() {
   return 0;
 }
 
+/** The name this command goes by: the host CLI's (`npx genclass`) when one runs it, else the runtime package's own. */
+const SELF = HOST_CLI ? CMD : "genclass-runtime";
+/** The usage text, with the commands written the way they are typed here. */
+const usage = () => (HOST_CLI ? USAGE.replace(/^ {2}genclass-runtime /gm, `  ${CMD} `) : USAGE);
+
 /** Entry from bin/genclass-runtime.mjs. Returns the exit code. */
 export async function run(cmd, argv) {
   const h = hostConfig();
   if (h.error) {
-    err(`genclass-runtime ${cmd}: ${h.error}`);
+    err(`${SELF} ${cmd}: ${h.error}`);
     return 2;
   }
   let o;
@@ -588,13 +604,13 @@ export async function run(cmd, argv) {
     if (o.app !== undefined && o.name !== undefined) throw new UsageError("--app and --name contradict each other (use an app, or create one)");
   } catch (e) {
     if (e instanceof UsageError) {
-      err(`genclass-runtime ${cmd}: ${e.message}\n\n${USAGE}`);
+      err(`${SELF} ${cmd}: ${e.message}\n\n${usage()}`);
       return 2;
     }
     throw e;
   }
   if (o.help) {
-    out(USAGE);
+    out(usage());
     return 0;
   }
   if (cmd === "login") return login(o);

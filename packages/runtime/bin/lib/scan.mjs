@@ -747,7 +747,8 @@ export async function run(cmd, argv) {
     }
     if (hosted) {
       if (privateHost(url)) {
-        err(`${NAME} ${cmd}: ${new URL(url).host} is a local address: the hosted page check cannot reach it and it is never sent there. Run without --hosted (needs Playwright's Chromium: ${INSTALL_LINE}).`);
+        // a host CLI (genclass) asks for the hosted check itself, so the way to a local run there is --local
+        err(`${NAME} ${cmd}: ${new URL(url).host} is a local address: the hosted page check cannot reach it and it is never sent there. ${HOST_CLI ? "Add --local" : "Run without --hosted"} to check it on this machine (needs Playwright's Chromium: ${INSTALL_LINE}).`);
         return 2;
       }
       const tty = process.stderr.isTTY;

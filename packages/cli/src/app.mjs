@@ -176,7 +176,11 @@ export async function dashboard(o = {}, deps = {}) {
 }
 
 /** How an app is named after --app: its name in quotes, or its id when another app has the same name. */
-export const appArg = (p, projects) => (projects.filter((x) => x.name.toLowerCase() === p.name.toLowerCase()).length > 1 ? p.id : `"${clean(p.name, 40)}"`);
+export const appArg = (p, projects) => {
+  const name = clean(p.name, 200);
+  // a name that is shared, cut, or holds a quote is not typed: the id always works
+  return projects.filter((x) => x.name.toLowerCase() === p.name.toLowerCase()).length > 1 || name !== p.name || /["\\$`]/.test(name) ? p.id : `"${name}"`;
+};
 
 /**
  * Which app a command is about, for a signed-in account: --app by name or id, else this folder's app, else the

@@ -21,7 +21,7 @@ import { dirname, join, relative, sep } from "node:path";
 import { pollDeviceLogin, readCredentials, saveCredentials, startDeviceLogin } from "../../runtime/bin/lib/account.mjs";
 import { detectProject } from "../../runtime/bin/lib/detect.mjs";
 import { apiHost, hostConfig, hostUrl } from "../../runtime/bin/lib/host.mjs";
-import { accountLabel, run as runInit } from "../../runtime/bin/lib/init.mjs";
+import { accountLabel, inspectProject, run as runInit } from "../../runtime/bin/lib/init.mjs";
 import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
 import { c, interactive, out, printChange, stopOnEnter, sym } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
@@ -191,6 +191,8 @@ export async function addRuntime(state, o = {}) {
     const { cmd, args } = runtimeArgs(state, o);
     const code = cmd === "connect" ? await runLogin("connect", args) : await runInit("init", args);
     if (code !== 0) return "failed";
+    // init returns 0 when the person says no to its change: then there is no GenClass to add Vite settings for
+    if (inspectProject({ cwd: state.cwd }).fresh) return "skipped";
   }
   return (await addViteSettings(state, o)) === "failed" ? "failed" : "done";
 }
@@ -239,7 +241,10 @@ export async function addViteSettings(state, o = {}) {
 /** Waits (up to `seconds`) for genclass.dev to have received a first event from this app. */
 export async function watchFirstPage(state, o = {}) {
   const creds = readCredentials();
-  if (!creds || !state.app.token) return "skipped";
+  if (!creds || !state.app.token) {
+    note(!creds ? "Sign in first: npx genclass login. The first page is looked for in your account." : "Put this app in your account first: npx genclass connect");
+    return "skipped";
+  }
   if (!o.yes && interactive()) {
     const ok = await agree("Is your site deployed with GenClass in it? I will watch for its first page for two minutes", false);
     if (!ok) {
@@ -340,7 +345,10 @@ async function waitForGithub(creds, repo, text, until, seconds) {
 export async function connectGithubApp(state, o = {}) {
   const creds = readCredentials();
   const repo = state.git.github;
-  if (!creds || !repo) return "skipped";
+  if (!creds || !repo) {
+    note(!creds ? "Sign in first: npx genclass login. The GitHub App is connected to your account." : "This folder is not a repository on GitHub, so there is nothing to connect.");
+    return "skipped";
+  }
   // a genclass.dev with no GitHub App (a collector someone hosts themselves): nothing to connect, and no waiting
   if (state.account?.github && state.account.github.app === false) {
     note("This genclass.dev has no GitHub App, so there is nothing to connect here.");

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **`init`/`connect` recognise more existing setups:** `@genclass/nuxt` and `@genclass/astro` in a config, and the
+  key of a hand-written setup (`bin/lib/init.mjs` `inspectProject`). `connect --yes` refuses to replace a key that is
+  none of the account's apps unless `--app` or `--name` says which (`bin/lib/login.mjs`). Run by a host CLI
+  (`genclass`) they leave the developer overlay out and use its name in help, errors and hints.
+
 - **`init` and `connect`: an app the account's plan has no room for points at an app it has.** When creating the
   app's token fails because of the plan's app limit, the hint was "run login again, then connect", which hits the
   same limit. It now says to pick one of the account's apps with `connect`, or make room on the account page

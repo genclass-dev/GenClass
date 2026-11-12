@@ -76,7 +76,7 @@ export async function ask(o = {}, deps = {}) {
     }
     return 2;
   }
-  const picked = await pickApp(o, deps, "ask");
+  const picked = await pickApp(o, deps, `ask "${question.replace(/["\\$`]/g, "")}"`);
   if ("code" in picked) return picked.code;
   const { state, creds, target } = picked;
   const range = ["24h", "7d", "30d", "90d", "1y"].includes(o.range) ? o.range : "7d";
