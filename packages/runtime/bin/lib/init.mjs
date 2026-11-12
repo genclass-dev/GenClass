@@ -20,7 +20,7 @@ import { createAccountProject, readCredentials } from "./account.mjs";
 import { hostConfig, hostUrl } from "./host.mjs";
 import { LOCAL_FILE, PENDING_TOKEN, START_URL, TOKEN_RE, createProject, readLocal, saveLocal, tokenInFiles } from "./token.mjs";
 import { banner, c, confirm, err, interactive, out, printChange, row, sym } from "./ui.mjs";
-import { CMD, PKG, PKG_DIR, VERSION, compareVersions, distTags, installedVersion, versionInSpec, versionStatus } from "./version.mjs";
+import { CMD, HOST_CLI, PKG, PKG_DIR, VERSION, compareVersions, distTags, installedVersion, versionInSpec, versionStatus } from "./version.mjs";
 
 const MODES = ["observe", "guard", "heal"];
 
@@ -107,6 +107,7 @@ const BOOL = {
   telemetry: "telemetry",
   "no-token": "noToken",
   "in-account": "inAccount",
+  brief: "brief",
   help: "help",
   h: "help",
 };
@@ -340,7 +341,8 @@ function printMoneyAdvice(money, cfgFile) {
 }
 
 /** The scan command (cli-scan): a headless pass of the measured checks over a URL. */
-export const SCAN_CMD = "npx @genclass/runtime@beta scan <url>";
+// inside the `genclass` command it is that command's own scan
+export const SCAN_CMD = HOST_CLI ? `${CMD} scan <url>` : "npx @genclass/runtime@beta scan <url>";
 
 /** One sentence when the project looks mostly static (issue 94): GenClass has little to find there. */
 function printLittleToWatch(kind) {
@@ -399,6 +401,20 @@ function telemetryNotice(cfg, where) {
   out(`             Anonymous counts and decisions go to GenClass's maintainers: no page text, cookies or IP`);
   out(`             addresses, never from localhost. Off: ${c.cyan(`${CMD} init --no-telemetry`)}`);
   out(`             What is sent: ${TELEMETRY_URL} · Privacy: ${PRIVACY_URL}`);
+}
+
+/**
+ * The same disclosure in two lines, for --brief (the `genclass` command's walk): that it is on, what it holds, how to
+ * turn it off, where the list of what is sent is. Nothing is left out that telemetryNotice says.
+ */
+function briefTelemetry(cfg) {
+  if (cfg.telemetry === false) {
+    out(`  ${c.gray("Anonymous diagnostics are off (--no-telemetry).")}`);
+    return;
+  }
+  out(`  ${c.gray("Anonymous diagnostics are on: counts and decisions go to GenClass's maintainers, with no page text,")}`);
+  out(`  ${c.gray(`cookies or IP addresses, and never from localhost. Off: ${CMD} init --no-telemetry`)}`);
+  out(`  ${c.gray(`What is sent: ${TELEMETRY_URL}`)}`);
 }
 
 /** Where to put the self-hosted model: the folder the framework serves as-is. */
@@ -790,9 +806,12 @@ async function offerAccount(o, tk) {
 export async function init(o, ctx = {}) {
   actor = ctx.cmd ?? "init";
   const cwd = projectDir(o);
-  if (ctx.banner !== false) banner("init");
-  if (ctx.banner !== false) hostNotice();
-  if (ctx.banner !== false) await versionNotice(o);
+  // --brief: the `genclass` command's walk has printed its own header, host and version; the facts below come in
+  // a few lines instead of rows, and the ending is short. Every warning is still printed.
+  const brief = !!o.brief;
+  if (ctx.banner !== false && !brief) banner("init");
+  if (ctx.banner !== false && !brief) hostNotice();
+  if (ctx.banner !== false && !brief) await versionNotice(o);
   const project = detectProject(cwd);
   let cfg = withLocalDevice(configOf(o), project);
   if (project.refused) {
@@ -809,8 +828,10 @@ export async function init(o, ctx = {}) {
     manualHelp(project);
     return 1;
   }
-  row("Project", `${c.bold(project.name)} ${c.gray(`(${project.label}${project.ts ? ", TypeScript" : ""})`)}`);
-  if (project.pm) row("Packages", project.pm);
+  if (!brief) {
+    row("Project", `${c.bold(project.name)} ${c.gray(`(${project.label}${project.ts ? ", TypeScript" : ""})`)}`);
+    if (project.pm) row("Packages", project.pm);
+  }
 
   const files = walkSources(cwd);
   const marked = files.filter((f) => hasMarker(readText(f) ?? ""));
@@ -902,13 +923,21 @@ export async function init(o, ctx = {}) {
     manualHelp(project);
     return 1;
   }
-  row("Entry", posix(relative(cwd, plan.entry)));
-  row("Mode", `${o.mode ?? "observe"}${o.mode ? "" : c.gray(" (default: reports only, never changes anything; --mode guard lets it act)")}`);
+  if (!brief) {
+    row("Entry", posix(relative(cwd, plan.entry)));
+    row("Mode", `${o.mode ?? "observe"}${o.mode ? "" : c.gray(" (default: reports only, never changes anything; --mode guard lets it act)")}`);
+  }
   const cfgAtOf = (changes, config) => changes.find((ch) => /genclass\.config\.[cm]?[jt]s$/.test(ch.file))?.rel ?? (config.telemetry === false || config.sinks?.length ? changes[0]?.rel : null);
   let cfgAt = cfgAtOf(plan.changes, cfg);
-  telemetryNotice(cfg, cfgAt);
+  if (brief) {
+    out();
+    out(`  ${c.bold(project.name)} ${c.gray(`${sym.dot} ${project.label}${project.pm ? ` ${sym.dot} ${project.pm}` : ""} ${sym.dot} ${posix(relative(cwd, plan.entry))}`)}`);
+    out(`  Adds ${PKG} ${VERSION} in ${c.bold(o.mode ?? "observe")} mode${o.mode ? "" : ": it reports and never changes anything"}.`);
+    briefTelemetry(cfg);
+  } else telemetryNotice(cfg, cfgAt);
   if (!ctx.creds) tk = await offerAccount(o, tk);
-  tokenRow(tk);
+  if (brief && tk.pending && tk.account) out(`  ${c.gray(`The app goes into your account (${accountLabel(tk.account.account)}) as "${String(tk.name ?? "").slice(0, 80) || "unnamed"}".`)}`);
+  else tokenRow(tk);
   sinksNotice(cfg, cfgAt);
   cspAdvice(project, files, cfg);
   out();
@@ -976,6 +1005,15 @@ export async function init(o, ctx = {}) {
   }
 
   out();
+  // --brief, with the app in the person's account (no private link to show once): three lines, and the walk goes on
+  if (brief && (tk.created?.account || tk.app)) {
+    out(`  ${c.green(sym.ok)} ${c.bold("GenClass is in your app.")} ${c.gray(`(${changes.map((ch) => ch.rel).join(", ")})`)}`);
+    out(`  ${c.gray("What it finds shows in the browser console as [GenClass] lines, and on your dashboard once the site is deployed.")}`);
+    printMoneyAdvice(money, cfgAt);
+    out(`  ${c.gray(`Off for one page: ?genclass=off. Undo: ${CMD} remove`)}`);
+    out();
+    return 0;
+  }
   out(`  ${c.green(sym.ok)} ${c.bold("GenClass Runtime is set up.")} ${c.gray(`(${changes.map((ch) => ch.rel).join(", ")})`)}`);
   out();
   dashboardNotice(tk, cwd, true, false, saved);

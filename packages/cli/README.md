@@ -17,7 +17,7 @@ per step. Stop at any point and run it again: it continues from what is true now
   ╚██████╔╝███████╗██║ ╚████║╚██████╗███████╗██║  ██║███████║███████║
    ╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝
 
-  Finds what breaks in your web app, and tells you what it needs next.  v0.2.1
+  Finds what breaks in your web app, and tells you what it needs next.  v0.2.2
 
   GenClass • shop                                                Vite + React
   ada@example.com • Free plan
@@ -45,10 +45,11 @@ it, and `d` again to fold it back.
 | Dashboard | Waits for your live site to be opened once. GenClass sends nothing from localhost. | Nothing. |
 | Test workflow | Runs your Playwright tests once more per pull request with slow and reordered responses. | One new file, `.github/workflows/genclass.yml`, which you commit. |
 | GitHub App | Comments on a pull request when a page ends up wrong, with the steps to see it. The command opens GitHub's install page and waits for the answer. | Nothing in your project. The app cannot read or change your code. |
-| Coding agent | Gives Claude Code, Cursor and other agents GenClass's tools: ask what went wrong, replay it, check the fix. | `.mcp.json` (or `.cursor/mcp.json`). |
+| Coding agent | Gives Claude Code, Cursor and other agents GenClass's tools and its skill: ask what went wrong, replay it, check the fix. | `.mcp.json` (or `.cursor/mcp.json`) and `.claude/skills/genclass/SKILL.md`. |
 | Suggestions | Tells you what your app is missing, most important first. | Nothing in your project. |
 
-On a terminal, Enter starts a step and is the yes for what its sentence says it writes. A part that does not apply
+On a terminal, Enter starts a step and is the yes for what its sentence says it writes. While a step waits for you
+in the browser (the sign-in, GitHub), Enter stops the wait and the walk goes on. A part that does not apply
 is left out and says why: no Playwright tests, not a GitHub repository, not a web app.
 
 ## Your app in the terminal

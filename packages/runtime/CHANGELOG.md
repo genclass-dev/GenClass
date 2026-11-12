@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **`init --brief`**: the same facts in a few lines and a short ending, for a caller that has printed its own header
+  (the `genclass` command's walk, `genclass` 0.2.2). The change is still shown in full, and the telemetry notice
+  keeps its switch and its link. Without the flag `init` prints what it printed before.
+- **`ui.mjs` `stopOnEnter()`**: lets a wait be stopped with Enter (used by the `genclass` command).
 - **`init --in-account`**: a signed-in developer's new app goes into their account without the question
   (`bin/lib/init.mjs`). The `genclass` command passes it when the person signed in one step earlier
   (`genclass` 0.2.0). Without the flag `init` asks as before.

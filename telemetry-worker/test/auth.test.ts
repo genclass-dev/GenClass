@@ -539,6 +539,16 @@ describe("accounts: device flow for the CLI (RFC 8628)", () => {
     expect(page.indexOf("Approve only a sign-in you started")).toBeLessThan(page.indexOf('id="yes"'));
     expect(page).toContain("show your apps' dashboards");
     expect(page).toContain("It cannot change how you sign in.");
+    // the page names the command that asked: the runtime CLI's login here, `npx genclass` for the genclass command
+    expect(page).toContain("If you did not run <code>npx @genclass/runtime@beta login</code> yourself just now");
+    const cli = (await (await call(env, "POST", "/api/device/code", { body: { client_name: "genclass 0.2.2" }, origin: null })).json()) as any;
+    const cliPage = await (await call(env, "GET", `/login/device?code=${cli.user_code}`, { cookie })).text();
+    expect(cliPage).toContain("genclass 0.2.2");
+    expect(cliPage).toContain("If you did not run <code>npx genclass</code> yourself just now");
+    expect(cliPage).not.toContain("runtime@beta login");
+    // a name that is neither is never shown
+    const odd = (await (await call(env, "POST", "/api/device/code", { body: { client_name: "genclass 0.2.2 <b>trust me</b>" }, origin: null })).json()) as any;
+    expect(await (await call(env, "GET", `/login/device?code=${odd.user_code}`, { cookie })).text()).toContain("Unknown client");
 
     const ap = await call(env, "POST", "/api/device/approve", { body: { user_code: code.user_code.replace("-", " ").toLowerCase(), approve: true }, cookie });
     expect(ap.status).toBe(200);
