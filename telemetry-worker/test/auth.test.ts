@@ -1162,7 +1162,7 @@ describe("accounts: GitHub and Google first, an email and a password always; cre
     expect(page).toContain('<section class="blk" id="security">');
     expect(page).toContain("<b>Passkey at sign-in: off.</b>");
     expect(page).toContain('id="addpk"');
-    expect(page).toContain('Lost all your passkeys? Email <a href="mailto:mehar@daybot.ca?subject=GenClass%20passkeys">mehar@daybot.ca</a>.');
+    expect(page).toContain('Lost all your passkeys? Email <a href="mailto:mehar@genclass.dev?subject=GenClass%20passkeys">mehar@genclass.dev</a>.');
     expect(page.indexOf("<td>Google</td>")).toBeLessThan(page.indexOf('id="addpk"'));
     // a password: not set, with its form ready for the account's email
     expect(page).toContain('<tr><td>Password</td><td><span class="muted">Not set</span></td>');
@@ -2583,7 +2583,7 @@ describe("accounts: a forgotten password", () => {
     const html = await r.text();
     expect(html).toContain("<h1>Forgot your password?</h1>");
     expect(html).toContain("GenClass cannot email you a reset link yet.");
-    expect(html).toContain('href="mailto:mehar@daybot.ca?subject=GenClass%20password"');
+    expect(html).toContain('href="mailto:mehar@genclass.dev?subject=GenClass%20password"');
     expect(html).toContain("from the address you sign in with");
     expect(html).not.toMatch(/ style="/);
     expect(resetSender(env)).toBeNull();

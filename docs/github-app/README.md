@@ -320,7 +320,7 @@ Uninstalling the app, or taking a repository out of it, deletes what was kept fo
 - **Whose plan counts.** The plan that counts for an installation's private repositories is the plan of the GenClass
   account that manages it. An installation on your own GitHub account is managed by the GenClass account you choose
   Connect GitHub from. For an organization, the managing account is set when the plan is agreed: write to
-  mehar@daybot.ca. Being able to push to a repository does not make an account the manager of its installation.
+  mehar@genclass.dev. Being able to push to a repository does not make an account the manager of its installation.
   <https://genclass.dev/account/github> shows for each installation whether your account, another account or no
   account manages it.
 

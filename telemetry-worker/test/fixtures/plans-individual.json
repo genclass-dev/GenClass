@@ -2,9 +2,9 @@
   "_about": "Test fixture, not GenClass's plans: billing/plans.json as it was on 2026-10-21 (Free; Individual at US$29 a month on Stripe Checkout, a classifier a person from GenClass trains; Enterprise by email and by GenClass's own grant). The tests of selling one paid plan (test/one-paid.test.ts: Checkout, the billing page's Upgrade button, a purchase a person follows up) and of scripts/stripe-setup.mjs (through GENCLASS_PLANS_FILE) load it in place of billing/plans.json, so they keep exercising code the real plans no longer reach. The real plans are checked in test/plans.test.ts.",
   "version": 2,
   "currency": "usd",
-  "contact": "mehar@daybot.ca",
+  "contact": "mehar@genclass.dev",
   "grant_plan": "enterprise",
-  "footer": "Questions about Enterprise, self-hosting or invoices? Email mehar@daybot.ca.",
+  "footer": "Questions about Enterprise, self-hosting or invoices? Email mehar@genclass.dev.",
   "plans": [
     {
       "id": "free",
@@ -44,7 +44,7 @@
         { "text": "Your own classifier: we train a GenClass model on your app's traffic, bug reports or labelled examples and ship it as a private model your runtime loads", "available": true },
         { "text": "A person from GenClass emails you within 1 business day of purchase to start", "available": true },
         { "text": "1 year of dashboard history", "available": true },
-        { "text": "Email support from mehar@daybot.ca", "available": true }
+        { "text": "Email support from mehar@genclass.dev", "available": true }
       ]
     },
     {

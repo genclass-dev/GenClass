@@ -9,7 +9,7 @@ available yet).
 
 ## Who we are
 
-GenClass is maintained by Daybot Solutions Inc. ("we"). Contact: mehar@daybot.ca.
+GenClass is maintained by Daybot Solutions Inc. ("we"). Contact: mehar@genclass.dev.
 
 ## What we collect
 
@@ -235,7 +235,7 @@ the GitHub App stores is kept in the same Cloudflare account, for the times give
 Because we do not keep IP addresses, and the diagnostics are not tied to any account, we usually cannot tell which
 diagnostics came from you. For a genclass.dev account, we can show or delete everything listed under "Accounts on
 genclass.dev". If you have a
-question or request (access, deletion or objection), contact mehar@daybot.ca and we will do what we can. You
+question or request (access, deletion or objection), contact mehar@genclass.dev and we will do what we can. You
 can also contact your local data protection authority.
 
 ## For developers using GenClass
