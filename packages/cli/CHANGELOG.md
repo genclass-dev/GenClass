@@ -6,7 +6,8 @@ For onboarding paying customers:
 
 - **Every app chooses its plan on a page.** Once the app is in the account, the setup opens the app's plan page in
   the browser: Team large, with its price and a Start button, and a very small "Try for free (limited)" under it.
-  The terminal shows the same card and waits for the choice made there (a payment, or Free for now). Plans are per
+  Free asks what is stopping them from paying first. The terminal shows the same card and waits for the choice made
+  there; the setup goes on only once the app has its plan. Plans are per
   app now: Team is $15 a project a month with the whole team on it, Free covers 3 apps and 100 problems fixed live a
   month per app. A fourth app has only Team. Before, the plan was a card in the terminal only, and a setup run
   without a keyboard (`--yes`, a coding agent) chose Free without showing anything.

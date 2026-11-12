@@ -150,7 +150,8 @@ export async function checkout(offer, o = {}, deps = {}) {
  * its price and what it has, and a very small "Try for free (limited)" under it (none for an app past the ones Free
  * covers). The command opens the page and waits for the choice made there: a payment, or Free for now. Without a
  * terminal (--yes, a coding agent) it opens the page and goes on, and the step stays open until the choice is made.
- * Returns "done" once the app has its plan, else "skipped".
+ * Returns "done" once the app has its plan; "quit" when the wait ended without a choice (the setup stops there);
+ * "skipped" without a terminal.
  * @param {{ plan: { name: string }, price: string, free: { name: string, apps: number | null }, checkoutUrl: string, project: { id: string, name: string, token: string }, needs: boolean }} offer
  */
 export async function projectPlan(offer, o = {}, deps = {}) {
@@ -164,8 +165,10 @@ export async function projectPlan(offer, o = {}, deps = {}) {
   }
   const got = await waitForPlan(offer, o, deps);
   if (got) return "done";
-  note(offer.needs ? `${name} waits for its plan: ${offer.checkoutUrl}` : `${name} goes on with ${offer.free.name} for now. Its plan, any time: ${offer.checkoutUrl}`);
-  return "skipped";
+  // the setup goes on only once the app has its plan: Team, or Free with what stops the person from paying (the
+  // owner's call, 2026-11-12)
+  note(`The setup goes on once ${name} has its plan: ${offer.needs ? offer.plan.name : `${offer.plan.name}, or ${offer.free.name} for now`}, on ${offer.checkoutUrl}`);
+  return "quit";
 }
 
 /**
