@@ -10,30 +10,35 @@ Run it in your web app's folder. It shows where the project stands and walks you
 per step. Stop at any point and run it again: it continues from what is true now.
 
 ```text
-   ██████╗ ███████╗███╗   ██╗ ██████╗██╗      █████╗ ███████╗███████╗
-  ██╔════╝ ██╔════╝████╗  ██║██╔════╝██║     ██╔══██╗██╔════╝██╔════╝
-  ██║  ███╗█████╗  ██╔██╗ ██║██║     ██║     ███████║███████╗███████╗
-  ██║   ██║██╔══╝  ██║╚██╗██║██║     ██║     ██╔══██║╚════██║╚════██║
-  ╚██████╔╝███████╗██║ ╚████║╚██████╗███████╗██║  ██║███████║███████║
-   ╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝
+  ╭─ GenClass ────────────────────────────────────────────── v0.2.3 ─╮
+  │                                                                  │
+  │                        Welcome back, Ada!                        │
+  │                                                                  │
+  │                             ▄▄████▄▄                             │
+  │                            ██▀    ▀▀                             │
+  │                            ██   ▄▄▄▄                             │
+  │                            ██▄    ██                             │
+  │                             ▀▀████▀▀                             │
+  │                                                                  │
+  │                       shop • Vite + React                        │
+  │                   ada@example.com • Free plan                    │
+  │                           ~/code/shop                            │
+  │                                                                  │
+  ╰──────────────────────────────────────────────────────────────────╯
 
-  Finds what breaks in your web app, and tells you what it needs next.  v0.2.3
-
-  GenClass • shop                                                Vite + React
-  ada@example.com • Free plan
-  ────────────────────────────────────────────────────────────────────────────
   ✔  Done     Account • Runtime
   ●  Next     Add the test workflow
   ◌  Waiting  Dashboard: deploy, then open your site once
   ○  Later    GitHub App • Coding agent • Suggestions
 
-  Next  Add the test workflow
-        One new file, .github/workflows/genclass.yml. Your tests are not changed.
+  ▎ Next  Add the test workflow
+  ▎ One new file, .github/workflows/genclass.yml. Your tests are not changed.
 
-        Enter to continue, d for every part, s to skip, q to stop
+  ────────────────────────────────────────────────────────────────────
+  ❯ Enter to continue · d every part · s skip · q stop
 ```
 
-The view stays that short. Press `d` (or run `genclass status --all`) to see every part with what is known about
+The view stays that short. Press `d` (or run `npx genclass status --all`) to see every part with what is known about
 it, and `d` again to fold it back.
 
 ## Every part, in order
@@ -83,7 +88,7 @@ suggestions run left to do.
   Visitors       312 visits · 1,020 page views · 41% left after one page
   Coding agent   5 found · 3 reproduced · 2 fixed · 1 with a test
   GitHub App     reviewing · 4 pull requests so far
-  Suggestions    7 to do, 2 urgent · checked 2 days ago · genclass suggest
+  Suggestions    7 to do, 2 urgent · checked 2 days ago · npx genclass suggest
 ```
 
 `--range 24h`, `7d` or `30d` picks the period, `--all` shows every row, `--app <name>` another app of your account,
@@ -122,16 +127,18 @@ prompt) is shown for the first three items on Free and for all of them on Team, 
 
 ## Commands
 
+`npx` runs the command without installing it. To type just `genclass`, install it once: `npm install -g genclass`.
+
 | | |
 |---|---|
-| `genclass` | where the project stands; on a terminal, the next step |
-| `genclass setup` | the guided setup (`--yes`: no questions) |
-| `genclass status` | what is done and what is next (`--all`: every part; `--json`) |
-| `genclass suggest [url]` | what your app is missing (`--json`, `--yes`, `--no-model`, `--all`) |
-| `genclass dashboard` | your app in the terminal (`--range`, `--all`, `--app`, `--open`, `--json`) |
-| `genclass scan <url>` | 23 visual checks on one page |
-| `genclass login`, `logout`, `whoami` | your account |
-| `genclass remove` | take GenClass out of the app again |
+| `npx genclass` | where the project stands; on a terminal, the next step |
+| `npx genclass setup` | the guided setup (`--yes`: no questions) |
+| `npx genclass status` | what is done and what is next (`--all`: every part; `--json`) |
+| `npx genclass suggest [url]` | what your app is missing (`--json`, `--yes`, `--no-model`, `--all`) |
+| `npx genclass dashboard` | your app in the terminal (`--range`, `--all`, `--app`, `--open`, `--json`) |
+| `npx genclass scan <url>` | 23 visual checks on one page |
+| `npx genclass login`, `logout`, `whoami` | your account |
+| `npx genclass remove` | take GenClass out of the app again |
 
 Options everywhere: `--cwd <dir>`, `--yes`, `--json`, `--no-browser`.
 

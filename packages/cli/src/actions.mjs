@@ -85,11 +85,11 @@ export async function signIn(o = {}) {
   const r = await pollDeviceLogin(dev, { signal: stop.signal });
   await stop.done();
   if (!r.ok && r.error === "cancelled") {
-    sp.stop("warn", "Stopped waiting. Nothing was signed in; run genclass again when you want to.");
+    sp.stop("warn", "Stopped waiting. Nothing was signed in; run npx genclass again when you want to.");
     return "skipped";
   }
   if (!r.ok) {
-    sp.stop("bad", r.error === "access_denied" ? "The sign-in was denied in the browser." : r.error === "expired_token" ? "The code expired before it was approved. Run genclass again for a new one." : `The sign-in did not finish: ${r.reason}`);
+    sp.stop("bad", r.error === "access_denied" ? "The sign-in was denied in the browser." : r.error === "expired_token" ? "The code expired before it was approved. Run npx genclass again for a new one." : `The sign-in did not finish: ${r.reason}`);
     return "failed";
   }
   saveCredentials({ host: apiHost(), access_token: r.access_token, account: r.account });
@@ -106,7 +106,7 @@ export async function signIn(o = {}) {
  * to the browser console, the dashboard and `genclass dashboard`.
  */
 export function runtimeArgs(state, o = {}) {
-  const connect = state.steps.find((s) => s.id === "runtime")?.run === "genclass connect";
+  const connect = state.steps.find((s) => s.id === "runtime")?.run === "npx genclass connect";
   // signed in one step earlier, so the app goes into that account without asking again
   const args = ["--cwd", state.cwd, ...(o.yes ? ["--yes"] : []), ...(state.signedIn ? ["--in-account"] : [])];
   // --brief: the walk has its own header, so init says the same things in a few lines
@@ -147,7 +147,7 @@ export async function watchFirstPage(state, o = {}) {
     }
   }
   await stop.done();
-  sp.stop("warn", "Nothing arrived yet. GenClass sends nothing from localhost or a private address; run genclass again after the live site was opened.");
+  sp.stop("warn", "Nothing arrived yet. GenClass sends nothing from localhost or a private address; run npx genclass again after the live site was opened.");
   return "skipped";
 }
 
@@ -179,7 +179,7 @@ export async function addWorkflow(state, o = {}) {
   const file = join(root, WORKFLOW_PATH);
   if (!o.yes && !o.confirmed) {
     if (!interactive()) {
-      note(`Not a terminal: run ${c.cyan("genclass setup --yes")} to write ${WORKFLOW_PATH}.`);
+      note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write ${WORKFLOW_PATH}.`);
       return "skipped";
     }
     if (!(await agree(`Write ${WORKFLOW_PATH}?`))) return "skipped";
@@ -259,7 +259,7 @@ export async function connectGithubApp(state, o = {}) {
       return "done";
     }
     if (!st.ok || !st.known) {
-      warn(`No answer yet. Make sure the browser is signed in to the same GenClass account as this command, then run genclass again.`);
+      warn(`No answer yet. Make sure the browser is signed in to the same GenClass account as this command, then run npx genclass again.`);
       return "skipped";
     }
   }
@@ -349,7 +349,7 @@ export async function connectAgent(state, o = {}) {
     out();
     printChange(plan.change);
     if (!interactive()) {
-      note(`Not a terminal: run ${c.cyan("genclass setup --yes")} to write it.`);
+      note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write it.`);
       return "skipped";
     }
     if (!(await agree("Write this change?"))) return "skipped";

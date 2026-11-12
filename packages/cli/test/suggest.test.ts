@@ -185,7 +185,7 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     const out = await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true }, deps(w)));
     expect(out).toContain("The plan is written for your app.");
     expect(out.match(/^ {6}Ask your agent$/gm)).toHaveLength(5);
-    expect(out).toContain("genclass suggest --all");
+    expect(out).toContain("npx genclass suggest --all");
     expect(out).not.toContain("come with the Team plan");
     const all = await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true, all: true }, deps(w)));
     expect(all.match(/^ {6}Ask your agent$/gm)).toHaveLength(j.failed.length);
@@ -197,7 +197,7 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     const w = world(env);
     const out = await printed(async () => suggest({ cwd: dir, url: "https://shop.example" }, deps(w)));
     expect(w.toGenclass()).toEqual([]);
-    expect(out).toContain("genclass login");
+    expect(out).toContain("npx genclass login");
     // signed in, no --yes, no terminal: asking is impossible, so it is not sent
     await account(env);
     const w2 = world(env);

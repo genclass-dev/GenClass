@@ -15,8 +15,9 @@
 //   says why and never blocks the ones after it.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
+import { detectProject } from "../../runtime/bin/lib/detect.mjs";
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { accountLabel, inspectProject } from "../../runtime/bin/lib/init.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
@@ -65,6 +66,48 @@ export function genclassWorkflows(root) {
 export function hasPlaywright(cwd, project) {
   if (project?.has?.("@playwright/test") || project?.has?.("playwright")) return true;
   return ["ts", "js", "mjs", "cjs", "mts"].some((e) => existsSync(join(cwd, `playwright.config.${e}`)));
+}
+
+const NOT_APPS = new Set(["node_modules", "dist", "build", "out", "coverage", "vendor", "tmp", "target"]);
+
+/**
+ * The web apps below `dir`, for a folder that is not one itself (a monorepo's root, the folder above the app):
+ * `{ apps: [{ dir, label }], more }`, `dir` relative with forward slashes, in name order. Bounded: three folders
+ * deep, at most `max` apps named (the rest counted in `more`) out of at most 400 folders read; hidden folders, build
+ * output and the inside of an app are not looked at. Only reads package.json files and what the detector reads.
+ */
+export function appsBelow(dir, max = 8) {
+  const apps = [];
+  let more = 0;
+  let seen = 0;
+  const walk = (abs, rel, depth) => {
+    let names = [];
+    try {
+      names = readdirSync(abs, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && !d.name.startsWith(".") && !NOT_APPS.has(d.name))
+        .map((d) => d.name)
+        .sort();
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (++seen > 400) return;
+      const at = join(abs, name);
+      const here = rel ? `${rel}/${name}` : name;
+      let p = null;
+      try {
+        p = existsSync(join(at, "package.json")) ? detectProject(at) : null;
+      } catch {
+        p = null;
+      }
+      if (p && !p.refused && p.framework) {
+        if (apps.length < max) apps.push({ dir: here, label: p.label || String(p.framework) });
+        else more++;
+      } else if (depth < 3) walk(at, here, depth + 1);
+    }
+  };
+  walk(resolve(dir), "", 1);
+  return { apps, more };
 }
 
 /** The MCP configuration files that name GenClass's server, relative to `dir`. */
@@ -119,7 +162,7 @@ export async function readState(o = {}, deps = {}) {
             : "",
     why: "Opens genclass.dev in your browser. You approve a short code there.",
     more: "Your account is where your apps, their dashboards and your plan live. Nothing is typed in the terminal.",
-    run: "genclass login",
+    run: "npx genclass login",
     human: "approve the sign-in in your browser",
   });
 
@@ -141,7 +184,7 @@ export async function readState(o = {}, deps = {}) {
             : `${st.handWritten ? "added by hand" : "added"}${app ? ` · app "${app.name}"` : ""}`,
     why: st.fresh ? "One import and the package. You see the change first. Nothing is drawn on your pages." : "Gives the app its place in your account, so what it finds shows on your dashboard.",
     more: "The runtime watches the page in your users' browsers for lost edits, double submits and old data shown over new. It only reports, to the browser console and your dashboard: it never holds, delays or changes anything your app does, and it puts nothing on the page.",
-    run: st.fresh ? "genclass init" : "genclass connect",
+    run: st.fresh ? "npx genclass init" : "npx genclass connect",
     human: null,
   });
 
@@ -153,7 +196,7 @@ export async function readState(o = {}, deps = {}) {
     state: !isApp ? "optional" : app?.last_event ? "done" : app ? "waiting" : "todo",
     detail: !isApp ? "" : app?.last_event ? `last page ${ago(app.last_event, now)}` : app ? "deploy, then open your site once" : "",
     why: "It fills once your live site has been opened.",
-    more: "GenClass sends nothing from localhost, so the dashboard starts with your deployed site. Deploy as you normally do, open the site, and run genclass again.",
+    more: "GenClass sends nothing from localhost, so the dashboard starts with your deployed site. Deploy as you normally do, open the site, and run npx genclass again.",
     run: null,
     human: "deploy your app and open the live site once",
   });
@@ -173,12 +216,12 @@ export async function readState(o = {}, deps = {}) {
     ...wf,
     why: `One new file, ${WORKFLOW_PATH}. Your tests are not changed.`,
     more: "On each pull request it runs your Playwright tests once more with slow and reordered responses, in a job of its own that is allowed to fail, and uploads small race files. It needs no secret.",
-    run: "genclass setup",
+    run: "npx genclass setup",
     human: null,
   });
 
   // 5. the GitHub App
-  const gh = { state: /** @type {StepState} */ ("todo"), detail: "", run: /** @type {string | null} */ ("genclass setup"), human: /** @type {string | null} */ (null) };
+  const gh = { state: /** @type {StepState} */ ("todo"), detail: "", run: /** @type {string | null} */ ("npx genclass setup"), human: /** @type {string | null} */ (null) };
   if (!isApp || !git.github) Object.assign(gh, { state: "optional", detail: !isApp ? "" : git.repo ? "the repository is not on GitHub" : "not a git repository yet" });
   // a genclass.dev with no GitHub App (a collector someone hosts themselves): nothing to connect
   else if (me?.github && me.github.app === false) Object.assign(gh, { state: "optional", detail: "this genclass.dev has no GitHub App" });
@@ -211,7 +254,7 @@ export async function readState(o = {}, deps = {}) {
     detail: agents.length ? agents.join(", ") : "",
     why: "Adds GenClass's tools and its skill to Claude Code, Cursor and other agents in this project.",
     more: "It adds GenClass's MCP server to the project's agent configuration (.mcp.json) and the skill that tells the agent how to use it (.claude/skills/genclass/SKILL.md). The server runs on your machine and lets an agent ask what went wrong on a page, replay it and check its fix.",
-    run: "genclass setup",
+    run: "npx genclass setup",
     human: null,
   });
 
@@ -227,8 +270,8 @@ export async function readState(o = {}, deps = {}) {
     detail: !s ? "" : s.failed ? `${s.failed} to do${s.urgent ? `, ${s.urgent} urgent` : ""} · checked ${ago(s.at, now)}` : `nothing to do · checked ${ago(s.at, now)}`,
     why: "Checks your repository and your live site, and tells you what to do first.",
     more: "It measures what a launched app needs (search engines and AI assistants can read it, payments are live, secrets are safe, people can see the price) and explains each thing in plain words, with a prompt for your coding agent.",
-    run: "genclass suggest",
-    human: s?.failed ? "work through the list: genclass suggest" : null,
+    run: "npx genclass suggest",
+    human: s?.failed ? "work through the list: npx genclass suggest" : null,
   });
 
   const next = steps.find((x) => x.state === "todo" && !(o.skip ?? []).includes(x.id)) ?? null;
@@ -236,7 +279,7 @@ export async function readState(o = {}, deps = {}) {
   return {
     cwd,
     host: host.overridden && !host.error ? host.host : null,
-    app: { name: app?.name ?? project.name ?? null, framework: project.label || null, isApp, token: st.token ?? null, dashboardUrl: app?.dashboard_url ?? st.local?.dashboardUrl ?? null, site: notes.site ?? null },
+    app: { name: app?.name ?? project.name ?? null, framework: project.label || null, isApp, token: st.token ?? null, dashboardUrl: app?.dashboard_url ?? st.local?.dashboardUrl ?? null, site: notes.site ?? null, ...(isApp ? {} : { below: appsBelow(cwd) }) },
     account: me ? { label: accountLabel(me.account), plan: me.plan, suggestions: me.suggestions, billingUrl: me.billingUrl, github: me.github } : null,
     signedIn: !!me,
     /** the account's apps as genclass.dev lists them ([] signed out) */

@@ -134,6 +134,39 @@ describe("scan: report pieces (bin/lib/scan.mjs)", () => {
     expect(text).toContain("ran remotely on the genclass.dev page check");
     expect(text).toContain("Score 41/100");
     expect(text).toContain("Top issues");
+    // a score over part of the check says so, next to the number, and names what was measured
+    expect(r.partial).toEqual({ measured: 1, of: 2, labels: ["Visual bugs"], timedOut: false });
+    expect(text).toContain("Score 41/100 over 1 of 2 parts");
+    expect(text).toContain("the score covers Visual bugs only");
+    expect(text).toContain("scan https://example.com/ --local");
+    // a person reads the full report on genclass.dev; another host's check keeps its own address
+    expect(hostedReport("https://example.com/", HOSTED_REPORT, "https://genclass-scan.mehar-144.workers.dev").fullReport).toBe("https://genclass.dev/scan?url=https%3A%2F%2Fexample.com%2F");
+    expect(r.fullReport).toBe("https://scan.example/scan?url=https%3A%2F%2Fexample.com%2F");
+  });
+
+  it("hostedReport(): a page the check ran out of time on, and one it measured whole", () => {
+    const all = { ...HOSTED_REPORT.score, categories: HOSTED_REPORT.score.categories.map((cat) => ({ ...cat, measured: true, value: 90 })) };
+    const whole = hostedReport("https://example.com/", { ...HOSTED_REPORT, findings: [], top: [], notMeasured: {}, score: { ...all, value: 100 } }, "https://scan.example");
+    expect(whole.partial).toBeNull();
+    const fine = formatReport(whole);
+    expect(fine).toContain("no problems found");
+    expect(fine).not.toContain("parts");
+    const none = { ...HOSTED_REPORT.score, value: 83, categories: [{ id: "visual", label: "Visual bugs", measured: false, value: null, count: 0 }, { id: "speed", label: "Speed", measured: true, value: 85, count: 0 }, { id: "security", label: "Security", measured: true, value: 88, count: 0 }] };
+    const slow = hostedReport("https://example.com/", { ...HOSTED_REPORT, findings: [], top: [], timedOut: true, score: none }, "https://scan.example");
+    expect(slow.partial).toEqual({ measured: 2, of: 3, labels: ["Speed", "Security"], timedOut: true });
+    const text = formatReport(slow);
+    expect(text).toContain("Score 83/100 over 2 of 3 parts");
+    expect(text).toContain("no problems in what was measured");
+    expect(text).not.toContain("no problems found");
+    expect(text).toContain("still loading when the page check's time ran out, so the score covers Speed and Security only");
+    // nothing measured at all: one sentence, not a table of dashes and a note per part
+    const dead = hostedReport("https://example.com/", { ...HOSTED_REPORT, views: [], findings: [], top: [], timedOut: true, notMeasured: { visual: "No view loaded.", speed: "No view loaded." }, score: { ...none, value: null, categories: none.categories.map((cat) => ({ ...cat, measured: false, value: null })) } }, "https://scan.example");
+    const empty = formatReport(dead);
+    expect(empty).toContain("no score");
+    expect(empty).toContain("nothing was measured");
+    expect(empty).toContain("so nothing could be scored");
+    expect(empty).not.toContain("not measured");
+    expect(empty).toContain("Full report: https://scan.example/scan?url=");
   });
 });
 

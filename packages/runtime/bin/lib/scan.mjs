@@ -24,7 +24,7 @@ import { createRequire } from "node:module";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { c, err, out, sym } from "./ui.mjs";
-import { HOST_CLI } from "./version.mjs";
+import { CMD, HOST_CLI } from "./version.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = resolve(HERE, "..", "..");
@@ -38,6 +38,8 @@ const VERSION = (() => {
 
 /** The hosted page check. GENCLASS_SCAN_HOSTED points the CLI at a test copy (tests use a local mock). */
 export const HOSTED = "https://genclass-scan.mehar-144.workers.dev";
+/** Where a person reads a hosted report: genclass.dev shows the page check's reports under its own name. */
+export const REPORT_PAGE = "https://genclass.dev/scan";
 /** The virtual same-origin path the runtime's dist/ is served on inside the scanned page. */
 export const RUNTIME_PATH = "/__genclass_scan__/";
 export const INSTALL_LINE = "npx playwright install chromium";
@@ -581,13 +583,26 @@ export function hostedReport(url, r, base) {
     views: (r.views || []).map((v) => ({ id: v.id, width: v.width, height: v.height, status: v.status ?? null, ok: !!v.ok, ms: v.ms ?? null, error: v.error ?? null })),
     findings,
     blocked: r.blocked ? r.blocked.message : null,
-    fullReport: `${base}/scan?url=${encodeURIComponent(url)}`,
+    fullReport: `${base === HOSTED ? REPORT_PAGE : `${base}/scan`}?url=${encodeURIComponent(url)}`,
     scannedAt: r.scannedAt || null,
+    // a score over part of the page check is said as one: how many parts were measured, and whether time ran out
+    partial: partialOf(r),
     notes,
   };
 }
 
+/** `{ measured, of, labels, timedOut }` when the hosted check could not measure every part of its score, else null. */
+function partialOf(r) {
+  const cats = Array.isArray(r.score?.categories) ? r.score.categories : [];
+  const done = cats.filter((cat) => cat.measured);
+  if (!cats.length || done.length === cats.length) return null;
+  return { measured: done.length, of: cats.length, labels: done.map((cat) => String(cat.label)), timedOut: r.timedOut === true };
+}
+
 // ---------------------------------------------------------------------------------------------- printing
+
+/** "a", "a and b", "a, b and c". */
+const list = (items) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
 
 const SEV_COLOR = { critical: c.red, high: c.red, serious: c.red, medium: c.yellow, moderate: c.yellow, low: c.gray, minor: c.gray };
 
@@ -604,10 +619,21 @@ export function formatReport(rep) {
   p();
   const n = rep.findings.length;
   const counts = SEVERITIES.filter((s) => rep.summary[s]).map((s) => `${rep.summary[s]} ${s}`).join(", ");
-  const score = rep.score.value === null ? "no score" : `${rep.ranAt === "local" ? "Visual score" : "Score"} ${c.bold(`${rep.score.value}/100`)}`;
-  p(`  ${score}  ${c.gray(sym.dot)}  ${n === 0 ? c.green(`${sym.ok} no problems found`) : `${n} problem${n === 1 ? "" : "s"} (${counts})`}`);
+  const part = rep.partial ?? null;
+  const score = rep.score.value === null ? "no score" : `${rep.ranAt === "local" ? "Visual score" : "Score"} ${c.bold(`${rep.score.value}/100`)}${part ? c.yellow(` over ${part.measured} of ${part.of} parts`) : ""}`;
+  // nothing found means something only when everything was looked at
+  const nothing = !!part && part.measured === 0;
+  const found = nothing ? "nothing was measured" : n === 0 ? (part ? `no problems in what was measured` : c.green(`${sym.ok} no problems found`)) : `${n} problem${n === 1 ? "" : "s"} (${counts})`;
+  p(`  ${score}  ${c.gray(sym.dot)}  ${found}`);
   if (rep.blocked) p(`  ${c.yellow(sym.warn)} ${rep.blocked}`);
-  if (rep.categories?.length) {
+  if (part && !rep.blocked) {
+    const why = part.timedOut ? "The page was still loading when the page check's time ran out" : "The page check could not finish every part on this page";
+    const what = part.measured ? `the score covers ${list(part.labels)} only` : "nothing could be scored";
+    p(`  ${c.yellow(sym.warn)} ${why}, so ${what}.`);
+    p(`    The visual checks can run on this computer instead, with no time limit: ${c.cyan(`${CMD} scan ${rep.url} --local`)}`);
+  }
+  // with nothing measured, eight lines of "not measured" and eight notes saying why add nothing to the sentence above
+  if (rep.categories?.length && !nothing) {
     p();
     for (const cat of rep.categories) p(`  ${cat.label.padEnd(20)} ${cat.measured ? String(cat.value).padStart(3) : "  -"}${cat.measured ? "" : c.gray("  not measured")}`);
   }
@@ -632,9 +658,10 @@ export function formatReport(rep) {
     if (msg && msg !== f.target) p(`      ${indent(msg)}`);
     if (f.fix) p(`      ${c.green("fix:")} ${indent(f.fix)}${f.fixNote ? c.gray(`  (${f.fixNote})`) : ""}`);
   }
-  if (rep.notes?.length) {
+  const notes = (rep.notes ?? []).filter((note) => !(nothing && / not measured: /.test(note)));
+  if (notes.length) {
     p();
-    for (const note of rep.notes) p(c.gray(`  note: ${note}`));
+    for (const note of notes) p(c.gray(`  note: ${note}`));
   }
   p();
   if (rep.ranAt === "local") p(c.gray(`  Score: ${rep.score.basis}. Accessibility, speed and security too: add --hosted.`));
@@ -719,7 +746,8 @@ export async function run(cmd, argv) {
   if (o.json) out(JSON.stringify(rep, null, 2));
   else out(formatReport(rep));
   if (rep.blocked || !rep.views.some((v) => v.ok)) {
-    if (!o.json) err(`${NAME} ${cmd}: nothing was measured${rep.blocked ? "" : `: ${rep.views.map((v) => v.error).filter(Boolean)[0] || "the page did not load"}`}`);
+    const why = rep.views.map((v) => v.error).filter(Boolean)[0] || (rep.partial?.timedOut ? "the page did not finish loading within the page check's time" : "the page did not load");
+    if (!o.json) err(`${NAME} ${cmd}: nothing was measured${rep.blocked ? "" : `: ${why}`}`);
     return 2;
   }
   return rep.findings.length ? 1 : 0;

@@ -65,7 +65,7 @@ function table(title, list, shown, describe) {
     const room = width() - 4 - wCount - wKind - wPage - 8;
     out(`${left}${what && room > 16 ? `  ${c.gray(clean(what, room))}` : ""}`.trimEnd());
   }
-  if (list.length > shown) out(`    ${c.gray(`and ${n(list.length - shown)} more: genclass dashboard --all`)}`);
+  if (list.length > shown) out(`    ${c.gray(`and ${n(list.length - shown)} more: npx genclass dashboard --all`)}`);
 }
 
 /** The app's numbers as the lines of the view. Exported for the tests: pure, prints with out(). */
@@ -81,7 +81,7 @@ export function render(app, state, o = {}) {
 
   if (!t.visits && !t.found && !t.checks) {
     out();
-    note(app.lastEvent ? "Nothing in this period. Try a longer one: genclass dashboard --range 30d" : "Nothing received yet. GenClass sends nothing from localhost: deploy your app, open the live site once, and run this again.");
+    note(app.lastEvent ? "Nothing in this period. Try a longer one: npx genclass dashboard --range 30d" : "Nothing received yet. GenClass sends nothing from localhost: deploy your app, open the live site once, and run this again.");
   } else if (!t.found && !t.checks) {
     out();
     out(`  ${c.green(sym.ok)} No problems found in this period.`);
@@ -106,14 +106,14 @@ export function render(app, state, o = {}) {
   } else if (app.visitorsPlan) part("Visitors", c.gray(`visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Team", 20)} plan${app.visitorsPlan.upgradeUrl ? `: ${app.visitorsPlan.upgradeUrl}` : ""}`));
   const a = app.agent;
   const agentStep = state?.steps?.find((s) => s.id === "agent");
-  part("Coding agent", a.found ? `${n(a.found)} found · ${n(a.reproduced)} reproduced · ${n(a.fixed)} fixed · ${n(a.closed)} with a test` : agentStep?.state === "done" ? c.gray("connected · nothing reported in this period") : c.gray("not connected yet: genclass setup"));
+  part("Coding agent", a.found ? `${n(a.found)} found · ${n(a.reproduced)} reproduced · ${n(a.fixed)} fixed · ${n(a.closed)} with a test` : agentStep?.state === "done" ? c.gray("connected · nothing reported in this period") : c.gray("not connected yet: npx genclass setup"));
   const gh = state?.steps?.find((s) => s.id === "github-app");
-  if (gh) part("GitHub App", gh.state === "done" ? clean(gh.detail, 60) : c.gray(gh.detail ? clean(gh.detail, 60) : gh.state === "optional" ? "not used in this project" : "not connected yet: genclass setup"));
+  if (gh) part("GitHub App", gh.state === "done" ? clean(gh.detail, 60) : c.gray(gh.detail ? clean(gh.detail, 60) : gh.state === "optional" ? "not used in this project" : "not connected yet: npx genclass setup"));
   const sg = state?.steps?.find((s) => s.id === "suggestions");
-  if (sg) part("Suggestions", sg.detail ? (sg.state === "done" ? clean(sg.detail, 60) : `${clean(sg.detail, 60)}${c.gray(" · genclass suggest")}`) : c.gray("not run yet: genclass suggest"));
+  if (sg) part("Suggestions", sg.detail ? (sg.state === "done" ? clean(sg.detail, 60) : `${clean(sg.detail, 60)}${c.gray(" · npx genclass suggest")}`) : c.gray("not run yet: npx genclass suggest"));
   out();
-  if (app.dashboardUrl) out(`  ${c.gray("In the browser")}  ${c.cyan(app.dashboardUrl)}  ${c.gray("(genclass dashboard --open)")}`);
-  if (!all) out(`  ${c.gray("Every row: genclass dashboard --all · another period: --range 24h, 7d or 30d")}`);
+  if (app.dashboardUrl) out(`  ${c.gray("In the browser")}  ${c.cyan(app.dashboardUrl)}  ${c.gray("(npx genclass dashboard --open)")}`);
+  if (!all) out(`  ${c.gray("Every row: npx genclass dashboard --all · another period: --range 24h, 7d or 30d")}`);
   out();
 }
 
@@ -144,10 +144,10 @@ export async function dashboard(o = {}, deps = {}) {
   if (!state.signedIn) {
     // signed out, an app can still have a private dashboard link: the runtime CLI's own command knows it
     if (!o.json && deps.fallback) return deps.fallback();
-    if (o.json) out(JSON.stringify({ ok: false, error: "not signed in", run: "genclass login" }));
+    if (o.json) out(JSON.stringify({ ok: false, error: "not signed in", run: "npx genclass login" }));
     else {
       header({ app: state.app.name, framework: state.app.framework, host: state.host });
-      note(state.sessionProblem && state.sessionProblem !== "expired" ? `Could not reach genclass.dev (${state.sessionProblem}).` : "Sign in to see your app here: genclass login (or just genclass, which walks you through it).");
+      note(state.sessionProblem && state.sessionProblem !== "expired" ? `Could not reach genclass.dev (${state.sessionProblem}).` : "Sign in to see your app here: npx genclass login (or just npx genclass, which walks you through it).");
       out();
     }
     return 1;
@@ -160,10 +160,10 @@ export async function dashboard(o = {}, deps = {}) {
     if (o.json) out(JSON.stringify({ ok: false, error: projects.length ? "which app" : "no app yet", apps: projects.map((p) => p.name) }));
     else {
       header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
-      if (!projects.length) note("No app in your account yet. Run genclass in your web app's folder: it adds GenClass and gives the app its dashboard.");
+      if (!projects.length) note("No app in your account yet. Run npx genclass in your web app's folder: it adds GenClass and gives the app its dashboard.");
       else {
         note(o.app ? `No app named "${clean(o.app, 40)}" in your account. Your apps:` : state.app.token ? "This folder's app is not in your account yet (genclass puts it there). Your apps:" : "Which app? Run this in the app's folder, or name one:");
-        for (const p of projects.slice(0, 30)) out(`    ${c.cyan(`genclass dashboard --app "${clean(p.name, 40)}"`)}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`);
+        for (const p of projects.slice(0, 30)) out(`    ${c.cyan(`npx genclass dashboard --app "${clean(p.name, 40)}"`)}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`);
       }
       out();
     }
@@ -184,10 +184,10 @@ export async function dashboard(o = {}, deps = {}) {
     app = await fetchApp(again, target.id, range, deps);
   }
   if (!app.ok) {
-    if (o.json) out(JSON.stringify({ ok: false, error: app.reauth ? "sign in again" : app.reason, run: app.reauth ? "genclass login" : null, dashboard_url: target.dashboard_url }));
+    if (o.json) out(JSON.stringify({ ok: false, error: app.reauth ? "sign in again" : app.reason, run: app.reauth ? "npx genclass login" : null, dashboard_url: target.dashboard_url }));
     else {
       header({ app: target.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
-      if (app.reauth) warn(`This sign-in is from before the command could show dashboards. Run ${c.cyan("genclass login")} once, then ${c.cyan("genclass dashboard")}.`);
+      if (app.reauth) warn(`This sign-in is from before the command could show dashboards. Run ${c.cyan("npx genclass login")} once, then ${c.cyan("npx genclass dashboard")}.`);
       else if (app.missing) note("This genclass.dev cannot show a dashboard in the terminal yet.");
       else bad(`Could not read the dashboard: ${clean(app.reason, 200)}`);
       if (target.dashboard_url) out(`  ${c.gray("In the browser")}  ${c.cyan(target.dashboard_url)}`);
