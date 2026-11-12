@@ -806,7 +806,7 @@ export class RuntimeImpl implements Runtime {
     if (on === this.planObserve) return;
     this.planObserve = on;
     if (on && this._mode !== "observe") {
-      this.warnOnce("plan-observe", "GenClass observes only until the month ends: this app's plan used its live fixes (genclass.dev/account/billing)");
+      this.warnOnce("plan-observe", "GenClass: live fixes used for the month, observing only. genclass.dev/account/billing");
     }
   }
 

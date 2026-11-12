@@ -377,6 +377,10 @@ rows and 837,623 real-browser rows (§6). Recall is the open problem.
 ## Privacy and telemetry
 
 - **Decisions are local.** The model runs in the browser; nothing is sent to make a decision.
+- **Free's live-fix limit.** On genclass.dev's Free plan an app gets 100 problems fixed live a month. Past it, the
+  collector's reply to a diagnostics batch tells the page to observe only until the month ends (it keeps finding and
+  reporting problems, and says so once in the console). Nothing more is sent for it; with diagnostics off it never
+  happens.
 - **Anonymous diagnostics are on by default** with `GenClass.init()`, `/auto` and the script tag on public hosts,
   sent to the GenClass maintainers' collector ([`telemetry-worker/`](telemetry-worker), a Cloudflare Worker writing
   to a private R2 bucket) to improve the model. One console line per page says it is on. Off on local and private

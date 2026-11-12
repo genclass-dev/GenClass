@@ -63,7 +63,7 @@ export const nativeTransport: TelemetryTransport = {
         // the status, and a Retry-After the collector exposes, decide back-off (429) vs failure (client.ts backoffOf)
         if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, retryAfterMs: retryAfterMs(r.headers?.get?.("retry-after")) });
         // the collector's word on this app's plan: observe only (client.ts planReply)
-        return { observe: r.headers?.get?.(OBSERVE_HEADER) };
+        return { observe: r.headers?.get?.(OBSERVE_HEADER) ?? null };
       });
     } catch (e) {
       return Promise.reject(e);

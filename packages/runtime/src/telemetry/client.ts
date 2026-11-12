@@ -206,8 +206,10 @@ export class TelemetryClient implements TelemetryStatus {
    * the page could not read (a beacon on page exit, a custom transport) changes nothing. It only ever lowers the mode.
    */
   private planReply(res: unknown): void {
-    if (!res || typeof res !== "object" || !("observe" in res) || !this.cfg.token) return;
-    const on = !!(res as { observe?: unknown }).observe;
+    // undefined: a reply the page could not read (a beacon, a custom transport); null: no cap
+    const o = (res as { observe?: unknown } | undefined)?.observe;
+    if (o === undefined || !this.cfg.token) return;
+    const on = !!o;
     try {
       const ls = this.g.localStorage as Storage;
       const d = new Date(this.rt.clock.now());
