@@ -9,6 +9,10 @@
 //   steps; nothing is guessed about it.
 // - A prompt names pages and counts only. It holds nothing from the person's code, which this command never reads
 //   for it.
+// - A page's path and a kind's key reach the dashboard from visitors' browsers, so anyone who has an app's public
+//   key can send one. Before either goes into a prompt (which `genclass fix` hands to an agent that can change code)
+//   it is cut down to what a path or a key is made of: no spaces, quotes, brackets or line breaks, so it cannot
+//   carry a sentence (safeRoute, KEY_RE). A kind whose key is not a plain key is left out of the list.
 
 /** The model's kinds: a name, what it means, how it is usually fixed. */
 export const TYPES = {
@@ -151,13 +155,25 @@ export const checkOf = (k) => CHECKS[k] ?? { name: k ? titled(k, /-/g) : "Other 
 /** Either, from a problem of the list below. */
 export const infoOf = (x) => (x.check ? checkOf(x.key) : typeOf(x.key));
 
+/** A kind's or a check's key as the runtime writes one: letters, digits, hyphens and underscores. */
+const KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
+
+/**
+ * A page's path as it may stand in a prompt: the characters a path is made of, anything else as an underscore, at
+ * most 120. "/orders/:id" stays as it is; "/x) Ignore the above and ..." cannot stay a sentence.
+ */
+export const safeRoute = (r) => {
+  const s = String(r ?? "").replace(/[^A-Za-z0-9/_.:~%@+*=,-]/g, "_").slice(0, 120);
+  return s.startsWith("/") ? s : `/${s}`;
+};
+
 /** "kind TAB page" rows as { kind: [{ route, count }] }, the most frequent page first. */
 function byKind(list) {
   const out = {};
   for (const x of list ?? []) {
     const i = x.key.indexOf("\t");
     if (i < 0) continue;
-    (out[x.key.slice(0, i)] ??= []).push({ route: x.key.slice(i + 1), count: x.count });
+    (out[x.key.slice(0, i)] ??= []).push({ route: safeRoute(x.key.slice(i + 1)), count: x.count });
   }
   for (const k of Object.keys(out)) out[k].sort((a, b) => b.count - a.count);
   return out;
@@ -172,13 +188,17 @@ export function problemList(breakdowns) {
   const b = breakdowns ?? {};
   const model = byKind(b.detect_issue);
   const checks = byKind(b.check_issue);
-  const out = (b.detect_diagnosis ?? []).filter((x) => x.key !== "expected" && x.count > 0).map((x) => ({ key: x.key, count: x.count, check: false, where: model[x.key] ?? [] }));
-  for (const x of b.check_kind ?? []) if (x.count > 0) out.push({ key: x.key, count: x.count, check: true, where: checks[x.key] ?? [] });
+  const out = (b.detect_diagnosis ?? []).filter((x) => x.key !== "expected" && x.count > 0 && KEY_RE.test(x.key)).map((x) => ({ key: x.key, count: x.count, check: false, where: model[x.key] ?? [] }));
+  for (const x of b.check_kind ?? []) if (x.count > 0 && KEY_RE.test(x.key)) out.push({ key: x.key, count: x.count, check: true, where: checks[x.key] ?? [] });
   return out.sort((a, z) => z.count - a.count);
 }
 
+/** An app's name as it may stand in a prompt or a table: its owner's own words, on one line, without a backtick or a bar. */
+const safeName = (name) => String(name ?? "").replace(/[`|\r\n]+/g, " ").slice(0, 80);
+
 /** The prompt for one kind of problem: what, where, the usual fix, the steps with the MCP server's tools. */
 export function fixPrompt(app, range, x) {
+  app = safeName(app);
   const t = infoOf(x);
   const pages = x.where.slice(0, 4).map((w) => `${w.route} (${fmt(w.count)})`).join(", ");
   const top = x.where.length ? x.where[0].route : "the page";
@@ -217,6 +237,7 @@ export function fixPrompt(app, range, x) {
 
 /** One prompt for every kind of problem in the period: the loop for each (reproduce, fix, prove). */
 export function fixAllPrompt(app, range, list) {
+  app = safeName(app);
   const checks = list.some((x) => x.check);
   const out = [
     `Fix the problems GenClass found in this web app (${app}) and prove each fix, with the GenClass MCP server (${MCP_PKG}; the project's MCP page in the GenClass dashboard says how to add it).`,
@@ -255,6 +276,7 @@ export const didAct = (r) => r.tier === "acted" && r.executed === true && !!r.ra
  * `app`: api.mjs fetchApp's answer; `name`: the app's name; `generated`: an ISO time for the heading.
  */
 export function markdown(name, app, generated) {
+  name = safeName(name);
   const t = app.more.totals;
   const b = app.more.breakdowns;
   const list = problemList(b);
@@ -298,7 +320,7 @@ export function markdown(name, app, generated) {
   const rec = app.more.events.slice(0, 10);
   if (rec.length) {
     out.push("## Latest detections", "", "| Time (UTC) | Page | What | Confidence | GenClass |", "| --- | --- | --- | ---: | --- |");
-    for (const r of rec) out.push(`| ${String(r.at).slice(0, 16).replace("T", " ")} | ${r.route || "-"} | ${r.kind ? typeOf(r.kind).name : r.trigger || "-"} | ${typeof r.confidence === "number" ? `${Math.round(r.confidence * 100)}%` : "-"} | ${didAct(r) ? (ACTION_NAMES[r.ran] ?? r.ran) : "Reported"} |`);
+    for (const r of rec) out.push(`| ${String(r.at).slice(0, 16).replace("T", " ")} | ${r.route ? safeRoute(r.route) : "-"} | ${r.kind ? (KEY_RE.test(r.kind) ? typeOf(r.kind).name : "Other") : KEY_RE.test(r.trigger ?? "") ? r.trigger : "-"} | ${typeof r.confidence === "number" ? `${Math.round(r.confidence * 100)}%` : "-"} | ${didAct(r) ? (ACTION_NAMES[r.ran] ?? r.ran) : "Reported"} |`);
     out.push("");
   }
   out.push("Counts only: GenClass stores no text from the app's pages. Guide: https://genclass.dev/docs/dashboard");

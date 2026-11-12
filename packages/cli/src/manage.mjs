@@ -430,7 +430,8 @@ export async function exportEvents(o = {}, deps = {}) {
   const text = parts.join("");
   const lines = text ? text.split("\n").filter(Boolean).length - (format === "csv" ? 1 : 0) : 0;
   if (toStd) {
-    process.stdout.write(text);
+    // as bytes: the data is not this program's text, so nothing in it is reworded on its way out (name.mjs)
+    process.stdout.write(Buffer.from(text, "utf8"));
     return 0;
   }
   const name = o.out ?? `genclass-${slug(target.name)}-${from}-${to}.${format}`;

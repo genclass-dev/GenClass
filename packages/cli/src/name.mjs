@@ -87,7 +87,9 @@ export function installGlobally(version, run = spawn) {
     let text = "";
     let child;
     try {
-      child = run(process.platform === "win32" ? "npm.cmd" : "npm", ["install", "-g", `genclass@${version}`, "--no-audit", "--no-fund"], { stdio: ["ignore", "pipe", "pipe"] });
+      // on Windows npm is a .cmd file, which Node starts only through a shell; every argument here is this program's own
+      const win = process.platform === "win32";
+      child = run(win ? "npm.cmd" : "npm", ["install", "-g", `genclass@${/^[0-9A-Za-z.-]+$/.test(String(version)) ? version : "latest"}`, "--no-audit", "--no-fund"], { stdio: ["ignore", "pipe", "pipe"], shell: win });
     } catch (e) {
       resolve({ ok: false, text: String(e?.message ?? e) });
       return;
