@@ -69,6 +69,9 @@ export function hasPlaywright(cwd, project) {
   return ["ts", "js", "mjs", "cjs", "mts"].some((e) => existsSync(join(cwd, `playwright.config.${e}`)));
 }
 
+/** What the command costs, said before the sign-in (the server says it in its own words once signed in). */
+export const PRO_TERMS = "The genclass command comes with Pro: 3 days free, then US$15 a developer a month, card on Stripe.";
+
 /** Free's limits as a few words ("3 apps, 7 days of history, your top 3 suggestions"), from the numbers the server sent. */
 export function freeLimits(free) {
   const parts = [];
@@ -190,8 +193,9 @@ export async function readState(o = {}, deps = {}) {
           : otherHost
             ? `the saved session is for ${otherHost}`
             : "",
-    why: "Opens genclass.dev in your browser. New here? Your free account is made there.",
-    more: "Your account is where your apps, their dashboards and your plan live. Nothing is typed in the terminal.",
+    // said before anyone signs up: the command is Pro's, with its trial and price (the owner's call, 2026-11-13)
+    why: "Opens genclass.dev. Then Pro: 3 days free, then US$15 a developer a month, with a card on Stripe.",
+    more: `Your account is where your apps, their dashboards and your plan live. New here? It is made on that page. Nothing is typed in the terminal. ${PRO_TERMS} Free stays on the website: one app and its totals.`,
     run: "npx genclass login",
     human: "approve the sign-in in your browser",
   });
@@ -207,15 +211,19 @@ export async function readState(o = {}, deps = {}) {
     doing: cli && !cli.paid ? (cli.trialDays ? `Start your ${cli.trialDays}-day free trial` : `Start ${cli.plan}`) : "Pro",
     state: !me ? (creds && offline !== "expired" ? "optional" : "todo") : !cli ? "optional" : cli.paid ? "done" : "todo",
     detail: !me
-      ? ""
+      ? creds
+        ? ""
+        : "3 days free, then US$15 a developer a month"
       : cli && !cli.paid
         ? `${cli.price ?? cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free` : ""}`
-        : cli?.paid && me.plan?.id === "free"
+        : cli?.paid && cli.via === "team"
           ? "through your team's plan"
-          : me.plan
-            ? me.plan.name
-            : "",
-    why: cli && !cli.paid ? `Every genclass command comes with ${cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free to start` : ""}.` : "Every genclass command comes with Pro.",
+          : cli?.paid && cli.via === "open"
+            ? "open on this genclass.dev"
+            : me.plan && me.plan.id !== "free"
+              ? me.plan.name
+              : "",
+    why: cli && !cli.paid ? `Every genclass command comes with ${cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free to start` : ""}.` : me ? "Every genclass command comes with Pro." : PRO_TERMS,
     more: `${cli && !cli.paid && cli.trialDays ? `The trial opens in your browser and the card is asked for there, on Stripe: nothing is charged if you cancel before the ${cli.trialDays} days end. ` : "Pro opens in your browser and is paid there, on Stripe. "}Free stays on the website: one app and its totals. Plans and prices: genclass.dev/pricing.`,
     run: "npx genclass upgrade",
     human: cli && !cli.paid ? `start ${cli.plan} in your browser: ${cli.checkoutUrl}` : null,
@@ -378,15 +386,19 @@ export async function readState(o = {}, deps = {}) {
     human: s?.failed ? "work through the list: npx genclass suggest" : null,
   });
 
-  // the first step to do that is not skipped and does not wait on a step that is not done (dashboard: the runtime)
-  const ready = (x) => !x.after || steps.find((y) => y.id === x.after)?.state === "done";
+  // the first step to do that is not skipped and does not wait on a step that is not done (dashboard: the runtime).
+  // Every step after Pro's waits for it: the genclass command is Pro's, so skipping the sign-in skips them too (a
+  // server that sells nothing, or cannot be reached, leaves Pro's step optional and locks nothing)
+  const pro = steps.find((y) => y.id === "plan");
+  const proReady = pro.state === "done" || pro.state === "optional";
+  const ready = (x) => (x.id === "account" || x.id === "plan" || proReady) && (!x.after || steps.find((y) => y.id === x.after)?.state === "done");
   const next = steps.find((x) => x.state === "todo" && !(o.skip ?? []).includes(x.id) && ready(x)) ?? null;
   if (next) next.state = "next";
   return {
     cwd,
     host: host.overridden && !host.error ? host.host : null,
     app: { name: app?.name ?? project.name ?? null, framework: project.label || null, isApp, token: st.token ?? null, dashboardUrl: app?.dashboard_url ?? st.local?.dashboardUrl ?? null, site: notes.site ?? null, ...(isApp ? {} : { below: appsBelow(cwd) }) },
-    account: me ? { label: accountLabel(me.account), plan: me.plan, suggestions: me.suggestions, billingUrl: me.billingUrl, github: me.github, offer: me.offer ?? null, cli: me.cli ?? null } : null,
+    account: me ? { label: accountLabel(me.account), plan: me.plan, suggestions: me.suggestions, billingUrl: me.billingUrl, github: me.github, offer: me.offer ?? null, cli: me.cli ?? null, teamPlan: me.account?.teamPlan ?? null } : null,
     signedIn: !!me,
     /** the account's apps as genclass.dev lists them ([] signed out) */
     projects: me?.projects ?? [],
@@ -418,7 +430,7 @@ export function appPlanOffer(app, accountOffer, paying) {
   const covered = !!app.plan.source && !app.needsPlan;
   if (!covered && !accountOffer && !paying) return null;
   const base = accountOffer ?? { plan: { name: "Pro" }, price: "", summary: null, features: [], free: { name: "Free", apps: null } };
-  return { ...base, checkoutUrl: `${app.planUrl}&from=cli`, project: { id: app.id, name: app.name, token: app.token }, needs: app.needsPlan === true, current: covered ? app.plan.name : null, paying: !!paying };
+  return { ...base, checkoutUrl: `${app.planUrl}&from=cli`, project: { id: app.id, name: app.name, token: app.token }, needs: app.needsPlan === true, current: covered ? app.plan.name : null, paying: !!paying, chosen: app.planChosen === true };
 }
 
 /** The plan of the app with `token` (plans are per project), else the account's: what a header shows. */

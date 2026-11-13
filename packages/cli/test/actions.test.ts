@@ -127,7 +127,8 @@ describe("genclass: nothing is drawn on a page (src/actions.mjs runtimeArgs)", (
     expect(said).toMatch(/Adds @genclass\/runtime \S+ in observe mode: it reports and never changes anything\./);
     expect(said).toContain("Anonymous diagnostics are on");
     expect(said).toContain("init --no-telemetry");
-    expect(said).toContain("What is sent: https://");
+    // the address on a line of its own, so it is never broken by the line before it
+    expect(said).toMatch(/What is sent:\s*\n\s*https:\/\/\S+TELEMETRY\.md/);
     expect(said).not.toMatch(/✔ Version|✔ Packages|✔ Entry|GenClass • init/);
     const entry = readFileSync(join(dir, "src/main.jsx"), "utf8");
     expect(entry).toContain('import "@genclass/runtime/auto"');

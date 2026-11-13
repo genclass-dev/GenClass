@@ -8,7 +8,8 @@ npx genclass
 ```
 
 Run it in your web app's folder. It shows where the project stands and walks you through the next step: one Enter
-per step. Stop at any point and run it again: it continues from what is true now.
+per step. Stop at any point and run it again: it continues from what is true now. It comes with Pro: 3 days free,
+then US$15 a developer a month.
 
 ```text
   ╭─ GenClass ────────────────────────────────────────────── v0.3.7 ─╮
@@ -25,12 +26,12 @@ per step. Stop at any point and run it again: it continues from what is true now
   │                              ▀▀█▀▀▀                              │
   │                                                                  │
   │                       shop • Vite + React                        │
-  │                   ada@example.com • Free plan                    │
+  │                    ada@example.com • Pro plan                    │
   │                           ~/code/shop                            │
   │                                                                  │
   ╰──────────────────────────────────────────────────────────────────╯
 
-  ✔  Done     Account • Runtime
+  ✔  Done     Account • Pro • Runtime
   ●  Next     Add the test workflow
   ◌  Waiting  Dashboard: deploy, then open your site once
   ○  Later    GitHub App • Coding agent • Suggestions
@@ -69,11 +70,13 @@ Type a number, a command, or a sentence: a sentence is a question about your app
 also a command of its own (`npx genclass problems`), so scripts and coding agents use the same things.
 
 **The command comes with Pro.** Right after the sign-in, an account without Pro sees Pro's card, and Enter opens its
-checkout in the browser: 3 days free (the card is asked for on Stripe, nothing is charged if you cancel before they
-end), then $15 a developer a month, for up to 3 apps. Every command but `login`, `logout`, `whoami`, `plan`,
-`upgrade`, `profile`, `status`, `remove`, `help` and `version` asks first. Without a terminal (`--yes`, `--json`, a
-coding agent) nothing is opened: one line with the checkout address, and exit code 1. Free stays on the website: one
-app and its totals.
+checkout in the browser: 3 days free (one trial per account; the card is asked for on Stripe, and nothing is charged
+if you cancel before they end), then US$15 a developer a month, for up to 3 apps in the account. More apps come with
+Enterprise, by email. Every command but `login`, `logout`, `whoami`, `plan`, `upgrade`, `profile`, `status`,
+`remove`, `help` and `version` asks first. Without a terminal (`--yes`, `--json`, a coding agent) nothing is opened:
+one line with the checkout address, and exit code 1. Free stays on the website: one app's totals for the last 7 days.
+Plans bought before 13 November 2026 keep every app they cover (an app paid for on its own does not count toward
+Pro's 3); Free covers an account's oldest app and locks the others.
 
 **Just `genclass`.** `npx` runs the command without installing it, so the first run on a terminal installs it
 (`npm install -g genclass`, said on screen; `npm uninstall -g genclass` takes it out, `GENCLASS_NO_INSTALL=1` turns
@@ -94,7 +97,8 @@ it off). After that you type `genclass`, and every screen says `genclass` instea
 | Suggestions | Tells you what your app is missing, most important first. | Nothing in your project. |
 
 On a terminal, Enter starts a step and is the yes for what its sentence says it writes. While a step waits for you
-in the browser (the sign-in, GitHub), Enter stops the wait and the walk goes on. A part that does not apply
+in the browser (the sign-in, GitHub), Enter stops the wait and the walk goes on. Pro and the app's plan are the
+exception: nothing after them runs until they are done. A part that does not apply
 is left out and says why: no Playwright tests, not a GitHub repository, not a web app.
 
 ## Your app in the terminal
@@ -109,7 +113,7 @@ suggestions run left to do.
 
 ```text
   GenClass • shop                                                Vite + React
-  ada@example.com • Team plan
+  ada@example.com • Pro plan
   ────────────────────────────────────────────────────────────────────────────
   last 7 days · last page 3 hours ago
 
@@ -140,11 +144,11 @@ Each part of the browser dashboard has its own view, short first, `--all` for ev
 | | |
 |---|---|
 | `npx genclass problems` | what was found, by kind and by page, the measured visual checks, what GenClass stopped on the visitor's screen, how it compares with the period before |
-| `npx genclass analytics` | visitors: visits, page views, time on a page, where people come from, devices and countries, what gets clicked again and again. One part in full: `analytics pages`, `sources`, `devices`, `clicks`, `paths`, `funnels` (Team) |
+| `npx genclass analytics` | visitors: visits, page views, time on a page, where people come from, devices and countries, what gets clicked again and again. One part in full: `analytics pages`, `sources`, `devices`, `clicks`, `paths`, `funnels` |
 | `npx genclass events` | the latest events one per line: when, kind, how sure the model was, the page, and what GenClass did |
 | `npx genclass health` | how GenClass itself runs on your pages: model loads, where it ran, decision time, what was not checked, runtime versions |
 | `npx genclass report` | the period as Markdown, to paste or pipe (`--out report.md` writes a file) |
-| `npx genclass export` | every stored event as a file, JSON Lines or `--format csv`, `--from` and `--to` as days (Team) |
+| `npx genclass export` | every stored event as a file, JSON Lines or `--format csv`, `--from` and `--to` as days |
 
 ## Have it fixed
 
@@ -185,22 +189,24 @@ npx genclass connections
 Where your app's new problems are sent (Slack, Sentry, PostHog, Datadog, or a webhook of your own), what the GitHub
 App is doing on the repository, whether your coding agent is connected, and whether the app has a private link.
 
-- `npx genclass connections add slack` sets a destination up (Team). What you type is not shown, goes to
+- `npx genclass connections add slack` sets a destination up. What you type is not shown, goes to
   genclass.dev over HTTPS, is stored encrypted there and is not kept on your machine. Then `test`, `off`, `on`,
   `remove` in place of `add`.
 - `npx genclass agent` shows how your coding agent is connected and what it did with the findings (found,
   reproduced, fix proven, closed). `npx genclass agent link` gives it the live site's numbers: it makes the app's
   private dashboard link and hands it to GenClass's MCP server in your own agent settings, never in a file of the
   repository.
-- `npx genclass funnels add "Checkout" /cart /checkout /thanks` adds a funnel (Team); `funnels remove "Checkout"`
+- `npx genclass funnels add "Checkout" /cart /checkout /thanks` adds a funnel; `funnels remove "Checkout"`
   removes it.
 
 ## Account
 
 `npx genclass apps` lists your apps (`apps new "Name"` makes one). `npx genclass plan` shows your plan, its limits
 and what is used, and each app's plan. `npx genclass profile` shows your account and each app's plan with numbered
-choices (upgrade, billing, sign out); `npx genclass upgrade` opens the plan page of this folder's app. `npx genclass team` shows who is on
-the plan (`team invite` makes a single-use invite link).
+choices (upgrade, billing, sign out). `npx genclass upgrade` starts Pro, its free trial first, for an account
+without it. With Pro there is nothing to upgrade: it says where seats are added (Manage billing), and for an app past
+Pro's 3 it says that more apps come with Enterprise, with the app's plan page. `npx genclass team` shows who is on the
+plan (`team invite` makes a single-use invite link).
 
 **What a terminal may do** is listed on the page where you approve its sign-in, and nothing else: read your apps'
 dashboards, analytics and stored events, ask the model, change where alerts go, funnels and the private link, show
@@ -227,12 +233,13 @@ It measures your repository and your live site against a list of checks, in plai
 - **Email:** SPF and DMARC, so your mail does not land in spam.
 
 Each failed check comes with the evidence that was measured, what to do, and a prompt you can paste to your coding
-agent. When you are signed in, genclass.dev orders the list for your app and words the reasons for it.
+agent. genclass.dev orders the list for your app and words the reasons for it.
 
 **What leaves your machine.** Requests to your own site, and, to get the plan, the checks that failed with their
 evidence lines, plus your app's name, framework, address, payment provider and host. No source code, no file
 contents, no secrets. The command shows this before the first time it sends it for a project; `--no-model` sends
-nothing. genclass.dev passes it to the model that writes the plan and stores none of it.
+nothing. genclass.dev passes it to the model that writes the plan, and keeps the plan it writes for your app, not
+what was sent.
 
 **What Pro shows.** Every check, with its evidence, and the plan for all of them: why it matters for your app, the
 first step and the agent prompt, with the model's own ideas and website designs.
@@ -257,12 +264,12 @@ first step and the agent prompt, with the model's own ideas and website designs.
 | `npx genclass fix [number, kind or all]` | hand a problem to your coding agent (`--print`, `--copy`, `--agent <name>`) |
 | `npx genclass ask "..."` | a question about your app, answered from its numbers |
 | `npx genclass suggest [url]` | what your app is missing, then one number hands the list to your coding agent (`--yes`, `--no-model`, `--all`) |
-| `npx genclass scan <url>` | 23 visual checks on one page |
+| `npx genclass scan <url>` | 23 visual checks on one page (free, with no account: `npx @genclass/runtime@beta scan <url>`) |
 | `npx genclass connections` | alerts, GitHub App, coding agent (`add`, `test`, `on`, `off`, `remove` a destination) |
 | `npx genclass agent` | your coding agent and what it did (`agent link`) |
 | `npx genclass funnels` | funnels (`add "Name" /a /b`, `remove "Name"`) |
 | `npx genclass apps`, `plan`, `team` | your apps, your plan, the people on it |
-| `npx genclass profile`, `upgrade` | your account and each app's plan; Team for this app |
+| `npx genclass profile`, `upgrade` | your account and each app's plan; start Pro |
 | `npx genclass login`, `logout`, `whoami` | your account |
 | `npx genclass remove` | take GenClass out of the app again |
 
@@ -282,9 +289,14 @@ npx genclass fix --print       # the prompt to fix what was found (fix stale --p
 npx genclass report            # the period as Markdown
 ```
 
-Two steps need the person: approving the sign-in and installing the GitHub App. Both happen in their browser, and
-the command prints the link. At the sign-in, `setup --yes` prints a link and a code and waits up to ten minutes for
-the person to approve, so give it a long timeout, or have them run `npx genclass login` first.
+Four steps need the person, in their browser, and the command prints the link for each: approving the sign-in,
+starting Pro's 3-day trial (their card, on Stripe), opening a new app's plan page once, and installing the GitHub
+App. At the sign-in, `setup --yes` prints a link and a code and waits up to ten minutes for the person to approve, so
+give it a long timeout, or have them run `npx genclass login` first. Without Pro, `setup --yes` stops at the trial
+with exit code 1 and one line with the checkout link, and every command that needs Pro answers the same way (`upgrade`
+included; `scan` and `audit` end with 2): give the person the link, wait for them to start the trial, then run
+`setup --yes` again. With `--json` that answer is one shape everywhere: `{ "ok": false, "needs_pro": true,
+"signed_in", "plan", "price", "trial_days", "checkout_url", "run" }`, where `run` is the command to run next.
 
 ## How it is built
 

@@ -143,11 +143,13 @@ and invite links.
 
 ## Paid plans, payments and Stripe
 
-Free costs nothing, Pro (named Team until 12 November 2026) is sold on genclass.dev per project (since 12 November 2026; per developer from 11 November), and Enterprise is agreed by
+Free costs nothing, Pro (named Team until 12 November 2026) is sold on genclass.dev for an account, per developer
+(per project on 12 November 2026 only), and Enterprise is agreed by
 email. A plan decides what your dashboard shows, never what is collected: an app that turned visitor analytics on has
-them counted on Free too, and they show once its plan includes them. A paid plan (Team; the Individual plan was one
+them counted on Free too, and they show once its plan includes them. A paid plan (Pro; the Individual plan was one
 until 22 October 2026) is paid through Stripe, which processes payments
-for us. We keep which app a subscription pays for (or, for a plan bought per developer, the number of seats), next to its status. When you choose Free for an app, we keep when, the reason you picked and anything you wrote (at most 500 characters), and we read them to improve our plans. When you upgrade, we send Stripe
+for us. We keep the number of developers a subscription pays for (for one bought per project on 12 November 2026,
+which app it pays for), next to its status. When you choose Free for an app, we keep when, the reason you picked and anything you wrote (at most 500 characters), and we read them to improve our plans. When you upgrade, we send Stripe
 your account's email (if it has one) and your GenClass account id, and you type your card or other payment details
 into Stripe's own checkout page: they go to Stripe and never reach GenClass. Stripe handles them under its own privacy
 policy (stripe.com/privacy) and keeps your invoices and receipts, which you can see under Manage billing on your
@@ -279,9 +281,9 @@ repository answers "not found" and is left as it is.
 We pass the digest to a language model (OpenAI's API) to order the failed checks and word the reasons, to suggest
 its own ideas for the app and website designs inspired by real sites (we check that each site it names answers), and
 return its answer. We do not store or log the digest. Since 12 November 2026 we keep the last answer for each app of
-an account (the ordered checks with their reasons, the ideas and the designs, not the digest), so the Free plan can
-show the same answer again and a paid plan can show all of it; it is replaced by the next answer and deleted with the
-account. We also keep how many plans an account asked for on a day, for 3 days, to hold each plan's daily limit.
+an account (the ordered checks with their reasons, the ideas and the designs, not the digest), so it can be shown
+again once the day's model runs are used up, and in your GenClass report (below); it is replaced by the next answer
+and deleted with the account. We also keep how many plans an account asked for on a day, for 3 days, to hold each plan's daily limit.
 OpenAI processes the digest under its API terms. Nothing from a digest is used to train GenClass's own model.
 
 ## Reports and alerts by email

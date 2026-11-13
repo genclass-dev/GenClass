@@ -30,12 +30,15 @@ take a prerelease. Both lines load the same model. AI coding agents working on t
 ## Quick start
 
 ```bash
-npx genclass   # signs you in, adds GenClass to your app and walks you through the rest
+npx genclass   # signs you in, starts Pro, adds GenClass to your app and walks you through the rest
 ```
 
-Run it in your web app's folder and press Enter for each step: account, runtime, dashboard, test workflow, GitHub
-App, coding agent, suggestions. A step that does not fit your project is skipped, Enter also stops any wait, and
-running it again continues from where things are. It draws nothing on your pages. Then:
+Run it in your web app's folder and press Enter for each step: account, Pro, runtime, app plan, dashboard, test
+workflow, GitHub App, coding agent, suggestions. The command comes with Pro: 3 days free, then US$15 a developer a
+month. The card is asked for on Stripe when the trial starts, and nothing is charged if you cancel before the 3 days
+end. Free stays on the website ([pricing](https://genclass.dev/pricing)). A step that does not fit your project is
+skipped, Enter also stops any wait, and running it again continues from where things are. It draws nothing on your
+pages. Then:
 
 ```bash
 npx genclass dashboard   # what GenClass found on your live site, in the terminal
@@ -43,8 +46,10 @@ npx genclass suggest     # what your app is missing, most important first
 ```
 
 With a coding agent (Claude Code, Cursor, Codex), tell it to run `npx genclass status --json` and then
-`npx genclass setup --yes`: the command asks nothing when an agent runs it, and prints a link for the two things only
-you can do (approve the sign-in, install the GitHub App). Guide: [genclass.dev/docs/cli](https://genclass.dev/docs/cli);
+`npx genclass setup --yes`: the command asks nothing when an agent runs it, and prints a link for each thing only you
+can do in your browser: approve the sign-in, start Pro's trial with your card, open a new app's plan page once, and
+install the GitHub App. Without Pro, `setup --yes` stops at the trial with exit code 1 and one line with the checkout
+link: the agent gives you the link, waits while you start the trial, then runs `setup --yes` again. Guide: [genclass.dev/docs/cli](https://genclass.dev/docs/cli);
 package: [`packages/cli`](packages/cli/README.md).
 
 To add only the runtime, with no account:
@@ -199,7 +204,7 @@ GenClass's GitHub App puts what the runtime saw on the pull request it was seen 
 the GenClass fixture, your workflow uploads the race files it writes, and the app posts one check and one comment:
 each finding with its test, the seeds it was flagged in and the evidence line. It reads those files and never your
 source code, it comments only where it is installed, and it is free on public repositories. Private repositories
-come with the Team plan (US$15 a developer a month; [pricing](https://genclass.dev/pricing)).
+come with Pro (US$15 a developer a month; [pricing](https://genclass.dev/pricing)).
 
 > **Install** at <https://genclass.dev/github> (the app is GenClass.dev, <https://github.com/apps/genclass-dev>). With
 > no change to your tests, one workflow file is the whole setup: the check on your first pull request links to it,
@@ -243,10 +248,12 @@ export const submitOrder = protect("checkout submit", (cart) => fetch("/api/orde
 ```
 
 - **Token and dashboard.** A token (`gc_` plus 22 letters and digits, public) groups your app's diagnostics under a
-  private dashboard link (`https://genclass.dev/dashboard/...`). The dashboard is free for every app, with or without
-  an account: what GenClass found, where and what it did, for the last 7 days and up to 3 apps in an account. Visitor
-  analytics, forwarding, export, 90 days of history and team members come with the Team plan
-  ([pricing](https://genclass.dev/pricing)); the runtime itself is never limited by a plan. Get a token at [genclass.dev/start](https://genclass.dev/start), or let `init` create it after you
+  private dashboard link (`https://genclass.dev/dashboard/...`). On Free the dashboard shows an app's totals for the
+  last 7 days, for one app in an account. Pro (US$15 a developer a month, up to 3 apps in an account) adds every
+  problem with its pages and a fix prompt, visitor analytics, forwarding, export, 90 days of history and team members;
+  more apps come with Enterprise ([pricing](https://genclass.dev/pricing)). Plans bought before 13 November 2026 keep
+  every app they cover (an app paid for on its own does not count toward Pro's 3); Free covers an account's oldest app
+  and locks the others. The runtime itself is never limited by a plan. Get a token at [genclass.dev/start](https://genclass.dev/start), or let `init` create it after you
   approve its diff. To keep dashboards in an optional genclass.dev account, `npx @genclass/runtime@beta login` signs in
   from the terminal (device flow) and connects the app in the current folder; `connect`, `whoami` and `logout` do the
   rest, and `npx @genclass/runtime@beta dashboard` prints an app's link again (from `0.3.0-beta.2`). The dashboard
@@ -316,7 +323,7 @@ very heavy page can cause a long task, which the runtime records as a `perf` eve
   double submit or a write race usually throws nothing, so there is no error to collect. GenClass looks for those
   situations inside the page, decides on the user's device and reports what it saw. It does not replace an error
   tracker: from `0.3.0` its reports can go to your own logging through `sinks` ([SINKS.md](docs/runtime/SINKS.md)),
-  and for apps in a genclass.dev account (any plan, Free included) the collector can forward likely detections to
+  and for apps in a genclass.dev account on Pro or Enterprise the collector can forward likely detections to
   Sentry, PostHog, Datadog, Slack or a signed webhook.
 - **Product analytics.** Analytics count what users do; GenClass reports what the app got wrong while they did it.
 - **Tests and linters.** These bugs depend on response order and user timing. A test on a fast, ordered network can

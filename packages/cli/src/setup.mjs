@@ -25,7 +25,7 @@ import { addRuntime, addWorkflow, chooseAppPlan, choosePlan, connectAgent, conne
 import { brand, canDraw } from "./art.mjs";
 import { BUILD } from "./assets.mjs";
 import { appsBelow, planName, readState, stateJson } from "./state.mjs";
-import { barPara, card, checklist, header, nextBlock, note, pick, PROMPT, rule, summary, typed, warn } from "./tui.mjs";
+import { barPara, card, checklist, header, homeOpen, nextBlock, note, pick, PROMPT, rule, summary, typed, warn } from "./tui.mjs";
 
 /**
  * Prints the header and the steps for a state: the short view, or with `details` every part and what is known
@@ -33,8 +33,9 @@ import { barPara, card, checklist, header, nextBlock, note, pick, PROMPT, rule, 
  */
 export function show(state, details = false, welcome = false) {
   const h = { app: state.app.name, framework: state.app.framework, account: state.account?.label ?? null, plan: planName(state), host: state.host };
-  // the first screen on a terminal is the welcome card; every later one, and anything piped, is the two-line header
-  if (welcome && canDraw()) card({ ...h, cwd: state.cwd, version: BUILD.version });
+  // the first screen on a terminal is the welcome card; every later one, anything piped, and `status` typed in the
+  // home (which showed the card once, at the top) is the two-line header
+  if (welcome && canDraw() && !homeOpen()) card({ ...h, cwd: state.cwd, version: BUILD.version });
   else header(h);
   if (details) checklist(state.steps);
   else summary(state.steps);
@@ -103,9 +104,10 @@ function closing(state) {
   }
   out();
   out(`  ${c.gray("Day to day")}`);
-  out(`    ${c.cyan("npx genclass".padEnd(23))}${c.gray("where things stand")}`);
-  out(`    ${c.cyan("npx genclass suggest".padEnd(23))}${c.gray("what your app is missing")}`);
-  if (state.app.token) out(`    ${c.cyan("npx genclass dashboard".padEnd(23))}${c.gray("what it found on your site")}`);
+  // the commands in one column with room after the longest, so the short name (genclass ...) keeps a gap too
+  out(`    ${c.cyan("npx genclass".padEnd(25))}${c.gray("where things stand")}`);
+  out(`    ${c.cyan("npx genclass suggest".padEnd(25))}${c.gray("what your app is missing")}`);
+  if (state.app.token) out(`    ${c.cyan("npx genclass dashboard".padEnd(25))}${c.gray("what it found on your site")}`);
   out();
 }
 
@@ -180,7 +182,7 @@ async function walk(o, deps, auto) {
       // input that ended is a stop, never an Enter: nothing is started without someone at the keyboard
       const dot = c.gray("·");
       rule();
-      const keys = `  ${PROMPT()} ${c.bold("Enter")} ${c.gray("to continue")} ${dot} ${c.bold("d")} ${c.gray(details ? "less" : "every part")} ${dot} ${c.bold("s")} ${c.gray("skip")} ${dot} ${c.bold("q")} ${c.gray(o.home !== false && deps.home ? "later" : "stop")}  `;
+      const keys = `  ${PROMPT()} ${c.bold("Enter")} ${c.gray("to continue")} ${dot} ${c.bold("d")} ${c.gray(details ? "less" : "every part")} ${dot} ${c.bold("s")} ${c.gray("skip")} ${dot} ${c.bold("q")} ${c.gray("stop")}  `;
       const a = (await typed(keys)) ?? "q";
       if (/^d/i.test(a)) {
         details = !details;
@@ -190,7 +192,7 @@ async function walk(o, deps, auto) {
         // leaving the walk is not leaving the command: its other commands are one prompt away
         if (o.home !== false && deps.home) {
           out();
-          note("The setup waits here: setup continues it.");
+          note("Setup stopped here. Type setup to go on with it.");
           return deps.home({ ...o, cwd: state.cwd, app: state.app.name ?? "" });
         }
         out();
@@ -240,7 +242,7 @@ async function walk(o, deps, auto) {
       if (auto || !deps.runSuggest) {
         note(`Run ${c.cyan("npx genclass suggest")} to see what your app is missing.`);
         result = "skipped";
-      } else result = (await deps.runSuggest({ cwd: o.cwd, fromSetup: true })) === 0 ? "done" : "failed";
+      } else result = (await deps.runSuggest({ cwd: o.cwd, fromSetup: true, paid: state.steps.find((x) => x.id === "plan")?.state === "done" })) === 0 ? "done" : "failed";
     }
     if (result === "failed") {
       failed = true;

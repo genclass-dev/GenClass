@@ -98,7 +98,9 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(f).toContain("Plan Free");
     expect(f).toContain("Apps 1 of 1");
     expect(f).toContain("History 7 days");
-    expect(f).toContain("Model runs 0 of 3 used today");
+    // without Pro neither suggest nor ask runs: their model runs are not shown as Free's
+    expect(f).toContain("Model runs come with Pro (suggest and ask)");
+    expect(f).not.toContain("0 of 3 used today");
     expect(f).toContain("Not included visitor analytics, alerts to Slack, Sentry and others, the stored events as a file, private repositories");
     // the paid plan's card, in the server's words, and (nobody at a terminal) where it starts: the genclass command is
     // Pro's, so the account's own checkout, its trial first
@@ -129,15 +131,19 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(f).toContain("Sign out npx genclass logout");
     expect(JSON.parse((await said(() => profile({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: true, plan: { id: "free" }, apps: [{ name: "Shop", plan: { id: "free" } }], upgrade_url: `${HOST}/account/billing?plan=pro&start=1`, cli: { paid: false } });
     // upgrade: Pro's card and its checkout, for the account (the genclass command is Pro's)
+    // nobody at a terminal, nothing started: it ends as every gated command does (exit 1, and --json says needs_pro)
     const u = await said(() => upgrade(me.o, me.deps));
-    expect(u.code).toBe(0);
+    expect(u.code).toBe(1);
+    const uj = await said(() => upgrade({ ...me.o, json: true }, me.deps));
+    expect(uj.code).toBe(1);
+    expect(JSON.parse(uj.text)).toMatchObject({ ok: false, needs_pro: true, signed_in: true, plan: "Pro", trial_days: 3, checkout_url: expect.stringContaining(`${HOST}/account/billing?plan=`), run: "npx genclass upgrade" });
     expect(tooWide(u.text)).toEqual([]);
     expect(flat(u.text)).toContain("Start your 3-day free trial");
     expect(flat(u.text)).toContain(`start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
     // on Team: no line, nothing to upgrade
     sql.db.prepare("UPDATE projects SET plan = 'team', stripe_mode = 'live', subscription_id = 'sub_s', subscription_status = 'active' WHERE id = ?").run(me.app.id);
     expect(await freeLine(me.o, me.deps)).toBe(false);
-    expect(flat((await said(() => upgrade(me.o, me.deps))).text)).toContain("Nothing to upgrade here");
+    expect(flat((await said(() => upgrade(me.o, me.deps))).text)).toContain("there is nothing to upgrade");
   });
 
   it("Team: the price, when it renews, the seats; a sign-in from before still gets the plan's name and what to do", async () => {
@@ -171,7 +177,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     const free = flat((await said(() => team(me.o, me.deps))).text);
     expect(free).toContain("Team 1 of 1 seat used");
     expect(free).toContain("Free is for one person.");
-    expect(free).toContain("npx genclass plan");
+    expect(free).toContain("npx genclass upgrade");
     const no = await said(() => team({ ...me.o, args: ["invite"] }, me.deps));
     expect(no.code).toBe(1);
     // the genclass command is Pro's: the invite, like every command, says where Pro starts
@@ -191,6 +197,38 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(list).toContain("npx genclass team invite");
     // removing someone stays in the browser, and the screen says where
     expect(list).toContain(`${HOST}/account/billing`);
+  });
+
+  it("Pro with one seat (the checkout's default): a team means more seats, in Manage billing, never another Pro", async () => {
+    const { env, sql } = setup(LIVE);
+    const me = await account(env);
+    setPlan(sql, me.account.id, "team", { stripe_mode: "live", seats: 1, subscription_id: "sub_t000000002", subscription_status: "active", current_period_end: "2026-12-13T12:00:00.000Z" });
+    const t = flat((await said(() => team(me.o, me.deps))).text);
+    expect(t).toContain("Team 1 of 1 seat used");
+    expect(t).toContain("Your plan has one seat, yours.");
+    expect(t).toContain("Add seats in Manage billing, then invite your team: npx genclass team invite");
+    expect(t).not.toContain("is for one person");
+    expect(t).not.toContain("A team comes with Pro");
+    // the invite the server refuses says the same, and upgrade says there is nothing to upgrade, with the seats
+    const no = await said(() => team({ ...me.o, args: ["invite"] }, me.deps));
+    expect(no.code).toBe(1);
+    // genclass.dev's own words since #231 ("add a seat for each member in Manage billing"), or the command's
+    expect(flat(no.text)).toMatch(/add (seats|a seat for each member) in Manage billing/i);
+    expect(flat(no.text)).toContain(`${HOST}/account/billing`);
+    expect(flat(no.text)).not.toContain("A team comes with Pro");
+    const nj = JSON.parse((await said(() => team({ ...me.o, args: ["invite"], json: true }, me.deps))).text);
+    expect(nj).toMatchObject({ ok: false });
+    expect(nj.error).toMatch(/Manage billing/);
+    expect(nj.needs_pro).toBeUndefined();
+    const u = flat((await said(() => upgrade(me.o, me.deps))).text);
+    expect(u).toContain("You are on Pro: there is nothing to upgrade.");
+    expect(u).toContain("More people on it: add seats in Manage billing");
+    // in its trial, plan says it is a trial and when the first charge is
+    sql.db.prepare("UPDATE accounts SET subscription_status = 'trialing' WHERE id = ?").run(me.account.id);
+    resetOwnerCache();
+    const p = flat((await said(() => plan(me.o, me.deps))).text);
+    expect(p).toContain("Trial until 2026-12-13. Then the first charge, $15 / developer / month, unless you cancel before.");
+    expect(p).not.toContain("Renews");
   });
 
   it("apps: the account's apps, a new one by name, and the plan's limit said with what starts more", async () => {
@@ -224,7 +262,8 @@ describe("genclass is Pro's: a view the server refuses with 402 says where Pro s
     expect(flat(v.text)).toContain(`The genclass command comes with Pro ($15 / developer / month): start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
     expect(flat(v.text)).toContain("npx genclass upgrade");
     expect(v.text).not.toContain("Could not read the dashboard");
-    expect(JSON.parse((await said(() => analytics({ ...me.o, json: true }, me.deps))).text)).toEqual({ ok: false, error: "the genclass command comes with Pro", needs_pro: true, checkout_url: `${HOST}/account/billing?plan=pro&start=1`, trial_days: 3, run: "npx genclass upgrade" });
+    // the same needs_pro shape as the gate's (src/paywall.mjs needsProJson)
+    expect(JSON.parse((await said(() => analytics({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: false, error: "the genclass command comes with Pro", needs_pro: true, signed_in: true, plan: "Pro", checkout_url: `${HOST}/account/billing?plan=pro&start=1`, trial_days: 3, run: "npx genclass upgrade" });
   });
 });
 

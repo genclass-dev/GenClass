@@ -4,20 +4,29 @@
 // Invariants:
 // - One way in: `genclass` with no command shows where the project stands and, on a terminal, walks the next step.
 //   Every other command is a part of that walk that can also be run alone.
-// - `login`, `logout`, `whoami`, `connect`, `init` and `scan` are the runtime CLI's own commands, unchanged: this
-//   file hands them their arguments. `remove` is the runtime CLI's, followed by what this command's other steps wrote
-//   (remove.mjs). `dashboard` is this command's own view (app.mjs); signed out it falls back to the runtime CLI's,
-//   which knows an app's private dashboard link.
+// - `login`, `logout`, `whoami`, `connect`, `init` and `scan` are the runtime CLI's own commands: this file hands
+//   them their arguments. `genclass login` only signs in (the runtime login with --no-connect), then shows Pro for an
+//   account without it, and offers to connect this folder's app once Pro is on. `remove` is the runtime CLI's,
+//   followed by what this command's other steps wrote (remove.mjs). `dashboard` is this command's own view
+//   (app.mjs); signed out, in a folder with an app's private link, it prints that link (the runtime CLI's own).
 // - The command is Pro's (the owner's call, 2026-11-13): every command but FREE_COMMANDS passes paywall.mjs
-//   requirePro first (signed out: the sign-in, then Pro with its free trial). The walk (`genclass`, `setup`) has Pro
-//   as its own step right after the sign-in (state.mjs), and a command run from the home (ctx.nested) came after it.
-// - Nothing here reads a file or the network but that gate: it parses and dispatches.
+//   requirePro first (signed out: the sign-in, then Pro with its free trial), the home's commands (ctx.nested)
+//   included. The walk (`genclass`, `setup`) has Pro as its own step right after the sign-in (state.mjs).
+// - Every opt-out keeps working without Pro (AGENTS.md rule 8): `init --no-telemetry` and `init --telemetry` on an
+//   app that has GenClass change only that option, and pass without the gate.
+// - A command's own usage errors come before the gate: nothing is asked of genclass.dev for words that are wrong.
+// - Nothing here reads the network but that gate, and nothing reads a file but the two checks before it (whether
+//   the app has GenClass, for the opt-out; its private dashboard link, signed out): it parses and dispatches.
 
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { c, err, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
 
 export const USAGE = `genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.
+
+  The genclass command comes with Pro: 3 days free, then US$15 a developer a month, with a card
+  on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, remove, help.
+  Free is on the website: https://genclass.dev
 
   npx genclass                where this project stands; on a terminal it walks you through the
                               next step, then stays open for commands and questions
@@ -50,7 +59,9 @@ export const USAGE = `genclass: GenClass in your terminal. Set it up, see what i
 
   Account
   npx genclass apps           your apps  (apps new "Name")
-  npx genclass plan           your plan, its limits and what is used; start the paid plan  (--open)
+  npx genclass plan           your plan, its limits and what is used  (--open: billing in the browser)
+  npx genclass upgrade        start Pro (its free trial first), in the browser
+  npx genclass profile        your account and plan, as numbered choices
   npx genclass team           who is on the plan  (team invite)
   npx genclass login          sign in  (logout, whoami)
   npx genclass remove         take GenClass out of this app again
@@ -92,10 +103,16 @@ export async function run(argv, ctx = {}) {
 
   // the genclass command is Pro's: a command asks genclass.dev first (paywall.mjs requirePro), once its words are
   // known to be right. Not: signing in and out, the plan, help, the version, status (where things stand, Pro's step
-  // included), remove, a command run from the home, and the walk, whose own Pro step comes right after the sign-in
+  // included), remove, and the walk, whose own Pro step comes right after the sign-in. A command typed in the home
+  // asks too: the home opens on q at any step, the sign-in's included (once Pro is seen, it is not asked again)
   const asksHelp = args.some((a) => ["--help", "-h", "--version", "-v"].includes(a));
   const paid = async () => {
-    if (ctx.nested || asksHelp || FREE_COMMANDS.includes(cmd) || hostConfig().error) return 0;
+    if (asksHelp || FREE_COMMANDS.includes(cmd)) return 0;
+    const h = hostConfig();
+    if (h.error) {
+      err(`genclass: ${h.error}`);
+      return 2;
+    }
     return (await import("./paywall.mjs")).requirePro(parseArgs(args).o);
   };
 
@@ -106,22 +123,49 @@ export async function run(argv, ctx = {}) {
     const again = await (await import("./app.mjs")).signInAgain(parseArgs(args).o);
     if (again !== null) return again;
   }
-  // Pro comes right after the sign-in (paywall.mjs afterLogin), and an app that login, connect or init put in the
-  // account opens its plan page next (actions.mjs planNow)
+  // an app that login, connect or init put in the account opens its plan page next (actions.mjs planNow)
+  const i = args.indexOf("--cwd");
+  const po = { cwd: i >= 0 ? args[i + 1] : undefined, yes: args.includes("--yes") || args.includes("-y"), json: args.includes("--json"), noBrowser: args.includes("--no-browser") };
   const thenPlan = async (code) => {
-    if (code !== 0 || ctx.inWalk) return code;
-    const i = args.indexOf("--cwd");
-    const po = { cwd: i >= 0 ? args[i + 1] : undefined, yes: args.includes("--yes"), json: args.includes("--json"), noBrowser: args.includes("--no-browser") };
-    if (cmd === "login" && !(await (await import("./paywall.mjs")).afterLogin(po).catch(() => true))) return code;
+    if (code !== 0) return code;
     await (await import("./actions.mjs")).planNow(po).catch(() => "none");
     return code;
   };
   if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
-  if (cmd === "login") return thenPlan(await (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args));
+  if (cmd === "login") {
+    // the sign-in only; then Pro (paywall.mjs afterLogin) for an account without it; this folder's app is offered
+    // to the account (the runtime login's own question) only once Pro is on, so nothing is written before Pro's card
+    const login = await import("../../runtime/bin/lib/login.mjs");
+    const noConnect = args.includes("--no-connect");
+    const code = await login.run(cmd, noConnect || asksHelp ? args : [...args, "--no-connect"]);
+    if (code !== 0 || asksHelp) return code;
+    if (!(await (await import("./paywall.mjs")).afterLogin(po).catch(() => true))) return code;
+    return thenPlan(noConnect ? code : await login.offerConnect(args).catch(() => 1));
+  }
   if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
   if (["connect", "init", "scan", "audit"].includes(cmd)) {
-    const gate = await paid();
-    if (gate !== 0) return gate;
+    // words the command does not take: its own usage error, before anything is asked of genclass.dev
+    if (!asksHelp && !(await argsRight(cmd, args))) {
+      if (cmd === "connect") return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
+      if (cmd === "init") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
+      return (await import("../../runtime/bin/lib/scan.mjs")).run(cmd, args);
+    }
+    // the opt-out the setup prints works for everyone (AGENTS.md rule 8): on an app with GenClass in it, init
+    // --no-telemetry (or --telemetry, to undo it) changes that one option, here on this machine
+    const optOut = cmd === "init" && telemetryOnly(args) && !(await import("../../runtime/bin/lib/init.mjs")).inspectProject({ cwd: po.cwd }).fresh;
+    const gate = optOut ? 0 : await paid();
+    if (gate !== 0) {
+      if (cmd !== "scan" && cmd !== "audit") return gate;
+      // a scan's exit code 1 means "problems found": a scan that did not run ends with 2, and says where the page
+      // check is free
+      if (!po.json && gate === 1) {
+        const { REPORT_PAGE } = await import("../../runtime/bin/lib/scan.mjs");
+        out(`  ${c.gray("Free, without Pro: the page check on the website")}`);
+        out(`    ${c.cyan(REPORT_PAGE)}`);
+        out();
+      }
+      return 2;
+    }
   }
   if (cmd === "connect") return thenPlan(await (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args));
   if (cmd === "init") return thenPlan(await (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args));
@@ -197,15 +241,15 @@ export async function run(argv, ctx = {}) {
     err(`genclass agent: there is no ${c.bold(words[0])}. Try ${c.cyan("npx genclass agent")} or ${c.cyan("npx genclass agent link")}`);
     return 2;
   }
+  // signed out, the runtime CLI's own command still knows an app's private dashboard link (.genclass.local): it is
+  // printed as before, with no sign-in and no Pro (it is on this machine already)
+  const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", [...(o.cwd ? ["--cwd", o.cwd] : []), ...(o.open ? ["--open"] : [])]);
+  if (cmd === "dashboard" && !o.json && !o.app && (await privateLinkHere(o.cwd))) return fallback();
   if (cmd !== null && !["setup", "status"].includes(cmd)) {
     const gate = await paid();
     if (gate !== 0) return gate;
   }
-  if (cmd === "dashboard") {
-    // signed out, the runtime CLI's own command still knows an app's private dashboard link
-    const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", [...(o.cwd ? ["--cwd", o.cwd] : []), ...(o.open ? ["--open"] : [])]);
-    return upsold((await import("./app.mjs")).dashboard(o, { fallback }));
-  }
+  if (cmd === "dashboard") return upsold((await import("./app.mjs")).dashboard(o, { fallback }));
   if (["problems", "events", "health", "report"].includes(cmd)) return upsold((await import("./views.mjs"))[cmd](o), cmd !== "report");
   if (cmd === "analytics") return upsold((await import("./views.mjs")).analytics({ ...o, section: words[0] ?? null }));
   if (cmd === "agent") {
@@ -226,6 +270,64 @@ export async function run(argv, ctx = {}) {
     return setup({ ...o, ...(ctx.nested ? { home: false } : {}) }, { runSuggest, home });
   }
   return 2;
+}
+
+/** init's options that leave what it does at the telemetry switch: where, whether to ask, and what not to run. */
+const TOGGLE_WITH = new Set(["--yes", "-y", "--dry-run", "--no-install", "--no-network"]);
+
+/** Whether `init`'s arguments only turn the anonymous diagnostics off (--no-telemetry) or back on (--telemetry). */
+export function telemetryOnly(args) {
+  let toggle = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--cwd") i++;
+    else if (a.startsWith("--cwd=")) continue;
+    else if (a === "--no-telemetry" || a === "--telemetry") toggle = true;
+    else if (!TOGGLE_WITH.has(a)) return false;
+  }
+  return toggle;
+}
+
+/** Whether a runtime command's words are ones it takes (a parse only: nothing is read or sent). */
+async function argsRight(cmd, args) {
+  try {
+    if (cmd === "init") {
+      const { parse } = await import("../../runtime/bin/lib/init.mjs");
+      parse(args);
+      return true;
+    }
+    if (cmd === "connect") return (await import("../../runtime/bin/lib/login.mjs")).argsError("connect", args) === null;
+    // scan and audit: their flags, and one address that is a URL
+    const { normaliseUrl } = await import("../../runtime/bin/lib/scan.mjs");
+    const urls = [];
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (["--json", "--phone", "--hosted", "--local"].includes(a) || /^--(timeout|cwd)=./.test(a)) continue;
+      if (a === "--timeout" || a === "--cwd") {
+        if (args[++i] === undefined) return false;
+        continue;
+      }
+      if (a.startsWith("-")) return false;
+      urls.push(a);
+    }
+    if (urls.length !== 1) return false;
+    normaliseUrl(urls[0]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Signed out, in a folder whose app has a private dashboard link (init without an account wrote it). */
+async function privateLinkHere(cwd) {
+  try {
+    const { readCredentialsFor } = await import("../../runtime/bin/lib/account.mjs");
+    if (readCredentialsFor().creds) return false;
+    const st = (await import("../../runtime/bin/lib/init.mjs")).inspectProject({ cwd });
+    return !!st.local?.dashboardUrl && (!st.token || st.local.token === st.token);
+  } catch {
+    return false;
+  }
 }
 
 /** The commands that work without Pro: signing in and out, the plan itself, where things stand, help, the version, and taking GenClass out. */

@@ -63,11 +63,13 @@ describe("genclass: the welcome card (src/art.mjs header, src/tui.mjs card)", ()
     }
   });
 
-  it("someone signed in is welcomed back by name; a new person is told what GenClass does", async () => {
+  it("someone signed in is welcomed back (by their GitHub name, never by the start of an email); a new person is told what GenClass does", async () => {
     const back = plain(await printed(() => card({ app: "shop", framework: "Vite + React", account: "ada.lovelace@example.com", plan: "Team", cwd: "/home/ada/shop", version: "9.9.9" })));
     expect(back).toContain("╭─ GenClass ─");
     expect(back).toContain(" v9.9.9 ─╮");
-    expect(back).toContain("Welcome back, Ada!");
+    expect(back).toContain("Welcome back!");
+    expect(back).not.toContain("Welcome back, Ada");
+    expect(plain(await printed(() => card({ account: "GitHub ada-l", version: "1" })))).toContain("Welcome back, Adal!");
     expect(back).toContain("ada.lovelace@example.com • Team plan");
     expect(back).toContain("shop • Vite + React");
     expect(back).not.toContain("Finds what breaks");
@@ -82,9 +84,9 @@ describe("genclass: the welcome card (src/art.mjs header, src/tui.mjs card)", ()
     expect(plain(await printed(() => card({ account: null, host: "http://localhost:8797", version: "1" })))).toContain("talking to http://localhost:8797");
   });
 
-  it("names: the start of an email address or a GitHub name, capitalised; nothing when there is no name in it", () => {
-    expect(firstName("mehar@daybot.ca")).toBe("Mehar");
-    expect(firstName("ada.lovelace+work@example.com")).toBe("Ada");
+  it("names: a GitHub name, capitalised; nothing for an email address (walk58@... is not a name) or no name at all", () => {
+    expect(firstName("mehar@daybot.ca")).toBeNull();
+    expect(firstName("walk58@example.com")).toBeNull();
     expect(firstName("GitHub octo-cat")).toBe("Octocat");
     expect(firstName("account acct0000000000000000001")).toBeNull();
     expect(firstName("")).toBeNull();

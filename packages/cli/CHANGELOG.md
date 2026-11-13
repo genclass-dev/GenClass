@@ -21,6 +21,41 @@ The genclass command comes with Pro:
 - The header shows this folder's app's plan. The note under a dashboard link says what Free shows (the totals) and
   what comes with Pro.
 
+Fixed before release, from a test report on the 0.3.7 pull request and a walk of 0.3.6 at 58 columns:
+
+- **The telemetry opt-out works without Pro.** `npx genclass init --no-telemetry` (and `--telemetry`, to undo it) on
+  an app that has GenClass changes only that option, signed out too. It no longer opens a checkout.
+- **`genclass login` only signs in.** An account without Pro sees Pro's card next, and nothing is written in the
+  folder. This folder's app is offered to the account (the runtime login's own question) once Pro is on.
+- **The home's commands pass the gate**, like any command: the home can open before the sign-in (q at the first
+  step). Skipping the sign-in skips the steps after Pro too.
+- **A 4th app on Pro** says that more apps come with Enterprise, by email, with the address on its plan page. Nothing
+  is opened or waited for, and the walk goes on. `upgrade` and `apps new` say the same.
+- **Pro with one seat:** `team` and `team invite` say to add seats in Manage billing, not that a team needs Pro.
+  `upgrade` on Pro says there is nothing to upgrade, and where seats are added.
+- **Said before the sign-in:** the first screen and `--help` say that the command comes with Pro (3 days free, then
+  US$15 a developer a month, card on Stripe). `--help` lists `upgrade`, `profile` and what works without Pro.
+- **No v4 text:** `whoami`, the login's next steps, the dashboard help and the lines under a dashboard link no
+  longer say every dashboard is free, or offer Pro to an account that has it. Signed out, `genclass dashboard` in a
+  folder with an app's private link prints it again.
+- **The Pro card:** a used trial is no longer promised; it says which account it is for; n, no, s and exit stop as
+  q does. `plan` says when a trial ends and its first charge, shows no model runs without Pro, and shows no app
+  limit for GenClass's grant. A stopped payment wait says so once.
+- **For scripts and agents:** `needs_pro` has one JSON shape everywhere: `ok`, `error`, `needs_pro`, `signed_in`,
+  `plan`, `price`, `trial_days`, `checkout_url`, `run`. `upgrade` without Pro ends like the gated commands (exit 1;
+  `--json` gives that shape). `scan` and `audit` behind the gate exit 2 (their 1 means problems found) and name the
+  free page check on genclass.dev. A command's own usage error comes before the gate.
+- An app Pro covers is no longer told it "has no plan yet", and its views are not blocked on a terminal. A Free
+  choice made earlier no longer answers a new plan-page wait.
+- **58 columns:** a spinner's line never wraps (the stop hint goes on its own line); a command or an address is never
+  broken across lines, and warnings are wrapped too; the session file is written with `~`.
+- Small ones: `ask` says Pro is needed before its privacy notice; `suggest` remembers "repository only"; adding
+  GenClass again after `remove` reuses the account's app of the same name (asked first; `--yes` reuses it); the
+  coding-agent step shows the files it writes and asks; the welcome no longer makes a name from an email address;
+  `q stop` everywhere; `status` in the home has no card; `analytics` on Free says "already counted" only when it is;
+  a Pro account's `suggest` with no plan from genclass.dev (`--no-model`) shows every item; a member of a paying team
+  is told a new app goes into the team's account (genclass.dev's `team_plan` and `via`).
+
 ## 0.3.6
 
 The paid plan is Pro (it was called Team), with 3 days free:

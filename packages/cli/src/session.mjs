@@ -12,7 +12,7 @@
 import { readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { signIn } from "./actions.mjs";
-import { proLine } from "./paywall.mjs";
+import { needsProJson, proLine } from "./paywall.mjs";
 import { bad, clean, note, proBox, typed, warn } from "./tui.mjs";
 
 /**
@@ -26,7 +26,7 @@ export async function asking(o, creds, call, deps = {}) {
   if (!r.ok && r.reauth && !o.json && interactive()) {
     out();
     note("This sign-in is from before the command could do this, so it was not approved for it. Signing in once more fixes it: the page lists what the terminal can do.");
-    const a = await typed(`  ${c.bold("Enter")} ${c.gray("to sign in again,")} ${c.bold("q")} ${c.gray("to stop")} `);
+    const a = await typed(`  ${c.bold("Enter")} ${c.gray("to sign in again ·")} ${c.bold("q")} ${c.gray("stop")} `);
     if (a === null || /^q/i.test(a)) return r;
     if ((await (deps.signIn ?? signIn)(o)) !== "done") return r;
     const again = readCredentialsFor().creds;
@@ -44,7 +44,7 @@ export async function asking(o, creds, call, deps = {}) {
 export function refused(r, ctx) {
   // the genclass command is Pro's (paywall.mjs): the one way on, whatever was asked
   if (r.needsPro) {
-    if (ctx.json) out(JSON.stringify({ ok: false, error: "the genclass command comes with Pro", needs_pro: true, checkout_url: r.needsPro.checkoutUrl, trial_days: r.needsPro.trialDays, run: "npx genclass upgrade" }));
+    if (ctx.json) out(JSON.stringify(needsProJson(r.needsPro)));
     else {
       out();
       warn(proLine(r.needsPro));

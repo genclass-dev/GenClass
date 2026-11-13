@@ -242,7 +242,7 @@ export async function pickApp(o = {}, deps = {}, name = "dashboard") {
     note(wanted.length > 1 ? `More than one app is named "${clean(o.app, 40)}". Which one?` : o.app ? `No app named "${clean(o.app, 40)}". Which one?` : state.app.token ? "This folder's app is not in your account yet. Which app?" : "Which app?");
     list.forEach((p, i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${c.bold(clean(appLabel(p, projects), 34))}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`));
     out();
-    const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("back")}  `);
+    const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("stop")}  `);
     const i = a !== null && /^\d+$/.test(a.trim()) ? Number(a.trim()) - 1 : -1;
     if (list[i]) return { state, creds, target: list[i] };
     out();
@@ -277,9 +277,15 @@ export async function appView(o = {}, deps = {}, view) {
   if ("code" in picked) return picked.code;
   let { state } = picked;
   const { creds, target } = picked;
-  // an app of the account with no plan chosen opens its plan page first, as its page on genclass.dev does
+  // an app of the account with no plan chosen opens its plan page first, as its page on genclass.dev does. An app
+  // the account's plan covers goes on whether or not Continue was clicked; one past what a paying account's plan
+  // covers has said so (Enterprise, by email), and its numbers are not the plan's
   if (!o.json && interactive()) {
     const p = await planNow({ cwd: o.cwd, yes: o.yes }, deps, target.id);
+    if (p === "locked") {
+      out();
+      return 1;
+    }
     if (p === "open") {
       out();
       note(`${clean(target.name, 40)} needs its plan first. Run this again once it is chosen.`);
@@ -294,7 +300,7 @@ export async function appView(o = {}, deps = {}, view) {
     // signed in before the command could show dashboards: one more approval in the browser, then it is shown
     header({ app: target.name, framework: state.app.framework, account: state.account?.label, plan: planName(state, target.token), host: state.host });
     note("This sign-in is from before the command could show dashboards, so it was not approved for that. Signing in once more fixes it.");
-    const a = await typed(`  ${c.bold("Enter")} ${c.gray("to sign in again,")} ${c.bold("q")} ${c.gray("to stop")} `);
+    const a = await typed(`  ${c.bold("Enter")} ${c.gray("to sign in again ·")} ${c.bold("q")} ${c.gray("stop")} `);
     if (a === null || /^q/i.test(a)) return 1;
     if ((await signIn(o)) !== "done") return 1;
     const again = readCredentialsFor().creds;

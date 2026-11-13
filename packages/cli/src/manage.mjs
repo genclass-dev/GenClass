@@ -82,12 +82,18 @@ export async function apps(o = {}, deps = {}) {
         // plans are per project: an app past the ones Free covers needs its own, and its page says so
         const me = await fetchOverview(creds, deps).catch(() => null);
         const made = me?.ok ? me.projects.find((p) => p.token === r.token) : null;
+        const full = !!made?.needsPlan && accountPaid(me);
         if (made?.needsPlan && made.planUrl) {
-          warn(accountPaid(me) ? "Your plan covers no more apps: more come with Enterprise, by email (its plan page has the address)." : "Free covers one app: this one needs Pro.");
-          out(`  ${c.gray("Its plan:")} ${c.cyan(made.planUrl)}`);
-        } else if (made?.plan?.id === "free" && made.planUrl) out(`  ${c.gray("On Free (limited). Its plan:")} ${c.cyan(made.planUrl)}`);
+          // past the apps a paying account's plan covers: nothing to pay for, so nothing is opened or waited for
+          warn(full ? "Your plan covers no more apps: more come with Enterprise, by email." : "Free covers one app: this one needs Pro.");
+          out(`  ${c.gray(full ? "The address, on its plan page:" : "Its plan:")}`);
+          out(`    ${c.cyan(made.planUrl)}`);
+        } else if (made?.plan?.id === "free" && made.planUrl) {
+          out(`  ${c.gray("On Free (limited). Its plan:")}`);
+          out(`    ${c.cyan(made.planUrl)}`);
+        }
         // its plan is chosen now, on its page (Pro, or Free with a reason)
-        if (made?.id) await planNow({ cwd: o.cwd }, deps, made.id);
+        if (made?.id && !full) await planNow({ cwd: o.cwd }, deps, made.id);
         note("To put GenClass into that app's code, run npx genclass in its folder and pick this app.");
       }
       out();
@@ -156,12 +162,20 @@ export async function plan(o = {}, deps = {}) {
     if (a.reauth) note("For its limits and what is used: npx genclass login, once (this sign-in is from before the command could show them).");
   } else {
     row("Plan", `${c.bold(clean(a.plan.name, 20))}${a.plan.price ? c.gray(`  ${clean(a.plan.price, 40)}`) : ""}${a.access === "comp" ? c.gray("  granted by GenClass") : ""}`);
-    if (a.subscription.periodEnd && a.access === "paid") row(a.subscription.cancels ? "Ends" : "Renews", day(a.subscription.periodEnd));
+    // a member of a paying team: the commands come with the team's plan (a newer server names it)
+    if (a.teamPlan && a.teamPlan.id !== a.plan.id) row("Through", `your team's ${clean(a.teamPlan.name, 20)}`);
+    const trial = a.subscription.status === "trialing" && a.access === "paid" && a.subscription.periodEnd;
+    // the trial says that it is one, and when its first charge is (or that a canceled one charges nothing)
+    if (trial) row("Trial", a.subscription.cancels ? `until ${day(a.subscription.periodEnd)}. Canceled: nothing is charged.` : `until ${day(a.subscription.periodEnd)}. Then the first charge, ${a.plan.price ? clean(a.plan.price, 40) : "the plan's price"}, unless you cancel before.`);
+    else if (a.subscription.periodEnd && a.access === "paid") row(a.subscription.cancels ? "Ends" : "Renews", day(a.subscription.periodEnd));
     if (a.subscription.status && !["active", "trialing"].includes(a.subscription.status)) row("Payment", c.yellow(clean(a.subscription.status.replace(/_/g, " "), 30)));
-    row("Apps", a.limits.apps === null ? `${n(a.used.apps)} ${sym.dot} no limit` : `${n(a.used.apps)} of ${n(a.limits.apps)}`);
+    // GenClass's grants cover every app, whatever the plan's own number says
+    row("Apps", a.limits.apps === null || a.access === "comp" ? `${n(a.used.apps)} ${sym.dot} no limit` : `${n(a.used.apps)} of ${n(a.limits.apps)}`);
     row("History", a.limits.historyDays === null ? "" : `${n(a.limits.historyDays)} days`);
     row("People", a.limits.seats === null ? `${n(a.used.seats)} ${sym.dot} no limit` : `${n(a.used.seats)} of ${n(a.limits.seats)}`);
-    if (a.limits.suggestionsPerDay !== null) row("Model runs", `${n(a.used.suggestionsToday)} of ${n(a.limits.suggestionsPerDay)} used today ${sym.dot} suggest and ask share them`);
+    // without Pro neither suggest nor ask runs here: their model runs are Pro's
+    if (pro) row("Model runs", "come with Pro (suggest and ask)");
+    else if (a.limits.suggestionsPerDay !== null) row("Model runs", `${n(a.used.suggestionsToday)} of ${n(a.limits.suggestionsPerDay)} used today ${sym.dot} suggest and ask share them`);
     const has = [a.includes.analytics && "visitor analytics", a.includes.forwarding && "alerts to Slack, Sentry and others", a.includes.export && "the stored events as a file", a.includes.privateRepositories && "private repositories"].filter(Boolean);
     const lacks = [!a.includes.analytics && "visitor analytics", !a.includes.forwarding && "alerts to Slack, Sentry and others", !a.includes.export && "the stored events as a file", !a.includes.privateRepositories && "private repositories"].filter(Boolean);
     if (has.length) row("Includes", has.join(", "));
@@ -199,7 +213,7 @@ export async function plan(o = {}, deps = {}) {
     return 0;
   }
   const dot = c.gray("·");
-  const k = await typed(`  ${PROMPT()} ${c.bold("Enter")} ${c.gray(`to start ${clean(offer.plan.name, 20)}`)} ${dot} ${c.bold("q")} ${c.gray("not now")}  `);
+  const k = await typed(`  ${PROMPT()} ${c.bold("Enter")} ${c.gray(`to start ${clean(offer.plan.name, 20)}`)} ${dot} ${c.bold("q")} ${c.gray("stop")}  `);
   if (k === null || k !== "") {
     out();
     return 0;
@@ -256,30 +270,50 @@ export async function upgrade(o = {}, deps = {}) {
   const s = await signedIn(o, deps, "upgrade");
   if ("code" in s) return s.code;
   const { state } = s;
-  // an account without Pro starts it here, for the whole account: the paywall the other commands show (paywall.mjs)
+  // an account without Pro starts it here, for the whole account: the paywall the other commands show (paywall.mjs).
+  // Until it is started this ends as they do: the needs_pro answer, exit code 1
   const cli = state.account?.cli ?? null;
+  const paywall = await import("./paywall.mjs");
   if (cli && !cli.paid) {
     if (o.json) {
-      out(JSON.stringify({ ok: true, app: null, plan: { name: cli.plan }, price: cli.price, trial_days: cli.trialDays, url: cli.checkoutUrl }));
-      return 0;
+      out(JSON.stringify(paywall.needsProJson(cli)));
+      return 1;
     }
     top(state);
-    await (await import("./paywall.mjs")).startPro(cli, state.account?.offer ?? null, { ...o, card: true }, deps);
+    const started = await paywall.startPro(cli, state.account?.offer ?? null, { ...o, card: true }, deps);
     out();
-    return 0;
+    return started ? 0 : 1;
   }
-  const offer = upgradeOffer(state, o.app ?? null);
   const billingUrl = state.account?.billingUrl ?? hostUrl("/account/billing");
+  const here = (state.projects ?? []).find((p) => p.token === state.app?.token && p.plan && !p.shared) ?? null;
+  // Pro already: an app past the ones it covers is Enterprise's (by email); nothing else is for sale here
+  const paying = accountPaid(state.account);
+  const full = paying && here?.needsPlan ? here : null;
+  const offer = paying ? null : upgradeOffer(state, o.app ?? null);
+  const viaTeam = cli?.via === "team" || state.account?.plan?.via === "team";
   if (o.json) {
-    out(JSON.stringify({ ok: true, app: offer?.project?.name ?? null, plan: offer?.plan ?? null, price: offer?.price ?? null, url: offer?.checkoutUrl ?? billingUrl }));
+    if (paying) out(JSON.stringify({ ok: true, paid: true, via: viaTeam ? "team" : (cli?.via ?? null), plan: state.account?.plan ?? null, app: here?.name ?? null, needs_plan: !!full, ...(full ? { error: "the plan covers no more apps: more come with Enterprise, by email", plan_url: full.planUrl } : {}), billing_url: billingUrl }));
+    else out(JSON.stringify({ ok: true, app: offer?.project?.name ?? null, plan: offer?.plan ?? null, price: offer?.price ?? null, url: offer?.checkoutUrl ?? billingUrl }));
     return 0;
   }
   top(state);
+  if (full) {
+    warn(`Your plan covers no more apps, and ${clean(full.name, 30)} is one more. More apps come with Enterprise, by email.`);
+    if (full.planUrl) {
+      out(`  ${c.gray("The address, on its plan page:")}`);
+      out(`    ${c.cyan(full.planUrl)}`);
+    }
+    out();
+    return 0;
+  }
   if (!offer) {
-    const here = (state.projects ?? []).find((p) => p.token === state.app?.token && p.plan);
-    if (here && here.plan.id !== "free") good(`${clean(here.name, 30)} is on ${clean(here.plan.name, 20)}.`);
-    else note("Nothing to upgrade here: every app of yours has a plan, or genclass.dev sells none here.");
-    out(`  ${c.gray("Billing, in the browser")}  ${c.cyan(billingUrl)}`);
+    if (paying) {
+      good(viaTeam ? "You are on your team's Pro: there is nothing to upgrade." : `You are on ${clean(state.account?.plan?.id !== "free" ? (state.account?.plan?.name ?? "Pro") : "Pro", 20)}: there is nothing to upgrade.`);
+      if (!viaTeam) note("More people on it: add seats in Manage billing, on the billing page.");
+    } else if (here && here.plan.id !== "free") good(`${clean(here.name, 30)} is on ${clean(here.plan.name, 20)}.`);
+    else note("Nothing to upgrade here: genclass.dev sells nothing here.");
+    out(`  ${c.gray("Billing, in the browser")}`);
+    out(`    ${c.cyan(billingUrl)}`);
     out();
     return 0;
   }
@@ -339,7 +373,7 @@ export async function profile(o = {}, deps = {}) {
   }
   choices.forEach(([label], i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${label}`));
   out();
-  const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("back")}  `);
+  const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("stop")}  `);
   const pick = a !== null && /^\d+$/.test(a.trim()) ? choices[Number(a.trim()) - 1] : null;
   if (pick) {
     const r = await pick[2]();
@@ -359,6 +393,15 @@ export async function team(o = {}, deps = {}) {
   const billing = state.account?.billingUrl ?? hostUrl("/account/billing");
   if ((o.args ?? [])[0] === "invite") {
     const r = await asking(o, creds, (cr) => createInvite(cr, deps), deps);
+    // on Pro, a refusal for the plan is a full team: seats are added in Manage billing, not by another plan
+    if (!r.ok && r.upgradeUrl && !r.needsPro && accountPaid(state.account)) {
+      if (o.json) out(JSON.stringify({ ok: false, error: "every seat is taken: add seats in Manage billing", billing_url: billing }));
+      else {
+        top(state);
+        seatsFull(billing);
+      }
+      return 1;
+    }
     if (!r.ok) {
       if (!o.json) top(state);
       return refused(r, { what: "A team", command: "team invite", browserUrl: billing, json: o.json });
@@ -390,10 +433,11 @@ export async function team(o = {}, deps = {}) {
   for (const i of t.invites) out(`    ${c.gray(`an invite link is open${i.expires ? ` until ${day(i.expires)}` : ""}`)}`);
   for (const m of t.memberships) out(`  ${c.gray("You are also in the team of")} ${clean(m.label, 50)}${m.active ? "" : c.gray(" (not active)")}`);
   out();
-  if (t.seats !== null && t.seats <= 1) {
+  if (t.seats !== null && t.seats <= t.used && (a.access === "paid" || a.plan.id !== "free")) seatsFull(billing, t.seats);
+  else if (t.seats !== null && t.seats <= 1) {
     out(`  ${c.bold(`${clean(a.plan.name, 20)} is for one person.`)}`);
     note("A team comes with Pro: everyone you invite opens the same dashboards.");
-    out(`    ${c.cyan("npx genclass plan")}`);
+    out(`    ${c.cyan("npx genclass upgrade")}`);
   } else {
     out(`  ${c.gray("Invite someone:")} ${c.cyan("npx genclass team invite")}`);
     out(`  ${c.gray(t.seats === null ? "Remove someone or change your plan, in the browser:" : "Remove someone or add seats, in the browser:")}`);
@@ -401,6 +445,13 @@ export async function team(o = {}, deps = {}) {
   }
   out();
   return 0;
+}
+
+/** A paid plan whose seats are all taken (one seat: the buyer's): more people come with more seats, in Manage billing. */
+function seatsFull(billing, seats = null) {
+  out(`  ${c.bold(seats === 1 ? "Your plan has one seat, yours." : "Every seat of your plan is taken.")}`);
+  note("Add seats in Manage billing, then invite your team: npx genclass team invite");
+  out(`    ${c.cyan(billing)}`);
 }
 
 // ----------------------------------------------------------------------------------------------- connections
