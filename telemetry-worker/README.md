@@ -9,7 +9,7 @@ its totals, on the website; Pro (plan id `team`), US$15 per developer a month fo
 command, every problem, visitor analytics, forwarding, export, 90 days of history, private repositories for the
 GitHub App and members ([Teams](#teams)), 3 days free at the first Checkout; and Enterprise, by agreement, with more
 apps and your own classifier, which GenClass trains ([Paid plans](#paid-plans)). What was bought before 13 November
-2026 keeps covering what it covered (migration 0020).
+2026 keeps covering what it covered (migration 0021).
 
 - **Deployed:** worker `genclass-telemetry`, account `144bd5f5270b51dbe7faf46227a154f0`.
   - `https://genclass-telemetry.mehar-144.workers.dev` (workers.dev). Runtime `0.2.1` and earlier send to this URL +
@@ -558,10 +558,10 @@ too much written"): the name, the price, the first 5 lines of the plan (`plans.t
 Free" and the trial's own line) and the rest folded under "N more"; a just-added app's page has one line under its
 heading, and the month's live fixes show once there are some.
 
-What was bought before version 5 keeps what it covered (the Terms; migration 0020, applied before the worker that
+What was bought before version 5 keeps what it covered (the Terms; migration 0021, applied before the worker that
 reads it is deployed: `npx --yes wrangler@4 d1 migrations apply genclass-dashboard --remote`). A subscription bought per
 app under version 4 keeps its app covered, the app is not counted in Pro's 3, and its team keeps every member (no seat
-count). An account subscription paying when 0020 is applied keeps covering as many apps as the account had then
+count). An account subscription paying when 0021 is applied keeps covering as many apps as the account had then
 (`accounts.apps_kept`) until that subscription ends or another replaces it (the webhook clears it). Every app a paid
 plan or a grant covered then counts as chosen (`projects.plan_chosen`), so it opens its dashboard as before instead of
 "Choose a plan". A paid Pro under GenClass's grant of Pro keeps the grant's room (every app, no seat limit). A Free

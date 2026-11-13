@@ -895,7 +895,7 @@ describe("what was bought before version 5 keeps what it covered, and a paying t
   it("an account subscription from before version 5 keeps covering the apps the account had (accounts.apps_kept) while it lasts", async () => {
     const b = await buyer();
     for (const n of ["Docs", "Extra", "Fifth"]) await createApp(b.env, b.cookie, n);
-    // a subscription of the whole account from version 3 (or bought per app), as migration 0020 leaves it
+    // a subscription of the whole account from version 3 (or bought per app), as migration 0021 leaves it
     paidPro(b.sql, b.account.id, 1);
     b.sql.db.prepare("UPDATE accounts SET apps_kept = 5 WHERE id = ?").run(b.account.id);
     expect(await plansOf(b)).toEqual(Array(5).fill("team:paid"));
@@ -918,7 +918,7 @@ describe("what was bought before version 5 keeps what it covered, and a paying t
     log.mockRestore();
   });
 
-  it("migration 0020: a paying or granted account's apps count as chosen, and an account subscription keeps its apps; Free's do not", async () => {
+  it("migration 0021: a paying or granted account's apps count as chosen, and an account subscription keeps its apps; Free's do not", async () => {
     const t = setup(LIVE);
     const ada = await signedIn(t.env);
     const bob = await signedIn(t.env, "bob@example.com");
@@ -929,7 +929,7 @@ describe("what was bought before version 5 keeps what it covered, and a paying t
     paidPro(t.sql, ada.account.id, 1);
     projectPaid(t.sql, cyApps[0]!.id);
     // the migration's own statements, run again on these rows (the tests' database ran it empty)
-    const sqlText = readFileSync(new URL("../migrations/0020_plans_v5_kept.sql", import.meta.url), "utf8").split("\n").filter((l) => !l.startsWith("--")).join("\n");
+    const sqlText = readFileSync(new URL("../migrations/0021_plans_v5_kept.sql", import.meta.url), "utf8").split("\n").filter((l) => !l.startsWith("--")).join("\n");
     t.sql.db.exec(sqlText.replace(/ALTER TABLE accounts ADD COLUMN apps_kept INTEGER;/, ""));
     expect(kept(t.sql, ada.account.id)).toBe(2);
     expect(kept(t.sql, bob.account.id)).toBeNull();

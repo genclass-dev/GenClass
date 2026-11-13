@@ -1076,7 +1076,7 @@ export async function applySubscription(x: EventContext, account: BillingAccount
   if (s.priced === null) console.log(`stripe webhook: ${String(event?.type)} ${String(event?.id)}: subscription ${subId} no longer has a GenClass price; plan set to free`);
   await x.db
     .prepare(
-      // apps_kept (migration 0020, what a subscription from before version 5 covered) ends with that subscription: when
+      // apps_kept (migration 0021, what a subscription from before version 5 covered) ends with that subscription: when
       // it ends, or another one replaces it (SET reads the row as it was)
       "UPDATE accounts SET plan = ?, subscription_id = ?, subscription_status = ?, past_due_since = ?, current_period_end = ?, cancel_at_period_end = ?, " +
         "stripe_mode = ?, seats = ?, apps_kept = CASE WHEN ? = 'free' OR subscription_id IS NOT ? THEN NULL ELSE apps_kept END WHERE id = ? AND stripe_customer_id = ?",

@@ -452,7 +452,7 @@ export interface Coverage {
  * The account's plan and how many apps it covers (billing/plans.json version 5): the best of its own subscription or
  * grant and every app's (a subscription bought per project under version 4, a grant copied to an app). A paid plan
  * covers limits.apps of the apps that do not pay for themselves (Pro: 3), oldest first, or as many as the account had
- * when version 5 came while that same subscription lasts (accounts.apps_kept, migration 0020: what was bought before
+ * when version 5 came while that same subscription lasts (accounts.apps_kept, migration 0021: what was bought before
  * 13 November 2026 keeps covering the apps it covered). An app with a subscription of its own is always covered and
  * not counted. A grant covers every app, a paid plan under a grant of the same plan too; Free covers its limits.apps.
  */
