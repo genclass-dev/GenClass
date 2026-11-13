@@ -70,11 +70,14 @@ const dots = (weight) => (weight >= 5 ? c.red("urgent") : weight >= 4 ? c.yellow
 /** Prints one item of the plan. */
 function printItem(i, full) {
   out();
-  const title = `  ${c.bold(String(i.n).padStart(2))}  ${c.bold(clean(i.title, 90))}`;
   const tag = `${c.gray(`${AREAS[i.area] ?? i.area} ${sym.dot}`)} ${dots(i.weight)}`;
-  if (visible(title) + 2 + visible(tag) <= width()) out(`${title}  ${tag}`);
+  // the title on as many lines as it takes at this width, the tag after it or under it
+  const [first = "", ...more] = wrap(clean(i.title, 90), width() - 8);
+  const title = `  ${c.bold(String(i.n).padStart(2))}  ${c.bold(first)}`;
+  if (!more.length && visible(title) + 2 + visible(tag) <= width() - 2) out(`${title}  ${tag}`);
   else {
     out(title);
+    for (const l of more) out(`      ${c.bold(l)}`);
     out(`      ${tag}`);
   }
   for (const e of i.evidence ?? []) {
@@ -104,7 +107,8 @@ const day = (iso) => {
 function printIdeas(ideas, all) {
   out();
   rule();
-  out(`  ${c.bold("Ideas from the model")} ${c.gray("(not measured: judged from your app and its site)")}`);
+  out(`  ${c.bold("Ideas from the model")}`);
+  note("Not measured: judged from your app and its site.");
   ideas.forEach((d, i) => {
     out();
     out(`  ${c.bold(String(i + 1).padStart(2))}  ${c.bold(clean(d.title, 90))}`);
@@ -123,7 +127,8 @@ function printIdeas(ideas, all) {
 function printDesigns(designs) {
   out();
   rule();
-  out(`  ${c.bold("Website designs")} ${c.gray("(the model's choice of sites that fit what you do)")}`);
+  out(`  ${c.bold("Website designs")}`);
+  note("The model's choice of sites that fit what you do.");
   designs.forEach((d, i) => {
     out();
     out(`  ${c.bold(String(i + 1).padStart(2))}  ${c.bold(clean(d.title, 90))}`);
@@ -243,7 +248,7 @@ export async function suggest(o = {}, deps = {}) {
     }
     if (!agreed) planNote = `Ordered by the checks' own weights: nothing was sent. ${quiet || !interactive() ? "Pass --yes to send the failed checks to genclass.dev for a plan written for your app." : ""}`.trim();
     else {
-      const sp = quiet ? null : spinner("Writing the plan for your app (the model also looks for ideas and designs: up to a minute)");
+      const sp = quiet ? null : spinner("Writing the plan for your app (up to a minute)");
       const r = await requestPlan(creds, digest, { fetchFn: deps.fetchFn });
       if (r.ok) {
         plan = { ...r, lockedIds: r.lockedIds ?? [] };
@@ -315,7 +320,7 @@ export async function suggest(o = {}, deps = {}) {
   }
   out();
   if (failed.length && !more) {
-    good("Fix one, then run it again: everything is measured afresh.");
+    good("Fix one, then run this again: it measures afresh.");
     out(`    ${c.cyan("npx genclass suggest")}`);
     note(`With a coding agent: paste an "Ask your agent" block, or tell it to run ${c.cyan("npx genclass suggest --json")} and work through the list.`);
   }

@@ -10,6 +10,7 @@ import { CHECKS, runChecks } from "../src/suggest/checks.mjs";
 import { buildDigest, describeDigest } from "../src/suggest/digest.mjs";
 import { FREE_SHOWN, layOut, siteAddress, suggest, suggestionsPrompt } from "../src/suggest/index.mjs";
 import { HOST, isolate, printed, tempDir, viteApp, write } from "./helpers.js";
+import { tooWide } from "./stats.js";
 
 isolate();
 beforeEach(() => {
@@ -74,24 +75,26 @@ describe("genclass suggest: addresses, the digest and the layout (src/suggest/in
       { id: "staging", area: "launch", title: "?", weight: 3, status: "unknown", evidence: [] },
       { id: "email-spf", area: "email", title: "n/a", weight: 3, status: "skip", evidence: [] },
     ];
-    const d = buildDigest({ name: "shop", framework: "Vite + React", site: "https://shop.example", payments: "stripe", hosting: null }, results as never);
+    const d = buildDigest({ name: "shop", framework: "Vite + React", site: "https://shop.example", payments: "stripe", hosting: null, about: `Polar Parts. Sled parts${ESC}[2J shipped across Canada. ${"y".repeat(400)}` }, results as never);
     expect(d).toEqual({
-      app: { name: "shop", framework: "Vite + React", site: "https://shop.example", payments: "stripe", hosting: null },
+      // what the site says it is about (its title and description), cut and cleaned: the design ideas fit the company with it
+      app: { name: "shop", framework: "Vite + React", site: "https://shop.example", payments: "stripe", hosting: null, about: expect.stringMatching(/^Polar Parts\. Sled parts shipped across Canada\. y+…$/) },
       checks: [{ id: "title", area: "launch", title: "A title with an escape", weight: 4, evidence: ['the title is "Vite + React"', `${"x".repeat(159)}…`, "third"] }],
       passed: 1,
       unknown: 1,
     });
-    expect(describeDigest(d).join(" ")).toMatch(/The 1 check that failed.*its name, its framework, its address, its payment provider\..*No source code/);
+    expect(d.app.about!.length).toBe(300);
+    expect(describeDigest(d).join(" ")).toMatch(/The 1 check that failed.*its name, its framework, its address, its site's title and description, its payment provider\..*No source code/);
     // every key the server reads, and no more
     expect(Object.keys(d.checks[0]!).sort()).toEqual(["area", "evidence", "id", "title", "weight"]);
   });
 
-  it("without a server the order is by weight and the first three are open; with one, its order and its words", () => {
+  it("without a server the order is by weight and the first one is open; with one, its order and its words", () => {
     const r = (id: string, weight: number) => ({ id, area: "search", title: id, weight, status: "fail", evidence: [], why: `why ${id}`, fix: `fix ${id}`, prompt: `prompt ${id}` });
     const results = [r("a", 1), r("b", 5), r("c", 3), r("d", 4), { ...r("e", 5), status: "pass" }];
     const local = layOut(results as never, null);
-    expect(local.map((i) => [i.n, i.id, i.open])).toEqual([[1, "b", true], [2, "d", true], [3, "c", true], [4, "a", false]]);
-    expect(FREE_SHOWN).toBe(3);
+    expect(local.map((i) => [i.n, i.id, i.open])).toEqual([[1, "b", true], [2, "d", false], [3, "c", false], [4, "a", false]]);
+    expect(FREE_SHOWN).toBe(1);
     expect(local[0]).toMatchObject({ why: "why b", step: "fix b", prompt: "prompt b", fromModel: false });
     // the server's plan: its order, its words where it has some, the catalog's where it has none, the rest held back
     const plan = { items: [{ id: "c", why: "for your shop", step: "do this", prompt: "tell it" }, { id: "a", why: null, step: null, prompt: null }, { id: "zzz", why: "x", step: "x", prompt: "x" }], lockedIds: ["d", "b"] };
@@ -116,13 +119,12 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     expect(w.toSite().every((c) => c.method === "GET")).toBe(true);
     expect(out).toMatch(/\d+ of \d+ checks pass\. \d+ to do/);
     expect(out).toContain("--no-model: nothing was sent");
-    // the empty shell and the placeholder title are found, each with what was measured
+    // the first one in full, with what was measured; the rest counted, with the way to Pro (the owner's call, 2026-11-12)
     expect(out).toMatch(/1 {2}\S/);
-    expect(out).toContain('"Vite + React"');
     expect(out).toContain("Ask your agent");
-    // three in full; the rest by title, with where the plans are
-    expect(out.match(/^ {6}Ask your agent$/gm)).toHaveLength(3);
-    expect(out).toContain("come with the Team plan");
+    expect(out.match(/^ {6}Ask your agent$/gm)).toHaveLength(1);
+    expect(out).not.toContain('"Vite + React"');
+    expect(out.replace(/\s+/g, " ")).toMatch(/ PRO \d+ more suggestions for this app: \d+ from your checks, each with a prompt for your coding agent\. Start: npx genclass upgrade/);
     // the last run is remembered outside the project, and the status shows it
     const notes = readNotes(dir);
     expect(notes.site).toBe("https://shop.example");
@@ -132,7 +134,7 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     expect(st.steps.find((s) => s.id === "suggestions")).toMatchObject({ state: "waiting" });
   });
 
-  it("signed in with --yes: the digest goes to genclass.dev, Free gets the plan for three, and no code or secret is in what was sent", async () => {
+  it("signed in with --yes: the digest goes to genclass.dev, Free gets the plan for one and the count of the rest, and no code or secret is in what was sent", async () => {
     const { env } = setup();
     await account(env);
     const dir = project();
@@ -141,11 +143,11 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     const text = await printed(async () => (code = await suggest({ cwd: dir, url: "https://shop.example", yes: true, json: true }, deps(w))));
     expect(code).toBe(0);
     const j = JSON.parse(text);
-    expect(j).toMatchObject({ site: "https://shop.example", source: "checks", plan: { id: "free", name: "Free" }, upgrade_url: `${HOST}/account/billing` });
-    expect(j.failed.length).toBeGreaterThan(5);
-    expect(j.failed.slice(0, 3).every((f: any) => f.why && f.do && f.prompt && !f.locked)).toBe(true);
-    expect(j.failed.slice(3).every((f: any) => f.locked === true && !("why" in f) && Array.isArray(f.evidence))).toBe(true);
-    expect(j.failed.map((f: any) => f.n)).toEqual(j.failed.map((_: unknown, i: number) => i + 1));
+    expect(j).toMatchObject({ site: "https://shop.example", source: "checks", plan: { id: "free", name: "Free" }, upgrade_url: `${HOST}/account/billing?plan=team&from=cli`, ideas: [], designs: [] });
+    // Free: the first one in full, the rest counted and not listed
+    expect(j.failed).toHaveLength(1);
+    expect(j.failed[0]).toMatchObject({ n: 1, why: expect.any(String), do: expect.any(String), prompt: expect.any(String) });
+    expect(j.more.checks).toBeGreaterThan(4);
     // heaviest first
     expect(j.failed[0].weight).toBe(5);
     const ids = new Set(CHECKS.map((c: { id: string }) => c.id));
@@ -155,13 +157,64 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     expect(sent.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual(["POST /api/cli/suggest"]);
     const body = sent[0]!.body;
     expect(Object.keys(body).sort()).toEqual(["app", "checks", "passed", "unknown"]);
-    expect(body.app).toEqual({ name: "shop", framework: "Vite + React", site: "https://shop.example", payments: "stripe", hosting: null });
-    expect(body.checks.map((c: any) => c.id).sort()).toEqual(j.failed.map((f: any) => f.id).sort());
+    expect(Object.keys(body.app).sort()).toEqual(["about", "framework", "hosting", "name", "payments", "site"]);
+    expect(body.app).toMatchObject({ name: "shop", framework: "Vite + React", site: "https://shop.example", payments: "stripe", hosting: null });
+    expect(body.checks).toHaveLength(j.failed.length + j.more.checks);
     // the secret in .env was found, and its value went nowhere: not to the server, not into the output
-    expect(j.failed.some((f: any) => f.id === "env-committed" || f.id === "secrets-in-repo" || f.id === "env-example")).toBe(true);
+    expect(body.checks.some((f: any) => f.id === "env-committed" || f.id === "secrets-in-repo" || f.id === "env-example")).toBe(true);
     for (const blob of [JSON.stringify(sent), text]) expect(blob.includes("kq7Zr2mVx9Lp4Ws8Tn3Yb6Hd")).toBe(false);
     // no file's contents either
     expect(JSON.stringify(sent)).not.toMatch(/createRoot|react-dom\/client|<div id=/);
+  });
+
+  it("the model's ideas and website designs: Free sees how many and the same plan again; Pro sees them, each design with its site and a whole prompt", async () => {
+    const { env, sql } = setup({ OPENAI_API_KEY: "sk-test-0123456789abcdef0123" });
+    const me = await account(env);
+    const dir = project();
+    let runs = 0;
+    const design = { title: "Bold outdoor retail", inspired_by: "https://www.patagonia.com", why: "A store that sells gear for the cold, like yours.", prompt: "Redesign the home page of this Vite and React shop in the style of a premium outdoor store: full-width photography, a short headline over it, large product cards in a three-column grid. ".repeat(3) };
+    const model = (init: RequestInit) => {
+      // the server checks that a design's site answers before it keeps the design
+      if ((init.method ?? "GET").toUpperCase() === "GET") return new Response("ok", { status: 200 });
+      runs++;
+      const failed = JSON.parse(JSON.parse(String(init.body)).messages[1].content).failed as { id: string }[];
+      const items = failed.map((c) => ({ id: c.id, why: `For this shop: ${c.id}.`, step: `First: ${c.id}.`, prompt: `Agent: ${c.id}.` }));
+      const ideas = ["A size guide for sleds", "Shipping times on the product page"].map((t) => ({ title: t, why: `why ${t}`, step: `step ${t}`, prompt: `prompt ${t}` }));
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ items, ideas, designs: [design] }) } }] }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const w = world(env, model);
+    // Free: the first suggestion, and the rest counted, ideas and designs included, with Pro's trial
+    const free = (await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true }, deps(w)))).replace(/\s+/g, " ");
+    expect(free).toMatch(/ PRO \d+ more suggestions for this app: \d+ from your checks, 2 ideas from the model, 1 website design inspired by sites like yours, each with a prompt for your coding agent\. 3 days free, then \$15 \/ project \/ month\. Cancel any time\. Start: npx genclass upgrade/);
+    expect(free).not.toContain("A size guide for sleds");
+    expect(free).not.toContain("patagonia");
+    expect(runs).toBe(1);
+    // Free again: the plan from the first run, said so, and no new model run
+    const again = (await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true }, deps(w)))).replace(/\s+/g, " ");
+    expect(again).toMatch(/This is your plan from \w+ \d+: on Free it stays this one\. Pro writes it again every time you run this\./);
+    expect(runs).toBe(1);
+    // Pro (here GenClass's grant): every item, the ideas marked as not measured, the design with its site and its whole prompt
+    setPlan(sql, me.account.id, "free", { comp_until: new Date(now().getTime() + 86_400_000).toISOString(), comp_plan: "team" });
+    const cols = process.stdout.columns;
+    process.stdout.columns = 58;
+    let paid = "";
+    try {
+      paid = await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true, all: true }, deps(w)));
+    } finally {
+      process.stdout.columns = cols;
+    }
+    expect(tooWide(paid)).toEqual([]);
+    const flat = paid.replace(/\s+/g, " ");
+    expect(flat).toContain("Ideas from the model Not measured: judged from your app and its site.");
+    expect(flat).toContain("A size guide for sleds");
+    expect(flat).toContain("Website designs The model's choice of sites that fit what you do.");
+    expect(flat).toContain("Bold outdoor retail Inspired by https://www.patagonia.com");
+    expect(flat).toContain(`Prompt for Claude (copy it all) ${design.prompt.trim()}`);
+    expect(flat).not.toContain("more suggestions for this app");
+    expect(runs).toBe(2);
+    const j = JSON.parse(await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true, json: true }, deps(w))));
+    expect(j.designs).toEqual([{ title: design.title, inspired_by: "https://www.patagonia.com", why: design.why, prompt: design.prompt.trim() }]);
+    expect(j.ideas.map((i: any) => i.title)).toEqual(["A size guide for sleds", "Shipping times on the product page"]);
   });
 
   it("with a model on the server and Team: the model's order and words for every item", async () => {
@@ -176,7 +229,7 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     };
     const w = world(env, model);
     const j = JSON.parse(await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true, json: true }, deps(w))));
-    expect(j).toMatchObject({ source: "model", plan: { id: "team", name: "Team" }, upgrade_url: null });
+    expect(j).toMatchObject({ source: "model", plan: { id: "team", name: "Pro" }, upgrade_url: null, more: { checks: 0, ideas: 0, designs: 0 } });
     expect(j.failed.every((f: any) => !f.locked && f.why === `For this shop: ${f.id}.` && f.do === `First: ${f.id}.` && f.prompt === `Agent: ${f.id}.`)).toBe(true);
     // the model's order, which was the reverse of what was sent
     const sentIds = w.toGenclass()[0]!.body.checks.map((c: any) => c.id);
