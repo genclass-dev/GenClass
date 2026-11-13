@@ -188,6 +188,10 @@ describe("a member reads the owner's dashboards with the owner's plan, and chang
     expect(html).not.toContain('type="button" data-mklink');
     expect(html).toContain("The app's owner makes it.");
     expect(html).toContain('"member":true');
+    // the owner's own app opens its plan page until the owner goes on with the plan there (plans.json version 5:
+    // every new app sees it, a paying account included); a member is never sent there
+    expect((await call(env, "GET", `/account/apps/${app.id}`, { cookie: owner.cookie })).headers.get("location")).toBe(`/account/billing?project=${app.id}`);
+    expect(await json(call(env, "POST", `/api/billing/projects/${app.id}/continue`, { cookie: owner.cookie, body: {} }))).toEqual({ ok: true, plan: "team" });
     const ownerPage = await text(call(env, "GET", `/account/apps/${app.id}`, { cookie: owner.cookie }));
     expect(ownerPage).toContain('id="delproj"');
     expect(ownerPage).toContain('type="button" data-mklink');

@@ -69,20 +69,23 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     expect(offered.offer).toEqual({
       // the plan id stays team; its name is Pro since 2026-11-12
       plan: { id: "team", name: "Pro" },
-      price: "$15 / project / month",
+      price: "$15 / developer / month",
       summary: teamPlan.summary,
       features: teamPlan.features.filter((f) => f.available && !/^Everything in /.test(f.text)).map((f) => f.text).slice(0, 12),
-      // plans are per project: the one app on Free has its own plan page
+      // Pro is the account's (plans.json version 5), bought on the plan page of its first app on Free
       checkout_url: `https://genclass.dev/account/billing?project=${app.id}&from=cli`,
       // an account that has never had a subscription starts with Pro's 3 days free (src/billing.ts trialFor)
       trial_days: 3,
-      free: { name: "Free", apps: 3, history_days: 7, suggestions_shown: 1, live_fixes: 100 },
+      // Pro is per developer since version 5, not sold by units of apps
+      apps_per_unit: null,
+      // Free covers one app since version 5
+      free: { name: "Free", apps: 1, history_days: 7, suggestions_shown: 1, live_fixes: 100 },
     });
     // each app says its plan, whether Free was chosen for it, and its plan page
     expect(offered.projects[0]).toMatchObject({ plan: { id: "free", name: "Free", source: null }, needs_plan: false, plan_chosen: false, plan_url: `https://genclass.dev/account/billing?project=${app.id}` });
     sql.db.prepare("UPDATE projects SET plan_chosen = '2026-11-12T00:00:00.000Z' WHERE id = ?").run(app.id);
     expect(((await (await call(selling, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).projects[0].plan_chosen).toBe(true);
-    // the app on Team: nothing left to offer (the account has no other app on Free)
+    // the app on a subscription of its own (version 4: it gives the account Pro): nothing left to offer
     sql.db.prepare("UPDATE projects SET plan = 'team', stripe_mode = 'live', subscription_id = 'sub_x', subscription_status = 'active' WHERE id = ?").run(app.id);
     expect(((await (await call(selling, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
     // its subscription ends: the app is on Free again and offered Pro, without a second trial (one per account)
@@ -104,11 +107,16 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     const team = (await (await call({ ...env, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any;
     expect(team.plan).toEqual({ id: "team", name: "Pro" });
     expect(team.suggestions).toEqual({ per_day: 30, shown: null, used_today: 0, model: true });
-    // an account whose apps all have a plan (here GenClass's grant, which is per project for a plan sold per project:
-    // migration 0016 copied it onto the apps that existed) is offered none, whatever the server sells
-    expect(((await (await call({ ...selling, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer.checkout_url).toBe(`https://genclass.dev/account/billing?project=${app.id}&from=cli`);
+    // an account with GenClass's grant is offered none, whatever the server sells: since version 5 a grant covers
+    // every app of the account, the account's own or one copied onto an app (migration 0016)
+    const offerNow = async () => ((await (await call({ ...selling, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any);
+    const granted = await offerNow();
+    expect(granted.offer).toBeNull();
+    expect(granted.projects[0]).toMatchObject({ plan: { id: "team", source: "comp" }, needs_plan: false });
+    setPlan(sql, me.account.id, "free", { comp_until: null, comp_plan: null });
+    expect((await offerNow()).offer.checkout_url).toBe(`https://genclass.dev/account/billing?project=${app.id}&from=cli`);
     sql.db.prepare("UPDATE projects SET comp_until = ?, comp_plan = 'team' WHERE id = ?").run(FUTURE(), app.id);
-    expect(((await (await call({ ...selling, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
+    expect((await offerNow()).offer).toBeNull();
     expect(JSON.stringify(team)).not.toContain(KEY);
   });
 
@@ -239,7 +247,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       cached_at: null,
       // the plan page that starts Pro from the command, and what Pro is
       upgrade_url: "https://genclass.dev/account/billing?plan=team&from=cli",
-      upgrade_plan: { name: "Pro", price: "$15 / project / month", trial_days: 3 },
+      upgrade_plan: { name: "Pro", price: "$15 / developer / month", trial_days: 3 },
       remaining_today: 3,
       limited: false,
     });
@@ -391,7 +399,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       designs_locked: 2,
       cached_at: null,
       upgrade_url: "https://genclass.dev/account/billing?plan=team&from=cli",
-      upgrade_plan: { name: "Pro", price: "$15 / project / month", trial_days: 3 },
+      upgrade_plan: { name: "Pro", price: "$15 / developer / month", trial_days: 3 },
       remaining_today: 2,
       limited: false,
     });
@@ -535,7 +543,7 @@ describe("genclass command: GET /api/cli/app (src/cli.ts)", () => {
     expect(j.recent).toEqual([]);
     expect(j.typeSeries.every((b: any) => Object.keys(b.counts).join() === "problems")).toBe(true);
     expect(j.typeSeries.reduce((n: number, b: any) => n + b.counts.problems, 0)).toBe(1);
-    expect(j.locked.problems).toEqual({ plan: "Pro", upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`, trial_days: 3, price: "$15 / project / month" });
+    expect(j.locked.problems).toEqual({ plan: "Pro", upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`, trial_days: 3, price: "$15 / developer / month" });
     expect(JSON.stringify(j)).not.toContain("/checkout");
     // nothing a page typed, and no session of the account
     expect(JSON.stringify(j)).not.toContain("SECRET PAGE TEXT");

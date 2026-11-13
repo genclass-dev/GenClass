@@ -82,7 +82,8 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, PLANS_FILE, priceText, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { trialFor } from "./billing.js";
 import { activeOwners, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
 import {
@@ -1956,6 +1957,19 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       if (!a) return redirect("/login?next=%2Faccount");
       const view = await accountView(c, a);
       view.notice = accountNotice(url);
+      // a new account's first screen is the paid plan's trial, with a tiny Skip on to its first app (the owner's call,
+      // 2026-11-13: "our entire goal is for them to put their credit cards in")
+      const sold = PAID_PLANS[0];
+      if (!view.projects.length && sold && canBuy(env, a.account) && (await accountAccess(c.db, a.account.id, env, c.now)).source === null) {
+        view.trial = {
+          plan: sold.name,
+          price: priceText(sold),
+          days: (await trialFor(c.db, a.account.id, sold)) || null,
+          summary: sold.summary,
+          features: sold.features.filter((f) => f.available && !/^Everything in /i.test(f.text) && !/days free/i.test(f.text)).map((f) => f.text).slice(0, 8),
+          start: `/account/billing?plan=${encodeURIComponent(sold.id)}&start=1`,
+        };
+      }
       return page(200, (n) => accountPage(n, view));
     }
     case "/account/new": {
@@ -2110,9 +2124,11 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     const access = await projectAccess(c.db, p, env, c.now);
     // plans per project: the account's own app on Free, where the paid plan is sold, opens its plan page until one is
     // chosen there, Team or Free with what stops the person from paying (the owner's call, 2026-11-12)
-    if (mine && access.source === null && access.plan.id === FREE.id && PAID_PLANS[0]?.per_project === true && canBuy(env, a.account)) {
+    if (mine && PAID_PLANS.length && canBuy(env, a.account)) {
+      // version 5 (2026-11-13): the paywall for every new app, a paying account included (it clicks Continue with
+      // Pro), and for an app its plan does not cover
       const row = await c.db.prepare("SELECT plan_chosen FROM projects WHERE id = ?").bind(p.id).first<{ plan_chosen: string | null }>();
-      if (!row?.plan_chosen) return redirect(`/account/billing?project=${encodeURIComponent(p.id!)}`);
+      if (!row?.plan_chosen || access.locked) return redirect(`/account/billing?project=${encodeURIComponent(p.id!)}`);
     }
     const base = {
       account: { apps, current: p.id!, email: a.account.email ?? (a.account.github_login ? `@${a.account.github_login}` : null), plan: access.plan.name },
@@ -2145,13 +2161,18 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
 }
 
 /**
- * The answer to a stats request for an app whose plan has no dashboard: a project past the ones Free covers (it waits
- * for a plan of its own: `upgrade_url` opens that project's plan page), or a plan file without dashboards.
+ * The answer to a stats request for an app whose plan has no dashboard: an app past the ones its account's plan covers
+ * (past Free's: it needs Pro; past Pro's: Enterprise, by email; `upgrade_url` opens the app's plan page, which says
+ * which), or a plan file without dashboards.
  */
-export function lockedJson(c: { cfg: AuthConfig; env: Env }, access?: { locked?: string } | null, projectId?: string | null): Response {
-  if (access?.locked === "free_projects" && projectId) {
+export function lockedJson(c: { cfg: AuthConfig; env: Env }, access?: { locked?: string; apps?: number | null } | null, projectId?: string | null): Response {
+  if ((access?.locked === "free_projects" || access?.locked === "pro_apps") && projectId) {
     const url = `${c.cfg.origin}/account/billing?project=${encodeURIComponent(projectId)}`;
-    return json(402, { ok: false, error: `Free covers ${FREE.limits.apps} projects, and this one is past them: it needs a plan of its own; choose it at ${url}`, locked: true, needs_plan: true, upgrade_url: url });
+    const covers = (n: number | null | undefined) => (n === 1 ? "one app" : `${n ?? "its"} apps`);
+    const error = access.locked === "free_projects"
+      ? `Free covers ${covers(FREE.limits.apps)}, and this one is past it: it needs ${PAID_PLANS[0]?.name ?? "a paid plan"}; start it at ${url}`
+      : `your plan covers ${covers(access.apps)}, and this one is past them: more apps come with Enterprise (${PLANS_FILE.contact}); see ${url}`;
+    return json(402, { ok: false, error, locked: true, needs_plan: true, upgrade_url: url });
   }
   const url = `${c.cfg.origin}/account/billing`;
   return json(402, { ok: false, error: lockedError(c.env), locked: true, upgrade_url: url });

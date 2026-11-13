@@ -21,10 +21,10 @@
 import { join, resolve } from "node:path";
 import { detectProject } from "../../runtime/bin/lib/detect.mjs";
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
-import { addRuntime, addWorkflow, choosePlan, connectAgent, connectGithubApp, signIn, watchFirstPage } from "./actions.mjs";
+import { addRuntime, addWorkflow, chooseAppPlan, choosePlan, connectAgent, connectGithubApp, signIn, watchFirstPage } from "./actions.mjs";
 import { brand, canDraw } from "./art.mjs";
 import { BUILD } from "./assets.mjs";
-import { appsBelow, readState, stateJson } from "./state.mjs";
+import { appsBelow, planName, readState, stateJson } from "./state.mjs";
 import { barPara, card, checklist, header, nextBlock, note, pick, PROMPT, rule, summary, typed, warn } from "./tui.mjs";
 
 /**
@@ -32,7 +32,7 @@ import { barPara, card, checklist, header, nextBlock, note, pick, PROMPT, rule, 
  * about it.
  */
 export function show(state, details = false, welcome = false) {
-  const h = { app: state.app.name, framework: state.app.framework, account: state.account?.label ?? null, plan: state.account?.plan?.name ?? null, host: state.host };
+  const h = { app: state.app.name, framework: state.app.framework, account: state.account?.label ?? null, plan: planName(state), host: state.host };
   // the first screen on a terminal is the welcome card; every later one, and anything piped, is the two-line header
   if (welcome && canDraw()) card({ ...h, cwd: state.cwd, version: BUILD.version });
   else header(h);
@@ -169,8 +169,8 @@ async function walk(o, deps, auto) {
       show(state, details, !auto && !welcomed);
       welcomed = true;
       if (!step) break;
-      // the plan step is its own screen and asks its own question (the card, then Enter or f)
-      if (step.id === "plan" && !auto) {
+      // Pro and the app's plan page are their own screens and ask their own question (the card, then Enter)
+      if ((step.id === "plan" || step.id === "app-plan") && !auto) {
         go = true;
         break;
       }
@@ -221,13 +221,14 @@ async function walk(o, deps, auto) {
     const so = { ...o, confirmed: true };
     let result = "skipped";
     if (step.id === "account") result = await signIn(so);
-    else if (step.id === "plan") {
-      result = await choosePlan(state, so);
+    else if (step.id === "plan" || step.id === "app-plan") {
+      result = step.id === "plan" ? await choosePlan(state, so) : await chooseAppPlan(state, so);
+      // nothing after Pro works without it (paywall.mjs), and an app waits for its plan
       if (result === "quit") {
         out();
-        note("Stopped. Run npx genclass again any time: it continues from here.");
+        if (!auto) note("Stopped. Run npx genclass again any time: it continues from here.");
         out();
-        return 0;
+        return auto ? 1 : 0;
       }
     }
     else if (step.id === "runtime") result = await addRuntime(state, so);

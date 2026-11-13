@@ -102,7 +102,8 @@ describe("POST /api/billing/checkout and /api/billing/portal", () => {
     const s = fakeStripe();
     const r = await call(env, "POST", "/api/billing/checkout", { body: { plan: "pro" }, cookie, fetch: s.fetch });
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000001" });
+    // the fixture's Pro has no trial_days: no days free
+    expect(await r.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000001", trial_days: null });
     expect(s.calls.map((x) => `${x.method} ${x.url.pathname}`)).toEqual(["POST /v1/customers", "GET /v1/prices", "POST /v1/checkout/sessions"]);
     const [customer, prices, session] = s.calls;
     expect(prices!.url.searchParams.get("lookup_keys[0]")).toBe("genclass_pro_monthly");
@@ -140,7 +141,7 @@ describe("POST /api/billing/checkout and /api/billing/portal", () => {
     // the unpaid Pro page is closed, and the price comes from Custom's own lookup key
     s.calls.length = 0;
     const second = await call(env, "POST", "/api/billing/checkout", { body: { plan: "custom" }, cookie, fetch: s.fetch });
-    expect(await second.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000002" });
+    expect(await second.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000002", trial_days: null });
     // the stored customer is checked first: it must be the account's own GenClass customer
     expect(s.calls.map((x) => `${x.method} ${x.url.pathname}`)).toEqual([
       "GET /v1/customers/cus_test0001",
@@ -163,7 +164,7 @@ describe("POST /api/billing/checkout and /api/billing/portal", () => {
     // a second click on Custom (or a second tab) gets the same open page, not a second one
     s.calls.length = 0;
     const third = await call(env, "POST", "/api/billing/checkout", { body: { plan: "custom" }, cookie, fetch: s.fetch });
-    expect(await third.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000002" });
+    expect(await third.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000002", trial_days: null });
     expect(s.calls.map((x) => `${x.method} ${x.url.pathname}`)).toEqual(["GET /v1/customers/cus_test0001", "GET /v1/subscriptions", "GET /v1/checkout/sessions"]);
   });
 
@@ -1526,6 +1527,9 @@ describe("plans: the Free plan's limits (apps, dashboard ranges)", () => {
     const locked = await call(env, "GET", `/api/account/projects/${app.id}/stats?range=30d`, { cookie });
     expect(locked.status).toBe(402);
     expect(await locked.json()).toMatchObject({ ok: false, locked: true, upgrade_url: "https://genclass.dev/account/billing" });
+    // with a plan on sale, the app's page opens its plan page until a plan is chosen there (plans.json version 5)
+    expect((await call(env, "GET", `/account/apps/${app.id}`, { cookie })).headers.get("location")).toBe(`/account/billing?project=${app.id}`);
+    sql.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ?").run(now().toISOString(), app.id);
     const page = await (await call(env, "GET", `/account/apps/${app.id}`, { cookie })).text();
     expect(page).toContain("This app's plan has no dashboard.");
     expect(page).not.toContain('data-r="7d"');
@@ -1582,6 +1586,8 @@ describe("GET /account/billing", () => {
     // the sidebars link to it
     expect(await (await call(on.env, "GET", "/account", { cookie: b.cookie })).text()).toContain('<a href="/account/billing">');
     const app = await createApp(on.env, b.cookie);
+    // its plan chosen first (until then the app's page opens its plan page)
+    on.sql.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ?").run(now().toISOString(), app.id);
     expect(await (await call(on.env, "GET", `/account/apps/${app.id}`, { cookie: b.cookie })).text()).toContain('<a href="/account/billing">');
   });
 

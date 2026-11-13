@@ -55,7 +55,7 @@ whoami   shows the signed-in account and its apps.
 logout   ends the CLI session at genclass.dev and deletes the saved file.
 dashboard
          prints the link to this app's dashboard, free for every app: what GenClass found, on which pages
-         and what it did (how visitors use each page, with analytics: true, shows on the Team plan). It reads the private link in
+         and what it did (Free shows the totals; every problem, its pages and how visitors use each page come with the Pro plan). It reads the private link in
          ${LOCAL_FILE} without contacting anything; signed in, it finds the app in your account (or lists
          your apps).
 

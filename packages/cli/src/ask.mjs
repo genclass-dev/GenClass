@@ -12,6 +12,7 @@
 // - No dead end: no model on the server, the day's runs used up, or a model that did not answer each say so and
 //   name the command that shows the numbers themselves.
 
+import { planName } from "./state.mjs";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { askModel } from "./api.mjs";
 import { n, pickApp, RANGE_WORDS } from "./app.mjs";
@@ -80,7 +81,7 @@ export async function ask(o = {}, deps = {}) {
   if ("code" in picked) return picked.code;
   const { state, creds, target } = picked;
   const range = ["24h", "7d", "30d", "90d", "1y"].includes(o.range) ? o.range : "7d";
-  if (!o.json) header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+  if (!o.json) header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: planName(state, target.token), host: state.host });
   // once per machine: what is sent, and where
   const prefs = (deps.readPrefs ?? readPrefs)();
   if (!prefs.askTold) {

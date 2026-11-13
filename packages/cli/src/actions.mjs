@@ -26,9 +26,8 @@ import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
 import { c, interactive, out, printChange, stopOnEnter, sym } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "./assets.mjs";
-import { freeLimits, WORKFLOW_PATH } from "./state.mjs";
-import { saveNotes } from "./store.mjs";
-import { agree, bad, clean, good, note, planCard, PROMPT, spinner, typed, warn } from "./tui.mjs";
+import { accountPaid, appPlanOffer, WORKFLOW_PATH } from "./state.mjs";
+import { agree, bad, clean, good, note, planCard, spinner, warn } from "./tui.mjs";
 import { planViteSettings } from "./vite.mjs";
 
 /** Resolves after `ms`, or at once when `signal` aborts. */
@@ -100,39 +99,72 @@ export async function signIn(o = {}) {
   return "done";
 }
 
-// ------------------------------------------------------------------------------------------------ 1b. the plan
+// ------------------------------------------------------------------------------------------------ 1b. Pro
 
 /**
- * The plan step, for an account on Free that can buy a plan here: the paid plan's card, then one question. Enter
- * opens that plan's checkout in the browser (genclass.dev sends the person straight to Stripe) and waits for the
- * payment; f goes on with Free for this project, and that choice is remembered so the project is asked once. With
- * --yes, or with nobody at a terminal, nothing is bought and nothing is opened: it is Free for now, said in one line
- * with where the plan starts. Returns "done", "skipped" (asked again next run) or "quit" (q: stop the walk).
+ * The Pro step, right after the sign-in (state.mjs, step "plan"): the genclass command is Pro's (the owner's call,
+ * 2026-11-13), so an account without it sees the paywall (paywall.mjs startPro): the card, then Enter, which opens
+ * the checkout with its free trial and waits for the payment. There is no Free here. Returns "done" once Pro is on,
+ * "skipped" when there is nothing to start, and "quit" otherwise (the walk stops: nothing after it works without Pro).
  * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
  */
 export async function choosePlan(state, o = {}, deps = {}) {
-  const offer = state.steps.find((s) => s.id === "plan")?.offer;
+  const cli = state.steps.find((s) => s.id === "plan")?.cli;
+  if (!cli || cli.paid) return "skipped";
+  return (await (await import("./paywall.mjs")).startPro(cli, state.account?.offer ?? null, o, deps)) ? "done" : "quit";
+}
+
+/** This app's plan page, in the walk (state.mjs, step "app-plan"): projectPlan with the step's offer. */
+export async function chooseAppPlan(state, o = {}, deps = {}) {
+  const offer = state.steps.find((s) => s.id === "app-plan")?.offer;
   if (!offer) return "skipped";
-  // plans per project: the choice is made on the app's own plan page
-  if (offer.project) return projectPlan(offer, o, deps);
-  const free = offer.free.name;
-  const limits = freeLimits(offer.free);
-  const stayFree = (line) => {
-    saveNotes(state.cwd, { plan: "free", planAt: new Date().toISOString() });
-    note(line);
-    return "done";
-  };
-  if (o.yes || !interactive()) return stayFree(`${free} for now (limited${limits ? `: ${limits}` : ""}). ${offer.plan.name}, ${offer.price}: ${offer.checkoutUrl}`);
-  planCard(offer, state.app?.name ?? null);
-  // the small way on, in the owner's words
-  out(`  ${c.gray(`f  Try ${free.toLowerCase()} for now (limited)`)}`);
-  const dot = c.gray("·");
-  const a = await typed(`  ${PROMPT()} ${c.bold("Enter")} ${c.gray(`to start ${offer.plan.name}`)} ${dot} ${c.bold("f")} ${c.gray("free for now")} ${dot} ${c.bold("q")} ${c.gray("stop")}  `);
-  if (a === null || /^q/i.test(a)) return "quit";
-  if (/^[fs]/i.test(a)) return stayFree(`${free} for now. ${offer.plan.name} any time: ${offer.checkoutUrl}`);
-  if (await checkout(offer, o, deps)) return "done";
-  note(`This project goes on with ${free} for now.`);
-  return "skipped";
+  return projectPlan(offer, o, deps);
+}
+
+/**
+ * What a paid plan for one app is, from the server's offer (genclass.dev's own words and price): this folder's app,
+ * or the one `name` names, else the account's first app past the ones Free covers, else its first app on Free. Null
+ * when that app has a plan (or a grant), when nothing is sold here, and when every app has one. A server from before
+ * plans per project: the account's offer as it sent it.
+ */
+export function upgradeOffer(state, name = null) {
+  const base = state.account?.offer ?? state.steps?.find((x) => x.id === "plan")?.offer ?? null;
+  if (!base) return null;
+  const mine = (state.projects ?? []).filter((p) => p.plan && !p.shared);
+  if (!mine.length) return base.project ? base : (state.projects ?? []).some((p) => p.plan) ? null : base;
+  const named = name ? mine.find((p) => p.id === name || p.name.toLowerCase() === String(name).toLowerCase()) : null;
+  const here = mine.find((p) => p.token === state.app?.token) ?? null;
+  const target = named ?? here ?? mine.find((p) => p.needsPlan) ?? mine.find((p) => p.plan.id === "free" && !p.plan.source) ?? null;
+  if (!target || target.plan.id !== "free" || target.plan.source || !target.planUrl) return null;
+  return { ...base, checkoutUrl: `${target.planUrl}&from=cli`, project: { id: target.id, name: target.name, token: target.token }, needs: target.needsPlan === true };
+}
+
+/**
+ * An app of the account with no plan chosen yet (on Free, nothing paid, granted or chosen on its page): the owner's
+ * rule (2026-11-12) is that it has its plan chosen before anything else, Pro or Free with a reason, so this opens its
+ * plan page in the browser and waits for the choice. `id` names the app; without it, this folder's. Without a
+ * terminal it says where the page is and goes on. Returns "chosen", "none" (nothing to choose: a plan, a grant, a
+ * choice already, or nothing sold) or "open" (the choice was not made).
+ */
+export async function planNow(o = {}, deps = {}, id = null) {
+  let state;
+  try {
+    state = await (deps.readState ?? (await import("./state.mjs")).readState)({ cwd: o.cwd }, deps);
+  } catch {
+    return "none";
+  }
+  const app = (state.projects ?? []).find((p) => (id ? p.id === id : p.token === state.app?.token) && !p.shared);
+  // version 5 (2026-11-13): every new app sees its plan page, a paying account's too (it goes on with its plan
+  // there), and an app its plan does not cover waits there (state.mjs appPlanOffer)
+  const offer = appPlanOffer(app, state.account?.offer ?? null, !!state.account && accountPaid(state.account));
+  if (!offer) return "none";
+  if (o.json) return "open";
+  if (o.yes || !interactive()) {
+    out();
+    note(`${clean(app.name, 40)} has no plan yet. Choose it in the browser: ${offer.checkoutUrl}`);
+    return "open";
+  }
+  return (await projectPlan(offer, o, deps)) === "done" ? "chosen" : "open";
 }
 
 /**
@@ -156,8 +188,19 @@ export async function checkout(offer, o = {}, deps = {}) {
  */
 export async function projectPlan(offer, o = {}, deps = {}) {
   const name = clean(offer.project.name, 30);
-  planCard(offer, offer.project.name);
-  note(offer.needs ? `Free covers ${offer.free.apps ?? 3} apps and this is one more: it needs ${offer.plan.name}, ${offer.price}.` : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`);
+  if (offer.features?.length) planCard(offer, offer.project.name);
+  else out();
+  note(
+    offer.current
+      ? `Your ${clean(offer.current, 20)} plan covers ${name}: continue with it on its plan page.`
+      : offer.needs && offer.paying
+        ? offer.appsPerUnit
+          ? `Your plan covers no more apps: add ${offer.appsPerUnit} more for ${name} on its plan page.`
+          : `Your plan covers no more apps, and ${name} is one more. More apps come with Enterprise, by email: its plan page has the address.`
+        : offer.needs
+          ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more: it needs ${offer.plan.name}, ${offer.price}.`
+          : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`,
+  );
   if (o.yes || !interactive()) {
     out(`  Open  ${c.cyan(offer.checkoutUrl)}`);
     if (openBrowser(offer.checkoutUrl, o)) note("Your browser is opening its plan page. Run npx genclass again once it is chosen.");
@@ -167,7 +210,7 @@ export async function projectPlan(offer, o = {}, deps = {}) {
   if (got) return "done";
   // the setup goes on only once the app has its plan: Team, or Free with what stops the person from paying (the
   // owner's call, 2026-11-12)
-  note(`The setup goes on once ${name} has its plan: ${offer.needs ? offer.plan.name : `${offer.plan.name}, or ${offer.free.name} for now`}, on ${offer.checkoutUrl}`);
+  note(offer.current ? `${name} goes on with ${clean(offer.current, 20)} once you continue on ${offer.checkoutUrl}` : `${name} has no plan yet: ${offer.needs ? offer.plan.name : `${offer.plan.name}, or ${offer.free.name} for now`}, on ${offer.checkoutUrl}`);
   return "quit";
 }
 
@@ -183,7 +226,7 @@ async function waitForPlan(offer, o = {}, deps = {}) {
   if (openBrowser(offer.checkoutUrl, o)) note(app ? `Your browser is opening the plan page for ${app}.` : "Your browser is opening the checkout.");
   const creds = readCredentials();
   const stop = stopOnEnter();
-  const sp = spinner(`${app && !offer.needs ? "Waiting for your choice in the browser" : "Waiting for the payment in the browser"}${canStop()}`);
+  const sp = spinner(`${offer.current || (app && !offer.needs) ? "Waiting for your choice in the browser" : "Waiting for the payment in the browser"}${canStop()}`);
   const until = Date.now() + (deps.waitMs ?? 10 * 60_000);
   let got = null;
   while (creds && !stop.signal.aborted && Date.now() < until) {
@@ -193,13 +236,16 @@ async function waitForPlan(offer, o = {}, deps = {}) {
     if (!me.ok) continue;
     if (offer.project) {
       const p = me.projects.find((x) => x.token === offer.project.token);
-      if (p?.plan && (p.plan.id !== "free" || p.plan.source)) got = "paid";
-      else if (p?.planChosen && !offer.needs) got = "free";
-    } else if (me.plan && me.plan.id !== "free") got = "paid";
+      // covered already: Continue was clicked; else a payment (or more apps) that covers it now, or Free chosen
+      if (offer.current) got = p?.planChosen ? "kept" : null;
+      else if (p?.plan && (p.plan.id !== "free" || p.plan.source) && !p.needsPlan) got = "paid";
+      else if (p?.planChosen && !offer.needs && !p.needsPlan) got = "free";
+    } else if (me.cli ? me.cli.paid : me.plan && me.plan.id !== "free") got = "paid";
     if (got) break;
   }
   await stop.done();
-  if (got === "paid") sp.stop("ok", `${offer.plan.name} is active${app ? ` for ${app}` : ""}. Thank you.`);
+  if (got === "kept") sp.stop("ok", `${app} goes on with ${clean(offer.current, 20)}.`);
+  else if (got === "paid") sp.stop("ok", `${offer.plan.name} is active${app ? ` for ${app}` : ""}. Thank you.`);
   else if (got === "free") sp.stop("ok", `${app} is on ${offer.free.name} for now (limited).`);
   else sp.stop("warn", app && !offer.needs ? "No choice yet." : `No payment yet. ${offer.plan.name} starts the moment the payment goes through.`);
   return got;

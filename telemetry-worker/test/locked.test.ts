@@ -108,6 +108,9 @@ describe("a locked private link: sign in, add the app to the account, see the pl
     expect(mine).toContain('<a class="btn green" href="/account/billing">See plans</a>');
     // the app's own page: the key and the Connect panel, the plans, no stats
     const id = String(sql.rows("SELECT id FROM projects WHERE token = ?", anon.token)[0]!.id);
+    // with a plan on sale the app's page opens its plan page first, until a plan is chosen there (plans.json version 5)
+    expect((await call(env, "GET", `/account/apps/${id}`, { cookie })).headers.get("location")).toBe(`/account/billing?project=${id}`);
+    sql.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ?").run(now().toISOString(), id);
     const app = await text(call(env, "GET", `/account/apps/${id}`, { cookie }));
     expect(app).toContain('<h2 id="lock-h">This app\'s plan has no dashboard.</h2>');
     expect(app).toContain('<div class="acts"><a class="btn green" href="/account/billing">See plans</a></div>');

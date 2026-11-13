@@ -30,10 +30,10 @@ export const INTERCEPTION_URL = "https://genclass.dev/docs/interception";
 export const PRIVACY_URL = `${REPO}/PRIVACY.md`;
 /** The plans page: forwarding to Sentry, PostHog and Datadog is not part of the free runtime; the genclass.dev collector does it on the Team and Enterprise plans. */
 export const PRICING_URL = "https://genclass.dev/pricing";
-/** What a dashboard shows, said under every dashboard link the CLI prints: the problems are free, visitor analytics come with Team. */
+/** What a dashboard shows, said under every dashboard link the CLI prints: Free the totals, Pro the rest (since 2026-11-12). */
 export const FREE_LINES = [
-  "Free for every app: what GenClass found, on which pages, and what it did, for the last 7 days. How visitors",
-  `use each page (analytics: true) shows on the Team plan. Print this link again any time: ${CMD} dashboard`,
+  "Free shows this app's totals for the last 7 days. Every problem, the pages it happens on, a fix prompt for",
+  `each and visitor analytics come with Pro (3 days free): ${PRICING_URL}. This link again: ${CMD} dashboard`,
 ];
 
 export const USAGE = `Usage:
@@ -57,7 +57,7 @@ remove   takes out exactly what init added (the lines and blocks marked "${MARK}
                    approve the changes (or pass --yes), init creates one at genclass.dev (sending
                    package.json's name), writes it into what it adds, and saves the token and your
                    private dashboard link in ${LOCAL_FILE} (the dashboard is free; visitor analytics
-                   come with the Team plan; \`dashboard\` prints the link again). Signed in (\`login\`), init first asks
+                   come with the Pro plan; \`dashboard\` prints the link again). Signed in (\`login\`), init first asks
                    whether the new app goes into your GenClass account instead (--yes or --in-account: it does)
   --no-token       no token, no network (no dashboard; you can add one later: ${START_URL})
   --no-telemetry   turn off GenClass's anonymous diagnostics (on by default; see TELEMETRY.md and

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The CLI's note under a dashboard link says what each plan shows since genclass.dev's plans changed (2026-11-12):
+  Free the totals for the last 7 days; every problem, its pages, fix prompts and visitor analytics with Pro (3 days
+  free).
+
 - **`init`/`connect` recognise more existing setups:** `@genclass/nuxt` and `@genclass/astro` in a config, and the
   key of a hand-written setup (`bin/lib/init.mjs` `inspectProject`). `connect --yes` refuses to replace a key that is
   none of the account's apps unless `--app` or `--name` says which (`bin/lib/login.mjs`). Run by a host CLI

@@ -8,7 +8,10 @@
 //   file hands them their arguments. `remove` is the runtime CLI's, followed by what this command's other steps wrote
 //   (remove.mjs). `dashboard` is this command's own view (app.mjs); signed out it falls back to the runtime CLI's,
 //   which knows an app's private dashboard link.
-// - Nothing here reads a file or the network: it parses and dispatches.
+// - The command is Pro's (the owner's call, 2026-11-13): every command but FREE_COMMANDS passes paywall.mjs
+//   requirePro first (signed out: the sign-in, then Pro with its free trial). The walk (`genclass`, `setup`) has Pro
+//   as its own step right after the sign-in (state.mjs), and a command run from the home (ctx.nested) came after it.
+// - Nothing here reads a file or the network but that gate: it parses and dispatches.
 
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { c, err, interactive, out } from "../../runtime/bin/lib/ui.mjs";
@@ -87,6 +90,15 @@ export async function run(argv, ctx = {}) {
   const cmd = argv[0] && !argv[0].startsWith("-") ? argv[0] : null;
   const args = cmd ? argv.slice(1) : argv;
 
+  // the genclass command is Pro's: a command asks genclass.dev first (paywall.mjs requirePro), once its words are
+  // known to be right. Not: signing in and out, the plan, help, the version, status (where things stand, Pro's step
+  // included), remove, a command run from the home, and the walk, whose own Pro step comes right after the sign-in
+  const asksHelp = args.some((a) => ["--help", "-h", "--version", "-v"].includes(a));
+  const paid = async () => {
+    if (ctx.nested || asksHelp || FREE_COMMANDS.includes(cmd) || hostConfig().error) return 0;
+    return (await import("./paywall.mjs")).requirePro(parseArgs(args).o);
+  };
+
   // the runtime CLI's own commands, with their own flags and help
   if (cmd === "login" && !args.some((a) => a === "--help" || a === "-h")) {
     // a sign-in from before the command could show dashboards: "already signed in" would be a dead end for
@@ -94,9 +106,25 @@ export async function run(argv, ctx = {}) {
     const again = await (await import("./app.mjs")).signInAgain(parseArgs(args).o);
     if (again !== null) return again;
   }
-  if (["login", "logout", "whoami", "connect"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
+  // Pro comes right after the sign-in (paywall.mjs afterLogin), and an app that login, connect or init put in the
+  // account opens its plan page next (actions.mjs planNow)
+  const thenPlan = async (code) => {
+    if (code !== 0 || ctx.inWalk) return code;
+    const i = args.indexOf("--cwd");
+    const po = { cwd: i >= 0 ? args[i + 1] : undefined, yes: args.includes("--yes"), json: args.includes("--json"), noBrowser: args.includes("--no-browser") };
+    if (cmd === "login" && !(await (await import("./paywall.mjs")).afterLogin(po).catch(() => true))) return code;
+    await (await import("./actions.mjs")).planNow(po).catch(() => "none");
+    return code;
+  };
+  if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
+  if (cmd === "login") return thenPlan(await (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args));
   if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
-  if (cmd === "init") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
+  if (["connect", "init", "scan", "audit"].includes(cmd)) {
+    const gate = await paid();
+    if (gate !== 0) return gate;
+  }
+  if (cmd === "connect") return thenPlan(await (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args));
+  if (cmd === "init") return thenPlan(await (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args));
   if (cmd === "scan" || cmd === "audit") {
     // this command carries no copy of the runtime's script-tag build, so the page check runs on genclass.dev unless asked otherwise
     const withHost = args.includes("--local") || args.includes("--hosted") || args.includes("--help") ? args : [...args, "--hosted"];
@@ -141,6 +169,8 @@ export async function run(argv, ctx = {}) {
       err(`genclass suggest: unknown option ${unknown[0]}\n\n${USAGE}`);
       return 2;
     }
+    const gate = await paid();
+    if (gate !== 0) return gate;
     return upsold(runSuggest({ ...o, url }));
   }
   if (cmd !== null && !COMMANDS.includes(cmd)) {
@@ -157,26 +187,29 @@ export async function run(argv, ctx = {}) {
     err(`genclass: unknown ${bad.startsWith("-") ? "option" : "command"} ${c.bold(bad)}\n\n${USAGE}`);
     return 2;
   }
+  // the words of the commands that take them, before anything is asked of genclass.dev
+  const { ANALYTICS_SECTIONS } = cmd === "analytics" ? await import("./views.mjs") : { ANALYTICS_SECTIONS: [] };
+  if (cmd === "analytics" && words[0] && !ANALYTICS_SECTIONS.includes(words[0])) {
+    err(`genclass analytics: there is no part ${c.bold(words[0])}. The parts: ${ANALYTICS_SECTIONS.join(", ")}`);
+    return 2;
+  }
+  if (cmd === "agent" && words[0] && words[0] !== "link") {
+    err(`genclass agent: there is no ${c.bold(words[0])}. Try ${c.cyan("npx genclass agent")} or ${c.cyan("npx genclass agent link")}`);
+    return 2;
+  }
+  if (cmd !== null && !["setup", "status"].includes(cmd)) {
+    const gate = await paid();
+    if (gate !== 0) return gate;
+  }
   if (cmd === "dashboard") {
     // signed out, the runtime CLI's own command still knows an app's private dashboard link
     const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", [...(o.cwd ? ["--cwd", o.cwd] : []), ...(o.open ? ["--open"] : [])]);
     return upsold((await import("./app.mjs")).dashboard(o, { fallback }));
   }
   if (["problems", "events", "health", "report"].includes(cmd)) return upsold((await import("./views.mjs"))[cmd](o), cmd !== "report");
-  if (cmd === "analytics") {
-    const { analytics, ANALYTICS_SECTIONS } = await import("./views.mjs");
-    if (words[0] && !ANALYTICS_SECTIONS.includes(words[0])) {
-      err(`genclass analytics: there is no part ${c.bold(words[0])}. The parts: ${ANALYTICS_SECTIONS.join(", ")}`);
-      return 2;
-    }
-    return upsold(analytics({ ...o, section: words[0] ?? null }));
-  }
+  if (cmd === "analytics") return upsold((await import("./views.mjs")).analytics({ ...o, section: words[0] ?? null }));
   if (cmd === "agent") {
     if (words[0] === "link") return (await import("./manage.mjs")).agentLink(o);
-    if (words[0]) {
-      err(`genclass agent: there is no ${c.bold(words[0])}. Try ${c.cyan("npx genclass agent")} or ${c.cyan("npx genclass agent link")}`);
-      return 2;
-    }
     return (await import("./views.mjs")).agent(o);
   }
   if (cmd === "fix") return upsold((await import("./fix.mjs")).fix({ ...o, what: words.join(" ") || null }));
@@ -194,6 +227,9 @@ export async function run(argv, ctx = {}) {
   }
   return 2;
 }
+
+/** The commands that work without Pro: signing in and out, the plan itself, where things stand, help, the version, and taking GenClass out. */
+export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version"];
 
 /** Every command, for the "did you mean" of a mistyped one. */
 export const COMMANDS = [
