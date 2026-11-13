@@ -265,9 +265,14 @@ export function cleanEmail(v: unknown): string | null {
 }
 
 /** Only same-site paths under /account (a team invite link, /account/join/<code>, is one) or /login/device may be a `next` target. */
+/**
+ * Where a sign-in may send the browser afterwards (?next=): our own account pages, the device page the genclass command
+ * opens, and the page check (/scan, or /scan?url=<an encoded address>, so "Sign in to see it all" on a report comes
+ * back to that report). Anything else is null (the caller goes to /account).
+ */
 export function safeNext(v: string | null | undefined): string | null {
   if (!v || v.length > 300 || !v.startsWith("/") || v.startsWith("//") || /[\\\u0000-\u001f]/.test(v)) return null;
-  return /^\/(account(\/[A-Za-z0-9/]*)?([?#].*)?|login\/device(\?code=[A-Za-z-]{0,12})?)$/.test(v) ? v : null;
+  return /^\/(account(\/[A-Za-z0-9/]*)?([?#].*)?|login\/device(\?code=[A-Za-z-]{0,12})?|scan(\?url=[A-Za-z0-9%._~!*'()\/:+-]{1,280})?)$/.test(v) ? v : null;
 }
 
 export function fail(status: number, error: string, headers: Record<string, string> = {}): Response {
