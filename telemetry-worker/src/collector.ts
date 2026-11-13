@@ -13,7 +13,8 @@
 // Per-app tokens and dashboards (src/dashboard.ts, src/pages.ts; also routed on genclass.dev/{api/*,start*,dashboard*}):
 // POST /api/projects, GET /api/projects/<secret>, POST and GET /start, GET /start/<secret>, GET /start/open-source (no account; no token to paste, init makes one unless the quiet choice is ticked), GET
 // /dashboard/<secret>. A batch with a known top-level `token` is also aggregated into D1 for that app's dashboard;
-// without one it is stored in R2 only, exactly as before.
+// without one it is stored in R2 only, exactly as before. A token that is one of an app's extra keys (app_keys,
+// migration 0022: the key of an app merged into it) is counted under that app's own key (dashboard.ts canonicalToken).
 // Every plan includes the dashboard (billing/plans.json), so a private link opens it, also for an app with no account
 // (Free). A plan file that left the dashboard out would open the locked page instead (src/locked.ts) and its stats
 // would answer 402. Collection never depends on it: every known token is aggregated.
@@ -32,7 +33,7 @@ import {
   agentReport,
   aggregate,
   createProject,
-  knownToken,
+  canonicalToken,
   projectBySecret,
   projectsCreatedSince,
   randomBase62,
@@ -336,12 +337,12 @@ async function ingest(request: Request, env: Env, opts: HandleOptions): Promise<
   // Past its plan's live fixes for the month, the runtime is told to observe only (src/usage.ts): read before this
   // batch is counted (cached a minute), so the batch itself is stored and counted the same either way.
   const db = env.DB;
-  const observe = batch.token && db ? await observeOnly(db, env, batch.token, now).catch(() => false) : false;
+  // the app this batch belongs to, by its own key: an app's extra key (app_keys, migration 0022) counts as that key
+  const token = batch.token && db ? await canonicalToken(db, batch.token, now.getTime()).catch(() => null) : null;
+  const observe = token && db ? await observeOnly(db, env, token, now).catch(() => false) : false;
   // Dashboard aggregation for a known token. Never affects the response (failures are swallowed).
-  if (batch.token && db) {
-    const token = batch.token;
+  if (token && db) {
     const task = (async () => {
-      if (!(await knownToken(db, token, now.getTime()))) return;
       await aggregate(db, token, { ...batch, country }, now).catch(() => undefined);
       // export index, and forwarding for apps on a paid plan (src/paid.ts)
       const f = opts.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i));
