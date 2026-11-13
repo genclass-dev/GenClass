@@ -1274,7 +1274,7 @@ text), `src/report-sweep.ts` is the hourly run, `src/report-routes.ts` the pages
   box with the trial.
 - **Priorities** are rules in `appItems`, tested in `test/report.test.ts`: P0 a failing endpoint 3 times, a duplicate,
   race or failure on a payment page (checkout, pay, billing, cart, order, subscribe, invoice), a blank page, a page that
-  stopped taking clicks or scrolling (3 times), an app silent for 6 hours after 36 page loads in the 18 before,
+  stopped taking clicks or scrolling (3 times), an app silent for 6 hours after 36 page loads spread over at least 12 of the 18 hours before,
   problems in the last two hours at least 10 and 4 times the usual; P1 the app's own bugs (duplicate, stale,
   conflict, broken state), a failing endpoint, visible checks (invisible text, controls out of reach, covered
   dialogs, stalled requests, broken images, template text), rage clicks, setup items; P2 the rest. The model never
