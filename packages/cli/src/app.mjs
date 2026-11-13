@@ -301,6 +301,11 @@ export async function appView(o = {}, deps = {}, view) {
     state = await readState({ cwd: o.cwd }, deps);
     app = await fetchApp(again, target.id, range, deps);
   }
+  // the genclass command is Pro's: an account without it is told where Pro starts, as every command says it
+  if (!app.ok && app.needsPro) {
+    if (!o.json) header({ app: target.name, framework: state.app.framework, account: state.account?.label, plan: planName(state, target.token), host: state.host });
+    return (await import("./session.mjs")).refused(app, { what: "The dashboard", command: view.name, json: o.json });
+  }
   if (!app.ok) {
     if (o.json) out(JSON.stringify({ ok: false, error: app.reauth ? "sign in again" : app.reason, run: app.reauth ? "npx genclass login" : null, dashboard_url: target.dashboard_url }));
     else {

@@ -214,6 +214,20 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
   });
 });
 
+describe("genclass is Pro's: a view the server refuses with 402 says where Pro starts (src/app.mjs, src/session.mjs refused)", () => {
+  it("Free: the dashboard's views print the paywall's line, and --json says needs_pro with the checkout", async () => {
+    const { env } = setup(LIVE);
+    const me = await account(env);
+    const v = await said(() => analytics(me.o, me.deps));
+    expect(v.code).toBe(1);
+    expect(tooWide(v.text)).toEqual([]);
+    expect(flat(v.text)).toContain(`The genclass command comes with Pro ($15 / developer / month): start your 3-day free trial at ${HOST}/account/billing?plan=team&start=1`);
+    expect(flat(v.text)).toContain("npx genclass upgrade");
+    expect(v.text).not.toContain("Could not read the dashboard");
+    expect(JSON.parse((await said(() => analytics({ ...me.o, json: true }, me.deps))).text)).toEqual({ ok: false, error: "the genclass command comes with Pro", needs_pro: true, checkout_url: `${HOST}/account/billing?plan=team&start=1`, trial_days: 3, run: "npx genclass upgrade" });
+  });
+});
+
 describe("genclass apps and team: the small words (src/manage.mjs)", () => {
   it("the hint names the app that heard from its site last; a plan with no seat count says person or people", async () => {
     const { env, sql } = setup(LIVE);

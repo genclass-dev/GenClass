@@ -503,7 +503,7 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     expect(one).not.toContain('type="button" data-continue>');
     expect(one).not.toContain('<span class="tag">Your plan</span>');
     // Free is the small way on: a very small link under the big card, and a popup that asks why before it goes on
-    expect(one).toContain('<p class="free"><a href="#why" class="linkish" id="free">Try for free (limited)</a></p>');
+    expect(one).toContain('<p class="free"><a href="#why" class="linkish" id="free">Skip</a></p>');
     expect(one).toContain(".linkish{background:none;border:0;padding:0;font:inherit;font-size:11px");
     expect(one).toContain('<h2 id="whyh">What\'s stopping you from paying?</h2>');
     for (const [val, words] of FREE_REASONS) expect(one).toContain(`<label><input type="radio" name="why" value="${val}"> ${words.replace(/'/g, "&#39;")}</label>`);
@@ -679,6 +679,41 @@ describe("POST /api/billing/projects/<id>/continue: an app the account's plan co
     expect((await go(0, { cookie: undefined, bearer: await cliToken(t.env, t.cookie), origin: null })).status).toBe(403);
     expect((await call(t.env, "GET", `/api/billing/projects/${t.apps[0]!.id}/continue`, { cookie: t.cookie })).status).toBe(405);
     expect(chosenAt(t.sql, t.apps[0]!.id)).toBeNull();
+  });
+});
+
+describe("the website: a new account's first screen is Pro's trial, with a tiny Skip (the owner's call, 2026-11-13)", () => {
+  it("an account with no app, on Free, where Pro is sold, sees the trial with its checkout and a Skip on to its first app", async () => {
+    const t = await withApps([]);
+    const home = await call(t.env, "GET", "/account", { cookie: t.cookie });
+    expect(home.status).toBe(200);
+    const page = await home.text();
+    expect(page).toContain('<div class="empty-p trial" id="trial"><h2>Start your 3-day free trial</h2>');
+    expect(page).toContain('<p class="tp">Pro, $15 / developer / month</p>');
+    expect(page).toContain('<a class="btn" href="/account/billing?plan=team&#38;start=1" id="starttrial"><span>Start your 3-day free trial</span></a>');
+    expect(page).toContain("3 days free, then $15 / developer / month. Your card is asked for on Stripe; cancel before the trial ends and you pay nothing.");
+    expect(page).toContain('<p class="skipit"><a href="/account/new" id="skiptrial">Skip</a></p>');
+    expect(page).toContain("<li>Up to 3 apps</li>");
+    expect(page).not.toContain("<li>Everything in Free</li>");
+    expect(page).not.toContain("Create your first project");
+    // the trial's own button opens the account's checkout at once (the billing page, go)
+    const billing = await (await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: t.cookie })).text();
+    expect(billing).toContain('"go":true');
+  });
+
+  it("an account with an app, on Pro, or where nothing is sold sees its projects as before", async () => {
+    const withApp = await withApps(["Shop"]);
+    expect(await (await call(withApp.env, "GET", "/account", { cookie: withApp.cookie })).text()).not.toContain('id="trial"');
+    const pro = await withApps([]);
+    paidPro(pro.sql, pro.account.id);
+    const p = await (await call(pro.env, "GET", "/account", { cookie: pro.cookie })).text();
+    expect(p).not.toContain('id="trial"');
+    expect(p).toContain("Create your first project");
+    const none = setup();
+    const n = await signedIn(none.env);
+    const free = await (await call(none.env, "GET", "/account", { cookie: n.cookie })).text();
+    expect(free).not.toContain('id="trial"');
+    expect(free).toContain("Create your first project");
   });
 });
 

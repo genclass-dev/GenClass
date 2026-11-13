@@ -656,6 +656,11 @@ export interface AccountView {
   plan?: string;
   /** This server runs the GitHub App (src/github/config.ts): the projects view links to /account/github. */
   githubApp?: boolean;
+  /**
+   * A new account on Free that can buy (no app yet): its first screen is the paid plan's trial, with a tiny Skip on to
+   * its first app (the owner's call, 2026-11-13: "our entire goal is for them to put their credit cards in").
+   */
+  trial?: { plan: string; price: string; days: number | null; summary: string; features: string[]; start: string } | null;
 }
 
 const TRANSPORT_WORDS: Record<string, string> = {
@@ -690,6 +695,14 @@ export const ORG_CSS = `
 .empty-p{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:12px;padding:56px 16px;border:1px dashed var(--rule2);border-radius:6px;text-align:center}
 .empty-p h2{font-size:16px}
 .empty-p p{font-size:13px;color:var(--ink3);max-width:52ch}
+.empty-p.trial{border-style:solid;border-color:var(--accent);gap:10px;padding:44px 20px 28px}
+.empty-p.trial h2{font-size:28px;letter-spacing:-.01em}
+.empty-p.trial .tp{font-size:17px;color:var(--ink);font-weight:600}
+.empty-p.trial ul{list-style:none;padding:0;margin:4px 0 6px;display:grid;gap:6px;text-align:left;font-size:14px}
+.empty-p.trial li::before{content:"\\2713";color:var(--accent);margin-right:8px}
+.empty-p.trial .btn{padding:14px 26px;font-size:16px}
+.empty-p.trial .skipit{font-size:11px;margin-top:6px}
+.empty-p.trial .skipit a{color:var(--ink3)}
 .acct-form{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-top:16px;max-width:720px}
 .acct-form .f{flex:1 1 260px;min-width:0}
 .acct-form label{display:block;font-size:13px;color:var(--ink2);margin-bottom:6px}
@@ -785,7 +798,14 @@ export function accountPage(nonce: string, v: AccountView): string {
     ? `<ul class="pgrid" id="pgrid">${cards}
 <li><a class="pnew" href="/account/new">${icon("plus", 18)}New project</a></li></ul>
 <p class="quiet hidden" id="pnone">No project matches your search.</p>`
-    : `<div class="pgrid"><div class="empty-p"><h2>Create your first project</h2><p>Fastest: run <code>npx genclass</code> in your app's folder. It creates the project here and sets GenClass up.</p><a class="btn" href="/account/new">${icon("plus", 14)}<span>New project</span></a></div></div>`;
+    : v.trial
+      ? `<div class="pgrid"><div class="empty-p trial" id="trial"><h2>${v.trial.days ? `Start your ${v.trial.days}-day free trial` : `Start ${esc(v.trial.plan)}`}</h2>
+  <p class="tp">${esc(v.trial.plan)}, ${esc(v.trial.price)}</p><p>${esc(v.trial.summary)}</p>
+  <ul>${v.trial.features.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
+  <a class="btn" href="${esc(v.trial.start)}" id="starttrial"><span>${v.trial.days ? `Start your ${v.trial.days}-day free trial` : `Start ${esc(v.trial.plan)}`}</span></a>
+  ${v.trial.days ? `<p>${v.trial.days} days free, then ${esc(v.trial.price)}. Your card is asked for on Stripe; cancel before the trial ends and you pay nothing.</p>` : ""}
+  <p class="skipit"><a href="/account/new" id="skiptrial">Skip</a></p></div></div>`
+      : `<div class="pgrid"><div class="empty-p"><h2>Create your first project</h2><p>Fastest: run <code>npx genclass</code> in your app's folder. It creates the project here and sets GenClass up.</p><a class="btn" href="/account/new">${icon("plus", 14)}<span>New project</span></a></div></div>`;
   // with the GitHub App set up on this server, its page sits next to New project (src/github/pages.ts)
   const newBtn = `<a class="btn sm" href="/account/new" id="newproj">${icon("plus", 14)}<span>New project</span></a>`;
   const newProject = v.githubApp ? `<div class="row"><a class="btn sm ghost" href="/account/github" id="ghapp">${icon("bot", 14)}<span>GitHub</span></a>${newBtn}</div>` : newBtn;

@@ -248,7 +248,7 @@ export interface ProjectPlanView {
 }
 
 /**
- * One project's plan: what it is on, what it has used, and the paid plan large with "Try free for now (limited)"
+ * One project's plan: what it is on, what it has used, and the paid plan large with a tiny "Skip" (Free, after the reason)
  * small under it (the owner's layout, 2026-11-12). The genclass command opens this page when it adds a project.
  */
 export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
@@ -301,7 +301,7 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const card = offer && a.source !== "open"
     ? `<div class="plan pick big"><h3>${esc(offer.name)}${covered ? ' <span class="tag">Your plan</span>' : ""}</h3><p class="price">${esc(priceText(offer))}</p><p class="sum">${esc(offer.summary)}</p><ul>${features}</ul>
   <div class="act">${action}</div></div>
-  ${a.locked || a.source !== null ? "" : `<p class="free"><a href="#why" class="linkish" id="free">Try for free (limited)</a></p>
+  ${a.locked || a.source !== null ? "" : `<p class="free"><a href="#why" class="linkish" id="free">Skip</a></p>
   <dialog id="why" class="why" aria-labelledby="whyh">
     <form id="whyform">
       <h2 id="whyh">What's stopping you from paying?</h2>

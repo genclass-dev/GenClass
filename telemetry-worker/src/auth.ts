@@ -82,7 +82,8 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, PLANS_FILE, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, PLANS_FILE, priceText, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { trialFor } from "./billing.js";
 import { activeOwners, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
 import {
@@ -1956,6 +1957,19 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       if (!a) return redirect("/login?next=%2Faccount");
       const view = await accountView(c, a);
       view.notice = accountNotice(url);
+      // a new account's first screen is the paid plan's trial, with a tiny Skip on to its first app (the owner's call,
+      // 2026-11-13: "our entire goal is for them to put their credit cards in")
+      const sold = PAID_PLANS[0];
+      if (!view.projects.length && sold && canBuy(env, a.account) && (await accountAccess(c.db, a.account.id, env, c.now)).source === null) {
+        view.trial = {
+          plan: sold.name,
+          price: priceText(sold),
+          days: (await trialFor(c.db, a.account.id, sold)) || null,
+          summary: sold.summary,
+          features: sold.features.filter((f) => f.available && !/^Everything in /i.test(f.text) && !/days free/i.test(f.text)).map((f) => f.text).slice(0, 8),
+          start: `/account/billing?plan=${encodeURIComponent(sold.id)}&start=1`,
+        };
+      }
       return page(200, (n) => accountPage(n, view));
     }
     case "/account/new": {
