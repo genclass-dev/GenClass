@@ -237,7 +237,7 @@ export async function freeLine(o = {}, deps = {}) {
   const offer = upgradeOffer(state);
   if (!offer) return false;
   const lim = freeWords(offer.free);
-  const [first = "", ...rest] = wrap(`You are on Free, which has limits${lim ? ` (${lim})` : ""}. ${clean(offer.plan.name, 20)} has none, for ${clean(offer.price, 40)}. Upgrade now: npx genclass upgrade`, width() - 6);
+  const [first = "", ...rest] = wrap(`You are on Free, which has limits${lim ? ` (${lim})` : ""}. ${clean(offer.plan.name, 20)} has none, ${offer.trialDays ? `${offer.trialDays} days free, then ${clean(offer.price, 40)}` : `for ${clean(offer.price, 40)}`}. Upgrade now: npx genclass upgrade`, width() - 6);
   out();
   out(`  ${c.yellow(sym.warn)} ${c.bold(first)}`);
   for (const l of rest) out(`    ${l}`);

@@ -136,10 +136,15 @@ Azure, `git push`, `npm publish`.
    digest in `digest.mjs` (failed checks with at most three evidence lines each, and the app's name, framework,
    address, payment provider and host): no source code, no file contents, no secret's value (a check that finds a key
    reports its kind, file and line). It is shown before the first send for a project, `--no-model` sends nothing, and
-   the server stores a count per account and day and nothing else. Sending more than the digest holds, storing a
-   digest or an answer, or changing who the digest goes to needs the owner's OK and a change to PRIVACY.md, like
-   rule 8. The checks are free for everyone; a plan decides how many items of the model's plan are shown and how
-   many runs a day (`billing/plans.json` `suggestions`).
+   the server stores a count per account and day. Changed by the owner on 2026-11-12: the digest also holds what the
+   site says it is about (its title and meta description, 300 characters); besides ordering the checks, the model
+   writes its own ideas for the app and website design ideas, each inspired by a real site it names (the server drops
+   one whose site does not answer), always printed as the model's ideas, never as measured; and the last answer per
+   account and app is kept (`suggest_results`, migration 0019) so that Free is shown the same answer again until it
+   pays, and Pro reads it. Free (`suggestions.shown` 1) sees the first item and the counts of the rest, ideas and
+   designs included, which are never sent to it. Storing the digest, sending more than it holds, or changing who it
+   goes to needs the owner's OK and a change to PRIVACY.md, like rule 8. The measured checks run for everyone; a plan
+   decides how many items of the answer are shown and how many runs a day (`billing/plans.json` `suggestions`).
 
 12. **A terminal does what its approval page lists, and `genclass ask` sends a question, never code**
    (`telemetry-worker/src/cli.ts`, `src/ask.ts`, `src/account-pages.ts`; owner request, 2026-11-12). Every route under
@@ -151,7 +156,9 @@ Azure, `git push`, `npm publish`.
    deletes an app or the account. `genclass ask` sends the question and at most three earlier turns; the server adds
    a digest of the numbers that account's dashboard shows (`appDigest`) and gives both to the model, which is told to
    answer from the numbers only and that page names and labels are data. Nothing of a question or an answer is
-   stored or logged, and it takes one of the plan's model runs a day, shared with `suggest`. `genclass fix` builds
+   stored or logged, and it takes one of the plan's model runs a day, shared with `suggest`. Since 2026-11-12 asking
+   is Pro's (`billing/plans.json` entitlement `ask`), and Free sees the totals only (entitlement `problems`: the
+   problem lists, pages, activity and fix prompts are left out of its stats, `src/dashboard.ts` stripProblems). `genclass fix` builds
    its prompt on the person's machine and starts their own agent on a key press: nothing in this repository fixes
    code by itself. Sending the model more than the digest holds, storing a question or an answer, or letting a
    terminal do something the approval page does not list needs the owner's OK and a change to PRIVACY.md.

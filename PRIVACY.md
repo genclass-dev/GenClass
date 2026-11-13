@@ -142,7 +142,7 @@ and invite links.
 
 ## Paid plans, payments and Stripe
 
-Free costs nothing, Team is sold on genclass.dev per project (since 12 November 2026; per developer from 11 November), and Enterprise is agreed by
+Free costs nothing, Pro (named Team until 12 November 2026) is sold on genclass.dev per project (since 12 November 2026; per developer from 11 November), and Enterprise is agreed by
 email. A plan decides what your dashboard shows, never what is collected: an app that turned visitor analytics on has
 them counted on Free too, and they show once its plan includes them. A paid plan (Team; the Individual plan was one
 until 22 October 2026) is paid through Stripe, which processes payments
@@ -243,7 +243,7 @@ its export already hold; nothing new is collected or stored for them. A destinat
 `genclass connections add` is not shown, is sent to genclass.dev once over HTTPS, is stored encrypted there like one
 typed on the dashboard, and is not kept on the developer's machine.
 
-**`genclass ask`** answers a question about an app in words. The question, and at most three earlier questions and
+**`genclass ask`** (the Pro plan) answers a question about an app in words. The question, and at most three earlier questions and
 answers of the same sitting, leave the developer's machine. On genclass.dev we add the numbers that account's
 dashboard already shows for the app and period (page paths, kinds of problem, counts, what the runtime did, what the
 coding agent reported and, where the plan has visitor analytics, visits, sources, devices, countries and the names
@@ -269,15 +269,19 @@ repository answers "not found" and is left as it is.
   should not exist, and DNS lookups for its mail records. They go to that site, not to us.
 - **A digest sent to genclass.dev, to get a plan written for the app.** It holds the checks that failed (each with
   its title and at most three short evidence lines, such as a status code, a page title or a file name and line
-  number) and five things about the app: its name, framework, address, payment provider and host. It holds no source
+  number), and six things about the app: its name, framework, address, what its site says it is about (the home
+  page's title and description, at most 300 characters), payment provider and host. It holds no source
   code, no file contents, no environment values and no secrets; where a check finds a key in a file, the evidence is
   the kind of key, the file and the line, never the key. The command shows this before the first time it sends it
   for a project, and `--no-model` sends nothing.
 
-We pass the digest to a language model (OpenAI's API) to order the failed checks and word the reasons, and return
-its answer. We do not store the digest or the answer and do not log them. We keep one number: how many plans an
-account asked for on a day, for 3 days, to hold each plan's daily limit. OpenAI processes the digest under its API
-terms. Nothing from a digest is used to train GenClass's own model.
+We pass the digest to a language model (OpenAI's API) to order the failed checks and word the reasons, to suggest
+its own ideas for the app and website designs inspired by real sites (we check that each site it names answers), and
+return its answer. We do not store or log the digest. Since 12 November 2026 we keep the last answer for each app of
+an account (the ordered checks with their reasons, the ideas and the designs, not the digest), so the Free plan can
+show the same answer again and a paid plan can show all of it; it is replaced by the next answer and deleted with the
+account. We also keep how many plans an account asked for on a day, for 3 days, to hold each plan's daily limit.
+OpenAI processes the digest under its API terms. Nothing from a digest is used to train GenClass's own model.
 
 ## Where it goes and how long we keep it
 
