@@ -105,7 +105,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(f).toContain("$15 / project / month");
     // plans are per project: the account's one app on Free has its own plan page
     expect(text).toContain(`${HOST}/account/billing?project=${me.app.id}&from=cli`);
-    expect(f).toContain("Apps and their plans Shop Free");
+    expect(f).toContain("Apps and their plans Shop no plan chosen");
     expect(JSON.parse((await said(() => plan({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: true, plan: { id: "free" }, limits: { apps: 3 }, offer: { plan: { id: "team" } } });
   });
 
@@ -124,7 +124,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(f).toContain("Profile");
     expect(f).toContain("Signed in as ada@example.com");
     expect(f).toContain("Plan Free (limited)");
-    expect(f).toContain("Apps and their plans Shop Free");
+    expect(f).toContain("Apps and their plans Shop no plan chosen");
     expect(f).toContain("Upgrade Shop to Pro $15 / project / month npx genclass upgrade");
     expect(f).toContain("Sign out npx genclass logout");
     expect(JSON.parse((await said(() => profile({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: true, plan: { id: "free" }, apps: [{ name: "Shop", plan: { id: "free" } }], upgrade_url: `${HOST}/account/billing?project=${me.app.id}&from=cli` });

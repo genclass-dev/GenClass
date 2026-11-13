@@ -16,12 +16,12 @@ import { resolve } from "node:path";
 import { createAccountProject, readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
 import { hostUrl } from "../../runtime/bin/lib/host.mjs";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
-import { checkout, mcpServer, openBrowser, projectPlan } from "./actions.mjs";
+import { checkout, mcpServer, openBrowser, planNow, projectPlan, upgradeOffer } from "./actions.mjs";
 import { changeConnection, createInvite, fetchAccount, fetchApp, fetchOverview, fetchConnections, fetchEvents, makeAgentLink, saveFunnels } from "./api.mjs";
 import { appArg, n, pickApp } from "./app.mjs";
 import { copyText, onPath } from "./fix.mjs";
 import { asking, refused } from "./session.mjs";
-import { readState } from "./state.mjs";
+import { planName, readState } from "./state.mjs";
 import { ago, agree, bad, clean, good, header, note, planCard, PROMPT, secret, spinner, typed, warn, width, wrap } from "./tui.mjs";
 import { agentSetup } from "./views.mjs";
 
@@ -31,7 +31,7 @@ const row = (label, text, w = 16) => {
   out(`  ${c.gray(label.padEnd(w))}${first}`);
   for (const l of rest) out(`  ${" ".repeat(w)}${l}`);
 };
-const top = (state, target = null) => header({ app: target?.name ?? state.app.name, framework: !target || state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+const top = (state, target = null) => header({ app: target?.name ?? state.app.name, framework: !target || state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: planName(state), host: state.host });
 const day = (iso) => String(iso ?? "").slice(0, 10);
 /** Signed in, or the lines that say how to. Returns { state, creds } or { code }. */
 async function signedIn(o, deps, name) {
@@ -86,6 +86,8 @@ export async function apps(o = {}, deps = {}) {
           warn("Free covers 3 apps: this one needs a paid plan.");
           out(`  ${c.gray("Its plan:")} ${c.cyan(made.planUrl)}`);
         } else if (made?.plan?.id === "free" && made.planUrl) out(`  ${c.gray("On Free (limited). Its plan:")} ${c.cyan(made.planUrl)}`);
+        // its plan is chosen now, on its page (Pro, or Free with a reason)
+        if (made?.id) await planNow({ cwd: o.cwd }, deps, made.id);
         note("To put GenClass into that app's code, run npx genclass in its folder and pick this app.");
       }
       out();
@@ -165,7 +167,7 @@ export async function plan(o = {}, deps = {}) {
     out();
     out(`  ${c.bold("Apps and their plans")}`);
     for (const p of mine) {
-      const what = p.needsPlan ? c.yellow("needs a plan") : p.plan.id === "free" ? c.gray("Free") : c.bold(clean(p.plan.name, 20));
+      const what = p.needsPlan ? c.yellow("needs a plan") : p.plan.id === "free" ? (p.planChosen ? c.gray("Free") : c.yellow("no plan chosen")) : c.bold(clean(p.plan.name, 20));
       out(`    ${clean(p.name, 24).padEnd(24)}  ${what}${p.token === state.app?.token ? c.gray("  this folder") : ""}`);
     }
   }
@@ -198,24 +200,6 @@ export async function plan(o = {}, deps = {}) {
 }
 
 // ------------------------------------------------------------------------------------- profile, upgrade, Free
-
-/**
- * What a paid plan for one app is, from the server's offer (genclass.dev's own words and price): this folder's app,
- * or the one `name` names, else the account's first app past the ones Free covers, else its first app on Free. Null
- * when that app has a plan (or a grant), when nothing is sold here, and when every app has one. A server from before
- * plans per project: the account's offer as it sent it.
- */
-export function upgradeOffer(state, name = null) {
-  const base = state.account?.offer ?? state.steps?.find((x) => x.id === "plan")?.offer ?? null;
-  if (!base) return null;
-  const mine = (state.projects ?? []).filter((p) => p.plan && !p.shared);
-  if (!mine.length) return base.project ? base : (state.projects ?? []).some((p) => p.plan) ? null : base;
-  const named = name ? mine.find((p) => p.id === name || p.name.toLowerCase() === String(name).toLowerCase()) : null;
-  const here = mine.find((p) => p.token === state.app?.token) ?? null;
-  const target = named ?? here ?? mine.find((p) => p.needsPlan) ?? mine.find((p) => p.plan.id === "free" && !p.plan.source) ?? null;
-  if (!target || target.plan.id !== "free" || target.plan.source || !target.planUrl) return null;
-  return { ...base, checkoutUrl: `${target.planUrl}&from=cli`, project: { id: target.id, name: target.name, token: target.token }, needs: target.needsPlan === true };
-}
 
 /** Free's limits in a few words, from the numbers the server sent ("3 apps, 100 live fixes a month"). */
 const freeWords = (free) =>
@@ -301,7 +285,7 @@ export async function profile(o = {}, deps = {}) {
     out();
     out(`  ${c.bold("Apps and their plans")}`);
     for (const p of mine) {
-      const what = p.needsPlan ? c.yellow("needs a plan") : p.plan.id === "free" ? c.gray("Free") : c.bold(clean(p.plan.name, 20));
+      const what = p.needsPlan ? c.yellow("needs a plan") : p.plan.id === "free" ? (p.planChosen ? c.gray("Free") : c.yellow("no plan chosen")) : c.bold(clean(p.plan.name, 20));
       out(`    ${clean(p.name, 24).padEnd(24)}  ${what}${p.token === state.app?.token ? c.gray("  this folder") : ""}`);
     }
   }

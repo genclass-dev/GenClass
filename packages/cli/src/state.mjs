@@ -395,6 +395,9 @@ export async function readState(o = {}, deps = {}) {
   };
 }
 
+/** The plan of the app with `token` (plans are per project), else the account's: what a header shows. */
+export const planName = (state, token = state?.app?.token) => (state?.projects ?? []).find((p) => p.token === token && p.plan)?.plan?.name ?? state?.account?.plan?.name ?? null;
+
 /** The state as plain data for `--json`: what a coding agent reads to know where things stand and what to run. */
 /** The command for a step as a coding agent runs it: without a terminal the walk does a step only with --yes. */
 const forAgent = (run) => (run === "npx genclass setup" ? "npx genclass setup --yes" : run);

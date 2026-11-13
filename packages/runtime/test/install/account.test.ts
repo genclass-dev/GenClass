@@ -475,8 +475,9 @@ describe("whoami and logout", () => {
   });
 });
 
-describe("dashboard: this app's free analytics, as a link in the terminal", () => {
-  const PAYWALL = /needs\s+Pro|free trial|trial for analytics|come with Pro/i;
+describe("dashboard: this app's link in the terminal, and what Free and Pro show (2026-11-12: Free the totals)", () => {
+  // the notice says what Free shows and what comes with Pro; it never says something "needs Pro" or offers a trial for analytics
+  const PAYWALL = /needs\s+Pro|trial for analytics/i;
   const KEYED = { "src/genclass.config.ts": `// genclass:init\nwindow.GENCLASS_CONFIG = { token: "${SHOP.token}" };\n` };
 
   it("an app init made without an account: prints its private link from .genclass.local, says it is free, contacts nothing", () => {
@@ -484,7 +485,8 @@ describe("dashboard: this app's free analytics, as a link in the terminal", () =
     const r = run(["dashboard", "--cwd", dir]);
     expect(r.code, r.out).toBe(0);
     expect(r.out).toMatch(new RegExp(`Your dashboard\\s+${ANON_LINK}`));
-    expect(r.out).toContain("Free for every app");
+    expect(r.out).toContain("Free shows this app's totals");
+    expect(r.out.replace(/\s+/g, " ")).toContain("come with Pro (3 days free): https://genclass.dev/pricing");
     expect(r.out).toContain("Keep this link private");
     expect(r.out).not.toMatch(PAYWALL);
     expect(r.calls).toEqual([]);

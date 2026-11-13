@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { run as runInit } from "../../runtime/bin/lib/init.mjs";
-import { choosePlan } from "../src/actions.mjs";
+import { choosePlan, planNow } from "../src/actions.mjs";
 import { status } from "../src/setup.mjs";
-import { agentConfigs, appsBelow, genclassWorkflows, hasPlaywright, readState, stateJson, WORKFLOW_PATH } from "../src/state.mjs";
+import { agentConfigs, appsBelow, genclassWorkflows, hasPlaywright, planName, readState, stateJson, WORKFLOW_PATH } from "../src/state.mjs";
 import { renamedRepo } from "../src/git.mjs";
 import { saveNotes } from "../src/store.mjs";
 import { planCard } from "../src/tui.mjs";
@@ -412,6 +412,30 @@ describe("genclass: the plan step (src/state.mjs, src/actions.mjs choosePlan, sr
     expect(said.replace(/\s+/g, " ")).toContain(`Open ${url}&from=cli`);
     // an app of a team the account is in: its owner chooses
     expect((await read(project({ shared: true }))).steps.find((x) => x.id === "plan")).toMatchObject({ state: "optional", detail: "the team's owner chooses it" });
+  });
+
+  it("an app with no plan chosen gets its plan page at once (after login, connect, init, apps new, and before its views); one with a plan or a choice does not", async () => {
+    const dir = tempDir();
+    viteApp(dir);
+    await addRuntime(dir);
+    signIn();
+    const url = `${HOST}/account/billing?project=p1`;
+    const app = (extra: object) => project({ id: "p1", plan: { id: "free", name: "Free", source: null }, needs_plan: false, plan_chosen: false, plan_url: url, ...extra });
+    const read = (p: object) => readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ offer: { ...OFFER, price: "$15 / project / month" }, projects: [p] }) } }).fetchFn });
+    // nobody at a terminal here: it says where the page is and goes on
+    let r = "";
+    const said = await printed(async () => (r = await planNow({ cwd: dir }, { readState: async () => read(app({})) })));
+    expect(r).toBe("open");
+    expect(said.replace(/\s+/g, " ")).toContain(`shop has no plan yet. Choose it in the browser: ${url}&from=cli`);
+    // the app named by its id, the same
+    expect(await planNow({ cwd: dir }, { readState: async () => read(app({})) }, "p1")).toBe("open");
+    // nothing to choose: Free chosen with a reason, Pro paid, or GenClass's grant
+    for (const p of [app({ plan_chosen: true }), app({ plan: { id: "team", name: "Pro", source: "paid" } }), app({ plan: { id: "team", name: "Pro", source: "comp" } })]) {
+      expect(await printed(async () => expect(await planNow({ cwd: dir }, { readState: async () => read(p) })).toBe("none"))).toBe("");
+    }
+    // the header names this app's plan, not the account's best one
+    const st = await read(app({ plan: { id: "free", name: "Free", source: null } }));
+    expect(planName({ ...st, account: { ...st.account, plan: { id: "team", name: "Pro" } } } as never)).toBe("Free");
   });
 
   it("the card is the paid plan, large, in the server's words, as wide as the welcome card", async () => {

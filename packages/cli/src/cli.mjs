@@ -94,9 +94,17 @@ export async function run(argv, ctx = {}) {
     const again = await (await import("./app.mjs")).signInAgain(parseArgs(args).o);
     if (again !== null) return again;
   }
-  if (["login", "logout", "whoami", "connect"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
+  // an app that login, connect or init put in the account opens its plan page next (actions.mjs planNow)
+  const thenPlan = async (code) => {
+    if (code !== 0 || ctx.inWalk) return code;
+    const i = args.indexOf("--cwd");
+    await (await import("./actions.mjs")).planNow({ cwd: i >= 0 ? args[i + 1] : undefined, yes: args.includes("--yes"), json: args.includes("--json") }).catch(() => "none");
+    return code;
+  };
+  if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
+  if (["login", "connect"].includes(cmd)) return thenPlan(await (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args));
   if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
-  if (cmd === "init") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
+  if (cmd === "init") return thenPlan(await (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args));
   if (cmd === "scan" || cmd === "audit") {
     // this command carries no copy of the runtime's script-tag build, so the page check runs on genclass.dev unless asked otherwise
     const withHost = args.includes("--local") || args.includes("--hosted") || args.includes("--help") ? args : [...args, "--hosted"];

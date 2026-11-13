@@ -24,7 +24,7 @@ import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { addRuntime, addWorkflow, choosePlan, connectAgent, connectGithubApp, signIn, watchFirstPage } from "./actions.mjs";
 import { brand, canDraw } from "./art.mjs";
 import { BUILD } from "./assets.mjs";
-import { appsBelow, readState, stateJson } from "./state.mjs";
+import { appsBelow, planName, readState, stateJson } from "./state.mjs";
 import { barPara, card, checklist, header, nextBlock, note, pick, PROMPT, rule, summary, typed, warn } from "./tui.mjs";
 
 /**
@@ -32,7 +32,7 @@ import { barPara, card, checklist, header, nextBlock, note, pick, PROMPT, rule, 
  * about it.
  */
 export function show(state, details = false, welcome = false) {
-  const h = { app: state.app.name, framework: state.app.framework, account: state.account?.label ?? null, plan: state.account?.plan?.name ?? null, host: state.host };
+  const h = { app: state.app.name, framework: state.app.framework, account: state.account?.label ?? null, plan: planName(state), host: state.host };
   // the first screen on a terminal is the welcome card; every later one, and anything piped, is the two-line header
   if (welcome && canDraw()) card({ ...h, cwd: state.cwd, version: BUILD.version });
   else header(h);

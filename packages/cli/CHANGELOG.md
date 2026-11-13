@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.7
+
+- **Every new app has its plan chosen right away.** `login`, `connect` and `init` (from the home prompt too) and
+  `apps new` open the app's plan page in the browser once it is in the account, and wait for the choice: Pro, with 3
+  days free, or Free with a reason. Before, only the guided setup did, so an app connected another way stayed on Free
+  without anyone choosing.
+- Opening an app with no plan chosen (`dashboard`, `problems`, ...) asks for its plan first, as its page on
+  genclass.dev does.
+- The header shows this folder's app's plan, not the best plan of the account. `profile` and `plan` say "no plan
+  chosen" for an app that has none.
+- The note under a dashboard link says what Free shows (the totals) and what comes with Pro.
+
 ## 0.3.6
 
 The paid plan is Pro (it was called Team), with 3 days free:

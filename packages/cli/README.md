@@ -11,7 +11,7 @@ Run it in your web app's folder. It shows where the project stands and walks you
 per step. Stop at any point and run it again: it continues from what is true now.
 
 ```text
-  ╭─ GenClass ────────────────────────────────────────────── v0.3.6 ─╮
+  ╭─ GenClass ────────────────────────────────────────────── v0.3.7 ─╮
   │                                                                  │
   │                        Welcome back, Ada!                        │
   │                                                                  │

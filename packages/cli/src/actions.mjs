@@ -136,6 +136,51 @@ export async function choosePlan(state, o = {}, deps = {}) {
 }
 
 /**
+ * What a paid plan for one app is, from the server's offer (genclass.dev's own words and price): this folder's app,
+ * or the one `name` names, else the account's first app past the ones Free covers, else its first app on Free. Null
+ * when that app has a plan (or a grant), when nothing is sold here, and when every app has one. A server from before
+ * plans per project: the account's offer as it sent it.
+ */
+export function upgradeOffer(state, name = null) {
+  const base = state.account?.offer ?? state.steps?.find((x) => x.id === "plan")?.offer ?? null;
+  if (!base) return null;
+  const mine = (state.projects ?? []).filter((p) => p.plan && !p.shared);
+  if (!mine.length) return base.project ? base : (state.projects ?? []).some((p) => p.plan) ? null : base;
+  const named = name ? mine.find((p) => p.id === name || p.name.toLowerCase() === String(name).toLowerCase()) : null;
+  const here = mine.find((p) => p.token === state.app?.token) ?? null;
+  const target = named ?? here ?? mine.find((p) => p.needsPlan) ?? mine.find((p) => p.plan.id === "free" && !p.plan.source) ?? null;
+  if (!target || target.plan.id !== "free" || target.plan.source || !target.planUrl) return null;
+  return { ...base, checkoutUrl: `${target.planUrl}&from=cli`, project: { id: target.id, name: target.name, token: target.token }, needs: target.needsPlan === true };
+}
+
+/**
+ * An app of the account with no plan chosen yet (on Free, nothing paid, granted or chosen on its page): the owner's
+ * rule (2026-11-12) is that it has its plan chosen before anything else, Pro or Free with a reason, so this opens its
+ * plan page in the browser and waits for the choice. `id` names the app; without it, this folder's. Without a
+ * terminal it says where the page is and goes on. Returns "chosen", "none" (nothing to choose: a plan, a grant, a
+ * choice already, or nothing sold) or "open" (the choice was not made).
+ */
+export async function planNow(o = {}, deps = {}, id = null) {
+  let state;
+  try {
+    state = await (deps.readState ?? (await import("./state.mjs")).readState)({ cwd: o.cwd }, deps);
+  } catch {
+    return "none";
+  }
+  const app = (state.projects ?? []).find((p) => (id ? p.id === id : p.token === state.app?.token) && !p.shared);
+  if (!app?.plan || app.plan.id !== "free" || app.plan.source || (app.planChosen && !app.needsPlan)) return "none";
+  const offer = upgradeOffer(state, app.id);
+  if (!offer?.project) return "none";
+  if (o.json) return "open";
+  if (o.yes || !interactive()) {
+    out();
+    note(`${clean(app.name, 40)} has no plan yet. Choose it in the browser: ${offer.checkoutUrl}`);
+    return "open";
+  }
+  return (await projectPlan(offer, o, deps)) === "done" ? "chosen" : "open";
+}
+
+/**
  * Opens a plan's checkout in the browser and waits for the payment (Enter stops the wait). The page is
  * genclass.dev's, the payment is Stripe's; this command never sees a card. Returns whether the plan became active.
  * @param {{ plan: { name: string }, checkoutUrl: string }} offer

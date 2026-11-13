@@ -13,9 +13,9 @@
 import { readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
 import { hostConfig, hostUrl } from "../../runtime/bin/lib/host.mjs";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
-import { openBrowser, signIn } from "./actions.mjs";
+import { openBrowser, planNow, signIn } from "./actions.mjs";
 import { fetchApp, signInIsOld } from "./api.mjs";
-import { readState } from "./state.mjs";
+import { planName, readState } from "./state.mjs";
 import { ago, bad, clean, header, note, proBox, PROMPT, typed, visible, warn, width, wrap } from "./tui.mjs";
 
 /** The views a Free app does not have (the server sends their data to Pro only), and what the Pro box says about each. */
@@ -238,7 +238,7 @@ export async function pickApp(o = {}, deps = {}, name = "dashboard") {
   // on a terminal: the apps as numbered choices, and the number picks one
   if (wanted.length !== 1 && projects.length && !o.json && !o.yes && interactive()) {
     const list = (wanted.length > 1 ? wanted : projects).slice(0, 30);
-    header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+    header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: planName(state), host: state.host });
     note(wanted.length > 1 ? `More than one app is named "${clean(o.app, 40)}". Which one?` : o.app ? `No app named "${clean(o.app, 40)}". Which one?` : state.app.token ? "This folder's app is not in your account yet. Which app?" : "Which app?");
     list.forEach((p, i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${c.bold(clean(appLabel(p, projects), 34))}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`));
     out();
@@ -251,7 +251,7 @@ export async function pickApp(o = {}, deps = {}, name = "dashboard") {
   if (wanted.length !== 1) {
     if (o.json) out(JSON.stringify({ ok: false, error: projects.length ? "which app" : "no app yet", apps: projects.map((p) => p.name) }));
     else {
-      header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+      header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: planName(state), host: state.host });
       if (!projects.length) note("No app in your account yet. Run npx genclass in your web app's folder: it adds GenClass and gives the app its dashboard.");
       else {
         note(wanted.length > 1 ? `More than one app is named "${clean(o.app, 40)}". Name it by its id:` : o.app ? `No app named "${clean(o.app, 40)}" in your account. Your apps:` : state.app.token ? "This folder's app is not in your account yet (genclass puts it there). Your apps:" : "Which app? Run this in the app's folder, or name one:");
@@ -277,11 +277,22 @@ export async function appView(o = {}, deps = {}, view) {
   if ("code" in picked) return picked.code;
   let { state } = picked;
   const { creds, target } = picked;
+  // an app of the account with no plan chosen opens its plan page first, as its page on genclass.dev does
+  if (!o.json && interactive()) {
+    const p = await planNow({ cwd: o.cwd, yes: o.yes }, deps, target.id);
+    if (p === "open") {
+      out();
+      note(`${clean(target.name, 40)} needs its plan first. Run this again once it is chosen.`);
+      out();
+      return 1;
+    }
+    if (p === "chosen") state = await readState({ cwd: o.cwd }, deps);
+  }
   if (o.open && target.dashboard_url) openBrowser(target.dashboard_url, o);
   let app = await fetchApp(creds, target.id, range, deps);
   if (!app.ok && app.reauth && !o.json && interactive()) {
     // signed in before the command could show dashboards: one more approval in the browser, then it is shown
-    header({ app: target.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+    header({ app: target.name, framework: state.app.framework, account: state.account?.label, plan: planName(state, target.token), host: state.host });
     note("This sign-in is from before the command could show dashboards, so it was not approved for that. Signing in once more fixes it.");
     const a = await typed(`  ${c.bold("Enter")} ${c.gray("to sign in again,")} ${c.bold("q")} ${c.gray("to stop")} `);
     if (a === null || /^q/i.test(a)) return 1;
@@ -293,7 +304,7 @@ export async function appView(o = {}, deps = {}, view) {
   if (!app.ok) {
     if (o.json) out(JSON.stringify({ ok: false, error: app.reauth ? "sign in again" : app.reason, run: app.reauth ? "npx genclass login" : null, dashboard_url: target.dashboard_url }));
     else {
-      header({ app: target.name, framework: state.app.framework, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+      header({ app: target.name, framework: state.app.framework, account: state.account?.label, plan: planName(state, target.token), host: state.host });
       if (app.reauth) warn(`This sign-in is from before the command could show dashboards. Run ${c.cyan("npx genclass login")} once, then ${c.cyan(`npx genclass ${view.name}`)}.`);
       else if (app.missing) note("This genclass.dev cannot show a dashboard in the terminal yet.");
       else bad(`Could not read the dashboard: ${clean(app.reason, 200)}`);
@@ -313,13 +324,13 @@ export async function appView(o = {}, deps = {}, view) {
   }
   // Free sees the totals only (the server left the rest out): these views are Pro's, and say so with the way to it
   if (app.problemsPlan && PRO_VIEWS[view.name]) {
-    header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+    header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: planName(state, target.token), host: state.host });
     proBox(PRO_VIEWS[view.name], app.problemsPlan);
     out();
     return 0;
   }
   // a view whose output is meant to be piped or pasted (the report) has no card over it
-  if (!view.plain) header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: state.account?.plan?.name, host: state.host });
+  if (!view.plain) header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: planName(state, target.token), host: state.host });
   const code = await view.show(app, state, target, readCredentialsFor().creds ?? creds);
   return typeof code === "number" ? code : 0;
 }
