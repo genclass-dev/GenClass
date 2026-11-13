@@ -373,19 +373,11 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
     if (typeof body.project_id !== "string" || !body.project_id) return fail(400, `the ${plan.name} plan is bought for one project: send project_id`);
     return checkoutProject(c, f, a, plan, body.project_id);
   }
-  // a plan sold per seat: how many people (the owner included); one when the page sends none. A plan sold by units of
-  // apps (version 5, Pro): how many units, by default enough for the apps the account has
+  // a plan sold per seat (Pro since version 5): how many developers (the owner included); one when the page sends none
   let seats = 1;
   if (plan.per_seat === true && body.seats !== undefined) {
     const n = cleanSeats(body.seats);
     if (n === null) return fail(400, `seats is a whole number from 1 to ${MAX_SEATS}; for a larger team email ${PLANS_FILE.contact}`);
-    seats = n;
-  }
-  if (plan.apps_per_unit) {
-    const asked = body.quantity ?? body.seats;
-    const own = (await accountProjects(c, a.account.id)).filter((x) => x.account_id === a.account.id).length;
-    const n = asked === undefined ? Math.max(1, Math.ceil(own / plan.apps_per_unit)) : cleanSeats(asked);
-    if (n === null) return fail(400, `quantity is a whole number from 1 to ${MAX_SEATS}`);
     seats = n;
   }
   // started from an app's plan page: Stripe returns there

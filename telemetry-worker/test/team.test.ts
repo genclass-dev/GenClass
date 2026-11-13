@@ -73,11 +73,12 @@ describe("invite links: who can make one, and how many", () => {
     expect((await call(env, "DELETE", `/api/team/invites/${a.id}`, { cookie })).status).toBe(204);
     expect((await call(env, "DELETE", `/api/team/invites/${a.id}`, { cookie })).status).toBe(404);
     await invite(env, cookie);
-    // a Team with one seat has no place for a member either, and the message says what to do
+    // Pro with one seat (the owner's) has no place for a member either, and the message says where seats are added:
+    // Manage billing, never "Pro is for one person" (the 0.3.7 report)
     team(sql, account.id, 1);
     const one = await call(env, "POST", "/api/team/invites", { body: {}, cookie });
-    expect(one.status).toBe(403);
-    expect((await one.json()).upgrade_url).toBe(PLANS_URL);
+    expect(one.status).toBe(409);
+    expect((await one.json()).error).toBe("your Team plan has one seat, yours: add a seat for each member in Manage billing ($15 / developer / month)");
   });
 
   it("only the browser session with our Origin: a CLI session and a cross-origin post are refused, a signed-out one is 401", async () => {
@@ -150,7 +151,7 @@ describe("joining: the invite page, single use, 7 days", () => {
     team(sql, owner.account.id, 1);
     const r = await join(env, bob.cookie, late.code);
     expect(r.status).toBe(409);
-    expect((await r.json()).error).toBe("this team's plan has no seat for members now; ask its owner");
+    expect((await r.json()).error).toBe("this team's plan has one seat, its owner's: ask its owner to add one for you in Manage billing");
     expect(sql.rows("SELECT member_id FROM team_members")).toEqual([]);
   });
 });

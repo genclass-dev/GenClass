@@ -4,10 +4,12 @@ Cloudflare Worker that receives the default-on diagnostics batches from `@gencla
 [`packages/runtime/TELEMETRY.md`](../packages/runtime/TELEMETRY.md)) and stores them in R2, that gives every web app
 a token and a private dashboard on genclass.dev, and that holds the optional accounts (Google, an email and a
 password, or GitHub, with passkeys as extra security) which keep several apps in one place and let `npx @genclass/runtime@beta login` connect an app
-([Accounts](#accounts)). There are three plans (since 2026-11-11): Free, the dashboard's problems for one person;
-Team, sold on the site per project (one subscription per app, since 2026-11-12; per developer before), with visitor analytics, forwarding, export, 90 days of history, private
-repositories for the GitHub App and members ([Teams](#teams)); and Enterprise, by agreement, with your own
-classifier, which GenClass trains ([Paid plans](#paid-plans)). There is no trial.
+([Accounts](#accounts)). There are three plans (`billing/plans.json` version 5, since 2026-11-13): Free, one app with
+its totals, on the website; Pro (plan id `team`), US$15 per developer a month for up to 3 apps, with the genclass
+command, every problem, visitor analytics, forwarding, export, 90 days of history, private repositories for the
+GitHub App and members ([Teams](#teams)), 3 days free at the first Checkout; and Enterprise, by agreement, with more
+apps and your own classifier, which GenClass trains ([Paid plans](#paid-plans)). What was bought before 13 November
+2026 keeps covering what it covered (migration 0021).
 
 - **Deployed:** worker `genclass-telemetry`, account `144bd5f5270b51dbe7faf46227a154f0`.
   - `https://genclass-telemetry.mehar-144.workers.dev` (workers.dev). Runtime `0.2.1` and earlier send to this URL +
@@ -551,7 +553,20 @@ GitHub App on public repositories, the page check, 100 live fixes a month. A new
 (`/account` with no app, on Free, where Pro is sold) is Pro's trial: "Start your 3-day free trial" large (the
 account's Checkout, `/account/billing?plan=team&start=1`) and a tiny "Skip" on to its first app (the owner: "our
 entire goal is for them to put their credit cards in"). On an app's plan page Free is the same tiny "Skip", and
-the reason popup still comes before it.
+the reason popup still comes before it. Both show Pro small and short (the owner: "a tad bit zoomed in and there's
+too much written"): the name, the price, the first 5 lines of the plan (`plans.ts` pitchLines, without "Everything in
+Free" and the trial's own line) and the rest folded under "N more"; a just-added app's page has one line under its
+heading, and the month's live fixes show once there are some.
+
+What was bought before version 5 keeps what it covered (the Terms; migration 0021, applied before the worker that
+reads it is deployed: `npx --yes wrangler@4 d1 migrations apply genclass-dashboard --remote`). A subscription bought per
+app under version 4 keeps its app covered, the app is not counted in Pro's 3, and its team keeps every member (no seat
+count). An account subscription paying when 0021 is applied keeps covering as many apps as the account had then
+(`accounts.apps_kept`) until that subscription ends or another replaces it (the webhook clears it). Every app a paid
+plan or a grant covered then counts as chosen (`projects.plan_chosen`), so it opens its dashboard as before instead of
+"Choose a plan". A paid Pro under GenClass's grant of Pro keeps the grant's room (every app, no seat limit). A Free
+account keeps one app, its oldest (the owner's call); the locked page says that Free covers one app since 13 November
+2026.
 
 The plans live in [`billing/plans.json`](../billing/plans.json) (version 3, 2026-11-11, the owner: "cut back on
 the free features"; one thing stays free, finding, seeing and fixing the problems):
@@ -641,10 +656,14 @@ their link opens the dashboard (24 hours, 7 and 30 days).
 `src/team.ts` (data) and `src/team-routes.ts` (routes); tables `team_members` and `team_invites` (migration 0014).
 
 - **Who is in.** A team is an account and the accounts it added as members. How many people an account holds comes
-  from its plan (`src/plans.ts` accessOf, `seats`): Free 1; Team (per project since 2026-11-12) no limit; a plan sold
-  per seat the seats its subscription pays for (`accounts.seats`, the subscription item's quantity, written by the
-  webhook with the plan; `test/team.test.ts` runs it on `test/fixtures/plans-v3-seats.json`); a plan GenClass grants,
-  and every account on a server with `PLAN_GATES = "open"`, no limit. The owner is the first seat, then members in
+  from its plan (`src/plans.ts` accessOf, `seats`): Free 1; Pro (per developer since version 5) the seats its
+  subscription pays for (`accounts.seats`, the subscription item's quantity, written by the webhook with the plan;
+  `test/team.test.ts` runs it on `test/fixtures/plans-v3-seats.json`), and no limit while they are not known (a
+  subscription bought per project under version 4 included the whole team; a row whose seats the webhook has not
+  written yet); with one seat the owner is told to add seats in Manage billing; a plan GenClass grants (a paid plan
+  under a grant of the same plan too), and every account on a server with `PLAN_GATES = "open"`, no limit. A member
+  works under its team's plan in the genclass command (`src/cli.ts` workingAccess: suggestions, `ask`, the plan it
+  names; `cli.via` is `"team"`). The owner is the first seat, then members in
   the order they joined. A member beyond the seats (fewer seats, or the plan ended) keeps the row and loses the
   access until there is a seat again: no billing change removes anyone.
 - **What a member can do.** Open the dashboards and read the stats of the owner's apps, shown with the owner's plan
@@ -836,7 +855,7 @@ does about it.
 | `GET /api/billing` | browser session: `{ plan, subscription_status, current_period_end, cancel_at_period_end, on_sale, access, seats }` (`on_sale`: a plan is sold and this account can buy it); `access` is `paid`, `comp` (GenClass's grant), `open` (this server's `PLAN_GATES`) or null (Free); `seats`: the people the account holds, null for no limit |
 | `POST /api/billing/trial` | 410: GenClass has no trial any more ([Grants and no trial](#grants-enterprise-and-no-trial)) |
 | `GET /account/trial` | `/account`, through `/signup` when signed out (genclass.dev's pricing page linked here until 2026-10-19) |
-| `GET /account/billing?project=<id>` | one app's plan page (plans per project, `billing/plans.json` version 4): "Choose a plan for <app>", Team large with its price, what it has and Start Team for <app> (a Checkout for that project: `project_id`, metadata `genclass_project`), and a very small "Skip" under it (Free, after the reason popup; it read "Try for free (limited)" until 2026-11-13), none for an app past the one Free covers; the app's live fixes this month. `&from=cli` (the genclass command's plan step, which waits for the choice), `&new=1` (an app just added on the website, which goes on to its setup), `&start=1` (opens the Checkout at once). `?plan=team` without a project opens the plan page of the account's first app on Free. |
+| `GET /account/billing?project=<id>` | one app's plan page (`billing/plans.json` version 5): "Choose a plan for <app>", Pro's card (its name, price, first 5 lines and "N more"), Start your 3-day free trial (the account's Checkout, coming back here) or Continue with Pro for a paying account, and a very small "Skip" under it (Free, after the reason popup; it read "Try for free (limited)" until 2026-11-13), none for an app past what the account's plan covers (Free: since 13 November 2026 one app, the oldest; Pro: Enterprise by email); the app's live fixes this month, once there are some. `&from=cli` (the genclass command's plan step, which waits for the choice; the choice goes on to the app's dashboard), `&new=1` (an app just added on the website, which goes on to its setup), `&start=1` (opens the Checkout at once). `?plan=team` without a project opens the plan page of the account's first app on Free. |
 | `POST /api/billing/projects/<id>/free` | `{ reason, note? }`, browser session and our `Origin`: Free chosen for one app on its plan page, after the popup "What's stopping you from paying?" (`reason` one of `FREE_REASONS` in `src/billing.ts`: price, trying, approval, feature, unsure, other; `note` at most 500 characters). Keeps the answer (`plan_feedback`, migration 0017), writes `projects.plan_chosen` (which `GET /api/cli/overview` reports as `plan_chosen`) and tells the owner (`NOTIFY_WEBHOOK`, kind `free_chosen`). 400 without a reason, 409 for an app past the ones Free covers, 404 for another account's app. Until an own app on Free has a choice (where Team is sold), `/account/apps/<id>` redirects to its plan page. |
 | `GET /account/billing` | the plan, its renewal or end date, the plans side by side (Free, Team and Enterprise), the seats box and Upgrade (and Switch, with two paid plans) buttons, the Team section (members, invite links, the teams the account is in) and Manage billing (only to an account that can buy), Talk to us (a mailto link) for Enterprise, and which plan is sold through Link (Managed Payments; none today). With no plan sold it shows no Upgrade button, no "billed monthly" and no Stripe footer. `?plan=<id>` (a pricing page button) survives the sign-in redirect and highlights and focuses that plan's button. Back from Checkout (`?done=1`) while the plan still reads Free, or back from a switch (`?done=1&to=<plan>`) while the plan is still the old one, it shows no buttons and waits for the webhook. |
 | `GET /api/account/projects/<id>/integrations` | browser session: the app's forwarding destinations, masked |
