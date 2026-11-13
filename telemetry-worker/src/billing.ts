@@ -46,6 +46,8 @@ import {
   PLANS,
   PLANS_FILE,
   planById,
+  planFromParam,
+  planParam,
   projectAccess,
   accountProjectsAccess,
   stripeMode,
@@ -105,7 +107,7 @@ export async function overBudget(lim: RateLimiterLike | undefined, bucket: strin
 export const tooMany = (): Response => fail(429, "too many requests from this account; try again in a minute", { "retry-after": "60" });
 
 /** The plan a link names (?plan=<id>, from the pricing page), if it is a paid plan. */
-const pickedPlan = (v: string | null): Plan | null => PAID_PLANS.find((p) => p.id === v) ?? null;
+const pickedPlan = (v: string | null): Plan | null => planFromParam(v);
 
 /** A browser-only write: a cookie session with our Origin. */
 export async function browserWrite(c: C, what: string): Promise<Auth | Response> {
@@ -220,7 +222,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       const go = !!picked && url.searchParams.get("start") === "1";
       const a = await webSession(c);
       // the plan picked on the pricing page survives the sign-in
-      if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${picked.id}${go ? "&start=1" : ""}` : ""}`)}`);
+      if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${planParam(picked)}${go ? "&start=1" : ""}` : ""}`)}`);
       // a plan sold per project, picked on the pricing page or started from an older genclass command: the plan page
       // of the account's first app still on Free, where it is bought for that app
       if (picked?.per_project === true) {

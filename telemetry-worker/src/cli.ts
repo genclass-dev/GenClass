@@ -55,7 +55,7 @@ import { isKind, KINDS } from "./forward.js";
 import { githubApp } from "./github/config.js";
 import { repoStatusForAccount } from "./github/http.js";
 import { json } from "./http.js";
-import { accountAccess, accountBilling, accountProjectsAccess, better, canBuy, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
+import { accountAccess, accountBilling, accountProjectsAccess, better, planParam, canBuy, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
 import { liveFixUsage } from "./usage.js";
 import { appKey, askModel, byWeight, claimRun, hasModel, keepAnswer, lastAnswer, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem, type SuggestAnswer } from "./suggest.js";
 import { activeOwners, createInvite, isTeamError, membershipsOf, teamOf } from "./team.js";
@@ -107,7 +107,7 @@ async function cliJson(c: C, a: Auth): Promise<{ paid: true; via: "plan" | "team
   const via = await cliVia(c, a);
   if (via !== null) return { paid: true, via };
   const plan = PAID_PLANS[0]!;
-  return { paid: false, plan: plan.name, price: priceText(plan), trial_days: (await trialFor(c.db, a.account.id, plan)) || null, checkout_url: `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1` };
+  return { paid: false, plan: plan.name, price: priceText(plan), trial_days: (await trialFor(c.db, a.account.id, plan)) || null, checkout_url: `${c.cfg.origin}/account/billing?plan=${planParam(plan)}&start=1` };
 }
 
 /** The routes that are Pro's for a CLI session: all but the overview and the account. */
@@ -170,7 +170,7 @@ async function offerFor(c: C, account: { id: string; email: string | null }, acc
     summary: plan.summary,
     // the plan's own "N days free" line only while the account still has the trial
     features: plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text) && (trialDays || !/days free/i.test(f.text))).map((f) => f.text).slice(0, 12),
-    checkout_url: one ? `${c.cfg.origin}/account/billing?project=${encodeURIComponent(one)}&from=cli` : `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1`,
+    checkout_url: one ? `${c.cfg.origin}/account/billing?project=${encodeURIComponent(one)}&from=cli` : `${c.cfg.origin}/account/billing?plan=${planParam(plan)}&start=1`,
     trial_days: trialDays,
     // a plan sold by units of apps (a design never sold): always null, kept because the genclass command reads it
     apps_per_unit: null,
@@ -272,7 +272,7 @@ async function suggest(c: C): Promise<Response> {
     designs_locked: partial ? designs.length : 0,
     // the answer was kept from an earlier run (Free sees it again; a plan out of runs for the day sees its last)
     cached_at: created,
-    upgrade_url: locked.length || hidden || limited ? `${c.cfg.origin}/account/billing?plan=team&from=cli` : null,
+    upgrade_url: locked.length || hidden || limited ? `${c.cfg.origin}/account/billing?plan=${planParam(pro ?? PAID_PLANS[0]!)}&from=cli` : null,
     upgrade_plan: pro ? { name: pro.name, price: priceText(pro), trial_days: pro.trial_days ?? null } : null,
     remaining_today: used === null ? Math.max(0, lim.per_day - (await usedToday(c.db, a.account.id, c.now))) : Math.max(0, lim.per_day - used),
     limited,

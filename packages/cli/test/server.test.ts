@@ -149,7 +149,7 @@ describe("genclass against the collector (src/api.mjs, telemetry-worker/src/cli.
       designs: [],
       ideasLocked: 2,
       designsLocked: 1,
-      upgradeUrl: `${HOST}/account/billing?plan=team&from=cli`,
+      upgradeUrl: `${HOST}/account/billing?plan=pro&from=cli`,
       upgradePlan: { plan: "Pro", price: "$15 / developer / month", trialDays: 3 },
       limited: false,
     };

@@ -212,6 +212,14 @@ export function pitchLines(plan: Plan): string[] {
   return plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text) && !/days free/i.test(f.text)).map((f) => f.text);
 }
 
+/**
+ * A plan as its links name it (`?plan=pro`): its name in lower case, so a link says what every screen says. A link
+ * with the plan's id (`?plan=team`, the links sent before 2026-11-13) still works (planFromParam).
+ */
+export const planParam = (plan: Plan): string => plan.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+/** The plan sold under a link's `plan` (its planParam or its id), or null. */
+export const planFromParam = (v: string | null): Plan | null => (v ? (PAID_PLANS.find((p) => planParam(p) === v.toLowerCase() || p.id === v) ?? null) : null);
+
 /** The most seats one Checkout sells and one account holds on a per_seat plan; a larger team is agreed by email. */
 export const MAX_SEATS = 200;
 
