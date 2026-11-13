@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/collector.js";
 import type { Stats } from "../src/dashboard.js";
+import { esc } from "../src/escape.js";
 import { renderReport } from "../src/report-email.js";
 import {
   accountToken,
@@ -240,6 +241,46 @@ describe("reports: one account's report", () => {
     expect(r.promptLinks[prompt]).toContain(`s=${await promptSignature(env, prompt)}`);
   });
 
+  it("the email is short: a linked prompt is a button, never its text; one setup step on several apps is one row", async () => {
+    const { env, sql } = world();
+    const { cookie, account } = await signedIn(env);
+    const shop = await createApp(env, cookie, "Shop");
+    grantPro(sql, shop.id);
+    for (const name of ["Blog", "Docs", "Admin"]) grantPro(sql, (await createApp(env, cookie, name)).id);
+    await sendBatch(env, shop.token, [page("/cart"), ...detection("stale", "/cart"), ...detection("stale", "/cart")]);
+    const r = (await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report;
+    const { html, text } = renderReport(r);
+    const fix = r.items.find((i) => i.rule === "kind:stale")!.prompt!;
+    expect(html).toContain("Copy the fix prompt");
+    expect(html).not.toContain(fix.slice(0, 60));
+    expect(text).toContain(fix.slice(0, 60));
+    // three apps without data: one row that names them, a signed setup prompt per app
+    const noData = r.items.filter((i) => i.rule === "setup:no-data");
+    expect(noData).toHaveLength(3);
+    expect(html.split("No page has reported to GenClass yet")).toHaveLength(2);
+    expect(html).toContain("On Blog, Docs and Admin.");
+    for (const i of noData) expect(html).toContain(esc(r.promptLinks[i.prompt!]!));
+    expect(html.length).toBeLessThan(102_000);
+  });
+
+  it("without signed links a short prompt is printed and a long one is left to the text part", async () => {
+    const { env, sql } = world({ INTEGRATIONS_KEY: undefined });
+    const { cookie, account } = await signedIn(env);
+    const app = await createApp(env, cookie, "Shop");
+    grantPro(sql, app.id);
+    await sendBatch(env, app.token, [page("/cart"), ...detection("stale", "/cart")]);
+    const r = (await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report;
+    expect(r.promptLinks).toEqual({});
+    const long = "Redesign the site. ".repeat(60);
+    r.designs = [{ title: "Calm", inspired_by: "https://example.com", why: null, prompt: long } as (typeof r.designs)[number]];
+    const { html, text } = renderReport(r);
+    const fix = r.items.find((i) => i.rule === "kind:stale")!.prompt!;
+    expect(html).toContain(fix.slice(0, 60));
+    expect(html).not.toContain(long.slice(0, 200));
+    expect(html).toContain("The full prompt is in the plain-text part of this email.");
+    expect(text).toContain(long.trim().slice(0, 200));
+  });
+
   it("a Free app's report has the totals and Pro's box, never its pages or prompts", async () => {
     const { env, sql } = world();
     const { cookie, account } = await signedIn(env);
@@ -389,7 +430,7 @@ describe("reports: the settings and the email's links", () => {
     const saved = await call(env, "POST", "/api/report/settings", { body: form, headers: { "content-type": "application/x-www-form-urlencoded" } });
     expect(saved.status).toBe(303);
     expect(accountRow(sql, account.id)).toMatchObject({ report_every: "monthly", report_alerts: 1 });
-    expect((await call(env, "POST", "/api/report/settings", { body: { a: account.id, t: `${t.slice(0, -1)}x`, every: "off" } })).status).toBe(403);
+    expect((await call(env, "POST", "/api/report/settings", { body: { a: account.id, t: `${t.slice(0, -1)}${t.endsWith("x") ? "y" : "x"}`, every: "off" } })).status).toBe(403);
     const one = await call(env, "POST", `/api/report/unsubscribe?a=${account.id}&t=${t}`, { body: "List-Unsubscribe=One-Click", headers: { "content-type": "application/x-www-form-urlencoded" }, origin: null });
     expect(one.status).toBe(200);
     expect(accountRow(sql, account.id)).toMatchObject({ report_every: "off", report_alerts: 0, report_next: null });
