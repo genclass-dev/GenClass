@@ -197,7 +197,8 @@ function hero(r: Report): string {
     .join("");
   const m = measured(r);
   const tot = (f: (x: AppReport) => number) => m.reduce((s, x) => s + f(x), 0);
-  const visits = m.some((x) => x.visitors) ? tot((x) => x.visitors?.visits ?? 0) : null;
+  // visits only when some were counted: an app whose pages do not send analytics would read "0 visits" beside its loads
+  const visits = m.some((x) => x.visitors) && tot((x) => x.visitors?.visits ?? 0) > 0 ? tot((x) => x.visitors?.visits ?? 0) : null;
   const tiles = m.length && r.kind !== "alert"
     ? [
         ["Page loads", tot((x) => x.totals.loads), tot((x) => x.totals.prevLoads)],
