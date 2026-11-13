@@ -82,9 +82,9 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, pitchLines, PLANS_FILE, priceText, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, canBuy, firstPlanWith, planParam, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, pitchLines, PLANS_FILE, priceText, problemsLock, projectAccess, viewRanges } from "./plans.js";
 import { trialFor } from "./billing.js";
-import { activeOwners, forgetTeam, membershipsOf } from "./team.js";
+import { activeOwners, appHome, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
 import {
   b64url,
@@ -1585,12 +1585,22 @@ async function overAppLimit(c: C, accountId: string): Promise<Response | null> {
   return null;
 }
 
+/**
+ * An app a team's member added to the team's account counts as chosen: its plan is the owner's, so the owner is not
+ * sent to "Choose a plan" for it (an app the plan does not cover still is: the lock shows its plan page).
+ */
+async function teamAppChosen(c: C, id: string | null): Promise<void> {
+  if (id) await c.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ? AND plan_chosen IS NULL").bind(c.now.toISOString(), id).run();
+}
+
 async function createAccountProject(c: C): Promise<Response> {
   const a = await writer(c);
   if (a instanceof Response) return a;
   const body = await readJson(c, 4096);
   if (body instanceof Response) return body;
-  const over = await overAppLimit(c, a.account.id);
+  // a team's member without a plan of its own adds the app to the team's account, under the team's plan (appHome)
+  const home = await appHome(c.db, c.env, a.account.id, c.now);
+  const over = await overAppLimit(c, home);
   if (over) return over;
   if (c.env.CREATE_LIMITER) {
     const { success } = await c.env.CREATE_LIMITER.limit({ key: (await sha256Hex(`create:account:${a.account.id}`)).slice(0, 32) });
@@ -1600,8 +1610,9 @@ async function createAccountProject(c: C): Promise<Response> {
   if ((await projectsCreatedSince(c.db, new Date(c.now.getTime() - MINUTE), "account")) >= MAX_ACCOUNT_PROJECTS_PER_MINUTE) {
     return fail(429, "too many apps created; try again in a minute", { "retry-after": "60" });
   }
-  const p = await createProject(c.db, sanitizeName(body.name), c.now, a.account.id);
-  const project = await ownedProject(c, a.account.id, p.id);
+  const p = await createProject(c.db, sanitizeName(body.name), c.now, home);
+  if (home !== a.account.id) await teamAppChosen(c, p.id);
+  const project = await readableProject(c, a.account.id, p.id);
   return json(201, { project: projectJson(c, project!) });
 }
 
@@ -1907,7 +1918,8 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       if (!a) return null;
       const json201 = (request.headers.get("accept") ?? "").includes("application/json");
       const elsewhere = (): Response => (json201 ? json(200, { url: "/account/new", copiedUrl: "/account/new", token: null, command: null }) : redirect("/account/new", [], 303));
-      if (!originOk(c) || (await overAppLimit(c, a.account.id))) return elsewhere();
+      const home = await appHome(c.db, env, a.account.id, c.now);
+      if (!originOk(c) || (await overAppLimit(c, home))) return elsewhere();
       if (c.env.CREATE_LIMITER) {
         const { success } = await c.env.CREATE_LIMITER.limit({ key: (await sha256Hex(`create:account:${a.account.id}`)).slice(0, 32) });
         if (!success) return elsewhere();
@@ -1918,8 +1930,13 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
         const body = await readJson(c);
         if (!(body instanceof Response)) name = sanitizeName(body.name);
       }
-      const p = await createProject(c.db, name, c.now, a.account.id);
+      const p = await createProject(c.db, name, c.now, home);
       const to = `/account/apps/${p.id}#connect`;
+      // a team's member adds it to the team's account (appHome): the owner's plan covers it, so it goes to its setup
+      if (home !== a.account.id) {
+        await teamAppChosen(c, p.id);
+        return json201 ? json(201, { url: to, copiedUrl: to, token: p.token, command: setupCommand(p.token) }) : redirect(to, [], 303);
+      }
       // the form's way on is the new app's plan page first (it then goes on to the app's setup)
       return json201 ? json(201, { url: to, copiedUrl: to, token: p.token, command: setupCommand(p.token) }) : redirect(`/account/billing?project=${encodeURIComponent(p.id ?? "")}&new=1`, [], 303);
     }
@@ -1966,7 +1983,7 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
           price: priceText(sold),
           days: (await trialFor(c.db, a.account.id, sold)) || null,
           features: pitchLines(sold),
-          start: `/account/billing?plan=${encodeURIComponent(sold.id)}&start=1`,
+          start: `/account/billing?plan=${encodeURIComponent(planParam(sold))}&start=1`,
         };
       }
       return page(200, (n) => accountPage(n, view));

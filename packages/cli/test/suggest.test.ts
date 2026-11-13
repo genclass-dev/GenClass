@@ -143,7 +143,7 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     const text = await printed(async () => (code = await suggest({ cwd: dir, url: "https://shop.example", yes: true, json: true }, deps(w))));
     expect(code).toBe(0);
     const j = JSON.parse(text);
-    expect(j).toMatchObject({ site: "https://shop.example", source: "checks", plan: { id: "free", name: "Free" }, upgrade_url: `${HOST}/account/billing?plan=team&from=cli`, ideas: [], designs: [] });
+    expect(j).toMatchObject({ site: "https://shop.example", source: "checks", plan: { id: "free", name: "Free" }, upgrade_url: `${HOST}/account/billing?plan=pro&from=cli`, ideas: [], designs: [] });
     // Free: the first one in full, the rest counted and not listed
     expect(j.failed).toHaveLength(1);
     expect(j.failed[0]).toMatchObject({ n: 1, why: expect.any(String), do: expect.any(String), prompt: expect.any(String) });

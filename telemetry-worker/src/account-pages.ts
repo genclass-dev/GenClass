@@ -96,6 +96,9 @@ dl.req{display:grid;grid-template-columns:minmax(110px,auto) minmax(0,1fr);borde
 dl.req dt,dl.req dd{padding:11px 0;border-bottom:1px solid var(--rule);font-size:14.5px;min-width:0;overflow-wrap:anywhere}
 dl.req dt{font:500 12.5px var(--mono);color:var(--ink3);padding-top:13px;padding-right:16px}
 ul.scope{margin:10px 0 0;padding-left:20px;font-size:14.5px;line-height:1.5;color:var(--ink2)}
+details.scope-d{margin-top:16px;font-size:14.5px;color:var(--ink2)}
+details.scope-d summary{cursor:pointer;color:var(--ink)}
+details.scope-d .lead{margin-top:10px}
 ul.scope li{margin-top:5px}
 .acts{display:flex;gap:10px;margin-top:22px}
 .acts .btn{flex:1}
@@ -573,11 +576,9 @@ ${signInWays({ ...v.providers, next: v.next })}
 <div class="ucode" aria-label="Code">${esc(r.userCode)}</div>
 <dl class="req">
   <dt>Requested by</dt><dd>${r.client ? `${esc(r.client)} <span class="muted">(as the command line reported itself)</span>` : 'Unknown client <span class="muted">(it did not name itself as the GenClass command line)</span>'}</dd>
-  <dt>Requested</dt><dd>${time(r.created, "time")} · ${time(r.created, "ago")}</dd>
-  <dt>Code expires</dt><dd id="exp">${time(r.expires, "time")}</dd>
   <dt>Account</dt><dd>${who}</dd>
 </dl>
-<p class="lead" id="scope">If you approve, the terminal that shows this code can do this, for 90 days or until you revoke it on your account page:</p>
+<details class="scope-d" id="scope"><summary>What this terminal can do for 90 days</summary>
 <ul class="scope" id="scopelist">
   <li>list and create apps, add an app from its private dashboard link, and write a project key into your project</li>
   <li>show your apps' dashboards, visitor analytics and stored events</li>
@@ -585,7 +586,8 @@ ${signInWays({ ...v.providers, next: v.next })}
   <li>show and change where an app's alerts are sent, its funnels, and its private dashboard link</li>
   <li>show your plan and your team, and make a team invite link</li>
 </ul>
-<p class="lead" id="never">It cannot change how you sign in, pay for anything, remove people, or delete an app or your account.</p>
+<p class="lead" id="never">It cannot change how you sign in, pay for anything, remove people, or delete an app or your account. You can revoke it any time on your account page.</p>
+</details>
 <p class="caution" id="caution"><b>Approve only a sign-in you started.</b> If you did not run ${runOf(r.client)} yourself just now, or someone sent you this link or code, choose Deny.</p>
 <div class="acts" id="acts"><button class="btn green" id="yes" type="button"><span>Approve</span></button><button class="btn ghost" id="no" type="button"><span>Deny</span></button></div>
 <p class="err" id="err" role="alert"></p>

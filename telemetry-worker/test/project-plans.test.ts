@@ -703,7 +703,7 @@ describe("the website: a new account's first screen is Pro's trial, with a tiny 
     const page = await home.text();
     expect(page).toContain('<div class="empty-p trial" id="trial"><h2>Start your 3-day free trial</h2>');
     expect(page).toContain('<p class="tp">Pro, $15 / developer / month</p>');
-    expect(page).toContain('<a class="btn" href="/account/billing?plan=team&#38;start=1" id="starttrial"><span>Start your 3-day free trial</span></a>');
+    expect(page).toContain('<a class="btn" href="/account/billing?plan=pro&#38;start=1" id="starttrial"><span>Start your 3-day free trial</span></a>');
     expect(page).toContain("<p>3 days free, then $15 / developer / month. Cancel before the trial ends and you pay nothing.</p>");
     // 5 lines shown, the rest folded, and no summary repeating the price (the owner, 2026-11-13: less written)
     expect(page).toContain(`<details class="pmore"><summary>${pitchLines(PLANS[1]!).length - 5} more</summary>`);
@@ -713,8 +713,10 @@ describe("the website: a new account's first screen is Pro's trial, with a tiny 
     expect(page).not.toContain("<li>Everything in Free</li>");
     expect(page).not.toContain("Create your first project");
     // the trial's own button opens the account's checkout at once (the billing page, go)
-    const billing = await (await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: t.cookie })).text();
+    const billing = await (await call(t.env, "GET", "/account/billing?plan=pro&start=1", { cookie: t.cookie })).text();
     expect(billing).toContain('"go":true');
+    // links name the plan as every screen does (plans.ts planParam); one sent before, with the plan's id, still works
+    expect(await (await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: t.cookie })).text()).toContain('"go":true');
   });
 
   it("an account with an app, on Pro, or where nothing is sold sees its projects as before", async () => {
@@ -783,22 +785,22 @@ describe("the website: an own app opens its plan page until a plan is chosen the
     expect(await at(3)).toBe(200);
   });
 
-  it("?plan=team&start=1 (the pricing page, the genclass command's checkout_url) opens the account's billing page, which starts Pro's Checkout", async () => {
+  it("?plan=pro&start=1 (the pricing page, the genclass command's checkout_url) opens the account's billing page, which starts Pro's Checkout", async () => {
     const t = setup(LIVE);
     const a = await signedIn(t.env);
     // no app needed: Pro is the account's
-    const none = await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: a.cookie });
+    const none = await call(t.env, "GET", "/account/billing?plan=pro&start=1", { cookie: a.cookie });
     expect(none.status).toBe(200);
     const html = await none.text();
     expect(html).toContain('"go":true');
     expect(html).toContain('data-plan="team" data-pick><span>Upgrade to Pro</span>');
     await createApp(t.env, a.cookie, "Shop");
-    expect((await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: a.cookie })).status).toBe(200);
+    expect((await call(t.env, "GET", "/account/billing?plan=pro&start=1", { cookie: a.cookie })).status).toBe(200);
     // a plain link shows the page, and starts nothing
-    const plain = await text(call(t.env, "GET", "/account/billing?plan=team", { cookie: a.cookie }));
+    const plain = await text(call(t.env, "GET", "/account/billing?plan=pro", { cookie: a.cookie }));
     expect(plain).not.toContain('"go"');
     // signed out: the plan survives the sign-in
-    expect((await call(t.env, "GET", "/account/billing?plan=team&start=1", {})).headers.get("location")).toBe("/login?next=%2Faccount%2Fbilling%3Fplan%3Dteam%26start%3D1");
+    expect((await call(t.env, "GET", "/account/billing?plan=pro&start=1", {})).headers.get("location")).toBe("/login?next=%2Faccount%2Fbilling%3Fplan%3Dpro%26start%3D1");
   });
 });
 

@@ -38,7 +38,7 @@ const LIVE = { STRIPE_SECRET_KEY: "sk_live_fake", INTEGRATIONS_KEY: SEAL };
 /** A server that sells nothing (no Stripe key): the genclass command is not locked there, so Free meets its plan's own rules. */
 const NOT_SOLD = { INTEGRATIONS_KEY: SEAL };
 /** The 402 a Free CLI session gets where Pro is on sale (src/cli.ts cliPaid, the owner's call of 2026-11-13). */
-const NEEDS_PRO = { ok: false, needs_pro: true, paid: false, plan: "Pro", checkout_url: "https://genclass.dev/account/billing?plan=team&start=1" };
+const NEEDS_PRO = { ok: false, needs_pro: true, paid: false, plan: "Pro", checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" };
 const get = (env: E, path: string, bearer: string) => call(env, "GET", path, { bearer, origin: null });
 const send = (env: E, method: string, path: string, bearer: string, body?: unknown, fetch?: Fetch) => call(env, method, path, { bearer, origin: null, body, fetch });
 const json = async (r: Promise<Response> | Response) => (await (await r).json()) as any;
@@ -118,7 +118,7 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     // nothing of how the account signs in or pays
     expect(JSON.stringify(j)).not.toMatch(/stripe|customer|password|passkey/i);
     // the genclass command is Pro's where Pro is sold: the account says so, and every other route answers 402
-    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: "https://genclass.dev/account/billing?plan=team&start=1" });
+    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" });
     const no = await send(env, "POST", "/api/cli/team/invite", me.bearer, {});
     expect(no.status).toBe(402);
     expect(await no.json()).toMatchObject(NEEDS_PRO);
@@ -450,7 +450,7 @@ describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
 });
 
 describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of 2026-11-13, 'make the entire CLI paid')", () => {
-  const CHECKOUT = "https://genclass.dev/account/billing?plan=team&start=1";
+  const CHECKOUT = "https://genclass.dev/account/billing?plan=pro&start=1";
   /** What every gated route answers a Free CLI session where Pro is on sale. */
   const LOCKED = {
     ok: false,

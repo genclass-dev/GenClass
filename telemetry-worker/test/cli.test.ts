@@ -246,7 +246,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       designs_locked: 0,
       cached_at: null,
       // the plan page that starts Pro from the command, and what Pro is
-      upgrade_url: "https://genclass.dev/account/billing?plan=team&from=cli",
+      upgrade_url: "https://genclass.dev/account/billing?plan=pro&from=cli",
       upgrade_plan: { name: "Pro", price: "$15 / developer / month", trial_days: 3 },
       remaining_today: 3,
       limited: false,
@@ -340,7 +340,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       expect([j.source, j.remaining_today, j.limited, j.items.length, j.locked, j.cached_at]).toEqual(["model", left, false, 1, 4, null]);
     }
     const over = (await (await post(s.env, me.bearer, at(4), model.fetch)).json()) as any;
-    expect([over.source, over.remaining_today, over.limited, over.upgrade_url, over.cached_at]).toEqual(["checks", 0, true, "https://genclass.dev/account/billing?plan=team&from=cli", null]);
+    expect([over.source, over.remaining_today, over.limited, over.upgrade_url, over.cached_at]).toEqual(["checks", 0, true, "https://genclass.dev/account/billing?plan=pro&from=cli", null]);
     expect(over.items.map((i: any) => i.id)).toEqual(["text-without-js"]);
     expect(model.calls).toHaveLength(3);
     expect(s.sql.rows("SELECT runs FROM suggest_usage")).toEqual([{ runs: 3 }]);
@@ -398,7 +398,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       ideas_locked: 3,
       designs_locked: 2,
       cached_at: null,
-      upgrade_url: "https://genclass.dev/account/billing?plan=team&from=cli",
+      upgrade_url: "https://genclass.dev/account/billing?plan=pro&from=cli",
       upgrade_plan: { name: "Pro", price: "$15 / developer / month", trial_days: 3 },
       remaining_today: 2,
       limited: false,
@@ -444,7 +444,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
     const about = "Polar Parts sells spare parts for snow machines. " + "x".repeat(400);
     for (const app of [{ name: "with-about", about }, { name: "with-site", site: "https://withsite.example" }]) {
       const j = (await (await post(s.env, me.bearer, { app, checks: [], passed: 20 }, model.fetch)).json()) as any;
-      expect([j.source, j.total, j.items, j.locked, j.ideas, j.ideas_locked, j.upgrade_url], app.name).toEqual(["model", 0, [], 0, [], 1, "https://genclass.dev/account/billing?plan=team&from=cli"]);
+      expect([j.source, j.total, j.items, j.locked, j.ideas, j.ideas_locked, j.upgrade_url], app.name).toEqual(["model", 0, [], 0, [], 1, "https://genclass.dev/account/billing?plan=pro&from=cli"]);
     }
     expect(model.calls).toHaveLength(2);
     // what the site says it is about goes to the model cut to 300 characters

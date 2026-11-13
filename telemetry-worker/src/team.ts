@@ -15,6 +15,8 @@
 //   and unexpired invites together never exceed the seats when an invite is made; a join checks the seats again.
 //   Expired invites go in the daily sweep (src/auth.ts authRetention).
 // - Joining never merges or links accounts, and a member's own apps, plan and billing are untouched by it.
+// - An app a member with no plan of its own adds goes into the paying team's account (appHome): the team's plan covers
+//   it (Pro covers up to 3 apps an account, whatever the seats: the owner's call, 2026-11-13) and the owner sees it.
 
 import type { Env } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like } from "./dashboard.js";
@@ -113,6 +115,19 @@ export async function activeOwners(db: D1Like, env: Env, memberId: string, now: 
     if (Number(before?.n ?? 0) < fit) out.push(row.account_id);
   }
   return out;
+}
+
+/**
+ * The account an app `accountId` adds goes into: its own, unless it has no plan of its own and an active place in a
+ * team whose owner has one; then that owner's (the first such team it joined), so the team's plan covers the app
+ * instead of Free, and the owner sees it with the rest of the team's apps. A member keeps reading it as a team app.
+ */
+export async function appHome(db: D1Like, env: Env, accountId: string, now: Date): Promise<string> {
+  if ((await accountAccess(db, accountId, env, now)).source !== null) return accountId;
+  for (const owner of await activeOwners(db, env, accountId, now)) {
+    if ((await accountAccess(db, owner, env, now)).source !== null) return owner;
+  }
+  return accountId;
 }
 
 /** `memberId` may read the apps of `ownerId` now (it is the owner, or an active member of its team). */

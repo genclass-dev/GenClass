@@ -170,7 +170,7 @@ describe("a member reads the owner's dashboards with the owner's plan, and chang
   };
 
   it("the app is in the member's list (marked shared), opens, and its stats have Team's analytics and 90 days", async () => {
-    const { env, owner, bob, app } = await joined();
+    const { env, sql, owner, bob, app } = await joined();
     const me = await json(call(env, "GET", "/api/me", { cookie: bob.cookie }));
     expect(me.projects).toMatchObject([{ id: app.id, name: "Shop", shared: true }]);
     // the owner's own list has no such mark
@@ -202,11 +202,19 @@ describe("a member reads the owner's dashboards with the owner's plan, and chang
     expect(st.locked).toBeUndefined();
     expect(st.totals.ix_views).toBe(1);
     expect(st.totals.detections).toBe(1);
-    // the member's own account is still Free: its own app shows 7 days and no analytics
-    const own = await createApp(env, bob.cookie, "Mine");
-    const mine = await json(call(env, "GET", `/api/account/projects/${own.id}/stats?range=90d`, { cookie: bob.cookie }));
-    expect(mine.range).toBe("7d");
-    expect(mine.locked.analytics.plan).toBe("Team");
+    // the member's own account is still Free, so an app it adds goes into the team's account (src/team.ts appHome):
+    // the team's plan covers it (90 days, analytics), the owner sees it, and nobody is sent to "Choose a plan" for it
+    const added = await createApp(env, bob.cookie, "Mine");
+    const mine = await json(call(env, "GET", `/api/account/projects/${added.id}/stats?range=90d`, { cookie: bob.cookie }));
+    expect(mine.range).toBe("90d");
+    expect(mine.locked?.analytics).toBeUndefined();
+    expect(sql.rows("SELECT account_id FROM projects WHERE id = ?", added.id)).toEqual([{ account_id: owner.account.id }]);
+    expect((await json(call(env, "GET", "/api/me", { cookie: owner.cookie }))).projects.map((p: { name: string }) => p.name).sort()).toEqual(["Mine", "Shop"]);
+    expect((await call(env, "GET", `/account/apps/${added.id}`, { cookie: owner.cookie })).status).toBe(200);
+    // the website's form does the same, and goes on to the app's setup, not a plan page
+    const form = await call(env, "POST", "/start", { cookie: bob.cookie, body: { name: "Form app" }, headers: { accept: "application/json" } });
+    expect(form.status).toBe(201);
+    expect(sql.rows("SELECT account_id FROM projects WHERE name = 'Form app'")).toEqual([{ account_id: owner.account.id }]);
   });
 
   it("every write and every paid setting stays the owner's: delete, private link, funnels, forwarding, export, invites", async () => {

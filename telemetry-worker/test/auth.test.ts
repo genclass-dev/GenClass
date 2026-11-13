@@ -545,6 +545,12 @@ describe("accounts: device flow for the CLI (RFC 8628)", () => {
     expect(page).toContain("show and change where an app's alerts are sent, its funnels, and its private dashboard link");
     expect(page).toContain("make a team invite link");
     expect(page).toContain("It cannot change how you sign in, pay for anything, remove people, or delete an app or your account.");
+    // short first (the 0.3.7 walk): the list is on the page, folded under one line; the warning stays open
+    expect(page).toContain('<details class="scope-d" id="scope"><summary>What this terminal can do for 90 days</summary>');
+    expect(page.indexOf('id="scopelist"')).toBeGreaterThan(page.indexOf('<details class="scope-d"'));
+    expect(page.indexOf('id="scopelist"')).toBeLessThan(page.indexOf("</details>"));
+    expect(page.indexOf("Approve only a sign-in you started")).toBeGreaterThan(page.indexOf("</details>"));
+    expect(page).not.toContain("<dt>Code expires</dt>");
     // the page names the command that asked: the runtime CLI's login here, `npx genclass` for the genclass command
     expect(page).toContain("If you did not run <code>npx @genclass/runtime@beta login</code> yourself just now");
     const cli = (await (await call(env, "POST", "/api/device/code", { body: { client_name: "genclass 0.2.2" }, origin: null })).json()) as any;
