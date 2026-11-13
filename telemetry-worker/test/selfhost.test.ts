@@ -95,7 +95,8 @@ describe("private mode: a self-hosted collector's snippets name its own endpoint
     for (const v of ["AUTH_ORIGIN", "AUTH_RP_ID", "DASHBOARD_ORIGIN"]) expect(self).toMatch(new RegExp(`^${v} = "`, "m"));
     const names = (t: string, re: RegExp) => [...code(t).matchAll(re)].map((m) => m[1]).sort();
     expect(names(self, /^binding = "(\w+)"/gm)).toEqual(names(prod, /^binding = "(\w+)"/gm).filter((b) => b !== "SITE"));
-    expect(names(self, /^name = "([A-Z_]+)"/gm)).toEqual(names(prod, /^name = "([A-Z_]+)"/gm));
+    // the reports' email binding sends as report@genclass.dev only: a self-hosted collector has none, and sends no email
+    expect(names(self, /^name = "([A-Z_]+)"/gm)).toEqual(names(prod, /^name = "([A-Z_]+)"/gm).filter((b) => b !== "EMAIL"));
     expect(self).toMatch(/^migrations_dir = "migrations"$/m);
     expect(self).toMatch(/^crons = \["17 3 \* \* \*"\]$/m);
   });

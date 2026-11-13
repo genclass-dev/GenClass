@@ -49,6 +49,8 @@ import {
 } from "./dashboard.js";
 import { routeBilling } from "./billing.js";
 import { routeTeam } from "./team-routes.js";
+import { routeReport } from "./report-routes.js";
+import type { EmailBinding } from "./report.js";
 import type { GithubEnv } from "./github/config.js";
 import { routeGithub } from "./github/http.js";
 import { routeCli } from "./cli.js";
@@ -133,6 +135,9 @@ export interface Env extends GithubEnv {
   EXPORT_LIMIT?: RateLimiterLike;
   /** 32 bytes, base64: encrypts forwarding settings at rest (src/forward.ts). Without it they cannot be saved. */
   INTEGRATIONS_KEY?: string;
+  /** Cloudflare Email Sending (`[[send_email]]` in wrangler.toml): GenClass reports and alerts (src/report.ts). Without
+   * it nothing is emailed and the report settings page says so. */
+  EMAIL?: EmailBinding;
   /** Optional https URL that gets short JSON notices: a Custom purchase, a duplicate subscription, a plan switch
    * that needs a refund by hand, a billing record holding something that is not GenClass's. */
   NOTIFY_WEBHOOK?: string;
@@ -247,6 +252,9 @@ export async function handle(request: Request, env: Env, opts: HandleOptions = {
   // teams (src/team-routes.ts): /api/team and the invite page /account/join/<code>, before the account routes
   const team = await routeTeam(request, url, path, env, opts);
   if (team) return team;
+  // email reports (src/report-routes.ts): /account/report*, /api/account/report*, /api/report/*, before the account routes
+  const report = await routeReport(request, url, path, env, opts);
+  if (report) return report;
   const account = await routeAuth(request, url, path, env, opts);
   if (account) return account;
   const site = await routeSite(request, url, path, env, opts);

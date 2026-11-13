@@ -1248,6 +1248,70 @@ One new table, `suggest_usage`. Additive; apply it before or after the deploy:
 `npx --yes wrangler@4 d1 migrations apply genclass-dashboard --remote`. Then set the key, as a secret, from your own
 terminal: `npx --yes wrangler@4 secret put OPENAI_API_KEY`.
 
+## Reports by email
+
+A GenClass report about an account's apps goes to the account's email on the schedule it chooses, and an alert goes
+out as soon as the hourly run sees a critical (P0) problem (the owner's request, 2026-11-13). `src/report.ts` builds
+it (data, priority rules, the model's summary, signed links, sending), `src/report-email.ts` renders it (subject, HTML,
+text), `src/report-sweep.ts` is the hourly run, `src/report-routes.ts` the pages and the settings API.
+
+- **Schedule.** `accounts.report_every`: `hourly`, `daily` (the default, NULL), `weekly` (Mondays), `monthly` (the
+  1st) or `off`; daily, weekly and monthly go at 13:00 UTC. The cron `7 * * * *` runs `reportSweep`: an account with
+  no `report_next` gets its next slot and nothing is sent that run; a due one is claimed (report_next moved on in one
+  statement) and sent. An hourly report is sent only when something critical or important is listed, or the last
+  hour had a problem. Period: hourly and daily the last 24 hours, weekly 7 days, monthly 30, cut to what the app's
+  plan shows (Free: 7 days).
+- **What is in it, in order.** The model's summary (Pro apps, src/suggest.ts modelText; an hourly report asks at most
+  every 6 hours), critical and important items with a prompt for a coding agent each, the apps' numbers against the
+  period before, the pull requests the GitHub App reviewed on linked repositories, visitors (Pro), security and
+  unusual activity (new terminals, passkeys and password changes on the account; request storms, odd behaviour and
+  traffic that tripled; no IP addresses, none are stored), setup (no data yet, no data for 3 days, the model failing
+  to load, an app past Free's apps, GitHub not connected), worth a look, the last `genclass suggest` answer, and
+  "Upgrade your website design" (measured contrast and layout checks, the suggest answer's designs with their prompts,
+  and three sites to learn from that day, one of them 3D, `SHOWCASE`). An app on Free gets its totals, its setup items
+  and the P0 rules on its hours (silent, spike), never its problems' kinds, pages or prompts, and the email has Pro's
+  box with the trial.
+- **Priorities** are rules in `appItems`, tested in `test/report.test.ts`: P0 a failing endpoint 3 times, a duplicate,
+  race or failure on a payment page (checkout, pay, billing, cart, order, subscribe, invoice), a blank page, a page that
+  stopped taking clicks or scrolling (3 times), an app silent for 6 hours after 36 page loads in the 18 before,
+  problems in the last two hours at least 10 and 4 times the usual; P1 the app's own bugs (duplicate, stale,
+  conflict, broken state), a failing endpoint, visible checks (invisible text, controls out of reach, covered
+  dialogs, stalled requests, broken images, template text), rage clicks, setup items; P2 the rest. The model never
+  sets a priority or adds an item.
+- **Alerts.** After the reports, the run reads the 24-hour stats of up to 60 apps that sent something in the last 30
+  hours and emails each account its P0 items that no email told it about in the last day (`report_alerts`, per app
+  and rule). An account whose report went out in that run gets no alert; a report marks its P0 items as told.
+- **Limits.** At most 30 emails an account a day (`report_sends`), 5 test reports a day ("Send me one now"), 25
+  reports a run, 4 built at once.
+- **Links.** The email's links to change how often, to unsubscribe (`List-Unsubscribe` with one-click
+  `List-Unsubscribe-Post`) and to open a prompt (`/account/report/prompt`, Copy, Open in Claude Code or Codex) carry
+  an HMAC from a key derived from `INTEGRATIONS_KEY`. Without that secret there are no such links: the email says to
+  change it on the account page and the prompts are only in the email's text.
+- **Sending.** The `[[send_email]]` binding `EMAIL`, allowed to send only as report@genclass.dev (genclass.dev is
+  onboarded: `npx --yes wrangler@4 email sending list`); replies go to mehar@genclass.dev. `wrangler dev` simulates
+  it. A self-hosted collector has no such binding and sends nothing.
+
+| route | who | what |
+|---|---|---|
+| `GET /account/report` | browser session | how often, alerts, Send me one now, Preview |
+| `GET /account/report/preview` | browser session | the email as HTML (nothing sent, no summary) |
+| `GET`, `POST /api/account/report` | browser session (+ Origin) | `{ every, alerts }` |
+| `POST /api/account/report/test` | browser session + Origin | sends this account's report now |
+| `GET /account/report/email?a=&t=[&every=]` | the email's token | the same choice and Save; a GET changes nothing |
+| `POST /api/report/settings` | the email's token | `{ a, t, every, alerts }`, a form or JSON |
+| `POST /api/report/unsubscribe?a=&t=` | the email's token | one click: reports and alerts off (a GET opens the page) |
+| `GET /account/report/prompt?q=&s=` | the prompt's signature | the prompt, Copy, Open in Claude Code or Codex |
+
+A terminal's session is refused on all of them.
+
+### Migration 0020 (`migrations/0020_reports.sql`)
+
+Five columns on `accounts` (`report_every`, `report_next`, `report_sent`, `report_alerts` default 1, `report_model`)
+and two tables (`report_alerts`, `report_sends`). Additive. Apply it before the deploy:
+`CLOUDFLARE_ACCOUNT_ID=144bd5f5270b51dbe7faf46227a154f0 npx --yes wrangler@4 d1 migrations apply genclass-dashboard --remote`.
+Until it is applied the routes answer "reports are unavailable" and the hourly run sends nothing. The first run after
+the deploy gives every account with an email its next 13:00 UTC; the first reports go out then.
+
 ## Self-host the collector (private mode)
 
 Telemetry sent to genclass.dev passes through GenClass: the maintainers can read every batch (README of the runtime,
