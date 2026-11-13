@@ -169,13 +169,13 @@ describe("Pro's trial: 3 days free at Checkout, once per account (src/billing.ts
     const b = await buyer();
     const first = await checkout(b, b.shop.id);
     expect((await first.json() as any).trial_days).toBe(3);
-    expect(sessionsOf(b.s)[0]!.get("metadata[genclass_trial]")).toBe("3");
+    expect(sessionsOf(b.s)[0]!.get("metadata[genclass_trial_days]")).toBe("3");
     // the shop's page is still open: the blog's starts without a trial
     const second = await checkout(b, b.blog.id);
     expect((await second.json() as any).trial_days).toBeNull();
     const blogForm = sessionsOf(b.s)[1]!;
     expect(blogForm.has("subscription_data[trial_period_days]")).toBe(false);
-    expect(blogForm.has("metadata[genclass_trial]")).toBe(false);
+    expect(blogForm.has("metadata[genclass_trial_days]")).toBe(false);
     // the shop asked again: its open page, with the same trial, is the answer (no second session)
     const again = await checkout(b, b.shop.id);
     expect((await again.json() as any).trial_days).toBe(3);
@@ -463,3 +463,22 @@ describe("problems fixed live: 100 a month per project on Free, then observe onl
 it("FREE is the first plan", () => expect(FREE.id).toBe("free"));
 it("price() still names Team's price", () => expect(price("genclass_team_monthly").id).toBe("price_team000001"));
 it("setPlan is available to the tests", () => expect(typeof setPlan).toBe("function"));
+
+describe("Pro's 3-day trial (plans.json trial_days), on an account's first subscription only (from #227)", () => {
+  it("a customer with no subscription gets 3 free days; one that has had any (even cancelled) gets none", async () => {
+    const b = await buyer();
+    expect(PLANS.find((p) => p.id === "team")!.trial_days).toBe(3);
+    expect((await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: b.shop.id }, cookie: b.cookie, fetch: b.s.fetch })).status).toBe(200);
+    const first = b.s.calls.filter((c) => c.method === "POST" && c.url.pathname === "/v1/checkout/sessions").pop()!;
+    expect(first.form!.get("subscription_data[trial_period_days]")).toBe("3");
+    expect(first.form!.get("metadata[genclass_trial_days]")).toBe("3");
+    // a card is still taken up front
+    expect(first.form!.get("payment_method_collection")).toBe("always");
+    // the same customer once had a subscription for the other project, since cancelled
+    b.s.subs.set("sub_old0000001", projectSub("sub_old0000001", b.account.id, "cus_ada0000001", b.shop.id, "canceled"));
+    expect((await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: b.blog.id }, cookie: b.cookie, fetch: b.s.fetch })).status).toBe(200);
+    const later = b.s.calls.filter((c) => c.method === "POST" && c.url.pathname === "/v1/checkout/sessions").pop()!;
+    expect(later.form!.has("subscription_data[trial_period_days]")).toBe(false);
+    expect(later.form!.has("metadata[genclass_trial_days]")).toBe(false);
+  });
+});

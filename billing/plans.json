@@ -41,6 +41,7 @@
       "stripe_tax_code": "txcd_10103001",
       "managed_payments": false,
       "per_seat": false,
+      "trial_days": 3,
       "limits": { "apps": null, "history_days": 90, "seats": null, "live_fixes_per_month": null },
       "suggestions": { "per_day": 30, "shown": null },
       "entitlements": { "dashboard": true, "forwarding": true, "export": true, "analytics": true, "custom_model": false, "github_private": true, "problems": true, "ask": true },

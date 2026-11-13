@@ -368,17 +368,19 @@ describe("the old trial stays gone; Pro's 3 days free are offered on the plan pa
     noTrial(granted, "a grant");
   });
 
-  it("only Checkout asks Stripe for a trial, with the days trialFor gives; nothing makes a payment intent or writes the old trial's columns", () => {
+  it("nothing in src/ asks Stripe for a trial but Checkout's plan trial_days, or writes the old trial's columns", () => {
     const dir = new URL("../src/", import.meta.url);
     for (const f of readdirSync(dir).filter((x) => x.endsWith(".ts"))) {
       const code = readFileSync(new URL(f, dir), "utf8");
-      expect(code, f).not.toMatch(/trial_settings|payment_intents|trial_started_at\s*=|trial_ends_at\s*=|trial_check_failures\s*=/);
+      // the one trial (2026-11-12, owner): Team's trial_days on a first subscription, in Checkout only (src/stripe.ts)
+      const rest = f === "stripe.ts" ? code.replace("...(trialDays ? { trial_period_days: trialDays } : {})", "") : code;
+      expect(rest, f).not.toMatch(/trial_period_days|trial_settings|payment_intents|trial_started_at\s*=|trial_ends_at\s*=|trial_check_failures\s*=/);
       expect(code, f).not.toMatch(/INSERT INTO accounts[^;`]*\b(trial_ends_at|trial_started_at|comp_until)\b/);
       // the one place: the Checkout Session's subscription_data, from the caller's trialDays (src/billing.ts trialFor)
       const asks = code.match(/trial_period_days/g) ?? [];
       if (f === "stripe.ts") {
         expect(asks, f).toHaveLength(1);
-        expect(code).toContain("...(o.trialDays ? { trial_period_days: o.trialDays } : {})");
+        expect(code).toContain("...(trialDays ? { trial_period_days: trialDays } : {})");
       } else expect(asks, f).toEqual([]);
     }
     // TRIAL_DAYS is gone from the worker's configuration: the days are plans.json's trial_days

@@ -36,9 +36,11 @@
 // - A plan is granted only once Stripe has the money: a subscription the account has not been granted yet counts only
 //   when its latest invoice is paid (or asks for nothing), not when Stripe calls it active while a bank debit is still
 //   processing; invoice.paid brings it back when the payment clears.
-// - GenClass offers no trial. Every Checkout GenClass makes collects a payment method up front
-//   (payment_method_collection "always"), and a subscription in Stripe's trialing status (one made by hand in the
-//   Stripe dashboard) that the account has not been granted yet counts only with a saved payment method (cardOnFile).
+// - A trial only on an account's first subscription: a plan's trial_days (Team: 3) go on a Checkout for a customer that
+//   has never had a subscription (billing.ts checkoutProject), never on a switch or a later one. Every Checkout still
+//   collects a payment method up front (payment_method_collection "always"), and a subscription in Stripe's trialing
+//   status that the account has not been granted yet counts only with a saved payment method (cardOnFile); Stripe
+//   charges the first month when the trial ends unless it is cancelled before.
 // - One subscription per account. Checkout asks Stripe (not the database, which a late webhook leaves behind) whether
 //   the customer already has one: the same plan is refused, the other plan is a switch (a Checkout whose subscription
 //   carries metadata genclass_switch_from naming the one it replaces); an account's older unpaid Checkout pages are
@@ -290,12 +292,12 @@ export async function ensureCustomer(env: Env, f: Fetch, db: D1Like, a: BillingA
  */
 /**
  * Whether one of this account's open Checkout pages for another project already holds a trial (its metadata
- * genclass_trial): one trial per account, so a second project bought meanwhile starts without one.
+ * genclass_trial_days): one trial per account, so a second project bought meanwhile starts without one.
  */
 export async function openTrialElsewhere(env: Env, f: Fetch, customer: string, accountId: string, projectId: string): Promise<boolean> {
   const open = await stripe(env, f, "GET", "/v1/checkout/sessions", { customer, status: "open", limit: 20 });
   return (Array.isArray(open?.data) ? (open.data as Obj[]) : []).some(
-    (x) => ownSession(x, accountId) && (x.metadata?.genclass_project ?? undefined) !== projectId && Number(x.metadata?.genclass_trial ?? 0) > 0,
+    (x) => ownSession(x, accountId) && (x.metadata?.genclass_project ?? undefined) !== projectId && Number(x.metadata?.genclass_trial_days ?? 0) > 0,
   );
 }
 
@@ -404,6 +406,8 @@ export async function checkoutSession(
   f: Fetch,
   o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string }; trialDays?: number },
 ): Promise<string> {
+  // free days only on a first subscription (the caller decides), never on a switch, and only what Stripe allows (1 to 730)
+  const trialDays = !o.switchFrom && Number.isInteger(o.trialDays) && o.trialDays! >= 1 && o.trialDays! <= 730 ? o.trialDays! : 0;
   const lookup = o.plan.stripe_lookup_keys.monthly;
   if (!lookup) throw new StripeError(`the ${o.plan.name} plan has no monthly price`, 400);
   // a plan sold per seat: the quantity is the seats asked for, and the buyer can still change it on Stripe's page
@@ -420,7 +424,8 @@ export async function checkoutSession(
       const same =
         x.metadata?.genclass_plan === o.plan.id &&
         (x.metadata?.genclass_switch_from ?? undefined) === o.switchFrom &&
-        (x.metadata?.genclass_trial ?? "0") === String(o.trialDays ?? 0) &&
+        x.metadata?.genclass_trial !== "1" &&
+        (x.metadata?.genclass_trial_days ?? "0") === String(trialDays) &&
         (x.metadata?.genclass_seats ?? "1") === String(seats);
       if (same && typeof x.url === "string" && x.url.startsWith("https://")) return x.url;
       await stripe(env, f, "POST", `/v1/checkout/sessions/${encodeURIComponent(x.id)}/expire`, {});
@@ -452,16 +457,15 @@ export async function checkoutSession(
         // back from a switch, the page waits for the new plan
         success_url: o.project ? `${back}&done=1` : `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}`,
         cancel_url: back,
-        metadata: { ...mark, genclass_plan: o.plan.id, ...(perSeat ? { genclass_seats: String(seats) } : {}), ...(o.trialDays ? { genclass_trial: String(o.trialDays) } : {}) },
+        metadata: { ...mark, genclass_plan: o.plan.id, ...(perSeat ? { genclass_seats: String(seats) } : {}), ...(trialDays ? { genclass_trial_days: String(trialDays) } : {}) },
         // a card (or another payment method) up front
         payment_method_collection: "always",
         // the "Add promotion code" field: codes made in the Stripe dashboard (Product catalog, Coupons) for GenClass's prices
         allow_promotion_codes: true,
-        // a first plan starts with the plan's trial (billing.ts trialFor): the card is taken now and charged when it ends
-        subscription_data: { metadata: mark, billing_mode: { type: "flexible" }, ...(o.trialDays ? { trial_period_days: o.trialDays } : {}) },
+        subscription_data: { metadata: mark, billing_mode: { type: "flexible" }, ...(trialDays ? { trial_period_days: trialDays } : {}) },
         managed_payments: managedPayments(env, o.plan) ? { enabled: true } : undefined,
       },
-      `genclass-checkout-${o.account.id}${o.project ? `-p-${o.project.id}` : ""}-${o.plan.id}${perSeat ? `-x${seats}` : ""}-${Math.floor(o.now.getTime() / 60_000)}${from}${after}`,
+      `genclass-checkout-${o.account.id}${o.project ? `-p-${o.project.id}` : ""}-${o.plan.id}${perSeat ? `-x${seats}` : ""}-${Math.floor(o.now.getTime() / 60_000)}${from}${after}${trialDays ? `-t${trialDays}` : ""}`,
     );
   } catch (e) {
     priceCache.delete(lookup); // the cached price may have been replaced since

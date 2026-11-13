@@ -64,7 +64,6 @@ import {
   missingCustomer,
   modeNote,
   notifyOwner,
-  customerSubscriptions,
   openTrialElsewhere,
   portalSession,
   sharedCustomer,
@@ -484,8 +483,11 @@ async function checkoutProject(c: C, f: Fetch, a: Auth, plan: Plan, projectId: s
   const account = { id: a.account.id, email: a.account.email, ...(await accountBilling(c.db, a.account.id)) };
   try {
     let customer = await ensureCustomer(c.env, f, c.db, account);
+    // the plan's free days only for a customer that has never had a subscription
+    let first = customer.fresh;
     if (!customer.fresh) {
       const own = await checkCustomer(c.env, f, account.id, customer.id);
+      first = own.state === "missing" || (own.state === "ok" && own.subs.length === 0);
       if (own.state === "not_genclass") return refuseShared(c, f, account.id, customer.id, NOT_GENCLASS);
       if (own.state === "ok" && sharedCustomer(own.subs)) return refuseShared(c, f, account.id, customer.id, SHARED_SUBSCRIPTION);
       if (own.state === "missing") customer = await ensureCustomer(c.env, f, c.db, { ...account, stripe_customer_id: customer.id, stripe_mode: stripeMode(c.env) }, customer.id);
@@ -493,10 +495,10 @@ async function checkoutProject(c: C, f: Fetch, a: Auth, plan: Plan, projectId: s
       const subs = own.state === "ok" ? own.subs : [];
       if (subs.some((s) => projectOf(s) === p.id && HOLDING_STATUSES.has(s.status))) return fail(409, `a plan for ${p.name} is already going through; reload this page in a minute`);
     }
-    const subs = customer.fresh ? [] : await customerSubscriptions(c.env, f, customer.id).catch(() => [{}]);
-    // one trial per account: none when another project's open Checkout already holds it
+    // one trial per account: none when the customer has had a subscription (first, above), GenClass's records say the
+    // account has had one (trialFor), or another project's open Checkout already holds it
     const elsewhere = customer.fresh ? false : await openTrialElsewhere(c.env, f, customer.id, a.account.id, p.id).catch(() => true);
-    const trialDays = elsewhere ? 0 : await trialFor(c.db, a.account.id, plan, subs.length);
+    const trialDays = elsewhere ? 0 : await trialFor(c.db, a.account.id, plan, first ? 0 : 1);
     const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, project: { id: p.id }, trialDays });
     return json(200, { url, trial_days: trialDays || null });
   } catch (e) {
