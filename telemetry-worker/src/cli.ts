@@ -55,7 +55,7 @@ import { isKind, KINDS } from "./forward.js";
 import { githubApp } from "./github/config.js";
 import { repoStatusForAccount } from "./github/http.js";
 import { json } from "./http.js";
-import { accountAccess, accountBilling, accountProjectsAccess, better, planParam, canBuy, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
+import { accountAccess, accountBilling, accountProjectsAccess, appsCovered, better, planParam, canBuy, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
 import { liveFixUsage } from "./usage.js";
 import { appKey, askModel, byWeight, claimRun, hasModel, keepAnswer, lastAnswer, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem, type SuggestAnswer } from "./suggest.js";
 import { activeOwners, createInvite, isTeamError, membershipsOf, teamOf } from "./team.js";
@@ -320,7 +320,8 @@ async function account(c: C): Promise<Response> {
     access: access.source,
     // the plan the account works under through a team when it is better than its own (workingAccess), else null
     team_plan: work.team ? { id: work.access.plan.id, name: work.access.plan.name } : null,
-    limits: { apps: access.plan.limits.apps, history_days: access.plan.limits.history_days, seats: access.seats, suggestions_per_day: lim.per_day, suggestions_shown: lim.shown },
+    // the apps the account's plan covers (coverage): no limit for a grant, Pro's 3 or the apps kept from before version 5
+    limits: { apps: await appsCovered(c.db, a.account.id, c.env, c.now), history_days: access.plan.limits.history_days, seats: access.seats, suggestions_per_day: lim.per_day, suggestions_shown: lim.shown },
     used: { apps: apps.filter((p) => p.account_id === a.account.id).length, suggestions_today: await usedToday(c.db, a.account.id, c.now), seats: t.used },
     includes: { analytics: entitled(access.plan, "analytics"), forwarding: entitled(access.plan, "forwarding"), export: entitled(access.plan, "export"), private_repositories: entitled(access.plan, "github_private") },
     subscription: { status: b.subscription_status, current_period_end: b.current_period_end, cancel_at_period_end: !!b.cancel_at_period_end },
