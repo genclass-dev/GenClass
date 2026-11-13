@@ -259,14 +259,13 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const name = esc(v.project.name);
   // version 5 (2026-11-13): Pro is the account's, per developer, for up to 3 apps; every new app sees this page, a
   // paying account included (Continue with Pro), and an app past what the plan covers waits here: more apps are
-  // Enterprise's, by email (a plan sold by units of apps, apps_per_unit, adds them on Stripe instead)
-  const per = offer?.apps_per_unit ?? null;
+  // Enterprise's, by email
   const proFull = a.locked === "pro_apps";
   const covered = !a.locked && a.source !== null;
   const status = a.source === "open"
     ? `This server gives every app everything in <b>${esc(a.plan.name)}</b>.`
     : proFull
-      ? `Your <b>${esc(offer?.name ?? "paid")}</b> plan covers ${per ? "" : "up to "}${a.apps ?? 0} apps, and <b>${name}</b> is one more.${per ? ` Add ${per} more apps for ${esc(priceText(offer!).replace(/ for \d+ apps$/, ""))}.` : " More apps come with <b>Enterprise</b>, agreed by email."}`
+      ? `Your <b>${esc(offer?.name ?? "paid")}</b> plan covers up to ${a.apps ?? 0} apps, and <b>${name}</b> is one more. More apps come with <b>Enterprise</b>, agreed by email.`
       : paid
         ? v.sub.cancels
           ? `<b>${name}</b> is on <b>${esc(a.plan.name)}</b> until ${day(v.sub.periodEnd)}. It is cancelled and will not renew; you can resume it in Manage billing.`
@@ -276,7 +275,7 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
         : a.source === "comp"
           ? `Your <b>${esc(a.plan.name)}</b> plan, set up by GenClass, covers <b>${name}</b>.`
           : a.locked
-            ? `Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}, and <b>${name}</b> is one more: it needs ${esc(offer?.name ?? "a paid plan")}.`
+            ? `Since 13 November 2026 Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}, your oldest, and <b>${name}</b> is past it: it needs ${esc(offer?.name ?? "a paid plan")}.`
             : (v.fromCli || v.isNew) && !v.chosen
               ? `<b>${name}</b> is in your account.`
               : `<b>${name}</b> is on <b>Free</b>.`;
@@ -294,9 +293,7 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const features = offer ? pitchList(pitchLines(offer)) : "";
   const action = covered
     ? `<button class="btn" type="button" data-continue><span>Continue with ${esc(a.plan.name)}</span></button><p class="trialnote">Your current plan.${paid ? ` <a href="#" id="portal">Manage billing</a>` : ""}</p>`
-    : proFull && per
-      ? `<button class="btn" type="button" data-addapps><span>Add ${per} more apps</span></button><p class="trialnote">${esc(priceText(offer!).replace(/ for \d+ apps$/, ""))} more, on your next bill. You choose the quantity on Stripe.</p>`
-      : proFull
+    : proFull
         ? `<a class="btn" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass Enterprise: more than ${a.apps ?? 3} apps`)}"><span>Email us about Enterprise</span></a><p class="trialnote">Or remove an app you no longer use, and this one takes its place.</p>`
       : v.live
         ? `<button class="btn" type="button" data-plan="${esc(offer!.id)}" data-pick><span>${v.trialDays ? `Start your ${v.trialDays}-day free trial` : `Start ${esc(offer!.name)}`}</span></button>${v.trialDays ? `<p class="trialnote">${v.trialDays} days free, then ${esc(priceText(offer!))}. Cancel before the trial ends and you pay nothing.</p>` : ""}`
@@ -332,7 +329,7 @@ ${notice}${test}
   <p class="intro"><a href="/account/billing#projects">All your projects and their plans</a></p>
 </section>
 </div>
-<script type="application/json" id="cfg">${embed({ project: v.project.id, go: v.go && !covered && !proFull && v.live, wait: (v.done && !paid) || (proFull && !!per), cli: v.fromCli, isNew: !!v.isNew })}</script>`;
+<script type="application/json" id="cfg">${embed({ project: v.project.id, go: v.go && !covered && !proFull && v.live, wait: v.done && !paid, cli: v.fromCli, isNew: !!v.isNew })}</script>`;
   const script = `
 (function(){
   gcDropQuery(["project"]);
@@ -362,7 +359,7 @@ ${notice}${test}
       if (!picked) { err.textContent = "Pick what is stopping you."; return; }
       gcBusy(go, true, "Saving...");
       gcPost("/api/billing/projects/" + encodeURIComponent(cfg.project) + "/free", { reason: picked.value, note: document.getElementById("whynote").value }).then(function(){
-        location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew || cfg.cli ? "#connect" : "");
+        location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew && !cfg.cli ? "#connect" : "");
       }, function(e2){ err.textContent = gcWhy(e2); gcBusy(go, false); });
     });
   }
@@ -372,21 +369,15 @@ ${notice}${test}
     var err = document.getElementById("portalerr"); err.textContent = "";
     gcPost("/api/billing/portal", {}).then(function(j){ location.href = j.url; }, function(e2){ err.textContent = gcWhy(e2); });
   });
-  // a paying account goes on with its plan: the app's dashboard (its setup for a new one)
+  // a paying account goes on with its plan: the app's dashboard (its setup for one new on the website; the genclass
+  // command has set it up already, so it never lands on the website's setup with other modes ticked)
   var cont = document.querySelector("[data-continue]");
   if (cont) cont.addEventListener("click", function(){
     var err = document.getElementById("planerr"); err.textContent = "";
     gcBusy(cont, true, "One moment...");
     gcPost("/api/billing/projects/" + encodeURIComponent(cfg.project) + "/continue", {}).then(function(){
-      location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew || cfg.cli ? "#connect" : "");
+      location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew && !cfg.cli ? "#connect" : "");
     }, function(e){ err.textContent = gcWhy(e); gcBusy(cont, false); });
-  });
-  // more apps on Pro: the quantity is changed on Stripe's billing page, and this page waits for it
-  var add = document.querySelector("[data-addapps]");
-  if (add) add.addEventListener("click", function(){
-    var err = document.getElementById("planerr"); err.textContent = "";
-    gcBusy(add, true, "Opening Stripe...");
-    gcPost("/api/billing/portal", {}).then(function(j){ location.href = j.url; }, function(e){ err.textContent = gcWhy(e); gcBusy(add, false); });
   });
   if (cfg.wait) {
     var tries = 0;
@@ -403,7 +394,8 @@ ${notice}${test}
   return studioPage(nonce, {
     title: `${paid || a.source === "comp" || a.source === "open" ? "The plan for" : "Choose a plan for"} ${v.project.name} | GenClass`,
     account: true,
-    org: { name: orgName(label), plan: a.plan.name, href: "/account" },
+    // the organization's plan in the header: an app past Pro's apps is locked, but its account is on Pro
+    org: { name: orgName(label), plan: a.locked === "pro_apps" && offer ? offer.name : a.plan.name, href: "/account" },
     projects: v.apps,
     project: null,
     user: { label, sub: orgName(label) },

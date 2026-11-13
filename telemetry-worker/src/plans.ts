@@ -77,11 +77,6 @@ export interface Plan {
   /** Days free at Checkout before the first payment (Pro: 3), once per account; left out: no trial. */
   trial_days?: number;
   /**
-   * Version 5: the apps one unit of the subscription covers (Pro: 3). The quantity is the units (accounts.seats), so
-   * the account's first apps_per_unit x quantity apps have the plan; a later one waits for more (coverage).
-   */
-  apps_per_unit?: number;
-  /**
    * `seats`: the people a plan that is not per_seat holds, the owner included (null or left out: no limit). `apps`
    * on Free: how many of an account's projects it covers (a later one is locked until it has a plan).
    * `live_fixes_per_month`: what the runtime may fix on visitors' screens a month for one project (interventions and
@@ -206,7 +201,7 @@ export function priceText(plan: Plan): string {
   const c = plan.price_usd_cents.monthly;
   if (c === null) return "By agreement";
   if (!c) return "$0";
-  return `$${c % 100 ? (c / 100).toFixed(2) : String(c / 100)}${plan.per_project === true ? " / project" : plan.per_seat === true ? " / developer" : ""} / month${plan.apps_per_unit ? ` for ${plan.apps_per_unit} apps` : ""}`;
+  return `$${c % 100 ? (c / 100).toFixed(2) : String(c / 100)}${plan.per_project === true ? " / project" : plan.per_seat === true ? " / developer" : ""} / month`;
 }
 
 /**
@@ -293,8 +288,8 @@ export interface Access {
   /** How many people the account holds now, its owner included (seatsOf); null: no limit. */
   seats: number | null;
   /**
-   * An app past the ones its account's plan covers (coverage): on Free past Free's apps, or on Pro past 3 x the units
-   * paid for. No dashboard until the account's plan covers it.
+   * An app past the ones its account's plan covers (coverage): on Free past Free's one app, on Pro past its 3 (or the
+   * apps a subscription from before version 5 kept). No dashboard until the account's plan covers it.
    */
   locked?: "free_projects" | "pro_apps";
   /** How many apps the account's plan covers (coverage); null: no limit. */
@@ -319,11 +314,13 @@ export const OPEN_ACCESS: Access = { plan: GRANT_PLAN, source: "open", seats: nu
 
 /**
  * How many people an account on `plan` holds, its owner included (null: no limit). A paid per_seat plan: the seats
- * paid for, at least 1. Any other plan, and every grant: the plan's own limits.seats (a grant of a per_seat plan has
- * no seat count, so no limit).
+ * paid for, or no limit when they are not known: a subscription bought per project under version 4 (the whole team
+ * included, so it never had a seat count) and an account row whose seats were not written (a rollback, a webhook
+ * still to come); the webhook writes them for every subscription bought per seat. Any other plan, and every grant:
+ * the plan's own limits.seats (a grant of a per_seat plan has no seat count, so no limit).
  */
 export function seatsOf(plan: Plan, source: AccessSource | null, paidSeats: number | null | undefined): number | null {
-  if (plan.per_seat === true) return source === "paid" ? Math.max(1, cleanSeats(paidSeats) ?? 1) : null;
+  if (plan.per_seat === true) return source === "paid" ? cleanSeats(paidSeats) : null;
   return plan.limits.seats ?? null;
 }
 
@@ -353,15 +350,21 @@ export function accessOf(row: AccessRow | null | undefined, mode: StripeMode | n
   const paid = modeCounts(row.stripe_mode, mode) ? planById(row.plan) : FREE;
   const comp = future(row.comp_until, now);
   const grant = grantPlan(row.comp_plan);
-  if (paid.id !== "free" && (!comp || rank(paid) >= rank(grant))) return { plan: paid, source: "paid", seats: seatsOf(paid, "paid", row.seats) };
+  // a paid plan wins a grant of the same plan (Manage billing, the subscription's state), with the grant's room: no
+  // seat limit (the grant never had one); coverage gives it every app too
+  if (paid.id !== "free" && (!comp || rank(paid) >= rank(grant))) return { plan: paid, source: "paid", seats: comp && rank(grant) === rank(paid) ? null : seatsOf(paid, "paid", row.seats) };
   if (comp) return { plan: grant, source: "comp", seats: seatsOf(grant, "comp", null) };
   return NO_ACCESS;
 }
 
-/** The better of two accesses: the plan listed later in plans.json, a paid one before a grant of the same plan. */
+/**
+ * The better of two accesses: the plan listed later in plans.json, a paid one before a grant of the same plan, and of
+ * two of the same plan and source the one with more seats (no limit first).
+ */
 export function better(a: Access, b: Access): Access {
   if (rank(b.plan) !== rank(a.plan)) return rank(b.plan) > rank(a.plan) ? b : a;
-  return a.source === "paid" || b.source !== "paid" ? a : b;
+  if (a.source !== b.source) return a.source === "paid" || b.source !== "paid" ? a : b;
+  return a.seats === null || (b.seats !== null && a.seats >= b.seats) ? a : b;
 }
 
 /** The columns a project's own plan is read from (migration 0016). */
@@ -387,7 +390,10 @@ export function accountWide(row: AccessRow | null | undefined, mode: StripeMode 
   return accessOf(grantPlan(row.comp_plan).per_project === true ? { ...row, comp_until: null } : row, mode, now);
 }
 
-/** A project's own access: its paid plan (as the current Stripe key sees it) or its grant (accessOf), else Free. */
+/**
+ * A project's own access: its paid plan (as the current Stripe key sees it) or its grant (accessOf), else Free. A
+ * subscription bought per project (version 4) included the whole team: no seat limit (seatsOf).
+ */
 export const projectOwnAccess = (r: ProjectPlanRow, mode: StripeMode | null, now: Date): Access =>
   accessOf({ plan: r.plan, stripe_mode: r.stripe_mode, comp_until: r.comp_until, comp_plan: r.comp_plan, seats: null }, mode, now);
 
@@ -412,8 +418,8 @@ export async function accountPlan(db: D1Like, accountId: string, env: Env, now: 
 
 /** This access opens dashboards (every plan in billing/plans.json today), unless the project waits for a plan. */
 export const hasDashboard = (a: Access): boolean => entitled(a.plan, "dashboard") && !a.locked;
-/** A plan sold by quantity: seats (per_seat) or units of apps (apps_per_unit). */
-export const byQuantity = (plan: Plan): boolean => plan.per_seat === true || (Number.isInteger(plan.apps_per_unit) && plan.apps_per_unit! > 0);
+/** A plan sold by quantity: seats (per_seat). */
+export const byQuantity = (plan: Plan): boolean => plan.per_seat === true;
 
 /** This access shows visitor analytics (Team and Enterprise); without it the stats are served with them left out. */
 export const hasAnalytics = (a: Access): boolean => entitled(a.plan, "analytics");
@@ -432,43 +438,61 @@ export const firstPaidWith = (e: "problems" | "ask"): Plan | null => PAID_PLANS.
 /** What an account's plan covers: its access, how many of its apps (null: all) and its apps, oldest first. */
 export interface Coverage {
   access: Access;
+  /** How many of the apps that do not pay for themselves the plan covers, oldest first (null: all). */
   cap: number | null;
   rows: ProjectPlanRow[];
-  /** The tokens of the apps with a subscription of their own (bought per project under version 4): always covered. */
+  /**
+   * The tokens of the apps with a subscription of their own (bought per project under version 4): always covered, and
+   * not counted in the cap.
+   */
   ownPaid?: Set<string>;
 }
 
 /**
  * The account's plan and how many apps it covers (billing/plans.json version 5): the best of its own subscription or
  * grant and every app's (a subscription bought per project under version 4, a grant copied to an app). A paid plan
- * sold by units (apps_per_unit) covers apps_per_unit x the units: the account's quantity (accounts.seats) plus one for
- * each app's own subscription. A grant covers every app, Free its limits.apps.
+ * covers limits.apps of the apps that do not pay for themselves (Pro: 3), oldest first, or as many as the account had
+ * when version 5 came while that same subscription lasts (accounts.apps_kept, migration 0020: what was bought before
+ * 13 November 2026 keeps covering the apps it covered). An app with a subscription of its own is always covered and
+ * not counted. A grant covers every app, a paid plan under a grant of the same plan too; Free covers its limits.apps.
  */
 export async function coverage(db: D1Like, accountId: string, mode: StripeMode | null, now: Date): Promise<Coverage> {
-  const acct = await db.prepare(`SELECT ${ACCESS_COLUMNS} FROM accounts WHERE id = ?`).bind(accountId).first<AccessRow>();
+  const acct = await db.prepare(`SELECT ${ACCESS_COLUMNS}, apps_kept FROM accounts WHERE id = ?`).bind(accountId).first<AccessRow & { apps_kept: number | null }>();
   const rows = (await db.prepare(`SELECT ${PROJECT_PLAN_COLUMNS} FROM projects WHERE account_id = ? ORDER BY created, rowid`).bind(accountId).all<ProjectPlanRow>()).results ?? [];
-  let best = accessOf(acct, mode, now);
-  let units = best.source === "paid" ? Math.max(1, cleanSeats(acct?.seats) ?? 1) : 0;
+  const own = accessOf(acct, mode, now);
+  let best = own;
+  // the best plan a grant gives here (the account's or one copied to an app), which covers every app
+  let granted: Plan | null = acct && future(acct.comp_until, now) ? grantPlan(acct.comp_plan) : null;
   const ownPaid = new Set<string>();
   for (const r of rows) {
-    const own = projectOwnAccess(r, mode, now);
-    if (own.source === "paid") {
-      units++;
-      ownPaid.add(r.token);
-    }
-    best = better(best, own);
+    const a = projectOwnAccess(r, mode, now);
+    if (a.source === "paid") ownPaid.add(r.token);
+    if (a.source === "comp" && (!granted || rank(a.plan) > rank(granted))) granted = a.plan;
+    best = better(best, a);
   }
-  const per = best.plan.apps_per_unit;
-  const cap = best.source === "comp" || best.source === "open" ? null : best.source === "paid" ? (per ? per * Math.max(1, units) : (best.plan.limits.apps ?? null)) : (FREE.limits.apps ?? null);
+  const limit = best.plan.limits.apps ?? null;
+  const kept = own.source === "paid" ? Math.max(0, Math.floor(Number(acct?.apps_kept) || 0)) : 0;
+  const cap =
+    best.source === "comp" || best.source === "open" || (granted && rank(granted) >= rank(best.plan))
+      ? null
+      : best.source === "paid"
+        ? limit === null ? null : Math.max(limit, kept)
+        : (FREE.limits.apps ?? null);
   return { access: { ...best, apps: cap }, cap, rows, ownPaid };
 }
 
-/** One app's access under its account's coverage: the plan when the app is among the first `cap`, else locked. */
+/**
+ * One app's access under its account's coverage: the plan when the app pays for itself or is among the first `cap`
+ * of the others, else locked.
+ */
 export function accessIn(cov: Coverage, project: { token?: string; id?: string | null }): Access {
   const i = cov.rows.findIndex((r) => (project.token ? r.token === project.token : r.id === project.id));
-  if (i < 0 || cov.cap === null || i < cov.cap) return cov.access;
-  // an app still paying for itself (a version 4 subscription) is never locked, wherever it is in the list
+  if (i < 0 || cov.cap === null) return cov.access;
+  // an app still paying for itself (a version 4 subscription) is never locked, and the others are counted without it
   if (cov.ownPaid?.has(cov.rows[i]!.token)) return cov.access;
+  let before = 0;
+  for (let j = 0; j < i; j++) if (!cov.ownPaid?.has(cov.rows[j]!.token)) before++;
+  if (before < cov.cap) return cov.access;
   return { ...NO_ACCESS, apps: cov.cap, locked: cov.access.source === null ? "free_projects" : "pro_apps" };
 }
 

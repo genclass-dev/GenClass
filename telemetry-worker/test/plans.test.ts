@@ -159,17 +159,19 @@ describe("billing/plans.json: the one source of plans", () => {
     expect(accessOf(row({ plan: "individual", comp_until: later }), "live", at)).toMatchObject({ source: "comp", plan: { id: "enterprise" } });
     expect(accessOf(row({ plan: "pro" }), "live", at)).toEqual(none);
     expect(accessOf(row({ plan: "custom", stripe_mode: "live" }), "live", at)).toEqual(none);
-    // Pro, paid (per developer since version 5): the seats paid for, at least 1
+    // Pro, paid (per developer since version 5): the seats paid for; not known (a row the webhook has not written
+    // seats to, after a rollback): no seat limit, never a team cut to one
     expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 4 }), "live", at)).toMatchObject({ source: "paid", plan: { id: "team" }, seats: 4 });
-    expect(accessOf(row({ plan: "team", stripe_mode: "live" }), "live", at)).toMatchObject({ source: "paid", plan: { id: "team" }, seats: 1 });
+    expect(accessOf(row({ plan: "team", stripe_mode: "live" }), "live", at)).toMatchObject({ source: "paid", plan: { id: "team" }, seats: null });
     // bought in test mode: counts only under a test key
     expect(accessOf(row({ plan: "team", stripe_mode: "test", seats: 4 }), "live", at)).toEqual(none);
     expect(accessOf(row({ plan: "team", stripe_mode: "test", seats: 4 }), "test", at)).toMatchObject({ source: "paid", seats: 4 });
     // a grant names its plan (comp_plan); unknown, empty or free: plans.json grant_plan. A grant has no seat count
     expect(accessOf(row({ comp_until: later, comp_plan: "team" }), "live", at)).toMatchObject({ source: "comp", plan: { id: "team" }, seats: null });
     for (const comp_plan of [null, "", "free", "pro"]) expect(accessOf(row({ comp_until: later, comp_plan }), "live", at), String(comp_plan)).toMatchObject({ source: "comp", plan: { id: "enterprise" } });
-    // both: the plan listed later applies (a Team grant does not lower a paid Team's seats; an Enterprise grant wins)
-    expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 2, comp_until: later, comp_plan: "team" }), "live", at)).toMatchObject({ source: "paid", seats: 2 });
+    // both: the plan listed later applies (an Enterprise grant wins); a grant of the same plan keeps the paid one, with
+    // the grant's room (no seat limit)
+    expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 2, comp_until: later, comp_plan: "team" }), "live", at)).toMatchObject({ source: "paid", seats: null });
     expect(accessOf(row({ plan: "team", stripe_mode: "live", seats: 2, comp_until: later }), "live", at)).toMatchObject({ source: "comp", plan: { id: "enterprise" }, seats: null });
     // PLAN_GATES open (a self-hosted collector): everyone, an app without an account too, has the grant plan
     expect(accessOf(null, null, at, true)).toMatchObject({ source: "open", plan: { id: "enterprise" }, seats: null });
@@ -181,9 +183,10 @@ describe("billing/plans.json: the one source of plans", () => {
     for (const bad of [0, -1, 201, 1.5, "3", null, undefined, NaN, Infinity]) expect(cleanSeats(bad), String(bad)).toBeNull();
     const [free, team, enterprise] = PLANS;
     expect(seatsOf(free!, null, null)).toBe(1);
-    // Pro is per developer since version 5: paid, what was paid for (at least 1); granted, no seat count
+    // Pro is per developer since version 5: paid, what was paid for (not known: no limit); granted, no seat count
     expect(seatsOf(team!, "paid", 5)).toBe(5);
-    expect(seatsOf(team!, "paid", 0)).toBe(1);
+    expect(seatsOf(team!, "paid", 0)).toBeNull();
+    expect(seatsOf(team!, "paid", null)).toBeNull();
     expect(seatsOf(team!, "comp", 5)).toBeNull();
     // a plan not sold per seat holds its own limit
     expect(seatsOf({ ...team!, per_seat: false }, "paid", 5)).toBeNull();

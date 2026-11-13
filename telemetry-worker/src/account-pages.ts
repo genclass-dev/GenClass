@@ -296,7 +296,10 @@ export interface AuthPageOptions {
   notice?: string | null;
 }
 
-/** The way in without an account, under the sign-in page: a dashboard of its own, protected (/start, link-lock.ts). */
+/**
+ * The way in without an account, under the sign-in page: a dashboard of its own, protected (/start, link-lock.ts).
+ * Not on a sign-in the genclass command started (next is /login/device): that one needs the account.
+ */
 const optional = (): string => `<p class="opt">Just trying it? <a href="/start">Create a dashboard without an account</a>.</p>`;
 
 /** The passkey sign-in button's script: sign in, then go to `next` (or reload, on the device page). */
@@ -340,7 +343,7 @@ ${providers}
 <p class="err" id="err" role="alert"></p>
 </div>
 </div>
-${optional()}
+${o.next?.startsWith("/login/device") ? "" : optional()}
 <script type="application/json" id="cfg">${embed({ next: o.next })}</script>`;
   return authPage(nonce, mode === "in" ? "Sign in | GenClass" : "Create an account | GenClass", inner, ENTRY_JS);
 }
@@ -619,7 +622,7 @@ ${signInWays({ ...v.providers, next: v.next })}
   function answer(ok){
     err.textContent = ""; yes.disabled = true; no.disabled = true;
     gcPost("/api/device/approve", { user_code: cfg.code, approve: ok }).then(function(){
-      if (ok) finish("Approved", "Go back to your terminal; it finishes on its own. You can close this tab.");
+      if (ok) finish("Approved", "Your terminal is signed in. You can close this tab.");
       else finish("Denied", "The terminal stops waiting and signs nothing in.");
     }, function(e){
       if (e.status === 404) { gone(); return; }
