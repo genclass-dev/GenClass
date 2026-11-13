@@ -185,7 +185,7 @@ describe("genclass suggest: end to end (src/suggest/index.mjs header)", () => {
     const w = world(env, model);
     // Free: the first suggestion, and the rest counted, ideas and designs included, with Pro's trial
     const free = (await printed(async () => suggest({ cwd: dir, url: "https://shop.example", yes: true }, deps(w)))).replace(/\s+/g, " ");
-    expect(free).toMatch(/ PRO \d+ more suggestions for this app: \d+ from your checks, 2 ideas from the model, 1 website design inspired by sites like yours, each with a prompt for your coding agent\. 3 days free, then \$15 \/ project \/ month\. Cancel any time\. Start: npx genclass upgrade/);
+    expect(free).toMatch(/ PRO \d+ more suggestions for this app: \d+ from your checks, 2 ideas from the model, 1 website design inspired by sites like yours, each with a prompt for your coding agent\. 3 days free, then \$15 \/ developer \/ month\. Cancel any time\. Start: npx genclass upgrade/);
     expect(free).not.toContain("A size guide for sleds");
     expect(free).not.toContain("patagonia");
     expect(runs).toBe(1);

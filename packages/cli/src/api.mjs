@@ -12,6 +12,10 @@
 import { cleanProject, failure, request } from "../../runtime/bin/lib/account.mjs";
 
 const str = (v, max = 200) => (typeof v === "string" ? v.slice(0, max) : null);
+/** The server's 402 for an account without Pro (the genclass command is Pro's since 2026-11-13), as cliOf reads it. */
+const proOf = (r, host) => (r.status === 402 && r.json?.needs_pro === true ? { needsPro: cliOf({ ...r.json, paid: false }, host) } : {});
+/** Why a call failed, in the server's own sentence when Pro is why. */
+const why = (r, what) => (r.status === 402 && r.json?.needs_pro === true && typeof r.json.error === "string" ? r.json.error.slice(0, 300) : failure(r, what));
 const sameOrigin = (u, host) => {
   try {
     return typeof u === "string" && new URL(u).origin === host ? u : null;
@@ -46,6 +50,27 @@ export async function fetchOverview(creds, opts = {}) {
     github: j.github && typeof j.github === "object" ? { app: j.github.app === true, installUrl: sameOrigin(j.github.install_url, creds.host), connectUrl: sameOrigin(j.github.connect_url, creds.host) } : null,
     billingUrl: sameOrigin(j.billing_url, creds.host),
     offer: offerOf(j.offer, creds.host),
+    cli: cliOf(j.cli, creds.host),
+  };
+}
+
+/**
+ * Whether this command works for the account (it is Pro's since 2026-11-13: Pro, its trial, GenClass's grant or a
+ * place in a paying team) and, without it, where Pro starts: the plan's name, its price, the trial the account has
+ * left, and the page that opens the checkout (on the server's own host; its billing page when it sent another).
+ * Null when the server does not say (an older or self-hosted one): nothing is locked then.
+ * @returns {{ paid: true } | { paid: false, plan: string, price: string | null, trialDays: number | null, checkoutUrl: string } | null}
+ */
+export function cliOf(v, host) {
+  if (!v || typeof v !== "object" || typeof v.paid !== "boolean") return null;
+  if (v.paid) return { paid: true };
+  const days = Number(v.trial_days);
+  return {
+    paid: false,
+    plan: str(v.plan, 40) ?? "Pro",
+    price: str(v.price, 60),
+    trialDays: Number.isInteger(days) && days > 0 && days <= 730 ? days : null,
+    checkoutUrl: sameOrigin(v.checkout_url, host) ?? `${host}/account/billing`,
   };
 }
 
@@ -92,7 +117,7 @@ function offerOf(o, host) {
  */
 export async function fetchRepoStatus(creds, repo, opts = {}) {
   const r = await request(`/api/cli/github?repo=${encodeURIComponent(repo)}`, { token: creds.access_token, host: creds.host, fetchFn: opts.fetchFn });
-  if (!r.ok) return { ok: false, status: r.status, reason: failure(r), ...(r.status === 404 ? { missing: true } : {}) };
+  if (!r.ok) return { ok: false, status: r.status, reason: why(r), ...(r.status === 404 ? { missing: true } : {}), ...proOf(r, creds.host) };
   const j = r.json ?? {};
   return {
     ok: true,
@@ -118,7 +143,7 @@ export async function fetchRepoStatus(creds, repo, opts = {}) {
 export async function requestPlan(creds, digest, opts = {}) {
   // the model works through the checks, its own ideas and three website designs: up to 90 seconds on the server
   const r = await request("/api/cli/suggest", { method: "POST", token: creds.access_token, host: creds.host, body: digest, fetchFn: opts.fetchFn, timeoutMs: opts.timeoutMs ?? 120_000 });
-  if (!r.ok) return { ok: false, status: r.status, reason: failure(r), ...(r.status === 404 ? { missing: true } : {}) };
+  if (!r.ok) return { ok: false, status: r.status, reason: why(r), ...(r.status === 404 ? { missing: true } : {}), ...proOf(r, creds.host) };
   const j = r.json ?? {};
   const items = (Array.isArray(j.items) ? j.items : [])
     .filter((i) => i && typeof i === "object" && /^[a-z0-9-]{1,40}$/.test(String(i.id ?? "")))
@@ -198,7 +223,7 @@ function liveUsage(u) {
  */
 export async function fetchApp(creds, id, range = "7d", opts = {}) {
   const r = await request(`/api/cli/app?id=${encodeURIComponent(id)}&range=${encodeURIComponent(range)}`, { token: creds.access_token, host: creds.host, fetchFn: opts.fetchFn });
-  if (!r.ok) return { ok: false, status: r.status, reason: failure(r), ...(r.status === 404 ? { missing: true } : {}), ...(r.json?.reauth === true ? { reauth: true } : {}), ...(r.json?.locked === true ? { locked: true, upgradeUrl: sameOrigin(r.json.upgrade_url, creds.host) } : {}) };
+  if (!r.ok) return { ok: false, status: r.status, reason: why(r), ...(r.status === 404 ? { missing: true } : {}), ...proOf(r, creds.host), ...(r.json?.reauth === true ? { reauth: true } : {}), ...(r.json?.locked === true ? { locked: true, upgradeUrl: sameOrigin(r.json.upgrade_url, creds.host) } : {}) };
   const j = r.json ?? {};
   const t = j.totals && typeof j.totals === "object" ? j.totals : {};
   const b = j.breakdowns && typeof j.breakdowns === "object" ? j.breakdowns : {};
@@ -310,6 +335,8 @@ const refused = (r, host, what) => ({
   ...(sameOrigin(r.json?.upgrade_url, host) ? { upgradeUrl: sameOrigin(r.json.upgrade_url, host) } : {}),
   // a part of the paid plan: which plan, its trial and price (the Pro box)
   ...(r.json?.locked === true ? { lock: lockOf(r.json, host) } : {}),
+  // the genclass command is Pro's: where Pro starts
+  ...proOf(r, host),
 });
 const numOrNull = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v) : null);
 const person = (x) => ({ label: str(x?.email, 120) ?? (str(x?.github_login, 60) ? `@${str(x.github_login, 60)}` : "a GenClass account"), joined: str(x?.joined, 40), active: x?.active !== false });

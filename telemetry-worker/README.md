@@ -532,6 +532,23 @@ npx --yes wrangler@4 d1 execute genclass-dashboard --remote --command "
 
 ## Paid plans
 
+**Version 5 (2026-11-13, the owner's calls; what follows below is the history it replaces where they differ).**
+Pro (id `team`) is bought for the account again, not per app, and per developer: `per_seat` true, the
+subscription's quantity is how many developers (US$15 each a month), and it covers up to 3 apps (`limits.apps`)
+whatever the number of developers, oldest first (`src/plans.ts` coverage, accessIn). An app past them is locked
+`pro_apps`: its plan page says more apps come with Enterprise, by email (a mailto button, no purchase). A
+subscription bought per project under version 4 still covers its own app (never locked) and gives the account
+Pro. Free covers one app (`free_projects` past it). Every new app of an account opens its plan page once, a paying
+account's too: "Continue with Pro" (`POST /api/billing/projects/<id>/continue` writes `plan_chosen`). Pro's
+3-day trial (card up front, once per account) starts on the account's first Checkout (`src/billing.ts` trialFor).
+**The genclass command is Pro's** (the owner's "let's make the entire CLI paid"): a CLI session of an account with
+no plan (paid, trialing, a grant) and no active place in a paying team gets 402 `needs_pro` from every `/api/cli`
+route but the overview and the account, which carry `cli` (`src/cli.ts` cliPaid). Nothing is locked for a browser
+session, where nothing is sold to the account (no Stripe key, a test key and an account not listed) or with
+PLAN_GATES open. Free's list (the owner: "1 app connection, limited dashboard, open-source basics", and "keep them
+free"): one app, the totals for 7 days, the open-source runtime and model, the coding-agent loop, self-hosting, the
+GitHub App on public repositories, the page check, 100 live fixes a month.
+
 The plans live in [`billing/plans.json`](../billing/plans.json) (version 3, 2026-11-11, the owner: "cut back on
 the free features"; one thing stays free, finding, seeing and fixing the problems):
 
@@ -1171,7 +1188,7 @@ sign-in, `/api/me`, `/api/account/projects`) and four of its own (`src/cli.ts`; 
 
 | Route | |
 |---|---|
-| `GET /api/cli/overview` | CLI session or browser session: the account, its plan `{ id, name }`, its apps, `suggestions: { per_day, shown, used_today, model }` and where the GitHub App's install and connect pages are |
+| `GET /api/cli/overview` | CLI session or browser session: the account, its plan `{ id, name }`, its apps, `suggestions: { per_day, shown, used_today, model }`, where the GitHub App's install and connect pages are, and `cli`: `{ paid: true }`, or `{ paid: false, plan, price, trial_days, checkout_url }` (the account's checkout, `?plan=team&start=1`) for an account the command is locked for. Every other route below but `/api/cli/account` answers such a CLI session `402 { ok: false, needs_pro: true, error, ...cli }` (version 5: the genclass command is Pro's) |
 | `GET /api/cli/github?repo=owner/name` | CLI session or browser session: what the GitHub App is doing on that repository (`known`, `installed`, `evidence`, `prs`, `last`, `private`, `needs_plan`, `paused`). GitHub is asked nothing: the answer comes from what GitHub told this account in the last 30 minutes (Connect GitHub, or Continue with GitHub after installing). Without such an answer: `known: false` and `connect_url` |
 | `POST /api/cli/suggest` | CLI session only. The body is a digest of the checks that failed on an app (`src/suggest.ts` `readDigest`: at most 60 checks, each an id, area, title, weight and at most 3 evidence lines of 160 characters, plus the app's name, framework, address, payment provider and host; at most 64 KB; anything else is dropped). The answer is the plan: `items` in order, each `{ id, why, step, prompt }`, `locked_ids` for the items the account's plan does not show, `source` (`model` or `checks`), `remaining_today`. Since 2026-11-12 (the owner's call): the digest's `app` also has `about` (the site's title and description, 300 characters); the model also writes `ideas` (up to 20, its own, never shown as measured) and `designs` (up to 4, each `{ title, inspired_by, why, prompt }` with a real site the server checks answers over HTTPS, and a complete prompt for a coding agent); the answer is kept per account and app (`suggest_results`, migration 0019, the app keyed by a hash of its address or name). A plan that shows part of it (Free, `suggestions.shown` 1) gets the kept answer again on later runs (`cached_at`, no new model run), its first item, the rest as `locked`/`locked_ids`, and `ideas_locked`/`designs_locked` as counts with `ideas` and `designs` empty; `upgrade_plan` `{ name, price, trial_days }` and `upgrade_url` say where Pro starts. Pro gets everything |
 | `GET /api/cli/app?id=<app id>&range=7d` | CLI session or browser session: one app's dashboard as data, for `genclass dashboard` and the views beside it (`problems`, `analytics`, `events`, `health`, `agent`, `report`, `fix`). It is what `/api/account/projects/<id>/stats` answers (same plan rules: the ranges a plan shows, visitor analytics left out without them, `402` when the plan has no dashboard), with the 50 most recent findings and `dashboard_url`. The app is the account's own or one of a team it is in; anything else is `404`. A CLI session reads it only if it was created at or after `CLI_DASHBOARD_FROM` (`src/cli.ts`), when the approval page began to say "show your apps' dashboards"; an older one gets `403` with `reauth: true`, and the command asks the person to sign in again. `/api/account/projects/<id>/stats` stays browser only |

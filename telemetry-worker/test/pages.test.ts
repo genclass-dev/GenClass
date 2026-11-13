@@ -655,7 +655,7 @@ describe("dashboard page: interaction analytics (docs/runtime/ANALYTICS.md secti
     const { doc, text, hidden, close } = await render(st);
     expect(hidden("prolock")).toBe(false);
     expect(text("#prolock b")).toBe("Free shows the totals");
-    expect(text("#prolockmsg")).toBe("Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with Pro. 3 days free, then $15 / project / month. Cancel any time.");
+    expect(text("#prolockmsg")).toBe("Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with Pro. 3 days free, then $15 / developer / month. Cancel any time.");
     expect(doc.getElementById("prolocka")!.getAttribute("href")).toBe("https://genclass.dev/account/billing?project=p1");
     expect(text("#prolocka")).toBe("Start your 3-day free trial");
     // the lists give way to the banner, so an empty list never reads as "no problems"

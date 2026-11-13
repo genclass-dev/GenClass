@@ -84,13 +84,13 @@ describe("genclass against the collector (src/api.mjs, telemetry-worker/src/cli.
     const deps = { runGit: () => null, fetchFn: through(env), now: now().getTime() };
     // Free: the totals, and the way to the rest (the problems, their pages and the fix prompts are Pro's)
     const data = await fetchApp(me.creds, app.id, "7d", deps);
-    expect(data).toMatchObject({ ok: true, name: "shop", range: "7d", totals: { found: 2, checks: 0 }, problems: [], visitors: null, visitorsPlan: { plan: "Pro", upgradeUrl: `${HOST}/account/billing` }, problemsPlan: { plan: "Pro", trialDays: 3, price: "$15 / project / month", upgradeUrl: `${HOST}/account/billing?project=${app.id}` }, dashboardUrl: `${HOST}/account/apps/${app.id}` });
+    expect(data).toMatchObject({ ok: true, name: "shop", range: "7d", totals: { found: 2, checks: 0 }, problems: [], visitors: null, visitorsPlan: { plan: "Pro", upgradeUrl: `${HOST}/account/billing` }, problemsPlan: { plan: "Pro", trialDays: 3, price: "$15 / developer / month", upgradeUrl: `${HOST}/account/billing?project=${app.id}` }, dashboardUrl: `${HOST}/account/apps/${app.id}` });
     let code = -1;
     const freeView = await printed(async () => (code = await dashboard({ cwd: dir }, deps)));
     expect(code).toBe(0);
     expect(freeView).toMatch(/Problems found\s+2/);
     expect(freeView.replace(/\s+/g, " ")).toContain("The problems, the pages they happen on and a fix prompt for each come with Pro. Free shows the totals.");
-    expect(freeView.replace(/\s+/g, " ")).toContain("3 days free, then $15 / project / month. Cancel any time. Start: npx genclass upgrade");
+    expect(freeView.replace(/\s+/g, " ")).toContain("3 days free, then $15 / developer / month. Cancel any time. Start: npx genclass upgrade");
     expect(freeView).not.toContain("the same request went out twice");
     // on Pro (here GenClass's grant for this app): every problem
     sql.db.prepare("UPDATE projects SET comp_until = '2027-12-31T00:00:00.000Z', comp_plan = 'team' WHERE id = ?").run(app.id);
@@ -150,7 +150,7 @@ describe("genclass against the collector (src/api.mjs, telemetry-worker/src/cli.
       ideasLocked: 2,
       designsLocked: 1,
       upgradeUrl: `${HOST}/account/billing?plan=team&from=cli`,
-      upgradePlan: { plan: "Pro", price: "$15 / project / month", trialDays: 3 },
+      upgradePlan: { plan: "Pro", price: "$15 / developer / month", trialDays: 3 },
       limited: false,
     };
     expect(free).toMatchObject({ ...shut, cachedAt: null, remainingToday: 2 });

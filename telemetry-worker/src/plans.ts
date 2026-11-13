@@ -426,6 +426,8 @@ export interface Coverage {
   access: Access;
   cap: number | null;
   rows: ProjectPlanRow[];
+  /** The tokens of the apps with a subscription of their own (bought per project under version 4): always covered. */
+  ownPaid?: Set<string>;
 }
 
 /**
@@ -439,20 +441,26 @@ export async function coverage(db: D1Like, accountId: string, mode: StripeMode |
   const rows = (await db.prepare(`SELECT ${PROJECT_PLAN_COLUMNS} FROM projects WHERE account_id = ? ORDER BY created, rowid`).bind(accountId).all<ProjectPlanRow>()).results ?? [];
   let best = accessOf(acct, mode, now);
   let units = best.source === "paid" ? Math.max(1, cleanSeats(acct?.seats) ?? 1) : 0;
+  const ownPaid = new Set<string>();
   for (const r of rows) {
     const own = projectOwnAccess(r, mode, now);
-    if (own.source === "paid") units++;
+    if (own.source === "paid") {
+      units++;
+      ownPaid.add(r.token);
+    }
     best = better(best, own);
   }
   const per = best.plan.apps_per_unit;
   const cap = best.source === "comp" || best.source === "open" ? null : best.source === "paid" ? (per ? per * Math.max(1, units) : (best.plan.limits.apps ?? null)) : (FREE.limits.apps ?? null);
-  return { access: { ...best, apps: cap }, cap, rows };
+  return { access: { ...best, apps: cap }, cap, rows, ownPaid };
 }
 
 /** One app's access under its account's coverage: the plan when the app is among the first `cap`, else locked. */
 export function accessIn(cov: Coverage, project: { token?: string; id?: string | null }): Access {
   const i = cov.rows.findIndex((r) => (project.token ? r.token === project.token : r.id === project.id));
   if (i < 0 || cov.cap === null || i < cov.cap) return cov.access;
+  // an app still paying for itself (a version 4 subscription) is never locked, wherever it is in the list
+  if (cov.ownPaid?.has(cov.rows[i]!.token)) return cov.access;
   return { ...NO_ACCESS, apps: cov.cap, locked: cov.access.source === null ? "free_projects" : "pro_apps" };
 }
 

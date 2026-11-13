@@ -26,9 +26,8 @@ import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
 import { c, interactive, out, printChange, stopOnEnter, sym } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "./assets.mjs";
-import { freeLimits, WORKFLOW_PATH } from "./state.mjs";
-import { saveNotes } from "./store.mjs";
-import { agree, bad, clean, good, note, planCard, PROMPT, spinner, typed, warn } from "./tui.mjs";
+import { accountPaid, appPlanOffer, WORKFLOW_PATH } from "./state.mjs";
+import { agree, bad, clean, good, note, planCard, spinner, warn } from "./tui.mjs";
 import { planViteSettings } from "./vite.mjs";
 
 /** Resolves after `ms`, or at once when `signal` aborts. */
@@ -100,39 +99,26 @@ export async function signIn(o = {}) {
   return "done";
 }
 
-// ------------------------------------------------------------------------------------------------ 1b. the plan
+// ------------------------------------------------------------------------------------------------ 1b. Pro
 
 /**
- * The plan step, for an account on Free that can buy a plan here: the paid plan's card, then one question. Enter
- * opens that plan's checkout in the browser (genclass.dev sends the person straight to Stripe) and waits for the
- * payment; f goes on with Free for this project, and that choice is remembered so the project is asked once. With
- * --yes, or with nobody at a terminal, nothing is bought and nothing is opened: it is Free for now, said in one line
- * with where the plan starts. Returns "done", "skipped" (asked again next run) or "quit" (q: stop the walk).
+ * The Pro step, right after the sign-in (state.mjs, step "plan"): the genclass command is Pro's (the owner's call,
+ * 2026-11-13), so an account without it sees the paywall (paywall.mjs startPro): the card, then Enter, which opens
+ * the checkout with its free trial and waits for the payment. There is no Free here. Returns "done" once Pro is on,
+ * "skipped" when there is nothing to start, and "quit" otherwise (the walk stops: nothing after it works without Pro).
  * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
  */
 export async function choosePlan(state, o = {}, deps = {}) {
-  const offer = state.steps.find((s) => s.id === "plan")?.offer;
+  const cli = state.steps.find((s) => s.id === "plan")?.cli;
+  if (!cli || cli.paid) return "skipped";
+  return (await (await import("./paywall.mjs")).startPro(cli, state.account?.offer ?? null, o, deps)) ? "done" : "quit";
+}
+
+/** This app's plan page, in the walk (state.mjs, step "app-plan"): projectPlan with the step's offer. */
+export async function chooseAppPlan(state, o = {}, deps = {}) {
+  const offer = state.steps.find((s) => s.id === "app-plan")?.offer;
   if (!offer) return "skipped";
-  // plans per project: the choice is made on the app's own plan page
-  if (offer.project) return projectPlan(offer, o, deps);
-  const free = offer.free.name;
-  const limits = freeLimits(offer.free);
-  const stayFree = (line) => {
-    saveNotes(state.cwd, { plan: "free", planAt: new Date().toISOString() });
-    note(line);
-    return "done";
-  };
-  if (o.yes || !interactive()) return stayFree(`${free} for now (limited${limits ? `: ${limits}` : ""}). ${offer.plan.name}, ${offer.price}: ${offer.checkoutUrl}`);
-  planCard(offer, state.app?.name ?? null);
-  // the small way on, in the owner's words
-  out(`  ${c.gray(`f  Try ${free.toLowerCase()} for now (limited)`)}`);
-  const dot = c.gray("·");
-  const a = await typed(`  ${PROMPT()} ${c.bold("Enter")} ${c.gray(`to start ${offer.plan.name}`)} ${dot} ${c.bold("f")} ${c.gray("free for now")} ${dot} ${c.bold("q")} ${c.gray("stop")}  `);
-  if (a === null || /^q/i.test(a)) return "quit";
-  if (/^[fs]/i.test(a)) return stayFree(`${free} for now. ${offer.plan.name} any time: ${offer.checkoutUrl}`);
-  if (await checkout(offer, o, deps)) return "done";
-  note(`This project goes on with ${free} for now.`);
-  return "skipped";
+  return projectPlan(offer, o, deps);
 }
 
 /**
@@ -169,12 +155,9 @@ export async function planNow(o = {}, deps = {}, id = null) {
   }
   const app = (state.projects ?? []).find((p) => (id ? p.id === id : p.token === state.app?.token) && !p.shared);
   // version 5 (2026-11-13): every new app sees its plan page, a paying account's too (it goes on with its plan
-  // there), and an app its plan does not cover waits there for more
-  if (!app?.plan || !app.planUrl || (app.planChosen && !app.needsPlan)) return "none";
-  const covered = !!app.plan.source && !app.needsPlan;
-  const base = upgradeOffer(state, app.id) ?? state.account?.offer ?? { plan: { name: "Pro" }, price: "", summary: null, features: [], free: { name: "Free", apps: null } };
-  if (!covered && !state.account?.offer && !app.plan.source) return "none";
-  const offer = { ...base, checkoutUrl: `${app.planUrl}&from=cli`, project: { id: app.id, name: app.name, token: app.token }, needs: app.needsPlan === true, current: covered ? app.plan.name : null, paying: !!app.plan.source };
+  // there), and an app its plan does not cover waits there (state.mjs appPlanOffer)
+  const offer = appPlanOffer(app, state.account?.offer ?? null, !!state.account && accountPaid(state.account));
+  if (!offer) return "none";
   if (o.json) return "open";
   if (o.yes || !interactive()) {
     out();
@@ -211,7 +194,9 @@ export async function projectPlan(offer, o = {}, deps = {}) {
     offer.current
       ? `Your ${clean(offer.current, 20)} plan covers ${name}: continue with it on its plan page.`
       : offer.needs && offer.paying
-        ? `Your plan covers no more apps: add ${offer.appsPerUnit ?? 3} more for ${name} on its plan page.`
+        ? offer.appsPerUnit
+          ? `Your plan covers no more apps: add ${offer.appsPerUnit} more for ${name} on its plan page.`
+          : `Your plan covers no more apps, and ${name} is one more. More apps come with Enterprise, by email: its plan page has the address.`
         : offer.needs
           ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more: it needs ${offer.plan.name}, ${offer.price}.`
           : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`,
@@ -255,7 +240,7 @@ async function waitForPlan(offer, o = {}, deps = {}) {
       if (offer.current) got = p?.planChosen ? "kept" : null;
       else if (p?.plan && (p.plan.id !== "free" || p.plan.source) && !p.needsPlan) got = "paid";
       else if (p?.planChosen && !offer.needs && !p.needsPlan) got = "free";
-    } else if (me.plan && me.plan.id !== "free") got = "paid";
+    } else if (me.cli ? me.cli.paid : me.plan && me.plan.id !== "free") got = "paid";
     if (got) break;
   }
   await stop.done();

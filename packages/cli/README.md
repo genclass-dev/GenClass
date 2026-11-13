@@ -65,9 +65,15 @@ When the walk is done (or you press `q` to leave it for later), the command does
   ❯ which page loses the most visitors?
 ```
 
-Type a number, a command, or a sentence: a sentence is a question about your app. `q` leaves. On Free, each command
-ends with one line on Free's limits and `genclass upgrade`. Everything here is also a
-command of its own (`npx genclass problems`), so scripts and coding agents use the same things.
+Type a number, a command, or a sentence: a sentence is a question about your app. `q` leaves. Everything here is
+also a command of its own (`npx genclass problems`), so scripts and coding agents use the same things.
+
+**The command comes with Pro.** Right after the sign-in, an account without Pro sees Pro's card, and Enter opens its
+checkout in the browser: 3 days free (the card is asked for on Stripe, nothing is charged if you cancel before they
+end), then $15 a developer a month, for up to 3 apps. Every command but `login`, `logout`, `whoami`, `plan`,
+`upgrade`, `profile`, `status`, `remove`, `help` and `version` asks first. Without a terminal (`--yes`, `--json`, a
+coding agent) nothing is opened: one line with the checkout address, and exit code 1. Free stays on the website: one
+app and its totals.
 
 **Just `genclass`.** `npx` runs the command without installing it, so the first run on a terminal installs it
 (`npm install -g genclass`, said on screen; `npm uninstall -g genclass` takes it out, `GENCLASS_NO_INSTALL=1` turns
@@ -78,8 +84,9 @@ it off). After that you type `genclass`, and every screen says `genclass` instea
 | Part | What the step does | What it changes |
 |---|---|---|
 | Account | Opens genclass.dev in your browser; you approve a short code there. | A session file in your user config folder. Nothing is typed in the terminal. |
+| Pro | Right after the sign-in: Pro's 3-day free trial opens in your browser, and the command waits for it. Every step after it needs Pro. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
 | Runtime | Adds GenClass to the app: one import (or script tag) and the package. It watches the page in your users' browsers for lost edits, double submits and old data shown over new, and only reports, to the console and your dashboard. Nothing is drawn on your pages. | Your entry file and `package.json`; you see the change first. `genclass remove` undoes it. |
-| Plan | Once the app is in your account, its plan page opens in your browser: Team, or Free for now (limited) after saying what stops you from paying. Each app has its own plan. The setup goes on once it has one. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
+| App plan | Once the app is in your account, its plan page opens in your browser once: Continue with Pro. Pro covers up to 3 apps; more apps come with Enterprise, by email. | Nothing in your project. |
 | Dashboard | Waits for your live site to be opened once. GenClass sends nothing from localhost. | Nothing. |
 | Test workflow | Runs your Playwright tests once more per pull request with slow and reordered responses. | One new file, `.github/workflows/genclass.yml`, which you commit. |
 | GitHub App | Comments on a pull request when a page ends up wrong, with the steps to see it. The command opens GitHub's install page and waits for the answer. A repository that was renamed on GitHub is looked up under its new name. | Nothing in your project. The app cannot read or change your code. |
@@ -167,7 +174,7 @@ the question; a follow-up ("and on which page?") carries the turn before it.
 **What leaves your machine:** the question. The numbers are read on genclass.dev, where they already are, and go to
 the model (OpenAI's API) with it. No code, no file of your project. Neither the question nor the answer is stored.
 The command says this before the first question and waits for Enter. Ask and suggest share a plan's model runs a
-day (3 on Free, 30 on Team).
+day (30 on Pro).
 
 ## Connections
 
@@ -227,8 +234,8 @@ evidence lines, plus your app's name, framework, address, payment provider and h
 contents, no secrets. The command shows this before the first time it sends it for a project; `--no-model` sends
 nothing. genclass.dev passes it to the model that writes the plan and stores none of it.
 
-**What is free.** Every check, with its evidence. The plan (why it matters for your app, the first step, the agent
-prompt) is shown for the first three items on Free and for all of them on Team, with more plans a day.
+**What Pro shows.** Every check, with its evidence, and the plan for all of them: why it matters for your app, the
+first step and the agent prompt, with the model's own ideas and website designs.
 
 ## Commands
 

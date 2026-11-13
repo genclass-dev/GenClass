@@ -196,6 +196,33 @@ export async function readState(o = {}, deps = {}) {
     human: "approve the sign-in in your browser",
   });
 
+  // 1b. Pro: the genclass command is Pro's (the owner's call, 2026-11-13: "let's make the entire CLI paid"). Right
+  // after the sign-in, an account without it (Pro paid or in its trial, GenClass's grant, a place in a paying team)
+  // starts it in the browser: the free trial first, the card on Stripe. paywall.mjs asks before every command, so
+  // nothing after this step runs without it. A server that does not say (`cli`), or sells nothing here, has no step.
+  const cli = me?.cli ?? null;
+  steps.push({
+    id: "plan",
+    title: "Pro",
+    doing: cli && !cli.paid ? (cli.trialDays ? `Start your ${cli.trialDays}-day free trial` : `Start ${cli.plan}`) : "Pro",
+    state: !me ? (creds && offline !== "expired" ? "optional" : "todo") : !cli ? "optional" : cli.paid ? "done" : "todo",
+    detail: !me
+      ? ""
+      : cli && !cli.paid
+        ? `${cli.price ?? cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free` : ""}`
+        : cli?.paid && me.plan?.id === "free"
+          ? "through your team's plan"
+          : me.plan
+            ? me.plan.name
+            : "",
+    why: cli && !cli.paid ? `Every genclass command comes with ${cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free to start` : ""}.` : "Every genclass command comes with Pro.",
+    more: `${cli && !cli.paid && cli.trialDays ? `The trial opens in your browser and the card is asked for there, on Stripe: nothing is charged if you cancel before the ${cli.trialDays} days end. ` : "Pro opens in your browser and is paid there, on Stripe. "}Free stays on the website: one app and its totals. Plans and prices: genclass.dev/pricing.`,
+    run: "npx genclass upgrade",
+    human: cli && !cli.paid ? `start ${cli.plan} in your browser: ${cli.checkoutUrl}` : null,
+    ...(cli ? { cli } : {}),
+    after: "account",
+  });
+
   // 2. the runtime in this app
   const linked = !!st.token && (!me || !!app);
   // added and in the account, but on Vite 7 or earlier without the build setting the model's worker needs (vite.mjs)
@@ -232,58 +259,37 @@ export async function readState(o = {}, deps = {}) {
     human: null,
   });
 
-  // 2b. the plan of this app. Plans are per project (genclass.dev's billing/plans.json version 4): once the app is in
-  // the account, the command opens the app's plan page in the browser, the paid plan large and "Try for free
-  // (limited)" small under it, and waits for the choice there. An app past the ones Free covers has only the paid
-  // plan. An app with a plan, an app of a team the account is in (its owner chooses), a server that sells nothing
-  // and a signed-out person have nothing to choose, so the step does not show. A server from before plans per
-  // project answers for the whole account: the plan is then chosen once, in the terminal, as it was.
-  const own = app && !app.shared ? app : null;
-  const pp = own?.plan ?? null;
-  const needs = own?.needsPlan === true;
-  const hasPlan = pp ? pp.id !== "free" || !!pp.source : !!me?.plan && me.plan.id !== "free";
-  const offer =
-    me?.offer && !hasPlan && !app?.shared && (!pp || own.planUrl)
-      ? pp
-        ? { ...me.offer, checkoutUrl: `${own.planUrl}&from=cli`, project: { id: own.id, name: own.name, token: own.token }, needs }
-        : me.offer
-      : null;
-  const choseFree = pp ? own.planChosen === true && !needs : notes.plan === "free";
-  const limits = offer ? freeLimits(offer.free) : "";
+  // 2b. this app's plan page (genclass.dev/account/billing?project=<id>): every new app of the account sees it once
+  // (the owner's call, 2026-11-13: the paywall for everyone, and a paying account clicks Continue with Pro), and an
+  // app past the ones its plan covers waits there (past Free's one: Pro; past Pro's: Enterprise, by email). An app of
+  // a team the account is in has nothing to choose: its owner does.
+  const appOffer = appPlanOffer(app, me?.offer ?? null, accountPaid(me));
   steps.push({
-    id: "plan",
-    title: "Plan",
-    doing: offer?.project ? "Choose this app's plan" : "Choose a plan",
-    state: !offer ? "optional" : choseFree ? "done" : "todo",
-    detail: !me
-      ? ""
-      : !offer
-        ? pp
-          ? `${pp.name}${pp.source === "comp" ? " (set up by GenClass)" : ""}`
-          : app?.shared
-            ? "the team's owner chooses it"
-            : me.plan
-              ? `${me.plan.name} plan`
-              : ""
-        : needs
-          ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`}: this one needs ${offer.plan.name}`
-          : choseFree
-            ? `${offer.free.name} for now (limited) · ${offer.plan.name} is ${offer.price}`
-            : `${offer.plan.name}, ${offer.price}`,
-    why: !offer
-      ? pp ? "This app's plan." : "The plan your account is on."
-      : needs
-        ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more. ${offer.plan.name} is ${offer.price}.`
-        : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name} for now (limited).`,
-    more: !offer
-      ? "Plans and prices: genclass.dev/pricing."
-      : offer.project
-        ? `The app's plan page opens in your browser: ${offer.plan.name}, paid there on Stripe, or ${offer.free.name} for now${limits ? ` (${limits})` : ""}. Every app has its own plan: genclass.dev/account/billing.`
-        : `${offer.plan.name} opens in your browser and is paid there, on Stripe. ${offer.free.name} keeps what finds, shows and fixes the problems${limits ? `: ${limits}` : ""}. You can change plan any time at genclass.dev/account/billing.`,
+    id: "app-plan",
+    title: "App plan",
+    doing: appOffer?.current ? `Continue with ${appOffer.current} for this app` : "Choose this app's plan",
+    state: appOffer ? "todo" : "optional",
+    detail: !me || !app?.plan
+      ? (app?.shared ? "the team's owner chooses it" : "")
+      : appOffer
+        ? appOffer.needs
+          ? appOffer.paying
+            ? `${appOffer.current ?? "Your plan"} covers no more apps`
+            : `Free covers ${appOffer.free.apps === 1 ? "one app" : `${appOffer.free.apps ?? 1} apps`}: this one needs ${appOffer.plan.name}`
+          : appOffer.current
+            ? `covered by ${appOffer.current}: continue on its plan page`
+            : `${appOffer.plan.name}, ${appOffer.price}`
+        : `${app.plan.name}${app.plan.source === "comp" ? " (set up by GenClass)" : ""}`,
+    why: appOffer?.needs && appOffer.paying
+      ? "Your plan covers no more apps. More apps come with Enterprise, by email."
+      : appOffer?.current
+        ? `Every new app has its plan page once. ${appOffer.current} covers this one: continue with it there.`
+        : "This app's plan, on its page in your browser.",
+    more: "Every app has its plan page: genclass.dev/account/billing. Plans and prices: genclass.dev/pricing.",
     run: "npx genclass setup",
-    human: offer && !choseFree ? `choose ${offer.project ? "this app's plan" : "a plan"} in your browser: ${offer.checkoutUrl}` : null,
-    ...(offer ? { offer } : {}),
-    // the plan is the app's: the walk asks once the app is in the account
+    human: appOffer ? `open this app's plan page: ${appOffer.checkoutUrl}` : null,
+    ...(appOffer ? { offer: appOffer } : {}),
+    // the plan page is the app's: the walk asks once the app is in the account
     after: "runtime",
   });
 
@@ -380,7 +386,7 @@ export async function readState(o = {}, deps = {}) {
     cwd,
     host: host.overridden && !host.error ? host.host : null,
     app: { name: app?.name ?? project.name ?? null, framework: project.label || null, isApp, token: st.token ?? null, dashboardUrl: app?.dashboard_url ?? st.local?.dashboardUrl ?? null, site: notes.site ?? null, ...(isApp ? {} : { below: appsBelow(cwd) }) },
-    account: me ? { label: accountLabel(me.account), plan: me.plan, suggestions: me.suggestions, billingUrl: me.billingUrl, github: me.github, offer: me.offer ?? null } : null,
+    account: me ? { label: accountLabel(me.account), plan: me.plan, suggestions: me.suggestions, billingUrl: me.billingUrl, github: me.github, offer: me.offer ?? null, cli: me.cli ?? null } : null,
     signedIn: !!me,
     /** the account's apps as genclass.dev lists them ([] signed out) */
     projects: me?.projects ?? [],
@@ -393,6 +399,26 @@ export async function readState(o = {}, deps = {}) {
     next,
     complete: steps.every((x) => x.state === "done" || x.state === "optional"),
   };
+}
+
+/** The account has a plan (paid, in its trial, a grant) or, as far as the command goes, a paying team. */
+export const accountPaid = (me) => !!me && (me.cli ? me.cli.paid : !!me.plan && me.plan.id !== "free");
+
+/**
+ * What one app's plan page is for, from the account's overview: null when the app has nothing to choose there (no
+ * such app, a team's app, a choice made and covered, a server that sells nothing). Else the offer the page shows:
+ * `current` (the plan that covers it: Continue), `needs` (past the apps its plan covers), `paying` (the account has
+ * a plan), and the page itself as `checkoutUrl`.
+ * @param {object | null} app the app as the overview lists it (api.mjs withPlan)
+ * @param {object | null} accountOffer the overview's `offer` (the account on Free)
+ * @param {boolean} paying accountPaid
+ */
+export function appPlanOffer(app, accountOffer, paying) {
+  if (!app || app.shared || !app.plan || !app.planUrl || (app.planChosen && !app.needsPlan)) return null;
+  const covered = !!app.plan.source && !app.needsPlan;
+  if (!covered && !accountOffer && !paying) return null;
+  const base = accountOffer ?? { plan: { name: "Pro" }, price: "", summary: null, features: [], free: { name: "Free", apps: null } };
+  return { ...base, checkoutUrl: `${app.planUrl}&from=cli`, project: { id: app.id, name: app.name, token: app.token }, needs: app.needsPlan === true, current: covered ? app.plan.name : null, paying: !!paying };
 }
 
 /** The plan of the app with `token` (plans are per project), else the account's: what a header shows. */

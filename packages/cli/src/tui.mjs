@@ -181,10 +181,10 @@ export function proBox(what, lock = {}) {
   if (lock.upgradeUrl) out(`    ${c.cyan(clean(lock.upgradeUrl, 200))}`);
 }
 
-export function planCard(offer, app) {
+export function planCard(offer, app, heading = null) {
   const inner = width() - 6;
   const B = unicode ? { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" } : { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" };
-  const title = ` ${c.bold(app ? `A plan for ${clean(app, 30)}` : "A plan for this project")} `;
+  const title = ` ${c.bold(heading ? clean(heading, 50) : app ? `A plan for ${clean(app, 30)}` : "A plan for this project")} `;
   const row = (text = "") => out(`  ${brand(B.v)}   ${text}${" ".repeat(Math.max(0, inner - 3 - visible(text)))}${brand(B.v)}`);
   const room = inner - 6;
   out();

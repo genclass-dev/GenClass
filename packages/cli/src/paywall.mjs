@@ -1,0 +1,156 @@
+// The genclass command is Pro's (the owner's call, 2026-11-13: "let's make the entire CLI paid"). Every command but
+// the sign-in's, the plan's, help and remove asks genclass.dev first whether the account has Pro (paid, in its
+// trial, GenClass's grant, or a place in a paying team) and, without it, shows the one way on: Pro, its free trial
+// first (the card is asked for up front, on Stripe), started in the browser. There is no Free in the terminal: the
+// website keeps Free.
+//
+// Invariants:
+// - Signed out, the sign-in comes first and the plan right after it: the first thing a new person does is sign in
+//   and start the trial.
+// - The answer is genclass.dev's (`cli` in GET /api/cli/overview, api.mjs cliOf). A server that does not say (an
+//   older or self-hosted one) locks nothing, and neither does one that cannot be reached: its own routes refuse
+//   what is Pro's (402) when it is back.
+// - The command never says to go back to the terminal: it opens the checkout, waits for the payment itself and goes
+//   on with the command that was asked for.
+// - Without a terminal (--yes, --json, a coding agent) nothing is opened and nothing waits: one line with the
+//   checkout address, and exit code 1.
+// - Asked once per process: once Pro is seen, the home's commands (home.mjs) go on without asking again.
+
+import { readCredentials } from "../../runtime/bin/lib/account.mjs";
+import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
+import { fetchOverview } from "./api.mjs";
+import { clean, note, planCard, PROMPT, typed, warn } from "./tui.mjs";
+
+let seen = false;
+
+/** For tests: forget that Pro was seen in this process. */
+export const forgetPro = () => {
+  seen = false;
+};
+
+/**
+ * What the paywall shows for an account without Pro: the server's plan card (its offer, in genclass.dev's words)
+ * with the trial and checkout of `cli`.
+ * @param {{ plan: string, price: string | null, trialDays: number | null, checkoutUrl: string }} cli
+ * @param {object | null} offer the overview's `offer` (api.mjs offerOf), for the summary and the lines of the card
+ */
+export function proOffer(cli, offer) {
+  return {
+    plan: { name: cli.plan },
+    price: cli.price ?? offer?.price ?? "",
+    summary: offer?.summary ?? null,
+    features: offer?.features ?? [],
+    trialDays: cli.trialDays,
+    checkoutUrl: cli.checkoutUrl,
+  };
+}
+
+/** The one line the command says without a terminal, and after a stop: what it needs and where it starts. */
+export function proLine(cli) {
+  const start = cli.trialDays ? `start your ${cli.trialDays}-day free trial` : `start ${clean(cli.plan, 20)}`;
+  return `The genclass command comes with ${clean(cli.plan, 20)}${cli.price ? ` (${clean(cli.price, 40)})` : ""}: ${start} at ${cli.checkoutUrl}`;
+}
+
+/**
+ * The paywall, on a terminal: the card, then one question. Enter opens the checkout (genclass.dev sends the person
+ * straight to Stripe, the trial first) and waits for the payment; q stops. Without a terminal it prints proLine and
+ * opens nothing. Returns whether the account has Pro now.
+ * @param {{ plan: string, price: string | null, trialDays: number | null, checkoutUrl: string }} cli
+ * @param {object | null} offer
+ * @param {{ yes?: boolean, json?: boolean, noBrowser?: boolean, card?: boolean }} o  `card`: the card without a terminal too
+ * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
+ */
+export async function startPro(cli, offer, o = {}, deps = {}) {
+  const card = proOffer(cli, offer);
+  const heading = cli.trialDays ? `Start your ${cli.trialDays}-day free trial` : `genclass comes with ${clean(cli.plan, 20)}`;
+  if (o.yes || o.json || !interactive()) {
+    if (o.json) out(JSON.stringify({ ok: false, needs_pro: true, plan: cli.plan, price: cli.price, trial_days: cli.trialDays, checkout_url: cli.checkoutUrl }));
+    else {
+      // `genclass plan` and `upgrade` show the card all the same: it is what they are for
+      if (o.card && card.features.length) planCard(card, null, heading);
+      out();
+      warn(proLine(cli));
+    }
+    return false;
+  }
+  planCard(card, null, heading);
+  note(
+    cli.trialDays
+      ? `Every genclass command comes with ${clean(cli.plan, 20)}. ${cli.trialDays} days free, then ${clean(card.price, 40)}: your card is asked for on Stripe, and nothing is charged if you cancel before the trial ends.`
+      : `Every genclass command comes with ${clean(cli.plan, 20)}, ${clean(card.price, 40)}, paid on Stripe.`,
+  );
+  out();
+  const dot = c.gray("·");
+  const a = await typed(`  ${PROMPT()} ${c.bold("Enter")} ${c.gray(cli.trialDays ? "to start the free trial" : `to start ${clean(cli.plan, 20)}`)} ${dot} ${c.bold("q")} ${c.gray("stop")}  `);
+  if (a === null || /^q/i.test(a)) {
+    out();
+    note(proLine(cli));
+    return false;
+  }
+  const { checkout } = await import("./actions.mjs");
+  if (await checkout({ ...card, pro: true }, o, deps)) return true;
+  note(`${clean(cli.plan, 20)} starts the moment the payment goes through; npx genclass goes on from there.`);
+  return false;
+}
+
+/**
+ * The gate every command but cli.mjs FREE_COMMANDS passes first. Signed out: the sign-in (on a terminal), then the plan.
+ * Returns 0 when the command may run, else the exit code to end with (1).
+ * @param {{ yes?: boolean, json?: boolean, noBrowser?: boolean }} o
+ * @param {{ fetchFn?: typeof fetch, signIn?: (o: object) => Promise<string>, waitMs?: number, everyMs?: number }} [deps]
+ */
+export async function requirePro(o = {}, deps = {}) {
+  if (seen) return 0;
+  let creds = readCredentials();
+  if (!creds) {
+    if (o.yes || o.json || !interactive()) {
+      if (o.json) out(JSON.stringify({ ok: false, signed_in: false, needs_pro: true, run: "npx genclass login" }));
+      else {
+        out();
+        warn("Sign in first: npx genclass login. The genclass command comes with Pro; its free trial starts right after the sign-in.");
+      }
+      return 1;
+    }
+    out();
+    note("Sign in to genclass.dev first. Pro, with its free trial, comes right after.");
+    const signIn = deps.signIn ?? (await import("./actions.mjs")).signIn;
+    if ((await signIn(o)) !== "done") return 1;
+    creds = readCredentials();
+    if (!creds) return 1;
+  }
+  const me = await fetchOverview(creds, deps);
+  // a server that cannot be reached, or one that does not say, locks nothing here (its own routes still do)
+  if (!me.ok || !me.cli || me.cli.paid) {
+    if (me.ok && me.cli?.paid) seen = true;
+    return 0;
+  }
+  if (await startPro(me.cli, me.offer ?? null, o, deps)) {
+    seen = true;
+    out();
+    return 0;
+  }
+  return 1;
+}
+
+/**
+ * After `genclass login`: Pro comes right after the sign-in. An account with it hears so in one line; one without it
+ * sees the paywall (startPro). Never changes the login's exit code. Returns whether the account has Pro now (true
+ * too when the server does not say or cannot be reached: nothing is locked then).
+ */
+export async function afterLogin(o = {}, deps = {}) {
+  const creds = readCredentials();
+  if (!creds) return false;
+  const me = await fetchOverview(creds, deps);
+  if (!me.ok || !me.cli) return true;
+  if (me.cli.paid) {
+    seen = true;
+    if (!o.json) note(`${clean(me.plan && me.plan.id !== "free" ? me.plan.name : "Pro", 20)} is on: every genclass command works. Next: npx genclass`);
+    return true;
+  }
+  if (await startPro(me.cli, me.offer ?? null, o, deps)) {
+    seen = true;
+    note("Next: npx genclass");
+    return true;
+  }
+  return false;
+}

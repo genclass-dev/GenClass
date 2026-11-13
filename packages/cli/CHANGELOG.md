@@ -2,15 +2,24 @@
 
 ## 0.3.7
 
-- **Every new app has its plan chosen right away.** `login`, `connect` and `init` (from the home prompt too) and
-  `apps new` open the app's plan page in the browser once it is in the account, and wait for the choice: Pro, with 3
-  days free, or Free with a reason. Before, only the guided setup did, so an app connected another way stayed on Free
-  without anyone choosing.
-- Opening an app with no plan chosen (`dashboard`, `problems`, ...) asks for its plan first, as its page on
-  genclass.dev does.
-- The header shows this folder's app's plan, not the best plan of the account. `profile` and `plan` say "no plan
-  chosen" for an app that has none.
-- The note under a dashboard link says what Free shows (the totals) and what comes with Pro.
+The genclass command comes with Pro:
+
+- **Pro right after the sign-in.** An account without Pro (paid, in its trial, GenClass's grant, or a place in a
+  paying team) sees Pro's card next, and Enter opens its checkout in the browser: 3 days free, the card asked for on
+  Stripe, then $15 a developer a month. The command waits for the payment and goes on with what was asked. There is
+  no Free in the terminal: Free stays on the website (one app and its totals).
+- **Every command asks first**, except `login`, `logout`, `whoami`, `plan`, `upgrade`, `profile`, `status`, `remove`,
+  `help` and `version`. Signed out, the sign-in comes first and Pro right after it. Without a terminal (`--yes`,
+  `--json`, a coding agent) nothing is opened: one line with the checkout address, and exit code 1. genclass.dev
+  answers 402 to the command's other routes for an account without Pro, and every command says the same line then.
+- **Pro is for the account**, per developer, for up to 3 apps (genclass.dev's plans version 5). Free covers one
+  app. `plan`, `profile` and `upgrade` show Pro's card and its trial; an app past the 3 says more apps come with
+  Enterprise, by email.
+- **Every new app has its plan page once.** `login`, `connect`, `init` and `apps new` open it once the app is in the
+  account: Continue with Pro for an account that has it, or what the app needs. The walk has it as its own step,
+  after the runtime.
+- The header shows this folder's app's plan. The note under a dashboard link says what Free shows (the totals) and
+  what comes with Pro.
 
 ## 0.3.6
 

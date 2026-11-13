@@ -317,7 +317,7 @@ async function chooseFree(c: C, f: Fetch, id: string): Promise<Response> {
   const p = await ownedProject(c, a.account.id, id);
   if (!p || !p.id) return fail(404, "not found");
   const access = await projectAccess(c.db, p, c.env, c.now);
-  if (access.locked) return fail(409, `Free covers ${FREE.limits.apps ?? 3} projects, and this one is past them: it needs a paid plan`);
+  if (access.locked) return fail(409, access.locked === "pro_apps" ? "your plan covers no more apps: more apps come with Enterprise" : `Free covers ${FREE.limits.apps === 1 ? "one app" : `${FREE.limits.apps ?? 1} apps`}, and this one is past it: it needs a paid plan`);
   const at = c.now.toISOString();
   await c.db.batch([
     c.db.prepare("INSERT INTO plan_feedback (account_id, project_id, reason, note, created) VALUES (?, ?, ?, ?, ?)").bind(a.account.id, p.id, reason[0], note || null, at),

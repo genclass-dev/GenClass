@@ -268,7 +268,7 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
     expect(status).toContain("GenClass");
     expect(status).toContain("shop");
     expect(status).toContain("Next  Sign in");
-    expect(status).toContain("Later    Runtime");
+    expect(status).toContain("Later    Pro • Runtime");
     expect(status).toContain("Every part: npx genclass status --all");
     // the full list on request: every part of GenClass by name
     const all = execFileSync(process.execPath, [main, "status", "--all", "--cwd", dir], { env, encoding: "utf8" });

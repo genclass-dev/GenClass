@@ -82,7 +82,7 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, PLANS_FILE, problemsLock, projectAccess, viewRanges } from "./plans.js";
 import { activeOwners, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
 import {
@@ -2147,13 +2147,18 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
 }
 
 /**
- * The answer to a stats request for an app whose plan has no dashboard: a project past the ones Free covers (it waits
- * for a plan of its own: `upgrade_url` opens that project's plan page), or a plan file without dashboards.
+ * The answer to a stats request for an app whose plan has no dashboard: an app past the ones its account's plan covers
+ * (past Free's: it needs Pro; past Pro's: Enterprise, by email; `upgrade_url` opens the app's plan page, which says
+ * which), or a plan file without dashboards.
  */
-export function lockedJson(c: { cfg: AuthConfig; env: Env }, access?: { locked?: string } | null, projectId?: string | null): Response {
-  if (access?.locked === "free_projects" && projectId) {
+export function lockedJson(c: { cfg: AuthConfig; env: Env }, access?: { locked?: string; apps?: number | null } | null, projectId?: string | null): Response {
+  if ((access?.locked === "free_projects" || access?.locked === "pro_apps") && projectId) {
     const url = `${c.cfg.origin}/account/billing?project=${encodeURIComponent(projectId)}`;
-    return json(402, { ok: false, error: `Free covers ${FREE.limits.apps} projects, and this one is past them: it needs a plan of its own; choose it at ${url}`, locked: true, needs_plan: true, upgrade_url: url });
+    const covers = (n: number | null | undefined) => (n === 1 ? "one app" : `${n ?? "its"} apps`);
+    const error = access.locked === "free_projects"
+      ? `Free covers ${covers(FREE.limits.apps)}, and this one is past it: it needs ${PAID_PLANS[0]?.name ?? "a paid plan"}; start it at ${url}`
+      : `your plan covers ${covers(access.apps)}, and this one is past them: more apps come with Enterprise (${PLANS_FILE.contact}); see ${url}`;
+    return json(402, { ok: false, error, locked: true, needs_plan: true, upgrade_url: url });
   }
   const url = `${c.cfg.origin}/account/billing`;
   return json(402, { ok: false, error: lockedError(c.env), locked: true, upgrade_url: url });

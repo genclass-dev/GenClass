@@ -1,7 +1,8 @@
 // The routes the `genclass` command asks (packages/cli/src/api.mjs is the client). Checked before the account routes.
 //
 //   GET  /api/cli/overview              the account, its plan, its apps, what suggestions it has left today, and
-//                                       for an account on Free the plan it can start (the command's plan step)
+//                                       for an account on Free the plan it can start (the command's plan step);
+//                                       `cli`: whether the command works for it (it is Pro's) and where Pro starts
 //   GET  /api/cli/github?repo=o/n       what genclass-dev[bot] is doing on one repository, from the account's own answer
 //   POST /api/cli/suggest               the plan for the checks that failed on an app (src/suggest.ts)
 //   GET  /api/cli/app?id=<app>&range=7d the app's dashboard as data: what the browser dashboard reads (`genclass dashboard`,
@@ -19,6 +20,10 @@
 //   POST /api/cli/ask                   a question about an app, answered by the model from its numbers (src/ask.ts)
 //
 // Invariants:
+// - The genclass command is Pro's (the owner's call, 2026-11-13): a CLI session of an account with neither a plan
+//   (paid, in its trial, or GenClass's grant) nor an active place in a team that has one gets 402 `needs_pro` from
+//   every route but the overview and the account (cliPaid). Nothing is locked where nothing is sold to the account,
+//   with PLAN_GATES open, or for a browser session: the website keeps Free.
 // - Every route needs a signed-in account: the CLI's session (a bearer token from `genclass login`) or, for the
 //   first three GETs, the browser session. Every other route takes the CLI's session only, so no page can make a
 //   signed-in browser spend an account's runs or change its settings through them.
@@ -53,10 +58,41 @@ import { json } from "./http.js";
 import { accountAccess, accountBilling, accountProjectsAccess, canBuy, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
 import { liveFixUsage } from "./usage.js";
 import { appKey, askModel, byWeight, claimRun, hasModel, keepAnswer, lastAnswer, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem, type SuggestAnswer } from "./suggest.js";
-import { createInvite, isTeamError, membershipsOf, teamOf } from "./team.js";
+import { activeOwners, createInvite, isTeamError, membershipsOf, teamOf } from "./team.js";
 
 /** A repository's full name as GitHub writes one. */
 const FULL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$/;
+
+// ------------------------------------------------------------------------- the genclass command is Pro's
+
+/**
+ * The genclass command works for this session (the owner's call, 2026-11-13: "let's make the entire CLI paid"): a
+ * browser session always; a CLI session when the account has a plan of its own (paid, in its trial, or GenClass's
+ * grant) or an active place in a team that has one, and wherever nothing is sold to the account (no plan on sale, no
+ * Stripe key, a test key and an account not on its list). PLAN_GATES open gives every account the grant.
+ */
+export async function cliPaid(c: C, a: Auth): Promise<boolean> {
+  if (a.via !== "bearer" || !PAID_PLANS.length || !canBuy(c.env, a.account)) return true;
+  if ((await accountAccess(c.db, a.account.id, c.env, c.now)).source !== null) return true;
+  for (const owner of await activeOwners(c.db, c.env, a.account.id, c.now)) {
+    if ((await accountAccess(c.db, owner, c.env, c.now)).source !== null) return true;
+  }
+  return false;
+}
+
+/**
+ * What the command says about itself (`cli` in the overview and the account): `paid`, and for an account without
+ * Pro the plan, its price, the trial it has left and the page that opens its checkout at once (the account's, so a
+ * new account with no app goes straight to Stripe).
+ */
+async function cliJson(c: C, a: Auth): Promise<{ paid: true } | { paid: false; plan: string; price: string; trial_days: number | null; checkout_url: string }> {
+  if (await cliPaid(c, a)) return { paid: true };
+  const plan = PAID_PLANS[0]!;
+  return { paid: false, plan: plan.name, price: priceText(plan), trial_days: (await trialFor(c.db, a.account.id, plan)) || null, checkout_url: `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1` };
+}
+
+/** The routes that are Pro's for a CLI session: all but the overview and the account. */
+const PRO_ROUTE_RE = /^\/api\/cli\/(?:github|suggest|app|team\/invite|connections(?:\/[a-z]+(?:\/test)?)?|events|funnels|link|ask)$/;
 
 async function overview(c: C): Promise<Response> {
   const a = await authenticate(c);
@@ -72,6 +108,7 @@ async function overview(c: C): Promise<Response> {
     github: { app: gh !== null, install_url: gh ? `${c.cfg.origin}/github/install` : null, connect_url: gh?.clientId ? `${c.cfg.origin}/github/connect` : null },
     billing_url: `${c.cfg.origin}/account/billing`,
     offer: await offerFor(c, a.account, access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
+    cli: await cliJson(c, a),
   });
 }
 
@@ -268,6 +305,7 @@ async function account(c: C): Promise<Response> {
     },
     billing_url: `${c.cfg.origin}/account/billing`,
     offer: await offerFor(c, a.account, access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
+    cli: await cliJson(c, a),
   });
 }
 
@@ -363,6 +401,14 @@ export async function routeCli(request: Request, url: URL, path: string, env: En
   const m = request.method;
   const get = m === "GET" || m === "HEAD";
   if (path === "/api/cli/overview") return get ? overview(c) : fail(405, "method not allowed");
+  // every other route is Pro's for a CLI session (cliPaid); the account's stays open, to say where Pro starts
+  if (PRO_ROUTE_RE.test(path)) {
+    const who = await authenticate(c);
+    if (who) {
+      const cli = await cliJson(c, who);
+      if (!cli.paid) return json(402, { ok: false, error: `the genclass command comes with ${cli.plan}${cli.trial_days ? `, ${cli.trial_days} days free` : ""}: ${cli.checkout_url}`, needs_pro: true, ...cli });
+    }
+  }
   if (path === "/api/cli/github") return get ? github(c) : fail(405, "method not allowed");
   if (path === "/api/cli/suggest") return m === "POST" ? suggest(c) : fail(405, "method not allowed");
   if (path === "/api/cli/app") return get ? app(c) : fail(405, "method not allowed");

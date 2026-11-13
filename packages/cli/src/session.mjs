@@ -6,11 +6,13 @@
 //   told so and, with someone at the terminal, signed in once more on the spot (one approval in the browser), then
 //   the same request is made again. Nothing is retried otherwise.
 // - No dead end: every refusal names the next step, as a command that runs as typed or an address to open. When
-//   the plan is why, it names the plan and the command that starts it.
+//   the plan is why, it names the plan and the command that starts it; when the account has no Pro (the genclass
+//   command is Pro's), the checkout of its free trial.
 
 import { readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { signIn } from "./actions.mjs";
+import { proLine } from "./paywall.mjs";
 import { bad, clean, note, proBox, typed, warn } from "./tui.mjs";
 
 /**
@@ -40,6 +42,17 @@ export async function asking(o, creds, call, deps = {}) {
  *   `what`: the thing in a few words, capitalised ("Sending alerts"); `command`: what was typed after `genclass`
  */
 export function refused(r, ctx) {
+  // the genclass command is Pro's (paywall.mjs): the one way on, whatever was asked
+  if (r.needsPro) {
+    if (ctx.json) out(JSON.stringify({ ok: false, error: "the genclass command comes with Pro", needs_pro: true, checkout_url: r.needsPro.checkoutUrl, trial_days: r.needsPro.trialDays, run: "npx genclass upgrade" }));
+    else {
+      out();
+      warn(proLine(r.needsPro));
+      out(`  ${c.gray("Start it here")}  ${c.cyan("npx genclass upgrade")}`);
+      out();
+    }
+    return 1;
+  }
   if (ctx.json) {
     out(JSON.stringify({ ok: false, error: r.reauth ? "sign in again" : r.upgradeUrl ? "not in this plan" : r.missing ? "this genclass.dev has no such route" : r.reason, ...(r.reauth ? { run: "npx genclass login" } : {}), ...(r.upgradeUrl ? { upgrade_url: r.upgradeUrl, run: "npx genclass plan" } : {}) }));
     return 1;
