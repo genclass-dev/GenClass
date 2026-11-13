@@ -212,9 +212,14 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     // the invite the server refuses says the same, and upgrade says there is nothing to upgrade, with the seats
     const no = await said(() => team({ ...me.o, args: ["invite"] }, me.deps));
     expect(no.code).toBe(1);
-    expect(flat(no.text)).toContain("Add seats in Manage billing");
+    // genclass.dev's own words since #231 ("add a seat for each member in Manage billing"), or the command's
+    expect(flat(no.text)).toMatch(/add (seats|a seat for each member) in Manage billing/i);
+    expect(flat(no.text)).toContain(`${HOST}/account/billing`);
     expect(flat(no.text)).not.toContain("A team comes with Pro");
-    expect(JSON.parse((await said(() => team({ ...me.o, args: ["invite"], json: true }, me.deps))).text)).toMatchObject({ ok: false, error: "every seat is taken: add seats in Manage billing", billing_url: `${HOST}/account/billing` });
+    const nj = JSON.parse((await said(() => team({ ...me.o, args: ["invite"], json: true }, me.deps))).text);
+    expect(nj).toMatchObject({ ok: false });
+    expect(nj.error).toMatch(/Manage billing/);
+    expect(nj.needs_pro).toBeUndefined();
     const u = flat((await said(() => upgrade(me.o, me.deps))).text);
     expect(u).toContain("You are on Pro: there is nothing to upgrade.");
     expect(u).toContain("More people on it: add seats in Manage billing");
