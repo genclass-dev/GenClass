@@ -1022,8 +1022,11 @@ export function stripProblems(s: Stats, lock: NonNullable<StatsLock["problems"]>
   return {
     ...s,
     breakdowns: Object.fromEntries(Object.entries(s.breakdowns).filter(([k]) => k.startsWith("ix_"))),
-    // the chart keeps its bars, one kind: how many, not which
+    // the charts keep their bars, one kind each: how many, not which
     typeSeries: s.typeSeries.map((b) => ({ bucket: b.bucket, counts: { problems: Object.values(b.counts).reduce((x, y) => x + y, 0) } })),
+    checkSeries: s.checkSeries.map((b) => ({ bucket: b.bucket, counts: { checks: Object.values(b.counts).reduce((x, y) => x + y, 0) } })),
+    // the agent's counts stay; what it found and its log (kinds and pages) are Pro's
+    agent: { ...s.agent, findings: [], log: [] },
     recent: [],
     locked: { ...(s.locked ?? { analytics: undefined as never }), problems: lock } as StatsLock,
   };

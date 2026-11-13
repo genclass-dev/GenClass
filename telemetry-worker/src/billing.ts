@@ -3,7 +3,7 @@
 //   POST /api/billing/checkout {plan: "<id>", seats?}   browser session + Origin; {url} of Stripe Checkout (with
 //                                                       switch: true when it replaces the plan already paid); `seats`
 //                                                       (1 to 200, default 1) for a plan sold per seat (Team)
-//   POST /api/billing/trial                            410: GenClass has no trial any more (the dashboard is free)
+//   POST /api/billing/trial                            410: the trial of 2026-10 is gone; Pro's trial starts at Checkout
 //   POST /api/billing/portal                           browser session + Origin; {url} of the Billing Portal
 //   POST /api/billing/webhook                          Stripe only: signature, no session (src/stripe.ts)
 //   GET  /api/billing                                  browser session; the plan and the subscription
@@ -65,6 +65,7 @@ import {
   modeNote,
   notifyOwner,
   customerSubscriptions,
+  openTrialElsewhere,
   portalSession,
   sharedCustomer,
   StripeError,
@@ -147,7 +148,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
     case "/api/billing/portal":
       return m === "POST" ? portal(c, f) : method();
     case "/api/billing/trial":
-      return m === "POST" ? fail(410, `GenClass has no trial any more: the dashboard is free; see ${c.cfg.origin}/account/billing`) : method();
+      return m === "POST" ? fail(410, `a trial starts at Checkout, on an app's plan page: ${c.cfg.origin}/account/billing`) : method();
     case "/account/trial":
       // genclass.dev's pricing page linked here until 2026-10-19 (bookmarks, caches): the account page
       return get ? redirect((await webSession(c)) ? "/account" : `/signup?next=${encodeURIComponent("/account")}`) : method();
@@ -227,6 +228,8 @@ export async function routeBilling(request: Request, url: URL, path: string, env
         const open = (await accountProjectsAccess(c.db, a.account.id, env, c.now)).find((x) => x.row.id && x.access.plan.id === FREE.id && x.access.source === null && !x.access.locked)
           ?? (await accountProjectsAccess(c.db, a.account.id, env, c.now)).find((x) => x.row.id && x.access.locked);
         if (open) return redirect(`/account/billing?project=${encodeURIComponent(open.row.id!)}${go ? "&from=cli" : ""}`);
+        // no app yet (the pricing page's trial button, from a new account): make one first; its plan page follows
+        if (go && !(await accountProjects(c, a.account.id)).some((x) => x.account_id === a.account.id)) return redirect("/account/new");
       }
       const access = await accountAccess(c.db, a.account.id, env, c.now);
       const apps = (await accountProjects(c, a.account.id)).map((p) => ({ id: p.id!, name: p.name }));
@@ -447,12 +450,6 @@ async function portal(c: C, f: Fetch): Promise<Response> {
 }
 
 /**
- * Checkout for one project: the project must be the account's and not already on that plan; the Stripe customer is
- * the account's own (the same checks as the account's checkout: GenClass's, holding nothing else). One subscription
- * of quantity 1 per project, its metadata naming the project (src/stripe.ts checkoutSession, applyProjectSubscription);
- * the account's other subscriptions are never touched.
- */
-/**
  * The days free a purchase of `plan` starts with: the plan's trial_days (Pro: 3) for an account that has never had a
  * subscription, none of its apps and not the account (D1), and none on its Stripe customer (`stripeSubs`, any
  * status, when the caller has asked Stripe); else 0. One trial per account: a cancelled trial does not start another.
@@ -468,6 +465,12 @@ export async function trialFor(db: D1Like, accountId: string, plan: Plan, stripe
   return Number(r?.n ?? 1) ? 0 : days;
 }
 
+/**
+ * Checkout for one project: the project must be the account's and not already on that plan; the Stripe customer is
+ * the account's own (the same checks as the account's checkout: GenClass's, holding nothing else). One subscription
+ * of quantity 1 per project, its metadata naming the project (src/stripe.ts checkoutSession, applyProjectSubscription);
+ * the account's other subscriptions are never touched. The first one starts with the plan's trial (trialFor).
+ */
 async function checkoutProject(c: C, f: Fetch, a: Auth, plan: Plan, projectId: string): Promise<Response> {
   const p = await ownedProject(c, a.account.id, projectId);
   if (!p || !p.id) return fail(404, "not found");
@@ -491,7 +494,9 @@ async function checkoutProject(c: C, f: Fetch, a: Auth, plan: Plan, projectId: s
       if (subs.some((s) => projectOf(s) === p.id && HOLDING_STATUSES.has(s.status))) return fail(409, `a plan for ${p.name} is already going through; reload this page in a minute`);
     }
     const subs = customer.fresh ? [] : await customerSubscriptions(c.env, f, customer.id).catch(() => [{}]);
-    const trialDays = await trialFor(c.db, a.account.id, plan, subs.length);
+    // one trial per account: none when another project's open Checkout already holds it
+    const elsewhere = customer.fresh ? false : await openTrialElsewhere(c.env, f, customer.id, a.account.id, p.id).catch(() => true);
+    const trialDays = elsewhere ? 0 : await trialFor(c.db, a.account.id, plan, subs.length);
     const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, project: { id: p.id }, trialDays });
     return json(200, { url, trial_days: trialDays || null });
   } catch (e) {

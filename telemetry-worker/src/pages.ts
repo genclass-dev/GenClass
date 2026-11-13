@@ -1759,7 +1759,7 @@ const DASH_JS = `
     ["found", "possible-s", "where", "recent-s", "advisor", "adv-s", "fixall2"].forEach(function(id){ var e = document.getElementById(id); if (e) e.classList.add("hidden"); });
     var h = document.getElementById("advn"); if (h && h.parentNode) h.parentNode.classList.add("hidden");
     var m = document.getElementById("prolockmsg"), a = document.getElementById("prolocka"), plan = lock.plan || "Pro";
-    if (m) m.textContent = "Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with " + plan + "." + (lock.trial_days ? " " + lock.trial_days + " days free, then cancel any time." : "");
+    if (m) m.textContent = "Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with " + plan + "." + (lock.trial_days ? " " + lock.trial_days + " days free, then " + (lock.price || "the monthly price") + ". Cancel any time." : "");
     if (a) {
       if (typeof lock.upgrade_url === "string" && lock.upgrade_url.indexOf("https://") === 0) a.href = lock.upgrade_url;
       var t = a.querySelector("span"); if (t) t.textContent = lock.trial_days ? "Start your " + lock.trial_days + "-day free trial" : "Upgrade to " + plan;
@@ -2369,8 +2369,10 @@ const DASH_JS = `
     var B2 = S.breakdowns, T2 = S.totals;
     function put(id, t){ var n = document.getElementById(id); if (n) n.textContent = t; }
     put("c-trend", fmt(problemsOf(S)));
-    put("c-found", String(problemList(S).length));
-    put("c-pages", String(problemPages(S)));
+    // Free has the totals only: no count that would read as "no problems" next to a view it does not have
+    var lockedP = !!(S.locked && S.locked.problems);
+    put("c-found", lockedP ? "" : String(problemList(S).length));
+    put("c-pages", lockedP ? "" : String(problemPages(S)));
     put("c-did", fmt((T2.interventions || 0) + (map(B2.check_fix).applied || 0)));
   }
 

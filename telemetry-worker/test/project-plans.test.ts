@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTokenCache } from "../src/dashboard.js";
 import { resetOwnerCache } from "../src/paid.js";
 import { accountWide, FREE, priceText, PLANS } from "../src/plans.js";
-import { FREE_REASONS } from "../src/billing.js";
+import { FREE_REASONS, trialFor } from "../src/billing.js";
 import { FREE_REASONS_SHOWN } from "../src/billing-pages.js";
 import { resetStripeCache } from "../src/stripe.js";
 import { monthOf, OBSERVE_HEADER, resetUsageCache } from "../src/usage.js";
@@ -67,7 +67,8 @@ describe("checkout for one project (POST /api/billing/checkout { plan, project_i
     const b = await buyer();
     const none = await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team" }, cookie: b.cookie, fetch: b.s.fetch });
     expect(none.status).toBe(400);
-    expect((await none.json() as any).error).toBe("the Team plan is bought for one project: send project_id");
+    // the plan id stays team; its name is Pro since 2026-11-12
+    expect((await none.json() as any).error).toBe("the Pro plan is bought for one project: send project_id");
     const other = await signedIn(b.env, "bob@example.com");
     const theirs = await createApp(b.env, other.cookie, "Theirs");
     expect((await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: theirs.id }, cookie: b.cookie, fetch: b.s.fetch })).status).toBe(404);
@@ -102,6 +103,111 @@ describe("checkout for one project (POST /api/billing/checkout { plan, project_i
   });
 });
 
+describe("Pro's trial: 3 days free at Checkout, once per account (src/billing.ts trialFor, the owner's decision of 2026-11-12)", () => {
+  const sessionsOf = (s: ReturnType<typeof fakeStripe>) => s.calls.filter((c) => c.method === "POST" && c.url.pathname === "/v1/checkout/sessions").map((c) => c.form!);
+  const checkout = (b: Awaited<ReturnType<typeof buyer>>, projectId: string) => call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: projectId }, cookie: b.cookie, fetch: b.s.fetch });
+
+  it("the first purchase starts with 3 days free; once a project of the account has had a subscription, no purchase does", async () => {
+    const b = await buyer();
+    const first = await checkout(b, b.shop.id);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ url: expect.stringMatching(/^https:\/\/checkout\.stripe\.com\//), trial_days: 3 });
+    const [form] = sessionsOf(b.s);
+    expect(form!.get("subscription_data[trial_period_days]")).toBe("3");
+    // the card is taken at Checkout, and the "Add promotion code" field is there
+    expect(form!.get("payment_method_collection")).toBe("always");
+    expect(form!.get("allow_promotion_codes")).toBe("true");
+    // the shop's Checkout is completed (Stripe closes the page) and its subscription is written by the webhook: the
+    // account has had one now
+    b.s.sessions.get("cs_test_000001")!.status = "complete";
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const sub = projectSub("sub_shop000001", b.account.id, "cus_ada0000001", b.shop.id);
+    b.s.subs.set(sub.id, sub);
+    expect(await json(deliver(b.env, stripeEvent("customer.subscription.created", sub), b.s.fetch))).toEqual({ received: true, result: "applied" });
+    const second = await checkout(b, b.blog.id);
+    expect(second.status).toBe(200);
+    expect((await second.json() as any).trial_days).toBeNull();
+    expect(sessionsOf(b.s)[1]!.has("subscription_data[trial_period_days]")).toBe(false);
+    expect(sessionsOf(b.s)[1]!.get("allow_promotion_codes")).toBe("true");
+    // the blog's plan page offers Pro, not a trial
+    const page = await text(call(b.env, "GET", `/account/billing?project=${b.blog.id}`, { cookie: b.cookie }));
+    expect(page).toContain('data-plan="team" data-pick><span>Start Pro for Blog</span>');
+    expect(page).not.toContain("free trial");
+    expect(page).not.toContain('class="trialnote"');
+    // a cancelled subscription does not start another trial: the project keeps its subscription id
+    const ended = projectSub("sub_shop000001", b.account.id, "cus_ada0000001", b.shop.id, "canceled");
+    b.s.subs.set(ended.id, ended);
+    expect((await json(deliver(b.env, stripeEvent("customer.subscription.deleted", ended), b.s.fetch))).result).toBe("applied");
+    const again = await json(checkout(b, b.shop.id));
+    expect(again.trial_days).toBeNull();
+    expect(sessionsOf(b.s)[2]!.has("subscription_data[trial_period_days]")).toBe(false);
+    log.mockRestore();
+  });
+
+  it("a Stripe customer that has had any subscription gets no trial, though nothing of it is in the database; a new customer does", async () => {
+    const b = await buyer();
+    // a subscription the webhook never wrote here (a project since deleted, say), cancelled long ago
+    const old = projectSub("sub_gone000001", b.account.id, "cus_ada0000001", "gone_project_01", "canceled");
+    b.s.subs.set(old.id, old);
+    expect(b.sql.rows("SELECT subscription_id FROM projects WHERE subscription_id IS NOT NULL")).toEqual([]);
+    const r = await checkout(b, b.shop.id);
+    expect(r.status).toBe(200);
+    expect((await r.json() as any).trial_days).toBeNull();
+    expect(sessionsOf(b.s)[0]!.has("subscription_data[trial_period_days]")).toBe(false);
+    // an account without a Stripe customer yet: one is made, and its first purchase has the trial
+    const t = setup(LIVE);
+    const a = await signedIn(t.env, "new@example.com");
+    const app = await createApp(t.env, a.cookie, "Fresh");
+    const s = fakeStripe();
+    const fresh = await call(t.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: app.id }, cookie: a.cookie, fetch: s.fetch });
+    expect(fresh.status).toBe(200);
+    expect((await fresh.json() as any).trial_days).toBe(3);
+    expect(sessionsOf(s)[0]!.get("subscription_data[trial_period_days]")).toBe("3");
+  });
+
+  it("one trial per account: while one project's Checkout holds the trial, another project's starts without one; a page is reused only with the same trial", async () => {
+    const b = await buyer();
+    const first = await checkout(b, b.shop.id);
+    expect((await first.json() as any).trial_days).toBe(3);
+    expect(sessionsOf(b.s)[0]!.get("metadata[genclass_trial]")).toBe("3");
+    // the shop's page is still open: the blog's starts without a trial
+    const second = await checkout(b, b.blog.id);
+    expect((await second.json() as any).trial_days).toBeNull();
+    const blogForm = sessionsOf(b.s)[1]!;
+    expect(blogForm.has("subscription_data[trial_period_days]")).toBe(false);
+    expect(blogForm.has("metadata[genclass_trial]")).toBe(false);
+    // the shop asked again: its open page, with the same trial, is the answer (no second session)
+    const again = await checkout(b, b.shop.id);
+    expect((await again.json() as any).trial_days).toBe(3);
+    expect(sessionsOf(b.s)).toHaveLength(2);
+  });
+
+  it("trialFor: the plan's trial_days for an account with no subscription anywhere; 0 for a plan without one, a past subscription, or one on Stripe", async () => {
+    const t = setup(LIVE);
+    const a = await signedIn(t.env);
+    const app = await createApp(t.env, a.cookie, "Shop");
+    const pro = PLANS.find((p) => p.id === "team")!;
+    expect(pro.trial_days).toBe(3);
+    expect(await trialFor(t.sql.api, a.account.id, pro)).toBe(3);
+    // subscriptions Stripe lists for the customer (any status)
+    expect(await trialFor(t.sql.api, a.account.id, pro, 1)).toBe(0);
+    // a plan with no trial, or a trial that is not a whole number of days
+    expect(await trialFor(t.sql.api, a.account.id, FREE)).toBe(0);
+    for (const trial_days of [0, -3, 1.5, undefined]) expect(await trialFor(t.sql.api, a.account.id, { ...pro, trial_days }), String(trial_days)).toBe(0);
+    // a project's subscription, cancelled or not
+    t.sql.db.prepare("UPDATE projects SET subscription_id = 'sub_p', subscription_status = 'canceled' WHERE id = ?").run(app.id);
+    expect(await trialFor(t.sql.api, a.account.id, pro)).toBe(0);
+    t.sql.db.prepare("UPDATE projects SET subscription_id = NULL, subscription_status = NULL WHERE id = ?").run(app.id);
+    expect(await trialFor(t.sql.api, a.account.id, pro)).toBe(3);
+    // the account's own subscription from before plans were per project
+    setPlan(t.sql, a.account.id, "free", { subscription_id: "sub_old", subscription_status: "canceled" });
+    expect(await trialFor(t.sql.api, a.account.id, pro)).toBe(0);
+    // another account's subscription is not this one's
+    const b = await signedIn(t.env, "bob@example.com");
+    expect(await trialFor(t.sql.api, b.account.id, pro)).toBe(3);
+  });
+});
+
 describe("the webhook writes a project's subscription to that project and touches nothing else", () => {
   it("two projects, two subscriptions: each project gets its plan, the account row stays, nothing is cancelled or refunded", async () => {
     const b = await buyer();
@@ -124,7 +230,7 @@ describe("the webhook writes a project's subscription to that project and touche
     // the project's access is Team: 90 days of history, visitor analytics
     const st = await json(call(b.env, "GET", `/api/account/projects/${b.shop.id}/stats?range=90d`, { cookie: b.cookie }));
     expect(st.range).toBe("90d");
-    expect(st.plan).toEqual({ id: "team", name: "Team", source: "paid" });
+    expect(st.plan).toEqual({ id: "team", name: "Pro", source: "paid" });
     expect(st.locked).toBeUndefined();
     // the subscription ends: the project goes back to Free
     expect(await apply(projectSub("sub_shop000001", b.account.id, "cus_ada0000001", b.shop.id!, "canceled"), "customer.subscription.deleted")).toEqual({ received: true, result: "applied" });
@@ -196,8 +302,10 @@ describe("Free covers 3 projects; a fourth waits for a plan of its own", () => {
     const one = await text(call(t.env, "GET", `/account/billing?project=${apps[0]!.id}&from=cli`, { cookie: a.cookie }));
     expect(one).toContain("<h1>Choose a plan for Shop</h1>");
     expect(one).toContain("<b>Shop</b> is on <b>Free</b>.");
-    expect(one).toContain('<div class="plan pick big"><h3>Team</h3><p class="price">$15 / project / month</p>');
-    expect(one).toContain('data-plan="team" data-pick><span>Start Team for Shop</span>');
+    expect(one).toContain('<div class="plan pick big"><h3>Pro</h3><p class="price">$15 / project / month</p>');
+    // an account that has never had a subscription starts with Pro's 3 days free (billing.ts trialFor)
+    expect(one).toContain('data-plan="team" data-pick><span>Start your 3-day free trial</span>');
+    expect(one).toContain('<p class="trialnote">3 days free, then $15 / project / month for Shop. Cancel before the trial ends and you pay nothing.</p>');
     // Free is the small way on, a very small button under the big card
     // Free is the small way on: a very small link under the big card, and a popup that asks why before it goes on
     expect(one).toContain('<p class="free"><a href="#why" class="linkish" id="free">Try for free (limited)</a></p>');
@@ -205,7 +313,7 @@ describe("Free covers 3 projects; a fourth waits for a plan of its own", () => {
     expect(one).toContain('<h2 id="whyh">What\'s stopping you from paying?</h2>');
     for (const [val, words] of FREE_REASONS) expect(one).toContain(`<label><input type="radio" name="why" value="${val}"> ${words.replace(/'/g, "&#39;")}</label>`);
     expect(one).toContain('<button class="btn ghost" type="submit" id="whygo" disabled><span>Continue with Free (limited)</span></button>');
-    expect(one).toContain("<span>Start Team instead</span>");
+    expect(one).toContain("<span>Start Pro instead</span>");
     // it never sends anyone back to a terminal: the choice is made here
     expect(one.toLowerCase()).not.toContain("terminal");
     expect(one).toContain("<b>Shop</b> is in your account. Choose its plan to go on.");
@@ -281,10 +389,13 @@ describe("Free covers 3 projects; a fourth waits for a plan of its own", () => {
   it("an older plan link (?plan=team&start=1, from the pricing page or an older genclass command) opens the first app on Free", async () => {
     const t = setup(LIVE);
     const a = await signedIn(t.env);
-    // no app yet: the billing page, which says to add one first
+    // no app yet: the trial button goes to the new app form first (its plan page follows); a plain link shows the page
     const none = await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: a.cookie });
-    expect(none.status).toBe(200);
-    expect(await none.text()).toContain("Add a project first");
+    expect(none.status).toBe(302);
+    expect(none.headers.get("location")).toBe("/account/new");
+    const page = await call(t.env, "GET", "/account/billing?plan=team", { cookie: a.cookie });
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Add a project first");
     const shop = await createApp(t.env, a.cookie, "Shop");
     const blog = await createApp(t.env, a.cookie, "Blog");
     const r = await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: a.cookie });

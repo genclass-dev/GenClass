@@ -288,6 +288,17 @@ export async function ensureCustomer(env: Env, f: Fetch, db: D1Like, a: BillingA
  * one's first payment cleared: paymentCleared). Only ever called with a customer id from the accounts table, which
  * only ensureCustomer writes.
  */
+/**
+ * Whether one of this account's open Checkout pages for another project already holds a trial (its metadata
+ * genclass_trial): one trial per account, so a second project bought meanwhile starts without one.
+ */
+export async function openTrialElsewhere(env: Env, f: Fetch, customer: string, accountId: string, projectId: string): Promise<boolean> {
+  const open = await stripe(env, f, "GET", "/v1/checkout/sessions", { customer, status: "open", limit: 20 });
+  return (Array.isArray(open?.data) ? (open.data as Obj[]) : []).some(
+    (x) => ownSession(x, accountId) && (x.metadata?.genclass_project ?? undefined) !== projectId && Number(x.metadata?.genclass_trial ?? 0) > 0,
+  );
+}
+
 export async function customerSubscriptions(env: Env, f: Fetch, customer: string): Promise<Obj[]> {
   // Stripe expands at most 4 levels: a list reaches data.items.data.price, not the price's product (asking for
   // data.items.data.price.product is a 400, which broke Checkout for every account with a customer until 2026-11-12),
@@ -409,7 +420,7 @@ export async function checkoutSession(
       const same =
         x.metadata?.genclass_plan === o.plan.id &&
         (x.metadata?.genclass_switch_from ?? undefined) === o.switchFrom &&
-        x.metadata?.genclass_trial !== "1" &&
+        (x.metadata?.genclass_trial ?? "0") === String(o.trialDays ?? 0) &&
         (x.metadata?.genclass_seats ?? "1") === String(seats);
       if (same && typeof x.url === "string" && x.url.startsWith("https://")) return x.url;
       await stripe(env, f, "POST", `/v1/checkout/sessions/${encodeURIComponent(x.id)}/expire`, {});
@@ -441,7 +452,7 @@ export async function checkoutSession(
         // back from a switch, the page waits for the new plan
         success_url: o.project ? `${back}&done=1` : `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}`,
         cancel_url: back,
-        metadata: { ...mark, genclass_plan: o.plan.id, ...(perSeat ? { genclass_seats: String(seats) } : {}) },
+        metadata: { ...mark, genclass_plan: o.plan.id, ...(perSeat ? { genclass_seats: String(seats) } : {}), ...(o.trialDays ? { genclass_trial: String(o.trialDays) } : {}) },
         // a card (or another payment method) up front
         payment_method_collection: "always",
         // the "Add promotion code" field: codes made in the Stripe dashboard (Product catalog, Coupons) for GenClass's prices

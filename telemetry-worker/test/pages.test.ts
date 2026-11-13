@@ -8,7 +8,8 @@ import { FRAME_SCALE, scaleCss, THEME_HEAD_JS } from "../src/studio.js";
 const setupOf = (o: Record<string, unknown> = {}) => setupPage("n", { token: "gc_TestToken0123456789abc", secret: "a".repeat(32), lastEvent: null, ...o });
 import { accountPage, devicePage, forgotPage, lockedLinkPage, loginPage, messagePage, newProjectPage, ORG_CSS, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
 import { sampleStats } from "../src/sample.js";
-import { stripAnalytics, type Stats } from "../src/dashboard.js";
+import { stripAnalytics, stripProblems, type Stats } from "../src/dashboard.js";
+import { problemsLock } from "../src/plans.js";
 
 const NOW = new Date("2026-10-13T20:00:00Z");
 const nf = new Intl.NumberFormat();
@@ -635,6 +636,71 @@ describe("dashboard page: interaction analytics (docs/runtime/ANALYTICS.md secti
     const full = await render(sampleStats("7d", NOW));
     expect(full.hidden("ixlock")).toBe(true);
     await full.close();
+  });
+
+  it("stripProblems keeps how many and never which: the agent's findings and log go, both charts become one count each", () => {
+    const s = sampleStats("7d", NOW);
+    const st = stripProblems(s, problemsLock("https://genclass.dev/account/billing?project=p1"));
+    expect(st.agent.findings).toEqual([]);
+    expect(st.agent.log).toEqual([]);
+    expect(st.agent.counts).toEqual(s.agent.counts);
+    expect(st.checkSeries.every((b) => Object.keys(b.counts).join() === "checks")).toBe(true);
+    expect(st.checkSeries.map((b) => b.counts.checks)).toEqual(s.checkSeries.map((b) => Object.values(b.counts).reduce((x, y) => x + y, 0)));
+    expect(st.typeSeries.every((b) => Object.keys(b.counts).join() === "problems")).toBe(true);
+  });
+
+  it("a plan without the problem lists (Free, stripProblems): one banner with the way to Pro and its trial; the problem sections hidden; the totals stay", async () => {
+    const lock = problemsLock("https://genclass.dev/account/billing?project=p1");
+    const st = stripProblems(sampleStats("7d", NOW), lock);
+    const { doc, text, hidden, close } = await render(st);
+    expect(hidden("prolock")).toBe(false);
+    expect(text("#prolock b")).toBe("Free shows the totals");
+    expect(text("#prolockmsg")).toBe("Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with Pro. 3 days free, then $15 / project / month. Cancel any time.");
+    expect(doc.getElementById("prolocka")!.getAttribute("href")).toBe("https://genclass.dev/account/billing?project=p1");
+    expect(text("#prolocka")).toBe("Start your 3-day free trial");
+    // the lists give way to the banner, so an empty list never reads as "no problems"
+    for (const id of ["found", "possible-s", "where", "recent-s", "advisor", "adv-s", "fixall2"]) expect(hidden(id), id).toBe(true);
+    expect(doc.getElementById("advn")!.parentElement!.classList.contains("hidden")).toBe(true);
+    // the totals stay; the pages a problem was on come with Pro
+    expect(text("#tiles > div:nth-child(1) .v")).toBe(nf.format(problems(st)));
+    expect(text("#tiles > div:nth-child(2) .v")).toBe("Pro");
+    // the rail's counts of the views Free does not have are left blank, never 0
+    expect([doc.getElementById("c-found"), doc.getElementById("c-pages")].every(Boolean)).toBe(true);
+    expect([text("#c-found"), text("#c-pages")]).toEqual(["", ""]);
+    await close();
+    // a plans address that is not an https URL stays out of the link; without a trial the button names the plan
+    const odd = await render(stripProblems(sampleStats("7d", NOW), { ...lock, upgrade_url: "javascript:alert(1)", trial_days: null }));
+    expect(odd.doc.getElementById("prolocka")!.getAttribute("href")).toBe("/account/billing");
+    expect(odd.text("#prolocka")).toBe("Upgrade to Pro");
+    expect(odd.text("#prolockmsg")).not.toContain("days free");
+    await odd.close();
+    // the whole stats: no banner, the sections there
+    const full = await render(sampleStats("7d", NOW));
+    expect(full.hidden("prolock")).toBe(true);
+    expect(full.hidden("found")).toBe(false);
+    expect(full.text("#c-found")).not.toBe("");
+    await full.close();
+  });
+
+  it("stripProblems keeps the totals, the series and visitor analytics' breakdowns; the lists, the latest events and the chart's kinds go", () => {
+    const st = sampleStats("7d", NOW);
+    const lock = problemsLock("https://genclass.dev/account/billing");
+    const out = stripProblems(st, lock);
+    expect(out.totals).toEqual(st.totals);
+    expect(out.series).toEqual(st.series);
+    expect(out.previous).toEqual(st.previous);
+    expect(Object.keys(out.breakdowns).sort()).toEqual(Object.keys(st.breakdowns).filter((k) => k.startsWith("ix_")).sort());
+    expect(Object.keys(st.breakdowns).some((k) => !k.startsWith("ix_"))).toBe(true);
+    expect(out.recent).toEqual([]);
+    expect(out.typeSeries.map((b) => b.bucket)).toEqual(st.typeSeries.map((b) => b.bucket));
+    for (const [i, b] of out.typeSeries.entries()) expect(b.counts).toEqual({ problems: Object.values(st.typeSeries[i]!.counts).reduce((x, y) => x + y, 0) });
+    expect(out.locked!.problems).toEqual(lock);
+    // with analytics left out too, both locks are there; the input is not changed
+    const both = stripProblems(stripAnalytics(st, { plan: "Pro", upgrade_url: "https://genclass.dev/account/billing" }), lock);
+    expect(both.locked).toEqual({ analytics: { plan: "Pro", upgrade_url: "https://genclass.dev/account/billing" }, problems: lock });
+    expect(both.breakdowns).toEqual({});
+    expect(st.recent.length).toBeGreaterThan(0);
+    expect(st.locked).toBeUndefined();
   });
 
   it("an app without analytics: the Visitors view is one big copy-prompt button, the other sections hidden", async () => {

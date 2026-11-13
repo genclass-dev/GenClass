@@ -12,7 +12,8 @@
 //   never as measured; a design whose site does not answer over HTTPS is dropped.
 // - The digest lives for one request. What is kept: a count per account and UTC day (suggest_usage), for the plan's
 //   daily number, which goes after 3 days; and the last answer per account and app (suggest_results: the plan, the
-//   ideas and the designs, not the digest), so Free can be shown it again and Pro can read what Free counted.
+//   ideas and the designs, not the digest), so Free can be shown it again, and a plan out of runs for the day its
+//   last one (a paid plan otherwise gets a new answer on every run).
 // - What the request may hold is fixed here: an app's name, framework, site address, payment provider, host and what
 //   its site says it is about (title and description, 300 characters), and per failed check its id, area, title,
 //   weight and at most 3 evidence lines of 160 characters. Anything else in the body is dropped. The `genclass`
