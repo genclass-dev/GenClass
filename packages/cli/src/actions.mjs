@@ -168,9 +168,13 @@ export async function planNow(o = {}, deps = {}, id = null) {
     return "none";
   }
   const app = (state.projects ?? []).find((p) => (id ? p.id === id : p.token === state.app?.token) && !p.shared);
-  if (!app?.plan || app.plan.id !== "free" || app.plan.source || (app.planChosen && !app.needsPlan)) return "none";
-  const offer = upgradeOffer(state, app.id);
-  if (!offer?.project) return "none";
+  // version 5 (2026-11-13): every new app sees its plan page, a paying account's too (it goes on with its plan
+  // there), and an app its plan does not cover waits there for more
+  if (!app?.plan || !app.planUrl || (app.planChosen && !app.needsPlan)) return "none";
+  const covered = !!app.plan.source && !app.needsPlan;
+  const base = upgradeOffer(state, app.id) ?? state.account?.offer ?? { plan: { name: "Pro" }, price: "", summary: null, features: [], free: { name: "Free", apps: null } };
+  if (!covered && !state.account?.offer && !app.plan.source) return "none";
+  const offer = { ...base, checkoutUrl: `${app.planUrl}&from=cli`, project: { id: app.id, name: app.name, token: app.token }, needs: app.needsPlan === true, current: covered ? app.plan.name : null, paying: !!app.plan.source };
   if (o.json) return "open";
   if (o.yes || !interactive()) {
     out();
@@ -201,8 +205,17 @@ export async function checkout(offer, o = {}, deps = {}) {
  */
 export async function projectPlan(offer, o = {}, deps = {}) {
   const name = clean(offer.project.name, 30);
-  planCard(offer, offer.project.name);
-  note(offer.needs ? `Free covers ${offer.free.apps ?? 3} apps and this is one more: it needs ${offer.plan.name}, ${offer.price}.` : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`);
+  if (offer.features?.length) planCard(offer, offer.project.name);
+  else out();
+  note(
+    offer.current
+      ? `Your ${clean(offer.current, 20)} plan covers ${name}: continue with it on its plan page.`
+      : offer.needs && offer.paying
+        ? `Your plan covers no more apps: add ${offer.appsPerUnit ?? 3} more for ${name} on its plan page.`
+        : offer.needs
+          ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more: it needs ${offer.plan.name}, ${offer.price}.`
+          : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`,
+  );
   if (o.yes || !interactive()) {
     out(`  Open  ${c.cyan(offer.checkoutUrl)}`);
     if (openBrowser(offer.checkoutUrl, o)) note("Your browser is opening its plan page. Run npx genclass again once it is chosen.");
@@ -212,7 +225,7 @@ export async function projectPlan(offer, o = {}, deps = {}) {
   if (got) return "done";
   // the setup goes on only once the app has its plan: Team, or Free with what stops the person from paying (the
   // owner's call, 2026-11-12)
-  note(`${name} has no plan yet: ${offer.needs ? offer.plan.name : `${offer.plan.name}, or ${offer.free.name} for now`}, on ${offer.checkoutUrl}`);
+  note(offer.current ? `${name} goes on with ${clean(offer.current, 20)} once you continue on ${offer.checkoutUrl}` : `${name} has no plan yet: ${offer.needs ? offer.plan.name : `${offer.plan.name}, or ${offer.free.name} for now`}, on ${offer.checkoutUrl}`);
   return "quit";
 }
 
@@ -228,7 +241,7 @@ async function waitForPlan(offer, o = {}, deps = {}) {
   if (openBrowser(offer.checkoutUrl, o)) note(app ? `Your browser is opening the plan page for ${app}.` : "Your browser is opening the checkout.");
   const creds = readCredentials();
   const stop = stopOnEnter();
-  const sp = spinner(`${app && !offer.needs ? "Waiting for your choice in the browser" : "Waiting for the payment in the browser"}${canStop()}`);
+  const sp = spinner(`${offer.current || (app && !offer.needs) ? "Waiting for your choice in the browser" : "Waiting for the payment in the browser"}${canStop()}`);
   const until = Date.now() + (deps.waitMs ?? 10 * 60_000);
   let got = null;
   while (creds && !stop.signal.aborted && Date.now() < until) {
@@ -238,13 +251,16 @@ async function waitForPlan(offer, o = {}, deps = {}) {
     if (!me.ok) continue;
     if (offer.project) {
       const p = me.projects.find((x) => x.token === offer.project.token);
-      if (p?.plan && (p.plan.id !== "free" || p.plan.source)) got = "paid";
-      else if (p?.planChosen && !offer.needs) got = "free";
+      // covered already: Continue was clicked; else a payment (or more apps) that covers it now, or Free chosen
+      if (offer.current) got = p?.planChosen ? "kept" : null;
+      else if (p?.plan && (p.plan.id !== "free" || p.plan.source) && !p.needsPlan) got = "paid";
+      else if (p?.planChosen && !offer.needs && !p.needsPlan) got = "free";
     } else if (me.plan && me.plan.id !== "free") got = "paid";
     if (got) break;
   }
   await stop.done();
-  if (got === "paid") sp.stop("ok", `${offer.plan.name} is active${app ? ` for ${app}` : ""}. Thank you.`);
+  if (got === "kept") sp.stop("ok", `${app} goes on with ${clean(offer.current, 20)}.`);
+  else if (got === "paid") sp.stop("ok", `${offer.plan.name} is active${app ? ` for ${app}` : ""}. Thank you.`);
   else if (got === "free") sp.stop("ok", `${app} is on ${offer.free.name} for now (limited).`);
   else sp.stop("warn", app && !offer.needs ? "No choice yet." : `No payment yet. ${offer.plan.name} starts the moment the payment goes through.`);
   return got;

@@ -80,6 +80,7 @@ function offerOf(o, host) {
     checkoutUrl,
     free: { name: str(f.name, 40) ?? "Free", apps: num(f.apps), historyDays: num(f.history_days), suggestionsShown: num(f.suggestions_shown), liveFixes: num(f.live_fixes) },
     trialDays: num(o.trial_days),
+    appsPerUnit: num(o.apps_per_unit),
   };
 }
 

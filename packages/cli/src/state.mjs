@@ -266,14 +266,14 @@ export async function readState(o = {}, deps = {}) {
               ? `${me.plan.name} plan`
               : ""
         : needs
-          ? `Free covers ${offer.free.apps ?? 3} apps: this one needs ${offer.plan.name}`
+          ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`}: this one needs ${offer.plan.name}`
           : choseFree
             ? `${offer.free.name} for now (limited) · ${offer.plan.name} is ${offer.price}`
             : `${offer.plan.name}, ${offer.price}`,
     why: !offer
       ? pp ? "This app's plan." : "The plan your account is on."
       : needs
-        ? `Free covers ${offer.free.apps ?? 3} apps and this is one more. ${offer.plan.name} is ${offer.price}.`
+        ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more. ${offer.plan.name} is ${offer.price}.`
         : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name} for now (limited).`,
     more: !offer
       ? "Plans and prices: genclass.dev/pricing."

@@ -74,7 +74,7 @@
 import type { Env } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like } from "./dashboard.js";
 import { json } from "./http.js";
-import { cleanSeats, entitled, LIVE_STATUSES, LOOKUP_PREFIX, MAX_SEATS, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
+import { byQuantity, cleanSeats, entitled, LIVE_STATUSES, LOOKUP_PREFIX, MAX_SEATS, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
 import { equalStrings } from "./webauthn.js";
 
 export const STRIPE_API = "https://api.stripe.com";
@@ -404,14 +404,16 @@ export function managedPayments(env: Env, plan: Plan): boolean {
 export async function checkoutSession(
   env: Env,
   f: Fetch,
-  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string }; trialDays?: number },
+  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string }; trialDays?: number; backTo?: string },
 ): Promise<string> {
   // free days only on a first subscription (the caller decides), never on a switch, and only what Stripe allows (1 to 730)
   const trialDays = !o.switchFrom && Number.isInteger(o.trialDays) && o.trialDays! >= 1 && o.trialDays! <= 730 ? o.trialDays! : 0;
   const lookup = o.plan.stripe_lookup_keys.monthly;
   if (!lookup) throw new StripeError(`the ${o.plan.name} plan has no monthly price`, 400);
   // a plan sold per seat: the quantity is the seats asked for, and the buyer can still change it on Stripe's page
-  const perSeat = o.plan.per_seat === true;
+  // a plan sold by quantity: seats (per_seat) or units of apps (apps_per_unit, Pro since version 5); the buyer can still
+  // change it on Stripe's page
+  const perSeat = byQuantity(o.plan);
   const seats = perSeat ? (cleanSeats(o.seats ?? 1) ?? 1) : 1;
   if (o.switchFrom !== undefined && !idOf(o.switchFrom)) throw new StripeError("not a subscription id", 400);
   const closed: string[] = [];
@@ -437,7 +439,9 @@ export async function checkoutSession(
   if (o.switchFrom) mark.genclass_switch_from = o.switchFrom;
   // a plan per project: the subscription names its project, and the webhook writes it there (applyProjectSubscription)
   if (o.project) mark.genclass_project = o.project.id;
-  const back = o.project ? `${o.origin}/account/billing?project=${encodeURIComponent(o.project.id)}` : `${o.origin}/account/billing`;
+  // a project's checkout (version 4), or the account's started from an app's plan page (backTo), returns to that page
+  const backId = o.project?.id ?? o.backTo;
+  const back = backId ? `${o.origin}/account/billing?project=${encodeURIComponent(backId)}` : `${o.origin}/account/billing`;
   // a double click within the same minute gets the same session; after closing pages, a new key (the old session
   // under the plain key may be one of those just closed); a switch has its own
   const after = closed.length ? `-after-${(await sha256Hex(closed.join(","))).slice(0, 16)}` : "";
@@ -455,7 +459,7 @@ export async function checkoutSession(
         client_reference_id: o.account.id,
         line_items: [perSeat ? { price, quantity: seats, adjustable_quantity: { enabled: true, minimum: 1, maximum: MAX_SEATS } } : { price, quantity: 1 }],
         // back from a switch, the page waits for the new plan
-        success_url: o.project ? `${back}&done=1` : `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}`,
+        success_url: backId ? `${back}&done=1` : `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}`,
         cancel_url: back,
         metadata: { ...mark, genclass_plan: o.plan.id, ...(perSeat ? { genclass_seats: String(seats) } : {}), ...(trialDays ? { genclass_trial_days: String(trialDays) } : {}) },
         // a card (or another payment method) up front
@@ -659,7 +663,7 @@ export function subscriptionState(sub: Obj, o: { pastDueSince?: string | null; n
     lookupKey,
     periodEnd: isoOf(end),
     cancelAtPeriodEnd: status !== "canceled" && (sub?.cancel_at_period_end === true || typeof sub?.cancel_at === "number"),
-    seats: priced?.per_seat === true ? (cleanSeats(quantity) ?? (typeof quantity === "number" && quantity > MAX_SEATS ? MAX_SEATS : 1)) : null,
+    seats: priced && byQuantity(priced) ? (cleanSeats(quantity) ?? (typeof quantity === "number" && quantity > MAX_SEATS ? MAX_SEATS : 1)) : null,
   };
 }
 

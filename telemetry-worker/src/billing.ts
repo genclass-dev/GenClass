@@ -260,6 +260,8 @@ export async function routeBilling(request: Request, url: URL, path: string, env
   }
   const free = /^\/api\/billing\/projects\/([^/]+)\/free$/.exec(path);
   if (free) return m === "POST" ? chooseFree(c, f, free[1]!) : method();
+  const keep = /^\/api\/billing\/projects\/([^/]+)\/continue$/.exec(path);
+  if (keep) return m === "POST" ? continueWith(c, keep[1]!) : method();
   if (integ) return integrations(c, f, integ[1]!, integ[2] ?? null, !!integ[3]);
   if (events) return exportEvents(c, events[1]!);
   if (keys) return exportKeys(c, keys[1] ?? null);
@@ -267,6 +269,23 @@ export async function routeBilling(request: Request, url: URL, path: string, env
 }
 
 // --------------------------------------------------------------------------------------------- Checkout, portal
+
+/**
+ * POST /api/billing/projects/<id>/continue: an app the account's plan covers goes on with it (the plan page's
+ * "Continue with Pro", the owner's call 2026-11-13: every new app sees the paywall, a paying account clicks through).
+ * It writes when (projects.plan_chosen), which the genclass command and the app's page wait for. 409 when the plan
+ * does not cover the app (it needs Pro, or more apps on Pro).
+ */
+async function continueWith(c: C, id: string): Promise<Response> {
+  const a = await browserWrite(c, "a plan is chosen");
+  if (a instanceof Response) return a;
+  const p = await ownedProject(c, a.account.id, id);
+  if (!p || !p.id) return fail(404, "not found");
+  const access = await projectAccess(c.db, p, c.env, c.now);
+  if (!access.source || access.locked) return fail(409, `${p.name} needs a plan first`);
+  await c.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ? AND account_id = ? AND plan_chosen IS NULL").bind(c.now.toISOString(), p.id, a.account.id).run();
+  return json(200, { ok: true, plan: access.plan.id });
+}
 
 /** What can stop someone from paying, as the plan page's popup lists them: [value, the words shown]. */
 export const FREE_REASONS: readonly (readonly [string, string])[] = [
@@ -354,17 +373,28 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
     if (typeof body.project_id !== "string" || !body.project_id) return fail(400, `the ${plan.name} plan is bought for one project: send project_id`);
     return checkoutProject(c, f, a, plan, body.project_id);
   }
-  // a plan sold per seat: how many people (the owner included); one when the page sends none
+  // a plan sold per seat: how many people (the owner included); one when the page sends none. A plan sold by units of
+  // apps (version 5, Pro): how many units, by default enough for the apps the account has
   let seats = 1;
   if (plan.per_seat === true && body.seats !== undefined) {
     const n = cleanSeats(body.seats);
     if (n === null) return fail(400, `seats is a whole number from 1 to ${MAX_SEATS}; for a larger team email ${PLANS_FILE.contact}`);
     seats = n;
   }
+  if (plan.apps_per_unit) {
+    const asked = body.quantity ?? body.seats;
+    const own = (await accountProjects(c, a.account.id)).filter((x) => x.account_id === a.account.id).length;
+    const n = asked === undefined ? Math.max(1, Math.ceil(own / plan.apps_per_unit)) : cleanSeats(asked);
+    if (n === null) return fail(400, `quantity is a whole number from 1 to ${MAX_SEATS}`);
+    seats = n;
+  }
+  // started from an app's plan page: Stripe returns there
+  const backTo = typeof body.project_id === "string" && (await ownedProject(c, a.account.id, body.project_id))?.id ? body.project_id : undefined;
   if (await overBudget(c.env.AUTH_LIMIT, "checkout", a.account.id)) return tooMany();
   // as stored: ensureCustomer decides what to do with a customer from the other Stripe mode
   const account = { id: a.account.id, email: a.account.email, ...(await accountBilling(c.db, a.account.id)) };
   try {
+    let first = false;
     let customer = await ensureCustomer(c.env, f, c.db, account);
     if (!customer.fresh) {
       // the stored customer must be the account's own GenClass customer, holding nothing else; then what Stripe has
@@ -374,6 +404,7 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
       if (own.state === "not_genclass") return refuseShared(c, f, account.id, customer.id, NOT_GENCLASS);
       if (own.state === "ok" && sharedCustomer(own.subs)) return refuseShared(c, f, account.id, customer.id, SHARED_SUBSCRIPTION);
       const subs = own.state === "ok" ? own.subs : [];
+      first = own.state === "missing" || subs.length === 0;
       if (own.state === "missing") {
         customer = await ensureCustomer(c.env, f, c.db, { ...account, stripe_customer_id: customer.id, stripe_mode: stripeMode(c.env) }, customer.id);
       }
@@ -400,8 +431,10 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
         return json(200, { url, switch: true });
       }
     }
-    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, seats });
-    return json(200, { url });
+    // the first subscription starts with the plan's trial (trialFor), once per account
+    const trialDays = customer.fresh || first ? await trialFor(c.db, a.account.id, plan, 0) : 0;
+    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, seats, trialDays, backTo });
+    return json(200, { url, trial_days: trialDays || null });
   } catch (e) {
     return stripeFail(e);
   }

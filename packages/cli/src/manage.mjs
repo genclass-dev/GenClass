@@ -83,7 +83,7 @@ export async function apps(o = {}, deps = {}) {
         const me = await fetchOverview(creds, deps).catch(() => null);
         const made = me?.ok ? me.projects.find((p) => p.token === r.token) : null;
         if (made?.needsPlan && made.planUrl) {
-          warn("Free covers 3 apps: this one needs a paid plan.");
+          warn(made.plan?.source ? "Your plan covers no more apps: this one needs more on it." : "Free covers one app: this one needs a paid plan.");
           out(`  ${c.gray("Its plan:")} ${c.cyan(made.planUrl)}`);
         } else if (made?.plan?.id === "free" && made.planUrl) out(`  ${c.gray("On Free (limited). Its plan:")} ${c.cyan(made.planUrl)}`);
         // its plan is chosen now, on its page (Pro, or Free with a reason)
@@ -203,7 +203,7 @@ export async function plan(o = {}, deps = {}) {
 
 /** Free's limits in a few words, from the numbers the server sent ("3 apps, 100 live fixes a month"). */
 const freeWords = (free) =>
-  [free?.apps ? `${free.apps} apps` : null, free?.liveFixes ? `${free.liveFixes} live fixes a month` : null, free?.historyDays ? `${free.historyDays} days of history` : null].filter(Boolean).join(", ");
+  [free?.apps ? `${free.apps} app${free.apps === 1 ? "" : "s"}` : null, free?.liveFixes ? `${free.liveFixes} live fixes a month` : null, free?.historyDays ? `${free.historyDays} days of history` : null].filter(Boolean).join(", ");
 
 /**
  * The line after a command for an app on Free that can have a paid plan here: Free's limits and the way up. Printed
@@ -221,7 +221,7 @@ export async function freeLine(o = {}, deps = {}) {
   const offer = upgradeOffer(state);
   if (!offer) return false;
   const lim = freeWords(offer.free);
-  const [first = "", ...rest] = wrap(`You are on Free, which has limits${lim ? ` (${lim})` : ""}. ${clean(offer.plan.name, 20)} has none, ${offer.trialDays ? `${offer.trialDays} days free, then ${clean(offer.price, 40)}` : `for ${clean(offer.price, 40)}`}. Upgrade now: npx genclass upgrade`, width() - 6);
+  const [first = "", ...rest] = wrap(`You are on Free, which has limits${lim ? ` (${lim})` : ""}. ${clean(offer.plan.name, 20)} has everything, ${offer.trialDays ? `${offer.trialDays} days free, then ${clean(offer.price, 40)}` : `for ${clean(offer.price, 40)}`}. Upgrade now: npx genclass upgrade`, width() - 6);
   out();
   out(`  ${c.yellow(sym.warn)} ${c.bold(first)}`);
   for (const l of rest) out(`    ${l}`);

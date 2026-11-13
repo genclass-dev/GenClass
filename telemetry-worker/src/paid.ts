@@ -9,7 +9,7 @@ import type { BucketLike, Env } from "./collector.js";
 import { RETENTION_DAYS, type D1Like } from "./dashboard.js";
 import { storeForExport } from "./export.js";
 import { forwardBatch } from "./forward.js";
-import { ACCESS_COLUMNS, accessOf, accountWide, better, entitled, FREE, keepDays, planGatesOpen, projectOwnAccess, stripeMode, type AccessRow, type Plan, type StripeMode } from "./plans.js";
+import { ACCESS_COLUMNS, accessIn, accessOf, coverage, entitled, FREE, keepDays, planGatesOpen, stripeMode, type AccessRow, type Plan, type StripeMode } from "./plans.js";
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -49,11 +49,8 @@ export async function ownerOf(db: D1Like, token: string, nowMs: number, mode: St
   const now = new Date(nowMs);
   // the project's own plan or grant, or a subscription of its whole account from before plans were per project
   // (src/plans.ts projectAccess; Free has neither export nor forwarding, so the 3-project lock does not matter here)
-  const plan = !row?.account_id
-    ? FREE
-    : open
-      ? accessOf(row, mode, now, true).plan
-      : better(projectOwnAccess({ id: row.id, token, created: row.created, plan: row.p_plan, stripe_mode: row.p_mode, comp_until: row.p_comp, comp_plan: row.p_comp_plan }, mode, now), accountWide(row, mode, now)).plan;
+  // the account's plan when it covers this app (src/plans.ts coverage, version 5), else Free's
+  const plan = !row?.account_id ? FREE : open ? accessOf(row, mode, now, true).plan : accessIn(await coverage(db, row.account_id, mode, now), { token }).plan;
   const o: Owner | null = row ? { projectId: row.id, name: row.name, accountId: row.account_id, plan, destinations: Number(row.n) || 0 } : null;
   if (owners.size > 5000) owners.clear();
   owners.set(token, { o, exp: nowMs + OWNER_MS });

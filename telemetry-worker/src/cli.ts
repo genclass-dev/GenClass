@@ -86,7 +86,7 @@ async function withPlans(c: C, accountId: string): Promise<Record<string, unknow
   return (await accountProjects(c, accountId)).map((p) => {
     const j: Record<string, unknown> = { ...projectJson(c, p) };
     const a = p.account_id === accountId ? access.get(p.token) : undefined;
-    if (a) Object.assign(j, { plan: { id: a.plan.id, name: a.plan.name, source: a.source }, needs_plan: a.locked === "free_projects", plan_chosen: chosen.has(p.token), plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
+    if (a) Object.assign(j, { plan: { id: a.plan.id, name: a.plan.name, source: a.source }, needs_plan: !!a.locked, plan_chosen: chosen.has(p.token), plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
     return j;
   });
 }
@@ -104,7 +104,8 @@ async function offerFor(c: C, account: { id: string; email: string | null }, acc
   // command asks right after the app is in the account); one sold for the whole account, while the account is on Free
   const open = (projects ?? []).filter((x) => x.row.id && x.access.plan.id === FREE.id && x.access.source === null);
   if (plan.per_project === true && projects ? !open.length : access.plan.id !== FREE.id || access.source !== null) return null;
-  const one = plan.per_project === true && open.length === 1 ? open[0]!.row.id! : null;
+  // the page of the account's first app with no plan: Pro is bought there, for the account (version 5)
+  const one = open.length ? open[0]!.row.id! : null;
   return {
     plan: { id: plan.id, name: plan.name },
     price: priceText(plan),
@@ -112,6 +113,7 @@ async function offerFor(c: C, account: { id: string; email: string | null }, acc
     features: plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text)).map((f) => f.text).slice(0, 12),
     checkout_url: one ? `${c.cfg.origin}/account/billing?project=${encodeURIComponent(one)}&from=cli` : `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1`,
     trial_days: (await trialFor(c.db, account.id, plan)) || null,
+    apps_per_unit: plan.apps_per_unit ?? null,
     free: { name: FREE.name, apps: FREE.limits.apps, history_days: FREE.limits.history_days, suggestions_shown: suggestionLimits(FREE).shown, live_fixes: FREE.limits.live_fixes_per_month ?? null },
   };
 }

@@ -2110,9 +2110,11 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     const access = await projectAccess(c.db, p, env, c.now);
     // plans per project: the account's own app on Free, where the paid plan is sold, opens its plan page until one is
     // chosen there, Team or Free with what stops the person from paying (the owner's call, 2026-11-12)
-    if (mine && access.source === null && access.plan.id === FREE.id && PAID_PLANS[0]?.per_project === true && canBuy(env, a.account)) {
+    if (mine && PAID_PLANS.length && canBuy(env, a.account)) {
+      // version 5 (2026-11-13): the paywall for every new app, a paying account included (it clicks Continue with
+      // Pro), and for an app its plan does not cover
       const row = await c.db.prepare("SELECT plan_chosen FROM projects WHERE id = ?").bind(p.id).first<{ plan_chosen: string | null }>();
-      if (!row?.plan_chosen) return redirect(`/account/billing?project=${encodeURIComponent(p.id!)}`);
+      if (!row?.plan_chosen || access.locked) return redirect(`/account/billing?project=${encodeURIComponent(p.id!)}`);
     }
     const base = {
       account: { apps, current: p.id!, email: a.account.email ?? (a.account.github_login ? `@${a.account.github_login}` : null), plan: access.plan.name },
