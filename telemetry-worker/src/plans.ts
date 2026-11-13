@@ -209,6 +209,14 @@ export function priceText(plan: Plan): string {
   return `$${c % 100 ? (c / 100).toFixed(2) : String(c / 100)}${plan.per_project === true ? " / project" : plan.per_seat === true ? " / developer" : ""} / month${plan.apps_per_unit ? ` for ${plan.apps_per_unit} apps` : ""}`;
 }
 
+/**
+ * A plan's feature lines for a pitch (an app's plan page, a new account's trial screen): the available ones, without
+ * "Everything in ..." and the trial's own line (the button and the note under it say that).
+ */
+export function pitchLines(plan: Plan): string[] {
+  return plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text) && !/days free/i.test(f.text)).map((f) => f.text);
+}
+
 /** The most seats one Checkout sells and one account holds on a per_seat plan; a larger team is agreed by email. */
 export const MAX_SEATS = 200;
 

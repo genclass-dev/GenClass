@@ -551,7 +551,10 @@ GitHub App on public repositories, the page check, 100 live fixes a month. A new
 (`/account` with no app, on Free, where Pro is sold) is Pro's trial: "Start your 3-day free trial" large (the
 account's Checkout, `/account/billing?plan=team&start=1`) and a tiny "Skip" on to its first app (the owner: "our
 entire goal is for them to put their credit cards in"). On an app's plan page Free is the same tiny "Skip", and
-the reason popup still comes before it.
+the reason popup still comes before it. Both show Pro small and short (the owner: "a tad bit zoomed in and there's
+too much written"): the name, the price, the first 5 lines of the plan (`plans.ts` pitchLines, without "Everything in
+Free" and the trial's own line) and the rest folded under "N more"; a just-added app's page has one line under its
+heading, and the month's live fixes show once there are some.
 
 The plans live in [`billing/plans.json`](../billing/plans.json) (version 3, 2026-11-11, the owner: "cut back on
 the free features"; one thing stays free, finding, seeing and fixing the problems):

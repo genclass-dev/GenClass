@@ -82,7 +82,7 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, PLANS_FILE, priceText, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, canBuy, firstPlanWith, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, pitchLines, PLANS_FILE, priceText, problemsLock, projectAccess, viewRanges } from "./plans.js";
 import { trialFor } from "./billing.js";
 import { activeOwners, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
@@ -1965,8 +1965,7 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
           plan: sold.name,
           price: priceText(sold),
           days: (await trialFor(c.db, a.account.id, sold)) || null,
-          summary: sold.summary,
-          features: sold.features.filter((f) => f.available && !/^Everything in /i.test(f.text) && !/days free/i.test(f.text)).map((f) => f.text).slice(0, 8),
+          features: pitchLines(sold),
           start: `/account/billing?plan=${encodeURIComponent(sold.id)}&start=1`,
         };
       }

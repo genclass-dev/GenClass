@@ -8,7 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTokenCache } from "../src/dashboard.js";
 import { ownerOf, resetOwnerCache } from "../src/paid.js";
-import { accessIn, accountProjectsAccess, byQuantity, coverage, FREE, priceText, PLANS } from "../src/plans.js";
+import { accessIn, accountProjectsAccess, byQuantity, coverage, FREE, pitchLines, priceText, PLANS } from "../src/plans.js";
 import { FREE_REASONS, trialFor } from "../src/billing.js";
 import { FREE_REASONS_SHOWN } from "../src/billing-pages.js";
 import { resetStripeCache } from "../src/stripe.js";
@@ -495,8 +495,17 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     const t = await withApps(["Shop", "Blog"]);
     const one = await text(call(t.env, "GET", `/account/billing?project=${t.apps[0]!.id}&from=cli`, { cookie: t.cookie }));
     expect(one).toContain("<h1>Choose a plan for Shop</h1>");
-    expect(one).toContain("<b>Shop</b> is on <b>Free</b>.");
-    expect(one).toContain('<div class="plan pick big"><h3>Pro</h3><p class="price">$15 / developer / month</p>');
+    // a just-added app: one short line under the heading, no notice box and no "0 of 100" (the owner, 2026-11-13: less written)
+    expect(one).toContain('<p class="status" id="status"><b>Shop</b> is in your account.</p>');
+    expect(one).not.toContain("Choose its plan to go on");
+    expect(one).not.toContain("Problems fixed live this month");
+    // the card: the name, the price, the first 5 lines, the rest folded under "N more"; no summary repeating the price
+    expect(one).toContain('<div class="plan pick big"><h3>Pro</h3><p class="price">$15 / developer / month</p><ul><li>Up to 3 apps</li><li>The genclass command in your terminal</li>');
+    const lines = pitchLines(PLANS[1]!);
+    expect(one).toContain(`<details class="pmore"><summary>${lines.length - 5} more</summary><ul>${lines.slice(5).map((l) => `<li>${l.replace(/'/g, "&#39;")}</li>`).join("")}</ul></details>`);
+    expect(one).not.toContain("<li>Everything in Free</li>");
+    expect(one).not.toContain("<li>3 days free to start</li>");
+    expect(one).not.toContain('<p class="sum">');
     // an account that has never had a subscription starts with Pro's 3 days free (billing.ts trialFor)
     expect(one).toContain('<button class="btn" type="button" data-plan="team" data-pick><span>Start your 3-day free trial</span></button>');
     expect(one).toContain('<p class="trialnote">3 days free, then $15 / developer / month. Cancel before the trial ends and you pay nothing.</p>');
@@ -514,7 +523,6 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     // it never sends anyone back to a terminal: the choice is made here (Pro's card lists the command as a feature)
     expect(one).toContain("<li>The genclass command in your terminal</li>");
     expect(one.replace("<li>The genclass command in your terminal</li>", "").toLowerCase()).not.toContain("terminal");
-    expect(one).toContain("<b>Shop</b> is in your account. Choose its plan to go on.");
     // ?start=1 (the genclass command) opens the trial's Checkout at once
     expect(await text(call(t.env, "GET", `/account/billing?project=${t.apps[0]!.id}&start=1`, { cookie: t.cookie }))).toContain('"go":true');
     // signed out: through the sign-in, back to the same page
@@ -691,7 +699,10 @@ describe("the website: a new account's first screen is Pro's trial, with a tiny 
     expect(page).toContain('<div class="empty-p trial" id="trial"><h2>Start your 3-day free trial</h2>');
     expect(page).toContain('<p class="tp">Pro, $15 / developer / month</p>');
     expect(page).toContain('<a class="btn" href="/account/billing?plan=team&#38;start=1" id="starttrial"><span>Start your 3-day free trial</span></a>');
-    expect(page).toContain("3 days free, then $15 / developer / month. Your card is asked for on Stripe; cancel before the trial ends and you pay nothing.");
+    expect(page).toContain("<p>3 days free, then $15 / developer / month. Cancel before the trial ends and you pay nothing.</p>");
+    // 5 lines shown, the rest folded, and no summary repeating the price (the owner, 2026-11-13: less written)
+    expect(page).toContain(`<details class="pmore"><summary>${pitchLines(PLANS[1]!).length - 5} more</summary>`);
+    expect(page).not.toContain("Everything for up to 3 apps, per developer.");
     expect(page).toContain('<p class="skipit"><a href="/account/new" id="skiptrial">Skip</a></p>');
     expect(page).toContain("<li>Up to 3 apps</li>");
     expect(page).not.toContain("<li>Everything in Free</li>");
@@ -806,6 +817,9 @@ describe("problems fixed live: 100 a month per project on Free, then observe onl
     const st = await json(call(t.env, "GET", `/api/account/projects/${app.id}/stats?range=7d`, { cookie: a.cookie }));
     expect(st.usage).toEqual({ used: 120, limit: 100, observe_only: true, resets: monthOf(new Date(st.generated)).resets });
     expect(st.plan_url).toBe(`https://genclass.dev/account/billing?project=${app.id}`);
+    // the plan page says so, once there are fixes to count (a new app's "0 of 100" is left out)
+    const planPage = await text(call(t.env, "GET", `/account/billing?project=${app.id}`, { cookie: a.cookie }));
+    expect(planPage).toContain("<b>Observing only.</b> Problems fixed live this month: <b>120 of 100</b>.");
     // the account on Pro: no limit, no header
     paidPro(t.sql, a.account.id);
     resetOwnerCache();
