@@ -181,6 +181,10 @@ describe("reports: the priority rules", () => {
     expect(rules(fakeStats({ hours }))).toContain("0 silent");
     const quiet = [...Array.from({ length: 18 }, () => ({ sessions: 1 })), ...Array.from({ length: 6 }, () => ({ sessions: 0 }))];
     expect(rules(fakeStats({ hours: quiet }))).not.toContain("0 silent");
+    // a burst is not steady traffic: a small site's real day (30 of 38 loads in two hours while it was set up, then a
+    // load every few hours) must not tell its owner the site went down
+    const burst = [1, 0, 1, 1, 1, 0, 0, 0, 0, 14, 16, 1, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].map((sessions) => ({ sessions }));
+    expect(rules(fakeStats({ hours: burst }))).not.toContain("0 silent");
   });
 
   it("problems that jumped within the hour are critical; a steady level is not", () => {
