@@ -44,8 +44,6 @@ const nap = (ms, signal) =>
       { once: true },
     );
   });
-/** What a wait's line ends with on a terminal: the person is never held by one. */
-const canStop = () => (interactive() ? c.gray(" (Enter to stop waiting)") : "");
 
 /** Opens `url` in the default browser when that makes sense here. Returns whether it tried; never throws. */
 export function openBrowser(url, o = {}) {
@@ -83,7 +81,7 @@ export async function signIn(o = {}) {
   out();
   if (openBrowser(dev.verification_uri_complete, o)) note("Your browser is opening that page.");
   const stop = stopOnEnter();
-  const sp = spinner(`Waiting for you to approve in the browser${canStop()}`);
+  const sp = spinner("Waiting for you to approve in the browser", { stoppable: interactive() });
   const r = await pollDeviceLogin(dev, { signal: stop.signal });
   await stop.done();
   if (!r.ok && r.error === "cancelled") {
@@ -136,7 +134,7 @@ export function upgradeOffer(state, name = null) {
   const here = mine.find((p) => p.token === state.app?.token) ?? null;
   const target = named ?? here ?? mine.find((p) => p.needsPlan) ?? mine.find((p) => p.plan.id === "free" && !p.plan.source) ?? null;
   if (!target || target.plan.id !== "free" || target.plan.source || !target.planUrl) return null;
-  return { ...base, checkoutUrl: `${target.planUrl}&from=cli`, project: { id: target.id, name: target.name, token: target.token }, needs: target.needsPlan === true };
+  return { ...base, checkoutUrl: `${target.planUrl}&from=cli`, project: { id: target.id, name: target.name, token: target.token }, needs: target.needsPlan === true, chosen: target.planChosen === true, paying: accountPaid(state.account) };
 }
 
 /**
@@ -144,7 +142,9 @@ export function upgradeOffer(state, name = null) {
  * rule (2026-11-12) is that it has its plan chosen before anything else, Pro or Free with a reason, so this opens its
  * plan page in the browser and waits for the choice. `id` names the app; without it, this folder's. Without a
  * terminal it says where the page is and goes on. Returns "chosen", "none" (nothing to choose: a plan, a grant, a
- * choice already, or nothing sold) or "open" (the choice was not made).
+ * choice already, or nothing sold), "covered" (the account's plan covers it; Continue was not clicked yet, which
+ * blocks nothing), "locked" (past the apps a paying account's plan covers: Enterprise, by email) or "open" (the
+ * choice was not made).
  */
 export async function planNow(o = {}, deps = {}, id = null) {
   let state;
@@ -158,13 +158,20 @@ export async function planNow(o = {}, deps = {}, id = null) {
   // there), and an app its plan does not cover waits there (state.mjs appPlanOffer)
   const offer = appPlanOffer(app, state.account?.offer ?? null, !!state.account && accountPaid(state.account));
   if (!offer) return "none";
-  if (o.json) return "open";
+  // past the apps a paying account's plan covers: nothing to pay for here, more apps are Enterprise's (by email)
+  if (offer.needs && offer.paying && !offer.appsPerUnit) {
+    if (!o.json) await projectPlan(offer, o, deps);
+    return "locked";
+  }
+  if (o.json) return offer.current ? "covered" : "open";
   if (o.yes || !interactive()) {
     out();
-    note(`${clean(app.name, 40)} has no plan yet. Choose it in the browser: ${offer.checkoutUrl}`);
-    return "open";
+    // an app the account's plan covers has a plan: it goes on with it once, on its page
+    note(offer.current ? `${clean(app.name, 40)} is covered by your ${clean(offer.current, 20)} plan. Continue with it once on its plan page: ${offer.checkoutUrl}` : `${clean(app.name, 40)} has no plan yet. Choose it in the browser: ${offer.checkoutUrl}`);
+    return offer.current ? "covered" : "open";
   }
-  return (await projectPlan(offer, o, deps)) === "done" ? "chosen" : "open";
+  const r = await projectPlan(offer, o, deps);
+  return r === "done" ? "chosen" : offer.current ? "covered" : "open";
 }
 
 /**
@@ -188,15 +195,23 @@ export async function checkout(offer, o = {}, deps = {}) {
  */
 export async function projectPlan(offer, o = {}, deps = {}) {
   const name = clean(offer.project.name, 30);
+  // a paying account past the apps its plan covers: its page sells nothing (more apps are Enterprise's, by email),
+  // so nothing is opened or waited for: the line, where the address is, and the setup goes on
+  if (offer.needs && offer.paying && !offer.appsPerUnit) {
+    out();
+    warn(`Your plan covers no more apps, and ${name} is one more. More apps come with Enterprise, by email.`);
+    out(`  ${c.gray("The address, on its plan page:")}`);
+    out(`    ${c.cyan(offer.checkoutUrl)}`);
+    note("Or delete an app you no longer need, in the browser.");
+    return "skipped";
+  }
   if (offer.features?.length) planCard(offer, offer.project.name);
   else out();
   note(
     offer.current
       ? `Your ${clean(offer.current, 20)} plan covers ${name}: continue with it on its plan page.`
       : offer.needs && offer.paying
-        ? offer.appsPerUnit
-          ? `Your plan covers no more apps: add ${offer.appsPerUnit} more for ${name} on its plan page.`
-          : `Your plan covers no more apps, and ${name} is one more. More apps come with Enterprise, by email: its plan page has the address.`
+        ? `Your plan covers no more apps: add ${offer.appsPerUnit} more for ${name} on its plan page.`
         : offer.needs
           ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more: it needs ${offer.plan.name}, ${offer.price}.`
           : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`,
@@ -226,7 +241,7 @@ async function waitForPlan(offer, o = {}, deps = {}) {
   if (openBrowser(offer.checkoutUrl, o)) note(app ? `Your browser is opening the plan page for ${app}.` : "Your browser is opening the checkout.");
   const creds = readCredentials();
   const stop = stopOnEnter();
-  const sp = spinner(`${offer.current || (app && !offer.needs) ? "Waiting for your choice in the browser" : "Waiting for the payment in the browser"}${canStop()}`);
+  const sp = spinner(offer.current || (app && !offer.needs) ? "Waiting for your choice in the browser" : "Waiting for the payment in the browser", { stoppable: interactive() });
   const until = Date.now() + (deps.waitMs ?? 10 * 60_000);
   let got = null;
   while (creds && !stop.signal.aborted && Date.now() < until) {
@@ -239,7 +254,8 @@ async function waitForPlan(offer, o = {}, deps = {}) {
       // covered already: Continue was clicked; else a payment (or more apps) that covers it now, or Free chosen
       if (offer.current) got = p?.planChosen ? "kept" : null;
       else if (p?.plan && (p.plan.id !== "free" || p.plan.source) && !p.needsPlan) got = "paid";
-      else if (p?.planChosen && !offer.needs && !p.needsPlan) got = "free";
+      // Free counts only when it is chosen now: a choice made before this wait is not an answer to it
+      else if (p?.planChosen && !offer.chosen && !offer.needs && !p.needsPlan) got = "free";
     } else if (me.cli ? me.cli.paid : me.plan && me.plan.id !== "free") got = "paid";
     if (got) break;
   }
@@ -247,7 +263,7 @@ async function waitForPlan(offer, o = {}, deps = {}) {
   if (got === "kept") sp.stop("ok", `${app} goes on with ${clean(offer.current, 20)}.`);
   else if (got === "paid") sp.stop("ok", `${offer.plan.name} is active${app ? ` for ${app}` : ""}. Thank you.`);
   else if (got === "free") sp.stop("ok", `${app} is on ${offer.free.name} for now (limited).`);
-  else sp.stop("warn", app && !offer.needs ? "No choice yet." : `No payment yet. ${offer.plan.name} starts the moment the payment goes through.`);
+  else sp.stop("warn", app && !offer.needs ? "No choice yet." : `No payment yet. ${offer.plan.name} starts once it is started on Stripe.`);
   return got;
 }
 
@@ -275,14 +291,47 @@ export function runtimeArgs(state, o = {}) {
  * missing (the step says so), only they are written.
  */
 export async function addRuntime(state, o = {}) {
+  // a member of a paying team: init and connect say the new app goes into the team's account
+  if (state.account) (await import("./paywall.mjs")).noteAccount(state.account);
   if (!state.steps.find((s) => s.id === "runtime")?.vite) {
     const { cmd, args } = runtimeArgs(state, o);
-    const code = cmd === "connect" ? await runLogin("connect", args) : await runInit("init", args);
+    // GenClass taken out and added again: the account's app of the same name is this one, not a new app
+    const again = cmd === "init" ? await sameApp(state, o) : null;
+    const code = again ? await again() : cmd === "connect" ? await runLogin("connect", args) : await runInit("init", args);
     if (code !== 0) return "failed";
     // init returns 0 when the person says no to its change: then there is no GenClass to add Vite settings for
     if (inspectProject({ cwd: state.cwd }).fresh) return "skipped";
   }
   return (await addViteSettings(state, o)) === "failed" ? "failed" : "done";
+}
+
+/**
+ * A fresh project (no GenClass in it) whose name is an app already in the account, as after `genclass remove`: on a
+ * terminal it asks whether this is that app (yes by default), with --yes it is. Returns the init that writes that
+ * app's key (no new app is made), or null when there is no such app or the person said no.
+ */
+export async function sameApp(state, o = {}) {
+  if (!state.signedIn) return null;
+  let st;
+  try {
+    st = inspectProject({ cwd: state.cwd });
+  } catch {
+    return null;
+  }
+  const name = String(st.project.pkg?.name || st.project.name || "").slice(0, 80);
+  const app = name ? (state.projects ?? []).find((p) => !p.shared && p.name === name && p.token) : null;
+  if (!app) return null;
+  if (!o.yes) {
+    if (!interactive()) return null;
+    out();
+    if (!(await agree(`Use your existing ${clean(app.name, 40)}? ${c.gray("(No makes a new app)")}`))) return null;
+  }
+  const { args } = runtimeArgs(state, o);
+  const creds = readCredentials();
+  return async () => {
+    const { init, parse } = await import("../../runtime/bin/lib/init.mjs");
+    return init({ ...parse(args), token: app.token, ...(o.noInstall ? { noInstall: true } : {}) }, { cmd: "init", creds, app });
+  };
 }
 
 /** Shows the two Vite settings and writes them on a yes (--yes, or one question on a terminal). */
@@ -341,7 +390,7 @@ export async function watchFirstPage(state, o = {}) {
     }
   } else return "skipped";
   const stop = stopOnEnter();
-  const sp = spinner(`Open your live site in a browser now. Watching for its first page${canStop()}`);
+  const sp = spinner("Open your live site in a browser now. Watching for its first page", { stoppable: interactive() });
   const until = Date.now() + (o.seconds ?? 120) * 1000;
   while (Date.now() < until && !stop.signal.aborted) {
     await nap(5000, stop.signal);
@@ -410,7 +459,7 @@ export async function addWorkflow(state, o = {}) {
  */
 async function waitForGithub(creds, repo, text, until, seconds) {
   const stop = stopOnEnter();
-  const sp = spinner(`${text}${canStop()}`);
+  const sp = spinner(text, { stoppable: interactive() });
   const end = Date.now() + seconds * 1000;
   let last = null;
   while (Date.now() < end && !stop.signal.aborted) {
@@ -555,14 +604,17 @@ export async function connectAgent(state, o = {}) {
     out(`    ${c.cyan(`"genclass": ${JSON.stringify(mcpServer())}`)}`);
     return "skipped";
   }
-  if (!o.yes && !o.confirmed) {
+  // what is written is shown and asked first, as the runtime step's change is (in the walk too); --yes writes it
+  if (!o.yes) {
     out();
     printChange(plan.change);
+    out(`  ${c.gray(`And ${SKILL_PATH}: how the agent uses GenClass's tools (a file you changed is left alone).`)}`);
+    out();
     if (!interactive()) {
       note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write it.`);
       return "skipped";
     }
-    if (!(await agree("Write this change?"))) return "skipped";
+    if (!(await agree(`Write ${plan.file} and the skill?`))) return "skipped";
   }
   try {
     mkdirSync(dirname(plan.path), { recursive: true });

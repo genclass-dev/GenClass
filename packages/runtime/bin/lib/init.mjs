@@ -30,11 +30,17 @@ export const INTERCEPTION_URL = "https://genclass.dev/docs/interception";
 export const PRIVACY_URL = `${REPO}/PRIVACY.md`;
 /** The plans page: forwarding to Sentry, PostHog and Datadog is not part of the free runtime; the genclass.dev collector does it on the Team and Enterprise plans. */
 export const PRICING_URL = "https://genclass.dev/pricing";
-/** What a dashboard shows, said under every dashboard link the CLI prints: Free the totals, Pro the rest (since 2026-11-12). */
-export const FREE_LINES = [
-  "Free shows this app's totals for the last 7 days. Every problem, the pages it happens on, a fix prompt for",
-  `each and visitor analytics come with Pro (3 days free): ${PRICING_URL}. This link again: ${CMD} dashboard`,
-];
+/**
+ * What a dashboard shows, said under every dashboard link the CLI prints: Free the totals, Pro the rest (since
+ * 2026-11-12). Through a host CLI (`genclass`, whose commands come with Pro: init and connect run there only once
+ * the account has it) the lines do not offer Pro again: they say where the rest is.
+ */
+export const FREE_LINES = HOST_CLI
+  ? ["Every problem, the pages it happens on, a fix prompt for each and visitor analytics, in the terminal:", `${CMD} dashboard`]
+  : [
+      "Free shows this app's totals for the last 7 days. Every problem, the pages it happens on, a fix prompt for",
+      `each and visitor analytics come with Pro (3 days free): ${PRICING_URL}. This link again: ${CMD} dashboard`,
+    ];
 
 export const USAGE = `Usage:
   genclass-runtime init   [--mode observe|guard|heal] [--token <gc_...> | --no-token]
@@ -418,7 +424,29 @@ function briefTelemetry(cfg) {
   briefLines("Anonymous diagnostics are on: counts and decisions go to GenClass's maintainers, with no page text, cookies or IP addresses, and never from localhost.");
   // the command and the address each stay whole on a line of their own, so they can be copied
   out(`  ${c.gray(`Off: ${CMD} init --no-telemetry`)}`);
-  out(`  ${c.gray(`What is sent: ${TELEMETRY_URL}`)}`);
+  out(`  ${c.gray("What is sent:")}`);
+  out(`  ${c.gray(TELEMETRY_URL)}`);
+}
+
+/**
+ * A command shown as what will run: on its label's line when it fits the window, else under it, folded between its
+ * words (a narrow terminal would otherwise break a word of it in two, "--n" and "o-audit").
+ */
+function commandLine(label, cmd) {
+  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || 100));
+  if (2 + label.length + 2 + cmd.length <= cols) {
+    out(`  ${c.bold(label)}  ${c.cyan(cmd)}`);
+    return;
+  }
+  out(`  ${c.bold(label)}`);
+  let line = "";
+  for (const w of cmd.split(" ")) {
+    if (line && 4 + line.length + 1 + w.length > cols) {
+      out(`    ${c.cyan(line)}`);
+      line = w;
+    } else line = line ? `${line} ${w}` : w;
+  }
+  if (line) out(`    ${c.cyan(line)}`);
 }
 
 /** A grey sentence of the compact (--brief) output, folded to the window (40 to 100 columns), every line indented. */
@@ -527,7 +555,7 @@ async function switchModes(o, project, planned, install, spec, cwd, what, tk) {
   out(`  ${c.bold("Changes")}`);
   out();
   for (const ch of changes) printChange({ ...ch, file: ch.rel });
-  if (install) out(`  ${c.bold("Install")}  ${c.cyan(installArgs(project.pm, spec).flat().join(" "))}`);
+  if (install) commandLine("Install", installArgs(project.pm, spec).flat().join(" "));
   out();
   if (o.dryRun) {
     out(`  ${c.gray("Dry run: nothing was written.")}`);
@@ -658,13 +686,20 @@ async function settleToken(tk, changes, replan) {
 /** "dev@example.com" (or the GitHub login, or the account id) for a saved session. */
 export const accountLabel = (account) => account?.email || (account?.github_login ? `GitHub ${account.github_login}` : account?.id ? `account ${account.id}` : "your account");
 
+/**
+ * Where a new app of the signed-in account goes, in words: "your account (dev@example.com)". A host CLI that knows
+ * better says so through HOST_CLI.into (`genclass`: a member of a paying team with no plan of their own adds apps to
+ * the team's account, which genclass.dev puts them in).
+ */
+export const accountWhere = (account) => (typeof HOST_CLI?.into === "string" && HOST_CLI.into ? HOST_CLI.into : `your account (${accountLabel(account)})`);
+
 /** The command running init's flow ("init", or "connect"), for the messages that say what it will send. */
 let actor = "init";
 
 function tokenRow(tk) {
   const name = c.bold(String(tk.name ?? "").slice(0, 80) || "unnamed");
   if (tk.pending && tk.account) {
-    row("Token", `a new app in your account (${accountLabel(tk.account.account)}) ${c.gray("once you apply these changes")}`);
+    row("Token", `a new app in ${accountWhere(tk.account.account)} ${c.gray("once you apply these changes")}`);
     out(`             ${actor} then sends this app's name (${name}) to ${c.cyan(hostUrl("/api/account/projects"))} with your`);
     out(`             CLI session and gets back the app's public token. ${c.cyan("--no-token")}: no token, no network.`);
     return;
@@ -676,7 +711,7 @@ function tokenRow(tk) {
     return;
   }
   if (tk.token) {
-    const from = tk.source === "new" ? "created for this app at genclass.dev" : tk.source === "account" ? `a new app in your account (${accountLabel(tk.account?.account)})` : tk.source;
+    const from = tk.source === "new" ? "created for this app at genclass.dev" : tk.source === "account" ? `a new app in ${accountWhere(tk.account?.account)}` : tk.source;
     row("Token", `${tk.token} ${c.gray(`(${from})`)}`);
     out(`             Public (it ships in your page). The diagnostics above also feed this app's ${tk.app || tk.source === "account" ? "dashboard in your account" : "private dashboard"}.`);
     return;
@@ -738,7 +773,7 @@ function dashboardNotice(tk, cwd, applied, remind = false, saved = null) {
     if (!applied || !tk.token) return;
     const link = tk.created?.dashboardUrl ?? tk.app?.dashboard_url ?? hostUrl("/account");
     out(`  ${c.bold("Your dashboard")}  ${c.bold(c.cyan(link))}`);
-    out(`  ${c.gray(`In your GenClass account (${accountLabel(tk.account?.account)}): sign in at genclass.dev to open it.`)}`);
+    out(`  ${c.gray(`In ${HOST_CLI?.into ? HOST_CLI.into : `your GenClass account (${accountLabel(tk.account?.account)})`}: sign in at genclass.dev to open it.`)}`);
     for (const l of FREE_LINES) out(`  ${c.gray(l)}`);
     out(`  ${c.gray("It fills once your deployed app runs with telemetry on. Local hosts (localhost, *.local, *.test, private")}`);
     out(`  ${c.gray("networks) do not send by default (telemetry: true opts them in), and visitors who opt out or send")}`);
@@ -968,7 +1003,7 @@ export async function init(o, ctx = {}) {
     briefTelemetry(cfg);
   } else telemetryNotice(cfg, cfgAt);
   if (!ctx.creds) tk = await offerAccount(o, tk);
-  if (brief && tk.pending && tk.account) briefLines(`The app goes into your account (${accountLabel(tk.account.account)}) as "${String(tk.name ?? "").slice(0, 80) || "unnamed"}".`);
+  if (brief && tk.pending && tk.account) briefLines(`The app goes into ${accountWhere(tk.account.account)} as "${String(tk.name ?? "").slice(0, 80) || "unnamed"}".`);
   else tokenRow(tk);
   sinksNotice(cfg, cfgAt);
   cspAdvice(project, files, cfg);
@@ -976,7 +1011,7 @@ export async function init(o, ctx = {}) {
   out(`  ${c.bold("Changes")}`);
   out();
   for (const ch of plan.changes) printChange({ ...ch, file: ch.rel });
-  if (install) out(`  ${c.bold("Install")}  ${c.cyan(installArgs(project.pm, spec).flat().join(" "))}`);
+  if (install) commandLine("Install", installArgs(project.pm, spec).flat().join(" "));
   else if (needsPackage) out(`  ${c.yellow(sym.warn)} --no-install: ${older ? `upgrade ${PKG} yourself (${installArgs(project.pm, spec).flat().join(" ")})` : `add ${PKG} to your dependencies yourself`}.`);
   for (const n of plan.notes ?? []) out(`  ${c.yellow(sym.warn)} ${n}`);
   out();

@@ -42,12 +42,69 @@ export function clean(text, max = 400) {
 /** The visible length of a string that may hold colour codes. */
 export const visible = (s) => String(s).replace(COLOUR, "").length;
 
-/** `text` wrapped to `cols` columns: an array of lines (words longer than a line are left whole). */
+/** The words that follow `genclass` (or npm) in a command: its commands and their subcommands. */
+const SUBCOMMANDS = new Set(
+  "setup status suggest dashboard problems analytics events health report export fix ask scan audit connections agent funnels apps plan upgrade profile team login logout whoami connect init remove help version new add invite link test on off pages sources devices clicks paths stale all install uninstall".split(" "),
+);
+/** The options of a command that take the word after them. */
+const VALUED = /^--?(cwd|app|range|out|from|to|format|agent|name|mode|token|url|model-url|sink|variant|ort)$/;
+const plainWord = (w) => w.replace(COLOUR, "");
+/** A word that ends a sentence or a clause (a URL's own last character does not). */
+const closes = (p) => /[.,;:!?)]$/.test(p) && !/^https?:\/\//.test(p);
+
+/**
+ * The words of one paragraph grouped so that a command is one unit: `npx genclass init --no-telemetry`,
+ * `npx genclass --cwd <folder>`, `npm install -g genclass`, `npx genclass apps new "My shop"`. A unit is never
+ * longer than `cols` because of the grouping: a command that would be is left to break as words do.
+ */
+function units(words, cols) {
+  const list = [];
+  let cmd = false;
+  let quote = false;
+  let valueNext = false;
+  for (const w of words) {
+    const p = plainWord(w);
+    const last = list.length ? plainWord(list[list.length - 1].at(-1)) : "";
+    let join = false;
+    if (list.length && cmd) {
+      join =
+        quote ||
+        valueNext ||
+        last === "npx" ||
+        (/^(genclass|@genclass\/)/.test(p) && /^(install|uninstall|-g)$/.test(last)) ||
+        /^-{1,2}[A-Za-z][\w-]*/.test(p) ||
+        /^<[^>]*>/.test(p) ||
+        /^"/.test(p) ||
+        /^https?:\/\//.test(p) ||
+        /^\d+[.,;:)]?$/.test(p) ||
+        SUBCOMMANDS.has(p.replace(/[.,;:)]$/, ""));
+      if (join && visible(list[list.length - 1].join(" ")) + 1 + visible(w) > cols) join = false;
+    }
+    if (join) list[list.length - 1].push(w);
+    else {
+      list.push([w]);
+      cmd = /^(npx|npm)$/.test(p) || /^(genclass|@genclass\/\S+?)[.,;:)]?$/.test(p);
+      quote = false;
+      valueNext = false;
+      if (!cmd) continue;
+    }
+    if (!quote && /^"/.test(p) && !/.["][.,;:)]?$/.test(p)) quote = true;
+    else if (quote && /"[.,;:)]?$/.test(p)) quote = false;
+    valueNext = !quote && VALUED.test(p);
+    if (!quote && closes(p)) cmd = false;
+  }
+  return list.map((u) => u.join(" "));
+}
+
+/**
+ * `text` wrapped to `cols` columns: an array of lines. A word longer than a line is left whole, and a command (npx
+ * genclass ...) is never broken across lines: it moves to the next line whole, so it can be copied as typed.
+ */
 export function wrap(text, cols = width() - 4) {
   const lines = [];
   for (const para of String(text).split("\n")) {
     let line = "";
-    for (const word of para.split(/\s+/).filter(Boolean)) {
+    for (const word of units(para.split(/[ \t\r\f\v]+/).filter(Boolean), cols)) {
       if (line && visible(line) + 1 + visible(word) > cols) {
         lines.push(line);
         line = word;
@@ -71,6 +128,8 @@ let homeApp = null;
 export const inHome = (app) => {
   homeApp = app === null ? null : clean(app ?? "", 40);
 };
+/** Whether the command's home is open (its card was shown once, at the top). */
+export const homeOpen = () => homeApp !== null;
 
 /**
  * The header: the product, this app and its framework on one line, the account and its plan under it.
@@ -109,10 +168,13 @@ export function folderName(dir, max = 48, home = homedir()) {
   return short.length > max ? `…${short.slice(short.length - max + 1)}` : short;
 }
 
-/** What to call the person on the card: the start of their email address or their GitHub name, else nothing. */
+/**
+ * What to call the person on the card: their GitHub name, else nothing. The start of an email address is not a name
+ * ("walk58@..." would be greeted as "Walk58"), so an account known by its email is welcomed without one.
+ */
 export function firstName(label) {
   const l = clean(label ?? "", 80);
-  const raw = /^GitHub (\S+)$/.exec(l)?.[1] ?? (l.includes("@") ? l.split("@")[0].split(/[._+-]/)[0] : "");
+  const raw = /^GitHub (\S+)$/.exec(l)?.[1] ?? "";
   const name = raw.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 24);
   return name ? name[0].toUpperCase() + name.slice(1) : null;
 }
@@ -322,24 +384,44 @@ export async function secret(question) {
 /** A line of small print. */
 export const note = (text) => para(text, "  ", c.gray);
 
+/** A line behind a mark, wrapped to the window: the lines after the first stand under its text, not under the mark. */
+const marked = (mark, text) => {
+  const [first = "", ...rest] = wrap(text, width() - 6);
+  out(`  ${mark} ${first}`);
+  for (const l of rest) out(`    ${l}`);
+};
 /** A finished thing. */
-export const good = (text) => out(`  ${c.green(sym.ok)} ${text}`);
+export const good = (text) => marked(c.green(sym.ok), text);
 /** Something that needs attention and is not an error. */
-export const warn = (text) => out(`  ${c.yellow(sym.warn)} ${text}`);
+export const warn = (text) => marked(c.yellow(sym.warn), text);
 /** Something that failed. */
-export const bad = (text) => out(`  ${c.red(sym.cross)} ${text}`);
+export const bad = (text) => marked(c.red(sym.cross), text);
 
 const FRAMES = unicode ? ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] : ["-", "\\", "|", "/"];
 
+/** What a stoppable wait says: after its line when it fits, else on its own line above it. */
+export const STOP_HINT = "(Enter to stop waiting)";
+
+/** `label` cut to what fits on one line of the terminal after the spinner's mark (a wrapped line could not be redrawn). */
+export function fitLine(label, columns = Number(process.stdout.columns) || 80) {
+  const room = Math.max(12, columns - 5);
+  return visible(label) <= room ? label : `${String(label).replace(COLOUR, "").slice(0, room - 1)}…`;
+}
+
 /**
- * A spinner for a wait. On a terminal it redraws one line; piped, it prints the text once. `stop(mark, text)` ends
- * it with one final line (`mark`: "ok", "warn", "bad" or null for no line).
+ * A spinner for a wait. On a terminal it redraws one line, never wider than the window (a line that wrapped would
+ * leave a copy of itself on every frame); piped, it prints the text once. `stoppable`: the wait ends on Enter, and
+ * the line says so. `stop(mark, text)` ends it with one final line (`mark`: "ok", "warn", "bad" or null for no line).
  */
-export function spinner(text) {
+export function spinner(text, opts = {}) {
   let label = text;
   let i = 0;
   let timer = null;
-  const draw = () => process.stdout.write(`\r\u001b[2K  ${c.cyan(FRAMES[i++ % FRAMES.length])} ${label}`);
+  if (opts.stoppable && tty()) {
+    if (visible(`${text} ${STOP_HINT}`) <= Math.max(12, (Number(process.stdout.columns) || 80) - 5)) label = `${text}${c.gray(` ${STOP_HINT}`)}`;
+    else out(`  ${c.gray("Enter stops the wait.")}`);
+  }
+  const draw = () => process.stdout.write(`\r\u001b[2K  ${c.cyan(FRAMES[i++ % FRAMES.length])} ${fitLine(label)}`);
   if (tty()) {
     draw();
     timer = setInterval(draw, 90);

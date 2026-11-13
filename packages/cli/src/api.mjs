@@ -37,14 +37,17 @@ export async function fetchOverview(creds, opts = {}) {
   if (!r.ok) return { ok: false, status: r.status, reason: failure(r) };
   const j = r.json ?? {};
   const projects = (Array.isArray(j.projects) ? j.projects : []).map((p) => withPlan(cleanProject(p, creds.host), p, creds.host)).filter(Boolean);
-  const account = j.account && typeof j.account === "object" ? { id: String(j.account.id ?? ""), email: str(j.account.email), github_login: str(j.account.github_login, 60) } : creds.account;
+  // team_plan (a newer server): the plan of a paying team the account is in, whose account its new apps go into
+  const tp = j.account?.team_plan;
+  const account = j.account && typeof j.account === "object" ? { id: String(j.account.id ?? ""), email: str(j.account.email), github_login: str(j.account.github_login, 60), ...(tp && typeof tp === "object" && str(tp.id, 40) ? { teamPlan: { id: str(tp.id, 40), name: str(tp.name, 40) ?? str(tp.id, 40) } } : {}) } : creds.account;
   if (!full) return { ok: true, account, plan: null, suggestions: null, projects, github: null, billingUrl: null };
   const s = j.suggestions && typeof j.suggestions === "object" ? j.suggestions : null;
   const num = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v) : null);
   return {
     ok: true,
     account,
-    plan: j.plan && typeof j.plan === "object" && str(j.plan.id, 40) ? { id: str(j.plan.id, 40), name: str(j.plan.name, 40) ?? str(j.plan.id, 40) } : null,
+    // `via`: "team" for a member covered by a team's plan (a newer server says it; older ones do not)
+    plan: j.plan && typeof j.plan === "object" && str(j.plan.id, 40) ? { id: str(j.plan.id, 40), name: str(j.plan.name, 40) ?? str(j.plan.id, 40), ...(str(j.plan.via, 20) ? { via: str(j.plan.via, 20) } : {}) } : null,
     suggestions: s ? { perDay: num(s.per_day), shown: num(s.shown), usedToday: num(s.used_today) ?? 0, model: s.model === true } : null,
     projects,
     github: j.github && typeof j.github === "object" ? { app: j.github.app === true, installUrl: sameOrigin(j.github.install_url, creds.host), connectUrl: sameOrigin(j.github.connect_url, creds.host) } : null,
@@ -59,11 +62,13 @@ export async function fetchOverview(creds, opts = {}) {
  * place in a paying team) and, without it, where Pro starts: the plan's name, its price, the trial the account has
  * left, and the page that opens the checkout (on the server's own host; its billing page when it sent another).
  * Null when the server does not say (an older or self-hosted one): nothing is locked then.
- * @returns {{ paid: true } | { paid: false, plan: string, price: string | null, trialDays: number | null, checkoutUrl: string } | null}
+ * `via` (a newer server): why the account has it, "plan" (its own), "team" (a paying team's) or "open" (nothing is
+ * sold here); null when the server does not say.
+ * @returns {{ paid: true, via: "plan" | "team" | "open" | null } | { paid: false, plan: string, price: string | null, trialDays: number | null, checkoutUrl: string } | null}
  */
 export function cliOf(v, host) {
   if (!v || typeof v !== "object" || typeof v.paid !== "boolean") return null;
-  if (v.paid) return { paid: true };
+  if (v.paid) return { paid: true, via: ["plan", "team", "open"].includes(v.via) ? v.via : null };
   const days = Number(v.trial_days);
   return {
     paid: false,
@@ -368,6 +373,8 @@ export async function fetchAccount(creds, opts = {}) {
     },
     billingUrl: sameOrigin(j.billing_url, creds.host),
     offer: offerOf(j.offer, creds.host),
+    /** the plan of a paying team the account is in (a newer server says it), else null */
+    teamPlan: j.team_plan && typeof j.team_plan === "object" && str(j.team_plan.id, 40) ? { id: str(j.team_plan.id, 40), name: str(j.team_plan.name, 40) ?? str(j.team_plan.id, 40) } : null,
   };
 }
 

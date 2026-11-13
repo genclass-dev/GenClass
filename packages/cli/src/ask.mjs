@@ -82,6 +82,9 @@ export async function ask(o = {}, deps = {}) {
   const { state, creds, target } = picked;
   const range = ["24h", "7d", "30d", "90d", "1y"].includes(o.range) ? o.range : "7d";
   if (!o.json) header({ app: target.name, framework: state.app.token === target.token ? state.app.framework : null, account: state.account?.label, plan: planName(state, target.token), host: state.host });
+  // an account without Pro is told so before the notice: it is not asked to agree to something that cannot run
+  const cli = state.account?.cli ?? null;
+  if (cli && !cli.paid) return refused({ ok: false, needsPro: cli }, { what: "A question to the model", command: "ask", json: o.json });
   // once per machine: what is sent, and where
   const prefs = (deps.readPrefs ?? readPrefs)();
   if (!prefs.askTold) {

@@ -115,7 +115,10 @@ export function renderAnalytics(app, o = {}) {
   if (app.visitorsPlan) {
     out();
     out(`  ${c.bold(`Visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Pro", 20)} plan.`)}`);
-    note("What your visitors do is already being counted, so it shows from the day you switch: visits, pages, time on a page, where people come from, what they click, funnels.");
+    // "already counted" only when the app sends visitor events (page views in the totals); else it is the app's switch
+    const counted = (t?.ix_views ?? 0) > 0 || (app.totals?.pageViews ?? 0) > 0;
+    note(counted ? "What your visitors do is already being counted, so it shows from the day you switch: visits, pages, time on a page, where people come from, what they click, funnels." : "Visits, pages, time on a page, where people come from, what they click, funnels. Your app turns it on with one line, no cookies:");
+    if (!counted) out(`    ${c.cyan("https://genclass.dev/docs/analytics")}`);
     out(`    ${c.cyan("npx genclass plan")}`);
     out();
     return;

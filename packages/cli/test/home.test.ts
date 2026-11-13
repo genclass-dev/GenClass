@@ -178,8 +178,9 @@ describe("genclass: the walk leads into the home (src/setup.mjs)", () => {
     const said = await at58(async () => expect(await setup({ cwd: dir }, { home: async (o: Record<string, unknown>) => (opened.push(o), 0) })).toBe(0));
     expect(opened).toHaveLength(1);
     expect(opened[0]).toMatchObject({ cwd: dir, app: "shop" });
-    expect(said).toContain("q later");
-    expect(plainLines(said).join(" ")).toContain("The setup waits here: setup continues it.");
+    // the same key is called the same everywhere
+    expect(said).toContain("q stop");
+    expect(plainLines(said).join(" ")).toContain("Setup stopped here. Type setup to go on with it.");
     // run from inside the home, the walk ends as it always did (no home inside the home)
     type("q");
     const nested = await at58(async () => expect(await setup({ cwd: dir, home: false }, { home: async () => (opened.push({}), 0) })).toBe(0));

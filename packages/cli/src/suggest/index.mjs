@@ -16,6 +16,7 @@ import { readCredentials } from "../../../runtime/bin/lib/account.mjs";
 import { inspectProject } from "../../../runtime/bin/lib/init.mjs";
 import { c, interactive, out, sym } from "../../../runtime/bin/lib/ui.mjs";
 import { requestPlan } from "../api.mjs";
+import { proSeen } from "../paywall.mjs";
 import { copyText, findAgents, startAgent } from "../fix.mjs";
 import { readNotes, saveNotes } from "../store.mjs";
 import { agree, clean, good, header, note, para, proBox, PROMPT, rule, spinner, typed, visible, warn, width, wrap } from "../tui.mjs";
@@ -42,9 +43,10 @@ export function siteAddress(v) {
 /**
  * The plan to print: the failed checks in order, each with the words to show and whether it is shown in full.
  * `plan` is the server's answer (api.mjs requestPlan) or null; without it the order is by weight and the first
- * FREE_SHOWN are shown in full with the catalog's own words.
+ * FREE_SHOWN are shown in full with the catalog's own words, or every one for an account with Pro (`paid`: no plan
+ * was asked for, --no-model or nothing agreed to send, but the account's own plan shows them all).
  */
-export function layOut(results, plan) {
+export function layOut(results, plan, paid = false) {
   const failed = results.filter((r) => r.status === "fail");
   const by = new Map(failed.map((r) => [r.id, r]));
   const order = [];
@@ -55,7 +57,7 @@ export function layOut(results, plan) {
   }
   // whatever the server did not name (or everything, without a server), heaviest first
   const rest = failed.filter((r) => !order.includes(r.id)).sort((a, b) => b.weight - a.weight);
-  const shown = plan ? plan.items.length : Math.min(FREE_SHOWN, rest.length);
+  const shown = plan ? plan.items.length : paid ? rest.length : Math.min(FREE_SHOWN, rest.length);
   for (const r of rest) order.push(r.id);
   return order.map((id, n) => {
     const r = by.get(id);
@@ -189,7 +191,7 @@ async function handToAgent(items, url, cwd, o, deps, plan) {
   choices.forEach(([label], i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${label}`));
   if (!agents.length) note("No coding agent's command found here (claude, codex, cursor-agent, gemini).");
   out();
-  const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("not now")}  `);
+  const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("stop")}  `);
   const pick = a !== null && /^\d+$/.test(a.trim()) ? choices[Number(a.trim()) - 1] : null;
   if (pick) await pick[1]();
 }
@@ -208,11 +210,13 @@ export async function suggest(o = {}, deps = {}) {
     return 2;
   }
   if (!quiet) header({ app: repo.name ?? st.project.name, framework: st.project.label || null, account: readCredentials()?.account?.email ?? null });
-  if (!url && !quiet && !o.yes && interactive()) {
+  // asked once per project: Enter (the repository only) is remembered, and the address can still be given
+  if (!url && !notes.repoOnly && !quiet && !o.yes && interactive()) {
     para("Where is this app live? With its address GenClass also checks what search engines, AI assistants and visitors get from it.", "  ");
     const a = await typed(`  ${c.bold("Address")} ${c.gray("(or Enter for the repository only)")} `);
     url = siteAddress(a);
     if (a && !url) warn("That is not a site address, so only the repository is checked this time.");
+    if (a === "") saveNotes(cwd, { repoOnly: true });
   }
   let site = null;
   if (url) {
@@ -258,7 +262,8 @@ export async function suggest(o = {}, deps = {}) {
       }
     }
   }
-  const items = layOut(results, plan);
+  // no plan from genclass.dev (--no-model, nothing sent): the account's own plan says how much is shown
+  const items = layOut(results, plan, !plan && !!creds && (o.paid === true || proSeen()));
   const locked = items.filter((i) => !i.open);
   saveNotes(cwd, { ...(site?.reachable ? { site: url } : {}), suggest: { at: new Date().toISOString(), failed: failed.length, urgent: failed.filter((r) => r.weight >= 4).length, passed: passed.length, top: items.slice(0, 3).map((i) => i.id) } });
 
@@ -315,7 +320,7 @@ export async function suggest(o = {}, deps = {}) {
   if (unknown.length) {
     out();
     // without the site's address these could not be measured: a count is enough, the line above says how to get them
-    if (!site?.reachable) note(`${unknown.length} more checks need your live site${url ? "" : `: ${c.cyan("npx genclass suggest https://your-site.com")}`}.`);
+    if (!site?.reachable) note(`${unknown.length} more checks need your live site${url ? "." : `: ${c.cyan("npx genclass suggest https://your-site.com")}`}`);
     else note(`${unknown.length} check${unknown.length === 1 ? "" : "s"} could not be measured on this site this time.`);
   }
   out();

@@ -8,13 +8,14 @@
 // approved, and writes its token exactly the way init does (init.mjs: the same snippet edits, the same diff and
 // question; --yes skips it). An app init made without an account (its private link in .genclass.local) can be added
 // to the account instead of replaced. whoami prints the account and its apps; logout revokes the session at
-// genclass.dev and deletes the file. dashboard prints the link to the free dashboard of the app in this folder: its
+// genclass.dev and deletes the file. dashboard prints the link to the dashboard of the app in this folder: its
 // private link from .genclass.local (no network), else its page in the signed-in account (GET /api/me), else the
 // account's apps; --open opens it. Running one of these commands is the agreement to contact genclass.dev for it;
 // creating an app or writing a file is asked first. A private dashboard link is only ever sent to the host it belongs
 // to: with GENCLASS_HOST set to another host, a genclass.dev link in .genclass.local stays on this computer.
 
 import { spawn } from "node:child_process";
+import { homedir } from "node:os";
 import { relative } from "node:path";
 import {
   claimProject,
@@ -54,10 +55,10 @@ connect  connects the app in this folder to your account: pick one of your apps,
 whoami   shows the signed-in account and its apps.
 logout   ends the CLI session at genclass.dev and deletes the saved file.
 dashboard
-         prints the link to this app's dashboard, free for every app: what GenClass found, on which pages
-         and what it did (Free shows the totals; every problem, its pages and how visitors use each page come with the Pro plan). It reads the private link in
-         ${LOCAL_FILE} without contacting anything; signed in, it finds the app in your account (or lists
-         your apps).
+         prints the link to this app's dashboard: what GenClass found, on which pages and what it did
+         (Free shows one app's totals; every problem, its pages and how visitors use each page come
+         with the Pro plan). It reads the private link in ${LOCAL_FILE} without contacting anything;
+         signed in, it finds the app in your account (or lists your apps).
 
   --yes, -y        no questions: login connects this folder's app; connect uses your app named like
                    package.json (or creates it) and applies the changes
@@ -104,6 +105,18 @@ const onHost = (url, host) => {
     return false;
   }
 };
+
+/** A file's path as a person writes it: the home folder as ~ (the whole path does not fit a narrow window). */
+const tilde = (path) => {
+  const home = homedir();
+  return home && typeof path === "string" && path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+};
+
+/**
+ * Where an app is set up from here: this CLI's connect, or a host CLI's own walk (`npx genclass`), which shows its
+ * plan before it connects anything.
+ */
+const SETUP_CMD = HOST_CLI ? CMD : `${CMD} connect`;
 
 const sessionGone = () => err(`  ${c.red(sym.cross)} The saved CLI session no longer works (signed out, revoked or expired). Sign in again: ${c.cyan(`${CMD} login`)}`);
 
@@ -302,7 +315,7 @@ async function connectApp(o, creds, st, me) {
       out(`    Its private link stays in ${LOCAL_FILE}; to keep that history, paste it under "Add an existing dashboard" at ${hostUrl("/account")}.`);
     out();
   }
-  row("App", app ? `${c.bold(app.name)} ${c.gray(`(in your account; project key ${app.token})`)}` : `${c.bold(createName)} ${c.gray("(a new app in your account, created once you apply the changes)")}`);
+  row("App", app ? `${c.bold(app.name)} ${c.gray(`(in your account; project key ${app.token})`)}` : `${c.bold(createName)} ${c.gray(`(a new app in ${HOST_CLI?.into ? HOST_CLI.into : "your account"}, created once you apply the changes)`)}`);
 
   if (st.handWritten) {
     out();
@@ -367,7 +380,7 @@ async function afterLogin(o, creds, me) {
   const st = inspectProject(o);
   if (st.project.refused || !st.project.framework) {
     out(`  Next: run ${c.cyan(`${CMD} connect`)} in your web app's folder to connect it to your account.`);
-    out(`  ${c.gray(`Your apps' dashboards, free: ${hostUrl("/account")}`)}`);
+    out(`  ${c.gray("Your apps' dashboards:")} ${c.cyan(hostUrl("/account"))}`);
     out();
     return 0;
   }
@@ -386,6 +399,35 @@ async function afterLogin(o, creds, me) {
   }
   out();
   return connectApp(o, creds, st, me);
+}
+
+/**
+ * The question login asks after the sign-in, on its own: connect this folder's app (asked first; --yes connects).
+ * For a host CLI (`genclass`) that runs `login --no-connect` and shows its plan in between. `argv`: login's own
+ * arguments. Returns the exit code.
+ */
+export async function offerConnect(argv) {
+  let o;
+  try {
+    o = parse(argv.filter((a) => a !== "--no-connect"), SPECS.login);
+  } catch (e) {
+    if (e instanceof UsageError) return 2;
+    throw e;
+  }
+  const { creds } = readCredentialsFor();
+  if (!creds) return 1;
+  return afterLogin(o, creds, null);
+}
+
+/** What is wrong with a command's arguments, in its usage error's words, or null when they are right (no network). */
+export function argsError(cmd, argv) {
+  try {
+    const o = parse(argv, SPECS[cmd]);
+    return o.app !== undefined && o.name !== undefined ? "--app and --name contradict each other (use an app, or create one)" : null;
+  } catch (e) {
+    if (e instanceof UsageError) return e.message;
+    throw e;
+  }
 }
 
 async function login(o) {
@@ -460,7 +502,8 @@ async function login(o) {
   }
   out();
   row("Signed in", `${c.bold(accountLabel(creds.account))}${creds.account.github_login && creds.account.email ? c.gray(` (GitHub ${creds.account.github_login})`) : ""}`);
-  out(`  ${c.gray(`Session saved in ${path} (only you can read it). Sign out: ${CMD} logout`)}`);
+  out(`  ${c.gray(`Session saved in ${tilde(path)} (only you can read it).`)}`);
+  out(`  ${c.gray(`Sign out: ${CMD} logout`)}`);
   out();
   return afterLogin(o, creds, null);
 }
@@ -485,15 +528,17 @@ async function whoami() {
   }
   const a = me.account;
   row("Account", `${c.bold(accountLabel(a))}${a.github_login && a.email ? c.gray(` (GitHub ${a.github_login})`) : ""}${a.id ? c.gray(`  id ${a.id}`) : ""}`);
-  row("Session", c.gray(`${path}${when(creds.created) ? `, signed in ${when(creds.created)}` : ""}`));
+  row("Session", c.gray(`${tilde(path)}${when(creds.created) ? `, signed in ${when(creds.created)}` : ""}`));
   out();
   out(`  ${c.bold("Apps")} ${c.gray(`(${me.projects.length})`)}`);
-  if (!me.projects.length) out(`    None yet. In your app's folder: ${c.cyan(`${CMD} connect`)}`);
+  if (!me.projects.length) out(`    None yet. In your app's folder: ${c.cyan(SETUP_CMD)}`);
   const w = Math.min(28, Math.max(4, ...me.projects.map((p) => p.name.length)));
   for (const p of me.projects) {
     out(`    ${c.bold(p.name.padEnd(w))}  ${p.token}  ${c.gray((p.last_event ? `last event ${when(p.last_event)}` : "no events yet").padEnd(31))}  ${p.dashboard_url ? c.cyan(p.dashboard_url) : ""}`.trimEnd());
   }
-  if (me.projects.length) out(`  ${c.gray(`Each app's dashboard is free: open its link above, or run ${CMD} dashboard in the app's folder.`)}`);
+  // Free (on the website) shows one app's totals; through a host CLI the terminal's views come with its plan
+  if (me.projects.length && HOST_CLI) out(`  ${c.gray(`Open a dashboard from its link above. In the terminal, with Pro: ${CMD} dashboard`)}`);
+  else if (me.projects.length) out(`  ${c.gray(`Open a dashboard from its link above, or run ${CMD} dashboard in the app's folder. One app's totals are free; the rest comes with Pro.`)}`);
   out();
   return 0;
 }
@@ -538,7 +583,7 @@ async function dashboard(o) {
     }
     if (st.token) out(`  This folder's project key (${st.token}) is not one of your account's apps; add it with ${c.cyan(`${CMD} connect`)}.`);
     out(`  ${c.bold("Your apps")}  ${c.bold(c.cyan(hostUrl("/account")))}`);
-    if (!me.projects.length) out(`    None yet. In your app's folder: ${c.cyan(`${CMD} connect`)}`);
+    if (!me.projects.length) out(`    None yet. In your app's folder: ${c.cyan(SETUP_CMD)}`);
     const w = Math.min(28, Math.max(4, ...me.projects.map((p) => p.name.length)));
     for (const p of me.projects) out(`    ${c.bold(p.name.padEnd(w))}  ${p.dashboard_url ? c.cyan(p.dashboard_url) : ""}`.trimEnd());
     for (const l of FREE_LINES) out(`  ${c.gray(l)}`);
@@ -576,12 +621,13 @@ async function logout() {
   const r = await revokeSession(creds);
   deleteCredentials();
   if (!r.ok) {
-    err(`  ${c.yellow(sym.warn)} Could not end the session at ${apiHost()} (${r.reason}). ${path} is deleted.`);
+    err(`  ${c.yellow(sym.warn)} Could not end the session at ${apiHost()} (${r.reason}). ${tilde(path)} is deleted.`);
     err(`  End it yourself at ${c.cyan(hostUrl("/account"))} (CLI sessions, Revoke).`);
     out();
     return 1;
   }
-  row("Signed out", `${accountLabel(creds.account)} ${c.gray(`(the CLI session is ended at genclass.dev and ${path} is deleted)`)}`);
+  row("Signed out", accountLabel(creds.account));
+  out(`  ${c.gray(`The CLI session is ended at genclass.dev, and ${tilde(path)} is deleted.`)}`);
   out();
   return 0;
 }

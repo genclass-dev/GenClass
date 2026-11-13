@@ -417,7 +417,7 @@ observing with no download and no worker.
   classic script, which the model's worker cannot be, so `vite build` stops with
   `Invalid value "iife" for option "worker.format"`; and the dev server's pre-bundle has no worker file, so the model
   runs on the page's main thread with a warning on each load. Add `worker: { format: "es" }` (the build) and
-  `optimizeDeps: { exclude: ["@genclass/runtime"] }` (the dev server) to your Vite config. `npx genclass` writes both
+  `optimizeDeps: { exclude: ["@genclass/runtime"] }` (the dev server) to your Vite config. `npx genclass` (with Pro) writes both
   for you and takes them out again; `init` in this package does not yet. Vite 8 needs neither.
 - **The model is new and imperfect.** It misses most problems, it was not evaluated on your app, and in observe mode
   it makes some false flags ([Model quality](#model-quality)). It is not a substitute for tests. Watch observe mode
@@ -837,11 +837,13 @@ writes), the meta tag or the script tag.
 digits) that groups its diagnostics on a dashboard at genclass.dev, kept in a GenClass account (the CLI's `login`,
 then `connect`, `whoami`, `logout`) or behind one private link per app (anyone with the link can open it), which
 `init` saves in `.genclass.local` and `npx @genclass/runtime@beta dashboard` prints again (from `0.3.0-beta.2`;
-`--open` opens it). The dashboard is free for every app (what GenClass found, where and what it did, for the last 7
-days and up to 3 apps in an account), and so is the `@genclass/mcp` server for coding agents. Visitor analytics,
-forwarding, export, 90 days of history and team members come with the Team plan, US$15 a developer a month; your own
-classifier, which a person from GenClass trains, and a year of history with Enterprise
-([pricing](https://genclass.dev/pricing)). No plan limits the runtime. It needs
+`--open` opens it). On Free the dashboard shows an app's totals for the last 7 days, for one app in an account, and
+the `@genclass/mcp` server for coding agents is free. Pro, US$15 a developer a month for up to 3 apps in an account,
+adds every problem with its pages and a fix prompt, visitor analytics, forwarding, export, 90 days of history, team
+members and the `genclass` command; more apps, your own classifier, which a person from GenClass trains, and a year
+of history come with Enterprise ([pricing](https://genclass.dev/pricing)). Plans bought before 13 November 2026 keep
+every app they cover (an app paid for on its own does not count toward Pro's 3); Free covers an account's oldest app
+and locks the others. No plan limits the runtime, and it needs no account. It needs
 telemetry on and a deployed host: local hosts do not send by default. Pass a key with `GenClass.init({ token })`,
 `data-token`, `token=` in the meta tag or `window.GENCLASS_CONFIG = { token }`. Accounts, the private link and what
 the CLI sends: [DASHBOARD.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/DASHBOARD.md).

@@ -36,7 +36,7 @@ export const COMMANDS = [
   ["scan <url>", "check one page", false],
   ["apps", "the apps in your account", false],
   ["plan", "your plan and what it includes", false],
-  ["upgrade", "a paid plan for this app", false],
+  ["upgrade", "start Pro, or see what your plan has", false],
   ["team", "the people on your plan", false],
   ["status", "where the setup stands", false],
   ["setup", "walk the setup again", false],
