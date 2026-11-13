@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.6
+
+The paid plan is Pro (it was called Team), with 3 days free:
+
+- **Free shows the totals and one suggestion.** `problems`, `events`, `report` and `fix` say what Pro adds, its
+  trial and price, and `genclass upgrade`; `dashboard` shows the headline numbers with the same box; `ask` is Pro's.
+- **`genclass suggest` on Free: the first suggestion and how many more**, counting the checks, the model's own ideas
+  and website designs. A Free app is shown that same plan again on later runs (with its date) until it has Pro.
+- **On Pro, suggest also prints the model's ideas** (marked as not measured) **and website designs**: each one is
+  inspired by a real site that fits what the company does, with a complete prompt to paste into Claude. The hand-off
+  menu copies a design's prompt in one key.
+- The digest sent for a plan now includes what the site says it is about (its title and description), shown before
+  it is sent.
+- The plan card and the Free line name the trial: 3 days free, then $15 a project a month.
+- Suggest's lines fit 58 columns.
+
 ## 0.3.5
 
 For onboarding paying customers:

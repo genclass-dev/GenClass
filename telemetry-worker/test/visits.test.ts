@@ -183,7 +183,8 @@ describe("funnels (stored per app, counted from the visits' routes)", () => {
     expect(link.status).toBe(403);
     expect(await link.json()).toEqual({
       ok: false,
-      error: "funnels are part of visitor analytics, which comes with the Team plan; see the plans at https://genclass.dev/account/billing",
+      // the paid plan's display name is Pro since 2026-11-12 (its id stays team)
+      error: "funnels are part of visitor analytics, which comes with the Pro plan; see the plans at https://genclass.dev/account/billing",
       upgrade_url: "https://genclass.dev/account/billing",
     });
     const { cookie } = await signedIn(env);

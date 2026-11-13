@@ -1,9 +1,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PLANS_JSON from "../../billing/plans.json";
+import SEATS_JSON from "./fixtures/plans-v3-seats.json";
 import { resetTokenCache } from "../src/dashboard.js";
 import { resetOwnerCache } from "../src/paid.js";
-import { accessOf, byAgreement, cleanSeats, FREE, GRANT_PLAN, ownedPrice, PAID_PLANS, PLANS, planByLookupKey, planForPrice, priceText, RETIRED_PLAN_IDS, seatsOf, viewRanges } from "../src/plans.js";
+import { accessOf, byAgreement, cleanSeats, firstPaidWith, firstPlanWith, FREE, GRANT_PLAN, hasAsk, hasProblems, ownedPrice, PAID_PLANS, PLANS, planByLookupKey, planForPrice, priceText, problemsLock, RETIRED_PLAN_IDS, seatsOf, viewRanges, type Plan } from "../src/plans.js";
 import { isGenClassSubscription, resetStripeCache, retiredSubscription, subscriptionState } from "../src/stripe.js";
 import {
   call,
@@ -24,11 +25,12 @@ import {
   WEBHOOK_SECRET,
 } from "./account-helpers.js";
 
-// The real plans (billing/plans.json, version 3, 2026-11-11), with no fixture: Free, Team and Enterprise. Free is what
-// finds, shows and fixes the problems (the dashboard's problems for one person, 3 apps, 7 days shown); Team is sold on
-// Stripe Checkout per developer (US$15 a seat a month) and adds visitor analytics, forwarding, export, 90 days and
-// members (test/team.test.ts); Enterprise is agreed by email and given by GenClass's own grant, with the classifier a
-// person trains. There is no trial. Selling one paid plan that is not per seat (Individual, until 2026-10-22) is tested on
+// The real plans (billing/plans.json, version 4, 2026-11-12), with no fixture: Free, Pro (id team; named Team until
+// 2026-11-12) and Enterprise. Free finds and fixes the problems and shows their totals (3 apps, 7 days shown, one
+// suggestion); Pro is sold on Stripe Checkout per project (US$15 a project a month, 3 days free once per account) and
+// adds the problem lists, genclass ask, every suggestion, visitor analytics, forwarding, export, 90 days and the whole
+// team (test/project-plans.test.ts); Enterprise is agreed by email and given by GenClass's own grant, with the
+// classifier a person trains. The old trial (/account/trial, 2026-10) stays gone. Selling one paid plan that is not per seat (Individual, until 2026-10-22) is tested on
 // test/fixtures/plans-individual.json (one-paid tests); the machinery that two paid plans or a locked dashboard reach
 // on test/fixtures/plans-two-paid.json (billing, locked, dashboard, auth, export and forward tests).
 
@@ -46,8 +48,10 @@ const text = async (r: Promise<Response> | Response) => (await r).text();
 const visible = (html: string) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!doctype html>/gi, "");
 
 describe("billing/plans.json: the one source of plans", () => {
-  it("has Free, Team and Enterprise with the owner's prices, limits and entitlements (version 4, 2026-11-12: per project)", () => {
+  it("has Free, Pro (id team) and Enterprise with the owner's prices, limits and entitlements (version 4, 2026-11-12: per project)", () => {
     expect(PLANS.map((p) => p.id)).toEqual(["free", "team", "enterprise"]);
+    // the paid plan keeps its id (Stripe's lookup key, the rows in D1) and is called Pro since 2026-11-12
+    expect(PLANS.map((p) => p.name)).toEqual(["Free", "Pro", "Enterprise"]);
     const [free, team, enterprise] = PLANS;
     expect(free!.price_usd_cents).toEqual({ monthly: 0, yearly: null });
     // US$15 a project a month (the owner, 2026-11-12; a developer a month before)
@@ -58,18 +62,26 @@ describe("billing/plans.json: the one source of plans", () => {
       { monthly: "genclass_team_monthly", yearly: null },
       { monthly: null, yearly: null },
     ]);
-    // Free: what finds, shows and fixes the problems, for one person; nothing else
+    // Free: finds and fixes the problems and shows their totals, for one person; the problem lists and genclass ask
+    // come with Pro (the owner's "limit free fully", 2026-11-12), and one suggestion is shown
     expect(free!.limits).toEqual({ apps: 3, history_days: 7, seats: 1, live_fixes_per_month: 100 });
-    expect(free!.entitlements).toEqual({ dashboard: true, forwarding: false, export: false, analytics: false, custom_model: false, github_private: false });
+    expect(free!.entitlements).toEqual({ dashboard: true, forwarding: false, export: false, analytics: false, custom_model: false, github_private: false, problems: false, ask: false });
+    expect(free!.suggestions).toEqual({ per_day: 3, shown: 1 });
+    expect(free!.summary).toBe("The totals, one suggestion, up to 3 projects.");
+    expect(free!.features.map((x) => x.text)).toEqual(expect.arrayContaining(["Dashboard totals, last 7 days", "Suggestions: your top one"]));
     // Team: sold per project, everything a team uses but the classifier a person trains
     expect(PLANS.map((p) => p.per_seat)).toEqual([false, false, false]);
     expect(PLANS.map((p) => p.per_project === true)).toEqual([false, true, false]);
     expect(team!.limits).toEqual({ apps: null, history_days: 90, seats: null, live_fixes_per_month: null });
-    expect(team!.entitlements).toEqual({ dashboard: true, forwarding: true, export: true, analytics: true, custom_model: false, github_private: true });
+    expect(team!.entitlements).toEqual({ dashboard: true, forwarding: true, export: true, analytics: true, custom_model: false, github_private: true, problems: true, ask: true });
+    expect(team!.suggestions).toEqual({ per_day: 30, shown: null });
     expect(team!.features[0]).toEqual({ text: "Everything in Free", available: true });
+    // Pro starts with 3 days free (once per account: src/billing.ts trialFor); no other plan has a trial
+    expect(PLANS.map((p) => p.trial_days)).toEqual([undefined, 3, undefined]);
+    expect(team!.features.map((x) => x.text)).toContain("3 days free to start");
     expect(enterprise!.limits).toEqual({ apps: null, history_days: 365, seats: null, live_fixes_per_month: null });
-    expect(enterprise!.entitlements).toEqual({ dashboard: true, forwarding: true, export: true, analytics: true, custom_model: true, github_private: true });
-    expect(enterprise!.features[0]).toEqual({ text: "Everything in Team", available: true });
+    expect(enterprise!.entitlements).toEqual({ dashboard: true, forwarding: true, export: true, analytics: true, custom_model: true, github_private: true, problems: true, ask: true });
+    expect(enterprise!.features[0]).toEqual({ text: "Everything in Pro", available: true });
     // the classifier a person from GenClass trains is in Enterprise only, in the entitlements and in the feature lines
     expect(PLANS.filter((p) => p.features.some((x) => /Your own classifier/.test(x.text))).map((p) => p.id)).toEqual(["enterprise"]);
     // every feature line is available: nothing is listed as coming next
@@ -96,15 +108,34 @@ describe("billing/plans.json: the one source of plans", () => {
     expect(viewRanges(team!)).toEqual(["24h", "7d", "30d", "90d"]);
     expect(viewRanges(enterprise!)).toEqual(["24h", "7d", "30d", "90d", "1y"]);
     expect((PLANS_JSON as any).version).toBe(4);
-    expect((PLANS_JSON as any).footer).toBe("Questions about Team, Enterprise, your own classifier, self-hosting or invoices? Email mehar@genclass.dev.");
+    expect((PLANS_JSON as any).footer).toBe("Questions about Pro, Enterprise, your own classifier, self-hosting or invoices? Email mehar@genclass.dev.");
     expect((PLANS_JSON as any).grant_plan).toBe("enterprise");
     expect(PLANS_JSON).not.toHaveProperty("trial_days");
   });
 
-  it("feature text follows the voice rules: no em-dashes, no exclamation marks, nothing about a trial", () => {
+  it("feature text follows the voice rules: no em-dashes, no exclamation marks; Pro's trial is said as days free", () => {
     const text = JSON.stringify(PLANS_JSON);
     expect(text).not.toMatch(/—|!/);
     expect(JSON.stringify((PLANS_JSON as any).plans)).not.toMatch(/\btrial\b/i);
+    // only Pro's lines speak of days free
+    expect(PLANS.filter((p) => p.features.some((x) => /days free/.test(x.text))).map((p) => p.id)).toEqual(["team"]);
+  });
+
+  it("problems and ask: Free has neither, Pro and Enterprise both; a plan file without the keys gives them", () => {
+    const of = (plan: Plan) => ({ plan, source: null, seats: null });
+    expect(PLANS.map((p) => [p.id, hasProblems(of(p)), hasAsk(of(p))])).toEqual([["free", false, false], ["team", true, true], ["enterprise", true, true]]);
+    // the plan an upgrade names: the first one on sale with it
+    expect(firstPaidWith("problems")?.id).toBe("team");
+    expect(firstPaidWith("ask")?.id).toBe("team");
+    expect(problemsLock("https://genclass.dev/account/billing?project=p1")).toEqual({ plan: "Pro", upgrade_url: "https://genclass.dev/account/billing?project=p1", trial_days: 3, price: "$15 / project / month" });
+    // the per-seat plans of version 3 (test/fixtures/plans-v3-seats.json) say nothing of them: every plan gives them
+    const v3 = (SEATS_JSON as any).plans as Plan[];
+    expect(v3.every((p) => !("problems" in p.entitlements) && !("ask" in p.entitlements))).toBe(true);
+    for (const p of v3) expect([p.id, hasProblems(of(p)), hasAsk(of(p))]).toEqual([p.id, true, true]);
+    // an explicit true is the same as no key; only false takes them away
+    expect(hasProblems(of({ ...FREE, entitlements: { ...FREE.entitlements, problems: true } }))).toBe(true);
+    // analytics still names the first plan that has it (Pro), on sale or not
+    expect(firstPlanWith("analytics")?.name).toBe("Pro");
   });
 
   it("accessOf: a paid plan or GenClass's grant, whichever plans.json lists later; Free otherwise; and the seats each holds", () => {
@@ -166,7 +197,7 @@ describe("the dashboard is free: every app opens it, with an account or without"
     expect((await call(env, "GET", `/api/projects/${path.split("/").pop()}?range=30d`, { origin: null })).status).toBe(200);
   });
 
-  it("a new account on Free: 3 apps, their dashboards and problems, 7 days shown; analytics, export and forwarding answer with the plans", async () => {
+  it("a new account on Free: 3 apps, their dashboards with the totals, 7 days shown; problems, analytics, export and forwarding answer with the plans", async () => {
     const { env } = setup(LIVE);
     const { cookie } = await signedIn(env);
     const apps = [];
@@ -180,7 +211,9 @@ describe("the dashboard is free: every app opens it, with an account or without"
     const page = await text(call(env, "GET", `/account/apps/${apps[0]!.id}`, { cookie }));
     expect(page).not.toContain("has no dashboard");
     // the sections are there and say which plans have them; no forms
-    expect(page).toContain('<p class="intro">Included in Team and Enterprise. <a href="/account/billing">See plans</a></p>');
+    expect(page).toContain('<p class="intro">Included in Pro and Enterprise. <a href="/account/billing">See plans</a></p>');
+    // the problem sections give way to one banner with the way to Pro, shown by the page script when the stats say so
+    expect(page).toContain('<div class="prolock hidden" id="prolock">');
     expect(page).not.toContain('id="exf"');
     expect(page).not.toContain("data-kind=");
     // the Visitors view has its upgrade panel, shown by the page script when the stats say analytics are left out
@@ -190,13 +223,18 @@ describe("the dashboard is free: every app opens it, with an account or without"
     const stats = (await st.json()) as any;
     // a longer ask than Free's 7 days gets the longest it shows
     expect(stats.range).toBe("7d");
-    expect(stats.locked).toEqual({ analytics: { plan: "Team", upgrade_url: "https://genclass.dev/account/billing" } });
+    // Free sees the totals: the problem lists, pages and latest events come with Pro, from the app's plan page
+    expect(stats.locked).toEqual({
+      analytics: { plan: "Pro", upgrade_url: "https://genclass.dev/account/billing" },
+      problems: { plan: "Pro", upgrade_url: `https://genclass.dev/account/billing?project=${apps[0]!.id}`, trial_days: 3, price: "$15 / project / month" },
+    });
+    expect([stats.breakdowns, stats.recent]).toEqual([{}, []]);
     const denied = async (r: Promise<Response>, what: string) => {
       const res = await r;
       expect(res.status, what).toBe(403);
       const j = (await res.json()) as any;
       expect(j.upgrade_url, what).toBe("https://genclass.dev/account/billing");
-      expect(j.error, what).toContain("Team and Enterprise");
+      expect(j.error, what).toContain("Pro and Enterprise");
     };
     await denied(call(env, "GET", `/api/account/projects/${apps[0]!.id}/events`, { cookie }), "export");
     await denied(call(env, "POST", "/api/account/export-keys", { body: {}, cookie }), "export key");
@@ -215,13 +253,14 @@ describe("the dashboard is free: every app opens it, with an account or without"
     expect((await sendBatch(env, app.token, [view, ...detection()])).status).toBe(202);
     const read = async () => (await (await call(env, "GET", `/api/account/projects/${app.id}/stats?range=7d`, { cookie })).json()) as any;
     const free = await read();
-    expect(free.locked.analytics.plan).toBe("Team");
+    expect(free.locked.analytics.plan).toBe("Pro");
     expect(Object.keys(free.totals).filter((k) => k.startsWith("ix_"))).toEqual([]);
     expect(Object.keys(free.breakdowns).filter((k) => k.startsWith("ix_"))).toEqual([]);
     expect(free.visits).toEqual({ sessions: 0, pages: 0, bounces: 0, entry: [], exit: [] });
     expect(free.series.every((r: any) => r.ix_views === 0 && r.ix_sessions === 0)).toBe(true);
-    // what GenClass found is all there
+    // what GenClass found is counted: Free sees the totals (the lists come with Pro: locked.problems)
     expect(free.totals.detections).toBe(1);
+    expect(free.locked.problems.plan).toBe("Pro");
     // the counters were written all the same
     expect(sql.rows("SELECT COUNT(*) AS n FROM daily WHERE metric = 'ix_views'")[0]!.n).toBeGreaterThan(0);
     setPlan(sql, account.id, "team", { stripe_mode: "live", seats: 1, subscription_id: "sub_t000000001", subscription_status: "active" });
@@ -230,21 +269,39 @@ describe("the dashboard is free: every app opens it, with an account or without"
     expect(team.totals.ix_views).toBe(1);
     expect(team.visits.sessions).toBe(1);
     expect(team.totals.detections).toBe(1);
+    expect(team.breakdowns.detect_issue).toEqual([{ key: "duplicate\t/checkout", count: 1 }]);
+    expect(team.recent.length).toBeGreaterThan(0);
   });
 
-  it("a private link shows what Free shows (7 days, no visitor analytics); a server with PLAN_GATES open shows everything", async () => {
+  it("a private link shows what Free shows (7 days, the totals, no visitor analytics); a server with PLAN_GATES open shows everything", async () => {
     for (const [over, range, locked] of [[{}, "7d", true], [{ PLAN_GATES: "open" }, "30d", false]] as const) {
       const { env } = setup(over);
       const j = (await (await call(env, "POST", "/api/projects", { body: { name: "shop-web" }, origin: null })).json()) as any;
-      const secret = new URL(j.dashboardUrl).pathname.split("/").pop();
+      const secret = new URL(j.dashboardUrl).pathname.split("/").pop()!;
+      await sendBatch(env, j.token, [{ t: "session", host: "shop.example", route: "/" }, ...detection("stale", "/search")]);
       const st = (await (await call(env, "GET", `/api/projects/${secret}?range=30d`, { origin: null })).json()) as any;
       expect(st.range, range).toBe(range);
       expect(!!st.locked?.analytics, range).toBe(locked);
+      expect(st.totals.detections, range).toBe(1);
+      if (locked) {
+        // the app has no account: the way to Pro is the plans page
+        expect(st.locked.problems).toEqual({ plan: "Pro", upgrade_url: "https://genclass.dev/account/billing", trial_days: 3, price: "$15 / project / month" });
+        expect([st.breakdowns, st.recent]).toEqual([{}, []]);
+      } else {
+        expect(st.locked).toBeUndefined();
+        expect(st.breakdowns.detect_issue).toEqual([{ key: "stale\t/search", count: 1 }]);
+      }
     }
+    // the sample dashboard is shown whole
+    const { env } = setup();
+    const sample = (await (await call(env, "GET", "/api/projects/sample?range=7d", { origin: null })).json()) as any;
+    expect(sample.locked?.problems).toBeUndefined();
+    expect(Object.keys(sample.breakdowns).filter((k) => !k.startsWith("ix_")).length).toBeGreaterThan(0);
+    expect(sample.recent.length).toBeGreaterThan(0);
   });
 });
 
-describe("no trial", () => {
+describe("the old trial stays gone; Pro's 3 days free are offered on the plan page, once per account", () => {
   it("POST /api/billing/trial is 410, GET /account/trial leads to /account through sign-up, and Stripe is never called", async () => {
     const { env } = setup(LIVE);
     const s = fakeStripe();
@@ -253,7 +310,7 @@ describe("no trial", () => {
     expect((await call(env, "GET", "/account/trial", { cookie, fetch: s.fetch })).headers.get("location")).toBe("/account");
     const r = await call(env, "POST", "/api/billing/trial", { body: {}, cookie, fetch: s.fetch });
     expect(r.status).toBe(410);
-    expect(((await r.json()) as any).error).toBe("GenClass has no trial any more: the dashboard is free; see https://genclass.dev/account/billing");
+    expect(((await r.json()) as any).error).toBe("a trial starts at Checkout, on an app's plan page: https://genclass.dev/account/billing");
     expect(s.calls).toEqual([]);
     expect(await (await call(env, "GET", "/api/billing", { cookie })).json()).toEqual({
       plan: "free",
@@ -268,22 +325,47 @@ describe("no trial", () => {
     });
   });
 
-  it("no page the worker serves offers a trial; the public ones say the dashboard is free", async () => {
-    const { env } = setup(LIVE);
+  it("the public pages offer no trial and say the dashboard is free; no page links to the old trial; the plan page offers Pro's 3 days free only to an account that never had a subscription", async () => {
+    const { env, sql } = setup(LIVE);
     const pages: [string, string][] = [];
     for (const p of ["/start", "/signup", "/login"]) pages.push([p, await text(call(env, "GET", p, {}))]);
-    const { cookie } = await signedIn(env);
+    for (const [p, html] of pages) expect(visible(html), p).not.toMatch(/trial/i);
+    const { cookie, account } = await signedIn(env);
     const app = await createApp(env, cookie, "a");
-    for (const p of ["/account", "/account/billing", `/account/apps/${app.id}`]) pages.push([p, await text(call(env, "GET", p, { cookie }))]);
+    for (const p of ["/account", "/account/billing", `/account/apps/${app.id}`, `/account/billing?project=${app.id}`]) pages.push([p, await text(call(env, "GET", p, { cookie }))]);
     for (const [p, html] of pages) {
-      expect(visible(html), p).not.toMatch(/trial/i);
       expect(html, p).not.toContain("/api/billing/trial");
-      // no Pro plan anywhere (the Studio pages' code font, Source Code Pro, is not one)
-      expect(html.replace(/Source(\+| )Code(\+| )Pro/g, ""), p).not.toMatch(/\bPro\b/);
+      expect(html, p).not.toContain("/account/trial");
     }
     expect(pages[0]![1]).toContain("Free. No sign-up.");
     expect(pages[1]![1]).toContain('<p class="opt">Just trying it? <a href="/start">Create a dashboard without an account</a>.</p>');
     expect(pages[2]![1]).toContain('<p class="opt">Just trying it? <a href="/start">Create a dashboard without an account</a>.</p>');
+    // the app's plan page, for an account that has never had a subscription: the trial, and what follows it
+    const eligible = pages.find(([p]) => p.startsWith("/account/billing?project="))![1];
+    expect(eligible).toContain('data-plan="team" data-pick><span>Start your 3-day free trial</span>');
+    expect(eligible).toContain('<p class="trialnote">3 days free, then $15 / project / month for a. Cancel before the trial ends and you pay nothing.</p>');
+    expect(visible(eligible)).not.toMatch(/—|!/);
+    const planPage = () => text(call(env, "GET", `/account/billing?project=${app.id}`, { cookie }));
+    const noTrial = (html: string, why: string) => {
+      expect(html, why).toContain('data-plan="team" data-pick><span>Start Pro for a</span>');
+      expect(html, why).not.toContain("free trial");
+      expect(html, why).not.toContain('class="trialnote"');
+    };
+    // an account that had a subscription of its own (before plans were per project), even one cancelled long ago
+    setPlan(sql, account.id, "free", { subscription_id: "sub_old0000001", subscription_status: "canceled" });
+    noTrial(await planPage(), "an account subscription");
+    setPlan(sql, account.id, "free", { subscription_id: null, subscription_status: null });
+    expect(await planPage()).toContain("Start your 3-day free trial");
+    // one of its projects had a subscription
+    const other = await createApp(env, cookie, "b");
+    sql.db.prepare("UPDATE projects SET subscription_id = 'sub_b000000001', subscription_status = 'canceled' WHERE id = ?").run(other.id);
+    noTrial(await planPage(), "a project's subscription");
+    // a project on GenClass's grant can start paying any time, with no trial
+    sql.db.prepare("UPDATE projects SET subscription_id = NULL, subscription_status = NULL WHERE id = ?").run(other.id);
+    sql.db.prepare("UPDATE projects SET comp_until = '9999-12-31T00:00:00.000Z', comp_plan = 'team' WHERE id = ?").run(app.id);
+    const granted = await planPage();
+    expect(granted).toContain("<b>a</b> has <b>Pro</b>, set up by GenClass.");
+    noTrial(granted, "a grant");
   });
 
   it("nothing in src/ asks Stripe for a trial but Checkout's plan trial_days, or writes the old trial's columns", () => {
@@ -294,8 +376,14 @@ describe("no trial", () => {
       const rest = f === "stripe.ts" ? code.replace("...(trialDays ? { trial_period_days: trialDays } : {})", "") : code;
       expect(rest, f).not.toMatch(/trial_period_days|trial_settings|payment_intents|trial_started_at\s*=|trial_ends_at\s*=|trial_check_failures\s*=/);
       expect(code, f).not.toMatch(/INSERT INTO accounts[^;`]*\b(trial_ends_at|trial_started_at|comp_until)\b/);
+      // the one place: the Checkout Session's subscription_data, from the caller's trialDays (src/billing.ts trialFor)
+      const asks = code.match(/trial_period_days/g) ?? [];
+      if (f === "stripe.ts") {
+        expect(asks, f).toHaveLength(1);
+        expect(code).toContain("...(trialDays ? { trial_period_days: trialDays } : {})");
+      } else expect(asks, f).toEqual([]);
     }
-    // TRIAL_DAYS is gone from the worker's configuration
+    // TRIAL_DAYS is gone from the worker's configuration: the days are plans.json's trial_days
     expect(readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8")).not.toMatch(/TRIAL_DAYS/);
   });
 
@@ -308,8 +396,8 @@ describe("no trial", () => {
   });
 });
 
-describe("Team is the one plan sold on the site, per project; Enterprise by email", () => {
-  it("checkout sells Team and nothing else, for one project, and never calls Stripe for another plan", async () => {
+describe("Pro (id team) is the one plan sold on the site, per project; Enterprise by email", () => {
+  it("checkout sells Pro and nothing else, for one project, and never calls Stripe for another plan", async () => {
     const { env } = setup(LIVE);
     const { cookie } = await signedIn(env);
     const s = fakeStripe();
@@ -320,7 +408,7 @@ describe("Team is the one plan sold on the site, per project; Enterprise by emai
     }
     const r = await call(env, "POST", "/api/billing/checkout", { body: { plan: "team", seats: 3 }, cookie, fetch: s.fetch });
     expect(r.status).toBe(400);
-    expect(((await r.json()) as any).error).toBe("the Team plan is bought for one project: send project_id");
+    expect(((await r.json()) as any).error).toBe("the Pro plan is bought for one project: send project_id");
     expect(s.calls).toEqual([]);
   });
 
@@ -369,12 +457,12 @@ describe("Team is the one plan sold on the site, per project; Enterprise by emai
     }
   });
 
-  it("a paid Team account (an old account subscription): the status line says the price; a server with PLAN_GATES open says it sells nothing", async () => {
+  it("a paid Pro account (an old account subscription): the status line says the price; a server with PLAN_GATES open says it sells nothing", async () => {
     const t = setup(LIVE);
     const a = await signedIn(t.env);
     setPlan(t.sql, a.account.id, "team", { stripe_customer_id: "cus_b000000001", stripe_mode: "live", seats: 3, subscription_id: "sub_b000000001", subscription_status: "active", current_period_end: "2026-11-13T12:00:00.000Z" });
     const page = await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }));
-    expect(page).toContain('You are on the <b>Team</b> plan, $15 / project / month. It renews on <time datetime="2026-11-13T12:00:00.000Z" data-f="date">2026-11-13</time>.');
+    expect(page).toContain('You are on the <b>Pro</b> plan, $15 / project / month. It renews on <time datetime="2026-11-13T12:00:00.000Z" data-f="date">2026-11-13</time>.');
     expect(page).toContain('<span class="tag">Your plan</span>');
     const open = setup({ PLAN_GATES: "open" });
     const b = await signedIn(open.env);
@@ -393,9 +481,9 @@ describe("Team is the one plan sold on the site, per project; Enterprise by emai
     const granted = await text(call(t.env, "GET", "/account/billing", { cookie: b.cookie }));
     expect(granted).toContain("You have <b>Enterprise</b>, set up by GenClass.");
     expect(granted).toContain('<span class="tag">Set up by GenClass</span>');
-    // a grant that names Team gives Team (accounts.comp_plan)
+    // a grant that names team gives Pro (accounts.comp_plan)
     setPlan(t.sql, b.account.id, "free", { comp_plan: "team" });
-    expect(await text(call(t.env, "GET", "/account/billing", { cookie: b.cookie }))).toContain("You have <b>Team</b>, set up by GenClass.");
+    expect(await text(call(t.env, "GET", "/account/billing", { cookie: b.cookie }))).toContain("You have <b>Pro</b>, set up by GenClass.");
   });
 });
 

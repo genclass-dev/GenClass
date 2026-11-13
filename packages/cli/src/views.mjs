@@ -114,7 +114,7 @@ export function renderAnalytics(app, o = {}) {
   period(app, o.now);
   if (app.visitorsPlan) {
     out();
-    out(`  ${c.bold(`Visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Team", 20)} plan.`)}`);
+    out(`  ${c.bold(`Visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Pro", 20)} plan.`)}`);
     note("What your visitors do is already being counted, so it shows from the day you switch: visits, pages, time on a page, where people come from, what they click, funnels.");
     out(`    ${c.cyan("npx genclass plan")}`);
     out();

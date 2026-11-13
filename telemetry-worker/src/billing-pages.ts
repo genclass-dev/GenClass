@@ -230,6 +230,8 @@ export interface ProjectPlanView {
   /** The project's own subscription, as the webhook wrote it. */
   sub: { status: string | null; periodEnd: string | null; cancels: boolean };
   usage: { used: number; limit: number | null; observe_only: boolean; resets: string } | null;
+  /** Days free this account's first plan starts with (billing.ts trialFor); 0: none. */
+  trialDays?: number;
   live: boolean;
   testMode: boolean;
   /** Back from Stripe Checkout (?done=1). */
@@ -280,8 +282,8 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const test = v.testMode && v.live ? '<p class="notice" role="note"><b>Stripe test mode.</b> No real money moves. Pay with card 4242 4242 4242 4242, any future date and any CVC.</p>' : "";
   const features = (offer?.features ?? []).filter((f) => f.available).map((f) => `<li>${esc(f.text)}</li>`).join("");
   const card = offer && !paid && a.source !== "open"
-    ? `<div class="plan pick big"><h3>${esc(offer.name)}</h3><p class="price">${esc(priceText(offer))}</p>${offer.trial_days ? `<p class="sum"><b>${offer.trial_days} days free</b> on your first paid project. Cancel any time.</p>` : ""}<p class="sum">${esc(offer.summary)}</p><ul>${features}</ul>
-  <div class="act">${v.live ? `<button class="btn" type="button" data-plan="${esc(offer.id)}" data-pick><span>Start ${esc(offer.name)} for ${name}</span></button>` : '<span class="muted">Paid plans are not on sale yet.</span>'}</div></div>
+    ? `<div class="plan pick big"><h3>${esc(offer.name)}</h3><p class="price">${esc(priceText(offer))}</p><p class="sum">${esc(offer.summary)}</p><ul>${features}</ul>
+  <div class="act">${v.live ? `<button class="btn" type="button" data-plan="${esc(offer.id)}" data-pick><span>${v.trialDays ? `Start your ${v.trialDays}-day free trial` : `Start ${esc(offer.name)} for ${name}`}</span></button>${v.trialDays ? `<p class="trialnote">${v.trialDays} days free, then ${esc(priceText(offer))} for ${name}. Cancel before the trial ends and you pay nothing.</p>` : ""}` : '<span class="muted">Paid plans are not on sale yet.</span>'}</div></div>
   ${a.locked || a.source !== null ? "" : `<p class="free"><a href="#why" class="linkish" id="free">Try for free (limited)</a></p>
   <dialog id="why" class="why" aria-labelledby="whyh">
     <form id="whyform">
@@ -371,7 +373,7 @@ ${notice}${test}
     user: { label, sub: orgName(label) },
     ...orgRail("billing"),
     railLabel: "Organization",
-    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".plan.big{max-width:560px;padding:34px 32px 30px}.plan.big h3{font-size:34px;letter-spacing:-.01em}.plan.big .price{font-size:22px;font-weight:600;margin-top:6px}.plan.big .sum{font-size:15px}.plan.big li{font-size:15px}.plan.big .act .btn{width:100%;justify-content:center;padding:15px 18px;font-size:17px}.free{margin-top:12px;font-size:11px;max-width:560px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}dialog.why{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:460px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}dialog.why::backdrop{background:rgba(0,0,0,.62)}dialog.why h2{font-size:21px;margin:0 0 4px}dialog.why fieldset{border:0;padding:0;margin:14px 0 6px}dialog.why label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;cursor:pointer}dialog.why textarea{margin-top:6px}.why-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}",
+    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".plan.big{max-width:560px;padding:34px 32px 30px}.plan.big h3{font-size:34px;letter-spacing:-.01em}.plan.big .price{font-size:22px;font-weight:600;margin-top:6px}.plan.big .sum{font-size:15px}.plan.big li{font-size:15px}.plan.big .act .btn{width:100%;justify-content:center;padding:15px 18px;font-size:17px}.free{margin-top:12px;font-size:11px;max-width:560px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}.trialnote{margin:10px 0 0;font-size:13px;color:var(--ink3);text-align:center;width:100%}dialog.why{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:460px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}dialog.why::backdrop{background:rgba(0,0,0,.62)}dialog.why h2{font-size:21px;margin:0 0 4px}dialog.why fieldset{border:0;padding:0;margin:14px 0 6px}dialog.why label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;cursor:pointer}dialog.why textarea{margin-top:6px}.why-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}",
     body,
     script: CLIENT_JS + script,
   });

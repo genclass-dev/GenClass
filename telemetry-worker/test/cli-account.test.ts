@@ -7,7 +7,7 @@ import { CLI_ACCOUNT_FROM } from "../src/cli.js";
 import { resetTokenCache } from "../src/dashboard.js";
 import { resetOwnerCache } from "../src/paid.js";
 import { MODEL_URL, resetStandIns } from "../src/suggest.js";
-import { call, cliToken, createApp, detection, resetClock, sendBatch, setNow, setPlan, setup, signedIn, type Fetch } from "./account-helpers.js";
+import { call, cliToken, createApp, detection, now, resetClock, sendBatch, setNow, setPlan, setup, signedIn, type Fetch } from "./account-helpers.js";
 
 beforeEach(() => {
   resetClock();
@@ -28,9 +28,12 @@ async function cliUser(env: E, email = "ada@example.com") {
   const me = await signedIn(env, email);
   return { ...me, bearer: await cliToken(env, me.cookie) };
 }
-/** A paid Team account with `seats` seats (as the webhook leaves it). */
+/** A paid Team (named Pro since 2026-11-12) account with `seats` seats (as the webhook leaves it). */
 const team = (sql: ReturnType<typeof setup>["sql"], accountId: string, seats = 3) =>
   setPlan(sql, accountId, "team", { stripe_mode: "live", seats, subscription_id: "sub_t000000001", subscription_status: "active", current_period_end: "2026-12-13T12:00:00.000Z" });
+/** One app on Pro (plans.json id team), paid for on its own as the webhook leaves it (plans per project, version 4). */
+const pro = (sql: ReturnType<typeof setup>["sql"], projectId: string) =>
+  sql.db.prepare("UPDATE projects SET plan = 'team', stripe_mode = 'live', subscription_id = ?, subscription_status = 'active' WHERE id = ?").run(`sub_${projectId.slice(0, 10)}`, projectId);
 const LIVE = { STRIPE_SECRET_KEY: "sk_live_fake", INTEGRATIONS_KEY: SEAL };
 const get = (env: E, path: string, bearer: string) => call(env, "GET", path, { bearer, origin: null });
 const send = (env: E, method: string, path: string, bearer: string, body?: unknown, fetch?: Fetch) => call(env, method, path, { bearer, origin: null, body, fetch });
@@ -99,11 +102,14 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     const j = await json(get(env, "/api/cli/account", me.bearer));
     expect(j.plan).toMatchObject({ id: "free", name: "Free", price: null });
     expect(j.access).toBeNull();
-    expect(j.limits).toEqual({ apps: 3, history_days: 7, seats: 1, suggestions_per_day: 3, suggestions_shown: 3 });
+    // Free is shown one item of genclass suggest's answer since 2026-11-12
+    expect(j.limits).toEqual({ apps: 3, history_days: 7, seats: 1, suggestions_per_day: 3, suggestions_shown: 1 });
     expect(j.used).toEqual({ apps: 1, suggestions_today: 0, seats: 1 });
     expect(j.includes).toEqual({ analytics: false, forwarding: false, export: false, private_repositories: false });
     expect(j.team).toEqual({ seats: 1, used: 1, members: [], invites: [], memberships: [] });
-    expect(j.offer.plan).toEqual({ id: "team", name: "Team" });
+    // the plan id stays team; its name is Pro, and an account that never had a subscription starts with 3 days free
+    expect(j.offer.plan).toEqual({ id: "team", name: "Pro" });
+    expect(j.offer.trial_days).toBe(3);
     expect(j.billing_url).toBe("https://genclass.dev/account/billing");
     // nothing of how the account signs in or pays
     expect(JSON.stringify(j)).not.toMatch(/stripe|customer|password|passkey/i);
@@ -112,12 +118,12 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     expect(await no.json()).toMatchObject({ ok: false, upgrade_url: "https://genclass.dev/account/billing" });
   });
 
-  it("Team: the price, the subscription's state, the seats, and an invite link that is shown once", async () => {
+  it("Pro (id team): the price, the subscription's state, the seats, and an invite link that is shown once", async () => {
     const { env, sql } = setup({ STRIPE_SECRET_KEY: "sk_live_fake" });
     const me = await cliUser(env);
     team(sql, me.account.id, 3);
     const j = await json(get(env, "/api/cli/account", me.bearer));
-    expect(j.plan).toMatchObject({ id: "team", name: "Team", price: "$15 / project / month" });
+    expect(j.plan).toMatchObject({ id: "team", name: "Pro", price: "$15 / project / month" });
     // Team is per project since plans.json version 4: no seat count, the whole team is in
     expect([j.access, j.limits.seats, j.limits.apps, j.limits.history_days]).toEqual(["paid", null, null, 90]);
     expect(j.includes).toEqual({ analytics: true, forwarding: true, export: true, private_repositories: true });
@@ -144,7 +150,7 @@ describe("genclass command: /api/cli/connections (forwarding, src/billing.ts int
       kinds: ["sentry", "posthog", "datadog", "slack", "webhook"],
       private_link: false,
       upgrade_url: "https://genclass.dev/account/billing",
-      plan: "Team",
+      plan: "Pro",
     });
     const r = await send(env, "PUT", `/api/cli/connections/slack?id=${app.id}`, me.bearer, { url: SLACK });
     expect(r.status).toBe(403);
@@ -251,16 +257,52 @@ describe("genclass command: PUT /api/cli/funnels and POST /api/cli/link", () => 
 });
 
 describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
+  it("Free: asking comes with Pro; a 403 names the plan, its trial, its price and the app's plan page, and no model run is used", async () => {
+    const { env, sql } = setup({ OPENAI_API_KEY: KEY });
+    const me = await cliUser(env);
+    const app = await createApp(env, me.cookie, "Shop");
+    const model = fakeModel("An answer.");
+    const r = await send(env, "POST", "/api/cli/ask", me.bearer, { id: app.id, question: "How is my app?" }, model.fetch);
+    expect(r.status).toBe(403);
+    expect(await r.json()).toEqual({
+      ok: false,
+      error: "asking about your app comes with Pro",
+      locked: true,
+      needs_plan: true,
+      plan: "Pro",
+      upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`,
+      trial_days: 3,
+      price: "$15 / project / month",
+    });
+    expect(model.calls).toEqual([]);
+    expect(sql.rows("SELECT * FROM suggest_usage")).toEqual([]);
+    // a question that is not one is still a 400, and someone else's app still a 404, before the plan is looked at
+    expect((await send(env, "POST", "/api/cli/ask", me.bearer, { id: app.id, question: 7 }, model.fetch)).status).toBe(400);
+    const other = await cliUser(env, "bob@example.com");
+    expect((await send(env, "POST", "/api/cli/ask", other.bearer, { id: app.id, question: "How is their app?" }, model.fetch)).status).toBe(404);
+    // the app on Pro: the model answers; the plan is the app's, so the account's other app on Free stays locked
+    const blog = await createApp(env, me.cookie, "Blog");
+    pro(sql, app.id);
+    expect(await json(send(env, "POST", "/api/cli/ask", me.bearer, { id: app.id, question: "How is my app?" }, model.fetch))).toMatchObject({ ok: true, answer: "An answer." });
+    expect((await send(env, "POST", "/api/cli/ask", me.bearer, { id: blog.id, question: "How is my app?" }, model.fetch)).status).toBe(403);
+    expect(model.calls).toHaveLength(1);
+    // GenClass's grant of Enterprise covers every app of the account
+    sql.db.prepare("UPDATE accounts SET comp_until = '9999-12-31T00:00:00.000Z' WHERE id = ?").run(me.account.id);
+    expect((await send(env, "POST", "/api/cli/ask", me.bearer, { id: blog.id, question: "How is my app?" }, model.fetch)).status).toBe(200);
+  });
+
   it("the model answers from the app's numbers; the request holds the question and the digest, never a key or who asked", async () => {
     const { env, sql } = setup({ OPENAI_API_KEY: KEY });
     const me = await cliUser(env);
     const app = await createApp(env, me.cookie, "Shop");
+    // asking comes with Pro (the Free 403 is the test above)
+    pro(sql, app.id);
     await sendBatch(env, app.token, [{ t: "session", host: "shop.example", route: "/" }, ...detection("duplicate", "/checkout"), ...detection("stale", "/search")]);
     const model = fakeModel("Two problems this week.\n\n\n- /checkout: a request was sent twice\u0007\n- /search: an older answer replaced a newer one\n");
     const r = await send(env, "POST", "/api/cli/ask", me.bearer, { id: app.id, range: "7d", question: "  What is going\u0000 wrong?  ", history: [{ q: "hello", a: "hi" }], extra: "dropped" }, model.fetch);
     expect(r.status).toBe(200);
     const j = (await r.json()) as any;
-    expect(j).toEqual({ ok: true, answer: "Two problems this week.\n\n- /checkout: a request was sent twice\n- /search: an older answer replaced a newer one", why: null, range: "7d", remaining_today: 2, per_day: 3, upgrade_url: null });
+    expect(j).toEqual({ ok: true, answer: "Two problems this week.\n\n- /checkout: a request was sent twice\n- /search: an older answer replaced a newer one", why: null, range: "7d", remaining_today: 29, per_day: 30, upgrade_url: null });
     // one request, to the model's API, with the server's key
     expect(model.calls.map((c) => [c.url, c.auth])).toEqual([[MODEL_URL, `Bearer ${KEY}`]]);
     const messages = model.calls[0]!.body.messages as { role: string; content: string }[];
@@ -270,8 +312,8 @@ describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
     expect(digest.app).toBe("Shop");
     expect(digest.totals).toMatchObject({ page_loads: 1, problems_found: 2 });
     expect(digest.problems_by_kind_and_page).toEqual(expect.arrayContaining([{ kind: "duplicate", page: "/checkout", count: 1 }, { kind: "stale", page: "/search", count: 1 }]));
-    // Free has no visitor analytics, so the model gets none either
-    expect(digest.visitors).toBe("visitor analytics are not part of this app's plan");
+    // Pro has visitor analytics, so the model gets them (a plan without them gets none: appDigest(s, false) below)
+    expect(digest.visitors).toMatchObject({ visits: 0, page_views: 0 });
     const sentText = JSON.stringify(model.calls[0]!.body);
     for (const secret of [app.token, me.account.id, "ada@example.com", me.bearer, "SECRET PAGE TEXT", "dropped"]) expect(sentText).not.toContain(secret);
     // nothing of the question or the answer is stored: one count for the day
@@ -282,25 +324,33 @@ describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
   });
 
   it("the plan's daily runs are shared with suggest; past them the answer says so and where the plans are", async () => {
-    const { env } = setup({ OPENAI_API_KEY: KEY });
+    const { env, sql } = setup({ OPENAI_API_KEY: KEY });
     const me = await cliUser(env);
     const app = await createApp(env, me.cookie, "Shop");
+    pro(sql, app.id);
+    // Pro has 30 runs a day: 26 already taken today, then one by genclass suggest, through its own route
+    sql.db.prepare("INSERT INTO suggest_usage (account_id, day, runs) VALUES (?, ?, 26)").run(me.account.id, now().toISOString().slice(0, 10));
     const model = fakeModel("An answer.");
+    const suggested = await json(send(env, "POST", "/api/cli/suggest", me.bearer, { app: { name: "Shop" }, checks: [{ id: "title", area: "launch", title: "No title", weight: 3, evidence: [] }] }, model.fetch));
+    expect(suggested.remaining_today).toBe(3);
     const ask = () => json(send(env, "POST", "/api/cli/ask", me.bearer, { id: app.id, question: "How is my app?" }, model.fetch));
     expect([(await ask()).remaining_today, (await ask()).remaining_today, (await ask()).remaining_today]).toEqual([2, 1, 0]);
-    expect(await ask()).toEqual({ ok: true, answer: null, why: "limit", remaining_today: 0, per_day: 3, upgrade_url: "https://genclass.dev/account/billing" });
-    expect(model.calls).toHaveLength(3);
-    expect((await json(get(env, "/api/cli/overview", me.bearer))).suggestions.used_today).toBe(3);
+    expect(await ask()).toEqual({ ok: true, answer: null, why: "limit", remaining_today: 0, per_day: 30, upgrade_url: "https://genclass.dev/account/billing" });
+    // one model request for suggest, three for ask
+    expect(model.calls).toHaveLength(4);
+    expect((await json(get(env, "/api/cli/overview", me.bearer))).suggestions.used_today).toBe(30);
   });
 
   it("no model on the server, a model that fails, a question that is not one, an app that is not theirs", async () => {
     const bare = setup();
     const a = await cliUser(bare.env);
     const app = await createApp(bare.env, a.cookie, "Shop");
-    expect(await json(send(bare.env, "POST", "/api/cli/ask", a.bearer, { id: app.id, question: "How is my app?" }))).toMatchObject({ ok: true, answer: null, why: "no-model", remaining_today: 3 });
-    const { env } = setup({ OPENAI_API_KEY: KEY });
+    pro(bare.sql, app.id);
+    expect(await json(send(bare.env, "POST", "/api/cli/ask", a.bearer, { id: app.id, question: "How is my app?" }))).toMatchObject({ ok: true, answer: null, why: "no-model", remaining_today: 30 });
+    const { env, sql } = setup({ OPENAI_API_KEY: KEY });
     const me = await cliUser(env);
     const mine = await createApp(env, me.cookie, "Shop");
+    pro(sql, mine.id);
     const down = fakeModel("", 500);
     expect(await json(send(env, "POST", "/api/cli/ask", me.bearer, { id: mine.id, question: "How is my app?" }, down.fetch))).toMatchObject({ ok: true, answer: null, why: "failed" });
     expect((await send(env, "POST", "/api/cli/ask", me.bearer, { id: mine.id, question: 7 })).status).toBe(400);

@@ -11,7 +11,7 @@
 import { readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { signIn } from "./actions.mjs";
-import { bad, clean, note, typed, warn } from "./tui.mjs";
+import { bad, clean, note, proBox, typed, warn } from "./tui.mjs";
 
 /**
  * Runs `call(creds)` (one of api.mjs's calls). When the answer says this sign-in is from before the command could
@@ -47,10 +47,8 @@ export function refused(r, ctx) {
   out();
   if (r.reauth) warn(`This sign-in is from before the command could do this. Run ${c.cyan("npx genclass login")} once, then ${c.cyan(`npx genclass ${ctx.command}`)}.`);
   else if (r.upgradeUrl) {
-    out(`  ${c.bold(`${ctx.what} comes with the ${clean(ctx.plan ?? "Team", 20)} plan.`)}`);
-    note("Everything GenClass finds stays free. The plan adds this, and it starts from here:");
-    out(`    ${c.cyan("npx genclass plan")}`);
-    out(`  ${c.gray("In the browser")}  ${c.cyan(r.upgradeUrl)}`);
+    const lock = r.lock ?? { plan: ctx.plan ?? null, upgradeUrl: r.upgradeUrl };
+    proBox(`${ctx.what} comes with ${clean(lock.plan ?? ctx.plan ?? "Pro", 20)}.`, { ...lock, upgradeUrl: lock.upgradeUrl ?? r.upgradeUrl });
   } else if (r.missing) note("This genclass.dev cannot do this from the terminal yet.");
   else bad(`${ctx.what}: ${clean(r.reason ?? "it did not work", 240)}`);
   if (ctx.browserUrl && !r.upgradeUrl) out(`  ${c.gray("In the browser")}  ${c.cyan(ctx.browserUrl)}`);

@@ -1,6 +1,6 @@
 {
   "name": "genclass",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "GenClass CLI: one command that sets GenClass up, shows your app in the terminal (problems, analytics, events), hands problems to your coding agent, answers questions about your app and tells you what it is missing.",
   "type": "module",
   "license": "Apache-2.0",

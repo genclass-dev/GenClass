@@ -290,6 +290,17 @@ export async function ensureCustomer(env: Env, f: Fetch, db: D1Like, a: BillingA
  * one's first payment cleared: paymentCleared). Only ever called with a customer id from the accounts table, which
  * only ensureCustomer writes.
  */
+/**
+ * Whether one of this account's open Checkout pages for another project already holds a trial (its metadata
+ * genclass_trial_days): one trial per account, so a second project bought meanwhile starts without one.
+ */
+export async function openTrialElsewhere(env: Env, f: Fetch, customer: string, accountId: string, projectId: string): Promise<boolean> {
+  const open = await stripe(env, f, "GET", "/v1/checkout/sessions", { customer, status: "open", limit: 20 });
+  return (Array.isArray(open?.data) ? (open.data as Obj[]) : []).some(
+    (x) => ownSession(x, accountId) && (x.metadata?.genclass_project ?? undefined) !== projectId && Number(x.metadata?.genclass_trial_days ?? 0) > 0,
+  );
+}
+
 export async function customerSubscriptions(env: Env, f: Fetch, customer: string): Promise<Obj[]> {
   // Stripe expands at most 4 levels: a list reaches data.items.data.price, not the price's product (asking for
   // data.items.data.price.product is a 400, which broke Checkout for every account with a customer until 2026-11-12),
