@@ -181,6 +181,10 @@ describe("reports: the priority rules", () => {
     expect(rules(fakeStats({ hours }))).toContain("0 silent");
     const quiet = [...Array.from({ length: 18 }, () => ({ sessions: 1 })), ...Array.from({ length: 6 }, () => ({ sessions: 0 }))];
     expect(rules(fakeStats({ hours: quiet }))).not.toContain("0 silent");
+    // a burst is not steady traffic: a small site's real day (30 of 38 loads in two hours while it was set up, then a
+    // load every few hours) must not tell its owner the site went down
+    const burst = [1, 0, 1, 1, 1, 0, 0, 0, 0, 14, 16, 1, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].map((sessions) => ({ sessions }));
+    expect(rules(fakeStats({ hours: burst }))).not.toContain("0 silent");
   });
 
   it("problems that jumped within the hour are critical; a steady level is not", () => {
@@ -261,6 +265,25 @@ describe("reports: one account's report", () => {
     expect(html).toContain("On Blog, Docs and Admin.");
     for (const i of noData) expect(html).toContain(esc(r.promptLinks[i.prompt!]!));
     expect(html.length).toBeLessThan(102_000);
+  });
+
+  it("before an app sends anything, the report is about that app: no generic ideas, what the next reports hold", async () => {
+    const { env, sql } = world();
+    const { cookie, account } = await signedIn(env);
+    grantPro(sql, (await createApp(env, cookie, "Glyco site")).id);
+    const r = (await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report;
+    const { subject, html, text } = renderReport(r);
+    expect(subject).toBe("GenClass daily report, Glyco site: finish setting up");
+    expect(html).toContain("Glyco site isn&#39;t sending data yet");
+    expect(html).toContain("What this report will show");
+    expect(html).toContain("Once Glyco site sends its first page load");
+    for (const generic of ["Sites to learn from today", "Upgrade your website design", "Suggestions for your app"]) expect(html).not.toContain(generic);
+    expect(text).not.toContain("UPGRADE YOUR WEBSITE DESIGN");
+    // once it has measured data, the ideas and the showcase come back
+    await sendBatch(env, (sql.db.prepare("SELECT token FROM projects WHERE name = 'Glyco site'").get() as { token: string }).token, [page("/")]);
+    const later = renderReport((await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report);
+    expect(later.html).toContain("Sites to learn from today");
+    expect(later.html).not.toContain("What this report will show");
   });
 
   it("without signed links a short prompt is printed and a long one is left to the text part", async () => {
