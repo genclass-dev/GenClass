@@ -1867,10 +1867,11 @@ describe("github app: the sweep's own limits and its cron triggers (docs/github-
   });
 
   it("two cron triggers: the one every 20 minutes runs the owed reviews and nothing else; the daily one, and any other, runs the retention sweeps and the owed reviews", async () => {
-    // production's configuration names both; a self-hosted collector's keeps the daily one, which runs everything
+    // production's configuration names both (and the hourly reports' trigger, src/report-sweep.ts); a self-hosted
+    // collector's keeps the daily one, which runs everything
     const prod = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
     expect(SWEEP_CRON).toBe("*/20 * * * *");
-    expect(prod).toMatch(/^crons = \["17 3 \* \* \*", "\*\/20 \* \* \* \*"\]$/m);
+    expect(prod).toMatch(/^crons = \["17 3 \* \* \*", "\*\/20 \* \* \* \*", "7 \* \* \* \*"\]$/m);
     expect(prod).toContain(`"${SWEEP_CRON}"`);
     expect(readFileSync(new URL("../wrangler.selfhost.toml", import.meta.url), "utf8")).toMatch(/^crons = \["17 3 \* \* \*"\]$/m);
 

@@ -1,6 +1,6 @@
 # GenClass Runtime: privacy policy
 
-_Last updated: 2026-11-12._
+_Last updated: 2026-11-13._
 
 This policy covers the diagnostics that `@genclass/runtime` (from `0.1.0-beta.3`) sends to its maintainers. It does not
 cover the website or app that uses GenClass; that site has its own privacy policy. It also covers the
@@ -103,7 +103,8 @@ creates one (at genclass.dev/signup, or with `npx @genclass/runtime@beta login`,
 - **An email address:** as Google returned it when you sign in with Google, or as you typed it (trimmed and
   lowercased) when you sign up with an email and a password or add a password to your account, together with whether
   it is verified (only Google can mark it verified; we do not verify a typed address). A typed address is also your
-  username. We use it only for notices about your account. A GitHub sign-in stores no email.
+  username. We use it for notices about your account and for the reports about your apps described below (which
+  you can change or stop). A GitHub sign-in stores no email.
 - **Your password, if you set one,** only as a salted one-way hash (PBKDF2-HMAC-SHA256, 600,000 iterations; the
   password itself is never stored or logged), with when it was set and last used, and how many wrong passwords were
   entered for the account in a row and when (to slow down guessing).
@@ -282,6 +283,27 @@ an account (the ordered checks with their reasons, the ideas and the designs, no
 show the same answer again and a paid plan can show all of it; it is replaced by the next answer and deleted with the
 account. We also keep how many plans an account asked for on a day, for 3 days, to hold each plan's daily limit.
 OpenAI processes the digest under its API terms. Nothing from a digest is used to train GenClass's own model.
+
+## Reports and alerts by email
+
+An account with an email address gets a GenClass report about its own apps, by default once a day at 13:00 UTC, and
+an alert when GenClass sees something critical on one of them (an endpoint that keeps failing, a page that stopped
+working for visitors, an app that stopped reporting, problems that jumped within the hour). On the account's Email
+reports page (genclass.dev/account/report), or from the links at the foot of every report, you can get it every hour
+(only when something happened), every day, week or month, turn the alerts off, or stop both. Stopping takes one click
+and needs no sign-in; most mail apps also show it as Unsubscribe.
+
+A report holds what your apps' dashboards already show you under each app's plan (the counts, the problems by kind and
+page, the measured checks, visitor numbers when the plan has them), the GitHub App's reviews of your linked
+repositories, new sign-ins, terminals and passkeys on your account, and your last `genclass suggest` answer. Nothing
+new is collected for it, and visitors' IP addresses never are: the section on unusual activity reads patterns in the
+counts, not addresses. For an app on a paid plan, the numbers its dashboard shows and the report's own list of
+problems (titles, counts and page names, never your email, your account id, an app's key or anything a visitor typed)
+are sent to OpenAI's API, with the same key as `genclass ask`, so a model can write the short summary at the top; it
+is not stored or logged. The report is sent only to your account's email, through Cloudflare Email Sending, from
+report@genclass.dev. We keep, per account, how often you chose and when the last report went out, how many emails it
+was sent on a day (for 3 days, to cap them), and when each alert last went out per app (7 days), so an alert is sent
+once a day at most.
 
 ## Where it goes and how long we keep it
 
