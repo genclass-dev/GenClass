@@ -32,7 +32,7 @@ import { apiHost, hostConfig, hostUrl } from "./host.mjs";
 import { FREE_LINES, UsageError, accountLabel, hostNotice, init, inspectProject, parse, versionNotice } from "./init.mjs";
 import { AUTO } from "./plan.mjs";
 import { LOCAL_FILE, tokenInFiles } from "./token.mjs";
-import { banner, c, choose, confirm, err, interactive, out, row, sym } from "./ui.mjs";
+import { banner, c, choose, columns, confirm, err, interactive, more, out, row, sym } from "./ui.mjs";
 import { CMD, HOST_CLI } from "./version.mjs";
 
 export const USAGE = `Usage:
@@ -379,14 +379,14 @@ async function afterLogin(o, creds, me) {
   if (o.noConnect) return 0;
   const st = inspectProject(o);
   if (st.project.refused || !st.project.framework) {
-    out(`  Next: run ${c.cyan(`${CMD} connect`)} in your web app's folder to connect it to your account.`);
+    more(`Next: run ${c.cyan(`${CMD} connect`)} in your web app's folder to connect it to ${HOST_CLI?.into ?? "your account"}.`, 2);
     out(`  ${c.gray("Your apps' dashboards:")} ${c.cyan(hostUrl("/account"))}`);
     out();
     return 0;
   }
   const where = relative(process.cwd(), st.cwd) || ".";
   const name = st.project.pkg?.name || st.project.name;
-  const ok = o.yes ? true : await confirm(`Connect ${name} (${where}, ${st.project.label}) to your account?`);
+  const ok = o.yes ? true : await confirm(`Connect ${name} (${where}, ${st.project.label}) to ${HOST_CLI?.into ?? "your account"}?`);
   if (ok === null) {
     out(`  Not a terminal: run ${c.cyan(`${CMD} connect --yes`)} here to connect this app.`);
     out();
@@ -534,11 +534,19 @@ async function whoami() {
   if (!me.projects.length) out(`    None yet. In your app's folder: ${c.cyan(SETUP_CMD)}`);
   const w = Math.min(28, Math.max(4, ...me.projects.map((p) => p.name.length)));
   for (const p of me.projects) {
-    out(`    ${c.bold(p.name.padEnd(w))}  ${p.token}  ${c.gray((p.last_event ? `last event ${when(p.last_event)}` : "no events yet").padEnd(31))}  ${p.dashboard_url ? c.cyan(p.dashboard_url) : ""}`.trimEnd());
+    const seen = p.last_event ? `last event ${when(p.last_event)}` : "no events yet";
+    const one = `    ${p.name.padEnd(w)}  ${p.token}  ${seen.padEnd(31)}  ${p.dashboard_url ?? ""}`.trimEnd();
+    // one line when it fits the terminal, else the app's name with its key, when it was last seen and its link under it
+    if (!HOST_CLI || one.length <= columns() - 2) out(`    ${c.bold(p.name.padEnd(w))}  ${p.token}  ${c.gray(seen.padEnd(31))}  ${p.dashboard_url ? c.cyan(p.dashboard_url) : ""}`.trimEnd());
+    else {
+      out(`    ${c.bold(p.name)}  ${c.gray(seen)}`);
+      out(`      ${p.token}`);
+      if (p.dashboard_url) out(`      ${c.cyan(p.dashboard_url)}`);
+    }
   }
   // Free (on the website) shows one app's totals; through a host CLI the terminal's views come with its plan
-  if (me.projects.length && HOST_CLI) out(`  ${c.gray(`Open a dashboard from its link above. In the terminal, with Pro: ${CMD} dashboard`)}`);
-  else if (me.projects.length) out(`  ${c.gray(`Open a dashboard from its link above, or run ${CMD} dashboard in the app's folder. One app's totals are free; the rest comes with Pro.`)}`);
+  if (me.projects.length && HOST_CLI) more(c.gray(`Open a dashboard from its link above. In the terminal, with Pro: ${CMD} dashboard`), 2);
+  else if (me.projects.length) more(c.gray(`Open a dashboard from its link above, or run ${CMD} dashboard in the app's folder. One app's totals are free; the rest comes with Pro.`), 2);
   out();
   return 0;
 }
@@ -637,6 +645,15 @@ const SELF = HOST_CLI ? CMD : "genclass-runtime";
 /** The usage text, with the commands written the way they are typed here. */
 const usage = () => (HOST_CLI ? USAGE.replace(/^ {2}genclass-runtime /gm, `  ${CMD} `) : USAGE);
 
+/** What each of these commands does, in one sentence, for `--help` under the genclass command. */
+const HOST_HELP = {
+  login: "signs this computer in to your GenClass account, in your browser (--no-browser: print the link only).",
+  connect: "connects the app in this folder to your account.",
+  whoami: "shows the signed-in account and its apps.",
+  logout: "ends this computer's session at genclass.dev and deletes the saved file.",
+  dashboard: "prints the link to this app's dashboard (--open: open it).",
+};
+
 /** Entry from bin/genclass-runtime.mjs. Returns the exit code. */
 export async function run(cmd, argv) {
   const h = hostConfig();
@@ -650,13 +667,15 @@ export async function run(cmd, argv) {
     if (o.app !== undefined && o.name !== undefined) throw new UsageError("--app and --name contradict each other (use an app, or create one)");
   } catch (e) {
     if (e instanceof UsageError) {
-      err(`${SELF} ${cmd}: ${e.message}\n\n${usage()}`);
+      // under the genclass command, one short line: its own help names every command, within 58 columns
+      err(HOST_CLI ? `${SELF} ${cmd}: ${e.message}. Every command and option: ${CMD} help` : `${SELF} ${cmd}: ${e.message}\n\n${usage()}`);
       return 2;
     }
     throw e;
   }
   if (o.help) {
-    out(usage());
+    if (HOST_CLI) more(`${CMD} ${cmd}: ${HOST_HELP[cmd] ?? ""} Every command and option: ${CMD} help`, 2);
+    else out(usage());
     return 0;
   }
   if (cmd === "login") return login(o);

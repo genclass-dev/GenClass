@@ -17,9 +17,9 @@ import { detectCsp, detectProject, detectState, htmlFiles, littleToWatch, isDir,
 import { MARK, hasMarker, isEmptyConfig, planRemoval, removeMarked, sinkBase, sinkNoEvidence, switchMetaConfig, switchMode, switchTagConfig, updateConfigText } from "./edit.mjs";
 import { AUTO, configFileChange, configFileFor, planInit, scriptTag } from "./plan.mjs";
 import { createAccountProject, readCredentials } from "./account.mjs";
-import { hostConfig, hostUrl } from "./host.mjs";
+import { apiHost, hostConfig, hostUrl } from "./host.mjs";
 import { LOCAL_FILE, PENDING_TOKEN, START_URL, TOKEN_RE, createProject, readLocal, saveLocal, tokenInFiles } from "./token.mjs";
-import { banner, c, confirm, err, interactive, out, printChange, row, sym } from "./ui.mjs";
+import { banner, c, confirm, err, interactive, more, out, printChange, row, sym } from "./ui.mjs";
 import { CMD, HOST_CLI, PKG, PKG_DIR, VERSION, compareVersions, distTags, installedVersion, versionInSpec, versionStatus } from "./version.mjs";
 
 const MODES = ["observe", "guard", "heal"];
@@ -396,8 +396,8 @@ const SINK_WHAT = {
 function sinksNotice(cfg, where) {
   if (!cfg.sinks?.length) return;
   row("Findings", `${c.bold(cfg.sinks.join(", "))} ${c.gray(`(--sink${where ? `, written to ${where}` : ""})`)}`);
-  out(`             Every detection, intervention, undo and breaker trip goes there as well as to the console:`);
-  for (const s of cfg.sinks) out(`             ${sym.dot} ${s}: ${SINK_WHAT[sinkBase(s)] ?? ""}${sinkNoEvidence(s) ? " (the structured fields only, no evidence text)" : ""}`);
+  more("Every detection, intervention, undo and breaker trip goes there as well as to the console:");
+  for (const s of cfg.sinks) more(`${sym.dot} ${s}: ${SINK_WHAT[sinkBase(s)] ?? ""}${sinkNoEvidence(s) ? " (the structured fields only, no evidence text)" : ""}`);
 }
 
 /** Telemetry disclosure: it is on by default, what it sends, how to turn it off, where the policy is. */
@@ -407,9 +407,9 @@ function telemetryNotice(cfg, where) {
     return;
   }
   row("Telemetry", `${c.bold("on")}${cfg.telemetry ? c.gray(" (--telemetry)") : c.gray(" (the default)")}`);
-  out(`             Anonymous counts and decisions go to GenClass's maintainers: no page text, cookies or IP`);
-  out(`             addresses, never from localhost. Off: ${c.cyan(`${CMD} init --no-telemetry`)}`);
-  out(`             What is sent: ${TELEMETRY_URL} · Privacy: ${PRIVACY_URL}`);
+  more(`Anonymous counts and decisions go to GenClass's maintainers: no page text, cookies or IP addresses, never from localhost. Off: ${c.cyan(`${CMD} init --no-telemetry`)}`);
+  more(`What is sent: ${TELEMETRY_URL}`);
+  more(`Privacy: ${PRIVACY_URL}`);
 }
 
 /**
@@ -700,20 +700,18 @@ function tokenRow(tk) {
   const name = c.bold(String(tk.name ?? "").slice(0, 80) || "unnamed");
   if (tk.pending && tk.account) {
     row("Token", `a new app in ${accountWhere(tk.account.account)} ${c.gray("once you apply these changes")}`);
-    out(`             ${actor} then sends this app's name (${name}) to ${c.cyan(hostUrl("/api/account/projects"))} with your`);
-    out(`             CLI session and gets back the app's public token. ${c.cyan("--no-token")}: no token, no network.`);
+    more(`${actor} then sends this app's name (${name}) to ${c.cyan(hostUrl("/api/account/projects"))} with your CLI session and gets back the app's public token. ${c.cyan("--no-token")}: no token, no network.`);
     return;
   }
   if (tk.pending) {
     row("Token", `a new one for this app, created at genclass.dev ${c.gray("once you apply these changes")}`);
-    out(`             init then sends this app's name (${name}) to ${c.cyan(hostUrl("/api/projects"))} and gets back`);
-    out(`             a public token and your private dashboard link. ${c.cyan("--no-token")}: no token, no network.`);
+    more(`init then sends this app's name (${name}) to ${c.cyan(hostUrl("/api/projects"))} and gets back a public token and your private dashboard link. ${c.cyan("--no-token")}: no token, no network.`);
     return;
   }
   if (tk.token) {
     const from = tk.source === "new" ? "created for this app at genclass.dev" : tk.source === "account" ? `a new app in ${accountWhere(tk.account?.account)}` : tk.source;
     row("Token", `${tk.token} ${c.gray(`(${from})`)}`);
-    out(`             Public (it ships in your page). The diagnostics above also feed this app's ${tk.app || tk.source === "account" ? "dashboard in your account" : "private dashboard"}.`);
+    more(`Public (it ships in your page). The diagnostics above also feed this app's ${tk.app || tk.source === "account" ? "dashboard in your account" : "private dashboard"}.`);
     return;
   }
   if (tk.wouldCreate) {
@@ -727,12 +725,12 @@ function tokenRow(tk) {
     // the account's plan is why (its app limit): signing in again would hit the same limit, so the way on is one of
     // the apps it has, or more room
     if (tk.account && /^upgrade needed/.test(String(tk.why))) {
-      out(`             GenClass works without it; you only miss the dashboard. Use one of your apps instead:`);
-      out(`             ${c.cyan(`${CMD} connect`)} and pick it, or make room at ${c.cyan(hostUrl("/account"))}`);
+      more(`GenClass works without it; you only miss the dashboard. Use one of your apps instead: ${c.cyan(`${CMD} connect`)} and pick it, or make room at ${c.cyan(hostUrl("/account"))}`);
       return;
     }
-    out(`             GenClass works without it; you only miss the dashboard. ${tk.account ? `Run ${c.cyan(`${CMD} login`)} again, then` : `Get a token at ${c.cyan(START_URL)}`}`);
-    out(`             ${tk.account ? c.cyan(`${CMD} connect`) : `and run ${c.cyan(`${CMD} init --token gc_...`)}`}`);
+    // a network error is not the sign-in: the session is fine, so the way on is to run it again
+    const net = /^network error|^no answer within/.test(String(tk.why));
+    more(`GenClass works without it; you only miss the dashboard. ${tk.account ? (net ? "The app is not in your account yet: run" : `Run ${c.cyan(`${CMD} login`)} again, then`) : `Get a token at ${c.cyan(START_URL)}`} ${tk.account ? c.cyan(`${CMD} connect`) : `and run ${c.cyan(`${CMD} init --token gc_...`)}`}${tk.account && net ? " again when genclass.dev answers." : ""}`);
     return;
   }
   if (tk.hint) {
@@ -773,7 +771,7 @@ function dashboardNotice(tk, cwd, applied, remind = false, saved = null) {
     if (!applied || !tk.token) return;
     const link = tk.created?.dashboardUrl ?? tk.app?.dashboard_url ?? hostUrl("/account");
     out(`  ${c.bold("Your dashboard")}  ${c.bold(c.cyan(link))}`);
-    out(`  ${c.gray(`In ${HOST_CLI?.into ? HOST_CLI.into : `your GenClass account (${accountLabel(tk.account?.account)})`}: sign in at genclass.dev to open it.`)}`);
+    more(c.gray(`In ${HOST_CLI?.into ? HOST_CLI.into : `your GenClass account (${accountLabel(tk.account?.account)})`}: sign in at ${new URL(apiHost()).host} to open it.`), 2);
     for (const l of FREE_LINES) out(`  ${c.gray(l)}`);
     out(`  ${c.gray("It fills once your deployed app runs with telemetry on. Local hosts (localhost, *.local, *.test, private")}`);
     out(`  ${c.gray("networks) do not send by default (telemetry: true opts them in), and visitors who opt out or send")}`);
@@ -950,7 +948,7 @@ export async function init(o, ctx = {}) {
     out();
     telemetryNotice(isEmptyConfig(cfg) ? currentConfig(marked) : { ...currentConfig(marked), ...cfg }, null);
     tokenRow(tk);
-    if (tk.token && !tk.app && !ctx.creds && readCredentials()) out(`             ${c.gray(`Signed in: ${CMD} connect adds this app to your account if it is not there yet.`)}`);
+    if (tk.token && !tk.app && !ctx.creds && readCredentials()) more(c.gray(`Signed in: ${CMD} connect adds this app to your account if it is not there yet.`));
     sinksNotice(cfg, null);
     cspAdvice(project, files, cfg);
     out();

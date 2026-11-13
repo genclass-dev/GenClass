@@ -93,7 +93,7 @@ export async function apps(o = {}, deps = {}) {
           out(`    ${c.cyan(made.planUrl)}`);
         }
         // its plan is chosen now, on its page (Pro, or Free with a reason)
-        if (made?.id && !full) await planNow({ cwd: o.cwd }, deps, made.id);
+        if (made?.id && !full) await planNow({ cwd: o.cwd, noBrowser: o.noBrowser }, deps, made.id);
         note("To put GenClass into that app's code, run npx genclass in its folder and pick this app.");
       }
       out();
@@ -150,8 +150,11 @@ export async function plan(o = {}, deps = {}) {
   const offer = pro ? null : (step?.offer ?? (mine.length ? null : a.ok ? a.offer : null));
   if (o.json) {
     const apps = mine.map((p) => ({ id: p.id, name: p.name, plan: p.plan, needs_plan: p.needsPlan, plan_url: p.planUrl, this_folder: p.token === state.app?.token }));
-    const command = cli ? { paid: cli.paid, ...(pro ? { checkout_url: pro.checkoutUrl, trial_days: pro.trialDays, price: pro.price } : {}) } : null;
-    out(JSON.stringify(a.ok ? { ok: true, plan: a.plan, access: a.access, limits: a.limits, used: a.used, includes: a.includes, subscription: a.subscription, billing_url: a.billingUrl, offer: offer ?? (pro ? a.offer : null), cli: command, apps } : { ok: true, plan: state.account?.plan ?? null, billing_url: state.account?.billingUrl ?? null, offer, cli: command, partial: a.reauth ? "sign in again for the limits: npx genclass login" : "this genclass.dev says no more" }, null, 2));
+    const command = cli ? { paid: cli.paid, ...(cli.paid && cli.via ? { via: cli.via } : {}), ...(pro ? { checkout_url: pro.checkoutUrl, trial_days: pro.trialDays, price: pro.price } : {}) } : null;
+    // without Pro the command runs no model at all: its runs a day are none here, whatever Free's number on the server
+    const limits = a.ok && pro ? { ...a.limits, suggestionsPerDay: 0 } : a.ok ? a.limits : null;
+    // a team's member: `plan` is the account's own (Free), `team_plan` the team's Pro its seat is on
+    out(JSON.stringify(a.ok ? { ok: true, plan: a.plan, access: a.access, team_plan: a.teamPlan ?? null, limits, used: a.used, includes: a.includes, subscription: a.subscription, billing_url: a.billingUrl, offer: offer ?? (pro ? a.offer : null), cli: command, apps } : { ok: true, plan: state.account?.plan ?? null, billing_url: state.account?.billingUrl ?? null, offer, cli: command, partial: a.reauth ? "sign in again for the limits: npx genclass login" : "this genclass.dev says no more" }, null, 2));
     return 0;
   }
   top(state);
@@ -160,10 +163,21 @@ export async function plan(o = {}, deps = {}) {
   if (!a.ok) {
     row("Plan", c.bold(clean(state.account?.plan?.name ?? "not known", 20)));
     if (a.reauth) note("For its limits and what is used: npx genclass login, once (this sign-in is from before the command could show them).");
+  } else if (a.teamPlan && a.teamPlan.id !== a.plan.id) {
+    // a member of a paying team: its seat is one the team's owner pays for (Pro is per developer), so it shows the
+    // team's plan, the team's apps and what that plan includes, never its own Free
+    const t = a.teamPlan;
+    const inc = t.includes ?? a.includes;
+    row("Plan", `${c.bold(clean(t.name, 20))}${c.gray(t.owner ? `  on ${clean(t.owner, 40)}'s team` : "  on your team")}`);
+    row("Seat", t.source === "comp" ? "set up by GenClass for the team" : "paid for by the team's owner");
+    row("Team apps", t.apps === null ? `${t.usedApps === null ? "" : `${n(t.usedApps)} ${sym.dot} `}no limit` : `${t.usedApps === null ? "" : `${n(t.usedApps)} of `}${n(t.apps)}`);
+    if (t.historyDays !== null) row("History", `${n(t.historyDays)} days`);
+    if (a.limits.suggestionsPerDay !== null) row("Model runs", `${n(a.used.suggestionsToday)} of ${n(a.limits.suggestionsPerDay)} used today ${sym.dot} suggest and ask share them`);
+    const has = [inc.analytics && "visitor analytics", inc.forwarding && "alerts to Slack, Sentry and others", inc.export && "the stored events as a file", inc.privateRepositories && "private repositories"].filter(Boolean);
+    if (has.length) row("Includes", has.join(", "));
+    note("Apps you add go into the team's account, under its plan.");
   } else {
-    row("Plan", `${c.bold(clean(a.plan.name, 20))}${a.plan.price ? c.gray(`  ${clean(a.plan.price, 40)}`) : ""}${a.access === "comp" ? c.gray("  granted by GenClass") : ""}`);
-    // a member of a paying team: the commands come with the team's plan (a newer server names it)
-    if (a.teamPlan && a.teamPlan.id !== a.plan.id) row("Through", `your team's ${clean(a.teamPlan.name, 20)}`);
+    row("Plan", `${c.bold(clean(a.plan.name, 20))}${a.plan.price && a.access !== "comp" ? c.gray(`  ${clean(a.plan.price, 40)}`) : ""}${a.access === "comp" ? c.gray("  set up by GenClass") : ""}`);
     const trial = a.subscription.status === "trialing" && a.access === "paid" && a.subscription.periodEnd;
     // the trial says that it is one, and when its first charge is (or that a canceled one charges nothing)
     if (trial) row("Trial", a.subscription.cancels ? `until ${day(a.subscription.periodEnd)}. Canceled: nothing is charged.` : `until ${day(a.subscription.periodEnd)}. Then the first charge, ${a.plan.price ? clean(a.plan.price, 40) : "the plan's price"}, unless you cancel before.`);
@@ -276,7 +290,7 @@ export async function upgrade(o = {}, deps = {}) {
   const paywall = await import("./paywall.mjs");
   if (cli && !cli.paid) {
     if (o.json) {
-      out(JSON.stringify(paywall.needsProJson(cli)));
+      out(JSON.stringify(paywall.needsProJson(cli, true, "upgrade")));
       return 1;
     }
     top(state);
@@ -309,7 +323,9 @@ export async function upgrade(o = {}, deps = {}) {
   if (!offer) {
     if (paying) {
       good(viaTeam ? "You are on your team's Pro: there is nothing to upgrade." : `You are on ${clean(state.account?.plan?.id !== "free" ? (state.account?.plan?.name ?? "Pro") : "Pro", 20)}: there is nothing to upgrade.`);
-      if (!viaTeam) note("More people on it: add seats in Manage billing, on the billing page.");
+      // a grant has no subscription and no seat count; a paid plan adds people as seats in Manage billing
+      if (state.account?.plan?.source === "comp") note("Set up by GenClass: it covers every app, with no seats to add.");
+      else if (!viaTeam) note("More people on it: add seats in Manage billing, on the billing page.");
     } else if (here && here.plan.id !== "free") good(`${clean(here.name, 30)} is on ${clean(here.plan.name, 20)}.`);
     else note("Nothing to upgrade here: genclass.dev sells nothing here.");
     out(`  ${c.gray("Billing, in the browser")}`);
@@ -340,15 +356,17 @@ export async function profile(o = {}, deps = {}) {
   const pro = cli && !cli.paid ? cli : null;
   const offer = pro ? null : upgradeOffer(state, o.app ?? null);
   const billingUrl = state.account?.billingUrl ?? hostUrl("/account/billing");
-  const onFree = state.account?.plan?.id === "free" || (mine.length > 0 && mine.every((p) => p.plan.id === "free"));
+  // a team's member: the overview names the team's plan (via "team"), a seat its owner pays for
+  const viaTeam = state.account?.plan?.via === "team" || cli?.via === "team";
+  const onFree = !viaTeam && (state.account?.plan?.id === "free" || (mine.length > 0 && mine.every((p) => p.plan.id === "free")));
   if (o.json) {
-    out(JSON.stringify({ ok: true, account: state.account?.label ?? null, plan: state.account?.plan ?? null, apps: mine.map((p) => ({ id: p.id, name: p.name, plan: p.plan, needs_plan: p.needsPlan })), upgrade_url: pro?.checkoutUrl ?? offer?.checkoutUrl ?? null, cli: cli ? { paid: cli.paid } : null, billing_url: billingUrl }));
+    out(JSON.stringify({ ok: true, account: state.account?.label ?? null, plan: state.account?.plan ?? null, apps: mine.map((p) => ({ id: p.id, name: p.name, plan: p.plan, needs_plan: p.needsPlan })), upgrade_url: pro?.checkoutUrl ?? offer?.checkoutUrl ?? null, trial_days: pro?.trialDays ?? offer?.trialDays ?? null, price: pro?.price ?? offer?.price ?? null, team_plan: state.account?.teamPlan ?? null, cli: cli ? { paid: cli.paid, ...(cli.paid && cli.via ? { via: cli.via } : {}) } : null, billing_url: billingUrl }));
     return 0;
   }
   top(state);
   out(`  ${c.bold("Profile")}`);
   row("Signed in as", clean(state.account?.label ?? "", 60));
-  row("Plan", onFree ? `Free ${c.gray(pro ? "(website only: the genclass command comes with Pro)" : "(limited)")}` : c.bold(clean(state.account?.plan?.name ?? "", 20)));
+  row("Plan", onFree ? `Free ${c.gray(pro ? "(website only: the genclass command comes with Pro)" : "(limited)")}` : `${c.bold(clean(state.account?.plan?.name ?? "", 20))}${viaTeam ? c.gray("  on your team: a seat its owner pays for") : state.account?.plan?.source === "comp" ? c.gray("  set up by GenClass") : ""}`);
   if (mine.length) {
     out();
     out(`  ${c.bold("Apps and their plans")}`);
@@ -391,7 +409,19 @@ export async function team(o = {}, deps = {}) {
   if ("code" in s) return s.code;
   const { state, creds } = s;
   const billing = state.account?.billingUrl ?? hostUrl("/account/billing");
+  // a member works on a paying team's plan: invites and seats are that team's owner's
+  const member = state.account?.cli?.via === "team" || state.account?.plan?.via === "team";
   if ((o.args ?? [])[0] === "invite") {
+    if (member) {
+      if (o.json) out(JSON.stringify({ ok: false, error: "invites come from the team's owner: ask them for a link", member: true }));
+      else {
+        top(state);
+        warn("Invites come from the team's owner: ask them for a link.");
+        note("Your seat is on their team, and they add seats in Manage billing.");
+        out();
+      }
+      return 1;
+    }
     const r = await asking(o, creds, (cr) => createInvite(cr, deps), deps);
     // on Pro, a refusal for the plan is a full team: seats are added in Manage billing, not by another plan
     if (!r.ok && r.upgradeUrl && !r.needsPro && accountPaid(state.account)) {
@@ -427,6 +457,17 @@ export async function team(o = {}, deps = {}) {
   }
   top(state);
   const t = a.team;
+  // a member of a paying team (its own account is Free, with no team of its own): the team it is on, its paid seat
+  if (a.teamPlan && a.teamPlan.id !== a.plan.id && t.used <= 1 && !t.members.length) {
+    const tp = a.teamPlan;
+    out(`  ${c.bold("Team")}  ${c.gray(`${clean(tp.name, 20)}, on ${clean(tp.owner ?? "your team's owner", 50)}'s team`)}`);
+    for (const m of t.memberships) out(`    ${clean(m.label, 50)}  ${c.gray(`owner${m.active ? "" : ` ${sym.dot} your seat is not active`}`)}`);
+    out(`    ${clean(state.account?.label ?? "you", 50)}  ${c.gray("you, a seat the owner pays for")}`);
+    out();
+    note("The owner invites people and adds seats in Manage billing. Apps you add go into the team's account.");
+    out();
+    return 0;
+  }
   out(`  ${c.bold("Team")}  ${c.gray(t.seats === null ? `${n(t.used)} ${t.used === 1 ? "person" : "people"}` : `${n(t.used)} of ${n(t.seats)} seat${t.seats === 1 ? "" : "s"} used`)}`);
   out(`    ${clean(state.account?.label ?? "you", 50)}  ${c.gray("owner")}`);
   for (const m of t.members) out(`    ${clean(m.label, 50)}  ${c.gray(`${m.joined ? `joined ${ago(m.joined, deps.now)}` : "member"}${m.active ? "" : ` ${sym.dot} over the seats, cannot open dashboards`}`)}`);

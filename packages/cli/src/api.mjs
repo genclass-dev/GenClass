@@ -47,7 +47,8 @@ export async function fetchOverview(creds, opts = {}) {
     ok: true,
     account,
     // `via`: "team" for a member covered by a team's plan (a newer server says it; older ones do not)
-    plan: j.plan && typeof j.plan === "object" && str(j.plan.id, 40) ? { id: str(j.plan.id, 40), name: str(j.plan.name, 40) ?? str(j.plan.id, 40), ...(str(j.plan.via, 20) ? { via: str(j.plan.via, 20) } : {}) } : null,
+    // `source`: "paid", "comp" (GenClass's grant) or "open" (a newer server says it)
+    plan: j.plan && typeof j.plan === "object" && str(j.plan.id, 40) ? { id: str(j.plan.id, 40), name: str(j.plan.name, 40) ?? str(j.plan.id, 40), ...(str(j.plan.via, 20) ? { via: str(j.plan.via, 20) } : {}), ...(["paid", "comp", "open"].includes(j.plan.source) ? { source: j.plan.source } : {}) } : null,
     suggestions: s ? { perDay: num(s.per_day), shown: num(s.shown), usedToday: num(s.used_today) ?? 0, model: s.model === true } : null,
     projects,
     github: j.github && typeof j.github === "object" ? { app: j.github.app === true, installUrl: sameOrigin(j.github.install_url, creds.host), connectUrl: sameOrigin(j.github.connect_url, creds.host) } : null,
@@ -373,8 +374,27 @@ export async function fetchAccount(creds, opts = {}) {
     },
     billingUrl: sameOrigin(j.billing_url, creds.host),
     offer: offerOf(j.offer, creds.host),
-    /** the plan of a paying team the account is in (a newer server says it), else null */
-    teamPlan: j.team_plan && typeof j.team_plan === "object" && str(j.team_plan.id, 40) ? { id: str(j.team_plan.id, 40), name: str(j.team_plan.name, 40) ?? str(j.team_plan.id, 40) } : null,
+    /**
+     * the plan of a paying team the account is in (a newer server says it), else null: whose team, the apps it covers
+     * and has, its history and what it includes (a seat the team's owner pays for)
+     */
+    teamPlan: teamPlanOf(j.team_plan),
+  };
+}
+
+/** A team's plan as /api/cli/account sends it (team_plan), or null. */
+function teamPlanOf(t) {
+  if (!t || typeof t !== "object" || !str(t.id, 40)) return null;
+  const inc = t.includes && typeof t.includes === "object" ? t.includes : null;
+  return {
+    id: str(t.id, 40),
+    name: str(t.name, 40) ?? str(t.id, 40),
+    source: ["paid", "comp", "open"].includes(t.source) ? t.source : null,
+    owner: str(t.owner, 120),
+    apps: numOrNull(t.apps),
+    usedApps: Number.isInteger(t.used_apps) && t.used_apps >= 0 ? t.used_apps : null,
+    historyDays: numOrNull(t.history_days),
+    includes: inc ? { analytics: inc.analytics === true, forwarding: inc.forwarding === true, export: inc.export === true, privateRepositories: inc.private_repositories === true } : null,
   };
 }
 

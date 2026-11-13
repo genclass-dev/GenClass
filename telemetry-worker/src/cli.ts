@@ -71,14 +71,39 @@ const FULL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/(?!\.{1,2}$)[A-Za-z0-9._-]
  * genclass ask, the plan it names), so a paying team's member is never told to buy Pro again. `team`: the plan is a
  * team's, not the account's own.
  */
-export async function workingAccess(c: C, accountId: string): Promise<{ access: Access; team: boolean }> {
+export async function workingAccess(c: C, accountId: string): Promise<{ access: Access; team: boolean; owner: string | null }> {
   const own = await accountAccess(c.db, accountId, c.env, c.now);
   let best = own;
+  let from: string | null = null;
   for (const owner of await activeOwners(c.db, c.env, accountId, c.now)) {
     const a = await accountAccess(c.db, owner, c.env, c.now);
-    if (a.source !== null && better(best, a) === a && a !== best) best = a;
+    if (a.source !== null && better(best, a) === a && a !== best) {
+      best = a;
+      from = owner;
+    }
   }
-  return { access: best, team: best !== own };
+  return { access: best, team: best !== own, owner: best !== own ? from : null };
+}
+
+/**
+ * A team plan as the command shows it to a member: the plan, whose team it is (the owner's email or GitHub login),
+ * the apps that plan covers for the team and how many it has, its history and what it includes. The member's seat is
+ * one its owner pays for (Pro is per developer), so it never reads as Free.
+ */
+async function teamPlanJson(c: C, work: { access: Access; owner: string | null }): Promise<Record<string, unknown>> {
+  const p = work.access.plan;
+  const who = work.owner ? await c.db.prepare("SELECT email, github_login FROM accounts WHERE id = ?").bind(work.owner).first<{ email: string | null; github_login: string | null }>() : null;
+  const count = work.owner ? await c.db.prepare("SELECT COUNT(*) AS n FROM projects WHERE account_id = ?").bind(work.owner).first<{ n: number }>() : null;
+  return {
+    id: p.id,
+    name: p.name,
+    source: work.access.source,
+    owner: who ? (who.email ?? (who.github_login ? `@${who.github_login}` : null)) : null,
+    apps: work.owner ? await appsCovered(c.db, work.owner, c.env, c.now) : (p.limits.apps ?? null),
+    used_apps: Number(count?.n ?? 0),
+    history_days: p.limits.history_days,
+    includes: { analytics: entitled(p, "analytics"), forwarding: entitled(p, "forwarding"), export: entitled(p, "export"), private_repositories: entitled(p, "github_private") },
+  };
 }
 
 /**
@@ -122,7 +147,7 @@ async function overview(c: C): Promise<Response> {
   const gh = githubApp(c.env);
   return json(200, {
     account: accountJson(a.account),
-    plan: { id: access.plan.id, name: access.plan.name, ...(team ? { via: "team" } : {}) },
+    plan: { id: access.plan.id, name: access.plan.name, source: access.source, ...(team ? { via: "team" } : {}) },
     suggestions: { per_day: lim.per_day, shown: lim.shown, used_today: await usedToday(c.db, a.account.id, c.now), model: hasModel(c.env) },
     projects: await withPlans(c, a.account.id),
     github: { app: gh !== null, install_url: gh ? `${c.cfg.origin}/github/install` : null, connect_url: gh?.clientId ? `${c.cfg.origin}/github/connect` : null },
@@ -318,8 +343,9 @@ async function account(c: C): Promise<Response> {
     plan: { id: access.plan.id, name: access.plan.name, price: access.plan.id === FREE.id ? null : priceText(access.plan), summary: access.plan.summary },
     // why the account has its plan now: "paid", "comp" (GenClass's own grant), "open" (this server's PLAN_GATES), or null on Free
     access: access.source,
-    // the plan the account works under through a team when it is better than its own (workingAccess), else null
-    team_plan: work.team ? { id: work.access.plan.id, name: work.access.plan.name } : null,
+    // the plan the account works under through a team when it is better than its own (workingAccess), else null:
+    // whose team, the apps it covers, its history and what it includes (a seat the team's owner pays for)
+    team_plan: work.team ? await teamPlanJson(c, work) : null,
     // the apps the account's plan covers (coverage): no limit for a grant, Pro's 3 or the apps kept from before version 5
     limits: { apps: await appsCovered(c.db, a.account.id, c.env, c.now), history_days: access.plan.limits.history_days, seats: access.seats, suggestions_per_day: lim.per_day, suggestions_shown: lim.shown },
     used: { apps: apps.filter((p) => p.account_id === a.account.id).length, suggestions_today: await usedToday(c.db, a.account.id, c.now), seats: t.used },

@@ -578,11 +578,13 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
     expect((await json(get(t.env, "/api/cli/overview", bob.bearer))).cli).toEqual({ paid: true, via: "team" });
     // and he works under the team's plan: its name, its suggestions, no offer of a second Pro (cli.ts workingAccess)
     const seen = await json(get(t.env, "/api/cli/overview", bob.bearer));
-    expect(seen.plan).toEqual({ id: "team", name: "Pro", via: "team" });
+    // the plan the member works under: the team's, paid (`source`), through the team (`via`)
+    expect(seen.plan).toEqual({ id: "team", name: "Pro", source: "paid", via: "team" });
     expect(seen.suggestions).toMatchObject({ per_day: 30, shown: null });
     expect(seen.offer).toBeNull();
     const acct = await json(get(t.env, "/api/cli/account", bob.bearer));
-    expect(acct.team_plan).toEqual({ id: "team", name: "Pro" });
+    // the team's plan as the member's screens show it: whose team, its apps, its history, what it includes
+    expect(acct.team_plan).toEqual({ id: "team", name: "Pro", source: "paid", owner: "ada@example.com", apps: 3, used_apps: 1, history_days: 90, includes: { analytics: true, forwarding: true, export: true, private_repositories: true } });
     expect(acct.limits).toMatchObject({ suggestions_per_day: 30, suggestions_shown: null });
     expect(acct.offer).toBeNull();
     // the owner down to one seat: bob is past it, and so gated again

@@ -45,10 +45,13 @@ const nap = (ms, signal) =>
     );
   });
 
-/** Opens `url` in the default browser when that makes sense here. Returns whether it tried; never throws. */
+/**
+ * Opens `url` in the default browser when that makes sense here: never with --no-browser, never without a terminal
+ * (a coding agent, CI, a pipe: the link is printed instead), never over SSH. Returns whether it tried; never throws.
+ */
 export function openBrowser(url, o = {}) {
   const env = process.env;
-  if (o.noBrowser || env.CI || env.SSH_CONNECTION || env.SSH_TTY) return false;
+  if (o.noBrowser || !interactive() || env.CI || env.SSH_CONNECTION || env.SSH_TTY) return false;
   if (process.platform === "linux" && !env.DISPLAY && !env.WAYLAND_DISPLAY) return false;
   const [cmd, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["rundll32", ["url.dll,FileProtocolHandler", url]] : ["xdg-open", [url]];
   try {
@@ -300,7 +303,16 @@ export async function addRuntime(state, o = {}) {
     const code = again ? await again() : cmd === "connect" ? await runLogin("connect", args) : await runInit("init", args);
     if (code !== 0) return "failed";
     // init returns 0 when the person says no to its change: then there is no GenClass to add Vite settings for
-    if (inspectProject({ cwd: state.cwd }).fresh) return "skipped";
+    const after = inspectProject({ cwd: state.cwd });
+    if (after.fresh) return "skipped";
+    // signed in, GenClass is in the code but the app never reached the account (genclass.dev did not answer): the
+    // step did not finish, so the walk says so and ends with exit code 1 instead of "done"
+    const optedOut = args.some((a) => a === "--no-telemetry" || a === "--no-token" || a === "--no-network" || a === "--dry-run");
+    if (state.signedIn && !after.token && !optedOut) {
+      warn("GenClass is in your code, but the app is not in your account yet: run npx genclass again to connect it.");
+      await addViteSettings(state, o);
+      return "failed";
+    }
   }
   return (await addViteSettings(state, o)) === "failed" ? "failed" : "done";
 }

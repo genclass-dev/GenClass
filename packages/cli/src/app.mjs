@@ -281,7 +281,7 @@ export async function appView(o = {}, deps = {}, view) {
   // the account's plan covers goes on whether or not Continue was clicked; one past what a paying account's plan
   // covers has said so (Enterprise, by email), and its numbers are not the plan's
   if (!o.json && interactive()) {
-    const p = await planNow({ cwd: o.cwd, yes: o.yes }, deps, target.id);
+    const p = await planNow({ cwd: o.cwd, yes: o.yes, noBrowser: o.noBrowser }, deps, target.id);
     if (p === "locked") {
       out();
       return 1;

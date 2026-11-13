@@ -50,7 +50,7 @@ export function noteAccount(who) {
  * `upgrade`): what is needed, where it starts, and the command that starts it. Signed out, the sign-in comes first.
  * @param {{ plan?: string, price?: string | null, trialDays?: number | null, checkoutUrl?: string } | null} cli
  */
-export function needsProJson(cli, signedIn = true) {
+export function needsProJson(cli, signedIn = true, from = null) {
   return {
     ok: false,
     error: "the genclass command comes with Pro",
@@ -60,7 +60,9 @@ export function needsProJson(cli, signedIn = true) {
     price: cli?.price ?? null,
     trial_days: cli?.trialDays ?? null,
     checkout_url: cli?.checkoutUrl ?? null,
-    run: signedIn ? "npx genclass upgrade" : "npx genclass login",
+    // `upgrade` itself points at the checkout (opened in a browser), never at itself
+    run: !signedIn ? "npx genclass login" : from === "upgrade" ? null : "npx genclass upgrade",
+    ...(signedIn && from === "upgrade" ? { next: "open checkout_url in a browser to start the trial" } : {}),
   };
 }
 

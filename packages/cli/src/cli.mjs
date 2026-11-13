@@ -21,56 +21,84 @@
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { c, err, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
+import { width, wrap } from "./tui.mjs";
 
-export const USAGE = `genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.
+/** The help's sections: [heading, [command, what it does]...]; usage() lays them out for the terminal's width. */
+const HELP = [
+  [null, [
+    ["npx genclass", "where this project stands; on a terminal it walks you through the next step, then stays open for commands and questions"],
+    ["npx genclass setup", "the guided setup (--yes: no questions, for a coding agent)"],
+    ["npx genclass status", "what is done, what is next (--all: every part; --json)"],
+  ]],
+  ["See", [
+    ["npx genclass dashboard", "your app, whole: problems found, checks, visitors, agent, GitHub App"],
+    ["npx genclass problems", "every problem found, by kind and page, and what GenClass did about it"],
+    ["npx genclass analytics", "visitors: visits, pages, time, where they come from, what they click (one part in full: analytics pages | sources | devices | clicks | paths | funnels)"],
+    ["npx genclass events", "the latest events, one per line (--all: each one's mode and trigger)"],
+    ["npx genclass health", "how GenClass itself runs on your pages (--all: every breakdown)"],
+    ["npx genclass report", "the period as Markdown (--out report.md)"],
+    ["npx genclass export", "every stored event, as a file (--from, --to, --format csv, --out)"],
+  ]],
+  ["Act", [
+    ["npx genclass fix", "hand a problem to your coding agent (fix 2 | fix stale | fix all; --print, --copy, --agent claude | codex | cursor-agent | gemini)"],
+    ['npx genclass ask "..."', "ask about your app in plain words; the model answers from its numbers"],
+    ["npx genclass suggest [url]", "what your app is missing, most important first (--yes, --no-model, --all)"],
+    ["npx genclass scan <url>", "23 visual checks on one page"],
+  ]],
+  ["Connect", [
+    ["npx genclass connections", "where alerts go (Slack, Sentry, PostHog, Datadog, a webhook), GitHub, agent (connections add | test | on | off | remove <kind>)"],
+    ["npx genclass agent", "your coding agent: is it connected, what it did (agent link: give it the live site's numbers)"],
+    ["npx genclass funnels", 'funnels (funnels add "Name" /a /b /c | funnels remove "Name")'],
+  ]],
+  ["Account", [
+    ["npx genclass apps", 'your apps (apps new "Name")'],
+    ["npx genclass plan", "your plan, its limits and what is used (--open: billing in the browser)"],
+    ["npx genclass upgrade", "start Pro (its free trial first), in the browser"],
+    ["npx genclass profile", "your account and plan, as numbered choices"],
+    ["npx genclass team", "who is on the plan (team invite)"],
+    ["npx genclass login", "sign in (logout, whoami)"],
+    ["npx genclass remove", "take GenClass out of this app again"],
+  ]],
+];
 
-  The genclass command comes with Pro: 3 days free, then US$15 a developer a month, with a card
-  on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, remove, help.
-  Free is on the website: https://genclass.dev
+/**
+ * The help, laid out for `cols` columns (the terminal's): a command and its words side by side on a wide terminal,
+ * the words under the command on a narrow one (58 columns and up), every line within `cols`.
+ */
+export function usage(cols = width()) {
+  const w = Math.max(40, cols - 2);
+  const lines = [];
+  const text = (t, indent = "") => {
+    for (const l of wrap(t, w - indent.length)) lines.push(`${indent}${l}`);
+  };
+  text("genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.");
+  lines.push("");
+  text("The genclass command comes with Pro: 3 days free, then $15 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, remove, help. Free is on the website: https://genclass.dev", "  ");
+  const side = w >= 78;
+  const col = 30;
+  for (const [head, rows] of HELP) {
+    lines.push("");
+    if (head) lines.push(`  ${head}`);
+    for (const [cmd, what] of rows) {
+      if (side) {
+        const words = wrap(what, w - col);
+        lines.push(`  ${cmd.padEnd(col - 2)}${words[0] ?? ""}`);
+        for (const l of words.slice(1)) lines.push(`${" ".repeat(col)}${l}`);
+      } else {
+        lines.push(`  ${cmd}`);
+        for (const l of wrap(what, w - 6)) lines.push(`      ${l}`);
+      }
+    }
+  }
+  lines.push("");
+  text("Options: --app <name>  --range 24h|7d|30d|90d|1y  --all  --json  --cwd <dir>  --yes  --no-browser  --help  --version", "  ");
+  lines.push("");
+  text('Run it in your web app\'s folder. npx runs it without installing; "npm install -g genclass" makes it just "genclass". Every part GenClass sets up is listed by "npx genclass status --all". Docs: https://genclass.dev/docs/cli', "  ");
+  return lines.join("\n");
+}
 
-  npx genclass                where this project stands; on a terminal it walks you through the
-                              next step, then stays open for commands and questions
-  npx genclass setup          the guided setup  (--yes: no questions, for a coding agent)
-  npx genclass status         what is done, what is next  (--all: every part; --json)
-
-  See
-  npx genclass dashboard      your app, whole: problems found, checks, visitors, agent, GitHub App
-  npx genclass problems       every problem found, by kind and page, and what GenClass did about it
-  npx genclass analytics      visitors: visits, pages, time, where they come from, what they click
-                              (one part in full: analytics pages | sources | devices | clicks | paths | funnels)
-  npx genclass events         the latest events, one per line  (--all: each one's mode and trigger)
-  npx genclass health         how GenClass itself runs on your pages  (--all: every breakdown)
-  npx genclass report         the period as Markdown  (--out report.md)
-  npx genclass export         every stored event, as a file  (--from, --to, --format csv, --out)
-
-  Act
-  npx genclass fix            hand a problem to your coding agent  (fix 2 | fix stale | fix all;
-                              --print, --copy, --agent claude | codex | cursor-agent | gemini)
-  npx genclass ask "..."      ask about your app in plain words; the model answers from its numbers
-  npx genclass suggest [url]  what your app is missing, most important first  (--yes, --no-model, --all)
-  npx genclass scan <url>     23 visual checks on one page
-
-  Connect
-  npx genclass connections    where alerts go (Slack, Sentry, PostHog, Datadog, a webhook), GitHub, agent
-                              (connections add | test | on | off | remove <kind>)
-  npx genclass agent          your coding agent: is it connected, what it did  (agent link: give it
-                              the live site's numbers)
-  npx genclass funnels        funnels  (funnels add "Name" /a /b /c | funnels remove "Name")
-
-  Account
-  npx genclass apps           your apps  (apps new "Name")
-  npx genclass plan           your plan, its limits and what is used  (--open: billing in the browser)
-  npx genclass upgrade        start Pro (its free trial first), in the browser
-  npx genclass profile        your account and plan, as numbered choices
-  npx genclass team           who is on the plan  (team invite)
-  npx genclass login          sign in  (logout, whoami)
-  npx genclass remove         take GenClass out of this app again
-
-  Options: --app <name>   --range 24h|7d|30d|90d|1y   --all   --json   --cwd <dir>   --yes
-           --no-browser   --help   --version
-
-  Run it in your web app's folder. npx runs it without installing; "npm install -g genclass" makes it just "genclass".
-  Every part GenClass sets up is listed by "npx genclass status --all". Docs: https://genclass.dev/docs/cli`;
+/** The help at the default width (80 columns), for tests and anything that wants it as one string. */
+export const USAGE = usage(80);
 
 const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open", print: "print", copy: "copy" };
 const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range", from: "from", to: "to", format: "format", out: "out", agent: "agent" };
@@ -177,7 +205,7 @@ export async function run(argv, ctx = {}) {
 
   const { o, rest, error } = parseArgs(args);
   if (error) {
-    err(`genclass: ${error}\n\n${USAGE}`);
+    err(`genclass: ${error}\n\n${usage()}`);
     return 2;
   }
   if (o.version || cmd === "version") {
@@ -185,7 +213,7 @@ export async function run(argv, ctx = {}) {
     return 0;
   }
   if (o.help || cmd === "help") {
-    out(USAGE);
+    out(usage());
     return 0;
   }
   const h = hostConfig();
@@ -210,7 +238,7 @@ export async function run(argv, ctx = {}) {
     const url = o.url ?? rest.find((a) => !a.startsWith("-")) ?? null;
     const unknown = rest.filter((a) => a.startsWith("-"));
     if (unknown.length) {
-      err(`genclass suggest: unknown option ${unknown[0]}\n\n${USAGE}`);
+      err(`genclass suggest: unknown option ${unknown[0]}\n\n${usage()}`);
       return 2;
     }
     const gate = await paid();
@@ -219,7 +247,7 @@ export async function run(argv, ctx = {}) {
   }
   if (cmd !== null && !COMMANDS.includes(cmd)) {
     const near = nearest(cmd);
-    err(`genclass: unknown command ${c.bold(cmd)}${near ? `. Did you mean ${c.cyan(`npx genclass ${near}`)}?` : ""}\n\n${USAGE}`);
+    err(`genclass: unknown command ${c.bold(cmd)}${near ? `. Did you mean ${c.cyan(`npx genclass ${near}`)}?` : ""}\n\n${usage()}`);
     return 2;
   }
   // the commands that take words after their name: sections, picks, subcommands, a question
@@ -228,7 +256,7 @@ export async function run(argv, ctx = {}) {
   const WORDY = ["analytics", "fix", "ask", "connections", "agent", "funnels", "apps", "team"];
   if (flags.length || (words.length && !WORDY.includes(cmd))) {
     const bad = flags[0] ?? words[0];
-    err(`genclass: unknown ${bad.startsWith("-") ? "option" : "command"} ${c.bold(bad)}\n\n${USAGE}`);
+    err(`genclass: unknown ${bad.startsWith("-") ? "option" : "command"} ${c.bold(bad)}\n\n${usage()}`);
     return 2;
   }
   // the words of the commands that take them, before anything is asked of genclass.dev
