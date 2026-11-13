@@ -42,9 +42,58 @@ export function banner(title) {
   out();
 }
 
-/** "  ✔ Label      value" rows. */
+/**
+ * The terminal's width (else COLUMNS, as a coding agent or a pipe sets it), between 60 and 96 columns; lines are kept
+ * within columns() - 2, so 58 columns is the narrowest window they fit.
+ */
+export const columns = () => Math.max(60, Math.min(96, Number(process.stdout.columns) || Number(env.COLUMNS) || 80));
+
+const COLOURS = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+const visible = (s) => String(s).replace(COLOURS, "").length;
+
+/**
+ * `text` wrapped to `width` visible columns, as lines. Colours stay with their words; a word longer than a line (an
+ * address) is left whole on a line of its own, so it can still be copied.
+ */
+export function wrapTo(text, width) {
+  const lines = [];
+  for (const para of String(text).split("\n")) {
+    let line = "";
+    for (const word of para.split(/ +/).filter((w) => w !== "")) {
+      if (line && visible(line) + 1 + visible(word) > width) {
+        lines.push(line);
+        line = word;
+      } else line = line ? `${line} ${word}` : word;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+/**
+ * Whether lines are wrapped to the terminal: under the genclass command (every screen fits 58 columns), not under
+ * genclass-runtime, whose lines stay whole as they always were.
+ */
+const wraps = () => !!globalThis.__GENCLASS_CLI__;
+
+/** "  ✔ Label      value" rows; under the genclass command a long value wraps under itself, within the terminal. */
 export function row(label, value, mark = c.green(sym.ok)) {
-  out(`  ${mark} ${c.bold(label.padEnd(10))} ${value}`);
+  if (!wraps()) {
+    out(`  ${mark} ${c.bold(label.padEnd(10))} ${value}`);
+    return;
+  }
+  const [first = "", ...rest] = wrapTo(value, columns() - 2 - 15);
+  out(`  ${mark} ${c.bold(label.padEnd(10))} ${first}`);
+  for (const l of rest) out(`${" ".repeat(15)}${l}`);
+}
+
+/** Text under a row (13 columns in); under the genclass command, wrapped within the terminal's width. */
+export function more(text, indent = 13) {
+  if (!wraps()) {
+    out(`${" ".repeat(indent)}${text}`);
+    return;
+  }
+  for (const l of wrapTo(text, columns() - 2 - indent)) out(`${" ".repeat(indent)}${l}`);
 }
 
 // ------------------------------------------------------------------------------------------------ diff

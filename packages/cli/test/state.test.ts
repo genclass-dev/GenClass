@@ -216,8 +216,8 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     const s = await readState({ cwd: dir, skip: ["account"] }, { runGit: noGit });
     expect(s.next).toBeNull();
     // before the sign-in, the first screen says what the command costs
-    expect(s.steps[0].why).toBe("Opens genclass.dev. Then Pro: 3 days free, then US$15 a developer a month, with a card on Stripe.");
-    expect(s.steps[1].detail).toBe("3 days free, then US$15 a developer a month");
+    expect(s.steps[0].why).toBe("Opens genclass.dev. Then Pro: 3 days free, then $15 / developer / month, with a card on Stripe.");
+    expect(s.steps[1].detail).toBe("3 days free, then $15 / developer / month");
     // with Pro, a skipped step is not the next one
     signIn();
     const fetchFn = fakeServer({ "GET /api/cli/overview": { json: overview({ plan: { id: "team", name: "Pro" }, cli: { paid: true, via: "plan" } }) } }).fetchFn;

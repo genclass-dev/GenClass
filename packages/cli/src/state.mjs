@@ -70,7 +70,7 @@ export function hasPlaywright(cwd, project) {
 }
 
 /** What the command costs, said before the sign-in (the server says it in its own words once signed in). */
-export const PRO_TERMS = "The genclass command comes with Pro: 3 days free, then US$15 a developer a month, card on Stripe.";
+export const PRO_TERMS = "The genclass command comes with Pro: 3 days free, then $15 / developer / month, card on Stripe.";
 
 /** Free's limits as a few words ("3 apps, 7 days of history, your top 3 suggestions"), from the numbers the server sent. */
 export function freeLimits(free) {
@@ -194,7 +194,7 @@ export async function readState(o = {}, deps = {}) {
             ? `the saved session is for ${otherHost}`
             : "",
     // said before anyone signs up: the command is Pro's, with its trial and price (the owner's call, 2026-11-13)
-    why: "Opens genclass.dev. Then Pro: 3 days free, then US$15 a developer a month, with a card on Stripe.",
+    why: "Opens genclass.dev. Then Pro: 3 days free, then $15 / developer / month, with a card on Stripe.",
     more: `Your account is where your apps, their dashboards and your plan live. New here? It is made on that page. Nothing is typed in the terminal. ${PRO_TERMS} Free stays on the website: one app and its totals.`,
     run: "npx genclass login",
     human: "approve the sign-in in your browser",
@@ -213,7 +213,7 @@ export async function readState(o = {}, deps = {}) {
     detail: !me
       ? creds
         ? ""
-        : "3 days free, then US$15 a developer a month"
+        : "3 days free, then $15 / developer / month"
       : cli && !cli.paid
         ? `${cli.price ?? cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free` : ""}`
         : cli?.paid && cli.via === "team"
@@ -277,6 +277,9 @@ export async function readState(o = {}, deps = {}) {
     title: "App plan",
     doing: appOffer?.current ? `Continue with ${appOffer.current} for this app` : "Choose this app's plan",
     state: appOffer ? "todo" : "optional",
+    // an app the account's plan already covers (paid, or GenClass's grant) waits on nothing: its page's Continue is
+    // offered once, never required, so a setup with --yes or a coding agent still ends complete
+    blocking: !(appOffer?.current && !appOffer.needs),
     detail: !me || !app?.plan
       ? (app?.shared ? "the team's owner chooses it" : "")
       : appOffer
@@ -409,7 +412,7 @@ export async function readState(o = {}, deps = {}) {
     repo: repo?.ok ? repo : null,
     steps,
     next,
-    complete: steps.every((x) => x.state === "done" || x.state === "optional"),
+    complete: steps.every((x) => x.state === "done" || x.state === "optional" || x.blocking === false),
   };
 }
 

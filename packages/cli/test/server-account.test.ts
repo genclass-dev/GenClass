@@ -10,7 +10,7 @@ import { CLI_ACCOUNT_FROM } from "../../../telemetry-worker/src/cli.js";
 import { resetTokenCache } from "../../../telemetry-worker/src/dashboard.js";
 import { resetOwnerCache } from "../../../telemetry-worker/src/paid.js";
 import { resetStandIns } from "../../../telemetry-worker/src/suggest.js";
-import { cliToken, createApp, detection, now, resetClock, sendBatch, setNow, setPlan, setup, signedIn } from "../../../telemetry-worker/test/account-helpers.js";
+import { call, cliToken, createApp, detection, now, resetClock, sendBatch, setNow, setPlan, setup, signedIn } from "../../../telemetry-worker/test/account-helpers.js";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { answerLines, ask, forget, marks } from "../src/ask.mjs";
 import { askModel, fetchAccount, fetchConnections } from "../src/api.mjs";
@@ -136,7 +136,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(u.code).toBe(1);
     const uj = await said(() => upgrade({ ...me.o, json: true }, me.deps));
     expect(uj.code).toBe(1);
-    expect(JSON.parse(uj.text)).toMatchObject({ ok: false, needs_pro: true, signed_in: true, plan: "Pro", trial_days: 3, checkout_url: expect.stringContaining(`${HOST}/account/billing?plan=`), run: "npx genclass upgrade" });
+    expect(JSON.parse(uj.text)).toMatchObject({ ok: false, needs_pro: true, signed_in: true, plan: "Pro", trial_days: 3, checkout_url: expect.stringContaining(`${HOST}/account/billing?plan=`), run: null, next: "open checkout_url in a browser to start the trial" });
     expect(tooWide(u.text)).toEqual([]);
     expect(flat(u.text)).toContain("Start your 3-day free trial");
     expect(flat(u.text)).toContain(`start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
@@ -525,5 +525,50 @@ describe("genclass ask (src/ask.mjs)", () => {
     const empty = await said(() => ask({ ...me.o, question: "  " }, deps));
     expect(empty.code).toBe(2);
     expect(empty.text).toContain('npx genclass ask "what is going wrong on my site?"');
+  });
+});
+
+describe("a team's member (the 0.3.7 walk): the team's Pro, a seat its owner pays for, never Free", () => {
+  it("plan, profile and team say the team's Pro and whose team it is; invites are the owner's", async () => {
+    const { env, sql } = setup(LIVE);
+    const ada = await account(env);
+    team3(sql, ada.account.id);
+    const inv = (await (await call(env, "POST", "/api/team/invites", { body: {}, cookie: ada.cookie })).json()) as { url: string };
+    const bob = await signedIn(env, "bob@example.com");
+    expect((await call(env, "POST", "/api/team/join", { body: { code: inv.url.split("/").pop() }, cookie: bob.cookie })).status).toBe(200);
+    saveCredentials({ host: HOST, access_token: await cliToken(env, bob.cookie), account: { id: bob.account.id, email: bob.account.email, github_login: null } });
+    const o = { cwd: tempDir() };
+    const p = await said(() => plan(o, ada.deps));
+    expect(p.code).toBe(0);
+    expect(tooWide(p.text)).toEqual([]);
+    expect(flat(p.text)).toContain("Pro on ada@example.com's team");
+    expect(flat(p.text)).toContain("Seat paid for by the team's owner");
+    expect(flat(p.text)).toContain("Team apps 1 of 3");
+    expect(flat(p.text)).toContain("History 90 days");
+    expect(flat(p.text)).not.toMatch(/Plan Free|History 7 days|Not included/);
+    const pj = JSON.parse((await said(() => plan({ ...o, json: true }, ada.deps))).text);
+    expect(pj.team_plan).toMatchObject({ id: "team", name: "Pro", owner: "ada@example.com", apps: 3, usedApps: 1, historyDays: 90 });
+    expect(pj.cli).toMatchObject({ paid: true, via: "team" });
+    const pr = await said(() => profile({ ...o, yes: true }, ada.deps));
+    expect(flat(pr.text)).toContain("Pro on your team: a seat its owner pays for");
+    expect(flat(pr.text)).not.toContain("Plan Free");
+    const t = await said(() => team(o, ada.deps));
+    expect(tooWide(t.text)).toEqual([]);
+    expect(flat(t.text)).toContain("Pro, on ada@example.com's team");
+    expect(flat(t.text)).toContain("a seat the owner pays for");
+    expect(flat(t.text)).not.toMatch(/is for one person|A team comes with Pro/);
+    const i = await said(() => team({ ...o, args: ["invite"] }, ada.deps));
+    expect(i.code).toBe(1);
+    expect(flat(i.text)).toContain("Invites come from the team's owner: ask them for a link.");
+    expect(flat(i.text)).not.toContain("Every seat of your plan is taken");
+  });
+
+  it("a grant is set up by GenClass: no seats to add, and its app's Continue never blocks setup", async () => {
+    const { env, sql } = setup(LIVE);
+    const me = await account(env);
+    setPlan(sql, me.account.id, "free", { comp_until: "9999-12-31T00:00:00.000Z", comp_plan: "team" });
+    const u = flat((await said(() => upgrade(me.o, me.deps))).text);
+    expect(u).toContain("Set up by GenClass: it covers every app, with no seats to add.");
+    expect(u).not.toContain("add seats in Manage billing");
   });
 });

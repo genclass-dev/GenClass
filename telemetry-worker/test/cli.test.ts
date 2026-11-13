@@ -53,7 +53,7 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     expect(r.status).toBe(200);
     const j = (await r.json()) as any;
     expect(j.account).toEqual({ id: me.account.id, email: "ada@example.com", github_login: null });
-    expect(j.plan).toEqual({ id: "free", name: "Free" });
+    expect(j.plan).toEqual({ id: "free", name: "Free", source: null });
     // Free is shown one item of the suggestions since 2026-11-12
     expect(j.suggestions).toEqual({ per_day: 3, shown: 1, used_today: 0, model: false });
     expect(j.projects.map((p: any) => [p.id, p.name, p.token, p.last_event])).toEqual([[app.id, "Shop", app.token, null]]);
@@ -105,7 +105,7 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     // a plan with more, and a server that has a model
     setPlan(sql, me.account.id, "free", { comp_until: FUTURE(), comp_plan: "team" });
     const team = (await (await call({ ...env, OPENAI_API_KEY: KEY }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any;
-    expect(team.plan).toEqual({ id: "team", name: "Pro" });
+    expect(team.plan).toEqual({ id: "team", name: "Pro", source: "comp" });
     expect(team.suggestions).toEqual({ per_day: 30, shown: null, used_today: 0, model: true });
     // an account with GenClass's grant is offered none, whatever the server sells: since version 5 a grant covers
     // every app of the account, the account's own or one copied onto an app (migration 0016)

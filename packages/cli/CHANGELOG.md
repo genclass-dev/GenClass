@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.8
+
+Fixes from a signed-in walk of 0.3.7 against a fresh account, a team and a grant:
+
+- **A team's member sees the team's Pro**, a seat its owner pays for: `plan` shows the team's plan, whose team it is,
+  the team's apps, its history and what it includes (and `--json` has `team_plan` and `cli.via`); `profile` and
+  `team` say the same; `team invite` says invites come from the team's owner. It never says Free, or that Free is
+  for one person.
+- **The browser opens only for someone at a terminal**: never with `--no-browser` (`dashboard` and `apps new` lost
+  it before), and never without a terminal (a coding agent, CI, a pipe): the link is printed instead.
+- **Setup never ends "done" with the app outside the account.** A request after a package install (which blocks the
+  command) gets a fresh connection once if the old one was closed meanwhile; if the app still could not be added,
+  the runtime step says so and the setup ends with exit code 1. The advice is to run it again, not to sign in again.
+- **58 columns**: `help` is laid out for the window (side by side when wide, stacked when narrow), `whoami` stacks an
+  app's key and link under its name when the row does not fit, and the setup's notes wrap. A wrong option to
+  `login`, `whoami` or `logout` says so in one line. The width follows `COLUMNS` when there is no terminal.
+- A grant (set up by GenClass) is never told to add seats, and its app's plan page never holds up setup or `status`
+  (Continue is offered once, not required). `upgrade --json` without Pro points at the checkout, not at itself;
+  `profile --json` has the trial and the price; one price wording everywhere: $15 / developer / month. With
+  `GENCLASS_HOST`, the lines name that host.
+
 ## 0.3.7
 
 The genclass command comes with Pro:

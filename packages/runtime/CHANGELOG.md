@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- CLI (shared with the `genclass` command): a request to genclass.dev that fails on a connection closed while the
+  command was busy (a package install) is sent once more on a new one; a token that could not be created for a
+  network error says to run the command again, not to sign in again; `connect` names the host it signs in at.
+  Under the `genclass` command, rows and notes wrap to the terminal (58 columns and up) and `whoami` stacks a long
+  app row; `genclass-runtime`'s own output is unchanged.
+
 - The CLI's note under a dashboard link says what each plan shows since genclass.dev's plans changed (2026-11-12):
   Free the totals for the last 7 days; every problem, its pages, fix prompts and visitor analytics with Pro (3 days
   free). Run by `genclass`, whose commands come with Pro, it names the terminal's own dashboard instead, and a member

@@ -6,9 +6,9 @@ import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { WORKFLOW_FILE as COLLECTOR_WORKFLOW } from "../../../telemetry-worker/src/github/workflow-file.js";
-import { addWorkflow, connectAgent, connectGithubApp, mcpServer, planAgentConfig, runtimeArgs, SKILL_PATH, skillText, workflowFor, writeSkill } from "../src/actions.mjs";
+import { addWorkflow, connectAgent, connectGithubApp, mcpServer, openBrowser, planAgentConfig, runtimeArgs, SKILL_PATH, skillText, workflowFor, writeSkill } from "../src/actions.mjs";
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "../src/assets.mjs";
-import { parseArgs, run, USAGE } from "../src/cli.mjs";
+import { parseArgs, run, usage, USAGE } from "../src/cli.mjs";
 import { githubName, gitInfo } from "../src/git.mjs";
 import { WORKFLOW_PATH } from "../src/state.mjs";
 import { ago, checklist, clean, summary, visible, wrap } from "../src/tui.mjs";
@@ -256,6 +256,17 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
     expect(USAGE).not.toMatch(/^ {2}genclass /m);
     expect(await run(["status", "--frob"])).toBe(2);
     expect(USAGE).not.toMatch(/[—–]/);
+    // within the window it is read in (the 0.3.7 walk: lines of 118 at 58 columns): side by side when wide, stacked
+    // when narrow, never wider than the terminal less 2
+    for (const [cols, max] of [[60, 58], [80, 78], [96, 94]] as const) {
+      const lines = usage(cols).split("\n");
+      expect(lines.filter((l) => l.length > max), String(cols)).toEqual([]);
+      expect(lines.join("\n")).toContain("npx genclass dashboard");
+    }
+    expect(usage(60)).toContain("$15 / developer / month");
+    // the browser opens only for someone at a terminal (none here: a coding agent, CI, a pipe), never with --no-browser
+    expect(openBrowser("https://genclass.dev/account", {})).toBe(false);
+    expect(openBrowser("https://genclass.dev/account", { noBrowser: true })).toBe(false);
   });
 
   it("the real entry names itself to the runtime CLI's modules: its commands say genclass, not the runtime package", () => {

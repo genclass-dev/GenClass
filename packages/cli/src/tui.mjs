@@ -26,8 +26,11 @@ const CONTROL = new RegExp("[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+", "g
 /** Colour codes (SGR). */
 const COLOUR = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 
-/** The width text is wrapped to: the terminal's, kept between 60 and 96 columns. */
-export const width = () => Math.max(60, Math.min(96, Number(process.stdout.columns) || 80));
+/**
+ * The width text is wrapped to: the terminal's (else COLUMNS, as a coding agent or a pipe sets it), kept between 60
+ * and 96 columns. Screens draw within width() - 2, so the narrowest is 58 columns, the window every screen is checked at.
+ */
+export const width = () => Math.max(60, Math.min(96, Number(process.stdout.columns) || Number(process.env.COLUMNS) || 80));
 
 /** `text` without control characters and terminal escape sequences, whitespace collapsed, at most `max` characters. */
 export function clean(text, max = 400) {

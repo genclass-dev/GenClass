@@ -117,7 +117,15 @@ export function deleteCredentials() {
  * One JSON request to the host. Resolves { ok, status, json } for any HTTP answer (json null when the body is not
  * JSON) or { ok: false, status: 0, reason } for a network error or timeout. Never rejects.
  */
-export async function request(path, { method = "GET", token, body, host = apiHost(), fetchFn = globalThis.fetch, timeoutMs = TIMEOUT_MS, signal } = {}) {
+export async function request(path, opts = {}) {
+  const r = await requestOnce(path, opts);
+  // a connection the server closed while this process was busy (a package install blocks Node, so a kept-alive
+  // socket dies unseen) fails before the request is sent: once more, on a new connection
+  if (r.status === 0 && r.stale && !r.cancelled) return requestOnce(path, opts);
+  return r;
+}
+
+async function requestOnce(path, { method = "GET", token, body, host = apiHost(), fetchFn = globalThis.fetch, timeoutMs = TIMEOUT_MS, signal } = {}) {
   if (typeof fetchFn !== "function") return { ok: false, status: 0, reason: "this Node.js has no fetch" };
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
@@ -140,7 +148,8 @@ export async function request(path, { method = "GET", token, body, host = apiHos
   } catch (e) {
     if (signal?.aborted) return { ok: false, status: 0, reason: "cancelled", cancelled: true };
     const aborted = e?.name === "AbortError";
-    return { ok: false, status: 0, reason: aborted ? `no answer within ${timeoutMs / 1000} s` : `network error (${e?.cause?.code ?? e?.message ?? e})` };
+    const code = e?.cause?.code ?? e?.message ?? e;
+    return { ok: false, status: 0, reason: aborted ? `no answer within ${timeoutMs / 1000} s` : `network error (${code})`, stale: !aborted && (code === "ECONNRESET" || code === "UND_ERR_SOCKET" || code === "EPIPE") };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onAbort);

@@ -890,7 +890,7 @@ describe("what was bought before version 5 keeps what it covered, and a paying t
       const bearer = await cliToken(t.env, m.cookie);
       const seen = await json(call(t.env, "GET", "/api/cli/overview", { bearer, origin: null }));
       expect(seen.cli).toEqual({ paid: true, via: "team" });
-      expect(seen.plan).toEqual({ id: "team", name: "Pro", via: "team" });
+      expect(seen.plan).toEqual({ id: "team", name: "Pro", source: "paid", via: "team" });
     }
   });
 
