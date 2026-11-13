@@ -163,6 +163,16 @@ Azure, `git push`, `npm publish`.
    code by itself. Sending the model more than the digest holds, storing a question or an answer, or letting a
    terminal do something the approval page does not list needs the owner's OK and a change to PRIVACY.md.
 
+13. **A report by email says what the account's dashboards already show, to that account only**
+   (`telemetry-worker/src/report*.ts`, migration 0020, PRIVACY.md "Reports and alerts by email"; owner request,
+   2026-11-13). Every number, page and item comes from an app's stats under its own plan (stripProblems and
+   stripAnalytics apply as on the dashboard), the GitHub App's stored reviews, the account's own sign-ins and its last
+   suggest answer; nothing new is collected for it and no IP address is stored or shown. Priorities are rules in
+   `appItems`; the model only writes the summary, from `appDigest` and the listed items, never an email, account id,
+   app key or the key. It goes only to the account's email, with one-click unsubscribe, at most 30 a day, an alert at
+   most once a day per app and rule. Sending more, to anyone else, or collecting anything for it needs the owner's OK
+   and a change to PRIVACY.md, like rule 8.
+
 ## Conventions and definition of done
 
 - Modules open with a `//` header stating role and invariants; JSDoc on exports; named exports; relative imports

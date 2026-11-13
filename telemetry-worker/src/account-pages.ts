@@ -763,6 +763,7 @@ const SETTINGS_MENU: ProductMenu = {
   groups: [
     { label: "Security", items: [{ href: "#security", label: "Ways in", icon: "shield" }, { href: "#password", label: "Password", icon: "key" }, { href: "#passkeys", label: "Passkeys", icon: "key" }] },
     { label: "Access", items: [{ href: "#sessions", label: "Sessions", icon: "monitor" }, { href: "#cli", label: "Terminals", icon: "terminal" }] },
+    { label: "Notifications", items: [{ href: "/account/report", label: "Email reports", icon: "message" }] },
     { label: "Danger zone", items: [{ href: "#delete", label: "Delete account", icon: "x" }] },
   ],
 };

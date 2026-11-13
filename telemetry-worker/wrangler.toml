@@ -138,6 +138,14 @@ service = "genclass-site"
 # "17 3 * * *": the daily retention sweep of dashboard rows (03:17 UTC), followed by the GitHub App's owed reviews.
 # "*/20 * * * *": every 20 minutes, the GitHub App's owed reviews only (src/github/handlers.ts SWEEP_CRON and
 # githubSweep: at most 20 pull requests a run). Without it an owed review waits for the daily run.
+# "7 * * * *": GenClass reports by email that are due, and P0 alerts (src/report-sweep.ts REPORT_CRON).
 [triggers]
-crons = ["17 3 * * *", "*/20 * * * *"]
+crons = ["17 3 * * *", "*/20 * * * *", "7 * * * *"]
+
+# GenClass reports and alerts by email (src/report.ts), through Cloudflare Email Sending. genclass.dev is onboarded
+# for sending (wrangler email sending list); the binding may send only from report@genclass.dev. Without it (a
+# self-hosted collector, wrangler.selfhost.toml) nothing is emailed. `wrangler dev` simulates it and sends nothing.
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["report@genclass.dev"]
 

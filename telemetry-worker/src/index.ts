@@ -6,6 +6,8 @@ import { githubSweep, SWEEP_CRON } from "./github/handlers.js";
 import { githubRetention } from "./github/store.js";
 import { suggestRetention } from "./suggest.js";
 import { planRetention, stripeMode } from "./plans.js";
+import { REPORT_CRON } from "./report.js";
+import { reportRetention, reportSweep } from "./report-sweep.js";
 
 interface Ctx {
   waitUntil(p: Promise<unknown>): void;
@@ -22,7 +24,9 @@ export default {
     );
   },
   /**
-   * Two cron triggers (wrangler.toml `crons`), told apart by the trigger's own expression (`event.cron`).
+   * Three cron triggers (wrangler.toml `crons`), told apart by the trigger's own expression (`event.cron`).
+   *
+   * At 7 minutes past every hour (REPORT_CRON): GenClass reports that are due and P0 alerts (src/report-sweep.ts).
    *
    * Every 20 minutes (SWEEP_CRON): the GitHub App's owed reviews and nothing else (src/github/handlers.ts
    * githubSweep), which is what finishes a check that an unfinished job left in progress.
@@ -40,8 +44,13 @@ export default {
       ctx.waitUntil(githubSweep(env).catch(() => undefined));
       return;
     }
+    if (event?.cron === REPORT_CRON) {
+      // GenClass reports and P0 alerts by email (src/report-sweep.ts); nothing without the EMAIL binding
+      ctx.waitUntil(reportSweep(env, new Date()).catch(() => undefined));
+      return;
+    }
     const now = new Date();
     // each sweep on its own: the GitHub App's tables may not exist yet on a database whose migration 0013 is not applied
-    ctx.waitUntil(Promise.all([planRetention(db, now, env.BUCKET, stripeMode(env)), authRetention(db, now).catch(() => undefined), githubRetention(db, now).catch(() => undefined), suggestRetention(db, now).catch(() => undefined), githubSweep(env).catch(() => undefined)]));
+    ctx.waitUntil(Promise.all([planRetention(db, now, env.BUCKET, stripeMode(env)), authRetention(db, now).catch(() => undefined), githubRetention(db, now).catch(() => undefined), suggestRetention(db, now).catch(() => undefined), reportRetention(db, now).catch(() => undefined), githubSweep(env).catch(() => undefined)]));
   },
 };
