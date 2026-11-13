@@ -8,7 +8,7 @@
 // Talk to us, a mailto link, whatever the key. Which plans include something is said from billing/plans.json
 // (plansWith), never by name.
 
-import { CLIENT_JS, ORG_CSS, orgRail, time } from "./account-pages.js";
+import { CLIENT_JS, ORG_CSS, orgRail, pitchList, time } from "./account-pages.js";
 import type { Env } from "./collector.js";
 import type { D1Like, Project, Range } from "./dashboard.js";
 import { integrationRows, integrationsKey, KIND_NAMES, KINDS, maskConfig, openConfig, DATADOG_SITES, POSTHOG_HOSTS, type Kind } from "./forward.js";
@@ -28,6 +28,7 @@ import {
   RETIRED_PLAN_IDS,
   PLANS,
   PLANS_FILE,
+  pitchLines,
   planById,
   priceText,
   viewRanges,
@@ -258,14 +259,13 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const name = esc(v.project.name);
   // version 5 (2026-11-13): Pro is the account's, per developer, for up to 3 apps; every new app sees this page, a
   // paying account included (Continue with Pro), and an app past what the plan covers waits here: more apps are
-  // Enterprise's, by email (a plan sold by units of apps, apps_per_unit, adds them on Stripe instead)
-  const per = offer?.apps_per_unit ?? null;
+  // Enterprise's, by email
   const proFull = a.locked === "pro_apps";
   const covered = !a.locked && a.source !== null;
   const status = a.source === "open"
     ? `This server gives every app everything in <b>${esc(a.plan.name)}</b>.`
     : proFull
-      ? `Your <b>${esc(offer?.name ?? "paid")}</b> plan covers ${per ? "" : "up to "}${a.apps ?? 0} apps, and <b>${name}</b> is one more.${per ? ` Add ${per} more apps for ${esc(priceText(offer!).replace(/ for \d+ apps$/, ""))}.` : " More apps come with <b>Enterprise</b>, agreed by email."}`
+      ? `Your <b>${esc(offer?.name ?? "paid")}</b> plan covers up to ${a.apps ?? 0} apps, and <b>${name}</b> is one more. More apps come with <b>Enterprise</b>, agreed by email.`
       : paid
         ? v.sub.cancels
           ? `<b>${name}</b> is on <b>${esc(a.plan.name)}</b> until ${day(v.sub.periodEnd)}. It is cancelled and will not renew; you can resume it in Manage billing.`
@@ -275,31 +275,31 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
         : a.source === "comp"
           ? `Your <b>${esc(a.plan.name)}</b> plan, set up by GenClass, covers <b>${name}</b>.`
           : a.locked
-            ? `Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}, and <b>${name}</b> is one more: it needs ${esc(offer?.name ?? "a paid plan")}.`
-            : `<b>${name}</b> is on <b>Free</b>.`;
-  const usage = v.usage && v.usage.limit !== null
+            ? `Since 13 November 2026 Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}, your oldest, and <b>${name}</b> is past it: it needs ${esc(offer?.name ?? "a paid plan")}.`
+            : (v.fromCli || v.isNew) && !v.chosen
+              ? `<b>${name}</b> is in your account.`
+              : `<b>${name}</b> is on <b>Free</b>.`;
+  // the month's live fixes, once there are some (a new app's "0 of 100" is one more line to read)
+  const usage = v.usage && v.usage.limit !== null && (v.usage.used > 0 || v.usage.observe_only)
     ? `<p class="status">${v.usage.observe_only ? `<b>Observing only.</b> ` : ""}Problems fixed live this month: <b>${v.usage.used} of ${v.usage.limit}</b>.${v.usage.observe_only ? ` GenClass keeps finding and reporting every problem, and stops fixing them on visitors' screens until ${day(v.usage.resets)}, or until this project has ${esc(offer?.name ?? "a paid plan")}.` : ""}</p>`
     : "";
   const notice = v.done && !paid
     ? '<p class="notice n-ok" role="status" id="donemsg"><b>Thanks.</b> This page changes as soon as Stripe confirms your payment, usually within a minute.</p>'
     : v.done
       ? `<p class="notice n-ok" role="status"><b>Thanks.</b> ${name} is on ${esc(a.plan.name)} now. <a href="/account/apps/${encodeURIComponent(v.project.id)}">Open its dashboard</a>.</p>`
-      : (v.fromCli || v.isNew) && !paid && a.source === null
-        ? `<p class="notice" role="status"><b>${name}</b> is in your account. Choose its plan to go on.</p>`
-        : "";
+      : "";
   const test = v.testMode && v.live ? '<p class="notice" role="note"><b>Stripe test mode.</b> No real money moves. Pay with card 4242 4242 4242 4242, any future date and any CVC.</p>' : "";
-  const features = (offer?.features ?? []).filter((f) => f.available).map((f) => `<li>${esc(f.text)}</li>`).join("");
+  // the card's lines: the first few, the rest folded (the owner, 2026-11-13: "too much written in the plan details")
+  const features = offer ? pitchList(pitchLines(offer)) : "";
   const action = covered
     ? `<button class="btn" type="button" data-continue><span>Continue with ${esc(a.plan.name)}</span></button><p class="trialnote">Your current plan.${paid ? ` <a href="#" id="portal">Manage billing</a>` : ""}</p>`
-    : proFull && per
-      ? `<button class="btn" type="button" data-addapps><span>Add ${per} more apps</span></button><p class="trialnote">${esc(priceText(offer!).replace(/ for \d+ apps$/, ""))} more, on your next bill. You choose the quantity on Stripe.</p>`
-      : proFull
+    : proFull
         ? `<a class="btn" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass Enterprise: more than ${a.apps ?? 3} apps`)}"><span>Email us about Enterprise</span></a><p class="trialnote">Or remove an app you no longer use, and this one takes its place.</p>`
       : v.live
         ? `<button class="btn" type="button" data-plan="${esc(offer!.id)}" data-pick><span>${v.trialDays ? `Start your ${v.trialDays}-day free trial` : `Start ${esc(offer!.name)}`}</span></button>${v.trialDays ? `<p class="trialnote">${v.trialDays} days free, then ${esc(priceText(offer!))}. Cancel before the trial ends and you pay nothing.</p>` : ""}`
         : '<span class="muted">Paid plans are not on sale yet.</span>';
   const card = offer && a.source !== "open"
-    ? `<div class="plan pick big"><h3>${esc(offer.name)}${covered ? ' <span class="tag">Your plan</span>' : ""}</h3><p class="price">${esc(priceText(offer))}</p><p class="sum">${esc(offer.summary)}</p><ul>${features}</ul>
+    ? `<div class="plan pick big"><h3>${esc(offer.name)}${covered ? ' <span class="tag">Your plan</span>' : ""}</h3><p class="price">${esc(priceText(offer))}</p>${features}
   <div class="act">${action}</div></div>
   ${a.locked || a.source !== null ? "" : `<p class="free"><a href="#why" class="linkish" id="free">Skip</a></p>
   <dialog id="why" class="why" aria-labelledby="whyh">
@@ -329,7 +329,7 @@ ${notice}${test}
   <p class="intro"><a href="/account/billing#projects">All your projects and their plans</a></p>
 </section>
 </div>
-<script type="application/json" id="cfg">${embed({ project: v.project.id, go: v.go && !covered && !proFull && v.live, wait: (v.done && !paid) || (proFull && !!per), cli: v.fromCli, isNew: !!v.isNew })}</script>`;
+<script type="application/json" id="cfg">${embed({ project: v.project.id, go: v.go && !covered && !proFull && v.live, wait: v.done && !paid, cli: v.fromCli, isNew: !!v.isNew })}</script>`;
   const script = `
 (function(){
   gcDropQuery(["project"]);
@@ -359,7 +359,7 @@ ${notice}${test}
       if (!picked) { err.textContent = "Pick what is stopping you."; return; }
       gcBusy(go, true, "Saving...");
       gcPost("/api/billing/projects/" + encodeURIComponent(cfg.project) + "/free", { reason: picked.value, note: document.getElementById("whynote").value }).then(function(){
-        location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew || cfg.cli ? "#connect" : "");
+        location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew && !cfg.cli ? "#connect" : "");
       }, function(e2){ err.textContent = gcWhy(e2); gcBusy(go, false); });
     });
   }
@@ -369,21 +369,15 @@ ${notice}${test}
     var err = document.getElementById("portalerr"); err.textContent = "";
     gcPost("/api/billing/portal", {}).then(function(j){ location.href = j.url; }, function(e2){ err.textContent = gcWhy(e2); });
   });
-  // a paying account goes on with its plan: the app's dashboard (its setup for a new one)
+  // a paying account goes on with its plan: the app's dashboard (its setup for one new on the website; the genclass
+  // command has set it up already, so it never lands on the website's setup with other modes ticked)
   var cont = document.querySelector("[data-continue]");
   if (cont) cont.addEventListener("click", function(){
     var err = document.getElementById("planerr"); err.textContent = "";
     gcBusy(cont, true, "One moment...");
     gcPost("/api/billing/projects/" + encodeURIComponent(cfg.project) + "/continue", {}).then(function(){
-      location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew || cfg.cli ? "#connect" : "");
+      location.href = "/account/apps/" + encodeURIComponent(cfg.project) + (cfg.isNew && !cfg.cli ? "#connect" : "");
     }, function(e){ err.textContent = gcWhy(e); gcBusy(cont, false); });
-  });
-  // more apps on Pro: the quantity is changed on Stripe's billing page, and this page waits for it
-  var add = document.querySelector("[data-addapps]");
-  if (add) add.addEventListener("click", function(){
-    var err = document.getElementById("planerr"); err.textContent = "";
-    gcBusy(add, true, "Opening Stripe...");
-    gcPost("/api/billing/portal", {}).then(function(j){ location.href = j.url; }, function(e){ err.textContent = gcWhy(e); gcBusy(add, false); });
   });
   if (cfg.wait) {
     var tries = 0;
@@ -400,13 +394,14 @@ ${notice}${test}
   return studioPage(nonce, {
     title: `${paid || a.source === "comp" || a.source === "open" ? "The plan for" : "Choose a plan for"} ${v.project.name} | GenClass`,
     account: true,
-    org: { name: orgName(label), plan: a.plan.name, href: "/account" },
+    // the organization's plan in the header: an app past Pro's apps is locked, but its account is on Pro
+    org: { name: orgName(label), plan: a.locked === "pro_apps" && offer ? offer.name : a.plan.name, href: "/account" },
     projects: v.apps,
     project: null,
     user: { label, sub: orgName(label) },
     ...orgRail("billing"),
     railLabel: "Organization",
-    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".planpage .sb-ph{text-align:center}.planpage .sb-ph>div{margin:0 auto}.planpage #plan{background:none;border:0;box-shadow:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:0}.planpage #plan .intro{margin:20px auto 0;text-align:center}.planpage #plan .err:empty{display:none}.planpage .notice{max-width:560px;margin-left:auto;margin-right:auto}.planpage .acct-form{justify-content:center}.plan.big{width:100%;max-width:560px;padding:34px 32px 30px}.plan.big h3{font-size:34px;letter-spacing:-.01em}.plan.big .price{font-size:22px;font-weight:600;margin-top:6px}.plan.big .sum{font-size:15px}.plan.big li{font-size:15px}.plan.big .act .btn{width:100%;justify-content:center;padding:15px 18px;font-size:17px}.free{margin-top:14px;font-size:11px;width:100%;max-width:560px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}.trialnote{margin:10px 0 0;font-size:13px;color:var(--ink3);text-align:center;width:100%}dialog.why{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:460px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}dialog.why::backdrop{background:rgba(0,0,0,.62)}dialog.why h2{font-size:21px;margin:0 0 4px}dialog.why fieldset{border:0;padding:0;margin:14px 0 6px}dialog.why label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;cursor:pointer}dialog.why textarea{margin-top:6px}.why-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}",
+    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".planpage .sb-ph{text-align:center}.planpage .sb-ph>div{margin:0 auto}.planpage #plan{background:none;border:0;box-shadow:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:0}.planpage #plan .intro{margin:20px auto 0;text-align:center}.planpage #plan .err:empty{display:none}.planpage .notice{max-width:440px;margin-left:auto;margin-right:auto}.planpage .acct-form{justify-content:center}.plan.big{width:100%;max-width:440px;padding:24px 24px 22px;gap:8px}.plan.big h3{font-size:24px;letter-spacing:-.01em}.plan.big .price{font-size:15px;font-weight:600;margin-top:2px}.plan.big ul{margin-top:6px;gap:6px}.plan.big li{font-size:13.5px}.plan.big .pmore{font-size:12.5px}.plan.big .pmore ul{margin-top:6px}.plan.big .act{padding-top:12px}.plan.big .act .btn{width:100%;justify-content:center;padding:11px 16px;font-size:14.5px}.free{margin-top:12px;font-size:11px;width:100%;max-width:440px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}.trialnote{margin:10px 0 0;font-size:13px;color:var(--ink3);text-align:center;width:100%}dialog.why{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:460px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}dialog.why::backdrop{background:rgba(0,0,0,.62)}dialog.why h2{font-size:21px;margin:0 0 4px}dialog.why fieldset{border:0;padding:0;margin:14px 0 6px}dialog.why label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;cursor:pointer}dialog.why textarea{margin-top:6px}.why-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}",
     body,
     script: CLIENT_JS + script,
   });

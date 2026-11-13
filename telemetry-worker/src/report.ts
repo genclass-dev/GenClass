@@ -53,6 +53,8 @@ export const ALERT_APPS = 60;
 /** An hourly report asks the model at most this often. */
 export const MODEL_EVERY_MS = 6 * 3_600_000;
 export const REPORT_MODEL_TIMEOUT_MS = 45_000;
+/** "Went silent" needs page loads in at least this many of the 18 hours before the 6 quiet ones. */
+export const SILENT_STEADY_HOURS = 12;
 /** The apps of one account a report covers (the oldest first, as the account page lists them). */
 export const MAX_APPS = 10;
 export const FROM = { email: "report@genclass.dev", name: "GenClass" };
@@ -392,7 +394,9 @@ export function appItems(app: AppReport, s: Stats, series24: Stats | null, origi
     const loads = h.map((b) => b.sessions);
     const problems = h.map((b) => b.detections + b.checks);
     const before = sum(loads.slice(0, 18));
-    if (before >= 36 && sum(loads.slice(18)) === 0) {
+    // steady means spread over the day, not one burst (someone testing for an hour): loads in most of those 18 hours
+    const steady = loads.slice(0, 18).filter((x) => x > 0).length >= SILENT_STEADY_HOURS;
+    if (before >= 36 && steady && sum(loads.slice(18)) === 0) {
       add({
         p: 0,
         rule: "silent",

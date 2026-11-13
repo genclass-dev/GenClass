@@ -15,10 +15,12 @@
 //   and unexpired invites together never exceed the seats when an invite is made; a join checks the seats again.
 //   Expired invites go in the daily sweep (src/auth.ts authRetention).
 // - Joining never merges or links accounts, and a member's own apps, plan and billing are untouched by it.
+// - An app a member with no plan of its own adds goes into the paying team's account (appHome): the team's plan covers
+//   it (Pro covers up to 3 apps an account, whatever the seats: the owner's call, 2026-11-13) and the owner sees it.
 
 import type { Env } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like } from "./dashboard.js";
-import { accountAccess, PAID_PLANS, type Access } from "./plans.js";
+import { accountAccess, PAID_PLANS, priceText, type Access } from "./plans.js";
 
 /** The plans on sale that hold more than one person (per seat, or with no limit on people), for the upgrade message. */
 const TEAM_PLANS = PAID_PLANS.filter((p) => p.per_seat === true || p.limits.seats === null)
@@ -115,6 +117,19 @@ export async function activeOwners(db: D1Like, env: Env, memberId: string, now: 
   return out;
 }
 
+/**
+ * The account an app `accountId` adds goes into: its own, unless it has no plan of its own and an active place in a
+ * team whose owner has one; then that owner's (the first such team it joined), so the team's plan covers the app
+ * instead of Free, and the owner sees it with the rest of the team's apps. A member keeps reading it as a team app.
+ */
+export async function appHome(db: D1Like, env: Env, accountId: string, now: Date): Promise<string> {
+  if ((await accountAccess(db, accountId, env, now)).source !== null) return accountId;
+  for (const owner of await activeOwners(db, env, accountId, now)) {
+    if ((await accountAccess(db, owner, env, now)).source !== null) return owner;
+  }
+  return accountId;
+}
+
 /** `memberId` may read the apps of `ownerId` now (it is the owner, or an active member of its team). */
 export async function canRead(db: D1Like, env: Env, memberId: string, ownerId: string | null | undefined, now: Date): Promise<boolean> {
   if (!ownerId) return false;
@@ -122,10 +137,14 @@ export async function canRead(db: D1Like, env: Env, memberId: string, ownerId: s
   return (await activeOwners(db, env, memberId, now)).includes(ownerId);
 }
 
+// a plan bought per seat with one seat (the owner's) is not a plan for one person: its seats are added in Manage billing
+const perSeatPaid = (t: Team): boolean => t.access.source === "paid" && t.access.plan.per_seat === true;
 const fullError = (t: Team): TeamError =>
-  t.seats !== null && t.seats <= 1
+  t.seats !== null && t.seats <= 1 && !perSeatPaid(t)
     ? { status: 403, upgrade: true, error: `the ${t.access.plan.name} plan is for one person; members come with ${TEAM_PLANS || "a paid plan"}` }
-    : { status: 409, error: `every seat is taken (${t.seats} of ${t.seats}): add a seat in Manage billing, remove a member or revoke an invite` };
+    : t.seats !== null && t.seats <= 1
+      ? { status: 409, error: `your ${t.access.plan.name} plan has one seat, yours: add a seat for each member in Manage billing (${priceText(t.access.plan)})` }
+      : { status: 409, error: `every seat is taken (${t.seats} of ${t.seats}): add a seat in Manage billing, remove a member or revoke an invite` };
 
 /**
  * A new invite link for the account's team, when its plan has a seat free for it (members and unexpired invites
@@ -166,7 +185,7 @@ export async function joinTeam(db: D1Like, env: Env, memberId: string, code: str
   if (t.members.some((m) => m.id === memberId)) return { ownerId: inv.account_id, already: true };
   if (t.members.length >= room(t.seats)) {
     return t.seats !== null && t.seats <= 1
-      ? { status: 409, error: "this team's plan has no seat for members now; ask its owner" }
+      ? { status: 409, error: perSeatPaid(t) ? "this team's plan has one seat, its owner's: ask its owner to add one for you in Manage billing" : "this team's plan has no seat for members now; ask its owner" }
       : { status: 409, error: "every seat of this team is taken; ask its owner to add one" };
   }
   await db.batch([

@@ -38,7 +38,7 @@ const LIVE = { STRIPE_SECRET_KEY: "sk_live_fake", INTEGRATIONS_KEY: SEAL };
 /** A server that sells nothing (no Stripe key): the genclass command is not locked there, so Free meets its plan's own rules. */
 const NOT_SOLD = { INTEGRATIONS_KEY: SEAL };
 /** The 402 a Free CLI session gets where Pro is on sale (src/cli.ts cliPaid, the owner's call of 2026-11-13). */
-const NEEDS_PRO = { ok: false, needs_pro: true, paid: false, plan: "Pro", checkout_url: "https://genclass.dev/account/billing?plan=team&start=1" };
+const NEEDS_PRO = { ok: false, needs_pro: true, paid: false, plan: "Pro", checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" };
 const get = (env: E, path: string, bearer: string) => call(env, "GET", path, { bearer, origin: null });
 const send = (env: E, method: string, path: string, bearer: string, body?: unknown, fetch?: Fetch) => call(env, method, path, { bearer, origin: null, body, fetch });
 const json = async (r: Promise<Response> | Response) => (await (await r).json()) as any;
@@ -118,7 +118,7 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     // nothing of how the account signs in or pays
     expect(JSON.stringify(j)).not.toMatch(/stripe|customer|password|passkey/i);
     // the genclass command is Pro's where Pro is sold: the account says so, and every other route answers 402
-    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: "https://genclass.dev/account/billing?plan=team&start=1" });
+    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" });
     const no = await send(env, "POST", "/api/cli/team/invite", me.bearer, {});
     expect(no.status).toBe(402);
     expect(await no.json()).toMatchObject(NEEDS_PRO);
@@ -317,10 +317,11 @@ describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
     expect((await send(env, "POST", "/api/cli/ask", me.bearer, { id: app.id, question: 7 }, model.fetch)).status).toBe(400);
     const other = await cliUser(env, "bob@example.com");
     expect((await send(env, "POST", "/api/cli/ask", other.bearer, { id: app.id, question: "How is their app?" }, model.fetch)).status).toBe(404);
-    // the app on Pro (a version-4 subscription of its own gives the account Pro, which covers up to 3 apps): the model
-    // answers for it and for the account's next app; a 4th app is past Pro's 3 and stays locked
+    // the app on Pro (a version-4 subscription of its own gives the account Pro, which covers 3 more apps): the model
+    // answers for it and for the account's next app; a 5th app is past Pro's 3 and stays locked
     const blog = await createApp(env, me.cookie, "Blog");
     await createApp(env, me.cookie, "Docs");
+    await createApp(env, me.cookie, "Fourth");
     const extra = await createApp(env, me.cookie, "Extra");
     pro(sql, app.id);
     expect(await json(send(env, "POST", "/api/cli/ask", me.bearer, { id: app.id, question: "How is my app?" }, model.fetch))).toMatchObject({ ok: true, answer: "An answer." });
@@ -449,7 +450,7 @@ describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
 });
 
 describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of 2026-11-13, 'make the entire CLI paid')", () => {
-  const CHECKOUT = "https://genclass.dev/account/billing?plan=team&start=1";
+  const CHECKOUT = "https://genclass.dev/account/billing?plan=pro&start=1";
   /** What every gated route answers a Free CLI session where Pro is on sale. */
   const LOCKED = {
     ok: false,
@@ -527,7 +528,7 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
     expect(r.status).not.toBe(402);
     expect(r.status).toBe(200);
     expect((await call(env, "GET", "/api/cli/overview", { cookie: me.cookie, origin: null })).status).toBe(200);
-    expect((await json(call(env, "GET", "/api/cli/overview", { cookie: me.cookie, origin: null }))).cli).toEqual({ paid: true });
+    expect((await json(call(env, "GET", "/api/cli/overview", { cookie: me.cookie, origin: null }))).cli).toEqual({ paid: true, via: "open" });
   });
 
   it("Pro (active or in its trial), a version-4 project subscription and GenClass's grant open the command", async () => {
@@ -535,8 +536,8 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
     expect(await appStatus()).toBe(402);
     team(db, me.account.id);
     expect(await appStatus()).toBe(200);
-    expect((await json(get(env, "/api/cli/overview", me.bearer))).cli).toEqual({ paid: true });
-    expect((await json(get(env, "/api/cli/account", me.bearer))).cli).toEqual({ paid: true });
+    expect((await json(get(env, "/api/cli/overview", me.bearer))).cli).toEqual({ paid: true, via: "plan" });
+    expect((await json(get(env, "/api/cli/account", me.bearer))).cli).toEqual({ paid: true, via: "plan" });
     setPlan(db, me.account.id, "team", { subscription_status: "trialing" });
     expect(await appStatus()).toBe(200);
     // a version-4 subscription of one app
@@ -571,7 +572,16 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
     expect((await json(get(t.env, "/api/cli/account", bob.bearer))).plan).toMatchObject({ id: "free" });
     expect((await get(t.env, `/api/cli/app?id=${mine.id}`, bob.bearer)).status).toBe(200);
     expect((await get(t.env, `/api/cli/app?id=${shop.id}`, bob.bearer)).status).toBe(200);
-    expect((await json(get(t.env, "/api/cli/overview", bob.bearer))).cli).toEqual({ paid: true });
+    expect((await json(get(t.env, "/api/cli/overview", bob.bearer))).cli).toEqual({ paid: true, via: "team" });
+    // and he works under the team's plan: its name, its suggestions, no offer of a second Pro (cli.ts workingAccess)
+    const seen = await json(get(t.env, "/api/cli/overview", bob.bearer));
+    expect(seen.plan).toEqual({ id: "team", name: "Pro", via: "team" });
+    expect(seen.suggestions).toMatchObject({ per_day: 30, shown: null });
+    expect(seen.offer).toBeNull();
+    const acct = await json(get(t.env, "/api/cli/account", bob.bearer));
+    expect(acct.team_plan).toEqual({ id: "team", name: "Pro" });
+    expect(acct.limits).toMatchObject({ suggestions_per_day: 30, suggestions_shown: null });
+    expect(acct.offer).toBeNull();
     // the owner down to one seat: bob is past it, and so gated again
     team(t.sql, owner.account.id, 1);
     expect((await get(t.env, `/api/cli/app?id=${mine.id}`, bob.bearer)).status).toBe(402);
@@ -585,7 +595,7 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
   it("nothing is gated where nothing is sold to the account: no Stripe key, a test key it is not listed for, PLAN_GATES open", async () => {
     const none = await freeUser({ INTEGRATIONS_KEY: SEAL });
     expect(await none.appStatus()).toBe(200);
-    expect((await json(get(none.env, "/api/cli/overview", none.me.bearer))).cli).toEqual({ paid: true });
+    expect((await json(get(none.env, "/api/cli/overview", none.me.bearer))).cli).toEqual({ paid: true, via: "open" });
     const test = await freeUser({ STRIPE_SECRET_KEY: "sk_test_fake" });
     expect(await test.appStatus()).toBe(200);
     // the test key sells to the accounts on its list: there the command is Pro's
@@ -593,6 +603,6 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
     expect(await listed.appStatus()).toBe(402);
     const open = await freeUser({ ...LIVE, PLAN_GATES: "open" });
     expect(await open.appStatus()).toBe(200);
-    expect((await json(get(open.env, "/api/cli/account", open.me.bearer))).cli).toEqual({ paid: true });
+    expect((await json(get(open.env, "/api/cli/account", open.me.bearer))).cli).toEqual({ paid: true, via: "open" });
   });
 });

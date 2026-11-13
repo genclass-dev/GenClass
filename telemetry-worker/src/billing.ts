@@ -46,6 +46,8 @@ import {
   PLANS,
   PLANS_FILE,
   planById,
+  planFromParam,
+  planParam,
   projectAccess,
   accountProjectsAccess,
   stripeMode,
@@ -105,7 +107,7 @@ export async function overBudget(lim: RateLimiterLike | undefined, bucket: strin
 export const tooMany = (): Response => fail(429, "too many requests from this account; try again in a minute", { "retry-after": "60" });
 
 /** The plan a link names (?plan=<id>, from the pricing page), if it is a paid plan. */
-const pickedPlan = (v: string | null): Plan | null => PAID_PLANS.find((p) => p.id === v) ?? null;
+const pickedPlan = (v: string | null): Plan | null => planFromParam(v);
 
 /** A browser-only write: a cookie session with our Origin. */
 export async function browserWrite(c: C, what: string): Promise<Auth | Response> {
@@ -220,7 +222,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       const go = !!picked && url.searchParams.get("start") === "1";
       const a = await webSession(c);
       // the plan picked on the pricing page survives the sign-in
-      if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${picked.id}${go ? "&start=1" : ""}` : ""}`)}`);
+      if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${planParam(picked)}${go ? "&start=1" : ""}` : ""}`)}`);
       // a plan sold per project, picked on the pricing page or started from an older genclass command: the plan page
       // of the account's first app still on Free, where it is bought for that app
       if (picked?.per_project === true) {
@@ -373,19 +375,11 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
     if (typeof body.project_id !== "string" || !body.project_id) return fail(400, `the ${plan.name} plan is bought for one project: send project_id`);
     return checkoutProject(c, f, a, plan, body.project_id);
   }
-  // a plan sold per seat: how many people (the owner included); one when the page sends none. A plan sold by units of
-  // apps (version 5, Pro): how many units, by default enough for the apps the account has
+  // a plan sold per seat (Pro since version 5): how many developers (the owner included); one when the page sends none
   let seats = 1;
   if (plan.per_seat === true && body.seats !== undefined) {
     const n = cleanSeats(body.seats);
     if (n === null) return fail(400, `seats is a whole number from 1 to ${MAX_SEATS}; for a larger team email ${PLANS_FILE.contact}`);
-    seats = n;
-  }
-  if (plan.apps_per_unit) {
-    const asked = body.quantity ?? body.seats;
-    const own = (await accountProjects(c, a.account.id)).filter((x) => x.account_id === a.account.id).length;
-    const n = asked === undefined ? Math.max(1, Math.ceil(own / plan.apps_per_unit)) : cleanSeats(asked);
-    if (n === null) return fail(400, `quantity is a whole number from 1 to ${MAX_SEATS}`);
     seats = n;
   }
   // started from an app's plan page: Stripe returns there

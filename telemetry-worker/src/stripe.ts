@@ -411,8 +411,6 @@ export async function checkoutSession(
   const lookup = o.plan.stripe_lookup_keys.monthly;
   if (!lookup) throw new StripeError(`the ${o.plan.name} plan has no monthly price`, 400);
   // a plan sold per seat: the quantity is the seats asked for, and the buyer can still change it on Stripe's page
-  // a plan sold by quantity: seats (per_seat) or units of apps (apps_per_unit, Pro since version 5); the buyer can still
-  // change it on Stripe's page
   const perSeat = byQuantity(o.plan);
   const seats = perSeat ? (cleanSeats(o.seats ?? 1) ?? 1) : 1;
   if (o.switchFrom !== undefined && !idOf(o.switchFrom)) throw new StripeError("not a subscription id", 400);
@@ -1078,11 +1076,13 @@ export async function applySubscription(x: EventContext, account: BillingAccount
   if (s.priced === null) console.log(`stripe webhook: ${String(event?.type)} ${String(event?.id)}: subscription ${subId} no longer has a GenClass price; plan set to free`);
   await x.db
     .prepare(
+      // apps_kept (migration 0021, what a subscription from before version 5 covered) ends with that subscription: when
+      // it ends, or another one replaces it (SET reads the row as it was)
       "UPDATE accounts SET plan = ?, subscription_id = ?, subscription_status = ?, past_due_since = ?, current_period_end = ?, cancel_at_period_end = ?, " +
-        "stripe_mode = ?, seats = ? WHERE id = ? AND stripe_customer_id = ?",
+        "stripe_mode = ?, seats = ?, apps_kept = CASE WHEN ? = 'free' OR subscription_id IS NOT ? THEN NULL ELSE apps_kept END WHERE id = ? AND stripe_customer_id = ?",
     )
     // the seats follow the subscription like the plan: a plan that is not sold per seat, or that ended, has none
-    .bind(s.plan, subId, s.status, pastDueSince, s.periodEnd, s.cancelAtPeriodEnd ? 1 : 0, stripeMode(x.env), s.plan === "free" ? null : s.seats, account.id, customer)
+    .bind(s.plan, subId, s.status, pastDueSince, s.periodEnd, s.cancelAtPeriodEnd ? 1 : 0, stripeMode(x.env), s.plan === "free" ? null : s.seats, s.plan, subId, account.id, customer)
     .run();
   return { status: "applied", ours: true, account: account.id, plan: s.plan };
 }

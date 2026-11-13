@@ -345,11 +345,11 @@ describe("genclass: Pro right after the sign-in, and each app's plan page (src/s
     price: "$15 / developer / month",
     summary: "Everything for up to 3 apps, per developer.",
     features: ["Every suggestion, with a prompt for your agent", "GitHub App on private repositories", "Visitor analytics", "Alerts to Sentry, PostHog, Datadog, Slack or a webhook"],
-    checkout_url: `${HOST}/account/billing?plan=team&start=1`,
+    checkout_url: `${HOST}/account/billing?plan=pro&start=1`,
     trial_days: 3,
     free: { name: "Free", apps: 1, history_days: 7, suggestions_shown: 1 },
   };
-  const CHECKOUT = `${HOST}/account/billing?plan=team&start=1`;
+  const CHECKOUT = `${HOST}/account/billing?plan=pro&start=1`;
   const LOCKED = { paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: CHECKOUT };
   const PRO = { plan: { id: "team", name: "Pro" }, cli: { paid: true } };
   const NEEDS_PRO = { ok: false, error: "the genclass command comes with Pro", needs_pro: true, signed_in: true, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: CHECKOUT, run: "npx genclass upgrade" };

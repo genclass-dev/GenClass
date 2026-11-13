@@ -55,7 +55,7 @@ import { isKind, KINDS } from "./forward.js";
 import { githubApp } from "./github/config.js";
 import { repoStatusForAccount } from "./github/http.js";
 import { json } from "./http.js";
-import { accountAccess, accountBilling, accountProjectsAccess, canBuy, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
+import { accountAccess, accountBilling, accountProjectsAccess, better, planParam, canBuy, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
 import { liveFixUsage } from "./usage.js";
 import { appKey, askModel, byWeight, claimRun, hasModel, keepAnswer, lastAnswer, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem, type SuggestAnswer } from "./suggest.js";
 import { activeOwners, createInvite, isTeamError, membershipsOf, teamOf } from "./team.js";
@@ -66,29 +66,48 @@ const FULL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/(?!\.{1,2}$)[A-Za-z0-9._-]
 // ------------------------------------------------------------------------- the genclass command is Pro's
 
 /**
- * The genclass command works for this session (the owner's call, 2026-11-13: "let's make the entire CLI paid"): a
- * browser session always; a CLI session when the account has a plan of its own (paid, in its trial, or GenClass's
- * grant) or an active place in a team that has one, and wherever nothing is sold to the account (no plan on sale, no
- * Stripe key, a test key and an account not on its list). PLAN_GATES open gives every account the grant.
+ * The plan an account works under: the best of its own (paid, its trial, GenClass's grant) and those of the teams it
+ * has an active place in. A member uses its team's plan for what the command gives it (suggestions a day and shown,
+ * genclass ask, the plan it names), so a paying team's member is never told to buy Pro again. `team`: the plan is a
+ * team's, not the account's own.
  */
-export async function cliPaid(c: C, a: Auth): Promise<boolean> {
-  if (a.via !== "bearer" || !PAID_PLANS.length || !canBuy(c.env, a.account)) return true;
-  if ((await accountAccess(c.db, a.account.id, c.env, c.now)).source !== null) return true;
-  for (const owner of await activeOwners(c.db, c.env, a.account.id, c.now)) {
-    if ((await accountAccess(c.db, owner, c.env, c.now)).source !== null) return true;
+export async function workingAccess(c: C, accountId: string): Promise<{ access: Access; team: boolean }> {
+  const own = await accountAccess(c.db, accountId, c.env, c.now);
+  let best = own;
+  for (const owner of await activeOwners(c.db, c.env, accountId, c.now)) {
+    const a = await accountAccess(c.db, owner, c.env, c.now);
+    if (a.source !== null && better(best, a) === a && a !== best) best = a;
   }
-  return false;
+  return { access: best, team: best !== own };
 }
 
 /**
- * What the command says about itself (`cli` in the overview and the account): `paid`, and for an account without
- * Pro the plan, its price, the trial it has left and the page that opens its checkout at once (the account's, so a
- * new account with no app goes straight to Stripe).
+ * Why the genclass command works for this session, or null when it does not (the owner's call, 2026-11-13: "let's
+ * make the entire CLI paid"): "plan", the account's own plan (paid, in its trial, GenClass's grant); "team", an
+ * active place in a team that has one; "open", nothing is sold to this session here (a browser session, no plan on
+ * sale, no Stripe key, a test key and an account not on its list, PLAN_GATES open).
  */
-async function cliJson(c: C, a: Auth): Promise<{ paid: true } | { paid: false; plan: string; price: string; trial_days: number | null; checkout_url: string }> {
-  if (await cliPaid(c, a)) return { paid: true };
+async function cliVia(c: C, a: Auth): Promise<"plan" | "team" | "open" | null> {
+  if (a.via !== "bearer" || !PAID_PLANS.length || !canBuy(c.env, a.account)) return "open";
+  const w = await workingAccess(c, a.account.id);
+  return w.access.source === null ? null : w.access.source === "open" ? "open" : w.team ? "team" : "plan";
+}
+
+/** The genclass command works for this session (cliVia). */
+export async function cliPaid(c: C, a: Auth): Promise<boolean> {
+  return (await cliVia(c, a)) !== null;
+}
+
+/**
+ * What the command says about itself (`cli` in the overview and the account): `paid` with `via` (cliVia), and for
+ * an account without Pro the plan, its price, the trial it has left and the page that opens its checkout at once (the
+ * account's, so a new account with no app goes straight to Stripe).
+ */
+async function cliJson(c: C, a: Auth): Promise<{ paid: true; via: "plan" | "team" | "open" } | { paid: false; plan: string; price: string; trial_days: number | null; checkout_url: string }> {
+  const via = await cliVia(c, a);
+  if (via !== null) return { paid: true, via };
   const plan = PAID_PLANS[0]!;
-  return { paid: false, plan: plan.name, price: priceText(plan), trial_days: (await trialFor(c.db, a.account.id, plan)) || null, checkout_url: `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1` };
+  return { paid: false, plan: plan.name, price: priceText(plan), trial_days: (await trialFor(c.db, a.account.id, plan)) || null, checkout_url: `${c.cfg.origin}/account/billing?plan=${planParam(plan)}&start=1` };
 }
 
 /** The routes that are Pro's for a CLI session: all but the overview and the account. */
@@ -97,12 +116,13 @@ const PRO_ROUTE_RE = /^\/api\/cli\/(?:github|suggest|app|team\/invite|connection
 async function overview(c: C): Promise<Response> {
   const a = await authenticate(c);
   if (!a) return fail(401, "not signed in");
-  const access = await accountAccess(c.db, a.account.id, c.env, c.now);
+  // a team's member works under the team's plan (workingAccess): its limits, its name, no offer of a second Pro
+  const { access, team } = await workingAccess(c, a.account.id);
   const lim = suggestionLimits(access.plan);
   const gh = githubApp(c.env);
   return json(200, {
     account: accountJson(a.account),
-    plan: { id: access.plan.id, name: access.plan.name },
+    plan: { id: access.plan.id, name: access.plan.name, ...(team ? { via: "team" } : {}) },
     suggestions: { per_day: lim.per_day, shown: lim.shown, used_today: await usedToday(c.db, a.account.id, c.now), model: hasModel(c.env) },
     projects: await withPlans(c, a.account.id),
     github: { app: gh !== null, install_url: gh ? `${c.cfg.origin}/github/install` : null, connect_url: gh?.clientId ? `${c.cfg.origin}/github/connect` : null },
@@ -143,14 +163,17 @@ async function offerFor(c: C, account: { id: string; email: string | null }, acc
   if (plan.per_project === true && projects ? !open.length : access.plan.id !== FREE.id || access.source !== null) return null;
   // the page of the account's first app with no plan: Pro is bought there, for the account (version 5)
   const one = open.length ? open[0]!.row.id! : null;
+  const trialDays = (await trialFor(c.db, account.id, plan)) || null;
   return {
     plan: { id: plan.id, name: plan.name },
     price: priceText(plan),
     summary: plan.summary,
-    features: plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text)).map((f) => f.text).slice(0, 12),
-    checkout_url: one ? `${c.cfg.origin}/account/billing?project=${encodeURIComponent(one)}&from=cli` : `${c.cfg.origin}/account/billing?plan=${plan.id}&start=1`,
-    trial_days: (await trialFor(c.db, account.id, plan)) || null,
-    apps_per_unit: plan.apps_per_unit ?? null,
+    // the plan's own "N days free" line only while the account still has the trial
+    features: plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text) && (trialDays || !/days free/i.test(f.text))).map((f) => f.text).slice(0, 12),
+    checkout_url: one ? `${c.cfg.origin}/account/billing?project=${encodeURIComponent(one)}&from=cli` : `${c.cfg.origin}/account/billing?plan=${planParam(plan)}&start=1`,
+    trial_days: trialDays,
+    // a plan sold by units of apps (a design never sold): always null, kept because the genclass command reads it
+    apps_per_unit: null,
     free: { name: FREE.name, apps: FREE.limits.apps, history_days: FREE.limits.history_days, suggestions_shown: suggestionLimits(FREE).shown, live_fixes: FREE.limits.live_fixes_per_month ?? null },
   };
 }
@@ -201,7 +224,8 @@ async function suggest(c: C): Promise<Response> {
   if (body instanceof Response) return body;
   const digest = readDigest(body);
   if (typeof digest === "string") return fail(400, digest);
-  const access = await accountAccess(c.db, a.account.id, c.env, c.now);
+  // a team's member gets its team's plan (workingAccess)
+  const { access } = await workingAccess(c, a.account.id);
   const lim = suggestionLimits(access.plan);
   // Free (a plan that shows part of the answer) is shown the answer it got the first time for this app, again, until
   // the account pays (the owner's call, 2026-11-12): no new model run, the same first item and the same counts
@@ -248,7 +272,7 @@ async function suggest(c: C): Promise<Response> {
     designs_locked: partial ? designs.length : 0,
     // the answer was kept from an earlier run (Free sees it again; a plan out of runs for the day sees its last)
     cached_at: created,
-    upgrade_url: locked.length || hidden || limited ? `${c.cfg.origin}/account/billing?plan=team&from=cli` : null,
+    upgrade_url: locked.length || hidden || limited ? `${c.cfg.origin}/account/billing?plan=${planParam(pro ?? PAID_PLANS[0]!)}&from=cli` : null,
     upgrade_plan: pro ? { name: pro.name, price: priceText(pro), trial_days: pro.trial_days ?? null } : null,
     remaining_today: used === null ? Math.max(0, lim.per_day - (await usedToday(c.db, a.account.id, c.now))) : Math.max(0, lim.per_day - used),
     limited,
@@ -285,13 +309,17 @@ async function account(c: C): Promise<Response> {
   const b = await accountBilling(c.db, a.account.id, c.env);
   const t = await teamOf(c.db, c.env, a.account.id, c.now);
   const memberships = await membershipsOf(c.db, c.env, a.account.id, c.now);
-  const lim = suggestionLimits(access.plan);
+  // `plan` is the account's own (what it pays for); a member works under its team's (team_plan), suggestions included
+  const work = await workingAccess(c, a.account.id);
+  const lim = suggestionLimits(work.access.plan);
   const apps = await accountProjects(c, a.account.id);
   return json(200, {
     account: accountJson(a.account),
     plan: { id: access.plan.id, name: access.plan.name, price: access.plan.id === FREE.id ? null : priceText(access.plan), summary: access.plan.summary },
     // why the account has its plan now: "paid", "comp" (GenClass's own grant), "open" (this server's PLAN_GATES), or null on Free
     access: access.source,
+    // the plan the account works under through a team when it is better than its own (workingAccess), else null
+    team_plan: work.team ? { id: work.access.plan.id, name: work.access.plan.name } : null,
     limits: { apps: access.plan.limits.apps, history_days: access.plan.limits.history_days, seats: access.seats, suggestions_per_day: lim.per_day, suggestions_shown: lim.shown },
     used: { apps: apps.filter((p) => p.account_id === a.account.id).length, suggestions_today: await usedToday(c.db, a.account.id, c.now), seats: t.used },
     includes: { analytics: entitled(access.plan, "analytics"), forwarding: entitled(access.plan, "forwarding"), export: entitled(access.plan, "export"), private_repositories: entitled(access.plan, "github_private") },
@@ -304,7 +332,7 @@ async function account(c: C): Promise<Response> {
       memberships: memberships.map((x) => ({ email: x.email, github_login: x.githubLogin, joined: x.joined, active: x.active })),
     },
     billing_url: `${c.cfg.origin}/account/billing`,
-    offer: await offerFor(c, a.account, access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
+    offer: await offerFor(c, a.account, work.access, await accountProjectsAccess(c.db, a.account.id, c.env, c.now)),
     cli: await cliJson(c, a),
   });
 }
@@ -376,7 +404,8 @@ async function ask(c: C, f: Fetch): Promise<Response> {
     const lock = problemsLock(`${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}`);
     return json(403, { ok: false, error: `asking about your app comes with ${lock.plan ?? "a paid plan"}`, locked: true, needs_plan: true, plan: lock.plan, upgrade_url: lock.upgrade_url, trial_days: lock.trial_days, price: lock.price });
   }
-  const mine = await accountAccess(c.db, a.account.id, c.env, c.now);
+  // the runs a day are the asker's, under the plan it works under (its team's for a member: workingAccess)
+  const mine = (await workingAccess(c, a.account.id)).access;
   const lim = suggestionLimits(mine.plan);
   const left = async (): Promise<number> => Math.max(0, lim.per_day - (await usedToday(c.db, a.account.id, c.now)));
   const none = async (why: "no-model" | "limit" | "failed"): Promise<Response> =>

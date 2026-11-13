@@ -13,6 +13,19 @@ import { DASH_CSS, embed, esc, LOGO, orgName, RUNTIME_PKG, shell, SIGNED_IN_NAV 
 import { icon, studioPage, type ProductMenu, type RailItem } from "./studio.js";
 import { entitled, FREE } from "./plans.js";
 
+/** How many feature lines a pitch shows before "N more" (the owner, 2026-11-13: less written on the plan). */
+export const PITCH_SHOWN = 5;
+
+/**
+ * A pitch's feature lines: the first PITCH_SHOWN in a list, the rest folded under "N more" (a details element, no
+ * script). Each line goes through esc().
+ */
+export function pitchList(lines: string[], shown = PITCH_SHOWN): string {
+  const li = (t: string) => `<li>${esc(t)}</li>`;
+  const rest = lines.slice(shown);
+  return `<ul>${lines.slice(0, shown).map(li).join("")}</ul>${rest.length ? `<details class="pmore"><summary>${rest.length} more</summary><ul>${rest.map(li).join("")}</ul></details>` : ""}`;
+}
+
 // --------------------------------------------------------------------------------------------- styles, icons
 
 export const ACCOUNT_CSS = `
@@ -83,6 +96,9 @@ dl.req{display:grid;grid-template-columns:minmax(110px,auto) minmax(0,1fr);borde
 dl.req dt,dl.req dd{padding:11px 0;border-bottom:1px solid var(--rule);font-size:14.5px;min-width:0;overflow-wrap:anywhere}
 dl.req dt{font:500 12.5px var(--mono);color:var(--ink3);padding-top:13px;padding-right:16px}
 ul.scope{margin:10px 0 0;padding-left:20px;font-size:14.5px;line-height:1.5;color:var(--ink2)}
+details.scope-d{margin-top:16px;font-size:14.5px;color:var(--ink2)}
+details.scope-d summary{cursor:pointer;color:var(--ink)}
+details.scope-d .lead{margin-top:10px}
 ul.scope li{margin-top:5px}
 .acts{display:flex;gap:10px;margin-top:22px}
 .acts .btn{flex:1}
@@ -283,7 +299,10 @@ export interface AuthPageOptions {
   notice?: string | null;
 }
 
-/** The way in without an account, under the sign-in page: a dashboard of its own, protected (/start, link-lock.ts). */
+/**
+ * The way in without an account, under the sign-in page: a dashboard of its own, protected (/start, link-lock.ts).
+ * Not on a sign-in the genclass command started (next is /login/device): that one needs the account.
+ */
 const optional = (): string => `<p class="opt">Just trying it? <a href="/start">Create a dashboard without an account</a>.</p>`;
 
 /** The passkey sign-in button's script: sign in, then go to `next` (or reload, on the device page). */
@@ -327,7 +346,7 @@ ${providers}
 <p class="err" id="err" role="alert"></p>
 </div>
 </div>
-${optional()}
+${o.next?.startsWith("/login/device") ? "" : optional()}
 <script type="application/json" id="cfg">${embed({ next: o.next })}</script>`;
   return authPage(nonce, mode === "in" ? "Sign in | GenClass" : "Create an account | GenClass", inner, ENTRY_JS);
 }
@@ -557,11 +576,9 @@ ${signInWays({ ...v.providers, next: v.next })}
 <div class="ucode" aria-label="Code">${esc(r.userCode)}</div>
 <dl class="req">
   <dt>Requested by</dt><dd>${r.client ? `${esc(r.client)} <span class="muted">(as the command line reported itself)</span>` : 'Unknown client <span class="muted">(it did not name itself as the GenClass command line)</span>'}</dd>
-  <dt>Requested</dt><dd>${time(r.created, "time")} · ${time(r.created, "ago")}</dd>
-  <dt>Code expires</dt><dd id="exp">${time(r.expires, "time")}</dd>
   <dt>Account</dt><dd>${who}</dd>
 </dl>
-<p class="lead" id="scope">If you approve, the terminal that shows this code can do this, for 90 days or until you revoke it on your account page:</p>
+<details class="scope-d" id="scope"><summary>What this terminal can do for 90 days</summary>
 <ul class="scope" id="scopelist">
   <li>list and create apps, add an app from its private dashboard link, and write a project key into your project</li>
   <li>show your apps' dashboards, visitor analytics and stored events</li>
@@ -569,7 +586,8 @@ ${signInWays({ ...v.providers, next: v.next })}
   <li>show and change where an app's alerts are sent, its funnels, and its private dashboard link</li>
   <li>show your plan and your team, and make a team invite link</li>
 </ul>
-<p class="lead" id="never">It cannot change how you sign in, pay for anything, remove people, or delete an app or your account.</p>
+<p class="lead" id="never">It cannot change how you sign in, pay for anything, remove people, or delete an app or your account. You can revoke it any time on your account page.</p>
+</details>
 <p class="caution" id="caution"><b>Approve only a sign-in you started.</b> If you did not run ${runOf(r.client)} yourself just now, or someone sent you this link or code, choose Deny.</p>
 <div class="acts" id="acts"><button class="btn green" id="yes" type="button"><span>Approve</span></button><button class="btn ghost" id="no" type="button"><span>Deny</span></button></div>
 <p class="err" id="err" role="alert"></p>
@@ -606,7 +624,7 @@ ${signInWays({ ...v.providers, next: v.next })}
   function answer(ok){
     err.textContent = ""; yes.disabled = true; no.disabled = true;
     gcPost("/api/device/approve", { user_code: cfg.code, approve: ok }).then(function(){
-      if (ok) finish("Approved", "Go back to your terminal; it finishes on its own. You can close this tab.");
+      if (ok) finish("Approved", "Your terminal is signed in. You can close this tab.");
       else finish("Denied", "The terminal stops waiting and signs nothing in.");
     }, function(e){
       if (e.status === 404) { gone(); return; }
@@ -660,7 +678,7 @@ export interface AccountView {
    * A new account on Free that can buy (no app yet): its first screen is the paid plan's trial, with a tiny Skip on to
    * its first app (the owner's call, 2026-11-13: "our entire goal is for them to put their credit cards in").
    */
-  trial?: { plan: string; price: string; days: number | null; summary: string; features: string[]; start: string } | null;
+  trial?: { plan: string; price: string; days: number | null; features: string[]; start: string } | null;
 }
 
 const TRANSPORT_WORDS: Record<string, string> = {
@@ -695,12 +713,17 @@ export const ORG_CSS = `
 .empty-p{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:12px;padding:56px 16px;border:1px dashed var(--rule2);border-radius:6px;text-align:center}
 .empty-p h2{font-size:16px}
 .empty-p p{font-size:13px;color:var(--ink3);max-width:52ch}
-.empty-p.trial{border-style:solid;border-color:var(--accent);gap:10px;padding:44px 20px 28px}
-.empty-p.trial h2{font-size:28px;letter-spacing:-.01em}
-.empty-p.trial .tp{font-size:17px;color:var(--ink);font-weight:600}
-.empty-p.trial ul{list-style:none;padding:0;margin:4px 0 6px;display:grid;gap:6px;text-align:left;font-size:14px}
+.empty-p.trial{border-style:solid;border-color:var(--accent);gap:10px;padding:32px 20px 24px}
+.empty-p.trial h2{font-size:22px;letter-spacing:-.01em}
+.empty-p.trial .tp{font-size:14px;color:var(--ink);font-weight:600}
+.empty-p.trial ul{list-style:none;padding:0;margin:2px 0 0;display:grid;gap:5px;text-align:left;font-size:13px}
 .empty-p.trial li::before{content:"\\2713";color:var(--accent);margin-right:8px}
-.empty-p.trial .btn{padding:14px 26px;font-size:16px}
+.empty-p.trial .pmore{font-size:12.5px;color:var(--ink3);margin-bottom:4px}
+.empty-p.trial .pmore ul{margin-top:5px}
+.pmore summary{cursor:pointer;list-style:none;color:var(--ink3);text-decoration:underline;text-underline-offset:2px}
+.pmore summary::-webkit-details-marker{display:none}
+.pmore[open] summary{display:none}
+.empty-p.trial .btn{padding:11px 22px;font-size:14.5px}
 .empty-p.trial .skipit{font-size:11px;margin-top:6px}
 .empty-p.trial .skipit a{color:var(--ink3)}
 .acct-form{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-top:16px;max-width:720px}
@@ -801,10 +824,10 @@ export function accountPage(nonce: string, v: AccountView): string {
 <p class="quiet hidden" id="pnone">No project matches your search.</p>`
     : v.trial
       ? `<div class="pgrid"><div class="empty-p trial" id="trial"><h2>${v.trial.days ? `Start your ${v.trial.days}-day free trial` : `Start ${esc(v.trial.plan)}`}</h2>
-  <p class="tp">${esc(v.trial.plan)}, ${esc(v.trial.price)}</p><p>${esc(v.trial.summary)}</p>
-  <ul>${v.trial.features.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
+  <p class="tp">${esc(v.trial.plan)}, ${esc(v.trial.price)}</p>
+  ${pitchList(v.trial.features)}
   <a class="btn" href="${esc(v.trial.start)}" id="starttrial"><span>${v.trial.days ? `Start your ${v.trial.days}-day free trial` : `Start ${esc(v.trial.plan)}`}</span></a>
-  ${v.trial.days ? `<p>${v.trial.days} days free, then ${esc(v.trial.price)}. Your card is asked for on Stripe; cancel before the trial ends and you pay nothing.</p>` : ""}
+  ${v.trial.days ? `<p>${v.trial.days} days free, then ${esc(v.trial.price)}. Cancel before the trial ends and you pay nothing.</p>` : ""}
   <p class="skipit"><a href="/account/new" id="skiptrial">Skip</a></p></div></div>`
       : `<div class="pgrid"><div class="empty-p"><h2>Create your first project</h2><p>Fastest: run <code>npx genclass</code> in your app's folder. It creates the project here and sets GenClass up.</p><a class="btn" href="/account/new">${icon("plus", 14)}<span>New project</span></a></div></div>`;
   // with the GitHub App set up on this server, its page sits next to New project (src/github/pages.ts)
