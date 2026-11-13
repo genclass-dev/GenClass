@@ -263,6 +263,25 @@ describe("reports: one account's report", () => {
     expect(html.length).toBeLessThan(102_000);
   });
 
+  it("before an app sends anything, the report is about that app: no generic ideas, what the next reports hold", async () => {
+    const { env, sql } = world();
+    const { cookie, account } = await signedIn(env);
+    grantPro(sql, (await createApp(env, cookie, "Glyco site")).id);
+    const r = (await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report;
+    const { subject, html, text } = renderReport(r);
+    expect(subject).toBe("GenClass daily report, Glyco site: finish setting up");
+    expect(html).toContain("Glyco site isn&#39;t sending data yet");
+    expect(html).toContain("What this report will show");
+    expect(html).toContain("Once Glyco site sends its first page load");
+    for (const generic of ["Sites to learn from today", "Upgrade your website design", "Suggestions for your app"]) expect(html).not.toContain(generic);
+    expect(text).not.toContain("UPGRADE YOUR WEBSITE DESIGN");
+    // once it has measured data, the ideas and the showcase come back
+    await sendBatch(env, (sql.db.prepare("SELECT token FROM projects WHERE name = 'Glyco site'").get() as { token: string }).token, [page("/")]);
+    const later = renderReport((await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report);
+    expect(later.html).toContain("Sites to learn from today");
+    expect(later.html).not.toContain("What this report will show");
+  });
+
   it("without signed links a short prompt is printed and a long one is left to the text part", async () => {
     const { env, sql } = world({ INTEGRATIONS_KEY: undefined });
     const { cookie, account } = await signedIn(env);

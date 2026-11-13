@@ -11,8 +11,10 @@
 //   links a report signs) is a prompt printed, and then only a short one; the plain-text body always has them all.
 // - The sections and their order: the headline, the summary, what needs doing (critical, then important), setup when
 //   an app is not connected, the apps' numbers, code changes, visitors, security, setup otherwise, worth a look,
-//   suggestions, website design, then how to change or stop these emails. An app on Free is counted, not listed:
-//   its problems' count shows with Pro's box, never its pages or prompts.
+//   suggestions, website design, then how to change or stop these emails. Every section is about the account's own
+//   sites: while GenClass has measured none of them and has no genclass suggest answer, the headline names the apps
+//   that send nothing yet, and one card says what the next reports hold for them in place of generic ideas.
+// - An app on Free is counted, not listed: its problems' count shows with Pro's box, never its pages or prompts.
 
 import { esc } from "./escape.js";
 import { DESIGN_CHECKS, EVERY_WORDS, PRIORITY_WORDS, showcasePrompt, type AppReport, type Every, type Item, type Priority, type Report } from "./report.js";
@@ -65,6 +67,12 @@ const counts = (items: Item[]): Record<Priority, number> => {
 const counted = (r: Report): Item[] => r.items.filter((i) => i.section !== "setup" || i.p === 0);
 const problemItems = (r: Report) => r.items.filter((i) => i.section === "problems");
 const measured = (r: Report): AppReport[] => r.apps.filter((x) => !!x.lastEvent && !x.demo);
+/** Whether GenClass knows anything about the account's sites: a measured app, or a genclass suggest answer. */
+const knowsSites = (r: Report): boolean => measured(r).length > 0 || r.suggestions.length + r.suggestionsHidden + r.designs.length + r.designsHidden > 0;
+/** "Glyco site" or "3 apps": what the report is about, by name when there is one. */
+const appsName = (r: Report): string => (r.apps.length === 1 ? r.apps[0]!.name : plural(r.apps.length, "app", "apps"));
+/** The headline when no app has measured data: the apps by name. */
+const notSending = (r: Report): string => (r.apps.length === 1 ? `${r.apps[0]!.name} isn't sending data yet` : `${plural(r.apps.length, "app isn't", "apps aren't")} sending data yet`);
 
 /** The subject line. Pure. */
 export function subjectOf(r: Report): string {
@@ -75,7 +83,7 @@ export function subjectOf(r: Report): string {
   const name = r.apps.length === 1 ? r.apps[0]!.name : `${r.apps.length} apps`;
   const adj = ADJ[r.every] || "daily";
   const lead = `${test}GenClass ${adj} report, ${name}`;
-  if (c[0] || c[1]) return `${lead}: ${[c[0] ? `${c[0]} critical` : "", c[1] ? `${c[1]} important` : ""].filter(Boolean).join(", ")}`.slice(0, 200);
+  if (c[0] || (c[1] && measured(r).length)) return `${lead}: ${[c[0] ? `${c[0]} critical` : "", c[1] ? `${c[1]} important` : ""].filter(Boolean).join(", ")}`.slice(0, 200);
   if (!measured(r).length) return `${lead}: finish setting up`;
   return `${lead}: all clear`;
 }
@@ -85,8 +93,8 @@ function headlineOf(r: Report): { text: string; tone: Priority | null } {
   const c = counts(counted(r));
   if (r.kind === "alert") return { text: r.items.length === 1 ? "Something critical needs you" : `${fmt(r.items.length)} critical problems need you`, tone: 0 };
   if (c[0]) return { text: `${plural(c[0], "critical problem", "critical problems")}${c[1] ? ` and ${plural(c[1], "important one", "important ones")}` : ""}`, tone: 0 };
+  if (!measured(r).length) return { text: notSending(r), tone: 1 };
   if (c[1]) return { text: `${plural(c[1], "important thing", "important things")} to look at`, tone: 1 };
-  if (!measured(r).length) return { text: "Finish setting up GenClass", tone: null };
   return { text: "All clear on your apps", tone: null };
 }
 
@@ -384,6 +392,18 @@ function designCard(r: Report): string {
   return card(out.join(""), "Upgrade your website design");
 }
 
+/**
+ * In place of the suggestions and the design ideas when GenClass knows nothing about the account's sites yet (no
+ * measured app, no genclass suggest answer): what the next reports hold for them, by name, and how to get ideas now.
+ */
+function nextCard(r: Report): string {
+  const name = appsName(r);
+  return card(
+    `${p(`Once ${esc(name)} ${r.apps.length === 1 ? "sends its" : "send their"} first page load, this report lists what breaks there with the pages it happens on, ${r.apps.some((x) => x.analytics) ? "who visits and what they click, " : ""}and contrast and layout problems measured on your visitors' screens.`, "margin:8px 0 0")}${p(`For ideas picked for ${esc(name)} today, run ${code("npx genclass suggest")} in ${r.apps.length === 1 ? "its" : "an app's"} folder: GenClass checks the repository and the live site, then suggests what to fix and website designs from sites in your field.`, "margin:8px 0 0")}`,
+    "What this report will show",
+  );
+}
+
 function upgradeCard(r: Report): string {
   const u = r.upgrade;
   if (!u) return "";
@@ -452,8 +472,8 @@ export function htmlOf(r: Report): string {
           securityCard(r),
           setupFirst ? "" : setupCard(r),
           laterCard(r),
-          suggestionsCard(r),
-          designCard(r),
+          knowsSites(r) ? suggestionsCard(r) : "",
+          knowsSites(r) ? designCard(r) : nextCard(r),
           upgradeCard(r),
         ].join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>${esc(subjectOf(r))}</title>${DARK}</head>
@@ -513,9 +533,13 @@ export function textOf(r: Report): string {
     const p2 = problemItems(r).filter((i) => i.p === 2);
     if (p2.length) out.push("WORTH A LOOK", ...p2.flatMap(textItem));
     if (r.suggestions.length) out.push("SUGGESTIONS", ...r.suggestions.flatMap((s) => [`- ${s.title}${s.why ? `: ${s.why}` : ""}`, ...(s.prompt ? [`  Prompt: ${s.prompt}`] : [])]), "");
-    out.push("UPGRADE YOUR WEBSITE DESIGN");
-    for (const d of r.designs) out.push(`- ${d.title} (inspired by ${d.inspired_by})`, `  Prompt: ${d.prompt}`);
-    for (const s of r.showcase) out.push(`- ${s.name} ${s.site}${s.three ? " (3D)" : ""}: ${s.take}`);
+    if (knowsSites(r)) {
+      out.push("UPGRADE YOUR WEBSITE DESIGN");
+      for (const d of r.designs) out.push(`- ${d.title} (inspired by ${d.inspired_by})`, `  Prompt: ${d.prompt}`);
+      for (const s of r.showcase) out.push(`- ${s.name} ${s.site}${s.three ? " (3D)" : ""}: ${s.take}`);
+    } else {
+      out.push("WHAT THIS REPORT WILL SHOW", `Once ${appsName(r)} sends its first page load: what breaks there and on which pages, and contrast and layout problems on your visitors' screens.`, "For ideas now, run npx genclass suggest in the app's folder.");
+    }
     out.push("");
     if (r.upgrade) out.push(`${r.upgrade.plan}: everything in this report, ${r.upgrade.price}${r.upgrade.trialDays ? `, ${r.upgrade.trialDays} days free to start` : ""}: ${r.upgrade.url}`, "");
   }
