@@ -148,6 +148,9 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     // only the code's hash is kept, and the team now lists one open invite
     expect(JSON.stringify(sql.rows("SELECT * FROM team_invites"))).not.toContain(inv.url.split("/").pop());
     expect((await json(get(env, "/api/cli/account", me.bearer))).team.invites).toHaveLength(1);
+    // GenClass's grant covers every app: no app limit in the answer, whatever plan the grant gives
+    setPlan(sql, me.account.id, "free", { stripe_mode: null, seats: null, subscription_id: null, subscription_status: null, comp_until: "9999-12-31T00:00:00.000Z", comp_plan: "team" });
+    expect((await json(get(env, "/api/cli/account", me.bearer))).limits.apps).toBeNull();
   });
 });
 

@@ -525,6 +525,15 @@ export async function projectAccess(db: D1Like, project: { account_id?: string |
   return accessIn(await coverage(db, project.account_id, stripeMode(env), now), project);
 }
 
+/**
+ * How many apps the account's plan covers now (coverage's cap): null for a grant, an open server and a plan with no
+ * limit; Pro's 3, or the apps a subscription from before version 5 kept; Free's one.
+ */
+export async function appsCovered(db: D1Like, accountId: string, env: Env, now: Date): Promise<number | null> {
+  if (planGatesOpen(env)) return null;
+  return (await coverage(db, accountId, stripeMode(env), now)).cap;
+}
+
 /** The first plan in plans.json that includes `e` (the plan an upgrade message names), or null. */
 export const firstPlanWith = (e: Entitlement): Plan | null => PLANS.find((p) => entitled(p, e)) ?? null;
 
