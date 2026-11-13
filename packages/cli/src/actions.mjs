@@ -212,7 +212,7 @@ export async function projectPlan(offer, o = {}, deps = {}) {
   if (got) return "done";
   // the setup goes on only once the app has its plan: Team, or Free with what stops the person from paying (the
   // owner's call, 2026-11-12)
-  note(`The setup goes on once ${name} has its plan: ${offer.needs ? offer.plan.name : `${offer.plan.name}, or ${offer.free.name} for now`}, on ${offer.checkoutUrl}`);
+  note(`${name} has no plan yet: ${offer.needs ? offer.plan.name : `${offer.plan.name}, or ${offer.free.name} for now`}, on ${offer.checkoutUrl}`);
   return "quit";
 }
 
