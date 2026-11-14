@@ -46,9 +46,9 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   of it is in one preview and asked once (one Enter; `--yes` writes it, and shows it too; without a terminal nothing
   is written). The form follows what init wrote: a `genclass:init` block with `import { GenClass }`,
   `import { connectAgent }` and `if (<dev check>) connectAgent(GenClass.init());` after the marked `/auto` import or
-  after the block of a file init created (with the app's own code after that place, the two imports stay there and
-  the call goes in a second block at the end of the file, so imports stay first); where init bound `genclass` in
-  Next.js, the dynamic
+  after the block of a file init created (with more of the app's imports after that place, the two imports stay
+  there and the call goes in a second block right after the file's last import, so imports stay first and the call
+  still runs before the app's code); where init bound `genclass` in Next.js, the dynamic
   `import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass))` that mirrors its devtools
   line; in Astro a second marked `<script>` line. The dev check is init's own: `import.meta.env.DEV` (Vite with React,
   Vue, Svelte, Solid or Preact, SvelteKit, Astro, React Router and Remix on Vite), `process.env.NODE_ENV ===
@@ -60,8 +60,15 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   - No link while the installed `@genclass/runtime` has no `./agent` export (0.2.x, npm's `latest`; or none is
     installed): the step and `doctor` say the upgrade to run first (`npm install @genclass/runtime@beta`), since the
     link would stop the dev server and the build.
+  - Plug'n'Play installs (Yarn's default, pnpm's `node-linker=pnp`; no `node_modules`) get the link again: the
+    lockfile next to `.pnp.cjs` gives the runtime's version (when it cannot tell which one the app gets, the link is
+    planned, as before).
   - Create React App keeps building: the link's call is no longer above the app's imports (react-app's
     `import/first` error).
+  - The link's call stays before the app's own code: right after the file's last import, not at the end of the file,
+    so an entry that throws while the page loads (a wrong root element id) or awaits at the top is still linked
+    first. A call whose next line opens with `(`, `[` or a template ends with `;` in a file without semicolons. Only
+    where the end of the imports cannot be read safely (code on an import's line) does it go at the end.
   - Nuxt's lines to add are a marked block for the end of GenClass's plugin, which `genclass remove` takes out with
     the plugin.
   - `genclass remove` gives back an entry file of the app's own that was empty before init (it deleted it once the

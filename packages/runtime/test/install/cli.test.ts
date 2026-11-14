@@ -566,6 +566,11 @@ describe("remove after a formatter rewrapped init's lines", () => {
     const app = `import React from 'react';\r\nimport App from './App';\r\n\r\nrender(<App />);\r\n`;
     const t = `import genclass from '@genclass/runtime/auto'; // genclass:init\r\n// genclass:init start: the coding-agent link's imports\r\nimport { GenClass } from '@genclass/runtime';\r\nimport { connectAgent } from '@genclass/runtime/agent';\r\n// genclass:init end\r\n${app}if (process.env.NODE_ENV === 'development') import('@genclass/runtime/devtools').then((d) => d.mountDevtools(genclass)); // genclass:init\r\n// genclass:init start: the coding-agent link\r\nif (process.env.NODE_ENV === "development") connectAgent(GenClass.init());\r\n// genclass:init end`;
     expect(planRemoval(t)).toEqual({ text: app.replace(/\r\n$/, ""), problems: [] });
+    // the call's block right after the app's last import, before its code (where the genclass command puts it now),
+    // in a file without semicolons whose next line opens with "(": the call's own ";" goes with it
+    const own = `import a from "./a.js"\n(async () => { await a() })()\n`;
+    const mid = `import "@genclass/runtime/auto" // genclass:init\n// genclass:init start: the coding-agent link's imports; its call is in a second block after this file's imports\nimport { GenClass } from "@genclass/runtime"\nimport { connectAgent } from "@genclass/runtime/agent"\n// genclass:init end\nimport a from "./a.js"\n// genclass:init start: the coding-agent link, development builds only\nif (import.meta.env.DEV) connectAgent(GenClass.init());\n// genclass:init end\n(async () => { await a() })()\n`;
+    expect(planRemoval(mid)).toEqual({ text: own, problems: [] });
   });
 
   it("Nuxt's plugin init created: the link's call inside defineNuxtPlugin (also next to the devtools line) or in a block after it; remove deletes the file", () => {
