@@ -140,6 +140,58 @@ describe("genclass doctor reads a Content-Security-Policy as the browser does (s
     }
   });
 
+  // API and asset patterns whose folder is not their first literal segment were read as page routes, so an API-only
+  // policy made doctor say "bad" and ask to loosen it (fix3 doctor 0). A route it cannot tell is left unchecked, and
+  // the row says so: never "bad", which makes doctor exit 1 on a correct site.
+  it("API and asset patterns not led by their folder are not page routes; a route it cannot tell is left unchecked, and the row says so", async () => {
+    for (const r of ["/(api|trpc)/(.*)", "/(api|trpc)(.*)", "/(api|_next/static)/:path*", "/:all*(svg|jpg|png)", "**/*.@(eot|otf|ttf|woff|font.css)"]) expect(routeHasPages(r)).toBe(false);
+    for (const r of ["/:locale/api/:path*", "/admin/api/(.*)", "/docs/api/:path*", " base /api/:path*", " apiRoutes "]) expect(routeHasPages(r)).toBe(null);
+    for (const r of ["/(app|api)/:path*", "/:lang(en|fr)?/about", "/(.*)", "/apiary/*"]) expect(routeHasPages(r)).toBe(true);
+    const API_ONLY = "default-src 'none'; frame-ancestors 'none'";
+    const vercel = (source: string, policy = API_ONLY) => JSON.stringify({ headers: [{ source: "/(.*)", headers: [{ key: "Content-Security-Policy", value: GOOD }] }, { source, headers: [{ key: "Content-Security-Policy", value: policy }] }] });
+    for (const source of ["/(api|trpc)/(.*)", "/(api|trpc)(.*)", "/:all*(svg|jpg|png)"]) {
+      const rows = (await checks({ cwd: appWith({ "vercel.json": vercel(source) }) }, OFF)).filter((x: any) => x.id === "csp");
+      expect(rows).toEqual([{ id: "csp", label: "Content policy", state: "ok", detail: "vercel.json allows what GenClass needs" }]);
+    }
+    for (const source of ["/:locale/api/:path*", "/admin/api/(.*)"]) {
+      const rows = (await checks({ cwd: appWith({ "vercel.json": vercel(source) }) }, OFF)).filter((x: any) => x.id === "csp");
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ state: "ok" });
+      expect(rows[0].fix).toBeUndefined();
+      expect(rows[0].detail).toBe(`vercel.json allows what GenClass needs; the policy for ${source} is not checked: GenClass cannot tell whether pages are served there (if they are, it needs connect-src https://genclass.dev, connect-src https://cdn.jsdelivr.net, script-src 'wasm-unsafe-eval', worker-src 'self')`);
+    }
+    // such a route's policy that lets GenClass through is not named at all
+    expect(byId(await checks({ cwd: appWith({ "vercel.json": vercel("/admin/api/(.*)", GOOD) }) }, OFF)).csp.detail).toBe("vercel.json allows what GenClass needs");
+    // a next.config source built at run time (a template, a name from another file): unchecked, named as written
+    const next = appWith({
+      "next.config.js": [
+        'const base = process.env.BASE_PATH ?? "";',
+        "module.exports = {",
+        "  async headers() {",
+        "    return [",
+        `      { source: \`\${base}/api/:path*\`, headers: [{ key: "Content-Security-Policy", value: "${API_ONLY}" }] },`,
+        `      { source: apiRoutes, headers: [{ key: "Content-Security-Policy", value: "${API_ONLY}" }] },`,
+        `      { source: \`/api/\${version}/:path*\`, headers: [{ key: "Content-Security-Policy", value: "${API_ONLY}" }] },`,
+        "    ];",
+        "  },",
+        "};",
+      ].join("\n"),
+    });
+    expect(cspIn(next).map((x: any) => [x.text, x.unsure])).toEqual([
+      ["`${base}/api/:path*`", true],
+      ["apiRoutes", true],
+    ]);
+    const rows = (await checks({ cwd: next }, OFF)).filter((x: any) => x.id === "csp");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ state: "info" });
+    expect(rows[0].detail).toMatch(/^next\.config\.js: the policies for `\$\{base\}\/api\/:path\*`, apiRoutes are not checked: GenClass cannot tell whether pages are served there \(if they are, they need connect-src https:\/\/genclass\.dev, /);
+    // a page route next to them is still checked, and its gaps are still "bad"
+    const both = appWith({ "vercel.json": JSON.stringify({ headers: [{ source: "/app/(.*)", headers: [{ key: "Content-Security-Policy", value: "default-src 'self'; connect-src 'self'; script-src 'self' 'wasm-unsafe-eval'" }] }, { source: "/admin/api/(.*)", headers: [{ key: "Content-Security-Policy", value: API_ONLY }] }] }) });
+    const csp = byId(await checks({ cwd: both }, OFF)).csp;
+    expect(csp).toMatchObject({ state: "bad", fix: "add connect-src https://genclass.dev, connect-src https://cdn.jsdelivr.net to the policy in vercel.json" });
+    expect(csp.detail).toContain("; the policy for /admin/api/(.*) is not checked: GenClass cannot tell whether pages are served there");
+  });
+
   // Cloudflare Pages' and Netlify's parsers trim each line, and Cloudflare's path may be an absolute URL (fix2 doctor 1)
   it("_headers as the hosts read it: header lines without indentation, and a path line that is an absolute URL", async () => {
     const BLOCKS = "default-src https://x.example; connect-src https://x.example; script-src 'self' 'wasm-unsafe-eval'";

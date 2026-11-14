@@ -190,6 +190,10 @@ Fixed in `genclass doctor` and the update notice:
   which then says `npm install -g genclass@alpha`.
 - A policy set for a section of the site (`/app/*`) is checked again, as GenClass runs on those pages too; only
   policies for API routes and static files (`/api/*`, `/assets/*`, `*.js`) are left out.
+- An API-only policy is no longer reported as blocking GenClass when its folder is not the pattern's first part
+  (`/(api|trpc)/(.*)`, `/(api|trpc)(.*)`, Next.js's `/:all*(svg|jpg|png)`); a route GenClass cannot tell serves pages
+  (`/:locale/api/:path*`, `/admin/api/(.*)`, a source built at run time such as `` `${base}/api/:path*` ``) is not
+  checked, and the Content policy row names it and what it would need if pages are served there.
 - `_headers` is read as Netlify and Cloudflare Pages read it: header lines need no indent, and a path line may be an
   absolute URL (`https://example.com/*`).
 - A next.config header's route is the `source` of its own entry (written before or after its `headers`), not the
