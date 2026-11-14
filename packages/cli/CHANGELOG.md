@@ -141,6 +141,14 @@ Fixed in `genclass privacy` (and so in `doctor`'s Diagnostics row):
   app key, genclass.dev's row names forwarding and OpenAI (PRIVACY.md).
 - SvelteKit's self-host command uses `static/`; the `--out` line says `npx genclass privacy`; options set by code are
   named in a "Not read" row.
+- Read as the runtime reads it, so the map never says less is sent: a `telemetry.endpoint` that is not an
+  `http(s)://` URL (a path, `//host`, a host without its scheme, one set by code) is diagnostics to genclass.dev, not
+  "your own collector" (`doctor` no longer says "your own collector (null)"); `window.GENCLASS_CONFIG ||= {...}`,
+  `??=`, `window["GENCLASS_CONFIG"]`, a const of the same file, `Object.assign(...)` and `GENCLASS_CONFIG.key = ...`
+  are read, and any other assignment is named as not read; `createRuntime({...})` is read with its own defaults (no
+  diagnostics, model or visual checks unless set); a regular expression in the options (`protect: [/[(]/]`) no
+  longer cuts them short; `data-consent` and `consent=` fail closed as in the runtime (any value but `denied`,
+  `granted` and a bare attribute included, is pending).
 
 Fixed in `genclass doctor` and the update notice:
 
