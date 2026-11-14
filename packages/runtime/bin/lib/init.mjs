@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { detectCsp, detectProject, detectState, htmlFiles, littleToWatch, isDir, isFile, readText, walkSkipped, walkSources } from "./detect.mjs";
-import { MARK, hasMarker, isEmptyConfig, planRemoval, removeMarked, sinkBase, sinkNoEvidence, switchMetaConfig, switchMode, switchTagConfig, updateConfigText } from "./edit.mjs";
+import { MARK, createdByInit, hasMarker, isEmptyConfig, planRemoval, removeMarked, sinkBase, sinkNoEvidence, switchMetaConfig, switchMode, switchTagConfig, updateConfigText } from "./edit.mjs";
 import { AUTO, configFileChange, configFileFor, planInit, scriptTag } from "./plan.mjs";
 import { createAccountProject, readCredentials } from "./account.mjs";
 import { apiHost, hostConfig, hostUrl } from "./host.mjs";
@@ -1121,7 +1121,8 @@ async function remove(o) {
     for (const x of p) problems.push(`${posix(relative(cwd, f))}:${x.line}: ${x.reason}`);
     if (next === before) continue;
     const rel = posix(relative(cwd, f));
-    const created = before.includes(`${MARK} start`) && next.trim() === "";
+    // a file init created goes; one the person had (empty too) that only got init's lines is written back as it was
+    const created = createdByInit(before, next);
     changes.push(created ? { file: f, rel, kind: "delete", before, after: "" } : { file: f, rel, kind: "modify", before, after: next });
     after.set(f, created ? "" : next);
   }

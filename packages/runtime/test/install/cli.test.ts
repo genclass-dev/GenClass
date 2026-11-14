@@ -8,7 +8,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it, vi } from "vitest";
 // @ts-expect-error plain ESM module without types
-import { appendEnd, bodyTagEnd, codeStyle, insertTop, planRemoval, removeMarked, switchMode, topOffset } from "../../bin/lib/edit.mjs";
+import { appendEnd, bodyTagEnd, codeStyle, createdByInit, insertTop, planRemoval, removeMarked, switchMode, topOffset } from "../../bin/lib/edit.mjs";
 // @ts-expect-error plain ESM module without types
 import { integrityFor, nodeOnlyImport, scriptTag } from "../../bin/lib/plan.mjs";
 // @ts-expect-error plain ESM module without types
@@ -560,6 +560,54 @@ describe("remove after a formatter rewrapped init's lines", () => {
     const edited = `${start}\n${imports}window.rt = GenClass.init();\n// genclass:init end\n`;
     expect(planRemoval(edited).problems).toHaveLength(1);
     expect(planRemoval(edited).text).toBe(edited);
+  });
+
+  it("the link around the app's own code (its imports after init's line, its call in a block at the end) comes out byte for byte", () => {
+    const app = `import React from 'react';\r\nimport App from './App';\r\n\r\nrender(<App />);\r\n`;
+    const t = `import genclass from '@genclass/runtime/auto'; // genclass:init\r\n// genclass:init start: the coding-agent link's imports\r\nimport { GenClass } from '@genclass/runtime';\r\nimport { connectAgent } from '@genclass/runtime/agent';\r\n// genclass:init end\r\n${app}if (process.env.NODE_ENV === 'development') import('@genclass/runtime/devtools').then((d) => d.mountDevtools(genclass)); // genclass:init\r\n// genclass:init start: the coding-agent link\r\nif (process.env.NODE_ENV === "development") connectAgent(GenClass.init());\r\n// genclass:init end`;
+    expect(planRemoval(t)).toEqual({ text: app.replace(/\r\n$/, ""), problems: [] });
+  });
+
+  it("Nuxt's plugin init created: the link's call inside defineNuxtPlugin (also next to the devtools line) or in a block after it; remove deletes the file", () => {
+    const header = "// genclass:init start: GenClass Runtime, added by `npx genclass` (`npx genclass remove` takes it out)";
+    const imports = `import { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\n`;
+    const dev = `  if (import.meta.dev) import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));\n`;
+    for (const plugin of [
+      `${header}\nimport "@genclass/runtime/auto";\n${imports}\nexport default defineNuxtPlugin(() => {\n  if (import.meta.dev) connectAgent(GenClass.init());\n});\n// genclass:init end\n`,
+      `${header}\nimport genclass from "@genclass/runtime/auto";\n${imports}\nexport default defineNuxtPlugin(() => {\n${dev}  if (import.meta.dev) {\n    connectAgent(GenClass.init());\n  }\n});\n// genclass:init end\n`,
+      `${header}\nimport "@genclass/runtime/auto";\n\nexport default defineNuxtPlugin(() => {});\n// genclass:init end\n// genclass:init start: the coding-agent link\n${imports}if (import.meta.dev) connectAgent(GenClass.init());\n// genclass:init end\n`,
+    ]) {
+      const r = planRemoval(plugin);
+      expect(r, plugin).toEqual({ text: "", problems: [] });
+      expect(createdByInit(plugin, r.text)).toBe(true);
+    }
+    // anything else inside the plugin function is still the person's
+    expect(planRemoval(`${header}\nimport "@genclass/runtime/auto";\nexport default defineNuxtPlugin(() => {\n  track();\n});\n// genclass:init end\n`).problems).toHaveLength(1);
+  });
+
+  it("a file the person had, empty, that init and the coding-agent link only added to: remove gives it back, never deletes it", () => {
+    const link = `// genclass:init start: the coding-agent link, development builds only\nimport { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\nif (COND) connectAgent(GenClass.init());\n// genclass:init end\n`;
+    const next16 = { "package.json": pkg({ next: "16.0.0", react: "^19" }), "tsconfig.json": "{}\n", "node_modules/next/package.json": JSON.stringify({ name: "next", version: "16.0.1" }), "src/app/layout.tsx": "export default function L({ children }) { return <html><body>{children}</body></html>; }\n" };
+    for (const [files, entry, cond] of [
+      [{ "package.json": pkg({ "@sveltejs/kit": "^2" }), "tsconfig.json": "{}\n", "src/hooks.client.ts": "\n" }, "src/hooks.client.ts", "import.meta.env.DEV"],
+      [{ ...next16, "src/instrumentation-client.ts": "" }, "src/instrumentation-client.ts", 'process.env.NODE_ENV === "development"'],
+    ] as [Record<string, string>, string, string][]) {
+      const dir = project(files);
+      const before = snapshot(dir);
+      expect(cli(dir, "init", "--yes", "--no-install", "--no-devtools").code).toBe(0);
+      const f = join(dir, entry);
+      const inited = readFileSync(f, "utf8");
+      expect(inited.split("\n")[0]).toContain("// genclass:init");
+      // the link as the genclass command writes it: right after init's line
+      writeFileSync(f, inited.replace(/(\/\/ genclass:init\n)/, `$1${link.replace("COND", cond)}`));
+      const r = cli(dir, "remove", "--yes");
+      expect(r.code, r.out).toBe(0);
+      expect(snapshot(dir), entry).toEqual(before);
+    }
+    // a file init created is still deleted whole (the header block is its first line)
+    expect(createdByInit(`// genclass:init start: GenClass Runtime, added by x\nimport "@genclass/runtime/auto";\n// genclass:init end\n`, "")).toBe(true);
+    expect(createdByInit(`import "@genclass/runtime/auto"; // genclass:init\n${link}`, "")).toBe(false);
+    expect(createdByInit(`// genclass:init start: GenClass Runtime\nx();\n`, "x();\n")).toBe(false);
   });
 });
 

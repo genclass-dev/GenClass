@@ -45,7 +45,9 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   of it is in one preview and asked once (one Enter; `--yes` writes it, and shows it too; without a terminal nothing
   is written). The form follows what init wrote: a `genclass:init` block with `import { GenClass }`,
   `import { connectAgent }` and `if (<dev check>) connectAgent(GenClass.init());` after the marked `/auto` import or
-  after the block of a file init created; where init bound `genclass` in Next.js, the dynamic
+  after the block of a file init created (with the app's own code after that place, the two imports stay there and
+  the call goes in a second block at the end of the file, so imports stay first); where init bound `genclass` in
+  Next.js, the dynamic
   `import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass))` that mirrors its devtools
   line; in Astro a second marked `<script>` line. The dev check is init's own: `import.meta.env.DEV` (Vite with React,
   Vue, Svelte, Solid or Preact, SvelteKit, Astro, React Router and Remix on Vite), `process.env.NODE_ENV ===
@@ -54,6 +56,17 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   root). Angular, Nuxt's plugin, a plain script tag, another bundler and a setup by hand get the lines to add and
   where, and nothing written. `genclass remove` takes every form out (the runtime's `remove` patterns), round-tripped
   in tests for each framework back to the files before init.
+  - No link while the installed `@genclass/runtime` has no `./agent` export (0.2.x, npm's `latest`; or none is
+    installed): the step and `doctor` say the upgrade to run first (`npm install @genclass/runtime@beta`), since the
+    link would stop the dev server and the build.
+  - Create React App keeps building: the link's call is no longer above the app's imports (react-app's
+    `import/first` error).
+  - Nuxt's lines to add are a marked block for the end of GenClass's plugin, which `genclass remove` takes out with
+    the plugin.
+  - `genclass remove` gives back an entry file of the app's own that was empty before init (it deleted it once the
+    link was in).
+  - Only `genclass remove` takes the link out for now: `npx @genclass/runtime@beta remove` (0.3.0-beta.6) refuses a
+    linked file and removes nothing until the next runtime release.
 - **The step is done** once the MCP server is configured and the link is in, or cannot be added for this framework;
   an agent configured before the link opens the step again for the link alone ("Link your dev page to your coding
   agent"), which writes only it. After it, and in the Dashboard step's waiting text (and `status --json`'s `now`),
