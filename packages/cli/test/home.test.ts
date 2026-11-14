@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMMANDS as ALL, nearest, run } from "../src/cli.mjs";
-import { COMMANDS, home, installShortName, menu, read, words } from "../src/home.mjs";
+import { COMMANDS, FREE_MENU, home, installShortName, menu, read, words } from "../src/home.mjs";
 import { forgetShortName, readPrefs, savePrefs, shorten, shortNameWorks } from "../src/name.mjs";
 import { isolate, printed, tempDir, write } from "./helpers.js";
 import { plainLines, tooWide } from "./stats.js";
@@ -149,7 +149,11 @@ describe("genclass: the home (src/home.mjs)", () => {
     // a number is the command listed with it
     expect(read("1")).toEqual({ command: ["dashboard"] });
     expect(read(String(COMMANDS.findIndex(([n]) => n === "profile") + 1))).toEqual({ command: ["profile"] });
-    expect(read("99")).toEqual({ unknown: "99" });
+    expect(read("99")).toEqual({ unknown: "99", number: true });
+    // a verb in front of a command is that command; on Free the numbers are the short list's
+    expect(read("show problems")).toEqual({ command: ["problems"] });
+    expect(read("open dashboard")).toEqual({ command: ["dashboard"] });
+    expect(read("1", undefined, FREE_MENU)).toEqual({ command: ["upgrade"] });
     expect(read("npx genclass")).toEqual({ help: true });
     // every command the command line has, including the runtime's own, is a command here and never a question
     for (const cmd of ["connect", "init", "audit"]) expect(read(`${cmd} --name shop now`)).toEqual({ command: [cmd, "--name", "shop", "now"] });
@@ -184,6 +188,40 @@ describe("genclass: the home (src/home.mjs)", () => {
     type("dashboard", "q");
     const after = await at58(async () => expect(await home({}, { runCommand: async () => Promise.reject(new Error("boom")), nearest })).toBe(0));
     expect(after).toContain("That did not work: boom");
+  });
+
+  it("y runs what a 'Did you mean' named; a number no command has says so; on Free the list is what works there (the 0.3.9 user stories)", async () => {
+    const ran: string[][] = [];
+    type("dashbord", "y", "99", "q");
+    const said = await at58(async () => expect(await home({}, { runCommand: async (a: string[]) => (ran.push(a), 0), nearest })).toBe(0));
+    expect(ran).toEqual([["dashboard"]]);
+    const flat = plainLines(said).join(" ").replace(/\s+/g, " ");
+    expect(flat).toContain("Did you mean dashboard? (y runs it)");
+    expect(flat).toContain("No command has the number 99.");
+    // y with nothing named before it is not a yes to anything
+    type("y", "q");
+    const plain = await at58(async () => expect(await home({}, { runCommand: async (a: string[]) => (ran.push(a), 0), nearest })).toBe(0));
+    expect(ran).toHaveLength(1);
+    expect(plainLines(plain).join(" ")).toContain('There is no command "y"');
+    // Free: the short list is the commands that work without Pro, and 1 is upgrade
+    type("1", "q");
+    const free = await at58(async () => expect(await home({ free: true }, { runCommand: async (a: string[]) => (ran.push(a), 0), nearest })).toBe(0));
+    expect(ran[1]).toEqual(["upgrade"]);
+    const freeFlat = plainLines(free).join(" ").replace(/\s+/g, " ");
+    expect(freeFlat).toContain("You are on Free: the other commands come with Pro.");
+    expect(freeFlat).not.toContain("what GenClass found on your live site");
+    expect(tooWide(free)).toEqual([]);
+  });
+
+  it("opening: signed out in a folder that is set up says to sign in, not that it is not set up (the 0.3.9 user stories)", async () => {
+    const { opening } = await import("../src/home.mjs");
+    const base = { app: { name: "shop", framework: "Vite", token: "gc_x" }, steps: [], projects: [], account: null, host: null };
+    expect(plainLines(await at58(() => opening({ ...base, signedIn: false, sessionProblem: null } as never))).join(" ")).toContain("Not signed in. Type login to sign in again.");
+    expect(plainLines(await at58(() => opening({ ...base, signedIn: false, sessionProblem: "expired" } as never))).join(" ")).toContain("Your sign-in expired. Type login to sign in again.");
+    const fresh = plainLines(await at58(() => opening({ ...base, app: { name: "shop", token: null }, signedIn: false, sessionProblem: null } as never))).join(" ").replace(/\s+/g, " ");
+    expect(fresh).toContain("Not signed in, and GenClass is not in this app yet. Type setup");
+    const unset = plainLines(await at58(() => opening({ ...base, app: { name: "shop", token: null }, signedIn: true, sessionProblem: null } as never))).join(" ");
+    expect(unset).toContain("GenClass is not set up in this folder yet.");
   });
 
   it("a command typed with a word it does not take is told so, not run as something else", async () => {

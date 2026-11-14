@@ -386,7 +386,8 @@ async function afterLogin(o, creds, me) {
   }
   const where = relative(process.cwd(), st.cwd) || ".";
   const name = st.project.pkg?.name || st.project.name;
-  const ok = o.yes ? true : await confirm(`Connect ${name} (${where}, ${st.project.label}) to ${HOST_CLI?.into ?? "your account"}?`);
+  // the folder is named only when it is not this one ("." says nothing)
+  const ok = o.yes ? true : await confirm(`Connect ${name} (${where === "." ? "" : `${where}, `}${st.project.label}) to ${HOST_CLI?.into ?? "your account"}?`);
   if (ok === null) {
     out(`  Not a terminal: run ${c.cyan(`${CMD} connect --yes`)} here to connect this app.`);
     out();
@@ -635,7 +636,7 @@ async function logout() {
     return 1;
   }
   row("Signed out", accountLabel(creds.account));
-  out(`  ${c.gray(`The CLI session is ended at genclass.dev, and ${tilde(path)} is deleted.`)}`);
+  more(c.gray(`The CLI session is ended at genclass.dev, and ${tilde(path)} is deleted.`), 2);
   out();
   return 0;
 }

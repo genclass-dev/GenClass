@@ -143,6 +143,9 @@ export const inHome = (app) => {
 /** Whether the command's home is open (its card was shown once, at the top). */
 export const homeOpen = () => homeApp !== null;
 
+/** A command as a hint: "type setup" in the home (homeOpen), else "run npx genclass setup". */
+export const hint = (cmd) => (homeOpen() ? `type ${cmd}` : `run npx genclass ${cmd}`);
+
 /**
  * The header: the product, this app and its framework on one line, the account and its plan under it.
  * @param {{ app?: string | null, framework?: string | null, account?: string | null, plan?: string | null, host?: string | null }} h
@@ -274,9 +277,11 @@ export function planCard(offer, app, heading = null) {
   }
   if (offer.summary) for (const l of wrap(clean(offer.summary, 200), room)) row(c.gray(l));
   // the trial, when this account has one: said before anything else is
-  if (offer.trialDays) for (const l of wrap(`${offer.trialDays} days free, then ${clean(offer.price, 40)}. Cancel any time.`, room)) row(c.green(l));
+  // (the price is on the line above: said once)
+  if (offer.trialDays) for (const l of wrap(`The first ${offer.trialDays} days are free. Cancel any time.`, room)) row(c.green(l));
   row();
-  for (const f of offer.features) {
+  // a feature line that says the trial again is left out: the line above says it
+  for (const f of offer.trialDays ? offer.features.filter((x) => !/days? free/i.test(x)) : offer.features) {
     const [first = "", ...rest] = wrap(clean(f, 120), room - 2);
     row(`${c.green(sym.ok)} ${first}`);
     for (const l of rest) row(`  ${l}`);

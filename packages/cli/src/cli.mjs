@@ -165,7 +165,11 @@ export async function run(argv, ctx = {}) {
     // to the account (the runtime login's own question) only once Pro is on, so nothing is written before Pro's card
     const login = await import("../../runtime/bin/lib/login.mjs");
     const noConnect = args.includes("--no-connect");
-    const code = await login.run(cmd, noConnect || asksHelp ? args : [...args, "--no-connect"]);
+    // on a terminal the sign-in is the setup's own step, so it looks like the rest of genclass (the 0.3.9 user
+    // stories: typed in the prompt it was the runtime CLI's screen, which says "Ctrl-C to cancel"); other options
+    // (--json, --host, ...) go to the runtime CLI's login
+    const plain = args.every((a, i) => ["--cwd", "--no-connect", "--no-browser"].includes(a) || args[i - 1] === "--cwd");
+    const code = !asksHelp && plain && interactive() ? await ownLogin(po) : await login.run(cmd, noConnect || asksHelp ? args : [...args, "--no-connect"]);
     if (code !== 0 || asksHelp) return code;
     if (!(await (await import("./paywall.mjs")).afterLogin(po).catch(() => true))) return code;
     return thenPlan(noConnect ? code : await login.offerConnect(args).catch(() => 1));
@@ -305,12 +309,46 @@ export async function run(argv, ctx = {}) {
       const ready = !!state?.signedIn && !!state?.app?.token;
       if (ready || !(await import("./name.mjs")).viaNpx()) {
         if (state) (await import("./home.mjs")).opening(state);
-        return home({ ...o, cwd: state?.cwd ?? o.cwd, app: state?.app?.name ?? "" });
+        // signed in without Pro: the prompt's short list is what works on Free
+        const free = !!state?.account?.cli && !state.account.cli.paid;
+        return home({ ...o, cwd: state?.cwd ?? o.cwd, app: state?.app?.name ?? "", free });
       }
     }
     return setup({ ...o, ...(ctx.nested ? { home: false } : {}) }, { runSuggest, home });
   }
   return 2;
+}
+
+/**
+ * `genclass login` on a terminal: the header, then the setup's sign-in step (actions.mjs signIn: the link, the code,
+ * the browser, Enter stops the wait). Already signed in: says so, and how to switch. Returns the exit code.
+ */
+async function ownLogin(po) {
+  const { readCredentialsFor } = await import("../../runtime/bin/lib/account.mjs");
+  const { accountLabel, inspectProject } = await import("../../runtime/bin/lib/init.mjs");
+  const { fetchOverview } = await import("./api.mjs");
+  const { bad, header, note } = await import("./tui.mjs");
+  const h = hostConfig();
+  let project = null;
+  try {
+    project = inspectProject({ cwd: po.cwd }).project;
+  } catch {
+    project = null;
+  }
+  const saved = readCredentialsFor().creds;
+  const me = saved ? await fetchOverview(saved) : null;
+  header({ app: project?.name ?? null, framework: project?.label ?? null, account: me?.ok ? accountLabel(me.account) : null, host: h.overridden && !h.error ? h.host : null });
+  if (me?.ok) {
+    note(`Already signed in as ${accountLabel(me.account)}. To switch accounts: logout, then login.`);
+    return 0;
+  }
+  if (me && me.status !== 401) {
+    bad(`Could not reach genclass.dev (${me.reason}).`);
+    return 1;
+  }
+  if (me) note("The saved sign-in no longer works: signing in again.");
+  const r = await (await import("./actions.mjs")).signIn(po);
+  return r === "done" ? 0 : 1;
 }
 
 /** init's options that leave what it does at the telemetry switch: where, whether to ask, and what not to run. */

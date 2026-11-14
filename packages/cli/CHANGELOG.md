@@ -8,8 +8,23 @@
 - **The installed `genclass` stays current**: a run through npx replaces an older installed copy with its own version,
   and the installed copy asks npm once a day and updates itself (`npm install -g genclass@<version>`; a failure says
   how by hand and waits a day). After the first install, zsh is told to `rehash` if the window does not see it yet.
-- `status --json` never points a coding agent at a step `setup --yes` cannot do (an app the plan already covers),
-  so an agent following `next.run` no longer runs the same setup again and again.
+- **A coding agent following `status --json` finishes**: every step it can do says `npx genclass setup --yes` (it
+  said `npx genclass init`, which writes nothing without a terminal, so an agent ran it again and again), and it is
+  never pointed at a step `setup --yes` cannot do.
+- **An app your plan already covers is done**: no third browser page right after paying, nothing to click, and
+  setup never stops there. Its plan page is in `genclass plan`.
+- **Free sees the Pro card once**: later commands say in one line that they come with Pro; the prompt lists what
+  works on Free (upgrade, profile, plan, status); the card says the price once.
+- **Fewer keys in setup**: Enter on a step is its yes, so the Vite settings and the coding agent's files are shown
+  and written without a second (Y/n) (the runtime's own diff is still asked about). Suggestions in setup show the
+  first in full and the rest by title, and Enter takes the first choice of the hand-off.
+- **Signed out says so**: after `logout`, `genclass` says to sign in again (it said the folder was not set up), and
+  the price is not quoted to someone signing in again. `plan`, `profile`, `team` and `apps` start the sign-in on a
+  terminal, as the others do. `login` (in the prompt too) is the setup's own sign-in screen. A sign-in denied twice
+  ends with how to sign in later.
+- The prompt: `y` runs what "Did you mean" named, "show problems" is `problems`, a number no command has says so.
+  `dashboard` in a web app without GenClass asks which app instead of showing another one. `fix` names each problem
+  in the dashboard's words too. The git hint is one command a line.
 - 58 columns: a wrong option, the sign-in's lines and `--version` (now two lines) fit; a label and a link go on two
   lines when one is too wide; setup's notes follow `COLUMNS` without a terminal.
 - A team member's `plan --json` has the team's Pro as `plan` (the account's own Free is `own_plan`), with its apps,

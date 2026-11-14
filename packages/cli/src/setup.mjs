@@ -250,8 +250,9 @@ async function walk(o, deps, auto) {
     }
     if (result === "failed") {
       failed = true;
-      // what went wrong is above, in the step's own words; this says that the walk goes on without it
-      if (!auto) {
+      // what went wrong is above, in the step's own words; this says that the walk goes on without it (not for the
+      // sign-in: every step after it needs it, so "the others go on" would not be true)
+      if (!auto && step.id !== "account") {
         out();
         warn(`${step.doing} did not finish. The steps that do not need it go on, and npx genclass offers it again next time.`);
       }
@@ -260,7 +261,10 @@ async function walk(o, deps, auto) {
     // one exception is a sign-in that did not finish (the code expired, the browser said no) while someone is at the
     // keyboard: everything after it is better with an account, so it is offered once more
     if (step.id === "account" && result === "failed" && !auto && signInTries++ < 1) note("Enter tries the sign-in again with a new code.");
-    else skip.push(step.id);
+    else {
+      if (step.id === "account" && result === "failed" && !auto) note(`Sign in any time: ${deps.home && o.home !== false ? "type login" : "npx genclass login"}.`);
+      skip.push(step.id);
+    }
     out();
     rule();
   }

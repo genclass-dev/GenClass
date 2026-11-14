@@ -16,13 +16,13 @@ import { resolve } from "node:path";
 import { createAccountProject, readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
 import { hostUrl } from "../../runtime/bin/lib/host.mjs";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
-import { checkout, mcpServer, openBrowser, planNow, projectPlan, upgradeOffer } from "./actions.mjs";
+import { checkout, mcpServer, openBrowser, planNow, projectPlan, signIn, upgradeOffer } from "./actions.mjs";
 import { changeConnection, createInvite, fetchAccount, fetchApp, fetchOverview, fetchConnections, fetchEvents, makeAgentLink, saveFunnels } from "./api.mjs";
 import { appArg, n, pickApp } from "./app.mjs";
 import { copyText, onPath } from "./fix.mjs";
 import { asking, refused } from "./session.mjs";
 import { accountPaid, planName, readState } from "./state.mjs";
-import { ago, agree, bad, clean, good, header, linkLine, note, planCard, PROMPT, secret, spinner, typed, warn, width, wrap } from "./tui.mjs";
+import { ago, agree, bad, clean, good, header, homeOpen, linkLine, note, planCard, PROMPT, secret, spinner, typed, warn, width, wrap } from "./tui.mjs";
 import { agentSetup } from "./views.mjs";
 
 const room = () => width() - 2;
@@ -35,9 +35,22 @@ const top = (state, target = null) => header({ app: target?.name ?? state.app.na
 const day = (iso) => String(iso ?? "").slice(0, 10);
 /** Signed in, or the lines that say how to. Returns { state, creds } or { code }. */
 async function signedIn(o, deps, name) {
-  const state = await readState({ cwd: o.cwd }, deps);
-  const { creds } = readCredentialsFor();
+  let state = await readState({ cwd: o.cwd }, deps);
+  let { creds } = readCredentialsFor();
   if (state.signedIn && creds) return { state, creds };
+  // signed out on a terminal: the sign-in starts here, as it does for the commands behind Pro (paywall.mjs
+  // requirePro), so every command does the same thing signed out (the 0.3.9 user stories). Not for a server that
+  // cannot be reached, where a new sign-in would not help
+  if (!o.json && !o.yes && interactive() && !(state.sessionProblem && state.sessionProblem !== "expired")) {
+    out();
+    note("Sign in to genclass.dev first.");
+    if ((await (deps.signIn ?? signIn)(o)) === "done") {
+      state = await readState({ cwd: o.cwd }, deps);
+      creds = readCredentialsFor().creds;
+      if (state.signedIn && creds) return { state, creds };
+    }
+    return { code: 1 };
+  }
   if (o.json) out(JSON.stringify({ ok: false, error: "not signed in", run: "npx genclass login" }));
   else {
     header({ app: state.app.name, framework: state.app.framework, host: state.host });
@@ -210,7 +223,7 @@ export async function plan(o = {}, deps = {}) {
     }
   }
   if (pro) {
-    await (await import("./paywall.mjs")).startPro(pro, state.account?.offer ?? (a.ok ? a.offer : null), { ...o, card: true }, deps);
+    await (await import("./paywall.mjs")).startPro(pro, state.account?.offer ?? (a.ok ? a.offer : null), { ...o, card: true, short: true }, deps);
     out();
     return 0;
   }
@@ -271,8 +284,8 @@ export async function freeLine(o = {}, deps = {}) {
   // the genclass command is Pro's: Free is the website's (one app and its totals), and the line says so
   const [first = "", ...rest] = wrap(
     cli && !cli.paid
-      ? `You are on Free${lim ? ` (${lim})` : ""}, on the website. Every genclass command comes with ${name}, ${days ? `${days} days free, then ${price}` : price}. Start it: npx genclass upgrade`
-      : `You are on Free, which has limits${lim ? ` (${lim})` : ""}. ${name} has everything, ${days ? `${days} days free, then ${price}` : `for ${price}`}. Upgrade now: npx genclass upgrade`,
+      ? `You are on Free${lim ? ` (${lim})` : ""}, on the website. Every genclass command comes with ${name}${days ? `, ${days} days free` : ""}: ${homeOpen() ? "type upgrade" : "npx genclass upgrade"}`
+      : `You are on Free, which has limits${lim ? ` (${lim})` : ""}. ${name} has everything, ${days ? `${days} days free, then ${price}` : `for ${price}`}. Upgrade now: ${homeOpen() ? "type upgrade" : "npx genclass upgrade"}`,
     width() - 6,
   );
   out();

@@ -167,6 +167,12 @@ export async function planNow(o = {}, deps = {}, id = null) {
     return "locked";
   }
   if (o.json) return offer.current ? "covered" : "open";
+  // covered by the account's plan: it has its plan, so nothing opens and nothing waits (its page is in `genclass plan`)
+  if (offer.current && !offer.needs) {
+    out();
+    note(`${clean(app.name, 40)} is on your ${clean(offer.current, 20)} plan.`);
+    return "covered";
+  }
   if (o.yes || !interactive()) {
     out();
     // an app the account's plan covers has a plan: it goes on with it once, on its page
@@ -266,7 +272,7 @@ async function waitForPlan(offer, o = {}, deps = {}) {
   if (got === "kept") sp.stop("ok", `${app} goes on with ${clean(offer.current, 20)}.`);
   else if (got === "paid") sp.stop("ok", `${offer.plan.name} is active${app ? ` for ${app}` : ""}. Thank you.`);
   else if (got === "free") sp.stop("ok", `${app} is on ${offer.free.name} for now (limited).`);
-  else sp.stop("warn", app && !offer.needs ? "No choice yet." : `No payment yet. ${offer.plan.name} starts once it is started on Stripe.`);
+  else sp.stop("warn", app && !offer.needs ? "No choice yet." : `No payment yet: ${clean(offer.plan.name, 20)} is not started.`);
   return got;
 }
 
@@ -364,7 +370,9 @@ export async function addViteSettings(state, o = {}) {
   note('Without them "vite build" fails.');
   out();
   printChange(plan.change);
-  if (!o.yes) {
+  // in the walk (o.confirmed) the step's Enter was the yes: adding GenClass, whose build fails without these two
+  // lines, or the step "Add two Vite settings" itself (the 0.3.9 user stories: one yes per step, not two)
+  if (!o.yes && !o.confirmed) {
     if (!interactive()) {
       note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write them.`);
       return "skipped";
@@ -461,7 +469,10 @@ export async function addWorkflow(state, o = {}) {
   }
   good(`Wrote ${c.bold(WORKFLOW_PATH)} ${c.gray(`(new file, ${text.split("\n").length - 1} lines)`)}`);
   note("It is not committed. When you are ready:");
-  out(`    ${c.cyan(`git add ${WORKFLOW_PATH} && git commit -m "Add GenClass to pull requests" && git push`)}`);
+  // one command a line, so each fits a narrow terminal and can be copied alone
+  out(`    ${c.cyan(`git add ${WORKFLOW_PATH}`)}`);
+  out(`    ${c.cyan('git commit -m "Add GenClass to pull requests"')}`);
+  out(`    ${c.cyan("git push")}`);
   return "done";
 }
 
@@ -616,12 +627,15 @@ export async function connectAgent(state, o = {}) {
     out(`    ${c.cyan(`"genclass": ${JSON.stringify(mcpServer())}`)}`);
     return "skipped";
   }
-  // what is written is shown and asked first, as the runtime step's change is (in the walk too); --yes writes it
+  // what is written is shown first; it is asked for on its own, and in the walk the step's Enter was the yes (its
+  // sentence says what it adds, as the workflow step's does); --yes writes it
   if (!o.yes) {
     out();
     printChange(plan.change);
-    out(`  ${c.gray(`And ${SKILL_PATH}: how the agent uses GenClass's tools (a file you changed is left alone).`)}`);
+    note(`And ${SKILL_PATH}: how the agent uses GenClass's tools (a file you changed is left alone).`);
     out();
+  }
+  if (!o.yes && !o.confirmed) {
     if (!interactive()) {
       note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write it.`);
       return "skipped";

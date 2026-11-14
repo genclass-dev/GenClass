@@ -45,7 +45,10 @@ describe("genclass: the one workflow file (src/assets.mjs, src/actions.mjs workf
     const out = await printed(async () => expect(await addWorkflow(state, { yes: true })).toBe("done"));
     expect(readFileSync(join(dir, WORKFLOW_PATH), "utf8")).toBe(WORKFLOW_FILE);
     expect(out).toContain("new file");
-    expect(out).toContain(`git add ${WORKFLOW_PATH} && git commit -m "Add GenClass to pull requests" && git push`);
+    // one command a line, each short enough for a narrow terminal
+    expect(out).toContain(`git add ${WORKFLOW_PATH}\n`);
+    expect(out).toContain('git commit -m "Add GenClass to pull requests"\n');
+    expect(out).toContain("git push");
     expect(existsSync(join(dir, ".git"))).toBe(false);
     // a second time the file is there: it is left alone
     write(dir, { [WORKFLOW_PATH]: "mine\n" });

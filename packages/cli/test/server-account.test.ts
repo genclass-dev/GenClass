@@ -117,7 +117,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     const line = await said(async () => ((await freeLine(me.o, me.deps)) ? 0 : 1));
     expect(line.code).toBe(0);
     expect(tooWide(line.text)).toEqual([]);
-    expect(flat(line.text)).toContain("You are on Free (1 app, 100 live fixes a month, 7 days of history), on the website. Every genclass command comes with Pro, 3 days free, then $15 / developer / month. Start it: npx genclass upgrade");
+    expect(flat(line.text)).toContain("You are on Free (1 app, 100 live fixes a month, 7 days of history), on the website. Every genclass command comes with Pro, 3 days free: npx genclass upgrade");
     // profile: who, the plan, each app's plan, and the choices (nobody at a terminal: as commands)
     const p = await said(() => profile(me.o, me.deps));
     expect(p.code).toBe(0);

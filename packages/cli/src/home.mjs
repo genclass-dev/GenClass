@@ -48,6 +48,17 @@ export const COMMANDS = [
 
 const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "version", "connect", "init", "audit"];
 
+/** The short list on Free (the account has no Pro): the commands that work there, numbered on their own. */
+export const FREE_MENU = [
+  ["upgrade", "start Pro: its free trial first"],
+  ["profile", "your account and plan"],
+  ["plan", "what Pro includes"],
+  ["status", "where the setup stands"],
+];
+
+/** Words in front of a command that change nothing ("show problems", "open dashboard"). */
+const VERBS = new Set(["show", "open", "see", "run", "view", "go", "list"]);
+
 /** A typed line as arguments: spaces separate, single or double quotes keep words together. */
 export function words(line) {
   const out = [];
@@ -57,8 +68,11 @@ export function words(line) {
   return out;
 }
 
-/** What a typed line is: { quit }, { help }, { command: argv }, { question: text } or { unknown: word }. */
-export function read(line, known = NAMES) {
+/**
+ * What a typed line is: { quit }, { help }, { command: argv }, { question: text } or { unknown: word } ({ number }
+ * too for a number no command has). `numbered`: the list the numbers are of (the short one on Free).
+ */
+export function read(line, known = NAMES, numbered = COMMANDS) {
   const text = String(line ?? "").trim();
   if (!text) return { help: true };
   let argv = words(text);
@@ -69,20 +83,39 @@ export function read(line, known = NAMES) {
   const head = argv[0].toLowerCase();
   if (["q", "quit", "exit", "bye"].includes(head)) return { quit: true };
   // a number is the command listed with it
-  if (/^\d{1,2}$/.test(head) && argv.length === 1) {
-    const cmd = COMMANDS[Number(head) - 1];
-    return cmd ? { command: [cmd[0].split(" ")[0]] } : { unknown: head };
+  if (/^\d+$/.test(head) && argv.length === 1) {
+    const cmd = numbered[Number(head) - 1];
+    return cmd ? { command: [cmd[0].split(" ")[0]] } : { unknown: head, number: true };
   }
   if (head === "help" || head === "?" || head === "commands") return { help: true, all: true };
   if (known.includes(head)) return { command: [head, ...argv.slice(1)] };
+  // "show problems": a verb in front of a command is that command
+  if (VERBS.has(head) && argv[1] && known.includes(argv[1].toLowerCase())) return { command: [argv[1].toLowerCase(), ...argv.slice(2)] };
   // a sentence, or anything ending in a question mark, is a question about the app
   if (argv.length >= 3 || /\?\s*$/.test(text)) return { question: text };
   return { unknown: argv[0] };
 }
 
-/** The list of commands: the short one, or every command. */
-export function menu(all = false) {
+/**
+ * The list of commands: the short one, or every command. On Free (`free`) the short one is FREE_MENU, the commands
+ * that work without Pro, and every command is listed by name only.
+ */
+export function menu(all = false, free = false) {
   out();
+  if (free) {
+    out(`  ${c.bold("What next?")} ${c.gray(all ? "Every command:" : "A number or a command.")}`);
+    if (all) {
+      const names = COMMANDS.map(([n]) => n);
+      for (let i = 0; i < names.length; i += 4) out(`    ${c.cyan(names.slice(i, i + 4).map((n) => n.padEnd(13)).join(""))}`);
+      note("All but upgrade, profile, plan, status, login and remove come with Pro.");
+      return;
+    }
+    const pad = Math.max(...FREE_MENU.map(([n]) => n.length)) + 2;
+    FREE_MENU.forEach(([name, what], i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${c.cyan(name.padEnd(pad))}${c.gray(what)}`));
+    out(`      ${c.cyan("help".padEnd(pad))}${c.gray("every command")}   ${c.cyan("q")} ${c.gray("leave")}`);
+    note("You are on Free: the other commands come with Pro.");
+    return;
+  }
   out(`  ${c.bold("What next?")} ${c.gray("A number, a command, or a question.")}`);
   const list = COMMANDS.map((x, i) => [...x, i + 1]).filter(([, , short]) => all || short);
   const pad = Math.max(...list.map(([n]) => n.length)) + 2;
@@ -163,7 +196,11 @@ export async function installShortName(deps = {}) {
 export function opening(state) {
   header({ app: state.app?.name, framework: state.app?.framework, account: state.account?.label, plan: planName(state), host: state.host });
   const left = state.steps.filter((x) => x.state !== "done" && x.state !== "optional" && x.blocking !== false && x.state !== "waiting");
-  if (!state.signedIn || !state.app?.token) note("GenClass is not set up in this folder yet. Type setup to do it, one step at a time.");
+  // signed out (logout, an expired session) in a folder that is set up: the app is still set up, only the sign-in is
+  // missing (the 0.3.9 user stories: after logout it said "not set up")
+  if (!state.signedIn && state.app?.token) note(state.sessionProblem === "expired" ? "Your sign-in expired. Type login to sign in again." : "Not signed in. Type login to sign in again.");
+  else if (!state.signedIn) note("Not signed in, and GenClass is not in this app yet. Type setup: it starts with the sign-in.");
+  else if (!state.app?.token) note("GenClass is not set up in this folder yet. Type setup to do it, one step at a time.");
   else if (left.length) note(`Set up. ${left.length} more step${left.length === 1 ? "" : "s"} you can add (${left.map((x) => x.title).join(", ")}): type setup.`);
   else note("Everything is set up. Type setup any time to change something.");
 }
@@ -176,21 +213,34 @@ export function opening(state) {
 export async function home(o = {}, deps = {}) {
   if (!interactive()) return 0;
   await installShortName(deps);
-  menu();
+  // on Free the short list is what works there; once Pro is on (upgrade, here), the whole list
+  let free = !!o.free;
+  const pro = async () => (await import("./paywall.mjs")).proSeen();
+  menu(false, free);
   inHome(o.app ?? "");
+  // the command a "Did you mean" named: y (or yes) runs it
+  let meant = null;
   for (;;) {
     out();
     const line = await typed(`  ${PROMPT()} `);
     if (line === null) break;
-    const got = read(line);
+    const yes = meant && /^\s*(y|yes)\s*$/i.test(line);
+    const got = yes ? { command: [meant] } : read(line, NAMES, free ? FREE_MENU : COMMANDS);
+    meant = null;
     if (got.quit) break;
     if (got.help) {
-      menu(!!got.all);
+      menu(!!got.all, free);
       continue;
     }
     if (got.unknown) {
+      if (got.number) {
+        warn(`No command has the number ${got.unknown}.`);
+        note(`The numbers are the ones in the list: ${free ? "1 to " + FREE_MENU.length : "help shows them all"}.`);
+        continue;
+      }
       const near = deps.nearest?.(got.unknown);
-      warn(`There is no command "${got.unknown}".${near ? ` Did you mean ${c.cyan(near)}?` : ""}`);
+      meant = near;
+      warn(`There is no command "${got.unknown}".${near ? ` Did you mean ${c.cyan(near)}? (y runs it)` : ""}`);
       note("help lists them all.");
       continue;
     }
@@ -202,13 +252,26 @@ export async function home(o = {}, deps = {}) {
     } catch (e) {
       warn(`That did not work: ${e?.message ?? e}`);
     }
-    // on Free: one line, every time, with the way up
-    if (!["upgrade", "profile", "plan", "login", "logout", "remove"].includes(argv[0])) {
+    // on Free: one line, every time, with the way up (not after the gate's own line for the same thing)
+    let stopped = false;
+    try {
+      const paywall = await import("./paywall.mjs");
+      stopped = paywall.wasRefused();
+      paywall.resetRefused();
+    } catch {
+      /* nothing to read */
+    }
+    if (!stopped && !["upgrade", "profile", "plan", "login", "logout", "remove"].includes(argv[0])) {
       try {
         await deps.afterCommand?.();
       } catch {
         /* the line is best effort */
       }
+    }
+    // Pro started here (upgrade, or the card after a command): every command works now
+    if (free && (await pro().catch(() => false))) {
+      free = false;
+      menu(false, false);
     }
     rule();
   }

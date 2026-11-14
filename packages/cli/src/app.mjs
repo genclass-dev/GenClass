@@ -16,7 +16,7 @@ import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { openBrowser, planNow, signIn } from "./actions.mjs";
 import { fetchApp, signInIsOld } from "./api.mjs";
 import { planName, readState } from "./state.mjs";
-import { ago, bad, clean, header, linkLine, note, proBox, PROMPT, typed, visible, warn, width, wrap } from "./tui.mjs";
+import { ago, bad, clean, header, hint, linkLine, note, proBox, PROMPT, typed, visible, warn, width, wrap } from "./tui.mjs";
 
 /** The views a Free app does not have (the server sends their data to Pro only), and what the Pro box says about each. */
 const PRO_VIEWS = {
@@ -234,12 +234,15 @@ export async function pickApp(o = {}, deps = {}, name = "dashboard") {
   const projects = state.projects;
   // which app: --app by id or by name, else this folder's, else the account's only one
   const byId = o.app ? projects.filter((p) => p.id === o.app) : [];
-  const wanted = byId.length ? byId : o.app ? projects.filter((p) => p.name.toLowerCase() === String(o.app).toLowerCase()) : state.app.token ? projects.filter((p) => p.token === state.app.token) : projects.length === 1 ? projects : [];
+  // a web app here without GenClass is not the account's only app: on a terminal it is asked, not shown as if it
+  // were this one (the 0.3.9 user stories: a second folder showed the first app's numbers)
+  const unsetHere = !state.app.token && state.app.isApp && !o.json && !o.yes && interactive();
+  const wanted = byId.length ? byId : o.app ? projects.filter((p) => p.name.toLowerCase() === String(o.app).toLowerCase()) : state.app.token ? projects.filter((p) => p.token === state.app.token) : projects.length === 1 && !unsetHere ? projects : [];
   // on a terminal: the apps as numbered choices, and the number picks one
   if (wanted.length !== 1 && projects.length && !o.json && !o.yes && interactive()) {
     const list = (wanted.length > 1 ? wanted : projects).slice(0, 30);
     header({ app: state.app.name, framework: state.app.framework, account: state.account?.label, plan: planName(state), host: state.host });
-    note(wanted.length > 1 ? `More than one app is named "${clean(o.app, 40)}". Which one?` : o.app ? `No app named "${clean(o.app, 40)}". Which one?` : state.app.token ? "This folder's app is not in your account yet. Which app?" : "Which app?");
+    note(wanted.length > 1 ? `More than one app is named "${clean(o.app, 40)}". Which one?` : o.app ? `No app named "${clean(o.app, 40)}". Which one?` : state.app.token ? "This folder's app is not in your account yet. Which app?" : unsetHere ? `GenClass is not in this folder's app yet: ${hint("setup")} to add it. Which app do you want to see?` : "Which app?");
     list.forEach((p, i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${c.bold(clean(appLabel(p, projects), 34))}${p.last_event ? c.gray(`  last page ${ago(p.last_event, deps.now)}`) : ""}`));
     out();
     const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("stop")}  `);
