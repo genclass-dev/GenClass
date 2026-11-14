@@ -153,12 +153,18 @@ Fixed in `genclass privacy` (and so in `doctor`'s Diagnostics row):
   named in a "Not read" row.
 - Read as the runtime reads it, so the map never says less is sent: a `telemetry.endpoint` that is not an
   `http(s)://` URL (a path, `//host`, a host without its scheme, one set by code) is diagnostics to genclass.dev, not
-  "your own collector" (`doctor` no longer says "your own collector (null)"); `window.GENCLASS_CONFIG ||= {...}`,
-  `??=`, `window["GENCLASS_CONFIG"]`, a const of the same file, `Object.assign(...)` and `GENCLASS_CONFIG.key = ...`
-  are read, and any other assignment is named as not read; `createRuntime({...})` is read with its own defaults (no
-  diagnostics, model or visual checks unless set); a regular expression in the options (`protect: [/[(]/]`) no
-  longer cuts them short; `data-consent` and `consent=` fail closed as in the runtime (any value but `denied`,
-  `granted` and a bare attribute included, is pending).
+  "your own collector" (`doctor` no longer says "your own collector (null)"); `createRuntime({...})` is read with its
+  own defaults (no diagnostics, model or visual checks unless set); a regular expression in the options
+  (`protect: [/[(]/]`) no longer cuts them short; `data-consent` and `consent=` fail closed as in the runtime (any
+  value but `denied`, `granted` and a bare attribute included, is pending).
+- Only what certainly applies is read: a whole literal (`window.GENCLASS_CONFIG = {...}`, `GenClass.init({...})`,
+  `createRuntime({...})`) at the top level of its script, the Nuxt and Astro options, the meta and script tags and
+  the `/auto` import. A `||=` or `??=` default, `Object.assign`, a spread, one key set on its own, an identifier,
+  code in a condition or a function, a config set in the module that imports `/auto` (that import runs first) and
+  `GenClass.init` options where `/auto` or the script tag already started GenClass are named in the Not read row,
+  and for what they may set the map takes the reading that sends and keeps more (diagnostics on to genclass.dev, the
+  model from jsDelivr) instead of an opt-out they may not make. `GenClass.init` through a default or namespace import
+  counts, so such a project is no longer read as headless.
 
 Fixed in `genclass doctor` and the update notice:
 
