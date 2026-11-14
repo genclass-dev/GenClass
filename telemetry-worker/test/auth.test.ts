@@ -1385,9 +1385,12 @@ describe("accounts: CBOR, signatures, links (unit)", () => {
     expect(() => derToRaw(Uint8Array.from([0x31, 0x00]))).toThrow();
   });
 
-  it("next targets stay on our own account pages; dashboard links parse", () => {
-    for (const ok of ["/account", "/account/apps/0123456789abcdef", "/login/device?code=BCDF-GHJK", "/account?welcome=1"]) expect(safeNext(ok)).toBe(ok);
-    for (const bad of ["//evil.example", "/\\evil.example", "https://evil.example", "/start", "/account/../x", "/login/device?code=<x>", null]) expect(safeNext(bad as string)).toBeNull();
+  it("next targets stay on our own account pages and the page check; dashboard links parse", () => {
+    for (const ok of ["/account", "/account/apps/0123456789abcdef", "/login/device?code=BCDF-GHJK", "/account?welcome=1",
+      "/scan", "/scan?url=https%3A%2F%2Fshop.example.com%2Fpricing%3Fa%3D1", "/scan?url=stripe.com/pricing"]) expect(safeNext(ok)).toBe(ok);
+    for (const bad of ["//evil.example", "/\\evil.example", "https://evil.example", "/start", "/account/../x", "/login/device?code=<x>", null,
+      "/scanner", "/scan/../account", "/scan?url=", "/scan?url=<x>", '/scan?url=a"b', "/scan?url=a&next=//evil.example", "/scan?url=a#x", "/scan?other=1",
+      "/scan?url=" + "a".repeat(281)]) expect(safeNext(bad as string)).toBeNull();
     const s = "A".repeat(32);
     expect(secretFromLink(`https://genclass.dev/dashboard/${s}`)).toBe(s);
     expect(secretFromLink(` /dashboard/${s} `)).toBe(s);
