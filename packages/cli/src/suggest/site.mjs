@@ -65,9 +65,11 @@ import { isDocumentedKey, isPlaceholder } from "./keys.mjs";
  *   on the host without a leading "www."; null when a lookup failed for a reason other than "no records"
  * @property {{ scanned: number | null, unread: number, partial: string[], found: { path: string, kind: string }[] }} bundle
  *   the home page's own scripts (same origin, not `nomodule`, the app's own first, at most MAX_SCRIPTS, 1 MB each),
- *   read for secret keys: `scanned` how many answered (null: the home page was not read); `unread` how many more the
- *   page lists past MAX_SCRIPTS, not requested; `partial` the paths of those over 1 MB, of which only the first 1 MB
- *   was read; `found` the kind of key and the script's path, never a value
+ *   read for secret keys: `scanned` how many answered and were read, to their end or to 1 MB (null: the home page was
+ *   not read); `unread` how many more were not: the ones the page lists past MAX_SCRIPTS (not requested), and the ones
+ *   whose request failed or timed out or whose body broke off before its end; `partial` the paths of those over 1 MB
+ *   (or of exactly 1 MB whose end did not come), of which only the first 1 MB was read; `found` the kind of key and
+ *   the script's path, never a value, also from the part of a script that came before it broke off
  */
 
 const USER_AGENT = "genclass-cli (+https://genclass.dev)";
@@ -191,62 +193,113 @@ function headerReader(headers) {
 }
 
 /**
- * At most `max` bytes of a response's body, as text. `cut`: the body went on past `max`, so the rest was not read. A
- * body of exactly `max` bytes is whole: when the chunks in reach `max` exactly, one more read tells its end from more.
+ * How long the one read past `max` waits to tell a body of exactly `max` bytes from a longer one, in milliseconds:
+ * the end of a body comes right after its last bytes, and a server that sends nothing more is not waited for.
  */
-async function readBody(res, max) {
+const TAIL_MS = 250;
+
+/**
+ * At most `max` bytes of a response's body, as text. Never rejects, and never throws away what was read.
+ * `cut`: the body was not read to its end: it went on past `max`, or it broke off. `broken`: why it broke off before
+ * `max` bytes or its end (an error code, or "timeout" when `stop` came first), else null. A body of exactly `max`
+ * bytes is whole when one more read, within TAIL_MS (and before `stop`), says it ended; when that read brings more,
+ * fails or does not answer, the `max` bytes are kept and marked cut, as a longer body's would be.
+ * @param {any} res  a fetch Response
+ * @param {number} max
+ * @param {Promise<unknown>} [stop]  settles when the request's time is up
+ * @returns {Promise<{ text: string, bytes: number, cut: boolean, broken: string | null }>}
+ */
+async function readBody(res, max, stop) {
+  const STOPPED = Symbol("stopped");
+  const until = stop ? Promise.resolve(stop).then(() => STOPPED, () => STOPPED) : new Promise(() => {});
+  const chunks = [];
+  let n = 0;
+  const result = (cut, broken) => {
+    const all = new Uint8Array(n);
+    let at = 0;
+    for (const chunk of chunks) {
+      all.set(chunk, at);
+      at += chunk.length;
+    }
+    return { text: new TextDecoder("utf-8").decode(all), bytes: n, cut, broken };
+  };
+  let body = null;
   try {
-    const body = res.body;
-    if (body && typeof body.getReader === "function") {
-      const reader = body.getReader();
-      const chunks = [];
-      let n = 0;
+    body = res ? res.body : null;
+  } catch {
+    /* no body to read */
+  }
+  if (body && typeof body.getReader === "function") {
+    let reader = null;
+    try {
+      reader = body.getReader();
       let ended = false;
       let over = false;
       while (n < max) {
-        const { done, value } = await reader.read();
-        if (done) {
+        const r = await Promise.race([reader.read(), until]);
+        if (r === STOPPED) return result(true, "timeout");
+        if (r.done) {
           ended = true;
           break;
         }
+        const value = r.value;
         if (!value || !value.length) continue;
         over = value.length > max - n;
         const take = over ? value.subarray(0, max - n) : value;
         chunks.push(take);
         n += take.length;
       }
-      while (!ended && !over) {
-        const { done, value } = await reader.read();
-        if (done) ended = true;
-        else if (value && value.length) over = true;
+      if (!ended && !over) {
+        // exactly `max` bytes so far: one short read tells the end from more; what it brings is not kept
+        let timer = null;
+        const wait = new Promise((done) => {
+          timer = setTimeout(() => done(STOPPED), TAIL_MS);
+        });
+        try {
+          while (!ended && !over) {
+            const r = await Promise.race([reader.read(), until, wait]);
+            if (r === STOPPED) break;
+            if (r.done) ended = true;
+            else if (r.value && r.value.length) over = true;
+          }
+        } catch {
+          /* it broke off at the end: the `max` bytes are kept, marked cut */
+        } finally {
+          clearTimeout(timer);
+        }
       }
+      return result(!ended, null);
+    } catch (e) {
+      return result(true, errorName(e));
+    } finally {
       try {
-        Promise.resolve(reader.cancel()).catch(() => {});
+        if (reader) Promise.resolve(reader.cancel()).catch(() => {});
       } catch {
         /* the stream is already closed */
       }
-      const all = new Uint8Array(n);
-      let at = 0;
-      for (const chunk of chunks) {
-        all.set(chunk, at);
-        at += chunk.length;
-      }
-      return { text: new TextDecoder("utf-8").decode(all), bytes: n, cut: !ended };
     }
-    if (typeof res.text === "function") {
-      const bytes = new TextEncoder().encode(String(await res.text()));
-      const head = bytes.length > max ? bytes.subarray(0, max) : bytes;
-      return { text: new TextDecoder("utf-8").decode(head), bytes: head.length, cut: bytes.length > max };
-    }
-  } catch {
-    /* an unreadable body is an empty one */
   }
-  return { text: "", bytes: 0, cut: false };
+  try {
+    if (res && typeof res.text === "function") {
+      const t = await Promise.race([Promise.resolve(res.text()), until]);
+      if (t === STOPPED) return result(true, "timeout");
+      const bytes = new TextEncoder().encode(String(t));
+      const head = bytes.length > max ? bytes.subarray(0, max) : bytes;
+      chunks.push(head);
+      n = head.length;
+      return result(bytes.length > max, null);
+    }
+  } catch (e) {
+    return result(true, errorName(e));
+  }
+  return result(false, null);
 }
 
 /**
- * One GET, never followed, never rejecting. `cut`: only the first MAX_BODY bytes of the body were read.
- * @returns {Promise<{ ok: true, status: number, header: (name: string) => string | null, text: string, bytes: number, cut: boolean } | { ok: false, error: string }>}
+ * One GET, never followed, never rejecting. `cut`: the body was not read to its end, because it went on past
+ * MAX_BODY bytes or broke off; `broken`: why it broke off (an error code or "timeout"), else null. Once the answer's
+ * status is in, the timeout stops the body's read and what was read is kept.
+ * @returns {Promise<{ ok: true, status: number, header: (name: string) => string | null, text: string, bytes: number, cut: boolean, broken: string | null } | { ok: false, error: string }>}
  */
 async function getOnce(fetchFn, url, timeoutMs) {
   let u;
@@ -259,14 +312,21 @@ async function getOnce(fetchFn, url, timeoutMs) {
 
   const ctrl = new AbortController();
   let timer = null;
+  let answered = false;
+  let timeUp = () => {};
+  const stop = new Promise((done) => {
+    timeUp = done;
+  });
   const timeout = new Promise((done) => {
     timer = setTimeout(() => {
+      timeUp();
       try {
         ctrl.abort();
       } catch {
         /* already gone */
       }
-      done({ ok: false, error: "timeout" });
+      // with the answer in, its body's read ends at `stop` with what it has
+      if (!answered) done({ ok: false, error: "timeout" });
     }, timeoutMs);
   });
   const work = (async () => {
@@ -281,10 +341,11 @@ async function getOnce(fetchFn, url, timeoutMs) {
         } catch {
           /* nothing to cancel */
         }
-        return { ok: true, status, header, text: "", bytes: 0, cut: false };
+        return { ok: true, status, header, text: "", bytes: 0, cut: false, broken: null };
       }
-      const body = await readBody(res, MAX_BODY);
-      return { ok: true, status, header, text: body.text, bytes: body.bytes, cut: body.cut };
+      answered = true;
+      const body = await readBody(res, MAX_BODY, stop);
+      return { ok: true, status, header, text: body.text, bytes: body.bytes, cut: body.cut, broken: body.broken };
     } catch (e) {
       return { ok: false, error: errorName(e) };
     }
@@ -296,13 +357,17 @@ async function getOnce(fetchFn, url, timeoutMs) {
   }
 }
 
-/** GET with redirects followed by hand. `chain` lists each hop; `res` is the last answer. */
+/**
+ * GET with redirects followed by hand. `chain` lists each hop; `res` is the last answer. An answer whose body broke
+ * off is a failed request here: its facts are unknown, never read from part of a page.
+ */
 async function follow(get, url) {
   const chain = [];
   let current = url;
   for (let hop = 0; hop <= MAX_HOPS; hop++) {
     const res = await get(current);
     if (!res.ok) return { ok: false, error: res.error, chain, finalUrl: current, res: null };
+    if (res.broken) return { ok: false, error: res.broken, chain, finalUrl: current, res: null };
     chain.push({ url: current, status: res.status });
     const location = res.status >= 300 && res.status < 400 ? res.header("location") : null;
     if (!location) return { ok: true, error: null, chain, finalUrl: current, res };
@@ -865,13 +930,23 @@ async function measure(facts, u, o) {
     const found = inline.map((kind) => ({ path: pathOf(r.finalUrl), kind }));
     const partial = [];
     let scanned = 0;
+    let failed = 0;
     read.forEach((x, i) => {
-      if (!x.ok || x.status !== 200) return;
+      // no answer, or a body that broke off before its end: not read (a key in the part that came still counts)
+      if (!x.ok) {
+        failed++;
+        return;
+      }
+      if (x.status !== 200) return;
+      for (const kind of bundleSecrets(x.text)) found.push({ path: pathOf(srcs[i]), kind });
+      if (x.broken) {
+        failed++;
+        return;
+      }
       scanned++;
       if (x.cut && partial.length < 20) partial.push(pathOf(srcs[i]));
-      for (const kind of bundleSecrets(x.text)) found.push({ path: pathOf(srcs[i]), kind });
     });
-    facts.bundle = { scanned, unread: all.length - srcs.length, partial, found: found.slice(0, 20) };
+    facts.bundle = { scanned, unread: all.length - srcs.length + failed, partial, found: found.slice(0, 20) };
   });
 
   const httpsTask = get(httpsUrl).then((r) => {
