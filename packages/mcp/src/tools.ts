@@ -239,7 +239,7 @@ function grouped<T extends { origin?: string }>(items: T[], line: (x: T) => stri
  * from the page (op id → key or action index); a number it does not name (a timer, an op from before the recording)
  * stays as it is, and so does everything inside a quoted value (the page's data, `"Order #3 shipped"`): the renderer
  * writes values as JSON strings, and its own numbers outside them. Line by line, so a value cut short before its
- * closing quote never pairs with a quote on another line.
+ * closing quote never pairs with a quote on another line; on one line `quotedValues` finds where such a value ends.
  */
 export function withStepNames(text: string, ops: Record<string, string | number> | undefined): string {
   if (!ops) return text;
@@ -259,11 +259,69 @@ export function withStepNames(text: string, ops: Record<string, string | number>
         const x = name(n);
         return x ? `${pre}${x}` : m;
       });
-  // the odd parts of the split are the quoted values
   return text
     .split("\n")
-    .map((line) => line.split(/("(?:[^"\\]|\\.)*")/).map((part, i) => (i % 2 ? part : rewrite(part))).join(""))
+    .map((line) => {
+      let out = "";
+      let at = 0;
+      for (const [a, b] of quotedValues(line)) {
+        out += rewrite(line.slice(at, a)) + line.slice(a, b);
+        at = b;
+      }
+      return out + rewrite(line.slice(at));
+    })
     .join("\n");
+}
+
+/**
+ * The quoted values on one line of the runtime's text, as [start, end) spans. The renderer writes a value as a JSON
+ * string (no raw quote inside it), and its `truncate()` may cut one short: the value then ends at the "…" it appends,
+ * with no closing quote, and the next quote on the line opens another value instead of closing this one
+ * (`#6 {title: "Buy milk and eggs f… (started after #4); #8 {title: "x"}`). So a value ends either at its closing
+ * quote or at a "…" not right before a quote (a "…" right before one is the end of a string the renderer shortened
+ * inside its quotes, or the page's own text). Each line is read so that every quote it opens ends one of those two
+ * ways, which tells a cut value from a closed one; where both readings hold, a quote followed by a letter or digit is
+ * read as the opening of the next value (the renderer writes punctuation or a space after a value), any other one as
+ * the closing quote. A line no reading fits (a stray quote) is read the same way, value by value, and a quote with no
+ * end at all is plain text. Linear in the line's length.
+ */
+export function quotedValues(line: string): [number, number][] {
+  const n = line.length;
+  const NONE = -1;
+  // read from i on inside a value: its closing quote, its first cut ("…" not right before a quote) and the first cut
+  // after which the rest of the line fits; one pass from the right, so a line costs its length
+  const close = new Int32Array(n + 2).fill(NONE);
+  const cut = new Int32Array(n + 2).fill(NONE);
+  const goodCut = new Int32Array(n + 2).fill(NONE);
+  // fits[p]: from p on, outside a value, every quote opens a value that ends one of the two ways
+  const fits = new Uint8Array(n + 2);
+  fits[n] = 1;
+  for (let i = n - 1; i >= 0; i--) {
+    const ch = line[i];
+    const k = ch === "\\" && line[i + 1] !== "…" ? Math.min(i + 2, n + 1) : i + 1; // an escape pair is one character
+    if (ch === '"') close[i] = i;
+    else {
+      close[i] = close[k];
+      cut[i] = ch === "…" && line[i + 1] !== '"' ? i : cut[k];
+      goodCut[i] = ch === "…" && line[i + 1] !== '"' && fits[i + 1] ? i : goodCut[k];
+    }
+    if (ch !== '"') fits[i] = fits[i + 1];
+    else fits[i] = (close[i + 1] !== NONE && fits[close[i + 1] + 1]) || goodCut[i + 1] !== NONE ? 1 : 0;
+  }
+  const spans: [number, number][] = [];
+  for (let p = 0; p < n; p++) {
+    if (line[p] !== '"') continue;
+    const shut = close[p + 1] === NONE ? NONE : close[p + 1] + 1;
+    const good = goodCut[p + 1] === NONE ? NONE : goodCut[p + 1] + 1;
+    const first = cut[p + 1] === NONE ? NONE : cut[p + 1] + 1;
+    const fitsShut = shut !== NONE && fits[shut] === 1;
+    // a quote followed by a letter or digit opens the next value: the cut reading first
+    const end = shut !== NONE && !/^[\p{L}\p{N}_]/u.test(line.slice(shut, shut + 2)) ? (fitsShut || good === NONE ? shut : good) : good !== NONE ? good : fitsShut ? shut : first !== NONE ? first : shut;
+    if (end === NONE) continue;
+    spans.push([p, end]);
+    p = end - 1;
+  }
+  return spans;
 }
 
 function findingLine(f: { id: string; kind: string; title: string; route: string; count: number; runs: number; last: number; replays?: { reproduced: boolean | null }[] }, now: number): string {

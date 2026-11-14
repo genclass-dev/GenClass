@@ -63,6 +63,8 @@ fixed and proved a stale-search race with these tools, and lost time on each of 
   to assert the test fails until one is written again, and a line with a clock time, a date or a count beside the
   typed value is no longer one of them.
 - `genclass_explain` leaves a `#3` inside a quoted page value (`"Order #3 shipped"`) as it is.
+  A value the runtime cut short (`{title: "Buy milk and eggs f…`, with no closing quote) ends at its `…`, so the
+  operation numbers after it on the line (`(started 0.10s after #4); #8 {title: "x"}`) are request keys again.
 - `genclass_setup` no longer takes a generated regression test, a fixture or a commented-out call for the agent link,
   and names the file that has it.
 - `genclass_replay` and `genclass_explore` name the origin they wait for, and say when a load of the page came from
@@ -70,7 +72,9 @@ fixed and proved a stale-search race with these tools, and lost time on each of 
 - With a shared bridge of an older release, which ignores `origin`, `genclass_findings` and `genclass_status` say they
   could not filter by app instead of naming one.
 - The skill says what to do with a server of an older release: without `wait`, `genclass_status` until the loads are
-  in; without `origin`, the page loads' URLs.
+  in; without `origin` (0.2.2 takes it without an error and returns every app's findings), each finding's URL in
+  `genclass_explain`, since that release's `genclass_status` shows routes only. The manifests test checks this advice
+  against 0.2.2's own answers, recorded from its code with two apps (`test/fixtures/record-released.mjs`).
 
 - **`genclass_analytics {source: "production"}` says what the app's plan leaves out.** Since 2026-11-11 a dashboard
   on the Free plan shows 7 days and no visitor analytics (they come with Team). The tool now prints one line for

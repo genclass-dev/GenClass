@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { makeApi } from "../src/api.js";
 import { Store } from "../src/store.js";
-import { callTool, withStepNames } from "../src/tools.js";
+import { callTool, quotedValues, withStepNames } from "../src/tools.js";
 import { act, hello, snap } from "./helpers.js";
 
 function setup() {
@@ -46,6 +46,41 @@ describe("explain: one numbering (AGENT.md §4.2)", () => {
     expect(withStepNames('a value with a quote in it: "say \\"#3\\" twice" then #3', ops)).toBe('a value with a quote in it: "say \\"#3\\" twice" then GET /api/orders#1');
     // a value cut short before its closing quote does not swallow the next line
     expect(withStepNames('order.note = "Order is on its w…\n+0.30s start GET /x (#5) "done #3"', ops).split("\n")[1]).toBe('+0.30s start GET /x (GET /api/search#1) "done #3"');
+  });
+
+  it("a value the renderer cut short ends at its …, so the next quote on the line opens a value and the numbers between are renamed", () => {
+    // the runtime's in-flight fact (situation/facts.ts: `#id ${truncate(detail, 30)} (started …)`), two POSTs with
+    // different bodies: the first body cut short inside its quotes; round 1 paired its quote with the second body's
+    const ops = { "4": "POST /api/todos#1", "6": "POST /api/todos#2", "8": "POST /api/todos#3", "3": "GET /api/orders#1", "5": "GET /api/search#1" };
+    expect(withStepNames('#6 {title: "Buy milk and eggs f… (started 0.10s after #4); #8 {title: "x"} (started 0.10s after #4)', ops)).toBe(
+      'POST /api/todos#2 {title: "Buy milk and eggs f… (started 0.10s after POST /api/todos#1); POST /api/todos#3 {title: "x"} (started 0.10s after POST /api/todos#1)',
+    );
+    // both bodies cut short: each value ends at its own …
+    expect(withStepNames('#6 {title: "Buy milk and eggs f… (started 0.10s after #4); #8 {title: "Call the plumber a… (started 0.10s after #4)', ops)).toBe(
+      'POST /api/todos#2 {title: "Buy milk and eggs f… (started 0.10s after POST /api/todos#1); POST /api/todos#3 {title: "Call the plumber a… (started 0.10s after POST /api/todos#1)',
+    );
+    expect(withStepNames('+0.20s write todos = 2 items [{title: "Buy milk and eggs from th… (by #6) "#3"', ops)).toBe('+0.20s write todos = 2 items [{title: "Buy milk and eggs from th… (by POST /api/todos#2) "#3"');
+    // a … inside a closed value is the page's text, and the number after it stays: the line reads only one way
+    expect(withStepNames('+0.20s write status = "Loading… order #3" (by #5)', ops)).toBe('+0.20s write status = "Loading… order #3" (by GET /api/search#1)');
+    expect(withStepNames('a = "Loading… #3 left", b = "x", c = "y" (#5)', ops)).toBe('a = "Loading… #3 left", b = "x", c = "y" (GET /api/search#1)');
+    expect(withStepNames('a = "Loading… #3 left", b = "Buy milk and eggs f… (by #5)', ops)).toBe('a = "Loading… #3 left", b = "Buy milk and eggs f… (by GET /api/search#1)');
+    // a string the renderer shortened inside its quotes ("…" then the quote) is a closed value; a stray quote is text
+    expect(withStepNames('#6 {t: "abc…"} (after #4) "x #3"', ops)).toBe('POST /api/todos#2 {t: "abc…"} (after POST /api/todos#1) "x #3"');
+    expect(withStepNames('a stray " before #4', ops)).toBe('a stray " before POST /api/todos#1');
+  });
+
+  it("quotedValues reads a long line in one pass", () => {
+    expect(quotedValues('"a" b "c… d "e"')).toEqual([
+      [0, 3],
+      [6, 9],
+      [12, 15],
+    ]);
+    // a value of 50,000 escaped quotes closed by the first of 20,000 quotes; the other 19,999 pair up but the last, which
+    // is text: a reading that scanned on from every quote would take minutes
+    const line = '"' + '\\"'.repeat(50_000) + '" #4 '.repeat(20_000);
+    const t = performance.now();
+    expect(quotedValues(line).length).toBe(10_000);
+    expect(performance.now() - t).toBeLessThan(1000);
   });
 
   it("a stale-write explanation shows the model's text in the steps' numbering, from the page's operation names", async () => {

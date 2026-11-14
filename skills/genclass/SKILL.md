@@ -20,8 +20,11 @@ you run or add any of them. Then load a page of the dev server.
 
 Pages and findings are grouped by app (page origin). When several dev servers run on this machine, pass the one you
 work on to `genclass_status` and `genclass_findings` as `origin` (`http://localhost:5173`, or the port `5173`). An
-older release of the server takes no `origin` and rejects the call: call them without it, and tell the apps apart by
-each page load's URL in `genclass_status` (its findings name a route, not an app).
+older release of the server takes no `origin` (its `genclass_findings` lists no such argument): it ignores one and
+returns every app's findings, or your client refuses the call. Call them without it. There a page load and a finding
+name only a route, and the same cause on the same route in two apps is one finding; `genclass_explain` shows the URL
+of a run behind it (the "Steps of run" line). Work on the findings with your app's URL, and replay one that shows
+another app's URL on your page before you set it aside.
 
 ## 1. From a finding to a proven fix
 
