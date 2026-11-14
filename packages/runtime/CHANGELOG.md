@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **Consent mode (`consent: "pending"`):** for sites that ask visitors first (the EU, EEA and UK: ePrivacy Article
+  5(3), EDPB Guidelines 2/2023). Set it where GenClass starts (`GenClass.init({ consent: "pending" })`,
+  `window.GENCLASS_CONFIG.consent`, `<meta name="genclass" content="consent=pending">`, `data-consent="pending"`) and
+  GenClass observes on the page, locally only: no diagnostics request, no analytics, no read or write of its own
+  `localStorage` / `sessionStorage` entries, no model download (no request to cdn.jsdelivr.net, no worker, no Cache
+  Storage). `GenClass.consent({ diagnostics, analytics, storage, model })` (or `runtime.consent(...)`; `true` /
+  `false` for every part) passes the visitor's choice: a grant starts that part from then on (diagnostics through the
+  same opt-out checks as at start, so Global Privacy Control, `telemetry: false`, `?genclass=no-telemetry` and local
+  hosts still win; analytics and learned state only where the app turned them on; the model as `model.preload`
+  says), a denial keeps it off, and a later denial withdraws it (telemetry stops and drops its queue, analytics stop,
+  GenClass's own entries are removed, the model is no longer consulted and its Cache Storage copy is deleted). It
+  resolves with each part's state (`"granted"`, `"denied"`, `"pending"`). Without the option nothing changes; every
+  part starts granted. New reasons: `runtime.telemetry.reason` and `runtime.analytics.reason` `"consent"`, and
+  `runtime.status` `{ state: "disabled", reason: "consent" }` while the built-in model waits. A consent option given to
+  `GenClass.init()` after `/auto` or the script tag started GenClass is ignored with one console warning. The code that
+  applies a choice is a lazy chunk (`src/consent.ts`, `dist/consent-*.js`); the gates add 0.34 KB gzip to `/auto` and
+  0.33 KB to the main entry (docs/runtime/RESULTS.md section 29; `test/bundle.test.ts` limits raised to 109.3 /
+  101.02 KB, pending the owner's OK). Recipes for Google Consent Mode v2 and IAB TCF v2.2: TELEMETRY.md "Consent".
+
 - `@genclass/runtime/agent` (development builds only): the page tells the bridge when its mode or model state changes
   after the hello (a `runtime` event, once per change, not per status update), so `genclass_status` no longer says
   "model off" for a page whose model loaded after it connected. Each batch of steps also carries the runtime's

@@ -29,6 +29,7 @@ Details under [Opting out](#opting-out).
 | the same, on a local or private host (`localhost`, `*.localhost`, `*.local`, `*.test`, `*.internal`, `127.0.0.1`, `::1`, `10/8`, `172.16/12`, `192.168/16`, link-local, `file:`) | off unless `telemetry: true` / `{ ... }` (`0.1.0-beta.3` to `0.2.0`: on, with no local-host rule yet; `0.2.1`: on, by mistake; fixed in `0.2.2`, see the CHANGELOG) |
 | `GenClass.init()` outside a browser (Node, SSR, workers) | off unless `telemetry: true` / `{ ... }` |
 | `createRuntime()` (headless, tests, the simulator) | off unless `telemetry: true` / `{ ... }` |
+| any of the above with `consent: "pending"` (unreleased, alpha line; [Consent](#consent)) | off until the app passes the visitor's `diagnostics: true` to `GenClass.consent(...)`; then as the rows above say |
 
 In `0.2.1` the local-host row did not apply to `GenClass.init()` (and so to `/auto` and the script tag): it passed
 an explicit `telemetry: true` internally, so local and private hosts sent too. Fixed in `0.2.2`
@@ -42,7 +43,7 @@ When it is on, the console shows one notice per page:
 
 `runtime.telemetry` reports `{ enabled, reason?, endpoint?, sessionId?, token?, flush() }`; `reason` says why it is off
 (`option`, `headless`, `local`, `url`, `localStorage`, `gpc`, `sampled-out`, `no-crypto`, `no-transport`,
-`kill-switch`, `disabled`).
+`kill-switch`, `disabled`, `consent`).
 
 ## What is sent
 
@@ -594,6 +595,82 @@ businesses to treat a GPC signal as a valid request to opt out of the sale or sh
 other US state laws (e.g. Colorado, Connecticut) recognise universal opt-out signals. GenClass honours GPC for every
 visitor, wherever they are: when the browser sends it, nothing is collected.
 
+## Consent
+
+Unreleased (the alpha line, after 0.3.0-beta.6). For sites that ask visitors before anything is read from their
+device or sent (the EU, the EEA and the UK: ePrivacy Article 5(3), regulation 6 of PECR, EDPB Guidelines 2/2023), set
+`consent: "pending"` where GenClass starts:
+
+```ts
+window.GENCLASS_CONFIG = { consent: "pending" };          // before the /auto import (genclass.config.ts/js)
+// or <script src=".../genclass.global.min.js" data-consent="pending"></script>
+// or <meta name="genclass" content="consent=pending">
+// or GenClass.init({ consent: "pending" })
+```
+
+Until the visitor answers, GenClass runs on the page **locally only**:
+
+| part | before consent | `true` (granted) | `false` (denied) |
+|---|---|---|---|
+| `diagnostics` | no request: `runtime.telemetry` is off with reason `consent` | telemetry starts now (a new session id; nothing from before the grant is counted or sent), exactly as without the gate, so every opt-out still wins | stays off; after a grant it stops now and what was queued is dropped |
+| `analytics` | not recorded (`runtime.analytics.reason` `consent`) | the analytics the app turned on (`analytics: true`, or an earlier `runtime.analytics.start()`) start, with diagnostics (they are sent as diagnostics) | stay off; after a grant they stop and their `localStorage` visit entry is removed |
+| `storage` | GenClass reads and writes none of its own `localStorage` / `sessionStorage` entries (learned state, the act/observe bucket, the breaker's trip): they live in memory for the page | learned state from earlier visits is read, and kept from now on (only where the app stores it at all: `learn.persist`, `learn.expectations`) | stays off; GenClass's own entries are removed, including ones from earlier visits |
+| `model` | no worker, no download (no request to cdn.jsdelivr.net), nothing in Cache Storage; `runtime.status` is `disabled` with reason `consent`; GenClass observes without a diagnosis | the model loads as `model.preload` says (`eager` now, `idle` when the browser is idle, `lazy` at the first salient situation) | stays off; after a grant it is no longer consulted and its Cache Storage copy (`genclass-runtime-v1`) is deleted; a model already in memory stays there, unused, until the page closes |
+
+Then pass the visitor's choice from your consent banner (`runtime.consent(...)` on the runtime does the same):
+
+```ts
+GenClass.consent({ diagnostics: true, analytics: false, storage: true, model: true }); // parts left out stay as they are
+GenClass.consent(true);    // everything granted
+GenClass.consent(false);   // everything denied (also a withdrawal, later on the page)
+const state = await GenClass.consent(); // { diagnostics: "granted" | "denied" | "pending", analytics, storage, model }
+```
+
+It resolves once applied (the code that applies a choice is a small lazy chunk, so the first load carries only the
+checks: about 0.34 KB gzip, RESULTS.md section 29). An object at start grants or denies those parts and leaves the rest
+pending: `consent: { model: true }` for a model served from your own site (`model.baseUrl`, `ortWasmPaths`), with
+diagnostics waiting. `consent: "denied"` denies everything; the meta tag and `data-consent` take `pending` and
+`denied` only, since a grant is the visitor's and comes from your code. Without the option nothing changes: every part
+starts granted (so `GenClass.consent(false)` still withdraws what runs, as above, but what was sent before it stays
+sent: set the option where consent is needed). Explicit `runtime.ask()` / `decide()` calls still use a model already
+in memory after a withdrawal. A consent option given to `GenClass.init()` after `/auto` or the script tag already started GenClass is
+ignored with one console warning; set it where GenClass starts.
+
+**What still runs before consent:** the observers, in memory (requests, user actions, errors, store writes), the
+measured visual checks and the devtools overlay (local; nothing is sent or stored), your own `sinks` (your
+configuration: gate them yourself), the coding-agent link (development builds only, to your own machine), the one
+read of GenClass's opt-out keys (`localStorage.genclass`, which only turns GenClass off, and, once diagnostics are
+granted, `genclass.telemetry`), and the device facts the model choice reads locally (`navigator.deviceMemory`, Save-Data).
+
+**Your consent banner.** Map its categories to the four parts; which category fits is your call (not legal advice).
+Google Consent Mode v2: where your banner calls `gtag("consent", "update", c)`, add
+
+```ts
+const on = (k: string) => (c[k] === undefined ? undefined : c[k] === "granted"); // a missing key leaves its part as it is
+GenClass.consent({
+  diagnostics: on("analytics_storage"),
+  analytics: on("analytics_storage"),
+  storage: on("functionality_storage"),
+  model: on("functionality_storage"),
+});
+```
+
+IAB TCF v2.2 (GenClass is not a registered TCF vendor, so use the purposes you disclose it under; with a publisher TC
+segment, `tc.publisher.consents` instead of `tc.purpose.consents`):
+
+```ts
+__tcfapi("addEventListener", 2, (tc, ok) => {
+  if (!ok || (tc.eventStatus !== "tcloaded" && tc.eventStatus !== "useractioncomplete")) return;
+  if (tc.gdprApplies === false) return void GenClass.consent(true);
+  const p = tc.purpose.consents; // 1 store or access on a device, 8 measure content performance, 10 develop and improve services
+  GenClass.consent({ storage: !!p[1], model: !!p[1], diagnostics: !!(p[1] && p[10]), analytics: !!(p[1] && p[8]) });
+});
+```
+
+A CMP that remembers the choice (a return visit) usually answers right at page load, so diagnostics and the model
+start then. Not done yet: ready-made adapters for these CMPs, a record of each choice in `runtime.audit()`, and the
+visual checks' counts in diagnostics that start after the checks did.
+
 ## If you ship GenClass in your app
 
 The data is collected from **your** users' browsers. Even though it is designed to be anonymous (random per-page
@@ -602,14 +679,17 @@ the session event names your hostname. Depending on your users and jurisdiction 
 
 - mention GenClass diagnostics in your privacy policy / cookie or tracking disclosures (GDPR transparency,
   Articles 13 and 14; CCPA notice at collection);
-- decide whether it needs consent where you require consent for analytics (GDPR / ePrivacy), and if so start
-  GenClass with `telemetry: false` until consent is given (`GenClass.init()` reads the option once; to switch it on
-  later, create the runtime after consent);
+- decide whether it needs consent where you require consent for analytics (GDPR / ePrivacy), and if so set
+  `consent: "pending"` and pass the visitor's choice to `GenClass.consent(...)` ([Consent](#consent): until then
+  nothing is sent, stored or downloaded). On releases without it (0.3.0-beta.6 and earlier), start GenClass with
+  `telemetry: false` until consent is given (`GenClass.init()` reads the option once; to switch it on later, create
+  the runtime after consent);
 - if you turn on interaction analytics (`analytics: true`): in the EU, the EEA and the UK, Article 5(3) of the
   ePrivacy Directive (regulation 6 of PECR in the UK) requires consent to read information from a visitor's device
   unless it is strictly necessary for the service they asked for, and regulators read it as covering scripts that send
   interaction data, not only cookies (EDPB Guidelines 2/2023). Analytics are not strictly necessary, so start with them
-  off there and call `runtime.analytics.start()` after consent; some regulators exempt first-party audience
+  off there and call `runtime.analytics.start()` after consent (or, with `consent: "pending"`, set `analytics: true`
+  and grant `analytics` with `GenClass.consent(...)`); some regulators exempt first-party audience
   measurement under strict conditions (the CNIL in France), which is your call. Name GenClass as a recipient in your
   privacy policy either way;
 - turn it off (`telemetry: false`) in apps that handle regulated data (health, finance, children's services): a

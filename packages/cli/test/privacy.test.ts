@@ -44,7 +44,7 @@ describe("genclass privacy: the setup, read from the project's files (src/privac
     expect(m.sent[0]!.what).toContain("No page text.");
     expect(m.sent[0]!.what).toContain("stores no IP address");
     expect(m.kept.map((x) => x.where)).toEqual(["localStorage (genclass:learn)", "Cache Storage"]);
-    expect(m.strict.map(([opt]) => opt)).toEqual(["telemetry: false", 'model: { baseUrl: "/genclass-model/", ortWasmPaths: "/genclass-model/ort/" }', "learn: { persist: false }"]);
+    expect(m.strict.map(([opt]) => opt)).toEqual(['consent: "pending"', "telemetry: false", 'model: { baseUrl: "/genclass-model/", ortWasmPaths: "/genclass-model/ort/" }', "learn: { persist: false }"]);
     expect(m.csp).toEqual(["connect-src https://genclass.dev", "connect-src https://cdn.jsdelivr.net", "script-src 'wasm-unsafe-eval'", "worker-src 'self' (blob: for the script tag)"]);
     expect(m.eu.join(" ")).toContain("EDPB Guidelines 2/2023");
     expect(m.us.join(" ")).toContain("Global Privacy Control");
@@ -59,6 +59,51 @@ describe("genclass privacy: the setup, read from the project's files (src/privac
     expect(m.eu).toHaveLength(1);
     expect(m.eu[0]).toContain("sends nothing from the visitor's browser");
     expect(m.csp).toEqual(["script-src 'wasm-unsafe-eval'", "worker-src 'self' (blob: for the script tag)"]);
+  });
+
+  it("the consent gate (the runtime's InitOptions.consent): read from the config, the meta tag and the script tag, with whether a banner passes the choice on", () => {
+    expect(readSetupText('import "@genclass/runtime/auto";')).toMatchObject({ consent: null, consentCall: false });
+    expect(readSetupText('GENCLASS_CONFIG = { consent: "pending" }')).toMatchObject({ consent: "pending", consentCall: false });
+    expect(readSetupText("GENCLASS_CONFIG = { consent: { model: true } }")).toMatchObject({ consent: "pending" });
+    expect(readSetupText('<meta name="genclass" content="consent=pending, mode=observe">')).toMatchObject({ consent: "pending" });
+    expect(readSetupText('<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.4.0/dist/genclass.global.min.js" data-consent="pending"></script>')).toMatchObject({ consent: "pending" });
+    expect(readSetupText("GenClass.init({ consent: 'denied' })")).toMatchObject({ consent: "denied" });
+    expect(readSetupText('GENCLASS_CONFIG = { consent: "pending" }; onAccept((c) => GenClass.consent({ diagnostics: c.statistics }));')).toMatchObject({ consent: "pending", consentCall: true });
+    expect(readSetupText("window.GenClass?.consent(true)").consentCall).toBe(true);
+  });
+
+  it('under consent: "pending" each recipient and stored entry waits for its part, the EU guidance says so, and a missing banner call is named', () => {
+    const s = { ...readSetupText('import "@genclass/runtime/auto"; GENCLASS_CONFIG = { consent: "pending", analytics: true }'), token: true, files: [], installed: true, app: "shop" } as any;
+    const m = dataMap(s);
+    expect(m.sent.map((x) => x.to.split(" ")[0])).toEqual(["genclass.dev", "genclass.dev,", "cdn.jsdelivr.net"]);
+    expect(m.sent[0]!.why).toContain("Only after the visitor grants diagnostics");
+    expect(m.sent[1]!.why).toContain("Only after the visitor grants analytics and diagnostics");
+    expect(m.sent[2]!.why).toContain("Only after the visitor grants the model");
+    expect(m.kept.map((x) => x.what).every((w) => w.includes("Only after the visitor grants"))).toBe(true);
+    expect(m.eu[0]).toContain('GenClass waits for consent (consent: "pending")');
+    expect(m.eu[0]).toContain("GenClass.consent({ diagnostics, analytics, storage, model })");
+    expect(m.eu[1]).toContain("No call to GenClass.consent(...) was found");
+    expect(m.eu.join(" ")).not.toContain("The careful choice");
+    // the gate is set: it is not suggested again; the narrower lines still are
+    expect(m.strict.map(([opt]) => opt)).not.toContain('consent: "pending"');
+    expect(m.strict.map(([opt]) => opt)).toContain("telemetry: false");
+    const md = markdown(s, m, "2026-11-14");
+    expect(md).toContain('| Consent | waits for the visitor (consent: "pending"): nothing is sent, stored or downloaded until GenClass.consent(...) grants it; no GenClass.consent(...) call found in these files |');
+    expect(md).toContain("TELEMETRY.md#consent");
+    // with the banner's call found, no such line
+    const called = dataMap({ ...readSetupText('GENCLASS_CONFIG = { consent: "pending" }; banner.on("save", (c) => GenClass.consent(c));'), token: true, files: [], installed: true } as any);
+    expect(called.eu.join(" ")).not.toContain("No call to GenClass.consent");
+  });
+
+  it('without the gate, consent: "pending" is the first line for sites that need consent, and the EU guidance names it', () => {
+    const m = dataMap({ ...readSetupText('import "@genclass/runtime/auto";'), token: true, files: [], installed: true } as any);
+    expect(m.strict[0]![0]).toBe('consent: "pending"');
+    expect(m.strict[0]![1]).toContain("for sites that need consent (EU, EEA, UK)");
+    expect(m.eu[0]).toContain('The careful choice for EU, EEA and UK visitors is consent: "pending" with your consent banner calling GenClass.consent(...), or telemetry off.');
+    expect(m.sent[0]!.why).not.toContain("Only after");
+    // a denial at start: nothing runs until the code grants a part
+    const denied = dataMap({ ...readSetupText("GenClass.init({ consent: 'denied' })"), token: false, files: [], installed: true } as any);
+    expect(denied.eu[0]).toContain('consent: "denied"');
   });
 
   it("analytics count only with the app's key or an own endpoint; a page-text opt-in is named with what it can hold", () => {

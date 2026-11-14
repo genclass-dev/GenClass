@@ -774,15 +774,20 @@ export class TelemetryClient implements TelemetryStatus {
     }
   }
 
-  /** Final summary and flush (runtime destroyed). */
-  stop(): void {
+  /**
+   * Final summary and flush (runtime destroyed). `withdrawn` (the visitor withdrew diagnostics consent,
+   * InitOptions.consent): nothing more is sent, and what is queued is dropped.
+   */
+  stop(withdrawn?: boolean): void {
     if (this.stopped) return;
-    try {
-      this.summary("destroy");
-      void this.flush(false);
-    } catch {
-      /* ignore */
-    }
+    if (withdrawn) this.queue.length = 0;
+    else
+      try {
+        this.summary("destroy");
+        void this.flush(false);
+      } catch {
+        /* ignore */
+      }
     this.stopped = true;
     if (this.timer !== null) {
       try {

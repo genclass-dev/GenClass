@@ -1655,3 +1655,27 @@ longer and the script tag's task with it. React, Vue, Svelte and plain-HTML apps
 of JavaScript and loads in under 100 ms throttled), Firefox and Safari. `guard` and `heal` started late. Whether
 GenClass finds anything on a late start in an app whose state it can see: recall and false reports are not measured
 for this install.
+
+## 29. The consent gate: first-load cost (development Mac, Node 25, 2026-11-14, branch `alpha/consent-mode`)
+
+`test/first-load-size.mjs` with this branch's `dist/` against a build of its base (`genclass-alpha`, `a117bfea`, whose
+`src/` is `main` at `de981c17`), minified + gzip as an app's bundler ships them, on the development Mac (not CI):
+
+| entry | `genclass-alpha` | with the consent gate | growth |
+|---|---|---|---|
+| `/auto` | 108.744 KB | 109.085 KB | 349 B |
+| main entry (`GenClass.init({})`) | 100.568 KB | 100.896 KB | 335 B |
+
+The first load carries only the gates (the `cs` state and its checks in `storage()`, `consultable()`, `ready` and
+`status`; the telemetry and lazy-model gate in `createRuntime`; the analytics reason; `GenClass.consent`; the
+meta/data key on `/auto`). What applies a choice is a lazy chunk, `dist/consent-*.js` (3.5 KB minified, not gzipped),
+imported the first time the app calls `consent()` or, with the option set, right after start; the script tag inlines
+it. A version that applied choices synchronously in the first load measured 1,073 / 1,078 B and was not kept.
+`test/bundle.test.ts` measures the same build at 109.09 / 100.90 KB; its limits were raised to 109.3 / 101.02 KB
+(Node 22's sizes before this branch plus the growth plus 0.05 / 0.07 KB), pending the owner's OK. CI (Node 22) was
+not run for this branch.
+
+No detection numbers: the gate never feeds a decision, so recall and FIR do not change, and without the option the
+runtime runs the same code paths (the full runtime suite passes unchanged). With the option and no model consent the
+page observes without a model: no detection, nothing held, as with `model: false`.
+

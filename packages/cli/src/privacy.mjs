@@ -20,6 +20,9 @@ import { clean, good, header, note, para, warn, width, wrap } from "./tui.mjs";
 const TELEMETRY_DOC = "https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md";
 const PRIVACY_DOC = "https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md";
 const CSP_DOC = "https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting";
+const CONSENT_DOC = "https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md#consent";
+/** The call a consent banner makes (the runtime's InitOptions.consent): GenClass.consent(...) or a runtime's consent(...). */
+const CONSENT_CALL = "GenClass.consent({ diagnostics, analytics, storage, model })";
 
 /** Text that sets GenClass up: an import or script tag of the runtime, its init, its config, its meta tag. */
 const REF = /@genclass\/runtime|GenClass\.init\s*\(|GENCLASS_CONFIG|<meta[^>]+name=["']genclass["']|genclass\.global(?:\.min)?\.js/;
@@ -48,6 +51,13 @@ export function readSetupText(text) {
   const persistOff = has(/persist\s*:\s*false/);
   const persistSession = has(/persist\s*:\s*["']session["']/);
   const sinkHosts = [...t.matchAll(/webhook:(https?:\/\/[^"'`\s,\]]+)/g)].map((m) => hostOf(m[1])).filter(Boolean);
+  // the consent gate (the runtime's InitOptions.consent): "pending" (an object leaves the parts it omits pending too)
+  // or "denied"; null when it is not set and everything below starts with the page
+  const consent = has(/consent\s*:\s*["']denied["']|data-consent=["']denied["']|consent=denied/)
+    ? "denied"
+    : has(/consent\s*:\s*(?:["']pending["']|\{)|data-consent=["']pending["']|consent=pending/)
+      ? "pending"
+      : null;
   return {
     mode,
     telemetry: telemetryOff ? "off" : endpoint ? "own" : "on",
@@ -60,6 +70,9 @@ export function readSetupText(text) {
     learn: persistOff ? "none" : persistSession ? "session" : "local",
     sinks: [...new Set(sinkHosts)],
     agentLink: has(/connectAgent\s*\(/),
+    consent,
+    // where the visitor's choice is passed on (a consent banner's callback): GenClass.consent(...) or rt.consent(...)
+    consentCall: has(/\b(?:GenClass|runtime|rt|genclass)\s*\??\.\s*consent\s*\(/),
   };
 }
 
@@ -114,18 +127,21 @@ export async function readSetup(o = {}, deps = {}) {
 export function dataMap(s) {
   const sent = [];
   const kept = [];
+  // under the consent gate each part waits for the visitor's grant (TELEMETRY.md "Consent")
+  const gated = s.consent === "pending" || s.consent === "denied";
+  const after = (part) => (gated ? ` Only after the visitor grants ${part} (consent: "${s.consent}" holds it until GenClass.consent(...) grants it).` : "");
   if (s.telemetry === "on") {
     sent.push({
       to: "genclass.dev (GenClass's collector, a Cloudflare Worker; stored in Cloudflare R2)",
       what: `Diagnostics about GenClass's own decisions: the site's hostname, the page route with ids replaced (no query or fragment), the mode, each decision's kind, confidence and outcome, counts and timings, a random id that is new on every page load, and the device class (CPU cores, memory, GPU, connection type). The collector adds the visitor's country from the request and stores no IP address, user agent, cookie or header.${s.situation ? " Situation text is on (include: { situation: true }): it can hold query strings, the page title, error messages, the first 40 characters typed into ordinary inputs and short state values, after the redactor." : " No page text."}${s.visual !== "local" ? " With the visual checks on: counts per check and page, never selectors, text, colours or URLs." : ""}`,
-      why: `Model evaluation and training by GenClass's maintainers${s.token ? ", and this app's dashboard" : ""}.`,
+      why: `Model evaluation and training by GenClass's maintainers${s.token ? ", and this app's dashboard" : ""}.${after("diagnostics")}`,
       keep: "90 days (1 year for an app on a plan with a year of history).",
     });
     if (s.analytics && s.token) {
       sent.push({
         to: "genclass.dev, for this app's dashboard only (never used for training)",
         what: "Interaction analytics: per page view the route, engaged time, scroll milestones, clicks, rage and dead clicks per element (named from markup, never its text); per visit a random visit id, the referring host and utm values, device class, browser and OS families, and whether the browser visited before.",
-        why: "This app's visitor analytics.",
+        why: `This app's visitor analytics.${after("analytics and diagnostics")}`,
         keep: "90 days.",
       });
     }
@@ -133,7 +149,7 @@ export function dataMap(s) {
     sent.push({
       to: `${s.endpoint ?? "your own endpoint"} (your own collector: telemetry.endpoint)`,
       what: `The same diagnostics batches GenClass's collector would get${s.analytics ? ", and the interaction analytics" : ""}. Nothing reaches genclass.dev.`,
-      why: "Whatever your collector does with them.",
+      why: `Whatever your collector does with them.${after("diagnostics")}`,
       keep: "As your collector keeps them.",
     });
   }
@@ -141,19 +157,19 @@ export function dataMap(s) {
     sent.push({
       to: "cdn.jsdelivr.net (a public CDN)",
       what: "Nothing about the visitor: the browser downloads the model files and ONNX Runtime's wasm from it, so the CDN receives the visitor's IP address and user agent, as any CDN does.",
-      why: "To run the on-device model.",
+      why: `To run the on-device model.${after("the model")}`,
       keep: "jsDelivr's own logs.",
     });
   } else if (s.model === "other") {
-    sent.push({ to: `${s.modelHost} (model.baseUrl)`, what: "Nothing about the visitor: the model files are downloaded from it, so it receives the visitor's IP address.", why: "To run the on-device model.", keep: "That host's logs." });
+    sent.push({ to: `${s.modelHost} (model.baseUrl)`, what: "Nothing about the visitor: the model files are downloaded from it, so it receives the visitor's IP address.", why: `To run the on-device model.${after("the model")}`, keep: "That host's logs." });
   }
-  for (const h of s.sinks) sent.push({ to: `${h} (a webhook sink)`, what: "Each finding's route, diagnosis and action, with the redacted evidence text by default (it can hold short fragments of what users typed). Telemetry opt-outs and GPC do not turn sinks off.", why: "Your own alerting.", keep: "As that endpoint keeps it." });
+  for (const h of s.sinks) sent.push({ to: `${h} (a webhook sink)`, what: `Each finding's route, diagnosis and action, with the redacted evidence text by default (it can hold short fragments of what users typed). Telemetry opt-outs and GPC do not turn sinks off${gated ? ", and neither does the consent gate: sinks are your configuration, so hold them yourself" : ""}.`, why: "Your own alerting.", keep: "As that endpoint keeps it." });
   if (s.agentLink) sent.push({ to: "127.0.0.1 on the developer's machine (the coding-agent link)", what: "Development builds only, on development hosts: the recording goes to GenClass's MCP server on the same machine. Inert on any page not served from the developer's machine.", why: "Debugging with a coding agent.", keep: "On the developer's machine." });
 
-  if (s.learn === "local") kept.push({ where: "localStorage (genclass:learn)", what: "Learned flows behind GenClass's expectation reports: request signatures, routes, field names, hashed action labels, counts and timings; never element text or values. It never leaves the browser.", off: "learn: { persist: false }" });
-  else if (s.learn === "session") kept.push({ where: "sessionStorage (genclass:learn)", what: "Learned flows and transition profiles for the tab's session, never element text or values. It never leaves the browser.", off: "learn: { persist: false }" });
-  if (s.analytics && (s.token || s.telemetry === "own")) kept.push({ where: "localStorage (genclass.analytics.*)", what: "A random visit id for 30 minutes and a flag that the browser visited before.", off: "analytics: false" });
-  if (s.model !== "off") kept.push({ where: "Cache Storage", what: "The model files, so they are not downloaded again.", off: "model: false (no model: GenClass then only observes without a diagnosis)" });
+  if (s.learn === "local") kept.push({ where: "localStorage (genclass:learn)", what: `Learned flows behind GenClass's expectation reports: request signatures, routes, field names, hashed action labels, counts and timings; never element text or values. It never leaves the browser.${after("storage")}`, off: "learn: { persist: false }" });
+  else if (s.learn === "session") kept.push({ where: "sessionStorage (genclass:learn)", what: `Learned flows and transition profiles for the tab's session, never element text or values. It never leaves the browser.${after("storage")}`, off: "learn: { persist: false }" });
+  if (s.analytics && (s.token || s.telemetry === "own")) kept.push({ where: "localStorage (genclass.analytics.*)", what: `A random visit id for 30 minutes and a flag that the browser visited before.${after("analytics")}`, off: "analytics: false" });
+  if (s.model !== "off") kept.push({ where: "Cache Storage", what: `The model files, so they are not downloaded again.${after("the model")}`, off: "model: false (no model: GenClass then only observes without a diagnosis)" });
 
   const optOuts = [
     "Global Privacy Control (navigator.globalPrivacyControl): nothing is collected from that browser",
@@ -163,10 +179,15 @@ export function dataMap(s) {
 
   const sendsToGenClass = s.telemetry === "on";
   const eu = [];
-  if (sendsToGenClass) eu.push("Telemetry is on: the runtime reads facts from the visitor's device and sends them to GenClass, which also uses them to improve its model. Regulators read ePrivacy Article 5(3) as covering scripts that send device information, not only cookies (EDPB Guidelines 2/2023), and the audience-measurement exemptions (CNIL, ICO) do not cover a recipient that reuses data for itself. The careful choice for EU, EEA and UK visitors is telemetry off, or GenClass started only after consent.");
-  if (s.analytics && (s.token || s.telemetry === "own")) eu.push("Analytics are on: they are not strictly necessary for the service, so start them off there and call runtime.analytics.start() after consent, unless you rely on an exemption you have checked.");
-  if (s.model === "cdn") eu.push("The model comes from jsDelivr, which receives visitors' IP addresses. A German court awarded damages over an IP address sent to a font CDN without consent (LG Munich I, 3 O 17493/20, 2022). Serving the model from your own site removes that recipient.");
-  if (s.learn !== "none") eu.push("Learned flows are stored on the device. Storing is in Article 5(3)'s scope as well as reading, even when nothing leaves the browser; learn: { persist: false } stores nothing.");
+  if (s.consent === "pending") {
+    eu.push(`GenClass waits for consent (consent: "pending"): before the visitor answers it sends nothing, reads or writes none of its own storage entries and downloads nothing; afterwards only what they granted runs, and a later denial withdraws it. Pass the choice from your consent banner with ${CONSENT_CALL} (recipes for Google Consent Mode v2 and IAB TCF: ${CONSENT_DOC}). Every opt-out, Global Privacy Control included, still wins over a grant.`);
+    if (!s.consentCall) eu.push("No call to GenClass.consent(...) was found in the project's GenClass files. Until your consent banner makes one, GenClass sends and keeps nothing at all (and the dashboard stays empty).");
+    if (s.model === "cdn") eu.push("Once the visitor grants the model, it comes from jsDelivr, which receives their IP address: name jsDelivr as a recipient, or serve the model from your own site.");
+  } else if (s.consent === "denied") eu.push('GenClass starts with consent: "denied": it sends, stores and downloads nothing unless your code grants a part with GenClass.consent(...).');
+  else if (sendsToGenClass) eu.push("Telemetry is on: the runtime reads facts from the visitor's device and sends them to GenClass, which also uses them to improve its model. Regulators read ePrivacy Article 5(3) as covering scripts that send device information, not only cookies (EDPB Guidelines 2/2023), and the audience-measurement exemptions (CNIL, ICO) do not cover a recipient that reuses data for itself. The careful choice for EU, EEA and UK visitors is consent: \"pending\" with your consent banner calling GenClass.consent(...), or telemetry off.");
+  if (!gated && s.analytics && (s.token || s.telemetry === "own")) eu.push("Analytics are on: they are not strictly necessary for the service, so start them off there and call runtime.analytics.start() after consent, unless you rely on an exemption you have checked.");
+  if (!gated && s.model === "cdn") eu.push("The model comes from jsDelivr, which receives visitors' IP addresses. A German court awarded damages over an IP address sent to a font CDN without consent (LG Munich I, 3 O 17493/20, 2022). Serving the model from your own site removes that recipient.");
+  if (!gated && s.learn !== "none") eu.push("Learned flows are stored on the device. Storing is in Article 5(3)'s scope as well as reading, even when nothing leaves the browser; learn: { persist: false } stores nothing.");
   if (!eu.length) eu.push("In this setup GenClass sends nothing from the visitor's browser and stores nothing beyond what is listed. Name it in your privacy policy as code that runs in the page; there is no recipient to disclose.");
 
   const us = [
@@ -176,6 +197,9 @@ export function dataMap(s) {
   ];
 
   const strict = [];
+  // for sites that need consent: everything waits for the visitor, and what they grant still works afterwards
+  if (!s.consent && (sent.some((x) => !/webhook sink|coding-agent link/.test(x.to)) || kept.some((x) => x.where !== "Cache Storage")))
+    strict.push(['consent: "pending"', `for sites that need consent (EU, EEA, UK): GenClass observes locally, sending, storing and downloading nothing, until your consent banner calls ${CONSENT_CALL}; what the visitor grants then runs as described above`, null]);
   if (s.telemetry === "on") strict.push(["telemetry: false", "nothing goes to genclass.dev (the dashboard stays empty)", "npx genclass init --no-telemetry"]);
   if (s.analytics) strict.push(["analytics: false", "no visitor analytics, and no visit id in localStorage", null]);
   if (s.model === "cdn") strict.push(['model: { baseUrl: "/genclass-model/", ortWasmPaths: "/genclass-model/ort/" }', "the model is served from your own site: no CDN sees your visitors", "npx @genclass/runtime@beta fetch-model public/genclass-model"]);
@@ -225,7 +249,7 @@ export function markdown(s, m, today = new Date().toISOString().slice(0, 10)) {
     L.push("");
   }
   if (m.csp.length) L.push("## Content-Security-Policy", "", ...m.csp.map((x) => `- \`${x}\``), "");
-  L.push("## Sources", "", `- What is sent, field by field: ${TELEMETRY_DOC}`, `- GenClass's privacy policy: ${PRIVACY_DOC}`, `- Content-Security-Policy and self-hosting: ${CSP_DOC}`, "");
+  L.push("## Sources", "", `- What is sent, field by field: ${TELEMETRY_DOC}`, `- Consent (consent: "pending", GenClass.consent): ${CONSENT_DOC}`, `- GenClass's privacy policy: ${PRIVACY_DOC}`, `- Content-Security-Policy and self-hosting: ${CSP_DOC}`, "");
   return L.join("\n");
 }
 
@@ -240,6 +264,14 @@ function setupRows(s) {
     ["Visual checks", s.visual === "local" ? "on localhost only (the default)" : s.visual],
     ["Model", s.model === "cdn" ? "from cdn.jsdelivr.net (the default)" : s.model === "self" ? "from your own site" : s.model === "other" ? `from ${s.modelHost}` : "off"],
     ["Stored on the device", s.learn === "none" ? "nothing (learn: { persist: false })" : s.learn === "session" ? "learned flows, for the tab's session" : "learned flows, in localStorage (the default)"],
+    [
+      "Consent",
+      s.consent === "pending"
+        ? `waits for the visitor (consent: "pending"): nothing is sent, stored or downloaded until GenClass.consent(...) grants it${s.consentCall ? "" : "; no GenClass.consent(...) call found in these files"}`
+        : s.consent === "denied"
+          ? 'denied at start (consent: "denied"): nothing runs until your code grants a part'
+          : "no consent gate (the default): what is listed starts with the page",
+    ],
   ];
 }
 
