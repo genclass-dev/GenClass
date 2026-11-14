@@ -90,10 +90,10 @@ it off). After that you type `genclass`, and every screen says `genclass` instea
 | Pro | Right after the sign-in: Pro's 3-day free trial opens in your browser, and the command waits for it. Every step after it needs Pro. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
 | Runtime | Adds GenClass to the app: one import (or script tag) and the package. It watches the page in your users' browsers for lost edits, double submits and old data shown over new, and only reports, to the console and your dashboard. Nothing is drawn on your pages. | Your entry file and `package.json`; you see the change first. `genclass remove` undoes it. |
 | App plan | Once the app is in your account, its plan page opens in your browser once: Continue with Pro. Pro covers up to 3 apps; more apps come with Enterprise, by email. | Nothing in your project. |
-| Dashboard | Waits for your live site to be opened once. GenClass sends nothing from localhost. | Nothing. |
+| Dashboard | Waits for your live site to be opened once. GenClass sends nothing from localhost; while it waits, the command says how to see GenClass work before any deploy: start your dev server, open the page, read the `[GenClass]` lines in the browser console, and ask your coding agent "is GenClass connected?" or to explore a flow for races. | Nothing. |
 | Test workflow | Runs your Playwright tests once more per pull request with slow and reordered responses. | One new file, `.github/workflows/genclass.yml`, which you commit. |
 | GitHub App | Comments on a pull request when a page ends up wrong, with the steps to see it. The command opens GitHub's install page and waits for the answer. A repository that was renamed on GitHub is looked up under its new name. | Nothing in your project. The app cannot read or change your code. |
-| Coding agent | Gives Claude Code, Cursor and other agents GenClass's tools and its skill: ask what went wrong, replay it, check the fix. | `.mcp.json` (or `.cursor/mcp.json`) and `.claude/skills/genclass/SKILL.md`. |
+| Coding agent | Gives Claude Code, Cursor and other agents GenClass's tools and its skill (ask what went wrong, replay it, check the fix), and links your dev page to them: `connectAgent` from `@genclass/runtime/agent`, in development builds only, so the agent sees each click, request and response on localhost and can run them again in another order. All of it is in one preview and one yes. Then it says how to see it work now: the dev server, the `[GenClass]` lines in the browser console, and "is GenClass connected?" for the agent. Done once the MCP server is configured and the link is in (or cannot be added for this framework: Angular, Nuxt and a plain script tag get the lines to add instead). | `.mcp.json` (or `.cursor/mcp.json`), `.claude/skills/genclass/SKILL.md`, and a `genclass:init` block right after GenClass's import (Vite apps, SvelteKit and React Router: `import.meta.env.DEV`; Next.js and Create React App: `process.env.NODE_ENV === "development"`; Astro: a second `<script>` line in the layout). `genclass remove` takes it out. |
 | Suggestions | Tells you what your app is missing, most important first. | Nothing in your project. |
 
 On a terminal, Enter starts a step and is the yes for what its sentence says it writes. While a step waits for you
@@ -262,8 +262,8 @@ policy or a vendor questionnaire.
 `doctor` checks every part GenClass added (this command's version and the one on your PATH, the runtime and its
 import order, the MCP server's pin, the skill, the coding-agent link, the bridge, your site's
 Content-Security-Policy, the test workflow) and says what to run for each. `--fix` writes GenClass's own lines only,
-after showing them: the MCP pin, the skill, and in a Vite app the dev-only coding-agent link, which `remove` takes out
-again.
+after showing them: the MCP pin, the skill, and the dev-only coding-agent link (the same block the Coding agent step
+writes, in every setup init writes but Angular, Nuxt and a plain script tag), which `remove` takes out again.
 
 ## Commands
 

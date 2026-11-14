@@ -19,7 +19,7 @@ import { AUTO, configFileChange, configFileFor, planInit, scriptTag } from "./pl
 import { createAccountProject, readCredentials } from "./account.mjs";
 import { apiHost, hostConfig, hostUrl } from "./host.mjs";
 import { LOCAL_FILE, PENDING_TOKEN, START_URL, TOKEN_RE, createProject, readLocal, saveLocal, tokenInFiles } from "./token.mjs";
-import { banner, c, confirm, err, interactive, more, out, printChange, row, sym } from "./ui.mjs";
+import { banner, c, confirm, err, foldWidth, interactive, labelled, more, out, outWhole, printChange, row, sym } from "./ui.mjs";
 import { CMD, HOST_CLI, PKG, PKG_DIR, VERSION, compareVersions, distTags, installedVersion, versionInSpec, versionStatus } from "./version.mjs";
 
 const MODES = ["observe", "guard", "heal"];
@@ -357,7 +357,7 @@ export const SCAN_CMD = HOST_CLI ? `${CMD} scan <url>` : "npx @genclass/runtime@
 function printLittleToWatch(kind) {
   if (!kind) return;
   const why = kind === "none" ? "No fetch, XHR, WebSocket or EventSource call was found in your sources" : "Your page has one script";
-  out(`  ${c.bold("Note")} ${why}, so GenClass will have little to find here. For a mostly static site, try ${c.cyan(SCAN_CMD)}.`);
+  labelled("Note", `${why}, so GenClass will have little to find here. For a mostly static site, try ${c.cyan(SCAN_CMD)}.`);
   out();
 }
 
@@ -422,10 +422,11 @@ function briefTelemetry(cfg) {
     return;
   }
   briefLines("Anonymous diagnostics are on: counts and decisions go to GenClass's maintainers, with no page text, cookies or IP addresses, and never from localhost.");
-  // the command and the address each stay whole on a line of their own, so they can be copied
+  // the command and the address each stay whole on a line of their own, so they can be copied (under the genclass
+  // command the address starts further left when the window is too narrow for it and its indent, ui.mjs outWhole)
   out(`  ${c.gray(`Off: ${CMD} init --no-telemetry`)}`);
   out(`  ${c.gray("What is sent:")}`);
-  out(`  ${c.gray(TELEMETRY_URL)}`);
+  outWhole(TELEMETRY_URL, 2, c.gray);
 }
 
 /**
@@ -433,7 +434,7 @@ function briefTelemetry(cfg) {
  * words (a narrow terminal would otherwise break a word of it in two, "--n" and "o-audit").
  */
 function commandLine(label, cmd) {
-  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || 100));
+  const cols = foldWidth();
   if (2 + label.length + 2 + cmd.length <= cols) {
     out(`  ${c.bold(label)}  ${c.cyan(cmd)}`);
     return;
@@ -449,9 +450,12 @@ function commandLine(label, cmd) {
   if (line) out(`    ${c.cyan(line)}`);
 }
 
-/** A grey sentence of the compact (--brief) output, folded to the window (40 to 100 columns), every line indented. */
+/**
+ * A grey sentence of the compact (--brief) output, folded to the window (40 to 100 columns; under the genclass
+ * command its own width, ui.mjs foldWidth), every line indented.
+ */
 function briefLines(text, paint = c.gray) {
-  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || 100)) - 4;
+  const cols = foldWidth() - 4;
   let line = "";
   for (const word of String(text).split(/\s+/).filter(Boolean)) {
     if (line && line.length + 1 + word.length > cols) {

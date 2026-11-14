@@ -1,0 +1,16 @@
+# dependencies and build output
+node_modules
+dist
+.astro
+
+# secrets and local settings
+.env
+.env.local
+.env.*.local
+
+# GenClass's app token and private dashboard link (written by `npx genclass`)
+.genclass.local
+
+# test output
+test-results
+playwright-report

@@ -78,6 +78,16 @@ production build drops it with the dead branch (the package's `sideEffects` list
 idempotent and returns that runtime here. `genclass_setup` prints this form, because the link alone needs no runtime in
 production, where `GenClass.init()` would run for every visitor and send anonymous diagnostics from public hosts by default.
 
+In an app `init` set up, the `genclass` command writes the link itself (its setup's Coding agent step, in the same
+preview and yes as `.mcp.json`, and `genclass doctor --fix`; `packages/cli/src/agentlink.mjs`): a `genclass:init`
+block right after init's `/auto` import (or after the block of a file init created) holding the two imports and
+`if (<dev check>) connectAgent(GenClass.init());`, with the check init uses there for the devtools line
+(`import.meta.env.DEV` on Vite, `process.env.NODE_ENV === "development"` in Next.js and Create React App, plus
+`typeof window !== "undefined"` in a file that also renders on the server). In a Next.js file where init bound
+`genclass`, the block holds `import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass))`
+behind the check instead; in Astro the link is a second marked `<script>` line. `genclass remove` takes every form
+out. Angular, Nuxt, the script tag and a setup by hand get these lines to add instead.
+
 It runs only on pages served from this machine (`localhost`, `127.x`, `[::1]`, `*.localhost`: names the browser itself
 resolves to loopback) and talks only to a loopback URL; elsewhere it returns an inert connection. A page on a `*.test`
 or `*.local` name or a LAN address (names that go through DNS, which a hostile network controls) needs
