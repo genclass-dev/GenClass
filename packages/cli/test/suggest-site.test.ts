@@ -371,6 +371,99 @@ describe("genclass suggest: which scripts are read, and how much of each (src/su
     const f = await collectSiteFacts("https://edge.example/", { fetchFn: fakeWeb({ "https://edge.example/": { body: page }, "https://edge.example/assets/index-a1.js": js("x".repeat(MB)) }).fetchFn, dns: dnsOf() });
     expect(runChecks({ repo: null, site: f }).find((r) => r.id === "secrets-in-bundle")?.status).toBe("pass");
   });
+
+  // A script sent as a stream of `parts`, which then ends, breaks off ("terminated", as undici says on a reset) or
+  // stalls: the server sends nothing more and never closes.
+  const MB = 1024 * 1024;
+  const live = ["sk", "live", "4kQ9zT2mXv7LpR3wN8bY6cHd"].join("_");
+  const bytes = (head: string, size: number) => {
+    const b = new Uint8Array(size).fill(0x3b);
+    b.set(new TextEncoder().encode(head));
+    return b;
+  };
+  const streamed = (parts: () => Uint8Array[], end: "close" | "error" | "stall") => async () => {
+    const left = parts();
+    return new Response(
+      new ReadableStream({
+        pull(c) {
+          const next = left.shift();
+          if (next) c.enqueue(next);
+          else if (end === "error") c.error(new TypeError("terminated"));
+          else if (end === "stall") return new Promise<void>(() => undefined);
+          else c.close();
+        },
+      }),
+      { status: 200, headers: { "content-type": "text/javascript" } },
+    );
+  };
+  const keyed = (size: number) => () => [bytes(`const k="${live}";`, size / 2), bytes("", size / 2)];
+  const clean = (size: number) => () => [bytes("", size / 2), bytes("", size / 2)];
+  const edgePage = (n: number) => `<title>Edge</title>${Array.from({ length: n }, (_, i) => `<script type="module" src="/assets/s${i}.js"></script>`).join("")}`;
+  const edge = (scripts: (Page | (() => Promise<Response>))[], timeoutMs = 3000) => {
+    const pages: Record<string, Page | (() => Promise<Response>)> = { "https://edge.example/": { body: edgePage(scripts.length) } };
+    scripts.forEach((s, i) => (pages[`https://edge.example/assets/s${i}.js`] = s));
+    return collectSiteFacts("https://edge.example/", { fetchFn: fakeWeb(pages).fetchFn, dns: dnsOf(), timeoutMs });
+  };
+  const verdict = (f: Awaited<ReturnType<typeof collectSiteFacts>>) => runChecks({ repo: null, site: f }).find((r) => r.id === "secrets-in-bundle")!;
+
+  it("an error on the read past exactly 1 MB keeps the 1 MB read, marked as read in part (fix3, suggest 1)", async () => {
+    const leak = await edge([streamed(keyed(MB), "error")]);
+    expect(leak.bundle).toEqual({ scanned: 1, unread: 0, partial: ["/assets/s0.js"], found: [{ path: "/assets/s0.js", kind: "sk-live-secret-key" }] });
+    expect(verdict(leak).status).toBe("fail");
+    // with no key in it, the script may go on past 1 MB: no pass
+    const none = await edge([streamed(clean(MB), "error")]);
+    expect(none.bundle).toEqual({ scanned: 1, unread: 0, partial: ["/assets/s0.js"], found: [] });
+    expect(verdict(none).status).toBe("unknown");
+    // one that ends there is still read whole
+    expect((await edge([streamed(clean(MB), "close")])).bundle).toEqual({ scanned: 1, unread: 0, partial: [], found: [] });
+  });
+
+  it("a server that stalls right after exactly 1 MB is not waited for: the 1 MB is kept, read in part (fix3, suggest 2)", async () => {
+    const started = Date.now();
+    const leak = await edge([streamed(keyed(MB), "stall")], 3000);
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(leak.bundle).toEqual({ scanned: 1, unread: 0, partial: ["/assets/s0.js"], found: [{ path: "/assets/s0.js", kind: "sk-live-secret-key" }] });
+    expect(verdict(leak).status).toBe("fail");
+    // next to a small clean script, it makes the check unknown, never a pass
+    const two = await edge([streamed(clean(MB), "stall"), js("export {};")], 3000);
+    expect(two.bundle).toEqual({ scanned: 2, unread: 0, partial: ["/assets/s0.js"], found: [] });
+    expect(verdict(two).status).toBe("unknown");
+    expect(verdict(two).evidence).toContain("/assets/s0.js is over 1 MB: only its first 1 MB was read");
+  });
+
+  it("a script that breaks off, stalls or fails before its end counts as not read; a key in the part that came is found (fix3, suggest 2)", async () => {
+    const part = 300 * 1024;
+    // broke off: the part that came is read for keys, the script is not counted as read whole
+    const broke = await edge([streamed(keyed(part), "error"), js("export {};")]);
+    expect(broke.bundle).toEqual({ scanned: 1, unread: 1, partial: [], found: [{ path: "/assets/s0.js", kind: "sk-live-secret-key" }] });
+    expect(verdict(broke).status).toBe("fail");
+    const brokeClean = await edge([streamed(clean(part), "error"), js("export {};")]);
+    expect(brokeClean.bundle).toEqual({ scanned: 1, unread: 1, partial: [], found: [] });
+    expect(verdict(brokeClean)).toMatchObject({ status: "unknown", evidence: ["no secret key in the 1 script read", "1 more script the home page loads was not read"] });
+    // stalled: the request's timeout ends its read with what came
+    const stalled = await edge([streamed(keyed(part), "stall"), js("export {};")], 400);
+    expect(stalled.bundle).toEqual({ scanned: 1, unread: 1, partial: [], found: [{ path: "/assets/s0.js", kind: "sk-live-secret-key" }] });
+    const stalledClean = await edge([streamed(clean(part), "stall"), js("export {};")], 400);
+    expect(stalledClean.bundle).toEqual({ scanned: 1, unread: 1, partial: [], found: [] });
+    expect(verdict(stalledClean).status).toBe("unknown");
+    // no answer at all (the script's address fails like a dead host), or a hung request
+    const pages: Record<string, Page | (() => Promise<Response>)> = { "https://edge.example/": { body: edgePage(3) }, "https://edge.example/assets/s1.js": () => new Promise<Response>(() => undefined), "https://edge.example/assets/s2.js": js("export {};") };
+    const dead = await collectSiteFacts("https://edge.example/", { fetchFn: fakeWeb(pages).fetchFn, dns: dnsOf(), timeoutMs: 400 });
+    expect(dead.bundle).toEqual({ scanned: 1, unread: 2, partial: [], found: [] });
+    expect(verdict(dead).status).toBe("unknown");
+    // a script that is not there (404) is none the browser runs either
+    expect((await edge([{ status: 404, body: "Not found" }, js("export {};")])).bundle).toEqual({ scanned: 1, unread: 0, partial: [], found: [] });
+  });
+
+  it("a home page whose body breaks off is a failed request, never an empty page read as the site (fix3)", async () => {
+    const half = await collectSiteFacts("https://half.example/", { fetchFn: fakeWeb({ "https://half.example/": streamed(() => [bytes("<!doctype html><title>Half a page", 4096)], "error") }).fetchFn, dns: dnsOf() });
+    expect(half).toMatchObject({ reachable: false, error: "request failed", home: null, bundle: { scanned: null } });
+    // the same verdicts as a home page that never answered: no title, h1 or description "missing"
+    const failed = async (f: Promise<Awaited<ReturnType<typeof collectSiteFacts>>>) => runChecks({ repo: null, site: await f }).filter((r) => r.status === "fail").map((r) => r.id);
+    expect(await failed(Promise.resolve(half))).toEqual(await failed(collectSiteFacts("https://half.example/", { fetchFn: fakeWeb({}).fetchFn, dns: dnsOf() })));
+    const hung = await collectSiteFacts("https://half.example/", { fetchFn: fakeWeb({ "https://half.example/": streamed(() => [bytes("<!doctype html><title>Half a page", 4096)], "stall") }).fetchFn, dns: dnsOf(), timeoutMs: 200 });
+    expect(hung).toMatchObject({ reachable: false, error: "timeout", home: null });
+  });
 });
 
 describe("genclass suggest: which key-shaped strings count as a secret in a bundle (src/suggest/site.mjs bundleSecrets)", () => {

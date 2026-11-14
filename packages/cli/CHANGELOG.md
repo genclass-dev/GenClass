@@ -95,8 +95,11 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   service_role, an AWS key ID with its secret, also as NAME=value in a shipped .env or credentials file, GitHub,
   Slack, SendGrid, private keys) and reports the kind and the script's path, never a value. Placeholders
   (sk_live_xxxx, AWS's ...EXAMPLE IDs), keys providers document and an AWS key ID in a pre-signed link
-  (X-Amz-Credential=, AWSAccessKeyId=) are not reported. Scripts left unread, or longer than 1 MB (one of exactly
-  1 MB is read whole), make it unknown, not a pass. On 13,473 library files (186 MB of node_modules) it matched
+  (X-Amz-Credential=, AWSAccessKeyId=) are not reported. Scripts left unread (past the 20, or whose request failed,
+  timed out or broke off before its end; a key in the part that came is still reported), or longer than 1 MB (one of
+  exactly 1 MB is read whole when its end follows within 250 ms; an error or a stall there keeps the 1 MB and counts
+  it as longer, never waiting for the request's timeout), make it unknown, not a pass; a home page whose body breaks
+  off is a failed request, never an empty page. On 13,473 library files (186 MB of node_modules) it matched
   one, a test certificate's private key. Stripe's documented sample test key is no leak in either scanner, but
   `test-keys-live` still fails on a production env file or hosting config that holds it.
   `framework-cve` reads the installed Next.js and react-server-dom-* versions (node_modules, else the npm, pnpm, yarn
