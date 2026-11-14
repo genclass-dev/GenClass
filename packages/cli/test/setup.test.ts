@@ -94,8 +94,9 @@ describe("the walk's answers, step by step (src/setup.mjs walk)", () => {
       expect(deviceCalls(), no).toEqual([]);
       expect(tooWide(said)).toEqual([]);
       // the walk ends with what is still to do and the command that does it; nothing Pro's is offered signed out
-      expect(flat(said)).toContain("Not done yet: Sign in");
-      expect(flat(said)).toContain("Run npx genclass login (then: approve the sign-in in your browser)");
+      // 0.3.9: a walk that ends signed out says so, with the one command back to the sign-in
+      expect(flat(said)).toContain("Not signed in yet.");
+      expect(flat(said)).toContain("Run npx genclass again");
       expect(said).not.toContain("npx genclass suggest");
     }
     // a word that is not a key is asked again, and starts nothing
@@ -126,7 +127,7 @@ describe("the walk's answers, step by step (src/setup.mjs walk)", () => {
     const said = await at58(async () => expect(await setup({ cwd: dir })).toBe(0));
     expect(said).toContain("to start the free trial");
     expect(said).not.toContain("Waiting for the payment");
-    expect(flat(said)).toContain("Stopped. Run npx genclass again any time");
+    // 0.3.9: the card has said how to start it later; no second stop line
     expect(overviewCalls()).toHaveLength(1);
   });
 
@@ -183,12 +184,13 @@ describe("the walk's answers, step by step (src/setup.mjs walk)", () => {
     const no = await at58(async () => expect(await setup({ cwd: dir })).toBe(0));
     expect(no).not.toContain(".mcp.json (create)");
     expect(written(dir).agent).toBe(false);
-    // Enter: the preview, then its own question (n: nothing written)
-    type("s", "", "n", "q");
+    // Enter: the step's Enter is the yes for what its sentence says it adds (0.3.9); the preview is shown first and
+    // no second question is asked
+    type("s", "", "q");
     const yes = await at58(async () => expect(await setup({ cwd: dir })).toBe(0));
     expect(yes).toContain(".mcp.json");
-    expect(yes).toContain("Write .mcp.json and the skill?");
-    expect(written(dir).agent).toBe(false);
+    expect(yes).not.toContain("Write .mcp.json");
+    expect(written(dir).agent).toBe(true);
   });
 
   it("Suggestions: n skips them; Enter runs them", async () => {
@@ -200,7 +202,8 @@ describe("the walk's answers, step by step (src/setup.mjs walk)", () => {
     type("s", "s", "no");
     await at58(async () => expect(await setup({ cwd: dir }, { runSuggest })).toBe(0));
     expect(runSuggest).not.toHaveBeenCalled();
-    type("s", "s", "");
+    // an empty answer with nothing typed after it is the end of the input (0.3.9), so q follows
+    type("s", "s", "", "q");
     await at58(async () => expect(await setup({ cwd: dir }, { runSuggest })).toBe(0));
     expect(runSuggest).toHaveBeenCalledTimes(1);
     expect(runSuggest.mock.calls[0][0]).toMatchObject({ cwd: dir, fromSetup: true });
@@ -229,8 +232,7 @@ describe("the end of a walk with nothing left to do here (src/setup.mjs closing)
     viteApp(dir);
     const said = await at58(async () => expect(await setup({ cwd: dir, yes: true })).toBe(1));
     expect(flat(said)).toContain("Could not start the sign-in");
-    expect(flat(said)).toContain("Not done yet: Sign in");
-    expect(flat(said)).toContain("Run npx genclass login (then: approve the sign-in in your browser)");
+    expect(flat(said)).toContain("Not signed in yet.");
     expect(said).not.toContain("npx genclass suggest");
     expect(said).toContain("Day to day");
     expect(tooWide(said)).toEqual([]);

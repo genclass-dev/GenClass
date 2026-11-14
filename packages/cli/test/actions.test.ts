@@ -45,7 +45,10 @@ describe("genclass: the one workflow file (src/assets.mjs, src/actions.mjs workf
     const out = await printed(async () => expect(await addWorkflow(state, { yes: true })).toBe("done"));
     expect(readFileSync(join(dir, WORKFLOW_PATH), "utf8")).toBe(WORKFLOW_FILE);
     expect(out).toContain("new file");
-    expect(out).toContain(`git add ${WORKFLOW_PATH} && git commit -m "Add GenClass to pull requests" && git push`);
+    // one command a line, each short enough for a narrow terminal
+    expect(out).toContain(`git add ${WORKFLOW_PATH}\n`);
+    expect(out).toContain('git commit -m "Add GenClass to pull requests"\n');
+    expect(out).toContain("git push");
     expect(existsSync(join(dir, ".git"))).toBe(false);
     // a second time the file is there: it is left alone
     write(dir, { [WORKFLOW_PATH]: "mine\n" });
@@ -249,7 +252,7 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
 
   it("help, the version and an unknown command", async () => {
     expect(await printed(async () => expect(await run(["--help"])).toBe(0))).toContain(USAGE);
-    expect(await printed(async () => expect(await run(["version"])).toBe(0))).toBe(`genclass ${BUILD.version} (installs @genclass/runtime ${BUILD.runtimeVersion}, @genclass/mcp ${BUILD.mcpVersion})\n`);
+    expect(await printed(async () => expect(await run(["version"])).toBe(0))).toBe(`genclass ${BUILD.version}\ninstalls @genclass/runtime ${BUILD.runtimeVersion}, @genclass/mcp ${BUILD.mcpVersion}\n`);
     expect(await run(["frobnicate"])).toBe(2);
     // the form that runs without installing, everywhere a command is named
     expect(USAGE).toContain("npx genclass dashboard");

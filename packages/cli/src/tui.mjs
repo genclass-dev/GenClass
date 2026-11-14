@@ -123,6 +123,15 @@ export function para(text, indent = "  ", paint = (s) => s) {
   for (const l of wrap(text, width() - 2 - indent.length)) out(`${indent}${paint(l)}`);
 }
 
+/** "  Label  url": on one line when it fits the window, else the link on its own line under the label. */
+export function linkLine(label, url) {
+  if (2 + visible(label) + 2 + visible(url) <= width() - 2) out(`  ${c.gray(label)}  ${c.cyan(url)}`);
+  else {
+    out(`  ${c.gray(label)}`);
+    out(`    ${c.cyan(url)}`);
+  }
+}
+
 /** A horizontal rule as wide as the text. */
 export const rule = () => out(`  ${c.gray((unicode ? "─" : "-").repeat(width() - 4))}`);
 
@@ -133,6 +142,9 @@ export const inHome = (app) => {
 };
 /** Whether the command's home is open (its card was shown once, at the top). */
 export const homeOpen = () => homeApp !== null;
+
+/** A command as a hint: "type setup" in the home (homeOpen), else "run npx genclass setup". */
+export const hint = (cmd) => (homeOpen() ? `type ${cmd}` : `run npx genclass ${cmd}`);
 
 /**
  * The header: the product, this app and its framework on one line, the account and its plan under it.
@@ -265,9 +277,11 @@ export function planCard(offer, app, heading = null) {
   }
   if (offer.summary) for (const l of wrap(clean(offer.summary, 200), room)) row(c.gray(l));
   // the trial, when this account has one: said before anything else is
-  if (offer.trialDays) for (const l of wrap(`${offer.trialDays} days free, then ${clean(offer.price, 40)}. Cancel any time.`, room)) row(c.green(l));
+  // (the price is on the line above: said once)
+  if (offer.trialDays) for (const l of wrap(`The first ${offer.trialDays} days are free. Cancel any time.`, room)) row(c.green(l));
   row();
-  for (const f of offer.features) {
+  // a feature line that says the trial again is left out: the line above says it
+  for (const f of offer.trialDays ? offer.features.filter((x) => !/days? free/i.test(x)) : offer.features) {
     const [first = "", ...rest] = wrap(clean(f, 120), room - 2);
     row(`${c.green(sym.ok)} ${first}`);
     for (const l of rest) row(`  ${l}`);
@@ -344,9 +358,11 @@ export function summary(steps) {
   const next = steps.find((s) => s.state === "next");
   const later = steps.filter((s) => s.state === "todo");
   if (done.length) line(MARK.done(), pad("Done"), names(done));
-  for (const b of steps.filter((s) => s.state === "blocked")) line(MARK.blocked(), pad(b.title), c.gray(clean(b.detail ?? "", room)));
+  // a detail that does not fit goes on under itself, never cut short (the 0.3.9 user stories: "checked 14 minutes a…")
+  const lines = (text) => wrap(text, room);
+  for (const b of steps.filter((s) => s.state === "blocked")) line(MARK.blocked(), pad(b.title), lines(clean(b.detail ?? "", 200)));
   if (next) line(MARK.next(), c.bold(pad("Next")), c.bold(clean(next.doing ?? next.title, room)));
-  for (const w of steps.filter((s) => s.state === "waiting")) line(MARK.waiting(), pad("Waiting"), c.gray(clean(`${w.title}: ${w.detail ?? ""}`, room)));
+  for (const w of steps.filter((s) => s.state === "waiting")) line(MARK.waiting(), pad("Waiting"), lines(clean(`${w.title}: ${w.detail ?? ""}`, 200)));
   if (later.length) line(MARK.todo(), c.gray(pad("Later")), names(later));
 }
 

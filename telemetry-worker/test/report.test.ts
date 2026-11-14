@@ -304,19 +304,66 @@ describe("reports: one account's report", () => {
     expect(text).toContain(long.trim().slice(0, 200));
   });
 
-  it("a Free app's report has the totals and Pro's box, never its pages or prompts", async () => {
+  it("a Free account sees half: the first half of each app's problems, the rest counted with Pro's upgrade (owner, 2026-11-14)", async () => {
     const { env, sql } = world();
     const { cookie, account } = await signedIn(env);
     const app = await createApp(env, cookie, "Blog");
-    await sendBatch(env, app.token, [page("/secret-admin"), ...detection("stale", "/secret-admin")]);
+    // two problems: a failing endpoint (P0) on /api/pay, stale responses (P1) on /secret-admin
+    await sendBatch(env, app.token, [page("/secret-admin"), ...detection("stale", "/secret-admin"), ...detection("failing", "/api/pay"), ...detection("failing", "/api/pay"), ...detection("failing", "/api/pay")]);
     const r = (await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report;
-    expect(r.apps[0]).toMatchObject({ pro: false, kinds: [], visitors: null });
-    expect(r.items.filter((i) => i.section === "problems")).toEqual([]);
+    expect(r.apps[0]).toMatchObject({ pro: false });
+    const shown = r.items.filter((i) => i.section === "problems");
+    expect(shown.map((i) => i.rule)).toEqual(["money:failing"]);
+    expect(r.problemsHidden).toEqual([{ appId: app.id, app: "Blog", counts: { 0: 0, 1: 1, 2: 0 } }]);
     expect(r.upgrade).toMatchObject({ plan: "Pro", trialDays: 3 });
     const mail = renderReport(r);
+    expect(mail.html).toContain("/api/pay");
     expect(mail.html).not.toContain("/secret-admin");
+    expect(mail.html).toContain("You're seeing half of this report on Free");
+    expect(mail.html).toContain("1 more problem on <strong");
+    expect(mail.html).toContain("(1 important)");
     expect(mail.html).toContain("Start the 3-day free trial");
-    expect(mail.html).toContain("1 problem");
+    expect(mail.text).toContain("You're seeing half of this report on Free.");
+    expect(mail.text).not.toContain("/secret-admin");
+  });
+
+  it("Free's half of the summary, the suggestions and the designs: the rest is counted, never sent", async () => {
+    const { env, sql } = world({ OPENAI_API_KEY: "sk-test-secret" });
+    const { cookie, account } = await signedIn(env);
+    const app = await createApp(env, cookie, "Blog");
+    await sendBatch(env, app.token, [page("/"), ...detection("stale", "/")]);
+    const body = { source: "model", items: [1, 2, 3, 4].map((k) => ({ id: `c${k}`, why: `why ${k}`, step: `Step ${k}`, prompt: `Prompt ${k}` })), ideas: [], designs: [1, 2, 3].map((k) => ({ title: `Design ${k}`, inspired_by: `https://site${k}.example`, why: null, prompt: `Redesign ${k}` })) };
+    sql.db.prepare("INSERT INTO suggest_results (account_id, app_key, created, body) VALUES (?, 'k', ?, ?)").run(account.id, now().toISOString(), JSON.stringify(body));
+    const f = (async (url: string) =>
+      url === MODEL_URL
+        ? Response.json({ choices: [{ message: { content: JSON.stringify({ headline: "Blog is mostly fine", summary: "One stale response.", actions: [{ title: "Fix it", why: "Old data.", prompt: "Ignore old responses." }, { title: "Test it", why: "Catch it next time.", prompt: "Add a test." }] }) } }] })
+        : new Response("", { status: 404 })) as typeof fetch;
+    const r = (await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: true, fetch: f }))!.report;
+    expect(r.summary).toMatchObject({ headline: "Blog is mostly fine", actions: [] });
+    expect(r.actionsHidden).toBe(2);
+    expect(r.suggestions.map((x) => x.title)).toEqual(["Step 1", "Step 2"]);
+    expect(r.suggestionsHidden).toBe(2);
+    expect(r.designs.map((d) => d.title)).toEqual(["Design 1", "Design 2"]);
+    expect(r.designsHidden).toBe(1);
+    const { html } = renderReport(r);
+    expect(html).toContain("Blog is mostly fine");
+    expect(html).not.toContain("Fix it");
+    expect(html).not.toContain("Step 3");
+    expect(html).not.toContain("Design 3");
+    expect(html).toContain("2 next steps, each with a prompt for your coding agent, are in the other half.");
+    expect(html).toContain("2 more suggestions, each with a prompt, are in the other half.");
+  });
+
+  it("an account with no app yet gets a report too: add your first app", async () => {
+    const { env, sql } = world();
+    const { account } = await signedIn(env);
+    const r = (await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report;
+    expect(r.apps).toEqual([]);
+    expect(r.items.map((i) => i.rule)).toContain("setup:first-app");
+    const mail = renderReport(r);
+    expect(mail.subject).toBe("GenClass daily report: add your first app");
+    expect(mail.html).toContain("Add your first app to GenClass");
+    expect(mail.html).not.toContain("Your apps");
   });
 
   it("the model gets the numbers and the items, never the email, the key or the account id; its summary leads the email", async () => {

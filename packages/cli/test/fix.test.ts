@@ -126,7 +126,8 @@ describe("genclass fix: the command (src/fix.mjs fix)", () => {
       expect(tooWide(said)).toEqual([]);
       const flat = plainLines(said).join(" ").replace(/\s+/g, " ");
       expect(flat).toContain("What GenClass found on the live site");
-      expect(flat).toMatch(/1 Double submits 14 times on \/checkout/);
+      // the dashboard's words under the name, so both screens name it the same way
+      expect(flat).toMatch(/1 Double submits 14 times the same request went out twice, on \/checkout/);
       expect(flat).toMatch(/3 Invisible text 6 times, visual check on \/pricing/);
       expect(flat).toContain("A prompt for stale responses is ready.");
       expect(flat).toContain("GenClass changes no code: the agent does, with you watching.");

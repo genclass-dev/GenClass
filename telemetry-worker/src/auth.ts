@@ -1715,6 +1715,8 @@ async function deleteProject(c: C, id: string): Promise<Response> {
     ...["daily", "hourly", "recent", "sessions", "visits", "agent_reports", "agent_log"].map((t) => c.db.prepare(`DELETE FROM ${t} WHERE token = ?`).bind(p.token)),
     c.db.prepare("DELETE FROM projects WHERE id = ? AND account_id = ?").bind(id, a.account.id),
   ]);
+  // its extra keys (migration 0022) go with it; before that migration the table is missing and there is nothing to delete
+  await c.db.prepare("DELETE FROM app_keys WHERE project_token = ?").bind(p.token).run().catch(() => undefined);
   forgetToken(p.token);
   await forgetExports(c.db, c.env.BUCKET, [p.token]).catch(() => undefined);
   // a repository linked to it by the GitHub App is unlinked (on its own: its tables come with migration 0013)

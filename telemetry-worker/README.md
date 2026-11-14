@@ -1249,6 +1249,22 @@ One new table, `suggest_usage`. Additive; apply it before or after the deploy:
 `npx --yes wrangler@4 d1 migrations apply genclass-dashboard --remote`. Then set the key, as a secret, from your own
 terminal: `npx --yes wrangler@4 secret put OPENAI_API_KEY`.
 
+## Extra keys (two apps merged into one)
+
+When an onboarding left one person with two apps for one site (one with the data, one with the plan), they are merged
+into one app and the key of the app that goes away keeps working: `app_keys` (migration 0022) maps that key to the
+remaining app's own key, and a batch that carries it is aggregated, exported and forwarded under the app's key
+(`src/dashboard.ts` `canonicalToken`; the raw batch in R2 keeps the key the page sent). An app's own key always wins;
+deleting the app deletes its extra keys. No route writes the table; add a key by hand:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=144bd5f5270b51dbe7faf46227a154f0 npx --yes wrangler@4 d1 execute genclass-dashboard --remote \
+  --command "INSERT INTO app_keys (token, project_token, created) VALUES ('<old gc_ key>', (SELECT token FROM projects WHERE id = '<app id>'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+```
+
+A worker keeps a key's answer in memory for up to 5 minutes (30 seconds for an unknown key), so a new extra key counts
+within 30 seconds.
+
 ## Reports by email
 
 A GenClass report about an account's apps goes to the account's email on the schedule it chooses, and an alert goes

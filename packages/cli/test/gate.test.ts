@@ -233,8 +233,14 @@ describe("genclass at a terminal: the paywall's question, the plan page's wait, 
       expect(got, answer).toBe(false);
       expect(said, answer).not.toMatch(/Waiting for the payment|Your browser is opening/);
       expect(flat(said), answer).toContain("For ada@example.com");
-      expect(flat(said), answer).toContain(`start your 3-day free trial at ${CHECKOUT}`);
+      // stopped: what starts it later, without the price again (it is on the card)
+      expect(flat(said), answer).toContain("Not started. Run npx genclass upgrade any time to start your 3-day free trial.");
+      expect(flat(said).match(/\$15/g), answer).toHaveLength(1);
     }
+    // the card once per process: a later command that needs Pro gets one line (the gate), upgrade and plan the card
+    type("q");
+    const again = await printed(async () => expect(await startPro(cli, null, { short: true }, { waitMs: 50, everyMs: 10 })).toBe(false));
+    expect(flat(again).trim()).toBe("That comes with Pro. Run npx genclass upgrade to start your 3-day free trial.");
   });
 
   it("the plan page's wait: a Free choice made before it is not its answer; a stopped wait says it once", async () => {
@@ -250,18 +256,23 @@ describe("genclass at a terminal: the paywall's question, the plan page's wait, 
     // the account's checkout, stopped: "No payment yet" once, not twice
     type("");
     const pay = await printed(async () => expect(await startPro(cli, null, {}, { fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ cli: LOCKED }) } }).fetchFn, waitMs: 60, everyMs: 10 })).toBe(false));
-    expect(flat(pay).match(/starts once it is started on Stripe/g)).toHaveLength(1);
+    expect(flat(pay).match(/No payment yet/g)).toHaveLength(1);
     expect(pay).not.toContain("goes on from there");
   });
 
-  it("the coding agent's files are shown and asked about in the walk too; no writes them nothing", async () => {
+  it("the coding agent's files are shown; on their own they are asked about (no writes nothing), in the walk the step's Enter was the yes", async () => {
     const dir = tempDir();
     viteApp(dir);
     type("n");
-    const said = await printed(async () => expect(await connectAgent({ cwd: dir }, { confirmed: true })).toBe("skipped"));
+    const said = await printed(async () => expect(await connectAgent({ cwd: dir }, {})).toBe("skipped"));
     expect(said).toContain(".mcp.json");
     expect(said).toContain(".claude/skills/genclass/SKILL.md");
     expect(existsSync(join(dir, ".mcp.json"))).toBe(false);
+    // the walk: shown, then written, with no second question
+    const walked = await printed(async () => expect(await connectAgent({ cwd: dir }, { confirmed: true })).toBe("done"));
+    expect(walked).toContain(".mcp.json");
+    expect(walked).not.toContain("and the skill?");
+    expect(existsSync(join(dir, ".mcp.json"))).toBe(true);
   });
 
   it("taken out and added again: the account's app of the same name is used, not a second one", async () => {

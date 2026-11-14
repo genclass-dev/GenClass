@@ -764,14 +764,16 @@ describe("the walk's Coding agent step: the MCP server, the skill and the link i
     it("one question for all of it: no writes nothing, Enter writes the MCP server, the skill and the link", async () => {
       const dir = setUpApp();
       const entry = readFileSync(join(dir, "src/main.jsx"), "utf8");
+      // called on its own (not from the walk, where the step's Enter is the yes): one question for all of it
       type("n");
-      const no = await printed(async () => expect(await connectAgent({ cwd: dir }, { confirmed: true })).toBe("skipped"));
+      const no = await printed(async () => expect(await connectAgent({ cwd: dir }, {})).toBe("skipped"));
       expect(no).toContain("Write .mcp.json, the skill and the dev-only link?");
       expect(no.match(/\(Y\/n\)/g)).toHaveLength(1);
       expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toBe(entry);
-      type("");
+      // in the walk (confirmed: the step's Enter was the yes, 0.3.9): the preview, then the writes, no second question
       const yes = await printed(async () => expect(await connectAgent({ cwd: dir }, { confirmed: true })).toBe("done"));
-      expect(yes.match(/\(Y\/n\)/g)).toHaveLength(1);
+      expect(yes).toContain("src/genclass.agent.js");
+      expect(yes.match(/\(Y\/n\)/g)).toBeNull();
       expect(readFileSync(join(dir, "src/genclass.agent.js"), "utf8")).toContain("connectAgent(GenClass.init())");
       expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toContain('import "./genclass.agent.js"; // genclass:init');
       expect(readFileSync(join(dir, ".mcp.json"), "utf8")).toContain("@genclass/mcp@");

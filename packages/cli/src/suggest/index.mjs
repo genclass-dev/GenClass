@@ -19,7 +19,7 @@ import { requestPlan } from "../api.mjs";
 import { proSeen } from "../paywall.mjs";
 import { copyText, findAgents, startAgent } from "../fix.mjs";
 import { readNotes, saveNotes } from "../store.mjs";
-import { agree, clean, good, header, note, para, proBox, PROMPT, rule, spinner, typed, visible, warn, width, wrap } from "../tui.mjs";
+import { agree, clean, good, header, hint, note, para, proBox, PROMPT, rule, spinner, typed, visible, warn, width, wrap } from "../tui.mjs";
 import { AREAS, runChecks } from "./checks.mjs";
 import { buildDigest, describeDigest } from "./digest.mjs";
 import { collectRepoFacts } from "./repo.mjs";
@@ -191,8 +191,10 @@ async function handToAgent(items, url, cwd, o, deps, plan) {
   choices.forEach(([label], i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${label}`));
   if (!agents.length) note("No coding agent's command found here (claude, codex, cursor-agent, gemini).");
   out();
-  const a = await typed(`  ${PROMPT()} ${c.gray("a number ·")} ${c.bold("q")} ${c.gray("stop")}  `);
-  const pick = a !== null && /^\d+$/.test(a.trim()) ? choices[Number(a.trim()) - 1] : null;
+  // Enter is the first choice (the 0.3.9 user stories: Enter did nothing, and said nothing); input that ended is not
+  const a = await typed(`  ${PROMPT()} ${c.bold("Enter")} ${c.gray("for 1 · a number ·")} ${c.bold("q")} ${c.gray("stop")}  `);
+  const t = a === null ? null : a.trim();
+  const pick = t === "" ? choices[0] : t !== null && /^\d+$/.test(t) ? choices[Number(t) - 1] : null;
   if (pick) await pick[1]();
 }
 
@@ -298,11 +300,13 @@ export async function suggest(o = {}, deps = {}) {
   if (planNote) note(planNote);
   if (!site?.reachable) note(url ? "The site could not be read, so only the repository was checked." : `Only the repository was checked. With the site's address there is more: ${c.cyan("npx genclass suggest https://your-site.com")}`);
   // Free: the first suggestion only, and how many more there are (the rest is Pro's, the owner's call 2026-11-12)
-  const fullCount = o.all ? items.length : 5;
+  // in the setup's walk only the first is in full, the rest by title (the 0.3.9 user stories: about 70 lines in the
+  // middle of the setup); `genclass suggest` on its own prints five, --all every one
+  const fullCount = o.all ? items.length : o.fromSetup ? 1 : 5;
   for (const i of items.filter((x) => x.open)) printItem(i, i.n <= fullCount);
   if (items.some((i) => i.open && i.n > fullCount)) {
     out();
-    note(`Items ${fullCount + 1} and after are listed by title. ${c.cyan("npx genclass suggest --all")} prints each one's reason, first step and prompt.`);
+    note(o.fromSetup ? `The others in full, with a prompt for each: ${hint("suggest")}.` : `Items ${fullCount + 1} and after are listed by title. ${c.cyan("npx genclass suggest --all")} prints each one's reason, first step and prompt.`);
   }
   if (plan?.ideas?.length) printIdeas(plan.ideas, o.all);
   if (plan?.designs?.length) printDesigns(plan.designs);

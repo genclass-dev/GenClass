@@ -13,7 +13,7 @@ import { readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { signIn } from "./actions.mjs";
 import { needsProJson, proLine } from "./paywall.mjs";
-import { bad, clean, note, proBox, typed, warn } from "./tui.mjs";
+import { bad, clean, linkLine, note, proBox, typed, warn } from "./tui.mjs";
 
 /**
  * Runs `call(creds)` (one of api.mjs's calls). When the answer says this sign-in is from before the command could
@@ -64,7 +64,7 @@ export function refused(r, ctx) {
     proBox(`${ctx.what} comes with ${clean(lock.plan ?? ctx.plan ?? "Pro", 20)}.`, { ...lock, upgradeUrl: lock.upgradeUrl ?? r.upgradeUrl });
   } else if (r.missing) note("This genclass.dev cannot do this from the terminal yet.");
   else bad(`${ctx.what}: ${clean(r.reason ?? "it did not work", 240)}`);
-  if (ctx.browserUrl && !r.upgradeUrl) out(`  ${c.gray("In the browser")}  ${c.cyan(ctx.browserUrl)}`);
+  if (ctx.browserUrl && !r.upgradeUrl) linkLine("In the browser", ctx.browserUrl);
   out();
   return 1;
 }

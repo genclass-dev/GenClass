@@ -12,12 +12,15 @@
 //   is remembered next to the sign-in. Nothing is installed with --yes, without a terminal, or in CI.
 
 import { spawn } from "node:child_process";
-import { accessSync, constants, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, constants, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { credentialsPath } from "../../runtime/bin/lib/account.mjs";
 
-/** Whether typing `genclass` in the person's shell runs this command. */
-export function shortNameWorks(env = process.env, platform = process.platform) {
+/** Whether this run was started by npx (a copy npx fetched for this run), not the installed `genclass`. */
+export const viaNpx = (argv1 = process.argv[1] ?? "") => /[\\/]_npx[\\/]/.test(String(argv1));
+
+/** The file typing `genclass` in the person's shell runs, or null. */
+function shortNameFile(env = process.env, platform = process.platform) {
   const names = platform === "win32" ? ["genclass.cmd", "genclass.exe", "genclass.ps1"] : ["genclass"];
   for (const dir of String(env.PATH ?? env.Path ?? "").split(platform === "win32" ? ";" : delimiter)) {
     if (!dir || /[\\/]_npx[\\/]/.test(dir) || /node_modules[\\/]\.bin[\\/]?$/.test(dir)) continue;
@@ -26,13 +29,66 @@ export function shortNameWorks(env = process.env, platform = process.platform) {
         const file = join(dir, n);
         if (!statSync(file).isFile()) continue;
         if (platform !== "win32") accessSync(file, constants.X_OK);
-        return true;
+        return file;
       } catch {
         /* not here */
       }
     }
   }
-  return false;
+  return null;
+}
+
+/**
+ * The version of the installed `genclass` (the package its command links to), or null when it cannot be told (not
+ * installed, a Windows shim, a copy that is not the npm package).
+ */
+export function installedVersion(env = process.env, platform = process.platform) {
+  const file = shortNameFile(env, platform);
+  if (!file || platform === "win32") return null;
+  try {
+    // <prefix>/bin/genclass links to <prefix>/lib/node_modules/genclass/bin/genclass.mjs
+    const pkg = join(dirname(dirname(realpathSync(file))), "package.json");
+    const j = JSON.parse(readFileSync(pkg, "utf8"));
+    return j?.name === "genclass" && typeof j.version === "string" ? j.version : null;
+  } catch {
+    return null;
+  }
+}
+
+/** a > b for versions like 0.3.9 (a prerelease sorts before its release). */
+export function newer(a, b) {
+  const parse = (v) => {
+    const m = /^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/.exec(String(v ?? ""));
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3]), m[4] ?? null] : null;
+  };
+  const x = parse(a);
+  const y = parse(b);
+  if (!x || !y) return false;
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  if (x[3] === y[3]) return false;
+  return x[3] === null ? true : y[3] === null ? false : x[3] > y[3];
+}
+
+/** The newest genclass on npm (`latest`), or null within `timeoutMs` (no network, an error): best effort. */
+export async function latestOnNpm(fetchFn = globalThis.fetch, timeoutMs = 2000) {
+  if (typeof fetchFn !== "function") return null;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetchFn("https://registry.npmjs.org/genclass/latest", { headers: { accept: "application/json" }, signal: ctl.signal });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return typeof j?.version === "string" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(j.version) ? j.version : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Whether typing `genclass` in the person's shell runs this command. */
+export function shortNameWorks(env = process.env, platform = process.platform) {
+  return shortNameFile(env, platform) !== null;
 }
 
 /** `text` with every `npx genclass` said the short way. */
@@ -43,6 +99,11 @@ let wrapped = false;
 
 /** Whether this run prints `genclass` (true) or `npx genclass`. */
 export const isShort = () => short;
+
+/** For tests: this process has not decided yet how the command is typed (what is printed keeps its shortening). */
+export const forgetShortName = () => {
+  short = false;
+};
 
 /**
  * From now on everything this process prints says `genclass` (the name works here): the runtime CLI's modules are

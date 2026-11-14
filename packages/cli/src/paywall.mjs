@@ -21,13 +21,25 @@ import { readCredentials } from "../../runtime/bin/lib/account.mjs";
 import { accountLabel } from "../../runtime/bin/lib/init.mjs";
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview } from "./api.mjs";
-import { clean, note, planCard, PROMPT, typed, warn } from "./tui.mjs";
+import { clean, homeOpen, note, planCard, PROMPT, typed, warn } from "./tui.mjs";
 
 let seen = false;
+// the card was shown in this process (the home): a later command that needs Pro gets one line, not the card again
+let cardShown = false;
+// the last command was stopped by the gate: the home's after-command line (manage.mjs freeLine) is not said again
+let refused = false;
 
 /** For tests: forget that Pro was seen in this process. */
 export const forgetPro = () => {
   seen = false;
+  cardShown = false;
+  refused = false;
+};
+
+/** Whether the last gate stopped its command (read by the home after each command, then reset with resetRefused). */
+export const wasRefused = () => refused;
+export const resetRefused = () => {
+  refused = false;
 };
 
 /** Whether this process has seen the account's Pro (the gate passed, or Pro was started here). */
@@ -114,15 +126,27 @@ export async function startPro(cli, offer, o = {}, deps = {}) {
     }
     return false;
   }
+  const start = cli.trialDays ? `start your ${cli.trialDays}-day free trial` : `start ${clean(cli.plan, 20)}`;
+  // seen once in this process: one line from then on (the 0.3.9 user stories: the same card three times in four
+  // commands). `genclass upgrade` and `plan` (o.card) are asked for it, so they show it again
+  // `again`: the command's own words for that line (plan: what Pro has; setup: it goes on with Pro)
+  if (cardShown && (o.short || o.again)) {
+    out();
+    note(`${o.again ?? `That comes with ${clean(cli.plan, 20)}.`} ${homeOpen() ? "Type upgrade" : "Run npx genclass upgrade"} to ${start}.`);
+    refused = true;
+    return false;
+  }
+  cardShown = true;
   if (o.account) {
     out();
     note(`For ${clean(o.account, 60)}`);
   }
   planCard(card, null, heading);
+  // the price is on the card once; this says only how paying works
   note(
     cli.trialDays
-      ? `Every genclass command comes with ${clean(cli.plan, 20)}. ${cli.trialDays} days free, then ${clean(card.price, 40)}: your card is asked for on Stripe, and nothing is charged if you cancel before the trial ends.`
-      : `Every genclass command comes with ${clean(cli.plan, 20)}, ${clean(card.price, 40)}, paid on Stripe.`,
+      ? `Every genclass command comes with ${clean(cli.plan, 20)}. Your card is asked for on Stripe, and nothing is charged if you cancel before the trial ends.`
+      : `Every genclass command comes with ${clean(cli.plan, 20)}, paid on Stripe.`,
   );
   out();
   const dot = c.gray("·");
@@ -130,7 +154,9 @@ export async function startPro(cli, offer, o = {}, deps = {}) {
   // only Enter or a yes starts it: n, no, s, exit and q all stop, as q does everywhere else
   if (a === null || !/^(y|yes)?$/i.test(a.trim())) {
     out();
-    note(proLine(cli));
+    note(`Not started. ${homeOpen() ? "Type upgrade" : "Run npx genclass upgrade"} any time to ${start}.`);
+    // the line above is the way up: the prompt's Free line is not said again after it
+    refused = true;
     return false;
   }
   const { checkout } = await import("./actions.mjs");
@@ -148,6 +174,7 @@ export async function startPro(cli, offer, o = {}, deps = {}) {
  * @param {{ fetchFn?: typeof fetch, signIn?: (o: object) => Promise<string>, waitMs?: number, everyMs?: number }} [deps]
  */
 export async function requirePro(o = {}, deps = {}) {
+  refused = false;
   if (seen) return 0;
   let creds = readCredentials();
   if (!creds) {
@@ -173,11 +200,12 @@ export async function requirePro(o = {}, deps = {}) {
     if (me.ok && me.cli?.paid) seen = true;
     return 0;
   }
-  if (await startPro(me.cli, me.offer ?? null, { ...o, account: accountLabel(me.account) }, deps)) {
+  if (await startPro(me.cli, me.offer ?? null, { ...o, account: accountLabel(me.account), short: true }, deps)) {
     seen = true;
     out();
     return 0;
   }
+  refused = true;
   return 1;
 }
 

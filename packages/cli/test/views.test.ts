@@ -125,13 +125,14 @@ describe("genclass problems, events and health (src/views.mjs)", () => {
     const said = await at(58, () => renderEvents(app, { now: NOW }));
     expect(tooWide(said)).toEqual([]);
     const lines = plainLines(said);
-    const first = lines.findIndex((l) => /3 min ago\s+stale\s+94%\s+\/search/.test(l));
+    // each kind by the name problems and fix give it
+    const first = lines.findIndex((l) => /3 min ago\s+Stale responses\s+94%\s+\/search/.test(l));
     expect(first).toBeGreaterThan(-1);
     expect(lines[first + 1]).toMatch(/→ Dropped a stale write/);
-    expect(said).toMatch(/40 min ago\s+duplicate\s+88%\s+\/checkout/);
+    expect(said).toMatch(/40 min ago\s+Double submits\s+88%\s+\/checkout/);
     // reported only: no line under it; no confidence: none shown
-    expect(lines[lines.findIndex((l) => l.includes("duplicate")) + 1]).not.toContain("→");
-    expect(said).toMatch(/9 h ago\s+odd plugin ki…\s+\/a\/very/);
+    expect(lines[lines.findIndex((l) => l.includes("Double submits")) + 1]).not.toContain("→");
+    expect(said).toMatch(/9 h ago\s+odd plugin kind\s+\/a\/very/);
     expect(said).toContain("npx genclass export");
     const all = await at(58, () => renderEvents(app, { now: NOW, all: true }));
     const flatAll = plainLines(all).join(" ").replace(/\s+/g, " ");

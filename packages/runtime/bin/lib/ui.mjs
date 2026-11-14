@@ -81,7 +81,7 @@ const wraps = () => !!globalThis.__GENCLASS_CLI__;
  * COLUMNS, as every screen of that command); under genclass-runtime the window between 40 and 100 columns, else 100,
  * as it always was.
  */
-export const foldWidth = () => (wraps() ? columns() : Math.max(40, Math.min(100, Number(process.stdout.columns) || 100)));
+export const foldWidth = () => (wraps() ? columns() : Math.max(40, Math.min(100, Number(process.stdout.columns) || Number(process.env.COLUMNS) || 100)));
 
 /**
  * The indent for a line of wrapped text: `indent`, or less when the line is one word too long for its place (an

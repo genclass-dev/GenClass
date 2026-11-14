@@ -147,7 +147,7 @@ export async function createProject(
         .prepare("INSERT INTO projects (id, token, secret_hash, name, created, account_id, private_link) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(id, token, await sha256Hex(secret), name, created, accountId, accountId ? 0 : 1)
         .run();
-      tokenCache.set(token, { ok: true, exp: now.getTime() + CACHE_OK_MS });
+      tokenCache.set(token, { token, exp: now.getTime() + CACHE_OK_MS });
       return { id, token, secret, name, created };
     } catch (e) {
       if (attempt >= 2) throw e; // a collision is astronomically unlikely; anything else is a real error
@@ -175,28 +175,47 @@ export async function projectBySecret(db: D1Like, secret: string): Promise<Proje
     .first<Project>();
 }
 
-/** Drop a deleted project's token from this isolate's cache, so its batches stop being counted here at once. */
+/** Drop a deleted project's token from this isolate's cache, and its extra keys, so their batches stop being counted here at once. */
 export function forgetToken(token: string): void {
   tokenCache.delete(token);
+  for (const [k, v] of tokenCache) if (v.token === token) tokenCache.delete(k);
 }
 
 const CACHE_OK_MS = 5 * 60_000;
 const CACHE_MISS_MS = 30_000;
-const tokenCache = new Map<string, { ok: boolean; exp: number }>();
+const tokenCache = new Map<string, { token: string | null; exp: number }>();
 export function resetTokenCache(): void {
   tokenCache.clear();
 }
 
-/** Is this a token of a known project? Cached in memory briefly (5 min hits, 30 s misses). */
-export async function knownToken(db: D1Like, token: string, nowMs: number): Promise<boolean> {
-  if (!TOKEN_RE.test(token)) return false;
+/**
+ * The app a batch's token belongs to, as that app's own key: the token itself when it is an app's key, the app's key
+ * when it is one of that app's extra keys (app_keys, migration 0022), else null. Cached in memory briefly (5 min hits,
+ * 30 s misses). An app's own key always wins over an extra key with the same value.
+ */
+export async function canonicalToken(db: D1Like, token: string, nowMs: number): Promise<string | null> {
+  if (!TOKEN_RE.test(token)) return null;
   const c = tokenCache.get(token);
-  if (c && c.exp > nowMs) return c.ok;
-  const row = await db.prepare("SELECT 1 AS ok FROM projects WHERE token = ?").bind(token).first();
-  const ok = !!row;
+  if (c && c.exp > nowMs) return c.token;
+  const own = await db.prepare("SELECT token FROM projects WHERE token = ?").bind(token).first<{ token: string }>();
+  let found = own?.token ?? null;
+  if (!found) {
+    // before migration 0022 the table is missing: that reads as "no extra key"
+    const extra = await db
+      .prepare("SELECT k.project_token AS token FROM app_keys k JOIN projects p ON p.token = k.project_token WHERE k.token = ?")
+      .bind(token)
+      .first<{ token: string }>()
+      .catch(() => null);
+    found = extra?.token ?? null;
+  }
   if (tokenCache.size > 5000) tokenCache.clear();
-  tokenCache.set(token, { ok, exp: nowMs + (ok ? CACHE_OK_MS : CACHE_MISS_MS) });
-  return ok;
+  tokenCache.set(token, { token: found, exp: nowMs + (found ? CACHE_OK_MS : CACHE_MISS_MS) });
+  return found;
+}
+
+/** Is this a token of a known project (its own key or one of its extra keys)? */
+export async function knownToken(db: D1Like, token: string, nowMs: number): Promise<boolean> {
+  return (await canonicalToken(db, token, nowMs)) !== null;
 }
 
 // --------------------------------------------------------------------------------------------- aggregation
