@@ -1094,7 +1094,12 @@ async function report(list, o) {
     return { code: wrong.length ? 1 : 0, ...done };
   }
   out(`  ${c.bold("To fix")}`);
-  for (const x of fixable) out(`    ${sym.dot} ${x.apply.what}`);
+  for (const x of fixable) {
+    // one item per fix, wrapped under its first word (a long file name used to run past the window)
+    const lines = wrap(x.apply.what, width() - 8);
+    out(`    ${sym.dot} ${lines[0] ?? ""}`);
+    for (const l of lines.slice(1)) out(`      ${l}`);
+  }
   out();
   // each change itself, before anything is written (with --yes too, so an agent that ran it sees what changed)
   for (const x of fixable) for (const w of x.apply.writes ?? [x.apply]) showWrite(w);
