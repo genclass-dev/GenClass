@@ -1124,7 +1124,7 @@ retraining, which has not been measured
   The interaction-analytics stub measured about 108.5 / 100.4 KB on its branch (§15); `0.3.0-beta.1` to `beta.4` are
   not re-measured here (`summary().requests` added 34 B in `0.3.0-beta.2`, §23; the consent gate about 0.34 KB
   on the alpha line, §29), and `test/bundle.test.ts` keeps them under 109.3 KB and 101.02 KB (the limits follow CI's
-  gzip on Node 22; RESULTS.md §14 lists each raise). The model worker, ONNX
+  gzip on Node 22; RESULTS.md §10 lists each raise). The model worker, ONNX
   Runtime, the devtools, the sinks and the visual checks load on demand; ONNX Runtime's `.wasm` (3.1 MB brotli; 5.5 MB
   with WebGPU, per the install tests) is never part of your build. The script-tag file is about 129 KB gzip.
 - **Model:** with onnxruntime-web 1.30 on single-thread WASM, a forward pass takes an estimated 182 / 330 / 599 ms at

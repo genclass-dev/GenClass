@@ -19,7 +19,7 @@ import { AUTO, configFileChange, configFileFor, planInit, scriptTag } from "./pl
 import { createAccountProject, readCredentials } from "./account.mjs";
 import { apiHost, hostConfig, hostUrl } from "./host.mjs";
 import { LOCAL_FILE, PENDING_TOKEN, START_URL, TOKEN_RE, createProject, readLocal, saveLocal, tokenInFiles } from "./token.mjs";
-import { banner, c, confirm, err, foldWidth, interactive, labelled, more, out, outWhole, printChange, row, sym } from "./ui.mjs";
+import { banner, c, columns, confirm, err, foldWidth, interactive, labelled, more, out, outWhole, printChange, row, sym, wrapTo } from "./ui.mjs";
 import { CMD, HOST_CLI, PKG, PKG_DIR, VERSION, compareVersions, distTags, installedVersion, versionInSpec, versionStatus } from "./version.mjs";
 
 const MODES = ["observe", "guard", "heal"];
@@ -337,14 +337,110 @@ export function moneyFlows(project, files) {
  * Suggest requests.protect for payment and sign-in endpoints (an opt-in preset; nothing is applied): protected
  * requests, their responses and what those responses write are observe-only in every mode (INTERCEPTION.md).
  */
+/**
+ * Whether the genclass command runs this (every screen of it fits the window), read when printing as ui.mjs reads it.
+ * Under genclass-runtime the lines below stay whole, byte for byte as they always were.
+ */
+const hosted = () => !!globalThis.__GENCLASS_CLI__;
+
+/** A line printed in cyan from its first character on (its indent left unpainted, as it always was). */
+const cyanLine = (l) => {
+  const t = l.trimStart();
+  return `${l.slice(0, l.length - t.length)}${c.cyan(t)}`;
+};
+
+/** "  Label (gray note)": under the genclass command the note wraps under itself, each line gray. */
+function labelNote(label, note) {
+  if (!hosted()) {
+    out(`  ${c.bold(label)} ${c.gray(note)}`);
+    return;
+  }
+  const indent = 3 + label.length;
+  const [first = "", ...rest] = wrapTo(note, columns() - 2 - indent);
+  out(`  ${c.bold(label)} ${c.gray(first)}`);
+  for (const l of rest) out(`${" ".repeat(indent)}${c.gray(l)}`);
+}
+
+/** A bullet: under the genclass command its text wraps under itself, past the bullet. */
+function bullet(text, indent = 4) {
+  if (!hosted()) {
+    out(`${" ".repeat(indent)}${sym.dot} ${text}`);
+    return;
+  }
+  const [first = "", ...rest] = wrapTo(text, columns() - 2 - indent - 2);
+  out(`${" ".repeat(indent)}${sym.dot} ${first}`);
+  for (const l of rest) out(`${" ".repeat(indent + 2)}${l}`);
+}
+
+/**
+ * A line of code to copy, `indent` columns in. Under the genclass command it is folded to the window so that what is
+ * pasted is still the same code: a trailing `// comment` goes on its own line above it, and the code breaks only at
+ * spaces outside quotes, the lines after the first 4 columns further in (a piece too long for any line stays whole,
+ * starting further left). Under genclass-runtime it is one line, as it always was.
+ */
+export function codeLines(line, indent = 8, cols = columns()) {
+  if (!hosted()) return [`${" ".repeat(indent)}${line}`];
+  const width = cols - 2;
+  if (indent + line.length <= width) return [`${" ".repeat(indent)}${line}`];
+  const lines = [];
+  let code = line;
+  const comment = / \/\/ ([^"'`]*)$/.exec(line);
+  if (comment) {
+    code = line.slice(0, comment.index);
+    for (const l of wrapTo(`// ${comment[1]}`, width - indent)) lines.push(`${" ".repeat(indent)}${l.startsWith("//") ? l : `// ${l}`}`);
+  }
+  // the pieces between spaces that are outside quotes
+  const pieces = [];
+  let cur = "";
+  let quote = null;
+  for (const ch of code) {
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'" || ch === "`") {
+      cur += ch;
+      quote = ch;
+    } else if (ch === " ") {
+      if (cur) pieces.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  if (cur) pieces.push(cur);
+  let row = "";
+  let pad = indent;
+  for (const p of pieces) {
+    if (row && pad + row.length + 1 + p.length > width) {
+      lines.push(`${" ".repeat(pad)}${row}`);
+      row = p;
+      pad = indent + 4;
+    } else row = row ? `${row} ${p}` : p;
+  }
+  if (row) lines.push(`${" ".repeat(pad)}${row}`);
+  // a piece longer than its line: further left, so it fits whole where it can
+  return lines.map((l) => {
+    const text = l.trimStart();
+    const at = l.length - text.length;
+    return at + text.length <= width ? l : `${" ".repeat(Math.max(0, Math.min(at, width - text.length)))}${text}`;
+  });
+}
+
 function printMoneyAdvice(money, cfgFile) {
   if (!money) return;
   const found = [...money.deps, ...money.paths].slice(0, 3).join(", ");
+  const protect = `requests: { protect: ["preset:payments", "preset:auth"] }`;
+  if (hosted()) {
+    labelNote("Payments", `(found ${found}; not applied)`);
+    for (const l of wrapTo(`GenClass recommends keeping checkout and sign-in requests observe-only in every mode: it then never holds, retries, caches, coalesces or drops them, nor what their responses write. Add to GenClass's options (${cfgFile ? `${cfgFile}, ` : ""}window.GENCLASS_CONFIG or GenClass.init({ ... })):`, columns() - 2 - 4)) out(`    ${l}`);
+    for (const l of codeLines(protect, 8)) out(cyanLine(l));
+    more(`Details: ${INTERCEPTION_URL}#money-and-identity-flows`, 4);
+    out();
+    return;
+  }
   out(`  ${c.bold("Payments")} ${c.gray(`(found ${found}; not applied)`)}`);
   out(`    GenClass recommends keeping checkout and sign-in requests observe-only in every mode: it then never holds,`);
   out(`    retries, caches, coalesces or drops them, nor what their responses write. Add to GenClass's options`);
   out(`    (${cfgFile ? `${cfgFile}, ` : ""}window.GENCLASS_CONFIG or GenClass.init({ ... })):`);
-  out(`        ${c.cyan(`requests: { protect: ["preset:payments", "preset:auth"] }`)}`);
+  out(`        ${c.cyan(protect)}`);
   out(`    Details: ${INTERCEPTION_URL}#money-and-identity-flows`);
   out();
 }
@@ -363,10 +459,10 @@ function printLittleToWatch(kind) {
 
 function printRecommendations(recs) {
   if (!recs.length) return;
-  out(`  ${c.bold("Optional")} ${c.gray("(not applied: the auto import already finds your app state; these let GenClass hold, drop or roll back writes to it)")}`);
+  labelNote("Optional", "(not applied: the auto import already finds your app state; these let GenClass hold, drop or roll back writes to it)");
   for (const r of recs) {
-    out(`    ${sym.dot} ${r.title}:`);
-    for (const l of r.lines) out(`        ${c.cyan(l)}`);
+    bullet(`${r.title}:`);
+    for (const l of r.lines) for (const piece of codeLines(l, 8)) out(cyanLine(piece));
   }
   out();
 }
@@ -858,9 +954,15 @@ async function offerAccount(o, tk) {
   // --in-account: the caller already has the person's word that the app goes into their account (the `genclass`
   // command asks for the sign-in one step before this one)
   if (tk.wouldCreate || o.yes || o.inAccount || !interactive()) return { ...tk, account: creds };
-  const ok = await confirm(`Signed in as ${accountLabel(creds.account)}: create this app in your GenClass account?`);
+  const question = `Signed in as ${accountLabel(creds.account)}: create this app in your GenClass account?`;
+  // under the genclass command the question fits the window: its first lines are printed, the last one is asked
+  // (with its "(Y/n)", 6 columns more)
+  const lines = hosted() ? wrapTo(question, columns() - 2 - 2 - 6) : [question];
+  for (const l of lines.slice(0, -1)) out(`  ${c.bold(l)}`);
+  const ok = await confirm(lines[lines.length - 1]);
   if (ok === false) {
-    out(`  ${c.gray("Not in your account: init creates the app with a private dashboard link instead, as without an account.")}`);
+    const said = "Not in your account: init creates the app with a private dashboard link instead, as without an account.";
+    for (const l of hosted() ? wrapTo(said, columns() - 2 - 2) : [said]) out(`  ${c.gray(l)}`);
     return tk;
   }
   return { ...tk, account: creds };

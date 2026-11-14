@@ -152,6 +152,26 @@ describe("genclass: the home (src/home.mjs)", () => {
     expect(after).toContain("That did not work: boom");
   });
 
+  it("every command the command line has is a command here, the free local ones included (privacy, doctor, flake)", async () => {
+    // never "There is no command" for a command that exists, and never a question
+    for (const cmd of ALL.filter((x) => x !== "help")) expect(read(cmd), cmd).toEqual({ command: [cmd] });
+    expect(read("doctor --fix")).toEqual({ command: ["doctor", "--fix"] });
+    expect(read("privacy --out p.md")).toEqual({ command: ["privacy", "--out", "p.md"] });
+    expect(read("flake tests/a.spec.ts --seed 3")).toEqual({ command: ["flake", "tests/a.spec.ts", "--seed", "3"] });
+    expect(read("npx genclass doctor --fix")).toEqual({ command: ["doctor", "--fix"] });
+    // help lists them, within 58 columns
+    const full = await at58(() => menu(true));
+    for (const name of ["privacy", "doctor", "flake"]) expect(full).toContain(name);
+    expect(tooWide(full)).toEqual([]);
+    // they run in the folder of the home; no line about the plan follows them (it would ask genclass.dev)
+    const ran: string[][] = [];
+    let after = 0;
+    type("doctor --fix", "privacy", "flake tests/a.spec.ts", "problems", "q");
+    await at58(async () => expect(await home({ cwd: "/app" }, { runCommand: async (a: string[]) => (ran.push(a), 0), nearest, afterCommand: async () => void after++ })).toBe(0));
+    expect(ran).toEqual([["doctor", "--fix", "--cwd", "/app"], ["privacy", "--cwd", "/app"], ["flake", "tests/a.spec.ts", "--cwd", "/app"], ["problems", "--cwd", "/app"]]);
+    expect(after).toBe(1);
+  });
+
   it("a command typed with a word it does not take is told so, not run as something else", async () => {
     const errs: string[] = [];
     const spy = (await import("vitest")).vi.spyOn(process.stderr, "write").mockImplementation(((s: unknown) => (errs.push(String(s)), true)) as never);

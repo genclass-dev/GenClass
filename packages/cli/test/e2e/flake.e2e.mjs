@@ -7,14 +7,17 @@
 //
 //   - the buggy page's test (it asserts the results of the last query): racy, failing on at least one seed with
 //     `overwrote-newer` on GET /api/search seen on a failing seed, and passing in the natural order;
-//   - the fixed page's same test: passed on every run, with no race seen on any run (the false reports on the
-//     correct variant: required to be 0);
+//   - the fixed page's same test: passed on every run, with no race seen on any run; and no race seen on any run
+//     of the three tests on the fixed page (the false reports on the correct variant: counted, printed and
+//     required to be 0);
 //   - a test on the fixed page that fails on its third repeat only (a flake planted by the repeat index, which stands
 //     for an ordinary flaky test: timing, isolation): flaky, failing on seed 3 only, with no race seen there;
 //   - a test that asserts what the page never shows: broken;
 //   - then the replay command the run printed for the racy test: run as it is, it fails again on that seed with the
-//     same race (the seed reproduces the order).
-// It prints the verdicts and the numbers. Nothing in the fixture is tuned to GenClass: the tests are what a project has.
+//     same race (the seed reproduces the order); and a replay of a failing seed of 2 or more, which checks that a
+//     seed is its run's base plus the repeat index (skipped, and said, when no such seed failed).
+// It prints the verdicts and the numbers (the RESULT lines). Nothing in the fixture is tuned to GenClass: the tests
+// are what a project has. Not in CI (it needs Chromium); its numbers are in docs/runtime/RESULTS.md section 30.
 //
 // Usage: npm run build -w @genclass/runtime && npm run build -w @genclass/playwright && npm run build -w genclass
 //        node packages/cli/test/e2e/flake.e2e.mjs [--runs N] [--keep]
@@ -164,7 +167,15 @@ try {
   check(buggy?.natural === "passed", "it passed in the natural order");
   check(!!buggy?.races.some((g) => g.kind === "overwrote-newer" && g.op === "GET /api/search" && g.failing_seeds.length > 0), "with overwrote-newer on GET /api/search on a failing seed");
   check(fixed?.verdict === "passed", "the fixed page's test passed every time");
-  check(!!fixed && fixed.races.length === 0 && fixed.also_seen.length === 0 && fixed.runs.every((r) => r.races.length === 0), "no race seen on any run of the fixed page (false reports on the correct variant: 0)");
+  check(!!fixed && fixed.races.length === 0 && fixed.also_seen.length === 0 && fixed.runs.every((r) => r.races.length === 0), "no race seen on any run of the fixed page's same test");
+  // every run of every test on the fixed page (the correct variant): the false reports, counted and required to be 0
+  const onFixed = [fixed, flaky, broken].filter(Boolean);
+  const fixedRuns = onFixed.flatMap((t) => t.runs);
+  const falseReports = fixedRuns.filter((r) => r.races.length).length + onFixed.reduce((n, t) => n + t.races.length + t.also_seen.length, 0);
+  console.log(`RESULT fixed page: ${onFixed.length} tests, ${fixedRuns.length} runs, ${fixedRuns.filter((r) => r.race_file).length} with a race file, ${falseReports} with a race seen (false reports on the correct variant)`);
+  const buggyFailing = (buggy?.runs ?? []).filter((r) => !r.ok);
+  console.log(`RESULT buggy page: ${buggy?.verdict}, ${buggyFailing.length} of ${(buggy?.runs ?? []).length} runs failed, ${buggyFailing.filter((r) => r.races.length).length} of them with the race seen; failing seeds [${buggy?.failed_seeds}]`);
+  check(onFixed.length === 3 && fixedRuns.length === 3 * (runs + 1) && falseReports === 0, `no race seen on any of the ${fixedRuns.length} runs of the three fixed-page tests (false reports on the correct variant: 0)`);
   check(flaky?.verdict === "flaky" && JSON.stringify(flaky.failed_seeds) === "[3]" && flaky.watched_failing_runs === 1, "the planted flake is flaky: seed 3 only, watched, no race");
   check(broken?.verdict === "broken", "the test that asserts what the page never shows is broken");
   check(typeof j.replay === "string" && /^(npx )?genclass flake search\.spec\.ts:\d+ /.test(j.replay) && / --seed \d+$/.test(j.replay), `one replay command: ${j.replay}`);
@@ -177,8 +188,20 @@ try {
     const again = await runCli([...words, "--json"], dir);
     const r = JSON.parse(again.out);
     const t = r.tests[0];
-    console.log(`replay ${buggy.replay}: exit ${again.code} in ${((Date.now() - t1) / 1000).toFixed(1)} s: ${t?.verdict}, failed seeds [${t?.failed_seeds}], races ${t?.races.map((g) => `${g.kind} ${g.op}`).join("; ") || "none"}`);
+    console.log(`RESULT replay ${buggy.replay}: exit ${again.code} in ${((Date.now() - t1) / 1000).toFixed(1)} s: ${t?.verdict}, failed seeds [${t?.failed_seeds}], races ${t?.races.map((g) => `${g.kind} ${g.op}`).join("; ") || "none"}`);
     check(r.tests.length === 1 && t.verdict === "racy" && t.failed_seeds.length === 1 && t.races.some((g) => g.kind === "overwrote-newer"), "the replay fails again on that seed with the same race");
+  }
+  // a replay of a failing seed of 2 or more: the seed a run reports is its base plus Playwright's repeat index, and
+  // --seed N must hold the requests that run held (a replay of seed 1 alone never tells the two apart)
+  const later = buggy?.races.flatMap((g) => g.failing_seeds).find((s) => s >= 2);
+  if (later === undefined) console.log(`skip no failing seed of 2 or more with the race on this run (failing seeds [${buggy?.failed_seeds}]): the later-seed replay was not made`);
+  else {
+    const args = [`${buggy.file}:${buggy.line}`, ...(buggy.project ? ["--project", buggy.project] : []), "--seed", String(later), "--json"];
+    const again = await runCli(args, dir);
+    const r = JSON.parse(again.out);
+    const t = r.tests[0];
+    console.log(`RESULT replay of seed ${later}: exit ${again.code}: ${t?.verdict}, failed seeds [${t?.failed_seeds}], races ${t?.races.map((g) => `${g.kind} ${g.op}`).join("; ") || "none"}`);
+    check(r.tests.length === 1 && t.verdict === "racy" && JSON.stringify(t.failed_seeds) === `[${later}]` && t.races.some((g) => g.kind === "overwrote-newer"), `the replay of seed ${later} fails again with the same race`);
   }
 } catch (e) {
   failures.push(String(e?.message ?? e));

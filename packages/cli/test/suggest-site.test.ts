@@ -279,6 +279,10 @@ describe("genclass suggest: the scripts a page ships, read for secret keys (src/
     expect(srcs.at(-1)).toBe("https://shop.example/assets/c.js");
     expect(srcs.every((s) => s.startsWith("https://shop.example/"))).toBe(true);
     expect(srcs).not.toContain("https://shop.example/legacy.js");
+
+    // below the cap the preloads are in the list: a module preload and a script preload, not a style's (a Vite
+    // app whose entry chunk is only preloaded is still read for keys)
+    expect(scriptSources(`<script type="module" src="/assets/a.js"></script><link rel="modulepreload" href="/assets/c.js"><link rel="preload" as="script" href="/assets/d.js"><link rel="preload" as="style" href="/assets/e.css"><link rel="modulepreload" href="https://cdn.other.example/f.js">`, "https://shop.example/")).toEqual(["https://shop.example/assets/a.js", "https://shop.example/assets/c.js", "https://shop.example/assets/d.js"]);
   });
 
   it("a live page whose bundle holds a key: the kind and the script's path, with no query", async () => {

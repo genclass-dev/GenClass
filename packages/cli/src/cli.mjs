@@ -172,7 +172,11 @@ export async function run(argv, ctx = {}) {
     await (await import("./actions.mjs")).planNow(po).catch(() => "none");
     return code;
   };
-  if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
+  // --no-browser is one of this command's options for every command (the help lists it so): the runtime CLI's
+  // commands that do not take it (connect, init, scan, audit, logout, whoami, remove) get their words without it,
+  // and it is kept in `po` and in what paywall.mjs reads
+  const rargs = args.filter((a) => a !== "--no-browser");
+  if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, rargs);
   if (cmd === "login") {
     // the sign-in only; then Pro (paywall.mjs afterLogin) for an account without it; this folder's app is offered
     // to the account (the runtime login's own question) only once Pro is on, so nothing is written before Pro's card
@@ -183,19 +187,19 @@ export async function run(argv, ctx = {}) {
     if (!(await (await import("./paywall.mjs")).afterLogin(po).catch(() => true))) return code;
     return thenPlan(noConnect ? code : await login.offerConnect(args).catch(() => 1));
   }
-  if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
+  if (cmd === "remove") return (await import("./remove.mjs")).remove(rargs);
   // free and local, and its words are Playwright's: it reads them itself (flake.mjs)
   if (cmd === "flake") return (await import("./flake.mjs")).flake(args);
   if (["connect", "init", "scan", "audit"].includes(cmd)) {
     // words the command does not take: its own usage error, before anything is asked of genclass.dev
-    if (!asksHelp && !(await argsRight(cmd, args))) {
-      if (cmd === "connect") return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
-      if (cmd === "init") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
-      return (await import("../../runtime/bin/lib/scan.mjs")).run(cmd, args);
+    if (!asksHelp && !(await argsRight(cmd, rargs))) {
+      if (cmd === "connect") return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, rargs);
+      if (cmd === "init") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, rargs);
+      return (await import("../../runtime/bin/lib/scan.mjs")).run(cmd, rargs);
     }
     // the opt-out the setup prints works for everyone (AGENTS.md rule 8): on an app with GenClass in it, init
     // --no-telemetry (or --telemetry, to undo it) changes that one option, here on this machine
-    const optOut = cmd === "init" && telemetryOnly(args) && !(await import("../../runtime/bin/lib/init.mjs")).inspectProject({ cwd: po.cwd }).fresh;
+    const optOut = cmd === "init" && telemetryOnly(rargs) && !(await import("../../runtime/bin/lib/init.mjs")).inspectProject({ cwd: po.cwd }).fresh;
     const gate = optOut ? 0 : await paid();
     if (gate !== 0) {
       if (cmd !== "scan" && cmd !== "audit") return gate;
@@ -210,11 +214,11 @@ export async function run(argv, ctx = {}) {
       return 2;
     }
   }
-  if (cmd === "connect") return thenPlan(await (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args));
-  if (cmd === "init") return thenPlan(await (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args));
+  if (cmd === "connect") return thenPlan(await (await import("../../runtime/bin/lib/login.mjs")).run(cmd, rargs));
+  if (cmd === "init") return thenPlan(await (await import("../../runtime/bin/lib/init.mjs")).run(cmd, rargs));
   if (cmd === "scan" || cmd === "audit") {
     // this command carries no copy of the runtime's script-tag build, so the page check runs on genclass.dev unless asked otherwise
-    const withHost = args.includes("--local") || args.includes("--hosted") || args.includes("--help") ? args : [...args, "--hosted"];
+    const withHost = rargs.includes("--local") || rargs.includes("--hosted") || rargs.includes("--help") ? rargs : [...rargs, "--hosted"];
     return (await import("../../runtime/bin/lib/scan.mjs")).run(cmd, withHost);
   }
 

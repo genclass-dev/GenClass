@@ -9,13 +9,16 @@
 // - One next step at a time, always the first one open in the fixed order, and every run starts from what is true
 //   now: stopping at any point and running `genclass` again continues where it left off, and a step done by hand or
 //   by another tool counts.
-// - On a terminal a step starts on Enter, and Enter is the yes for what the step's sentence says it will write (s
-//   skips it for this run, q stops). With --yes nothing is asked: every step that needs no person is done, and what
-//   only a person can do (install the GitHub App, deploy) is printed with its address; the sign-in prints its link
-//   and code and waits for the approval (up to ten minutes), so a coding agent can hand them to the person. Without a
-//   terminal and without --yes nothing is done at all: the view and the next command are printed, which is what a
-//   coding agent reads. Input that ends at a question (end of file) stops the walk: an empty answer is an Enter only
-//   while someone can still type.
+// - On a terminal a step starts on Enter (or y, yes), and that is the yes for what the step's sentence says it will
+//   write; s or n (skip, no) skips it for this run, q (quit, exit, stop) stops, d shows every part. Any other answer
+//   is asked again: only a yes starts a step (stepKey). With --yes nothing is asked: every step that needs no person
+//   is done, and what only a person can do (install the GitHub App, deploy) is printed with its address; the sign-in
+//   prints its link and code and waits for the approval (up to ten minutes), so a coding agent can hand them to the
+//   person. Without a terminal and without --yes nothing is done at all: the view and the next command are printed,
+//   which is what a coding agent reads. Input that ends at a question (end of file) stops the walk: an empty answer
+//   is an Enter only while someone can still type.
+// - When the walk ends with a step still to do (a sign-in that failed, a step skipped), the last lines name it and
+//   the command that does it; the day-to-day commands that come with Pro are listed only once Pro is there.
 // - A step that fails or is skipped does not stop the ones after it that do not depend on it.
 
 import { join, resolve } from "node:path";
@@ -32,7 +35,10 @@ import { barPara, card, checklist, header, homeOpen, nextBlock, note, pick, PROM
  * about it.
  */
 export function show(state, details = false, welcome = false) {
-  const h = { app: state.app.name, framework: state.app.framework, account: state.account?.label ?? null, plan: planName(state), host: state.host };
+  // a saved session genclass.dev could not be asked about (offline) is the account the Account step shows as done,
+  // said as not checked, never as "not signed in"
+  const account = state.account?.label ?? (state.savedAccount ? `${state.savedAccount} (not checked)` : null);
+  const h = { app: state.app.name, framework: state.app.framework, account, plan: planName(state), host: state.host };
   // the first screen on a terminal is the welcome card; every later one, anything piped, and `status` typed in the
   // home (which showed the card once, at the top) is the two-line header
   if (welcome && canDraw() && !homeOpen()) card({ ...h, cwd: state.cwd, version: BUILD.version });
@@ -84,6 +90,20 @@ async function whichApp(cwd) {
   return join(here, dir);
 }
 
+/**
+ * What an answer at a step's prompt means: "go" (Enter, y, yes: start the step, which is the yes for what it says
+ * it writes), "skip" (s, skip, n, no), "details" (d: every part, or fewer), "quit" (q, quit, exit, stop), or null for
+ * anything else, which is asked again. A word is read whole, in any case: "nope" or "stop it" is not a key.
+ */
+export function stepKey(answer) {
+  const a = String(answer ?? "").trim().toLowerCase();
+  if (a === "" || a === "y" || a === "yes") return "go";
+  if (["s", "skip", "n", "no"].includes(a)) return "skip";
+  if (a === "d") return "details";
+  if (["q", "quit", "exit", "stop"].includes(a)) return "quit";
+  return null;
+}
+
 /** What comes next, in one sentence; with `details`, the fuller explanation under it. */
 function showNext(step, details) {
   nextBlock(step.doing, step.why);
@@ -106,18 +126,28 @@ function closing(state) {
   out();
   const waiting = state.steps.filter((s) => s.state === "waiting");
   const blocked = state.steps.find((s) => s.state === "blocked");
+  // a step still to do that this run did not do (the sign-in failed, or it was skipped): named, with its command
+  const todo = blocked || state.complete ? null : state.steps.find((s) => s.state === "todo");
   if (blocked) {
     /* show() has said where to run it */
   } else if (state.complete) out(`  ${c.green("Everything is set up.")}`);
-  else if (waiting.length) {
-    out(`  ${c.bold("Nothing more to do here right now.")}`);
-    waitingNotes(waiting);
+  else {
+    if (waiting.length) {
+      if (!todo) out(`  ${c.bold("Nothing more to do here right now.")}`);
+      waitingNotes(waiting);
+    }
+    if (todo) {
+      out(`  ${c.bold("Not done yet:")} ${todo.doing}`);
+      barPara(`${c.gray("Run")} ${c.cyan(todo.run ?? "npx genclass setup")}${todo.human ? c.gray(`  (then: ${todo.human})`) : ""}`, (l) => l);
+    }
   }
   out();
   out(`  ${c.gray("Day to day")}`);
   // the commands in one column with room after the longest, so the short name (genclass ...) keeps a gap too
   out(`    ${c.cyan("npx genclass".padEnd(25))}${c.gray("where things stand")}`);
-  out(`    ${c.cyan("npx genclass suggest".padEnd(25))}${c.gray("what your app is missing")}`);
+  // suggest is Pro's (cli.mjs FREE_COMMANDS): offered once the account has it, never to someone signed out
+  const pro = state.steps.find((s) => s.id === "plan");
+  if (state.signedIn && (!pro || pro.state === "done" || pro.state === "optional")) out(`    ${c.cyan("npx genclass suggest".padEnd(25))}${c.gray("what your app is missing")}`);
   if (state.app.token) out(`    ${c.cyan("npx genclass dashboard".padEnd(25))}${c.gray("what it found on your site")}`);
   out();
 }
@@ -194,12 +224,19 @@ async function walk(o, deps, auto) {
       const dot = c.gray("·");
       rule();
       const keys = `  ${PROMPT()} ${c.bold("Enter")} ${c.gray("to continue")} ${dot} ${c.bold("d")} ${c.gray(details ? "less" : "every part")} ${dot} ${c.bold("s")} ${c.gray("skip")} ${dot} ${c.bold("q")} ${c.gray("stop")}  `;
-      const a = (await typed(keys)) ?? "q";
-      if (/^d/i.test(a)) {
+      // only Enter or a yes starts the step: n or no skips it, as s does, and a word that is none of the keys is
+      // asked again (it never writes a file, opens a page or starts a sign-in)
+      let key = null;
+      while (key === null) {
+        const a = await typed(keys);
+        key = a === null ? "quit" : stepKey(a);
+        if (key === null) note(`Enter continues, d shows ${details ? "less" : "every part"}, s skips this step, q stops.`);
+      }
+      if (key === "details") {
         details = !details;
         continue;
       }
-      if (/^q/i.test(a)) {
+      if (key === "quit") {
         // leaving the walk is not leaving the command: its other commands are one prompt away
         if (o.home !== false && deps.home) {
           out();
@@ -211,7 +248,7 @@ async function walk(o, deps, auto) {
         out();
         return 0;
       }
-      if (/^s/i.test(a)) skip.push(step.id);
+      if (key === "skip") skip.push(step.id);
       else go = true;
       break;
     }

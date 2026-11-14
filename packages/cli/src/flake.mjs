@@ -9,22 +9,30 @@
 //     which request, the seed, and the command that replays that seed;
 //   - flaky: it failed on some runs and GenClass recorded no race on any failing run (or could not watch them):
 //     likely the test itself (a fixed wait, a timeout, state shared between tests);
-//   - broken: it failed on every run, in the natural order too.
+//   - broken: it failed on every run, in the natural order too. Without a natural-order run (--seed, --no-baseline)
+//     a test that failed on every seed with no race seen is listed apart, as failing on every seed with the order
+//     not checked, and the command that checks it is given; it is never said to fail "in the natural order too".
 // It ends with the one command that replays a failing seed and a prompt for the coding agent.
 //
 // Invariants:
 // - Local and free: nothing is sent anywhere, no sign-in, no Pro (cli.mjs FREE_COMMANDS). It runs the person's tests
 //   with the Playwright and @genclass/playwright installed in their project; it never installs anything, and when
 //   either (or @genclass/runtime) is missing it prints the exact install line and exits 2 without running anything.
+//   A runtime the app already lists in its dependencies (it ships GenClass) is installed without -D, so it stays
+//   there; everything else is a dev dependency.
 // - A test is called racy only when the race file of one of its failing runs shows a race. A run GenClass saw
 //   nothing on is said as "GenClass saw no race there", never as "there is no race"; a run it could not watch (no race
 //   file, the agent entry not connected) is said as that.
 // - It writes nothing in the project but what the run itself writes (Playwright's test-results, the race files in
 //   test-results/genclass). Its reporter and the results it collects live in a temporary folder removed at the end.
-// - The person's own reporters stay: with a Playwright that has --add-reporter ours is added on top; an older one
-//   gets --reporter with ours and theirs (Playwright then adds its line reporter for the terminal). The HTML report
-//   never opens a browser and waits (PLAYWRIGHT_HTML_OPEN=never). Retries are off unless --retries is passed: a
-//   retry would hide the failure this command is looking for.
+// - The person's own reporters stay on a Playwright that has --add-reporter: ours is added on top. An older one only
+//   has --reporter, which replaces the reporters in the playwright.config for that run: it gets ours and the ones
+//   given to this command with --reporter (Playwright then adds its own terminal output), and the run says so
+//   before it starts when none were given. The HTML report never opens a browser and waits
+//   (PLAYWRIGHT_HTML_OPEN=never). Retries are off unless --retries is passed: a retry would hide the failure this
+//   command is looking for.
+// - Every screen fits the window (58 columns and up), the help included; an install line is kept whole.
+// - With --json every exit prints one JSON object on stdout, the ones where nothing could be judged included.
 // - Text that came from the run (test titles, error messages, evidence lines) goes through clean() before it is
 //   printed or put into the prompt, and the prompt says it is data about the app, not instructions.
 // - Exit code: 0 when every test passed every time, 1 when one did not, 2 when nothing could be judged (a missing
@@ -54,32 +62,64 @@ const MAX_RACE_FILES = 20_000;
 /** Model diagnoses that are about the order things happened in (a witness always is). */
 const ORDER_DIAGNOSES = new Set(["stale", "duplicate", "conflict"]);
 
-/** The command's help. */
-export const FLAKE_USAGE = `usage: npx genclass flake [playwright test arguments ...] [--runs N] [--seed N] [--json]
+/** The help's parts; flakeUsage() lays them out for the window. */
+const HELP = {
+  // the usage line in the parts it may break between
+  head: ["usage: npx genclass flake", "[playwright test arguments ...]", "[--runs N]", "[--seed N]", "[--json]"],
+  intro: "Is a failing Playwright test flaky, or is your app racy? This runs your own suite with your own Playwright and @genclass/playwright: once with responses in their natural order, then once per seed with your app's API responses held for a seeded time, so they can arrive in another order. Then it says, for each test:",
+  verdicts: [
+    ["passed", "it passed every time"],
+    ["racy", "it failed on some runs, and on a failing run GenClass saw a race: which request came late, the seed, and the command that replays exactly that seed"],
+    ["flaky", "it failed on some runs and GenClass saw no race there: likely the test itself"],
+    ["broken", "it failed every time, in the natural order too (with --seed or --no-baseline there is no natural-order run: it failed on every seed, and whether the order matters is not checked)"],
+  ],
+  options: [
+    ["--runs N", `seeds per test (default ${DEFAULT_RUNS}, at most ${MAX_RUNS})`],
+    ["--seed N", "the first seed (default 1), without the natural-order run; alone it replays that one seed"],
+    ["--no-baseline", "no natural-order run first"],
+    ["--no-chaos", "every run in the natural order: plain repeats, nothing held"],
+    ["--json", "the same as data"],
+    ["--print", "only the prompt for your coding agent"],
+    ["--cwd <dir>", "the folder with your playwright.config"],
+  ],
+  tail: 'Every other argument goes to "playwright test": a file, file:line, --grep, --project, -c ... Retries are off unless you pass --retries (a retry would hide the failure). Your reporters stay on a Playwright with --add-reporter; an older one runs only ours and the ones you pass with --reporter. Local and free: nothing is sent anywhere, no sign-in. It needs, in the project, Playwright and:',
+  install: "npm install -D @genclass/playwright @genclass/runtime@beta",
+  after: "(an app that lists @genclass/runtime in its dependencies installs it without -D, so it stays there)",
+};
 
-Is a failing Playwright test flaky, or is your app racy? This runs your own suite with your own
-Playwright and @genclass/playwright: once with responses in their natural order, then once per seed
-with your app's API responses held for a seeded time, so they can arrive in another order. Then it
-says, for each test:
-  passed   it passed every time
-  racy     it failed on some runs, and on a failing run GenClass saw a race: which request came
-           late, the seed, and the command that replays exactly that seed
-  flaky    it failed on some runs and GenClass saw no race there: likely the test itself
-  broken   it failed every time, in the natural order too
+/**
+ * The command's help, laid out for `cols` columns (the window's): prose wrapped, the verdicts and the options as
+ * name and words with the words wrapped under themselves, every line within `cols` - 2; the install line is kept
+ * whole (it starts further left when it would not fit).
+ */
+export function flakeUsage(cols = width()) {
+  const w = Math.max(40, cols - 2);
+  const lines = [];
+  const prose = (t, first = "", next = first) => wrap(t, w - next.length).forEach((l, i) => lines.push(`${i ? next : first}${l}`));
+  const table = (rows, pad) => {
+    for (const [name, what] of rows) wrap(what, w - 2 - pad).forEach((l, i) => lines.push(`${i ? " ".repeat(2 + pad) : `  ${name.padEnd(pad)}`}${l}`));
+  };
+  let head = "";
+  for (const part of HELP.head) {
+    if (head && head.length + 1 + part.length > w) {
+      lines.push(head);
+      head = `  ${part}`;
+    } else head = head ? `${head} ${part}` : part;
+  }
+  lines.push(head, "");
+  prose(HELP.intro);
+  table(HELP.verdicts, 9);
+  lines.push("");
+  table(HELP.options, 16);
+  lines.push("");
+  prose(HELP.tail);
+  lines.push(`${" ".repeat(Math.max(0, Math.min(2, w - HELP.install.length)))}${HELP.install}`);
+  prose(HELP.after, "  ");
+  return `${lines.join("\n")}\n`;
+}
 
-  --runs N        seeds per test (default ${DEFAULT_RUNS}, at most ${MAX_RUNS})
-  --seed N        the first seed (default 1), without the natural-order run; alone it replays that one seed
-  --no-baseline   no natural-order run first
-  --no-chaos      every run in the natural order: plain repeats, nothing held
-  --json          the same as data
-  --print         only the prompt for your coding agent
-  --cwd <dir>     the folder with your playwright.config
-
-Every other argument goes to "playwright test": a file, file:line, --grep, --project, -c ...
-Retries are off unless you pass --retries (a retry would hide the failure). Your reporters stay.
-Local and free: nothing is sent anywhere, no sign-in. It needs, in the project, Playwright and:
-  npm install -D @genclass/playwright @genclass/runtime@beta
-`;
+/** The command's help at the default width (80 columns), for tests and anything that wants it as one string. */
+export const FLAKE_USAGE = flakeUsage(80);
 
 // ------------------------------------------------------------------------------------------------- arguments
 
@@ -122,6 +162,9 @@ export function parseFlakeArgs(argv) {
     else if (key === "--no-chaos") o.chaos = false;
     else if (key === "--json") o.json = true;
     else if (key === "--print") o.print = true;
+    // one of the genclass command's options for every command (its help lists it); this one opens no browser, and
+    // "playwright test" would refuse the word
+    else if (key === "--no-browser") continue;
     else if (key === "--cwd") {
       const v = value();
       if (!v) o.error ??= "--cwd needs a folder";
@@ -207,32 +250,44 @@ export function findTools(cwd, env = process.env) {
   return { playwright, genclassPlaywright, runtime };
 }
 
-/** The add command of the project's package manager, for dev dependencies. */
-export function addCommand(pm, pkgs) {
+/**
+ * The add command of the project's package manager: for dev dependencies, or with `dev` false a plain add (which
+ * keeps a package the project lists in its dependencies there).
+ */
+export function addCommand(pm, pkgs, dev = true) {
   const list = pkgs.join(" ");
-  if (pm === "pnpm") return `pnpm add -D ${list}`;
-  if (pm === "yarn") return `yarn add -D ${list}`;
-  if (pm === "bun") return `bun add -d ${list}`;
-  return `npm install -D ${list}`;
+  if (pm === "pnpm") return `pnpm add ${dev ? "-D " : ""}${list}`;
+  if (pm === "yarn") return `yarn add ${dev ? "-D " : ""}${list}`;
+  if (pm === "bun") return `bun add ${dev ? "-d " : ""}${list}`;
+  return `npm install ${dev ? "-D " : ""}${list}`;
+}
+
+/** Where a package.json lists @genclass/runtime: "dependencies" (an app that ships GenClass), "devDependencies", or null. */
+export function runtimeListed(pkg) {
+  const has = (k) => !!pkg && typeof pkg[k] === "object" && pkg[k] !== null && Object.hasOwn(pkg[k], "@genclass/runtime");
+  return has("dependencies") ? "dependencies" : has("devDependencies") ? "devDependencies" : null;
 }
 
 /**
  * What is missing for a run, each with the exact line that installs it: [{ what, why, run }]. Empty when the run can
- * start. `pm`: the project's package manager.
+ * start. `pm`: the project's package manager. `listed`: where the project's package.json lists @genclass/runtime
+ * (runtimeListed): in its dependencies, the runtime is installed without -D, so a production install keeps it.
  */
-export function missingTools(tools, pm = "npm") {
+export function missingTools(tools, pm = "npm", listed = null) {
   const miss = [];
   const named = (pkg, v) => (v ? `${pkg} ${v}` : pkg);
   if (!tools.playwright) miss.push({ what: "Playwright", why: "your tests run with your own Playwright, and this project has none", run: [addCommand(pm, ["@playwright/test"]), "npx playwright install chromium"] });
   const gp = tools.genclassPlaywright;
   const rt = tools.runtime;
   const needRuntime = !rt || !rt.ok;
+  const shipped = listed === "dependencies";
   if (!gp || !gp.bin) {
     const why = gp ? `the installed ${named("@genclass/playwright", gp.version)} has no built genclass-playwright-run command` : "it runs your suite with GenClass on the pages your tests open";
-    miss.push({ what: "@genclass/playwright", why, run: [addCommand(pm, ["@genclass/playwright", ...(needRuntime ? ["@genclass/runtime@beta"] : [])])] });
+    const run = needRuntime && shipped ? [addCommand(pm, ["@genclass/playwright"]), addCommand(pm, ["@genclass/runtime@beta"], false)] : [addCommand(pm, ["@genclass/playwright", ...(needRuntime ? ["@genclass/runtime@beta"] : [])])];
+    miss.push({ what: "@genclass/playwright", why, run });
   } else if (needRuntime) {
     const why = !rt ? "@genclass/playwright puts it on the pages your tests open" : rt.given ? `GENCLASS_RUNTIME_DIR names ${rt.dir}, which has no genclass.global.js` : rt.why === "no-build" ? `the installed ${named("@genclass/runtime", rt.version)} has no build (dist/genclass.global.js)` : `the installed ${named("@genclass/runtime", rt.version)} has no agent entry: 0.3.0-beta.1 or later is needed`;
-    miss.push({ what: "@genclass/runtime", why, run: [addCommand(pm, ["@genclass/runtime@beta"])] });
+    miss.push({ what: "@genclass/runtime", why, run: [addCommand(pm, ["@genclass/runtime@beta"], !shipped)] });
   }
   return miss;
 }
@@ -479,19 +534,22 @@ function verdictOf(t, o) {
     error: failing.find((r) => r.error)?.error ?? null,
     replay,
     replaySeed: seedRun ? seedRun.seed : null,
+    // failed on every seed with no natural-order run to compare with: the run that says whether the order matters
+    orderCheck: verdict === "broken" && !natural.length ? replayCommand(t, null, { ...o, whole: true }) : null,
   };
 }
 
 /**
  * The command that runs one test again: with `seed`, that seed's holds once (`genclass flake <file:line> --seed N`);
  * without one, in the natural order (`--no-chaos`), and for a broken test plain `playwright test`. `o.config`: the
- * -c the run had; `o.cwdArg`: the --cwd it had.
+ * -c the run had; `o.cwdArg`: the --cwd it had; `o.whole`: the whole check of that test (the natural order, then the
+ * seeds), with no seed named.
  */
 export function replayCommand(t, seed, o = {}) {
   const loc = t.line ? `${t.file}:${t.line}` : t.file;
   const extra = [...(t.project ? ["--project", t.project] : []), ...(o.config ? ["-c", o.config] : [])];
-  if (o.broken && seed === null) return `${o.cwdArg ? `cd ${shell(o.cwdArg)} && ` : ""}${["npx", "playwright", "test", loc, ...extra].map(shell).join(" ")}`;
-  const tail = seed === null ? ["--no-chaos"] : ["--seed", String(seed)];
+  if (o.broken && seed === null && !o.whole) return `${o.cwdArg ? `cd ${shell(o.cwdArg)} && ` : ""}${["npx", "playwright", "test", loc, ...extra].map(shell).join(" ")}`;
+  const tail = o.whole ? [] : seed === null ? ["--no-chaos"] : ["--seed", String(seed)];
   return ["npx", "genclass", "flake", loc, ...extra, ...(o.cwdArg ? ["--cwd", o.cwdArg] : []), ...tail].map(shell).join(" ");
 }
 
@@ -507,8 +565,19 @@ const VERDICT = {
   racy: { mark: () => c.red(sym.cross), head: "Racy: your app" },
   flaky: { mark: () => c.yellow(sym.warn), head: "Flaky: likely the test" },
   broken: { mark: () => c.red(sym.cross), head: "Broken: fails every time" },
+  // broken with no natural-order run (--seed, --no-baseline): what was measured, and no more
+  unordered: { mark: () => c.red(sym.cross), head: "Failed on every seed (no natural-order run)" },
   passed: { mark: () => c.green(sym.ok), head: "Passed every time" },
 };
+
+/** The groups the verdicts are listed in, the worst first: broken tests with no natural-order run apart. */
+const GROUPS = [
+  ["racy", (t) => t.verdict === "racy"],
+  ["flaky", (t) => t.verdict === "flaky"],
+  ["broken", (t) => t.verdict === "broken" && t.naturalRuns > 0],
+  ["unordered", (t) => t.verdict === "broken" && !t.naturalRuns],
+  ["passed", (t) => t.verdict === "passed"],
+];
 
 /** How each test ran, in words: "once in the natural order, then on seeds 1 to 5". */
 export function runsWords(plan) {
@@ -542,12 +611,22 @@ export function testLines(t, plan) {
     if (plan.chaos && t.natural === "passed" && t.failedSeeds.length && !t.passedSeeds.length) lines.push(["It passed in the natural order and failed on every seed: slower responses alone break it", c.gray]);
   } else if (t.verdict === "broken") {
     if (t.races.length) lines.push([`GenClass also saw a race there: ${listWords(t.races.map((g) => g.words))}; look at it too`, null]);
+    else if (!t.naturalRuns) lines.push([`${upper(watchWords(t))}`, c.gray]);
   }
   if (t.other.length) lines.push([`GenClass also flagged ${listWords(t.other.slice(0, 3).map((g) => g.words))} on the failing runs (not a race)`, c.gray]);
   if (t.alsoSeen.length && t.verdict !== "racy") lines.push([`GenClass saw a race only on runs that passed: ${listWords(t.alsoSeen.map((g) => g.words))}`, c.gray]);
   if (t.error) lines.push([`first error: ${t.error}`, c.gray]);
   if (t.replay) lines.push([`${t.replaySeed !== null ? `replay seed ${t.replaySeed}` : t.verdict === "broken" ? "run it alone" : "run it again"}: ${t.replay}`, c.cyan]);
+  if (t.orderCheck) lines.push([`with the natural order too: ${t.orderCheck}`, c.cyan]);
   return lines;
+}
+
+const upper = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
+
+/** What GenClass saw on a test's failing runs, in words, for a test with no race on them. */
+function watchWords(t) {
+  if (!t.watchedFailing) return `GenClass could not watch the failing runs (${t.unwatchedWhy}), so this says nothing about races`;
+  return t.watchedFailing === t.failingRuns ? `GenClass saw no race on the failing ${t.failingRuns === 1 ? "run" : "runs"}` : `GenClass saw no race on the ${t.watchedFailing} failing runs it could watch`;
 }
 
 /** Where a test failed, in words: "failed on seeds 2 and 4 of 5; passed in the natural order". */
@@ -583,7 +662,10 @@ export function flakePrompt(report, plan) {
   ];
   const racy = bad.filter((t) => t.verdict === "racy");
   const flaky = bad.filter((t) => t.verdict === "flaky");
-  const broken = bad.filter((t) => t.verdict === "broken");
+  // failing every time is about the order of responses only when the natural order failed too: a test with no
+  // natural-order run (--seed, --no-baseline) is said as failing on every seed, with the run that checks the order
+  const broken = bad.filter((t) => t.verdict === "broken" && t.naturalRuns > 0);
+  const unordered = bad.filter((t) => t.verdict === "broken" && !t.naturalRuns);
   if (racy.length) {
     lines.push("Races (the app's bug: the test fails when responses arrive in another order):");
     for (const t of racy) {
@@ -607,6 +689,11 @@ export function flakePrompt(report, plan) {
     for (const t of broken) lines.push(`- ${loc(t)} ${q(t.title)}${t.error ? `. First error: ${q(t.error, 160)}` : ""}. Run it alone: ${t.replay}`);
     lines.push("");
   }
+  if (unordered.length) {
+    lines.push("Failing on every seed, with no natural-order run (so this does not say whether the order of responses matters):");
+    for (const t of unordered) lines.push(`- ${loc(t)} ${q(t.title)}: failed on ${seedWords(t.failedSeeds)}; ${watchWords(t)}.${t.error ? ` First error: ${q(t.error, 160)}.` : ""} Run it again: ${t.replay}. With the natural order too: ${t.orderCheck}`);
+    lines.push("");
+  }
   let n = 1;
   if (racy.length) {
     lines.push(
@@ -617,6 +704,7 @@ export function flakePrompt(report, plan) {
   }
   if (flaky.length) lines.push(`${n++}. For each flaky test: run it again with its command and read the failure. Make it wait for what the user sees (expect(...).toHaveText, toBeVisible, toHaveURL) instead of a fixed time, and keep tests from sharing state. Do not raise timeouts or add retries to hide it.`);
   if (broken.length) lines.push(`${n++}. For each test that fails every time: run it alone; it fails in the natural order too, so it is the test or the app, not the order of responses.`);
+  if (unordered.length) lines.push(`${n++}. For each test that failed on every seed: run its "With the natural order too" command first. If the natural-order run fails as well, it is the test or the app, not the order of responses; if it passes, the order matters: look at what the page writes after each response.`);
   lines.push(`${n++}. Never make a test pass by weakening what it checks. Tell me, per test, what you changed and the verdict of \`npx genclass flake\` before and after.`);
   return lines.join("\n");
 }
@@ -644,6 +732,8 @@ export function flakeJson(report, plan, extra = {}) {
       unwatched: t.unwatchedWhy,
       first_error: t.error,
       replay: t.replay,
+      // a test that failed on every seed with no natural-order run: the run that says whether the order matters
+      order_check: t.orderCheck,
       runs: t.runs.map((r) => ({ order: r.order, seed: r.seed, retry: r.retry, ok: r.ok, status: r.status, race_file: r.raceFile, races: r.races.map((s) => s.sig) })),
     })),
     replay: fin?.command ?? null,
@@ -733,40 +823,57 @@ export async function flake(argv = [], deps = {}) {
   const env = deps.env ?? process.env;
   const say = a.json || a.print ? (s = "") => err(s) : (s = "") => out(s);
   if (a.help) {
-    out(FLAKE_USAGE);
+    out(flakeUsage());
     return 0;
   }
+  // with --json, an exit where nothing ran is one JSON object too (on stdout), and the sentence goes to stderr
+  const failed = (error, message) => {
+    if (a.json) out(JSON.stringify({ ok: false, error, ran: false, message: clean(message, 300) }, null, 2));
+    err(`genclass flake: ${message}`);
+    return 2;
+  };
   if (a.error) {
+    if (a.json) return failed("usage", a.error);
     err(`genclass flake: ${a.error}\n  The options: ${c.cyan("npx genclass flake --help")}`);
     return 2;
   }
   const cwd = resolve(deps.cwd ?? process.cwd(), a.cwd ?? ".");
-  if (!existsSync(cwd)) {
-    err(`genclass flake: there is no folder ${clean(a.cwd ?? cwd, 120)}`);
-    return 2;
-  }
+  if (!existsSync(cwd)) return failed("no-folder", `there is no folder ${clean(a.cwd ?? cwd, 120)}`);
   const tools = deps.tools ?? findTools(cwd, env);
+  const pkg = (() => {
+    try {
+      return readJson(join(cwd, "package.json"));
+    } catch {
+      return null;
+    }
+  })();
   const pm = (() => {
     try {
-      return detectPackageManager(cwd, readJson(join(cwd, "package.json")));
+      return detectPackageManager(cwd, pkg);
     } catch {
       return "npm";
     }
   })();
-  const missing = missingTools(tools, pm);
+  const missing = missingTools(tools, pm, runtimeListed(pkg));
   if (missing.length) {
     if (a.json) {
       out(JSON.stringify({ ok: false, error: "missing", ran: false, install: missing.map((m) => ({ package: m.what, why: m.why, run: m.run })) }, null, 2));
       return 2;
     }
     const w = a.print ? err : out;
+    // folded to the window like every other screen; an install line stays whole (further left when it must be)
+    const whole = (text, indent) => w(`${" ".repeat(Math.max(0, Math.min(indent, width() - 2 - text.length)))}${c.cyan(text)}`);
     w();
-    w(`  ${c.yellow(sym.warn)} ${c.bold("genclass flake runs your Playwright tests with GenClass, and this project is missing what it needs.")}`);
+    const [head = "", ...rest] = wrap("genclass flake runs your Playwright tests with GenClass, and this project is missing what it needs.", width() - 6);
+    w(`  ${c.yellow(sym.warn)} ${c.bold(head)}`);
+    for (const l of rest) w(`    ${c.bold(l)}`);
     w(`    ${c.gray("Nothing was run.")}`);
     w();
     for (const m of missing) {
-      w(`  ${c.bold(m.what)}${c.gray(`: ${m.why}`)}`);
-      for (const r of m.run) w(`    ${c.cyan(r)}`);
+      const [first = "", ...more] = wrap(`${m.what}: ${m.why}`, width() - 4);
+      w(`  ${first.startsWith(`${m.what}:`) ? `${c.bold(m.what)}${c.gray(first.slice(m.what.length))}` : c.gray(first)}`);
+      for (const l of more) w(`  ${c.gray(l)}`);
+      for (const r of m.run) whole(r, 4);
     }
     w();
     for (const l of wrap(`Then: npx genclass flake. Run it in the folder with your playwright.config (or --cwd apps/web), where "npx playwright test" works.`, width() - 4)) w(`  ${c.gray(l)}`);
@@ -801,6 +908,14 @@ export async function flake(argv = [], deps = {}) {
     const named = (pkg, v) => (v ? `${pkg} ${v}` : pkg);
     const intro = `Running your Playwright suite with ${named(tools.playwright.name, tools.playwright.version)} and ${named("@genclass/playwright", tools.genclassPlaywright.version)}, each test ${runsWords(view)}${a.chaos ? ", with your app's API responses held for a seeded time on each seed" : ""}. Retries are ${a.retries ? "as you asked" : "off"}; nothing is sent anywhere.`;
     for (const l of wrap(intro, width() - 4)) say(`  ${c.gray(l)}`);
+    // a Playwright without --add-reporter: its --reporter replaces the config's reporters for these runs
+    if (!tools.playwright.addReporter && !a.reporter) {
+      say();
+      const why = `Your ${named(tools.playwright.name, tools.playwright.version)} has no --add-reporter, so for these runs the reporters in your playwright.config are replaced by GenClass's (Playwright still prints its own lines here). To keep yours, pass them: --reporter html,junit (yours run next to GenClass's), or use a Playwright that has --add-reporter.`;
+      const [first = "", ...rest] = wrap(why, width() - 6);
+      say(`  ${c.yellow(sym.warn)} ${first}`);
+      for (const l of rest) say(`    ${l}`);
+    }
     const raceDir = raceDirOf(cwd, env);
     const done = [];
     let stopped = null;
@@ -820,6 +935,7 @@ export async function flake(argv = [], deps = {}) {
       // Playwright empties test-results when the next run starts: this run's race files are read now
       done.push({ order: run.order, seedBase: run.seedBase, results: results.tests, errors: results.errors, end: results.end, races: readRaceDir(raceDir), exit: exitOf(r) });
       if (r.error) {
+        if (a.json) out(JSON.stringify({ ok: false, error: "start", ran: false, message: `could not start genclass-playwright-run (${clean(r.error, 160)})` }, null, 2));
         err(`genclass flake: could not start genclass-playwright-run (${clean(r.error, 160)}). Nothing was judged.`);
         return 2;
       }
@@ -877,8 +993,8 @@ export async function flake(argv = [], deps = {}) {
     if (stopped?.why === "interrupted") out(`  ${c.yellow(sym.warn)} ${c.gray("The run was interrupted: this is what ran before it stopped.")}`);
     if (stopped?.why === "none") out(`  ${c.gray("The seeded run ran no test, so only the natural-order run is judged.")}`);
     const cols = width() - 8;
-    for (const v of ["racy", "flaky", "broken", "passed"]) {
-      const group = report.tests.filter((t) => t.verdict === v);
+    for (const [v, inGroup] of GROUPS) {
+      const group = report.tests.filter(inGroup);
       if (!group.length) continue;
       out();
       out(`  ${VERDICT[v].mark()} ${c.bold(`${VERDICT[v].head} (${group.length})`)}`);
