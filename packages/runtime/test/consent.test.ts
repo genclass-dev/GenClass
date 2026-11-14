@@ -609,6 +609,41 @@ describe("withdrawing analytics drops their queued events (CONTRACT section 17; 
     expect(sent.flat().some((e) => e.t === "summary")).toBe(true);
     expect(ix(sent.flat())).toEqual([]);
   });
+
+  it("analytics granted again before that request settles keep the new view's event (only those from before the withdrawal go)", async () => {
+    const sent: Ev[][] = [];
+    let settle: (() => void) | null = null;
+    let first = true;
+    const transport: TelemetryTransport = {
+      send(_u, body) {
+        const evs = (JSON.parse(body) as { events: Ev[] }).events;
+        if (first) {
+          first = false;
+          return new Promise<void>((r) => (settle = () => (sent.push(evs), r())));
+        }
+        sent.push(evs);
+        return Promise.resolve();
+      },
+    };
+    const p = page({ consent: "pending", dom: true, transport });
+    await p.rt.consent({ diagnostics: true, analytics: true });
+    const client = p.rt.telemetry as unknown as TelemetryClient;
+    await vi.waitFor(() => expect(client.pre).toBeTypeOf("function"));
+    client.summary("periodic");
+    void client.flush(); // in flight, with the first view's interactions event
+    await p.rt.consent({ analytics: false });
+    await p.rt.consent({ analytics: true });
+    await vi.waitFor(() => expect(client.pre).toBeTypeOf("function"));
+    client.summary("periodic"); // the analytics granted again queue their view's event
+    expect(ix(client["queue"] as Ev[])).toHaveLength(1);
+    settle!();
+    await drain();
+    expect(ix(client["queue"] as Ev[])).toHaveLength(1);
+    await p.clock.advance(1500);
+    await drain();
+    // the first request had left before the withdrawal; the second carries the new view's event
+    expect(sent.map((b) => ix(b).length)).toEqual([1, 1]);
+  });
 });
 
 describe("withdrawing the model while it loads stops the load (CONTRACT section 17; TELEMETRY.md Consent)", () => {
@@ -627,6 +662,39 @@ describe("withdrawing the model while it loads stops the load (CONTRACT section 
     await p.rt.consent({ model: true });
     expect(p.created.n).toBe(2);
   });
+
+  for (const gate of [true, false])
+    it(`a ready awaited while it loads resolves at the withdrawal, as with no model; an ask() rejects as unavailable (${gate ? "pending at start" : "no gate"})`, async () => {
+      const p = page(gate ? { consent: "pending" } : {});
+      if (gate) await p.rt.consent({ model: true });
+      expect(p.rt["decider"]!.status.state).toBe("loading");
+      const ready = p.rt.ready.then(
+        () => "resolved",
+        (e: Error) => `rejected: ${e.name}`,
+      );
+      const asked = p.rt.ask({ type: "noul", instructions: "x" }).then(
+        () => "answered",
+        (e: Error & { reason?: string }) => `${e.name} ${e.reason}: ${e.message}`,
+      );
+      await drain();
+      await p.rt.consent({ model: false });
+      await drain();
+      expect(await ready).toBe("resolved");
+      // the model did not fail to load: it is withdrawn, as when it waits for consent
+      expect(await asked).toBe("GenClassUnavailableError error: the model is off");
+      await p.rt.ready;
+      // a later grant loads again, and a ready read then waits for that load
+      await p.rt.consent({ model: true });
+      expect(p.created.n).toBe(2);
+      let again = false;
+      // (destroying the runtime rejects it: caught)
+      void p.rt.ready.then(
+        () => (again = true),
+        () => undefined,
+      );
+      await drain();
+      expect(again).toBe(false);
+    });
 
   it('the runtime hears the host put in place: its status reaches rt.on("status")', async () => {
     const p = page({ consent: "pending" });

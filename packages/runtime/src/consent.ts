@@ -270,10 +270,16 @@ function model(rt: RuntimeImpl, on: boolean): void {
     .catch(() => undefined);
 }
 
-/** Put a new host in the runtime's place for the old one (disposed), listened to as the old one was. */
+/**
+ * Put a new host in the runtime's place for the old one (disposed), listened to as the old one was. What waits for the
+ * old host's load (an app's `await rt.ready`, an ask()) is not rejected by its disposal: it waits on as `rt.ready` says
+ * now (resolved at once while the model is withdrawn, as with no model; a granted host's load otherwise).
+ */
 function swap(rt: RuntimeImpl, next: DecisionProvider): void {
   const old = rt["decider"];
   if (old === next) return;
+  // src/model/host.ts ModelHost: the ready() and load() promises it has not settled (it rejects them when disposed)
+  const waiting = (old as { readyWaiters?: { resolve(): void; reject(e: unknown): void }[] } | null)?.readyWaiters?.splice(0) ?? [];
   old?.dispose?.();
   rt["decider"] = next;
   const f = rt.onModel as ((s: ModelStatus) => void) | undefined;
@@ -281,5 +287,11 @@ function swap(rt: RuntimeImpl, next: DecisionProvider): void {
     next.onStatus(f);
     // what it did while being made (an eager start) is heard too
     f(next.status);
+  }
+  // after the choice is in rt.cs and `ready` was reset (model()); read only when something waits, as reading it starts
+  // a lazy load
+  if (waiting.length) {
+    const p = rt.ready;
+    for (const w of waiting) p.then(w.resolve, w.reject);
   }
 }

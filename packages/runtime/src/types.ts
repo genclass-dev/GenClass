@@ -1752,7 +1752,10 @@ export interface RuntimeEvents {
 }
 
 export interface Runtime {
-  /** Resolves when the model is loaded (immediately when there is no model). Accessing it starts a lazy load. */
+  /**
+   * Resolves when the model is loaded (immediately when there is no model, or while the built-in model's consent is
+   * pending or denied; at the withdrawal when one was awaited during a download). Accessing it starts a lazy load.
+   */
   readonly ready: Promise<void>;
   readonly status: ModelStatus;
   readonly mode: Mode;
