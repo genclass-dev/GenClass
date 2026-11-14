@@ -31,6 +31,8 @@
 - Consent mode: a `runtime.ready` awaited while the model downloads resolves when the model is withdrawn, as with no
   model, instead of rejecting with `ModelDisposedError`; an `ask()` waiting for it rejects with
   `GenClassUnavailableError` "the model is off", as while the model waits for consent.
+- Consent mode: the same with `model.unloadAfterIdleMs` set, where `runtime.ready` and `ask()` (with or without
+  `timeoutMs`) still failed with `ModelDisposedError` at the withdrawal.
 - Consent mode: analytics withdrawn and granted again before a telemetry request settles keep the new view's
   `interactions` event; only those queued before the withdrawal are dropped.
 - Consent mode: GenClass's own storage writes at a storage grant are no longer recorded as the app's `storage` events.

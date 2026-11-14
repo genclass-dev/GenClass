@@ -103,6 +103,8 @@ function page(
     preload?: "eager" | "idle" | "lazy";
     /** model.loadIf (default: always load). */
     loadIf?: () => unknown;
+    /** model.unloadAfterIdleMs (default: unset, the host is never unloaded). */
+    unloadAfterIdleMs?: number;
     /** The storages of an earlier page load in the same tab (they then record into this page's `calls`). */
     stores?: { local: RecStorage; session: RecStorage };
     /** The storage observer on, with a Storage class on the page. */
@@ -149,7 +151,12 @@ function page(
     global: g,
     report: "silent",
     observe: o.observeStorage ? { ...OFF, storage: true } : OFF,
-    model: { preload: o.preload ?? "eager", loadIf: o.loadIf ?? (() => true), workerFactory: fakeWorker(created, ended) } as never,
+    model: {
+      preload: o.preload ?? "eager",
+      loadIf: o.loadIf ?? (() => true),
+      ...(o.unloadAfterIdleMs ? { unloadAfterIdleMs: o.unloadAfterIdleMs } : {}),
+      workerFactory: fakeWorker(created, ended),
+    } as never,
     telemetry: o.telemetry ?? { transport: o.transport ?? transport, flushMs: 1000 },
     token: TOKEN,
     analytics: o.analytics ?? true,
@@ -663,38 +670,46 @@ describe("withdrawing the model while it loads stops the load (CONTRACT section 
     expect(p.created.n).toBe(2);
   });
 
+  // model.unloadAfterIdleMs (OPTIONS-SPEC's production example sets 300_000) puts the host in a wrapper (index.ts
+  // IdleUnloadProvider): what waits for the load is on the host inside it, and the wrapper, disposed, reads as that host
   for (const gate of [true, false])
-    it(`a ready awaited while it loads resolves at the withdrawal, as with no model; an ask() rejects as unavailable (${gate ? "pending at start" : "no gate"})`, async () => {
-      const p = page(gate ? { consent: "pending" } : {});
-      if (gate) await p.rt.consent({ model: true });
-      expect(p.rt["decider"]!.status.state).toBe("loading");
-      const ready = p.rt.ready.then(
-        () => "resolved",
-        (e: Error) => `rejected: ${e.name}`,
-      );
-      const asked = p.rt.ask({ type: "noul", instructions: "x" }).then(
-        () => "answered",
-        (e: Error & { reason?: string }) => `${e.name} ${e.reason}: ${e.message}`,
-      );
-      await drain();
-      await p.rt.consent({ model: false });
-      await drain();
-      expect(await ready).toBe("resolved");
-      // the model did not fail to load: it is withdrawn, as when it waits for consent
-      expect(await asked).toBe("GenClassUnavailableError error: the model is off");
-      await p.rt.ready;
-      // a later grant loads again, and a ready read then waits for that load
-      await p.rt.consent({ model: true });
-      expect(p.created.n).toBe(2);
-      let again = false;
-      // (destroying the runtime rejects it: caught)
-      void p.rt.ready.then(
-        () => (again = true),
-        () => undefined,
-      );
-      await drain();
-      expect(again).toBe(false);
-    });
+    for (const idle of [0, 600_000])
+      it(`a ready awaited while it loads resolves at the withdrawal, as with no model; an ask() rejects as unavailable (${gate ? "pending at start" : "no gate"}${idle ? `, model.unloadAfterIdleMs ${idle}` : ""})`, async () => {
+        const p = page({ ...(gate ? { consent: "pending" as const } : {}), ...(idle ? { unloadAfterIdleMs: idle } : {}) });
+        if (gate) await p.rt.consent({ model: true });
+        expect(p.rt["decider"]!.status.state).toBe("loading");
+        const ready = p.rt.ready.then(
+          () => "resolved",
+          (e: Error) => `rejected: ${e.name}`,
+        );
+        const unavailable = (e: Error & { reason?: string }) => `${e.name} ${e.reason}: ${e.message}`;
+        const asked = p.rt.ask({ type: "noul", instructions: "x" }).then(() => "answered", unavailable);
+        const askedInTime = p.rt.ask({ type: "noul", instructions: "x" }, { timeoutMs: 5000 }).then(() => "answered", unavailable);
+        await drain();
+        await p.rt.consent({ model: false });
+        await drain();
+        expect(p.ended.n).toBe(1);
+        expect(await ready).toBe("resolved");
+        // the model did not fail to load: it is withdrawn, as when it waits for consent
+        expect(await asked).toBe("GenClassUnavailableError error: the model is off");
+        expect(await askedInTime).toBe("GenClassUnavailableError error: the model is off");
+        await p.rt.ready;
+        // nothing loads it while it is withdrawn, through idle unloads too
+        await p.clock.advance(2 * (idle || 60_000));
+        await drain();
+        expect(p.created.n).toBe(1);
+        // a later grant loads again, and a ready read then waits for that load
+        await p.rt.consent({ model: true });
+        expect(p.created.n).toBe(2);
+        let again = false;
+        // (destroying the runtime rejects it: caught)
+        void p.rt.ready.then(
+          () => (again = true),
+          () => undefined,
+        );
+        await drain();
+        expect(again).toBe(false);
+      });
 
   it('the runtime hears the host put in place: its status reaches rt.on("status")', async () => {
     const p = page({ consent: "pending" });
