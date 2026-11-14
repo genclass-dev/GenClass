@@ -728,8 +728,10 @@ export async function connectAgent(state, o = {}) {
   if (skill) note(`And ${SKILL_PATH}: how the agent uses GenClass's tools (a file you changed is left alone).`);
   if (linkChanges.length) note("The link runs in development builds only, on pages served from this machine: a production build leaves it out, and npx genclass remove takes it out.");
   out();
-  // in the walk (o.confirmed) the step's Enter was the yes: its sentence says what it adds (main's 0.3.9 rule)
-  if (!o.yes && !o.confirmed) {
+  // in the walk (o.confirmed) the step's Enter was the yes for the MCP server and the skill, as its sentence says (the
+  // 0.3.9 rule); an edit to the app's own source (the link's import line) is asked for after its diff, as the runtime
+  // step's init and doctor --fix ask (pre-release check, 2026-11-14)
+  if (!o.yes && (!o.confirmed || linkChanges.length > 0)) {
     if (!interactive()) {
       note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write ${what}.`);
       return "skipped";

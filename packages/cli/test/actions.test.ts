@@ -279,26 +279,29 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
     const PATH = String(process.env.PATH ?? "").split(delimiter).filter((d) => d && !existsSync(join(d, "genclass"))).join(delimiter);
     const env = { ...process.env, PATH, NO_COLOR: "1", GENCLASS_HOST: "" };
     const main = fileURLToPath(new URL("../src/main.mjs", import.meta.url));
+    // a prerelease build names itself with its tag (npx genclass@alpha): plain npx genclass is npm's stable line
+    const line = /^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/.exec(BUILD.version)?.[1];
+    const NAME = line ? `npx genclass@${line}` : "npx genclass";
     const status = execFileSync(process.execPath, [main, "status", "--cwd", dir], { env, encoding: "utf8" });
     expect(status).toContain("GenClass");
     expect(status).toContain("shop");
     expect(status).toContain("Next  Sign in");
     expect(status).toContain("Later    Pro • Runtime");
-    expect(status).toContain("Every part: npx genclass status --all");
+    expect(status).toContain(`Every part: ${NAME} status --all`);
     // the full list on request: every part of GenClass by name
     const all = execFileSync(process.execPath, [main, "status", "--all", "--cwd", dir], { env, encoding: "utf8" });
     for (const part of ["Account", "Runtime", "Dashboard", "Test workflow", "GitHub App", "Coding agent", "Suggestions"]) expect(all, part).toContain(part);
     expect(all).not.toContain("Every part:");
-    expect(status).toContain("Run npx genclass login");
+    expect(status).toContain(`Run ${NAME} login`);
     // a command handed to the runtime CLI's own code prints this command's name
     // (signed out, whoami says how to sign in and exits 1)
     const ran = spawnSync(process.execPath, [main, "whoami"], { env, encoding: "utf8" });
     const who = `${ran.stdout}${ran.stderr}`;
     expect(ran.status).toBe(1);
-    expect(who).toContain("npx genclass login");
+    expect(who).toContain(`${NAME} login`);
     expect(who).not.toContain("@genclass/runtime");
     const json = JSON.parse(execFileSync(process.execPath, [main, "status", "--json", "--cwd", dir], { env, encoding: "utf8" }));
-    expect(json.next).toMatchObject({ id: "account", run: "npx genclass login" });
+    expect(json.next).toMatchObject({ id: "account", run: `${NAME} login` });
     // without a terminal, `genclass` alone changes nothing and prints the checklist
     const bare = execFileSync(process.execPath, [main, "--cwd", dir], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     expect(bare).toContain("Next  Sign in");

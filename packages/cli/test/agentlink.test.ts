@@ -770,10 +770,12 @@ describe("the walk's Coding agent step: the MCP server, the skill and the link i
       expect(no).toContain("Write .mcp.json, the skill and the dev-only link?");
       expect(no.match(/\(Y\/n\)/g)).toHaveLength(1);
       expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toBe(entry);
-      // in the walk (confirmed: the step's Enter was the yes, 0.3.9): the preview, then the writes, no second question
+      // in the walk (confirmed: the step's Enter was the yes for the MCP server and the skill, 0.3.9): an edit to the
+      // app's own source is still asked for once, after its diff (pre-release check, 2026-11-14)
+      type("");
       const yes = await printed(async () => expect(await connectAgent({ cwd: dir }, { confirmed: true })).toBe("done"));
       expect(yes).toContain("src/genclass.agent.js");
-      expect(yes.match(/\(Y\/n\)/g)).toBeNull();
+      expect(yes.match(/\(Y\/n\)/g)).toHaveLength(1);
       expect(readFileSync(join(dir, "src/genclass.agent.js"), "utf8")).toContain("connectAgent(GenClass.init())");
       expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toContain('import "./genclass.agent.js"; // genclass:init');
       expect(readFileSync(join(dir, ".mcp.json"), "utf8")).toContain("@genclass/mcp@");

@@ -41,14 +41,28 @@ export function viteApp(dir: string, pkg: Record<string, unknown> = {}): void {
  */
 export function isolate(): void {
   const saved: Record<string, string | undefined> = {};
+  let realFetch: typeof fetch | null = null;
   beforeEach(() => {
-    for (const k of ["XDG_CONFIG_HOME", "GENCLASS_HOST", "APPDATA", "CI"]) saved[k] = process.env[k];
+    // no test ever reaches production genclass.dev: a request there fails as if offline (a test that wants the server
+    // passes its own fetchFn, a stand-in or the collector in process). Before this, init's account step created a
+    // real app there on every run of actions.test.ts.
+    realFetch = globalThis.fetch;
+    globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+      const u = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (/^https?:\/\/(?:[^/]*\.)?genclass\.dev(?:[:/]|$)/i.test(u)) return Promise.reject(Object.assign(new TypeError("fetch failed (tests never reach genclass.dev)"), { cause: { code: "ENOTFOUND" } }));
+      return realFetch!(input as never, init);
+    }) as typeof fetch;
+    for (const k of ["XDG_CONFIG_HOME", "GENCLASS_HOST", "APPDATA", "CI", "NO_UPDATE_NOTIFIER", "GENCLASS_NO_UPDATE"]) saved[k] = process.env[k];
+    // the update opt-outs belong to the person running the tests, never to the code under test
+    delete process.env.NO_UPDATE_NOTIFIER;
+    delete process.env.GENCLASS_NO_UPDATE;
     process.env.XDG_CONFIG_HOME = tempDir("genclass-cfg-");
     process.env.APPDATA = process.env.XDG_CONFIG_HOME;
     delete process.env.GENCLASS_HOST;
     process.env.CI = "1"; // no browser is opened by a test
   });
   afterEach(() => {
+    if (realFetch) globalThis.fetch = realFetch;
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;

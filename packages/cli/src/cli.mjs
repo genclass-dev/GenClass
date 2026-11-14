@@ -70,6 +70,17 @@ const HELP = [
 ];
 
 /**
+ * A help line with the command named as this run prints it: `genclass` once installed (name.mjs shortens it), or
+ * `npx genclass@alpha` for a prerelease run through npx (name.mjs useTaggedName): laid out with that name, so the
+ * columns line up after the output is rewritten.
+ */
+function named0(t) {
+  if (isShort()) return shorten(t);
+  const cmd = globalThis.__GENCLASS_CLI__?.cmd ?? "npx genclass";
+  return cmd !== "npx genclass" && cmd.startsWith("npx genclass@") ? String(t).replace(/(^|[^\w-])npx genclass(?![@\w-])/g, `$1${cmd}`) : t;
+}
+
+/**
  * The help, laid out for `cols` columns (the terminal's): a command and its words side by side on a wide terminal,
  * the words under the command on a narrow one (58 columns and up), every line within `cols`.
  */
@@ -83,10 +94,12 @@ export function usage(cols = width()) {
   lines.push("");
   text("The genclass command comes with Pro: 3 days free, then $15 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, privacy, doctor, flake, remove, help. Free is on the website: https://genclass.dev", "  ");
   const side = w >= 78;
-  const col = 30;
+  // the command column fits the longest name as it is printed (npx genclass@alpha suggest [url] is 32 wide)
+  const longest = Math.max(...HELP.flatMap(([, rows]) => rows.map(([cmd]) => named0(cmd).length)));
+  const col = Math.max(30, Math.min(40, longest + 4));
   // laid out with the name as it is printed: once `genclass` is installed every `npx genclass` is shortened on its
   // way out (name.mjs), so padding the long form would leave the first column four characters short
-  const named = (t) => (isShort() ? shorten(t) : t);
+  const named = named0;
   for (const [head, rows] of HELP) {
     lines.push("");
     if (head) lines.push(`  ${head}`);
@@ -106,7 +119,9 @@ export function usage(cols = width()) {
   lines.push("");
   text("Options: --app <name>  --range 24h|7d|30d|90d|1y  --all  --json  --cwd <dir>  --yes  --no-browser  --help  --version", "  ");
   lines.push("");
-  text('Run it in your web app\'s folder. npx runs it without installing; "npm install -g genclass" makes it just "genclass". Every part GenClass sets up is listed by "npx genclass status --all". Docs: https://genclass.dev/docs/cli', "  ");
+  // a prerelease is installed by its tag: plain "genclass" on npm is the stable line, which lacks this line's commands
+  const line = /^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/.exec(BUILD.version)?.[1] ?? "";
+  text(`Run it in your web app's folder. npx runs it without installing; "npm install -g genclass${line ? `@${line}` : ""}" makes it just "genclass". Every part GenClass sets up is listed by "npx genclass status --all". Docs: https://genclass.dev/docs/cli`, "  ");
   return lines.join("\n");
 }
 
@@ -127,7 +142,8 @@ export function parseArgs(argv) {
     if (key && BOOL[key] && eq < 0) o[BOOL[key]] = true;
     else if (key && VALUE[key]) {
       const v = eq > 0 ? a.slice(eq + 1) : argv[++i];
-      if (v === undefined || v === "") return { o, rest, error: `--${key} needs a value` };
+      // a flag where the value should be (privacy --out --json) is a missing value, never a file named "--json"
+      if (v === undefined || v === "" || (eq < 0 && /^--?[A-Za-z]/.test(v))) return { o, rest, error: `--${key} needs a value` };
       o[VALUE[key]] = v;
     } else rest.push(a);
   }
@@ -228,7 +244,7 @@ export async function run(argv, ctx = {}) {
 
   const { o, rest, error } = parseArgs(args);
   if (error) {
-    err(`genclass: ${error}\n\n${usage()}`);
+    err(`genclass: ${error}\n  Every command and option: ${c.cyan("npx genclass help")}`);
     return 2;
   }
   if (o.version || cmd === "version") {

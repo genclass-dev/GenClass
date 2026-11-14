@@ -17,7 +17,7 @@
 
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
-import { installedVersion, installGlobally, isShort, latestOnNpm, newer, readPrefs, savePrefs, shortNameWorks, useShortName, viaNpx } from "./name.mjs";
+import { installedVersion, installGlobally, isShort, latestOnNpm, lineOf, newer, readPrefs, savePrefs, shortNameWorks, useShortName, viaNpx } from "./name.mjs";
 import { planName } from "./state.mjs";
 import { header, inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
 
@@ -117,7 +117,7 @@ export function menu(all = false, free = false) {
     if (all) {
       const names = COMMANDS.map(([n]) => n);
       for (let i = 0; i < names.length; i += 4) out(`    ${c.cyan(names.slice(i, i + 4).map((n) => n.padEnd(13)).join(""))}`);
-      note("All but upgrade, profile, plan, status, login and remove come with Pro.");
+      note("Without Pro: upgrade, profile, plan, status, login, remove, and the local privacy, doctor and flake. The others come with Pro.");
       return;
     }
     const pad = Math.max(...FREE_MENU.map(([n]) => n.length)) + 2;
@@ -143,6 +143,11 @@ const DAY = 24 * 60 * 60_000;
  */
 export async function installShortName(deps = {}) {
   if (isShort() || process.env.CI || process.env.GENCLASS_NO_INSTALL || !(deps.interactive ?? interactive)()) return "skipped";
+  // a prerelease (genclass@alpha) never installs itself or replaces an installed copy: trying the alpha through npx
+  // must not swap someone's stable command for it (pre-release check, 2026-11-14); npm install -g genclass@alpha by hand
+  const version = deps.version ?? BUILD.version;
+  if (lineOf(version)) return "skipped";
+  const quiet = !!(process.env.NO_UPDATE_NOTIFIER || process.env.GENCLASS_NO_UPDATE);
   const p = readPrefs();
   const now = deps.now ?? Date.now();
   const install = deps.install ?? installGlobally;
@@ -152,7 +157,10 @@ export async function installShortName(deps = {}) {
     const have = (deps.installedVersion ?? installedVersion)();
     const npx = (deps.viaNpx ?? viaNpx)();
     let want = null;
-    if (have && npx) want = newer(BUILD.version, have) ? BUILD.version : null;
+    // only within one line: a stable run never replaces an installed prerelease, and the update opt-outs
+    // (NO_UPDATE_NOTIFIER, GENCLASS_NO_UPDATE) stop the daily check and the replacement
+    if (quiet || lineOf(have)) want = null;
+    else if (have && npx) want = newer(version, have) ? version : null;
     else if (have && !(p.updateCheckedAt && now - Date.parse(p.updateCheckedAt) < DAY)) {
       savePrefs({ updateCheckedAt: new Date(now).toISOString() });
       const latest = await (deps.latest ?? latestOnNpm)();
@@ -180,7 +188,7 @@ export async function installShortName(deps = {}) {
   if (p.installFailedAt && now - Date.parse(p.installFailedAt) < DAY) return "skipped";
   out();
   const sp = spinner("Adding the genclass command to your terminal");
-  const r = await install(BUILD.version);
+  const r = await install(version);
   if (!r.ok) {
     savePrefs({ installFailedAt: new Date(now).toISOString() });
     sp.stop("warn", "Could not add the genclass command. npx genclass keeps working.");

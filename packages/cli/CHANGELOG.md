@@ -3,8 +3,20 @@
 ## 0.4.0-alpha.0 (genclass-alpha)
 
 On npm's `alpha` tag: `npx genclass@alpha` (or `npm install -g genclass@alpha`); `npx genclass` stays on the stable
-line. Everything in 0.3.9 is in it too. Piping the command into a reader that stops early (`genclass help | head`) no
-longer ends with a stack trace.
+line. Everything in 0.3.9 is in it too. Fixed in the pre-release check:
+
+- A prerelease never installs itself or replaces an installed `genclass` (and a stable run never replaces an installed
+  alpha), the installed copy's refresh honours `NO_UPDATE_NOTIFIER` and `GENCLASS_NO_UPDATE`, and `alpha.10` is newer
+  than `alpha.9`.
+- Run through npx, the alpha names itself `npx genclass@alpha` in every hint, `--json` included (plain `npx genclass`
+  is npm's stable line, which has no `privacy`, `doctor` or `flake`), and says `genclass` only when the installed copy
+  is on the alpha line; the help's columns follow the longer name.
+- In the walk, the Coding agent step still asks after the diff when it edits the app's own source (the link's import
+  line); the MCP server and the skill are written on the step's Enter, as 0.3.9 does.
+- A flag where a value should be (`privacy --out --json`) is a missing value, said in one line.
+- The Free prompt's help names the free local commands (privacy, doctor, flake).
+- Piping the command into a reader that stops early (`genclass help | head`) no longer ends with a stack trace.
+- The CLI's tests never reach production genclass.dev (one of them created an app there on every run since 0.2.1).
 
 The alpha line: new commands from a full walk of 0.3.8 against a local genclass.dev, a coding agent fixing a real race
 with `genclass fix`'s prompt, and research on what developers ask for and on compliance.

@@ -22,8 +22,10 @@ globalThis.__GENCLASS_CLI__ = { name: "genclass", brand: "GenClass", cmd: "npx g
 
 try {
   // once `genclass` is installed, every screen says `genclass`; until then, `npx genclass` (name.mjs)
-  const { shortNameWorks, useShortName } = await import("./name.mjs");
+  const { lineOf, shortNameWorks, useShortName, useTaggedName } = await import("./name.mjs");
   if (shortNameWorks()) useShortName();
+  // a prerelease that cannot say `genclass` names itself with its tag (npx genclass@alpha), never npm's latest
+  else if (lineOf(BUILD.version)) useTaggedName(lineOf(BUILD.version));
   const { run } = await import("./cli.mjs");
   process.exitCode = await run(process.argv.slice(2));
 } catch (e) {

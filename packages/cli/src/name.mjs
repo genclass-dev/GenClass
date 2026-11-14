@@ -66,8 +66,28 @@ export function newer(a, b) {
   if (!x || !y) return false;
   for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
   if (x[3] === y[3]) return false;
-  return x[3] === null ? true : y[3] === null ? false : x[3] > y[3];
+  if (x[3] === null) return true;
+  if (y[3] === null) return false;
+  // prerelease identifiers one by one, numbers as numbers (alpha.10 is newer than alpha.9), as semver orders them
+  const xs = x[3].split(".");
+  const ys = y[3].split(".");
+  for (let i = 0; i < Math.max(xs.length, ys.length); i++) {
+    if (xs[i] === undefined) return false;
+    if (ys[i] === undefined) return true;
+    const xn = /^\d+$/.test(xs[i]);
+    const yn = /^\d+$/.test(ys[i]);
+    if (xn && yn) {
+      if (Number(xs[i]) !== Number(ys[i])) return Number(xs[i]) > Number(ys[i]);
+    } else if (xs[i] !== ys[i]) return xn ? false : yn ? true : xs[i] > ys[i];
+  }
+  return false;
 }
+
+/** The release line of a version: its prerelease tag ("alpha" for 0.4.0-alpha.0, as release-cli.yml names it) or "". */
+export const lineOf = (v) => {
+  const m = /^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/.exec(String(v ?? ""));
+  return m ? m[1] : "";
+};
 
 /** The newest genclass on npm (`latest`), or null within `timeoutMs` (no network, an error): best effort. */
 export async function latestOnNpm(fetchFn = globalThis.fetch, timeoutMs = 2000) {
@@ -87,8 +107,26 @@ export async function latestOnNpm(fetchFn = globalThis.fetch, timeoutMs = 2000) 
 }
 
 /** Whether typing `genclass` in the person's shell runs this command. */
-export function shortNameWorks(env = process.env, platform = process.platform) {
-  return shortNameFile(env, platform) !== null;
+export function shortNameWorks(env = process.env, platform = process.platform, version = globalThis.__GENCLASS_CLI__?.version) {
+  if (shortNameFile(env, platform) === null) return false;
+  // a prerelease (genclass@alpha) says `genclass` only when the installed copy is on its line: typing `genclass` must
+  // run a command that has what this one names (privacy, doctor, flake), not a stable copy without them
+  if (!lineOf(version)) return true;
+  return lineOf(installedVersion(env, platform)) === lineOf(version);
+}
+
+/**
+ * From now on everything this process prints says `npx genclass@<tag>` where it would say `npx genclass` (a
+ * prerelease run through npx: plain `npx genclass` is npm's latest, the stable line, which lacks this line's commands).
+ */
+export function useTaggedName(tag) {
+  if (!tag || short) return;
+  const cmd = `npx genclass@${tag}`;
+  if (globalThis.__GENCLASS_CLI__) globalThis.__GENCLASS_CLI__.cmd = cmd;
+  for (const stream of [process.stdout, process.stderr]) {
+    const write = stream.write.bind(stream);
+    stream.write = (chunk, ...rest) => write(typeof chunk === "string" ? chunk.replace(/(^|[^\w-]|\u001b\[[0-9;]*m)npx genclass(?![@\w-])/g, `$1${cmd}`) : chunk, ...rest);
+  }
 }
 
 /** `text` with every `npx genclass` said the short way. */
