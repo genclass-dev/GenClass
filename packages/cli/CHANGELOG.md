@@ -91,6 +91,29 @@ Fixed from the walk:
 - A mistyped command or option says one line and `npx genclass help`, instead of the whole help.
 - `funnels` lines its counts up in one column.
 
+Fixed in `genclass privacy` (and so in `doctor`'s Diagnostics row):
+
+- Options are read only from GenClass's own places (GENCLASS_CONFIG, `GenClass.init({...})`, the Nuxt and Astro
+  options, the meta and script tags, the `/auto` import), each key in its own object, comments taken out: another
+  library's `endpoint:` or `baseUrl:`, a commented-out `telemetry: false` or a template's "switch to /auto/guard" note
+  no longer change the map.
+- Nuxt (`@genclass/nuxt`) and Astro (`@genclass/astro`) setups count as installed, with their mode and telemetry.
+- Test setup files (`vitest.setup.ts`, `setupTests.ts`, Cypress, Playwright, `spec/`) never count, on Windows too.
+- The consent gate is described as working only when the project's runtime has it: 0.3.0-beta.6 and earlier ignore
+  `consent`, and the map says so (and stops recommending it) instead of promising that nothing is sent.
+- `consent: { model: true }` grants the model at start; only the parts it leaves out wait.
+- `breaker: { persist: false }` no longer hides learned flows, and `telemetry.sample` no longer adds a bucket entry.
+- ONNX Runtime's wasm is listed from jsDelivr when `model.baseUrl` is set without `ortWasmPaths`.
+- A script tag on a CDN names the CDN as a recipient, with its `script-src` line.
+- Webhook sinks from the `webhook()` adapter or a same-origin path (`webhook:/genclass`) are listed.
+- "Stored on the device" lists what the device section lists (the model in Cache Storage included); learned flows
+  name their `sessionStorage` entry; the analytics visit entry is said to have no expiry.
+- The EU section says "no recipient to disclose" only when nothing leaves the browser; the opt-outs say they stop
+  diagnostics and analytics only; IP addresses are said to reach every recipient, never stored by GenClass; with an
+  app key, genclass.dev's row names forwarding and OpenAI (PRIVACY.md).
+- SvelteKit's self-host command uses `static/`; the `--out` line says `npx genclass privacy`; options set by code are
+  named in a "Not read" row.
+
 ## 0.3.8
 
 Fixes from a signed-in walk of 0.3.7 against a fresh account, a team and a grant:
