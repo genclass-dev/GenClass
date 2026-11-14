@@ -1543,7 +1543,16 @@ export async function privacy(o = {}, deps = {}) {
     out(md);
     return s.installed ? 0 : 1;
   }
-  header({ app: s.app, framework: s.framework });
+  // who is signed in, from the session file on this machine only (privacy itself needs no account and asks nothing)
+  let account = null;
+  try {
+    const { readCredentialsFor } = await import("../../runtime/bin/lib/account.mjs");
+    const got = readCredentialsFor();
+    account = got?.creds?.account?.email ?? got?.creds?.account?.github_login ?? null;
+  } catch {
+    /* no session: the header says so */
+  }
+  header({ app: s.app, framework: s.framework, account });
   out();
   note("What GenClass sends from your visitors' browsers, and what it keeps there, read from this project's files. Not legal advice.");
   if (!s.installed) {
