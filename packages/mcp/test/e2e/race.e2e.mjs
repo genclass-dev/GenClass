@@ -8,7 +8,7 @@
 // the built runtime from packages/runtime/dist), and drives Chromium through the same steps an agent would take with
 // the MCP tools:
 //   1. explore on the buggy page: two baselines, one with no added delay, + 6 seeded orders with up to 600 ms of extra
-//      latency → a race finding;
+//      latency (9 loads), then genclass_explore wait (all 9 in) → a race finding;
 //   2. replay the finding → reproduced;
 //   3. write the generated regression test and run it with Playwright → fails on the buggy page;
 //   4. switch the server to the fixed page; replay → not reproduced; the regression test → passes; explore → no race.
@@ -81,7 +81,8 @@ let id = 0;
 async function rpc(method, params = {}) {
   const my = ++id;
   input.write(`${JSON.stringify({ jsonrpc: "2.0", id: my, method, params })}\n`);
-  for (let i = 0; i < 500; i++) {
+  // up to 35 s: genclass_explore wait answers when the loads are in
+  for (let i = 0; i < 3500; i++) {
     const m = lines.find((x) => x.id === my);
     if (m) return m;
     await new Promise((r) => setTimeout(r, 10));
@@ -123,6 +124,11 @@ summary.buggyRuns = [];
 // the plan says how many loads: 2 baselines, one with no added delay, 6 seeded
 const loadsIn = (text) => Number(/next (\d+) page loads/.exec(text)[1]);
 for (let i = 0; i < loadsIn(armed); i++) summary.buggyRuns.push(await scenario());
+// what an agent calls after driving the loads, instead of sleeping in a shell
+const waited = await tool("genclass_explore", { action: "wait", timeout_s: 30 });
+console.log(waited);
+summary.waitBuggy = /all (\d+) loads in/.exec(waited)?.[0] ?? waited;
+if (!new RegExp(`all ${loadsIn(armed)} loads in`).test(waited)) fail("explore wait did not see every armed load");
 const report = await tool("genclass_explore", { action: "report" });
 console.log(report);
 summary.exploreBuggy = /RACE: (\d+) of (\d+)/.exec(report)?.slice(1).join("/") ?? "no race";
@@ -133,6 +139,10 @@ const explain = await tool("genclass_explain", { id: fid });
 console.log(explain);
 const test = /```ts\n([\s\S]*?)```/.exec(explain)?.[1];
 if (!test) fail("explain gave no regression test");
+// the file says what it needs, holds the page to what the baselines showed, and declares nothing it does not read
+if (!test.startsWith("// Needs @playwright/test")) fail("the regression test does not open with what it needs");
+if (!/the fixed page keeps showing it/.test(test) || /TODO: assert what the user should see/.test(test)) fail("the regression test has no positive assertion of what the baseline showed");
+if (/void (witnesses|errors|snap)/.test(test)) fail("the regression test declares records it does not read");
 
 // 2. replay → reproduced
 await tool("genclass_replay", { action: "arm", id: fid });
@@ -178,6 +188,8 @@ armed = await tool("genclass_explore", { action: "start", runs: 6, slow_ms: 600 
 console.log(armed);
 summary.fixedRuns = [];
 for (let i = 0; i < loadsIn(armed); i++) summary.fixedRuns.push(await scenario());
+const waited2 = await tool("genclass_explore", { action: "wait", timeout_s: 30 });
+if (!new RegExp(`all ${loadsIn(armed)} loads in`).test(waited2)) fail("explore wait did not see every armed load (fixed page)");
 const report2 = await tool("genclass_explore", { action: "report" });
 console.log(report2);
 summary.exploreFixed = /RACE:/.test(report2) ? "race" : "no race";

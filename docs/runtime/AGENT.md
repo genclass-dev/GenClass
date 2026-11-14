@@ -141,6 +141,12 @@ lists. It never writes to the event log and never feeds a situation, a decision 
   toasts), and requests sent per signature. When the page goes away, a final
   snapshot is sent only if the page is quiet, differs from the last one sent, and fits a keepalive request (48,000
   characters); otherwise the last quiet snapshot stands.
+- **Operation numbers.** Each batch of steps carries, as `ops` (`[id, name]` pairs, at most 2,000 per batch), the
+  runtime's operation numbers its new steps stand for: a request's key or a user action's index (every keystroke of a
+  typing burst names the same action). The model's situation text numbers operations (`#3`); with these the bridge
+  writes that text in the steps' numbering when it shows it to the agent.
+- **The runtime's state.** The hello carries the mode and the model state; a `runtime` event follows each time either
+  changes (the model usually loads after the hello), not on every status update.
 
 ## 3. Schedules (`src/agent/schedule.ts`)
 
@@ -200,17 +206,23 @@ directory (`.genclass/agent`, or `GENCLASS_STATE_DIR` relative to the project; i
 agent session sees what the last one found; the runs findings need are always kept. Armed explores and replays expire
 after 30 minutes and are not restored after a restart.
 
+Several apps can run on one machine (a shop on `:5173`, its admin on `:3000`) and share routes. Every run and finding
+keeps its page origin (the browser's `Origin` at hello, else the page URL's), the origin is part of a finding's dedup
+key, `genclass_status` and `genclass_findings` group by it and take an `origin` filter (an exact origin or a bare port),
+an explore session belongs to the app of its first load (as to its page), and an armed replay is taken only by a load of
+the finding's app.
+
 ### 4.2 Tools
 
 | tool | what the agent gets |
 |---|---|
-| `genclass_status` | connected pages (route, schedule, model state), counts of findings, the explore session, armed replays |
-| `genclass_findings` | ranked, deduplicated findings with counts and the last replay verdict |
-| `genclass_explain` | one finding: the evidence in causal order, the recorded steps and delivery order, the model's last situation, how to replay, and a Playwright regression test |
-| `genclass_explore` | `start` (two baselines + N seeded loads, optional `focus`, `route`, `slow_ms`, which adds a third baseline with no added delay), `report` (the verdict per scenario, race findings with a replayable seed), `stop` |
+| `genclass_status` | connected pages grouped by app (page origin: route, schedule, model state as the page last reported it), counts of findings (per app when there are several), the explore session, armed replays; `origin` keeps one app |
+| `genclass_findings` | ranked, deduplicated findings grouped by app, with counts and the last replay verdict; `origin` keeps one app |
+| `genclass_explain` | one finding: the evidence in causal order, the recorded steps and delivery order, the model's last situation in the steps' numbering (left out for an explore race), how to replay, and a Playwright regression test |
+| `genclass_explore` | `start` (two baselines + N seeded loads, optional `focus`, `route`, `slow_ms`, which adds a third baseline with no added delay: `runs + 2` loads, `runs + 3` with `slow_ms`), `wait` (blocks until every armed load is in, or `timeout_s`, default 120, at most 300; MCP progress), `report` (the verdict per scenario, race findings with a replayable seed), `stop` |
 | `genclass_replay` | `arm` the next page load with a finding's order; `result`: reproduced, not reproduced, or inconclusive (and why) |
 | `genclass_analytics` | `local`: per-endpoint counts, median and p95 latency, error rates, failure streaks, per-page runs, errors and overwritten fields, learned relations and flows; `production`: the GenClass dashboard's sessions, detections by diagnosis and page, latest decisions (`GENCLASS_DASHBOARD`) |
-| `genclass_setup` | the pinned install line and the lines to add for this project's framework (read from `package.json`), all behind a development check; changes no file, and tells the agent to show them and wait for a yes |
+| `genclass_setup` | the pinned install line and the lines to add for this project's framework (read from `package.json`), all behind a development check; when the project's source already imports `@genclass/runtime/auto`, the form that connects that runtime first (`connectAgent(GenClass.init())`, or `import("@genclass/runtime/agent")` with the import's binding), saying `GenClass.init()` returns the runtime `/auto` started; changes no file, and tells the agent to show them and wait for a yes |
 | `genclass_scan` | `{url, phone?, hosted?}`: audits any page (no `connectAgent` needed) by running `@genclass/runtime`'s `scan <url> --json` (the project's own runtime when it has the command, else `npx -y` of the exact runtime this release was tested with, `RUNTIME_VERSION` in `packages/mcp/src/clients.ts`) in the project's folder: headless Chromium through Playwright at desktop and phone sizes, the 23 measured visual checks in observe mode; a score and each problem with its element, selector and suggested CSS fix, plus the JSON report (`structuredContent`). `--local` unless `hosted: true` (the genclass.dev page check, public pages only), so the URL leaves the machine only when the agent asks |
 | `genclass_clear` | forget runs and/or findings (runs findings still need are kept) |
 
@@ -228,7 +240,8 @@ test when the user only asked what broke.
 The skill (`packages/mcp/plugin/skills/genclass/SKILL.md`; the plugin installs it, `genclass-mcp init` writes it to
 `.claude/skills/genclass/SKILL.md`, and `skills/genclass/SKILL.md` at the repository root is the identical copy skill
 directories read) carries the "how", which always-loaded context cannot afford: the explore arguments
-(`runs: 6, slow_ms: 600`), the Playwright pairing (`--repeat-each 9 --workers 1`), how to read a report
+(`runs: 6, slow_ms: 600`) and how many loads they arm (9; 8 without `slow_ms`; go by the count `start` answers), the
+Playwright pairing (`--repeat-each 9 --workers 1`), `genclass_explore {action:"wait"}` instead of a sleep, how to read a report
 ("Compared: 6 of 6" against "NO VERDICT", "No verdict" and "0 compared"; "Internal state only" and "Along the way only"
 are not races), what a witness, an explore race and a model detection each are, the reporting rule ("reproduced",
 "not reproduced" or "no race in N orders", never "fixed" unless a replay or explore showed it), where it stops and waits
@@ -240,7 +253,9 @@ that the instructions stay under 4,096 characters, put the symptom words first a
 
 ### 4.3 Agent API
 
-`POST /v1/api` with `{ m, p }`: `status`, `findings`, `finding`, `explore.start|report|stop`, `replay.arm|result`,
+`POST /v1/api` with `{ m, p }`: `status` and `findings` (both with an optional `origin`), `finding`,
+`explore.start|progress|report|stop` (`progress`: planned, started and in loads, which `genclass_explore wait` polls),
+`replay.arm|result`,
 `analytics`, `digest` (findings changed since a cursor, tied to the store's epoch so a restarted bridge counts from the
 start), `clear`. Local processes of the same user only (section 6).
 
@@ -450,9 +465,15 @@ matches by its prefix; a target without a name is flagged for checking; the reco
 that shape, no `identical-in-flight` on that signature, no recurrence of the error (by name and shape), the baseline's
 page lines, form values and request counts for a race and none of the failing run's (compared with the agent's own
 snapshot; store values only when nothing visible differed, so a cache's bookkeeping cannot keep a fixed page failing; a
-line with an age in it is no assertion, a field with a generated name is found by the rest of its name, and a field with nothing but a generated name gets a note instead of a line). A finding it
+line with an age in it is no assertion, a field with a generated name is found by the rest of its name, and a field with nothing but a generated name gets a note instead of a line). A race's test also
+holds the page to what the request-order baselines showed: the lines the failing run lacked, then lines every
+baseline showed that name a value the user typed, so it asserts what the user should see; other findings get one
+marked place for that assertion. A finding it
 cannot give a generic assertion produces a test that fails until the domain assertion is written: it never passes
-while asserting nothing. Page strings enter the file only as JSON string literals.
+while asserting nothing. The file opens with what it needs (`@playwright/test`, the dev server running with
+`connectAgent`) and the command that runs it, names a locator used more than once in one constant, and declares only the
+records (witnesses, errors, the snapshot) its assertions read. Page strings enter the file only as JSON string
+literals; a constant's name keeps only the letters and digits of the element's name, followed by its role.
 
 ## 6. Untrusted input and security
 

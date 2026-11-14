@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { connectAgent, hash32, isDevHost, parseSpec, type AgentConnection } from "../src/agent/index.js";
 import { Scheduler } from "../src/agent/schedule.js";
 import { FakeClock, setup as baseSetup, type Setup } from "./helpers.js";
+import type { ModelStatus } from "../src/types.js";
 
 /** The app on the developer's machine (connectAgent's default hosts). */
 const LOC = { href: "http://localhost:5173/search", pathname: "/search", hostname: "localhost", search: "" };
@@ -717,5 +718,70 @@ describe("agent: review fixes (AGENT.md §2–§4)", () => {
   it("only pages on this machine connect by default", () => {
     for (const h of ["localhost", "127.0.0.1", "app.localhost", "::1"]) expect(isDevHost(h), h).toBe(true);
     for (const h of ["shop.test", "192.168.1.5", "10.0.0.2", "printer.local", "corp.internal", "", "example.com"]) expect(isDevHost(h), h).toBe(false);
+  });
+});
+
+describe("agent: what the bridge shows and explains stays current (AGENT.md §2, §4)", () => {
+  /** A model host that loads after the page connected (the usual order: the model downloads after hello). */
+  function lateModel() {
+    let status: ModelStatus = { state: "loading" };
+    const fns = new Set<(s: ModelStatus) => void>();
+    return {
+      get status() {
+        return status;
+      },
+      ready: () => Promise.resolve(),
+      evaluate: () => Promise.resolve({}),
+      onStatus: (fn: (s: ModelStatus) => void) => {
+        fns.add(fn);
+        return () => fns.delete(fn);
+      },
+      set(s: ModelStatus) {
+        status = s;
+        for (const f of fns) f(s);
+      },
+    };
+  }
+
+  it("the model's state reaches the bridge when it changes after hello, once per change", async () => {
+    const m = lateModel();
+    const s = setup({ mode: undefined, decider: m });
+    const b = bridge(s);
+    connectAgent(s.rt, { schedule: "natural" });
+    await s.clock.advance(100);
+    expect(b.hellos[0]).toMatchObject({ runtime: { mode: "observe", model: "loading" } });
+    m.set({ state: "loading", progress: { loaded: 1, total: 10 } });
+    m.set({ state: "ready", model: "genclass-runtime-r17", device: "wasm" });
+    // the host keeps notifying while ready (latency stats): no new event for those
+    m.set({ state: "ready", model: "genclass-runtime-r17", device: "wasm", loadMs: 1160 });
+    await s.clock.advance(1000);
+    expect(b.events.filter((e) => e.t === "runtime")).toEqual([{ t: "runtime", runtime: { mode: "observe", model: "ready" } }]);
+    s.rt.setMode("guard");
+    await s.clock.advance(1000);
+    expect(b.events.filter((e) => e.t === "runtime").at(-1)).toEqual({ t: "runtime", runtime: { mode: "guard", model: "ready" } });
+  });
+
+  it("the steps carry the runtime's operation numbers, so the bridge can name the model's #N as the steps do", async () => {
+    const s = setup({ mode: undefined });
+    const b = bridge(s);
+    connectAgent(s.rt, { schedule: "natural" });
+    s.server.on("GET", "/api/search", ({ url }) => ({ body: { q: url.searchParams.get("q") }, latency: 30 }));
+    for (const value of ["rea", "react"]) {
+      s.rt.user({ kind: "type", target: 'searchbox "Search"', value }, () => void s.fetch(`/api/search?q=${value}`));
+      await s.clock.advance(20);
+    }
+    await s.clock.advance(2000);
+    const named = new Map<number, string | number>();
+    for (const e of b.events) if (e.t === "steps" && Array.isArray(e.ops)) for (const [id, as] of e.ops as [number, string | number][]) named.set(id, as);
+    const ops = [...s.rt.internals.ops.byId.values()];
+    const fetches = ops.filter((o) => o.kind === "fetch");
+    const users = ops.filter((o) => o.kind === "user");
+    expect(fetches.map((o) => named.get(o.id))).toEqual(["GET /api/search#1", "GET /api/search#2"]);
+    // both keystrokes are the one typing action
+    expect(users.length).toBeGreaterThanOrEqual(1);
+    for (const u of users) expect(named.get(u.id)).toBe(0);
+    // sent once each
+    const all = b.events.flatMap((e) => (e.t === "steps" && Array.isArray(e.ops) ? (e.ops as [number, unknown][]).map(([id]) => id) : []));
+    expect(new Set(all).size).toBe(all.length);
   });
 });

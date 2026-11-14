@@ -2,6 +2,61 @@
 
 ## Unreleased
 
+From a coding agent's real run (2026-11-13: a fresh Claude agent given only `genclass fix stale --print` reproduced,
+fixed and proved a stale-search race with these tools, and lost time on each of the points below):
+
+- **Apps on one machine are told apart.** Findings and page loads carry their page origin (`scheme://host:port`), and
+  `genclass_status` and `genclass_findings` group by it: one header per app instead of the origin on every line, and,
+  with several apps, the findings counted per app. Both take an optional `origin`: an exact origin
+  (`http://localhost:5173`; `localhost:5173` reads as http) or a bare port (`5173`); anything else is an error that says
+  so. The origin is part of a finding's dedup key, so the same error on `/` of two apps is two findings (a finding saved
+  before this change keeps its old key, and its origin is read from its run). An explore session armed without a
+  route now belongs to the app of its first load as well as its page, and an armed replay is taken only by a load of
+  the finding's app: another dev server's page on the same path no longer takes a slot. `genclass_explain` names the
+  finding's app.
+- **`genclass_explore {action: "wait", timeout_s?}`** blocks until every armed load of the current session is in, or
+  `timeout_s` passes (default 120, at most 300), and says how many are ("6 of 8 loads in") and what is missing (loads not
+  started, an open one still mid-scenario). A load is in once its page went away, a later load started after it
+  reached a quiet point, or it stayed quiet for 1.5 s after a quiet point with as many user actions as the loads that
+  are over (so a person still typing in the last load is waited for). It sends MCP `notifications/progress` when the
+  call carries a `progressToken`, ends on `notifications/cancelled` (and then sends no answer, as MCP asks) or when the
+  session ends. The tool description, the server's instructions, `start`'s answer and the skill tell an agent driving
+  the loads with Playwright, or waiting for a person, to call it instead of sleeping in a shell. A shared bridge of an
+  older release has no `wait`; the tool says so.
+- **The regression test `genclass_explain` writes runs as it is.** It opens with what it needs (`@playwright/test`, the
+  dev server running with `connectAgent`) and the command (`GENCLASS_APP_URL=<origin> npx playwright test
+  genclass-f3.spec.ts`); a race's test asserts what the request-order baselines showed, the lines the failing run
+  lacked and then those naming what the user typed (lines every baseline showed, never one with an age), so it checks
+  what the user should see and has no TODO; other findings keep one marked place for it. A locator used more than once
+  is one constant (`const searchSearchbox = ...`, letters and digits of the element's name and its role), and the file
+  declares only the records its assertions read (no more `void witnesses; void errors; void snap;`). The end-to-end
+  check runs the generated file in Chromium: it fails on the buggy page and passes on the fixed one.
+- **One numbering in `genclass_explain`.** The steps name a request by its key (`GET /api/search#1`, its signature and
+  occurrence) and the on-device model's text by the runtime's operation number (`#3`), so the same request had two
+  numbers. The model's text and its facts are now written with the steps' names (`(GET /api/search#1, by action 0)`)
+  from the operation numbers the page sends with its steps (`@genclass/runtime` from the next release; with an older
+  page a line says the two numberings differ). An explore race's explanation leaves the model's text out: its evidence
+  is the comparison of whole runs, which the steps already show.
+- **`genclass_setup` in an app that already starts GenClass with `@genclass/runtime/auto`** (what `npx genclass` adds)
+  reads the project's source for that import and prints the matching form first: `import { GenClass }` and
+  `connectAgent(GenClass.init())` behind the development check for a bare import, or
+  `void import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass))` for an import that binds a
+  name, saying plainly that `GenClass.init()` starts nothing new there and returns the runtime `/auto` already started.
+  When some file already calls `connectAgent`, it says so and only how to check it. A test bundles both forms with
+  esbuild: the production build has no agent link, the development build has it. Vite is now found by any of its
+  config file names (`vite.config.mts`, `.mjs`, `.cjs`, ...) and through SvelteKit, Astro, React Router and other
+  Vite-based frameworks (`import.meta.env.DEV`); SvelteKit is pointed at `src/hooks.client.ts`.
+- **The skill's explore counts are the tool's.** It said 3 baselines and `--repeat-each 9` while an agent that called
+  `start` without `slow_ms` was asked for 8 loads with 2 baselines. Both were right for their call: `start` arms 2
+  baselines in request order, a third with no added delay only with `slow_ms`, then `runs` reordered loads. The skill
+  now says so, gives both numbers (9 with `slow_ms`, 8 without) and says to go by the count `start` answers; a test
+  computes the counts from the store, so the text cannot drift from the code again.
+- **The model state in `genclass_status` stays current.** It showed "model off" for a page whose console said
+  `[GenClass] Model ready`: the state was the one the page sent at hello, before the model loaded. The bridge now takes
+  a `runtime` event that updates it; the page sends one each time its mode or model state changes (from the next
+  `@genclass/runtime` release; a page on an older runtime still shows its state at hello).
+- `latestExplore` picks the later of two sessions armed in the same millisecond (it picked the earlier one).
+
 - **`genclass_analytics {source: "production"}` says what the app's plan leaves out.** Since 2026-11-11 a dashboard
   on the Free plan shows 7 days and no visitor analytics (they come with Team). The tool now prints one line for
   each (`Showing 7d, not 30d: ...`, `Upgrade needed for visitor analytics ...`) with the plans page, so the agent

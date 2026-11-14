@@ -18,6 +18,9 @@ Call `genclass_status`. If no page is listed, call `genclass_setup`. It changes 
 the lines for the app's browser entry, behind a development check. Show the user those lines and wait for a yes before
 you run or add any of them. Then load a page of the dev server.
 
+Pages and findings are grouped by app (page origin). When several dev servers run on this machine, pass the one you
+work on to `genclass_status` and `genclass_findings` as `origin` (`http://localhost:5173`, or the port `5173`).
+
 ## 1. From a finding to a proven fix
 
 1. `genclass_findings`, then `genclass_explain` on the most relevant finding. Read the causal chain (which click
@@ -31,7 +34,8 @@ you run or add any of them. Then load a page of the dev server.
    a submit is in flight, send an idempotency key, apply a response only if the state did not change since...). Do
    not hide the symptom.
 5. Replay again: "not reproduced" (with the same steps) is the evidence. Offer the regression test from
-   `genclass_explain`; add it to the repo's Playwright tests once the user says yes.
+   `genclass_explain`; add it to the repo's Playwright tests once the user says yes. Its first lines say what it needs
+   (`@playwright/test`, the dev server running) and the command that runs it.
 6. Run explore once more (section 2) to check other orders.
 
 If nothing was recorded, reproduce it with explore (section 2), using the page and endpoint the user named
@@ -40,12 +44,17 @@ shows which pages and endpoints the GenClass dashboard flagged.
 
 ## 2. Explore response orders
 
-1. `genclass_explore {action:"start", runs: 6, slow_ms: 600}` (add `route` to limit it to one page).
-2. Run the same scenario once per armed page load (3 baselines, one with no added delay, + 6), each a fresh load:
-   with Playwright `--repeat-each 9 --workers 1`, or with a browser tool. After the steps, wait for
-   `window.__GENCLASS_AGENT__.whenSettled()`. Keep a script you write for this out of the repo, and wait for a yes
-   before adding Playwright to a project that has none.
-3. `genclass_explore {action:"report"}` and read the verdict per scenario:
+1. `genclass_explore {action:"start", runs: 6, slow_ms: 600}` (add `route` to limit it to one page). Its answer lists
+   the armed loads and how many there are: 2 baselines in request order, a third with no added delay (because of
+   `slow_ms`), then the `runs` reordered ones. That is 9 loads here, and 8 for `runs: 6` without `slow_ms`: go by the
+   number the answer gives.
+2. Run the same scenario once per armed load, each a fresh page load: with Playwright `--repeat-each 9 --workers 1`
+   (that number), or with a browser tool. After the steps, wait for `window.__GENCLASS_AGENT__.whenSettled()`. Keep a
+   script you write for this out of the repo, and wait for a yes before adding Playwright to a project that has none.
+3. `genclass_explore {action:"wait"}` returns once every armed load is in (or after `timeout_s`, default 120) and says
+   how many are ("6 of 9 loads in"). Call it after your script, or while the person does the loads; do not sleep in a
+   shell instead.
+4. `genclass_explore {action:"report"}` and read the verdict per scenario:
    - "No race found" with the reordered runs compared ("Compared: 6 of 6"): done.
    - "NO VERDICT", "No verdict" or "0 compared": nothing was compared, so it is not a negative result; run it again
      with `route` set and the same steps on every load.

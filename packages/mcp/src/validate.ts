@@ -42,7 +42,6 @@ export function hello(v: unknown): { url: string; route: string; title?: string;
   const o = obj(v);
   const page = obj(o?.page);
   if (!o || !page) return null;
-  const rt = obj(o.runtime);
   const out: { url: string; route: string; title?: string; ua?: string; mode?: string; model?: string; schedule: ScheduleSpec | null } = {
     url: str(page.url, 2000) ?? "",
     route: str(page.route, 500) ?? "/",
@@ -52,10 +51,33 @@ export function hello(v: unknown): { url: string; route: string; title?: string;
   if (title) out.title = title;
   const ua = str(o.ua, 300);
   if (ua) out.ua = ua;
+  const r = runtime(o.runtime);
+  if (r.mode) out.mode = r.mode;
+  if (r.model) out.model = r.model;
+  return out;
+}
+
+/** The runtime's mode and model state, from a hello or a later "runtime" event. */
+export function runtime(v: unknown): { mode?: string; model?: string } {
+  const rt = obj(v);
+  const out: { mode?: string; model?: string } = {};
   const mode = str(rt?.mode, 20);
   if (mode) out.mode = mode;
   const model = str(rt?.model, 20);
   if (model) out.model = model;
+  return out;
+}
+
+/** A steps event's operation numbers: [op id, a request key or an action index] pairs (at most `max`, default 2,000). */
+export function opNames(v: unknown, max = 2000): [number, string | number][] {
+  if (!Array.isArray(v)) return [];
+  const out: [number, string | number][] = [];
+  for (const p of v.slice(0, max)) {
+    if (!Array.isArray(p) || p.length !== 2) continue;
+    const id = int(p[0], 2 ** 31);
+    const as = typeof p[1] === "number" ? int(p[1], 1e6) : str(p[1], 300);
+    if (id !== undefined && as !== undefined && as !== "") out.push([id, as]);
+  }
   return out;
 }
 

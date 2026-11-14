@@ -127,7 +127,7 @@ export async function serve(o: ServeOptions): Promise<Served> {
     tools: TOOLS,
     channel: true,
     log,
-    call: (name, args) => callTool(name, args, { api: (m, p) => api(m, p), now: () => Date.now(), cwd: o.cwd, env: o.env, client: mcp.clientName }),
+    call: (name, args, extra) => callTool(name, args, { api: (m, p) => api(m, p), now: () => Date.now(), cwd: o.cwd, env: o.env, client: mcp.clientName, ...(extra?.progress ? { progress: extra.progress } : {}), ...(extra?.signal ? { signal: extra.signal } : {}) }),
   });
   const pump = () => {
     timer = null;
