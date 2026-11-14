@@ -9,6 +9,8 @@
 //   account without it, and offers to connect this folder's app once Pro is on. `remove` is the runtime CLI's,
 //   followed by what this command's other steps wrote (remove.mjs). `dashboard` is this command's own view
 //   (app.mjs); signed out, in a folder with an app's private link, it prints that link (the runtime CLI's own).
+//   `flake` takes Playwright's arguments, so it reads its own words (flake.mjs); it runs locally, sends nothing and
+//   is free, like `privacy` and `doctor`.
 // - The command is Pro's (the owner's call, 2026-11-13): every command but FREE_COMMANDS passes paywall.mjs
 //   requirePro first (signed out: the sign-in, then Pro with its free trial), the home's commands (ctx.nested)
 //   included. The walk (`genclass`, `setup`) has Pro as its own step right after the sign-in (state.mjs).
@@ -45,6 +47,7 @@ const HELP = [
     ['npx genclass ask "..."', "ask about your app in plain words; the model answers from its numbers"],
     ["npx genclass suggest [url]", "what your app is missing, most important first (--yes, --no-model, --all)"],
     ["npx genclass scan <url>", "23 visual checks on one page"],
+    ["npx genclass flake [tests]", "is a failing Playwright test flaky, or is your app racy? Runs your suite on seeded response orders and says which, with the seed that replays it (--runs N, --seed N, --json; free, local)"],
   ]],
   ["Connect", [
     ["npx genclass connections", "where alerts go (Slack, Sentry, PostHog, Datadog, a webhook), GitHub, agent (connections add | test | on | off | remove <kind>)"],
@@ -78,7 +81,7 @@ export function usage(cols = width()) {
   };
   text("genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.");
   lines.push("");
-  text("The genclass command comes with Pro: 3 days free, then $15 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, privacy, doctor, remove, help. Free is on the website: https://genclass.dev", "  ");
+  text("The genclass command comes with Pro: 3 days free, then $15 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, privacy, doctor, flake, remove, help. Free is on the website: https://genclass.dev", "  ");
   const side = w >= 78;
   const col = 30;
   // laid out with the name as it is printed: once `genclass` is installed every `npx genclass` is shortened on its
@@ -181,6 +184,8 @@ export async function run(argv, ctx = {}) {
     return thenPlan(noConnect ? code : await login.offerConnect(args).catch(() => 1));
   }
   if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
+  // free and local, and its words are Playwright's: it reads them itself (flake.mjs)
+  if (cmd === "flake") return (await import("./flake.mjs")).flake(args);
   if (["connect", "init", "scan", "audit"].includes(cmd)) {
     // words the command does not take: its own usage error, before anything is asked of genclass.dev
     if (!asksHelp && !(await argsRight(cmd, args))) {
@@ -385,13 +390,13 @@ async function privateLinkHere(cwd) {
   }
 }
 
-/** The commands that work without Pro: signing in and out, the plan itself, where things stand, help, the version, and taking GenClass out. */
-export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version", "privacy", "doctor"];
+/** The commands that work without Pro: signing in and out, the plan itself, where things stand, help, the version, taking GenClass out, and the local checks that send nothing (privacy, doctor, flake). */
+export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version", "privacy", "doctor", "flake"];
 
 /** Every command, for the "did you mean" of a mistyped one. */
 export const COMMANDS = [
   "setup", "status", "suggest", "dashboard", "problems", "analytics", "events", "health", "report", "export", "fix", "ask", "scan", "connections", "agent", "funnels",
-  "apps", "plan", "upgrade", "profile", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version", "privacy", "doctor",
+  "apps", "plan", "upgrade", "profile", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version", "privacy", "doctor", "flake",
 ];
 
 /** The command a mistyped one is closest to (at most two edits away), or null. */
