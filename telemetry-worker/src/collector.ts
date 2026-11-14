@@ -55,6 +55,7 @@ import type { EmailBinding } from "./report.js";
 import type { GithubEnv } from "./github/config.js";
 import { routeGithub } from "./github/http.js";
 import { routeCli } from "./cli.js";
+import { routePartner } from "./partner.js";
 import { json, readCapped } from "./http.js";
 import { afterBatch } from "./paid.js";
 import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, setupCommand, setupPage, startPage } from "./pages.js";
@@ -248,6 +249,9 @@ export async function handle(request: Request, env: Env, opts: HandleOptions = {
   // the `genclass` command's routes (src/cli.ts): /api/cli/*
   const cli = await routeCli(request, url, path, env, opts);
   if (cli) return cli;
+  // the partner API (src/partner.ts): /api/partner/* and /api/account/partner-keys, before the account routes
+  const partner = await routePartner(request, url, path, env, opts);
+  if (partner) return partner;
   const billing = await routeBilling(request, url, path, env, opts);
   if (billing) return billing;
   // teams (src/team-routes.ts): /api/team and the invite page /account/join/<code>, before the account routes
