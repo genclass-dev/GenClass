@@ -2,6 +2,10 @@
 
 ## 0.4.0-alpha.0 (genclass-alpha)
 
+On npm's `alpha` tag: `npx genclass@alpha` (or `npm install -g genclass@alpha`); `npx genclass` stays on the stable
+line. Everything in 0.3.9 is in it too. Piping the command into a reader that stops early (`genclass help | head`) no
+longer ends with a stack trace.
+
 The alpha line: new commands from a full walk of 0.3.8 against a local genclass.dev, a coding agent fixing a real race
 with `genclass fix`'s prompt, and research on what developers ask for and on compliance.
 

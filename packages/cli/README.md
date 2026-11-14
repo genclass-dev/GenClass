@@ -7,7 +7,7 @@ answers questions about your app.
 npx genclass
 ```
 
-Run it in your web app's folder. It shows where the project stands and walks you through the next step: one Enter
+Run it in your web app's folder. The alpha line (`genclass privacy`, `doctor`, `flake`, the coding-agent link in setup) is on npm's `alpha` tag: `npx genclass@alpha`. It shows where the project stands and walks you through the next step: one Enter
 per step. Stop at any point and run it again: it continues from what is true now. It comes with Pro: 3 days free,
 then US$15 a developer a month.
 

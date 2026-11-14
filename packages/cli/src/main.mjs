@@ -9,6 +9,15 @@
 
 import { BUILD } from "./assets.mjs";
 
+// a reader that stops early (`genclass help | head`) closes the pipe: that ends the command quietly, never with a
+// stack trace (EPIPE on stdout or stderr is the reader's choice, not an error of the command)
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (e) => {
+    if (e?.code === "EPIPE") process.exit(process.exitCode ?? 0);
+    throw e;
+  });
+}
+
 globalThis.__GENCLASS_CLI__ = { name: "genclass", brand: "GenClass", cmd: "npx genclass", version: BUILD.version, runtimeVersion: BUILD.runtimeVersion, mcpVersion: BUILD.mcpVersion };
 
 try {
