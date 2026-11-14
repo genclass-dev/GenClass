@@ -832,8 +832,22 @@ const visualRank = (v) => {
   return on !== true ? 0 : isObj(v) && (v.fix === true || (Array.isArray(v.fix) && v.fix.length > 0)) ? 2 : 1;
 };
 const modeRank = (v) => (typeof v === "string" ? MODES.indexOf(v) : -1);
-/** The value of `vals` that ranks highest by `rank` (the first of them), or `none`. */
-const top = (vals, rank, none) => vals.reduce((best, v) => (best === none || rank(v) > rank(best) ? v : best), none);
+/**
+ * The value of `vals` that ranks highest by `rank` (on a tie, the earliest; `none` first of all), or `none`. A plain
+ * running maximum: a certain literal's higher value never loses to a lower reading that comes after it.
+ */
+const top = (vals, rank, none) => {
+  let best = none;
+  let r = rank(none);
+  for (const v of vals) {
+    const rv = rank(v);
+    if (rv > r) {
+      best = v;
+      r = rv;
+    }
+  }
+  return best;
+};
 
 /**
  * For each option a taint may set: the value that sends and keeps more of what the files say (`known`: the reading

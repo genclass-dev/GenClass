@@ -401,13 +401,17 @@ export function planAgentLink(st, deps = {}) {
       taken = rel(file);
       continue;
     }
-    if (own === null && !made.some((ch) => ch.file === file)) {
-      const { q, semi } = codeStyle(before);
-      const after = agentFileText(devCondition(project, f), { q, semi, eol: eolOf(before), client: project.framework === "next", bound: project.framework === "next" && BOUND.test(before) });
-      made.push({ file, rel: rel(file), kind: "create", before: "", after, what: `${rel(file)}: the coding-agent link, development builds only` });
-    }
     const after = withAgentLink(before, { spec: linkSpecifier(f, file) });
-    if (after !== null && after !== before) edits.push({ file: f, rel: rel(f), kind: "modify", before, after, what: `${rel(f)}: the line that imports ${rel(file)}, right after GenClass's import` });
+    const edit = after !== null && after !== before;
+    // the link's file is written only when something imports it: the line planned here, or one the entry has already
+    // (an entry that only mentions connectAgent, in a comment or a function of its own, gets neither: no orphan file)
+    const importsIt = linkImportsIn(before).some((s) => resolve(dirname(f), /\.[cm]?[jt]s$/.test(s) ? s : `${s}.ts`) === resolve(file) || resolve(dirname(f), s) === resolve(file));
+    if (own === null && (edit || importsIt) && !made.some((ch) => ch.file === file)) {
+      const { q, semi } = codeStyle(before);
+      const text = agentFileText(devCondition(project, f), { q, semi, eol: eolOf(before), client: project.framework === "next", bound: project.framework === "next" && BOUND.test(before) });
+      made.push({ file, rel: rel(file), kind: "create", before: "", after: text, what: `${rel(file)}: the coding-agent link, development builds only` });
+    }
+    if (edit) edits.push({ file: f, rel: rel(f), kind: "modify", before, after, what: `${rel(f)}: the line that imports ${rel(file)}, right after GenClass's import` });
   }
   const changes = [...made, ...edits];
   if (!changes.length) {

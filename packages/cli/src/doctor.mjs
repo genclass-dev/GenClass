@@ -933,7 +933,9 @@ export async function checks(o = {}, deps = {}) {
     } catch {
       link = null;
     }
-    if (setup?.agentLink || link?.state === "linked") add({ id: "link", label: "Agent link", state: "ok", detail: "the dev build connects to your coding agent (connectAgent)" });
+    // the planner's answer first: the link's own file without the line that imports it is not a link (privacy's text
+    // test would count it); privacy's reading only when the planner could not run
+    if (link ? link.state === "linked" : setup?.agentLink) add({ id: "link", label: "Agent link", state: "ok", detail: "the dev build connects to your coding agent (connectAgent)" });
     else if (link?.state === "manual" && !link.lines?.length) {
       // nothing to add for this setup (the script tag): the agent's other tools still work
       add({ id: "link", label: "Agent link", state: "info", detail: `not available here: ${link.why}; your coding agent's GenClass tools still audit any page you name (genclass_scan)` });

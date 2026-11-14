@@ -790,3 +790,18 @@ describe("the update notice (src/update.mjs)", () => {
     expect(readPrefs()).toMatchObject({ latestGenclass: "0.4.1", latestCheckedAt: 1_000_000_000_000 });
   });
 });
+
+describe("genclass privacy: a higher certain value is never lost to a lower one read after it (review round 3, the WIDEN tie-break)", () => {
+  const auto = 'import "@genclass/runtime/auto";';
+  it("learned flows, the mode and the visual checks keep the reading that keeps more", () => {
+    // two whole literals in two files: the one that keeps more stays
+    expect(readSetupText([auto, "window.GENCLASS_CONFIG = { learn: { persist: true } };", "window.GENCLASS_CONFIG = { telemetry: false };"]).learn).toBe("local");
+    expect(readSetupText([auto, "window.GENCLASS_CONFIG = { mode: 'heal' };", "window.GENCLASS_CONFIG = { telemetry: false };"]).mode).toBe("heal");
+    // a default that never runs after a certain literal does not lower it
+    const or = readSetupText([auto, "window.GENCLASS_CONFIG = { mode: 'heal', learn: { persist: true } };\nwindow.GENCLASS_CONFIG ||= { mode: 'observe', learn: { persist: false } };"]);
+    expect([or.mode, or.learn]).toEqual(["heal", "local"]);
+    // a deeper key written later keeps the object it is in
+    expect(readSetupText([auto, 'window.GENCLASS_CONFIG = { learn: { persist: true } };\nwindow.GENCLASS_CONFIG.learn.key = "myapp";']).learn).toBe("local");
+    expect(readSetupText([auto, "window.GENCLASS_CONFIG = { visual: { on: true, fix: true } };\nwindow.GENCLASS_CONFIG.visual.ignore = ['.ad'];"]).visual).toBe("on, with fixes");
+  });
+});

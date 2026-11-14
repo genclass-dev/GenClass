@@ -84,7 +84,7 @@ next to the entry, `genclass.agent.ts` (`.js` beside a JavaScript entry), one `g
 imports and `if (<dev check>) connectAgent(GenClass.init());` with the check init uses there for the devtools line
 (`import.meta.env.DEV` on Vite, `process.env.NODE_ENV === "development"` in Next.js and Create React App, plus
 `typeof window !== "undefined"` where the entry also renders on the server), and one marked line in the entry,
-`import "./genclass.agent"; // genclass:init`, right after init's `/auto` import (or after the block of a file init
+`import "./genclass.agent"; // genclass:init` (`./genclass.agent.js` from a JavaScript entry; from Next.js's pages/_app, `../genclass.agent`, the file sits in the folder above pages/), right after init's `/auto` import (or after the block of a file init
 created). The app's own code is never read or changed; imports stay first, and the link runs right after `/auto`,
 before the app's code. In Next.js the file starts with `"use client"`, and where init bound `genclass` it holds
 `import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(GenClass.init()))` behind the check

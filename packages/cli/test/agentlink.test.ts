@@ -779,3 +779,31 @@ describe("the walk's Coding agent step: the MCP server, the skill and the link i
     });
   });
 });
+
+describe("no orphan link file, and doctor never calls a half link connected (review round 3)", () => {
+  it("an entry that only mentions connectAgent (a comment, or its own function) gets no link file nothing imports", () => {
+    for (const text of [
+      `import { createRoot } from "react-dom/client";\n\n// connectAgent() for the coding agent: see README\ncreateRoot(document.getElementById("root")!).render(null);\n`,
+      `import { connectAgent } from "./support/chat";\nconnectAgent({ room: "help" });\n`,
+    ]) {
+      const { link } = initThenLink({ "package.json": pkg({ react: "^19", "react-dom": "^19", vite: "^8" }), "index.html": html("/src/main.tsx"), "src/main.tsx": text });
+      const made = (link.changes ?? []).filter((ch: Change) => ch.kind === "create");
+      const edits = (link.changes ?? []).filter((ch: Change) => ch.kind === "modify");
+      // a file is created only together with the line that imports it
+      expect(made.length === 0 || edits.length > 0, JSON.stringify(link)).toBe(true);
+    }
+  });
+
+  it("the link's file with its import line taken out by hand: doctor warns and --fix puts the line back", async () => {
+    const files = { "package.json": pkg({ react: "^19", "react-dom": "^19", vite: "^8" }), "index.html": html("/src/main.tsx"), "src/main.tsx": `import { createRoot } from "react-dom/client";\n\ncreateRoot(document.getElementById("root")!).render(null);\n` };
+    const { dir, link } = initThenLink(files);
+    for (const ch of link.changes as Change[]) writeFileSync(ch.file, ch.after);
+    // take the entry's import line out, keep the link's file
+    const entry = join(dir, "src/main.tsx");
+    writeFileSync(entry, readFileSync(entry, "utf8").split("\n").filter((l) => !l.includes("./genclass.agent")).join("\n"));
+    const { checks } = await import("../src/doctor.mjs");
+    const by = Object.fromEntries((await checks({ cwd: dir }, { offline: true, pathVersion: null, creds: null, listening: async () => false })).map((x: any) => [x.id, x]));
+    expect(by.link.state).toBe("warn");
+    expect(by.link.apply?.file ?? by.link.fix).toBeTruthy();
+  });
+});
