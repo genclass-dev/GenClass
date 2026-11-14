@@ -1,5 +1,6 @@
 // Facts read from a project folder (src/suggest/repo.mjs): small projects built in a temp folder, a stand-in git.
 import { describe, expect, it } from "vitest";
+import { runChecks } from "../src/suggest/checks.mjs";
 import { collectRepoFacts, emptyRepoFacts, lockVersion, redactSecrets } from "../src/suggest/repo.mjs";
 import { isolate, tempDir, write } from "./helpers.js";
 
@@ -146,6 +147,25 @@ describe("genclass suggest: the facts of a project (src/suggest/repo.mjs)", () =
     write(dull, { "a.ts": `const a = "sk_live_${"51Nx".repeat(8)}";\nconst b = "ghp_${"x".repeat(36)}";\nconst c = "sk_live_your_key_here_0000000000";\n` });
     expect(collectRepoFacts(dull, { runGit: noGit }).secrets).toEqual([]);
     expect(redactSecrets("nothing to hide")).toBe("nothing to hide");
+  });
+
+  it("Stripe's documented sample test key is no leak, but a production setup on it still takes test payments", () => {
+    const sample = ["sk", "test", "4eC39HqLyjWDarjtT1zdp7dc"].join("_");
+    const older = ["sk", "test", "BQokikJOvBiI2HlWgH4olfQ2"].join("_");
+    const dir = tempDir();
+    write(dir, {
+      "package.json": JSON.stringify({ name: "shop", dependencies: { stripe: "1.0.0" } }),
+      ".env.production": `STRIPE_SECRET_KEY=${sample}\n`,
+      "wrangler.toml": `name = "shop"\n[vars]\nSTRIPE_SECRET_KEY = "${older}"\n`,
+      "src/pay.ts": `const stripe = new Stripe("${sample}");\n`,
+    });
+    const f = collectRepoFacts(dir, { runGit: git({ tracked: ["package.json", ".env.production", "wrangler.toml", "src/pay.ts"] }) });
+    // a key anyone may read leaks nothing, in any file
+    expect(f.secrets).toEqual([]);
+    expect(f.payments.secretInClient).toEqual([]);
+    // but it is a test key: the live site takes no real payment
+    expect(f.payments.testKeyInProduction).toEqual([".env.production", "wrangler.toml"]);
+    expect(runChecks({ repo: f, site: null }).find((r) => r.id === "test-keys-live")?.status).toBe("fail");
   });
 
   it("a folder that is no git repository scans its files, and a folder with nothing in it gives empty facts", () => {

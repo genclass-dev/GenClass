@@ -92,10 +92,13 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   origin, not the `nomodule` polyfills, at most 20, 1 MB each; on a Next.js page the chunks of its own components
   first, the framework's runtime last) for secret keys (sk_live_ and sk_test_ keys, named for no one provider since
   Stripe, Clerk and others use them; Stripe restricted, OpenAI, OpenRouter, Anthropic, Supabase sb_secret_ and
-  service_role, an AWS key ID with its secret, GitHub, Slack, SendGrid, private keys) and reports the kind and the
-  script's path, never a value. Placeholders (sk_live_xxxx, AWS's ...EXAMPLE IDs), keys providers document and an
-  AWS key ID in a pre-signed link are not reported. Scripts left unread, or cut at 1 MB, make it unknown, not a
-  pass. On 13,473 library files (186 MB of node_modules) it matched one, a test certificate's private key.
+  service_role, an AWS key ID with its secret, also as NAME=value in a shipped .env or credentials file, GitHub,
+  Slack, SendGrid, private keys) and reports the kind and the script's path, never a value. Placeholders
+  (sk_live_xxxx, AWS's ...EXAMPLE IDs), keys providers document and an AWS key ID in a pre-signed link
+  (X-Amz-Credential=, AWSAccessKeyId=) are not reported. Scripts left unread, or longer than 1 MB (one of exactly
+  1 MB is read whole), make it unknown, not a pass. On 13,473 library files (186 MB of node_modules) it matched
+  one, a test certificate's private key. Stripe's documented sample test key is no leak in either scanner, but
+  `test-keys-live` still fails on a production env file or hosting config that holds it.
   `framework-cve` reads the installed Next.js and react-server-dom-* versions (node_modules, else the npm, pnpm, yarn
   or bun lockfile, this app's own entry in a monorepo's) against CVE-2025-55182 (remote code execution in React
   Server Components; the App Router as Next.js finds it, not a static export) and CVE-2025-29927 (Next.js

@@ -1,5 +1,6 @@
 // Facts measured from a live site (src/suggest/site.mjs), against a stand-in site and stand-in DNS: no network.
 import { describe, expect, it } from "vitest";
+import { runChecks } from "../src/suggest/checks.mjs";
 import { AI_CRAWLERS, bundleSecrets, collectSiteFacts, emptySiteFacts, isPublicHost, MAX_SCRIPTS, parseHtml, parseRobots, robotsBlocks, scriptSources } from "../src/suggest/site.mjs";
 
 type Page = { status?: number; headers?: Record<string, string>; body?: string };
@@ -352,6 +353,24 @@ describe("genclass suggest: which scripts are read, and how much of each (src/su
     const small = await collectSiteFacts("https://big.example/", { fetchFn: site("export {};").fetchFn, dns: dnsOf() });
     expect(small.bundle.partial).toEqual([]);
   });
+
+  it("a script of exactly 1 MB is read whole, one byte more is read in part, however the chunks fall", async () => {
+    const MB = 1024 * 1024;
+    const page = `<title>Edge</title><script type="module" src="/assets/index-a1.js"></script>`;
+    const bundle = async (body: Page | (() => Promise<Response>)) => (await collectSiteFacts("https://edge.example/", { fetchFn: fakeWeb({ "https://edge.example/": { body: page }, "https://edge.example/assets/index-a1.js": body }).fetchFn, dns: dnsOf() })).bundle;
+    expect(await bundle(js("x".repeat(MB)))).toEqual({ scanned: 1, unread: 0, partial: [], found: [] });
+    expect((await bundle(js("x".repeat(MB + 1)))).partial).toEqual(["/assets/index-a1.js"]);
+    // a stream whose chunks add up to 1 MB exactly, then ends after an empty chunk, or then sends one byte more
+    const stream = (sizes: number[]) => async () => {
+      const chunks = sizes.map((n) => new Uint8Array(n).fill(120));
+      return new Response(new ReadableStream({ pull(c) { const next = chunks.shift(); if (next) c.enqueue(next); else c.close(); } }), { status: 200, headers: { "content-type": "text/javascript" } });
+    };
+    expect((await bundle(stream([MB / 2, MB / 2, 0]))).partial).toEqual([]);
+    expect((await bundle(stream([MB / 2, MB / 2, 1]))).partial).toEqual(["/assets/index-a1.js"]);
+    // so a clean page with such a script is a pass, not "over 1 MB"
+    const f = await collectSiteFacts("https://edge.example/", { fetchFn: fakeWeb({ "https://edge.example/": { body: page }, "https://edge.example/assets/index-a1.js": js("x".repeat(MB)) }).fetchFn, dns: dnsOf() });
+    expect(runChecks({ repo: null, site: f }).find((r) => r.id === "secrets-in-bundle")?.status).toBe("pass");
+  });
 });
 
 describe("genclass suggest: which key-shaped strings count as a secret in a bundle (src/suggest/site.mjs bundleSecrets)", () => {
@@ -371,6 +390,22 @@ describe("genclass suggest: which key-shaped strings count as a secret in a bund
     expect(bundleSecrets(`new S3Client({region:"us-east-1",credentials:{accessKeyId:"${awsId}",secretAccessKey:"${awsSecret}"}})`)).toEqual(["aws-access-key"]);
     // a SHA-1 (40 hex digits, no capitals) is no secret access key
     expect(bundleSecrets(`const id="${awsId}",sha="${"0123456789abcdef0123456789abcdef01234567"}";`)).toEqual([]);
+  });
+
+  it("an AWS key pair written as NAME=value is found: a .env, a credentials file, a .env shipped as a string, a query string", () => {
+    const dotenv = join("AWS_ACCESS_KEY_ID=", awsId, "\nAWS_SECRET_ACCESS_KEY=", awsSecret, "\n");
+    const credentials = join("[default]\naws_access_key_id=", awsId, "\naws_secret_access_key=", awsSecret, "\n");
+    // what a Vite ?raw import of the .env ships: the text as a JavaScript string
+    const raw = `const env=${JSON.stringify(dotenv)};`;
+    const query = join('fetch("/api/upload?accessKeyId=', awsId, "&secretAccessKey=", awsSecret, '")');
+    // only X-Amz-Credential= and AWSAccessKeyId= mark a pre-signed link; accessKeyId= is the app's own query string
+    const queryId = join('fetch("/api/upload?accessKeyId=', awsId, '",{headers:{"x-secret":"', awsSecret, '"}})');
+    for (const t of [dotenv, credentials, raw, query, queryId]) expect(bundleSecrets(t), t.slice(0, 24)).toEqual(["aws-access-key"]);
+    // with spaces and quotes, as before
+    expect(bundleSecrets(join('AWS_ACCESS_KEY_ID = "', awsId, '"\nAWS_SECRET_ACCESS_KEY = "', awsSecret, '"'))).toEqual(["aws-access-key"]);
+    // the ID alone after "=" still signs nothing, and base64 padding after 40 characters is a longer value
+    expect(bundleSecrets(join("AWS_ACCESS_KEY_ID=", awsId, "\n"))).toEqual([]);
+    expect(bundleSecrets(join("AWS_ACCESS_KEY_ID=", awsId, "\nINTEGRITY=", awsSecret, "=\n"))).toEqual([]);
   });
 
   it("placeholders and the keys providers document are no secret (finding 52)", () => {

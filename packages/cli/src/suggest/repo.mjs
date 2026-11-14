@@ -14,7 +14,7 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
-import { isPlaceholder } from "./keys.mjs";
+import { isDocumentedKey, isPlaceholder } from "./keys.mjs";
 
 /**
  * @typedef {Object} RepoFacts
@@ -41,8 +41,8 @@ import { isPlaceholder } from "./keys.mjs";
  *   "stripe-secret-live", "stripe-secret-test", "openai-key", "anthropic-key", "aws-access-key", "github-token",
  *   "private-key", "slack-token", "generic-secret"
  * @property {{ provider: "stripe" | "paddle" | "lemonsqueezy" | "polar" | "paypal" | null, testKeyInProduction: string[], secretInClient: string[] }} payments
- *   testKeyInProduction: production env files or hosting config that hold pk_test_ or sk_test_; secretInClient:
- *   client source files that hold sk_live_ or sk_test_
+ *   testKeyInProduction: production env files or hosting config that hold pk_test_ or sk_test_ (Stripe's documented
+ *   sample key included); secretInClient: client source files that hold sk_live_ or sk_test_ (not the sample key)
  * @property {{ provider: "vercel" | "netlify" | "cloudflare" | "fly" | "render" | "railway" | "github-pages" | "firebase" | "docker" | null, from: "config" | "link" | "deps" | "workflow" | "docker" | null, previews: boolean | null, staging: boolean | null }} hosting
  *   from: what the guess rests on: the host's config file (vercel.json), the folder its CLI links with (.vercel), a
  *   dependency (only a guess: @vercel/otel runs anywhere), a deploy workflow, or a Dockerfile;
@@ -192,7 +192,8 @@ const PRIVATE_KEY = /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----(?:\\
 const SECRET_HINT = /[sr]k_(?:live|test)_|sk-|AKIA|gh[pousr]_|github_pat_|xox[baprs]-|PRIVATE KEY-----/;
 const STRIPE_SECRET = /(?<![A-Za-z0-9_])sk_(?:live|test)_([A-Za-z0-9]{16,})/g;
 const STRIPE_TEST_KEY = /(?<![A-Za-z0-9_])[ps]k_test_([A-Za-z0-9]{10,})/g;
-// The placeholder test and the sample keys providers document (Stripe's) are shared with site.mjs: keys.mjs.
+// The placeholder test and the sample keys providers document (Stripe's) are shared with site.mjs: keys.mjs. A
+// documented key is no leak (findSecrets, holdsStripeSecret) but is still a test key (holdsTestKey).
 
 const PLACEHOLDER_VALUE = /^(?:null|undefined|none|true|false|todo|tbd|secret|password|passwd|pass|postgres|root|admin|test|testing|dev|development|local|localhost|token|key|api[_-]?key)$/i;
 const ENV_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s*=\s*(.*)$/;
@@ -807,7 +808,7 @@ function findSecrets(text, envFile, testPath) {
       for (const [kind, re] of SECRET_PATTERNS) {
         for (const m of line.matchAll(re)) {
           const body = m[1];
-          if (isPlaceholder(body)) continue;
+          if (isPlaceholder(body) || isDocumentedKey(body)) continue;
           // "sk-" also starts ordinary hyphenated names; a key has a digit and either a capital or a long run.
           if (kind === "openai-key" && !(/\d/.test(body) && (/[A-Z]/.test(body) || /[A-Za-z0-9]{20,}/.test(body)))) continue;
           if (kind === "slack-token" && !/\d/.test(body)) continue;
@@ -842,15 +843,17 @@ function envValue(raw) {
   return quoted ? quoted[2].trim() : s.replace(/\s+#.*$/, "").trim();
 }
 
+/** Whether client source holds a Stripe secret key; a placeholder or Stripe's documented sample key opens nothing. */
 function holdsStripeSecret(text) {
   if (!text.includes("sk_")) return false;
-  for (const m of text.matchAll(STRIPE_SECRET)) if (!isPlaceholder(m[1])) return true;
+  for (const m of text.matchAll(STRIPE_SECRET)) if (!isPlaceholder(m[1]) && !isDocumentedKey(m[1])) return true;
   return false;
 }
 
 /**
  * Whether a production env file or a hosting config holds a Stripe test key. Sections of a config that belong to
  * another environment ([env.staging] in wrangler.toml, [context.deploy-preview] in netlify.toml) are not counted.
+ * Stripe's documented sample test key counts: a live site on it takes no real payment either.
  */
 function holdsTestKey(base, text) {
   if (!text.includes("k_test_")) return false;
