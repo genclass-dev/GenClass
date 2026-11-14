@@ -25,7 +25,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
-import { delimiter, dirname, join, relative } from "node:path";
+import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { c, interactive, out, printChange, sym } from "../../runtime/bin/lib/ui.mjs";
 import { channelOf, cmdFor, installedVersion } from "../../runtime/bin/lib/version.mjs";
 import { SKILL_MARK, SKILL_PATH, skillText } from "./actions.mjs";
@@ -324,15 +324,19 @@ function policiesIn(file, t) {
     return found;
   }
   if (/_headers$/.test(file)) {
-    // Netlify's and Cloudflare Pages' file: a path line, then its headers indented under it
-    let route = null;
-    for (const line of t.split(/\r?\n/)) {
-      if (!line.trim() || /^\s*#/.test(line)) continue;
-      if (!/^\s/.test(line)) route = line.trim();
-      else {
-        const m = /^\s+content-security-policy\s*:\s*(.+)$/i.exec(line);
-        if (m) found.push({ policy: m[1].trim(), route });
+    // Netlify's and Cloudflare Pages' file, read as their parsers read it: each line trimmed, so indenting is optional;
+    // a path line starts with `/` (or, on Cloudflare, an absolute URL: `https://example.com/*`), and the `Name: value`
+    // lines after it are its headers. A header before any path line is not applied, so it is not read.
+    let route;
+    for (const raw of t.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      if (line.startsWith("/") || /^[a-z][a-z0-9+.-]*:\/\//i.test(line)) {
+        route = line;
+        continue;
       }
+      const m = /^content-security-policy\s*:\s*(.+)$/i.exec(line);
+      if (m && route !== undefined) found.push({ policy: m[1].trim(), route });
     }
     return found;
   }
@@ -372,7 +376,9 @@ function policiesIn(file, t) {
     }
   }
   // JS and TS: { key: "Content-Security-Policy", value: ... }, { "Content-Security-Policy": ... },
-  // headers.set("Content-Security-Policy", ...), with the value read as far as the text tells (jsValue)
+  // headers.set("Content-Security-Policy", ...), with the value read as far as the text tells (jsValue), and the
+  // route of the `{ source, headers }` entry it is in (jsRouteAt)
+  let code;
   for (const m of t.matchAll(/(["'`])content-security-policy\1/gi)) {
     let j = skipWs(t, m.index + m[0].length);
     if (t[j] === ":") j++;
@@ -383,29 +389,139 @@ function policiesIn(file, t) {
     } else continue;
     const r = jsValue(t, j);
     if (!r || !r[0].trim()) continue;
-    const sources = [...t.slice(0, m.index).matchAll(/\bsource\s*:\s*(["'`])([^"'`\n]*)\1/g)];
-    found.push({ policy: r[0], route: sources.length ? sources[sources.length - 1][2] : null });
+    code ??= codeOnly(t);
+    found.push({ policy: r[0], route: jsRouteAt(t, code, m.index) });
   }
   return found;
 }
 
+const KEYWORD_BEFORE_REGEX = /^(?:return|typeof|instanceof|in|of|new|delete|void|throw|case|do|else|yield|await)$/;
+
 /**
- * Whether a header's path pattern takes in the site's home page: Netlify's and Cloudflare's `/*`, Vercel's and
- * Next's `/(.*)`, `/:path*` and `/((?!api).*)`, Firebase's `**`. A pattern that cannot be read counts.
+ * A JS or TS file's text with what is not code blanked (the inside of strings and template literals, comments, regular
+ * expressions), at the same length and with the same line breaks, so brackets and keys can be found in it.
  */
-export function routeHasRoot(route) {
-  if (route == null) return true;
-  const r = String(route).trim();
-  if (!r || r === "*" || r === "**") return true;
-  try {
-    const src = r
-      .replace(/:\w+(\([^)]*\))?([*?+])?/g, (m, group, q) => (group ? `${group}${q ?? ""}` : q === "*" ? ".*" : q === "?" ? "[^/]*" : q === "+" ? ".+" : "[^/]+"))
-      .replace(/(?<![.\\)\]])\*+/g, ".*");
-    const re = new RegExp(`^${src}$`);
-    return re.test("/") || re.test("");
-  } catch {
-    return true;
+function codeOnly(t) {
+  const o = t.split("");
+  const blank = (a, b) => {
+    for (let k = a; k < b; k++) if (o[k] !== "\n") o[k] = " ";
+  };
+  let last = ""; // the last code character before i (spaces left out)
+  let word = ""; // the identifier that ends there, if one does
+  for (let i = 0; i < t.length; ) {
+    const ch = t[i];
+    if (ch === "/" && (t[i + 1] === "/" || t[i + 1] === "*")) {
+      const close = t[i + 1] === "/" ? t.indexOf("\n", i) : t.indexOf("*/", i + 2);
+      const end = close < 0 ? t.length : t[i + 1] === "/" ? close : close + 2;
+      blank(i, end);
+      i = end;
+      continue;
+    }
+    if (isQuote(ch)) {
+      const s = stringAt(t, i);
+      if (s) {
+        blank(i + 1, s[1] - 1);
+        i = s[1];
+        last = ch;
+        word = "";
+        continue;
+      }
+    }
+    if (ch === "/" && (!/[\w$)\]'"`]/.test(last) || KEYWORD_BEFORE_REGEX.test(word))) {
+      // a regular expression, to its closing slash (past character classes) on the same line
+      let j = i + 1;
+      for (let cls = false; j < t.length && t[j] !== "\n"; j++) {
+        if (t[j] === "\\") j++;
+        else if (t[j] === "[") cls = true;
+        else if (t[j] === "]") cls = false;
+        else if (t[j] === "/" && !cls) break;
+      }
+      if (t[j] === "/") {
+        blank(i + 1, j);
+        i = j + 1;
+        last = ")";
+        word = "";
+        continue;
+      }
+    }
+    const id = /^[\w$]+/.exec(t.slice(i, i + 100))?.[0];
+    if (id) {
+      last = id[id.length - 1];
+      word = id;
+      i += id.length;
+      continue;
+    }
+    if (!/\s/.test(ch)) {
+      last = ch;
+      word = "";
+    }
+    i++;
   }
+  return o.join("");
+}
+
+/**
+ * The route a JS or TS header at t[at] is set for: the `source` of the innermost object around it that has one, as
+ * Next.js's headers() writes `{ source, headers: [...] }` (in either order); null when none does (a header a
+ * middleware sets, or one in a list kept in a constant). `code`: codeOnly(t).
+ */
+function jsRouteAt(t, code, at) {
+  const open = [];
+  for (let i = 0; i < at; i++) {
+    const ch = code[i];
+    if (ch === "{" || ch === "[" || ch === "(") open.push(i);
+    else if ((ch === "}" || ch === "]" || ch === ")") && open.length) open.pop();
+  }
+  for (let n = open.length - 1; n >= 0; n--) {
+    if (code[open[n]] !== "{") continue;
+    // the object's own keys: at its depth, each after its `{` or a `,`
+    let depth = 0;
+    let prev = "{";
+    for (let i = open[n] + 1; i < code.length; i++) {
+      const ch = code[i];
+      if (/\s/.test(ch)) continue;
+      if (depth === 0 && (prev === "{" || prev === ",")) {
+        const key = /^(?:source|"source"|'source')\s*:/.exec(t.slice(i, i + 20));
+        if (key) {
+          const v = jsValue(t, i + key[0].length);
+          return v ? v[0] : null;
+        }
+      }
+      if (ch === "{" || ch === "[" || ch === "(") depth++;
+      else if (ch === "}" || ch === "]" || ch === ")") {
+        if (depth === 0) break;
+        depth--;
+      }
+      prev = ch;
+    }
+  }
+  return null;
+}
+
+/** The first path segments that serve no pages: API routes, and the folders frameworks and hosts serve files from. */
+const NOT_PAGES = /^\/(?:api|trpc|graphql|_next|_nuxt|_astro|_app|assets|static|fonts|\.well-known)(?:\/|$)/i;
+/** File extensions that are not pages (a pattern such as `**\/*.@(js|css)` or `/*.png` sets headers for files). */
+const FILE_EXT = /^(?:m?js|cjs|css|map|json|wasm|onnx|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|eot|txt|xml|webmanifest|mp4|webm|mp3|pdf)$/i;
+
+/**
+ * Whether a header's path pattern takes in any of the site's pages, where GenClass runs: every pattern but those for
+ * API routes (`/api/*`, `/api/:path*`) and static files (`/assets/(.*)`, `/_next/static/*`, `**\/*.@(js|css)`). So
+ * `/*`, `/(.*)`, `/:path*`, `/((?!api).*)`, `**` and a section such as `/app/*` count; an absolute URL
+ * (Cloudflare's `https://example.com/*`) is read by its path. A pattern that cannot be read counts.
+ */
+export function routeHasPages(route) {
+  if (route == null) return true;
+  let r = String(route).trim();
+  const origin = /^[a-z][a-z0-9+.-]*:\/\/[^/]*/i.exec(r);
+  if (origin) r = r.slice(origin[0].length) || "/";
+  if (!r || r === "*" || r === "**") return true;
+  // the literal start, before the first wildcard, placeholder or group
+  const literal = /^[^*:(){}[\]?!+@]*/.exec(r)?.[0] ?? "";
+  if (NOT_PAGES.test(literal)) return false;
+  // a pattern for files of some kinds: `*.js`, `*.@(js|css)`, `*.(js|css)`, `*.{js,css}`
+  const ext = /\.(?:@?\(([\w|]+)\)|\{([\w,]+)\}|(\w+))$/.exec(r.split("/").pop() ?? "");
+  if (ext && (ext[1] ?? ext[2] ?? ext[3]).split(/[|,]/).every((e) => FILE_EXT.test(e))) return false;
+  return true;
 }
 
 /** Whether a policy's text names a directive at all (else it was not read, as a value built at run time). */
@@ -417,15 +533,16 @@ const readable = (policy) =>
 /**
  * The Content-Security-Policy strings a project sets for its pages, in the files hosts and frameworks read them
  * from (and `extra`, more files relative to `dir`, as a plain HTML site's pages): [{ file, policy, route }]. A
- * policy set only for other paths (`/api/*`) is left out, and so is one whose text could not be read (built at run time);
- * a report-only policy is not read (it blocks nothing).
+ * policy for any of the pages counts, the home page's or a section's (`/app/*`); one set only for API routes or
+ * static files (`/api/*`, `/assets/*`) is left out (routeHasPages), and so is one whose text could not be read (built
+ * at run time); a report-only policy is not read (it blocks nothing).
  */
 export function cspIn(dir, extra = []) {
   const found = [];
   for (const f of [...new Set([...CSP_FILES, ...extra])]) {
     const t = read(join(dir, f));
     if (!t || !/content-security-policy/i.test(t)) continue;
-    for (const p of policiesIn(f, t)) if (routeHasRoot(p.route) && readable(p.policy)) found.push({ file: f, ...p });
+    for (const p of policiesIn(f, t)) if (routeHasPages(p.route) && readable(p.policy)) found.push({ file: f, ...p });
   }
   return found;
 }
@@ -454,8 +571,35 @@ const listFor = (dirs, d) => {
   return null;
 };
 
-/** What the default model setup fetches from jsDelivr: the model's files and ONNX Runtime's wasm. */
-const CDN_FILES = ["https://cdn.jsdelivr.net/npm/@genclass/runtime-model@0.2.0/files/model.onnx", "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort-wasm-simd-threaded.wasm"];
+/** The default model's folder on jsDelivr (the runtime's src/model/host.ts DEFAULT_MODEL_BASE_URL; a test keeps them equal). */
+const MODEL_BASE = "https://cdn.jsdelivr.net/npm/@genclass/runtime-model@0.2.0/files/";
+/**
+ * The onnxruntime-web version the runtime asks jsDelivr for: the one it bundles, which packages/runtime/package.json
+ * pins exactly (src/model/backend.ts ORT_FALLBACK_VERSION; a test keeps them equal). An app's installed runtime may
+ * pin another (ortPinnedFrom), and that is the one its pages load.
+ */
+const ORT_VERSION = "1.30.0";
+/** What the default model setup fetches from jsDelivr: the model, and ONNX Runtime's wasm (its WASM or WebGPU build's). */
+const cdnFiles = (ort) => [`${MODEL_BASE}model.onnx`, ...["ort-wasm-simd-threaded.wasm", "ort-wasm-simd-threaded.asyncify.wasm"].map((f) => `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ort}/dist/${f}`)];
+
+/**
+ * The onnxruntime-web version pinned by the runtime Node finds from `dir` (its node_modules or a parent's), as the
+ * runtime's own fetch-model reads it; null when the runtime is not installed or names a range.
+ */
+function ortPinnedFrom(dir) {
+  for (let d = resolve(dir); ; d = dirname(d)) {
+    const t = read(join(d, "node_modules", "@genclass", "runtime", "package.json"));
+    if (t !== null) {
+      try {
+        const v = String(JSON.parse(t)?.dependencies?.["onnxruntime-web"] ?? "");
+        return /^\d+\.\d+\.\d+$/.test(v) ? v : null;
+      } catch {
+        return null;
+      }
+    }
+    if (dirname(d) === d) return null;
+  }
+}
 
 const schemeMatches = (a, b) => a === b || (a === "http" && b === "https") || (a === "ws" && /^(?:wss|https?)$/.test(b)) || (a === "wss" && b === "https");
 
@@ -517,13 +661,15 @@ export function publicDirOf(project) {
  * What a policy blocks of what GenClass needs: [{ need, why }]. `policy` may hold several policies (a header's
  * comma-separated list): each is enforced, so what any of them blocks is a gap. `o.script`: the script tag's src
  * on a script-tag setup (its worker starts from a blob: URL; the tag needs script-src); `o.publicDir`: where a
- * self-hosted model would go. Pure.
+ * self-hosted model would go; `o.ort`: the onnxruntime-web version the app's runtime loads (ORT_VERSION when not
+ * given). Pure.
  */
 export function cspGaps(policy, s, o = {}) {
   const gaps = [];
   const need = (g) => {
     if (!gaps.some((x) => x.need === g.need)) gaps.push(g);
   };
+  const cdn = cdnFiles(typeof o.ort === "string" && /^\d+\.\d+\.\d+$/.test(o.ort) ? o.ort : ORT_VERSION);
   const rt = cmdFor(BUILD.runtimeVersion);
   const pub = o.publicDir ?? "public";
   const modelDir = pub ? `${pub}/genclass-model` : "genclass-model";
@@ -542,7 +688,7 @@ export function cspGaps(policy, s, o = {}) {
     const lets = (d, url, opts) => sourceAllows(listFor(dirs, d), url, opts);
     if (s.telemetry === "on" && !lets("connect-src", "https://genclass.dev/api/v1/events")) need({ need: "connect-src https://genclass.dev", why: "the diagnostics are blocked (or set telemetry: false)" });
     if (s.telemetry === "own" && s.endpoint && !lets("connect-src", `https://${s.endpoint}/`)) need({ need: `connect-src https://${s.endpoint}`, why: "the diagnostics cannot reach your collector" });
-    if (s.model === "cdn" && !CDN_FILES.every((u) => lets("connect-src", u))) need({ need: "connect-src https://cdn.jsdelivr.net", why: `the model cannot download, so GenClass observes without a diagnosis (or self-host it: ${selfHost})` });
+    if (s.model === "cdn" && !cdn.every((u) => lets("connect-src", u))) need({ need: "connect-src https://cdn.jsdelivr.net", why: `the model cannot download, so GenClass observes without a diagnosis (or self-host it: ${selfHost})` });
     if (s.model === "other" && s.modelHost && !lets("connect-src", `https://${s.modelHost}/`)) need({ need: `connect-src https://${s.modelHost}`, why: "the model cannot download, so GenClass observes without a diagnosis" });
     for (const h of s.sinks ?? []) if (typeof h === "string" && h && !lets("connect-src", `https://${h}/`)) need({ need: `connect-src https://${h}`, why: "the sink cannot send" });
     if (tagUrl) {
@@ -752,9 +898,10 @@ export async function checks(o = {}, deps = {}) {
     try {
       const byFile = new Map();
       for (const { file, policy } of cspIn(cwd, pages)) byFile.set(file, [...(byFile.get(file) ?? []), policy]);
+      const ort = html ? null : ortPinnedFrom(cwd);
       for (const [file, policies] of byFile) {
         const gaps = [];
-        for (const p of policies) for (const g of cspGaps(p, setup, { script: tag?.src ?? null, publicDir: publicDirOf(st.project) })) if (!gaps.some((x) => x.need === g.need)) gaps.push(g);
+        for (const p of policies) for (const g of cspGaps(p, setup, { script: tag?.src ?? null, publicDir: publicDirOf(st.project), ort })) if (!gaps.some((x) => x.need === g.need)) gaps.push(g);
         if (gaps.length) add({ id: "csp", label: "Content policy", state: "bad", detail: `${file}: ${gaps.map((g) => `without ${g.need}, ${g.why}`).join("; ")}`, fix: `add ${gaps.map((g) => g.need).join(", ")} to the policy in ${file}` });
         else add({ id: "csp", label: "Content policy", state: "ok", detail: `${file} allows what GenClass needs` });
       }

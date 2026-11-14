@@ -172,6 +172,14 @@ Fixed in `genclass doctor` and the update notice:
 - After linking the dev page, the agent is asked about the page only when its configuration names GenClass's server.
 - An alpha build is compared with the `alpha` dist-tag as well as `latest`, in `doctor` and in the update notice,
   which then says `npm install -g genclass@alpha`.
+- A policy set for a section of the site (`/app/*`) is checked again, as GenClass runs on those pages too; only
+  policies for API routes and static files (`/api/*`, `/assets/*`, `*.js`) are left out.
+- `_headers` is read as Netlify and Cloudflare Pages read it: header lines need no indent, and a path line may be an
+  absolute URL (`https://example.com/*`).
+- A next.config header's route is the `source` of its own entry (written before or after its `headers`), not the
+  last `source` above it, so a `redirects()` entry no longer hides the policy.
+- The model check asks for the onnxruntime-web version the app's runtime loads (1.30.0, or the installed runtime's
+  pin), so a jsDelivr source limited to that version's folder is no longer reported as blocking it.
 
 Fixed from the review (2026-11-14):
 
