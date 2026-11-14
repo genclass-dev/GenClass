@@ -185,6 +185,11 @@ Fixed from the review (2026-11-14):
 - Offline, with a saved session, the header says the account "(not checked)" instead of "not signed in".
 - Under `genclass`, init's Optional and Payments blocks and its question about the account fit the window (a
   code line's `//` comment goes above it).
+- Init's folded code pastes as code: it breaks only after `,` `;` `:` `=` `{` `(` `[` or `=>`, never between an arrow
+  function's parameters and its `=>` (the Zustand and Redux Toolkit lines were a SyntaxError at 58 to 61 columns),
+  and a line it cannot read surely is printed whole.
+- `flake`'s results fit the window too (the title, the replay's heading, an interrupted run, a long list of passing
+  tests); the replay command at the end stays whole, further left when it must be.
 
 ## 0.3.8
 

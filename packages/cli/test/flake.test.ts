@@ -650,6 +650,34 @@ describe("genclass flake: review fixes (alpha, 2026-11-14)", () => {
     expect(flat(flakeUsage(60))).toBe(flat(FLAKE_USAGE));
   });
 
+  it("the results screen fits a 58-column window too; only the replay command and the prompt to copy are printed whole", async () => {
+    const dir = tempDir();
+    const REPLAY = "npx genclass flake tests/search.spec.ts:12 --project chromium --seed 2";
+    const said = await at(58, async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, SUITE), interactive: false })).toBe(1));
+    const screen = said.out.slice(0, said.out.indexOf("A prompt for your coding agent:"));
+    // the title (81 columns before) and the replay's heading fold; the command is whole, at the first column, as the
+    // install line is
+    expect(tooWide(screen, 58)).toEqual([REPLAY]);
+    expect(plainLines(screen)).toContain(REPLAY);
+    expect(flat(plainLines(screen).join(" "))).toContain("GenClass flake: 5 tests, each once in the natural order, then on seeds 1 to 5");
+    expect(flat(plainLines(screen).join(" "))).toContain(`Replay seed 2 of tests/search.spec.ts:12: ${REPLAY}`);
+    // in an 80-column window the command fits where it always stood; at 96 the title is one line, as before
+    const wide = await at(80, async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, SUITE), interactive: false })).toBe(1));
+    expect(plainLines(wide.out)).toContain(`    ${REPLAY}`);
+    expect(tooWide(wide.out.slice(0, wide.out.indexOf("A prompt for your coding agent:")), 78)).toEqual([]);
+    const widest = await at(96, async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, SUITE), interactive: false })).toBe(1));
+    expect(plainLines(widest.out)).toContain("  GenClass flake: 5 tests, each once in the natural order, then on seeds 1 to 5");
+    // an interrupted run, and many passing tests listed by count, fold too
+    const stopped = await at(58, async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, interactive: false, spawn: standIn(dir, SUITE.slice(0, 2), { result: () => ({ code: 130, signal: null }) }) })).toBe(130));
+    const cut = stopped.out.slice(0, stopped.out.indexOf("A prompt for your coding agent:"));
+    expect(tooWide(cut, 58).filter((l) => l.trim() !== REPLAY)).toEqual([]);
+    expect(flat(plainLines(cut).join(" "))).toContain("The run was interrupted: this is what ran before it stopped.");
+    const many: TestDef[] = Array.from({ length: 10 }, (_, i) => ({ file: "tests/list.spec.ts", line: i + 1, titles: [`item ${i + 1}`], outcome: () => ({ ok: true }) }));
+    const passing = await at(58, async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, many), interactive: false })).toBe(0));
+    expect(tooWide(passing.out, 58)).toEqual([]);
+    expect(flat(plainLines(passing.out).join(" "))).toContain("each passed on every run with no race seen (--json lists them)");
+  });
+
   it("an app that ships the runtime in its dependencies is told to install it without -D, so it stays there", () => {
     const old = { ...TOOLS, runtime: { version: "0.2.3", dir: "/p/node_modules/@genclass/runtime/dist", given: false, ok: false, why: "no-agent" } };
     expect(runtimeListed({ dependencies: { "@genclass/runtime": "^0.2.3" } })).toBe("dependencies");

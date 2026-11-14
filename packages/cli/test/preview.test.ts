@@ -133,6 +133,85 @@ describe("the init preview under the genclass command (runtime ui.mjs)", () => {
     expect(codeLines("x".repeat(120), 8, 60)).toEqual([`        ${"x".repeat(120)}`]);
   });
 
+  it("init's folded code is still code: never a line break where JavaScript forbids one (an arrow's parameters and =>)", async () => {
+    const { codeLines } = await import("../../runtime/bin/lib/init.mjs");
+    g.__GENCLASS_CLI__ = HOST;
+    // the code lines init recommends (recommendations, printMoneyAdvice), at every width from 20 to 140 columns
+    const LINES = [
+      'create(genclass(GenClass.runtime, "store")((set) => ({ /* your store */ })))',
+      'configureStore({ reducer, enhancers: (getDefault) => getDefault().concat(genclassEnhancer(GenClass.runtime, { name: "app" })) })',
+      'createStore(reducer, genclassEnhancer(GenClass.runtime, { name: "app" }))',
+      'const [cart, setCart] = useGenClassState("cart", initialCart); // instead of useState(initialCart)',
+      'const protect = { requests: { protect: ["preset:payments", "preset:auth"] } };',
+      'const f = async (x) => { return { a: x, b: "a b, c", c: `d, e` }; }; x++; f({ k: 1 });',
+    ];
+    for (const line of LINES) {
+      expect(() => new Function(line), line).not.toThrow();
+      for (let cols = 20; cols <= 140; cols++) {
+        const folded = codeLines(line, 8, cols);
+        expect(() => new Function(folded.join("\n")), `${cols} columns:\n${folded.join("\n")}`).not.toThrow();
+        // the same code, its comment above it once it folds
+        if (folded.length === 1) expect(folded[0]).toBe(`        ${line}`);
+        else expect(folded.filter((l) => !l.trim().startsWith("//")).map((l) => l.trim()).join(" "), `${cols} columns`).toBe(line.replace(/ \/\/ .*$/, ""));
+        // never a line that starts with => (the break JavaScript forbids), never one that ends after return or async
+        for (const l of folded) expect(/^\s*=>|\b(return|async|throw)\s*$/.test(l), `${cols} columns: ${l}`).toBe(false);
+      }
+    }
+    // the 58 to 61 columns the review saw: Zustand's (set) and Redux Toolkit's (getDefault) stay with their =>
+    for (const cols of [58, 59, 60, 61]) {
+      expect(codeLines(LINES[0], 8, cols).join("\n")).toContain("((set) =>");
+      expect(codeLines(LINES[1], 8, cols).join("\n")).toContain("(getDefault) =>");
+    }
+    // a line it cannot read surely is printed whole, as wide as it is: a regular expression (or a division), JSX, a
+    // template with ${...}, a quote left open
+    for (const line of [
+      'const re = / a, b /g; match(re, { first: "one", second: "two", third: "three" });',
+      "const el = <p className={x}>Hello, world, this is a long paragraph of text in JSX, folded</p>;",
+      "const s = `a ${b, c} d`; call({ first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6 });",
+      'const s = "never closed, so the rest of it is read as a string, though it is long enough to fold',
+    ]) expect(codeLines(line, 8, 60)).toEqual([`        ${line}`]);
+  });
+
+  it("init --dry-run on Zustand and Redux Toolkit apps at 58 to 61 columns: each Optional block's code parses as a module", async () => {
+    const { spawnSync } = await import("node:child_process");
+    const { join } = await import("node:path");
+    const { writeFileSync } = await import("node:fs");
+    const dir = tempDir();
+    viteApp(dir);
+    write(dir, {
+      "src/store.js": 'import { create } from "zustand";\nexport const useStore = create((set) => ({ n: 0 }));\n',
+      "src/redux.js": 'import { configureStore } from "@reduxjs/toolkit";\nexport const store = configureStore({ reducer: (s = 0) => s });\n',
+    });
+    const scratch = tempDir();
+    const saveTags = process.env.GENCLASS_TEST_DIST_TAGS;
+    process.env.GENCLASS_TEST_DIST_TAGS = "fail";
+    try {
+      g.__GENCLASS_CLI__ = HOST;
+      for (const cols of [58, 59, 60, 61]) {
+        process.stdout.columns = cols;
+        const said = plain(await printed(async () => expect(await runInit("init", ["--cwd", dir, "--dry-run", "--no-install", "--no-network", "--no-devtools", "--brief"])).toBe(0)));
+        const lines = said.split("\n");
+        for (const title of ["Zustand store in", "Redux store in"]) {
+          // the bullet, its title to the line ending "):", then the code to the next bullet or blank line
+          const from = lines.findIndex((l) => l.startsWith(`    ${"•"} ${title}`) || l.startsWith(`    * ${title}`));
+          expect(from, `${cols} columns: ${title}`).toBeGreaterThan(-1);
+          const start = lines.findIndex((l, i) => i >= from && l.endsWith("):")) + 1;
+          let end = start;
+          while (end < lines.length && lines[end].trim() && !/^\s{4}[•*] /.test(lines[end])) end++;
+          const code = lines.slice(start, end);
+          expect(code.length).toBeGreaterThanOrEqual(3);
+          const file = join(scratch, `${title.split(" ")[0]}-${cols}.mjs`);
+          writeFileSync(file, `${code.join("\n")}\n`);
+          const check = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
+          expect(check.status, `${cols} columns, ${title}:\n${code.join("\n")}\n${check.stderr}`).toBe(0);
+        }
+      }
+    } finally {
+      if (saveTags === undefined) delete process.env.GENCLASS_TEST_DIST_TAGS;
+      else process.env.GENCLASS_TEST_DIST_TAGS = saveTags;
+    }
+  });
+
   it("init's question about the account fits the window under the genclass command", async () => {
     const { saveCredentials } = await import("../../runtime/bin/lib/account.mjs");
     const { PassThrough } = await import("node:stream");
