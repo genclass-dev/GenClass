@@ -612,10 +612,10 @@ Until the visitor answers, GenClass runs on the page **locally only**:
 
 | part | before consent | `true` (granted) | `false` (denied) |
 |---|---|---|---|
-| `diagnostics` | no request: `runtime.telemetry` is off with reason `consent` | telemetry starts now (a new session id; nothing from before the grant is counted or sent), exactly as without the gate, so every opt-out still wins | stays off; after a grant it stops now and what was queued is dropped |
-| `analytics` | not recorded (`runtime.analytics.reason` `consent`) | the analytics the app turned on (`analytics: true`, or an earlier `runtime.analytics.start()`) start, with diagnostics (they are sent as diagnostics) | stay off; after a grant they stop and their `localStorage` visit entry is removed |
-| `storage` | GenClass reads and writes none of its own `localStorage` / `sessionStorage` entries (learned state, the act/observe bucket, the breaker's trip): they live in memory for the page | learned state from earlier visits is read, and kept from now on (only where the app stores it at all: `learn.persist`, `learn.expectations`) | stays off; GenClass's own entries are removed, including ones from earlier visits |
-| `model` | no worker, no download (no request to cdn.jsdelivr.net), nothing in Cache Storage; `runtime.status` is `disabled` with reason `consent`; GenClass observes without a diagnosis | the model loads as `model.preload` says (`eager` now, `idle` when the browser is idle, `lazy` at the first salient situation) | stays off; after a grant it is no longer consulted and its Cache Storage copy (`genclass-runtime-v1`) is deleted; a model already in memory stays there, unused, until the page closes |
+| `diagnostics` | no request: `runtime.telemetry` is off with reason `consent` (reason `url` when the page started with `?genclass=no-telemetry`: that opt-out holds for the page load, even after a route change drops it from the URL) | telemetry starts now (a new session id; nothing from before the grant is counted or sent: the summary's runtime counts start at the grant too), exactly as without the gate, so every opt-out still wins | stays off; after a grant it stops now and what was queued is dropped |
+| `analytics` | not recorded (`runtime.analytics.reason` `consent`) | the analytics the app turned on (`analytics: true`, or an earlier `runtime.analytics.start()`) start, with diagnostics (they are sent as diagnostics) | stay off; after a grant they stop, the events they queued are dropped and their `localStorage` visit entry is removed (one an earlier visit left too) |
+| `storage` | GenClass reads and writes none of its own `localStorage` / `sessionStorage` entries (learned state, the act/observe bucket, the breaker's trip): they live in memory for the page | learned state from earlier visits is read, and kept from now on (only where the app stores it at all: `learn.persist`, `learn.expectations`); the session's act/observe bucket and breaker trip are read (a stored trip caps the mode from then on), or this page's are stored | stays off; GenClass's own entries are removed, including ones from earlier visits |
+| `model` | no worker, no download (no request to cdn.jsdelivr.net), nothing in Cache Storage; `runtime.status` is `disabled` with reason `consent`; GenClass observes without a diagnosis | the model loads as `model.preload` and `model.loadIf` say, from the grant (`eager` now, `idle` once the page has loaded and the browser is idle, `lazy` at the first salient situation) | stays off; after a grant it is no longer consulted, a download in progress stops (the worker ends) and its Cache Storage copy (`genclass-runtime-v1`) is deleted; a model already in memory stays there, unused, until the page closes |
 
 Then pass the visitor's choice from your consent banner (`runtime.consent(...)` on the runtime does the same):
 
@@ -627,10 +627,11 @@ const state = await GenClass.consent(); // { diagnostics: "granted" | "denied" |
 ```
 
 It resolves once applied (the code that applies a choice is a small lazy chunk, so the first load carries only the
-checks: about 0.34 KB gzip, RESULTS.md section 29). An object at start grants or denies those parts and leaves the rest
+checks: about 0.38 KB gzip, RESULTS.md section 29). An object at start grants or denies those parts and leaves the rest
 pending: `consent: { model: true }` for a model served from your own site (`model.baseUrl`, `ortWasmPaths`), with
 diagnostics waiting. `consent: "denied"` denies everything; the meta tag and `data-consent` take `pending` and
-`denied` only, since a grant is the visitor's and comes from your code. Without the option nothing changes: every part
+`denied` only, since a grant is the visitor's and comes from your code, and they fail closed: any value but `denied`
+(a bare `data-consent`, `granted`, a typo) is `pending`. Without the option nothing changes: every part
 starts granted (so `GenClass.consent(false)` still withdraws what runs, as above, but what was sent before it stays
 sent: set the option where consent is needed). Explicit `runtime.ask()` / `decide()` calls still use a model already
 in memory after a withdrawal. A consent option given to `GenClass.init()` after `/auto` or the script tag already started GenClass is

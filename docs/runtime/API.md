@@ -107,7 +107,10 @@ and `0.3.0-beta.0` have no analytics and ignore the option silently: install `@g
 `window.GENCLASS_CONFIG.consent`, `consent=pending` in the meta tag, `data-consent="pending"`) makes GenClass observe
 locally only until the app passes the visitor's choice: no telemetry request, no analytics, no read or write of
 GenClass's own `localStorage` / `sessionStorage` entries, no model download, worker or Cache Storage
-(`rt.telemetry.reason`, `rt.analytics.reason` and, for the built-in model, `rt.status.reason` are `"consent"`).
+(`rt.telemetry.reason`, `rt.analytics.reason` and, for the built-in model, `rt.status.reason` are `"consent"`;
+`rt.telemetry.reason` is `"url"` when the page started with `?genclass=no-telemetry`, which then holds for the page
+load). The meta tag and `data-consent` fail closed: `denied` denies, any other value (bare, `granted`, a typo) is
+`pending`.
 
 ```ts
 type ConsentChoices = { diagnostics?: boolean; analytics?: boolean; storage?: boolean; model?: boolean };
@@ -119,11 +122,14 @@ GenClass.consent(choices?)                                    // the same, on Ge
 
 `true` grants every part, `false` denies every part, an object sets the parts it names; no argument reads. A grant
 starts the part from that point (diagnostics through the usual opt-out checks, so Global Privacy Control,
-`telemetry: false`, `?genclass=no-telemetry` and local hosts still win; analytics only when the app turned them on;
-learned state only where the app stores it; the model as `model.preload` says). A denial keeps the part off; after a
-grant it withdraws it: telemetry stops and drops its queue, analytics stop, GenClass's own entries are removed, the
-model is no longer consulted and its Cache Storage copy is deleted. It resolves once applied (a lazy chunk,
-`dist/consent-*.js`; null if it could not load) and never rejects. Without the option every part starts granted.
+`telemetry: false`, `?genclass=no-telemetry` as the page started and local hosts still win, and a late session's
+summary counts the runtime from the grant; analytics only when the app turned them on; learned state only where the
+app stores it, with the session's act/observe bucket and breaker trip read as without the gate; the model as
+`model.preload` and `model.loadIf` say, `idle` once the page has loaded). A denial keeps the part off; after a grant
+it withdraws it: telemetry stops and drops its queue, analytics stop and their queued events are dropped, GenClass's
+own entries are removed (the analytics visit entry too), the model is no longer consulted, a download in progress
+stops, and its Cache Storage copy is deleted. It resolves once applied (a lazy chunk, `dist/consent-*.js`; null if it
+could not load) and never rejects. Without the option every part starts granted.
 
 ## Options
 

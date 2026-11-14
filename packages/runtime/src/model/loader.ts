@@ -380,7 +380,8 @@ export async function fetchFile(
       });
     }
   }
-  const stored = cache ? storeCopy(cache, url, bytes, sha, tag) : Promise.resolve();
+  // `env.caches` read again: the backend clears it when it is disposed during the download (backend.ts doLoad)
+  const stored = cache && env.caches ? storeCopy(cache, url, bytes, sha, tag) : Promise.resolve();
   return { bytes, fromCache: false, stored };
 }
 
@@ -430,7 +431,7 @@ export async function fetchCard(env: FetchEnv, baseUrl: string): Promise<{ card:
     if (!res.ok) throw new ModelLoadError(`model card download failed: HTTP ${res.status} for ${url}`);
     const text = await res.text();
     const card = parseCard(JSON.parse(text));
-    if (cache) {
+    if (cache && env.caches) {
       cache.put(url, new Response(text, { headers: { "content-type": "application/json" } })).catch(() => undefined);
     }
     return { card, fromCache: false };

@@ -74,7 +74,11 @@ export type TelemetryResolution = { on: true; config: TelemetryConfig } | { on: 
 
 type G = Record<string, unknown>;
 
-function urlOptOut(g: G): boolean {
+/**
+ * `?genclass=no-telemetry` or `?genclass=off` in the page's URL. Under InitOptions.consent createRuntime also reads it
+ * at start, so the opt-out the page started with wins over a later grant (src/consent.ts), after a route change too.
+ */
+export function urlOptOut(g: G): boolean {
   try {
     const search = (g.location as { search?: unknown } | undefined)?.search;
     if (typeof search !== "string" || !search) return false;

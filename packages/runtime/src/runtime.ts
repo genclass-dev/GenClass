@@ -330,9 +330,12 @@ export class RuntimeImpl implements Runtime {
   readonly cs: ConsentChoices;
   /**
    * What the consent chunk needs from createRuntime (src/index.ts): start telemetry, whether the gate is on
-   * (InitOptions.consent set), the model options (preload, cacheName). Internal.
+   * (InitOptions.consent set), the model options (cacheName), a new built-in model host (lazy, or as the options and
+   * model.loadIf say), the app's token (the analytics visit entry's key). Internal.
    */
-  cx?: { tel?: () => TelemetryStatus; gate?: boolean; model?: ModelOptions | false };
+  cx?: { tel?: () => TelemetryStatus; gate?: boolean; model?: ModelOptions | false; host?: (lazy?: boolean) => DecisionProvider; token?: string };
+  /** The built-in model's status listener: the consent chunk subscribes a host it puts in place (src/consent.ts). Internal. */
+  declare onModel?: (s: ModelStatus) => void;
   /** Sessions the stored learned state counted when it was loaded. */
   private storedSessions = 0;
   /** Signatures with a `response` expectation reported and no answer since (one line per run of hangs). */
@@ -364,6 +367,8 @@ export class RuntimeImpl implements Runtime {
   /** "on", "pending" (an async enabled predicate: pass-through), "off" (an EnabledSource flipped off), "disabled". */
   private enabledState: "on" | "pending" | "off" | "disabled" = "on";
   private sampled = true;
+  /** The `sample` whose bucket is kept in sessionStorage (0 < p < 1): a storage grant reads or stores it (src/consent.ts). */
+  private declare bucketP?: number;
   private routes: RouteRule[] = [];
   private routeScope: { route?: string; rule?: number; mode: ModeOrOff; aggressiveness: number } = { mode: "heal", aggressiveness: 1 };
   private requestsOpt: RequestScope = {};
@@ -625,7 +630,7 @@ export class RuntimeImpl implements Runtime {
       // the model host also notifies while it stays ready (latency stats after the first decision, then every 5 s):
       // the "Model ready" line is printed when the model becomes ready, not on each of those updates
       let wasReady = false;
-      const off = this.decider.onStatus((s) => {
+      const off = this.decider.onStatus((this.onModel = (s) => {
         this.fire("status", s);
         const becameReady = s.state === "ready" && !wasReady;
         wasReady = s.state === "ready";
@@ -642,7 +647,7 @@ export class RuntimeImpl implements Runtime {
         if (s.state === "error" && s.blocked) this.warnOnce("model-blocked", blockedMessage(s.blocked));
         else if (s.state === "error") this.emitReport({ kind: "status", message: `[GenClass] Model unavailable (${s.error ?? "error"}); observing only.` });
         else if (s.state === "skipped" && s.reason === "worker-unavailable") this.warnWorkerUnavailable(s);
-      });
+      }));
       this.uninstall.push(off);
     }
     // not loaded before the runtime could subscribe: the device floor (model.loadIf, src/model/device.ts) or, with
@@ -764,6 +769,7 @@ export class RuntimeImpl implements Runtime {
     }
     if (p >= 1) return true;
     if (p <= 0) return false;
+    this.bucketP = p;
     const ss = this.storage("session");
     const actAt = `act@${p}`;
     const observeAt = `observe@${p}`;
@@ -3988,21 +3994,20 @@ export class RuntimeImpl implements Runtime {
     } catch {
       /* unreadable: discarded below */
     }
+    // GenClass's own writes from here (a stale entry removed, the session ordinal) are not app activity: a storage
+    // grant (src/consent.ts) runs this after the storage observer is installed. startSession catches its own errors.
+    this.selfStorage = true;
     try {
       if (w && typeof w === "object" && w.format === LEARN_FORMAT && w.lib === RUNTIME_VERSION && w.version === this.learnVersion) {
         if (this.persistProfiles) this.profiles.load(w.profiles);
         this.storedFlows = w.flows;
         if (typeof w.sessions === "number" && Number.isFinite(w.sessions) && w.sessions >= 0) stored = Math.floor(w.sessions);
-      } else if (raw) {
-        this.selfStorage = true;
-        st?.removeItem(this.learnKey);
-      }
+      } else if (raw) st?.removeItem(this.learnKey);
     } catch {
       /* start over */
-    } finally {
-      this.selfStorage = false;
     }
     this.startSession(stored);
+    this.selfStorage = false;
   }
 
   /**

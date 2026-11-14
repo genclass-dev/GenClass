@@ -169,7 +169,17 @@ export class ModelBackend {
     const { clock } = this.env;
     const t0 = clock.now();
     const baseUrl = normalizeBaseUrl(opts.baseUrl, globalLocation());
-    const fenv: FetchEnv = { fetch: this.env.fetch, caches: this.env.caches, cacheName: opts.cacheName || DEFAULT_CACHE_NAME, timers: this.env.clock };
+    // disposed while loading (a consent withdrawal; a worker is terminated, the inline backend goes on until the next
+    // await): no further request starts and nothing more is written to Cache Storage
+    const self = this;
+    const fenv: FetchEnv = {
+      fetch: (u, i) => (this.disposed ? Promise.reject(new ModelLoadError("disposed while loading")) : this.env.fetch(u, i)),
+      get caches() {
+        return self.disposed ? null : self.env.caches;
+      },
+      cacheName: opts.cacheName || DEFAULT_CACHE_NAME,
+      timers: this.env.clock,
+    };
     const base: ModelHostStatus = { state: "loading", worker: this.env.inWorker };
     this.set({ ...base, phase: "card" });
     const attempts: LoadAttempt[] = [];
