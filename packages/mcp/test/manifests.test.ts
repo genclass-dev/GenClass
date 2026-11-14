@@ -169,6 +169,18 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
     if (i > 0) fields[line.slice(0, i).trim()] = line.slice(i + 1).trim();
   }
   const body = parts?.[2] ?? "";
+  // the skill's paragraphs and numbered steps, each on one line
+  const chunks = body.split(/\n\s*\n|\n(?=\s*\d+\. )/).map((c) => c.replace(/\s+/g, " "));
+  // what the newest @genclass/mcp on npm answers with two apps on this machine, recorded from its own code by
+  // test/fixtures/record-released.mjs (its arguments, its explore actions, its answers)
+  const released = JSON.parse(readFileSync(join(pkgDir, "test", "fixtures", "released-mcp.json"), "utf8")) as {
+    release: string;
+    apps: string[];
+    arguments: Record<string, string[]>;
+    exploreActions: string[];
+    calls: { tool: string; args: Record<string, unknown>; isError: boolean; text: string }[];
+  };
+  const answer = (tool: string, args: Record<string, unknown>) => released.calls.find((c) => c.tool === tool && JSON.stringify(c.args) === JSON.stringify(args))!;
 
   it("the frontmatter parses: name genclass, one-line description of at most 1,024 characters (Claude Code's limit) with the symptom words early", () => {
     expect(parts, "frontmatter between --- lines").not.toBeNull();
@@ -234,10 +246,10 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
   });
 
   it("the skill also works with the released server the CLI pins beside it: what that release lacks comes with what to do without it (finding 45)", () => {
-    // the explore actions and the genclass_status / genclass_findings arguments of the newest @genclass/mcp on npm
-    // (mcp-v0.2.2): `genclass` writes this skill next to an .mcp.json pinned to it, whose schemas reject anything newer
-    const RELEASED = { explore: ["start", "report", "stop"], origin: false };
-    const chunks = body.split(/\n\s*\n|\n(?=\s*\d+\. )/).map((c) => c.replace(/\s+/g, " "));
+    // the explore actions and the genclass_status / genclass_findings arguments of the newest @genclass/mcp on npm, as
+    // recorded from its own code: `genclass` writes this skill next to an .mcp.json pinned to it
+    expect(released.release, "test/fixtures/released-mcp.json records the release the skill's install line pins: record it again with test/fixtures/record-released.mjs").toBe(V);
+    const RELEASED = { explore: released.exploreActions, origin: ["genclass_status", "genclass_findings"].every((t) => released.arguments[t]?.includes("origin")) };
     let checked = 0;
     for (const c of chunks) {
       const newer = [...c.matchAll(/genclass_explore \{action:"(\w+)"/g)].map((m) => m[1]).filter((a) => !RELEASED.explore.includes(a));
@@ -248,6 +260,33 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
       if (newer.includes("wait")) expect(c).toContain("call `genclass_status`");
     }
     expect(checked).toBeGreaterThanOrEqual(2);
+  });
+
+  it("the skill's advice for a release without `origin` works on that release's recorded answers: where each app's URL shows, what an origin it does not take returns (finding 45)", () => {
+    const c = chunks.find((x) => /An older release of the server takes no `origin`/.test(x));
+    expect(c, "the origin fallback").toBeDefined();
+    const fallback = c!.slice(c!.indexOf("An older release"));
+    // a tool whose recorded answers (without an error) name every app's page URL
+    const showsUrls = (tool: string) => released.apps.every((a) => released.calls.some((x) => x.tool === tool && !x.isError && x.text.includes(a)));
+    const named = [...new Set([...fallback.matchAll(/`(genclass_\w+)`/g)].map((m) => m[1]))];
+    expect(named.filter(showsUrls), `${named.join(", ")}: none shows the apps' URLs on ${released.release}`).not.toEqual([]);
+    // every tool a sentence of the fallback names next to "URL" shows them (0.2.2's genclass_status shows routes only)
+    for (const s of fallback.split(/(?<=[.;:])\s/)) if (/\bURL\b/.test(s)) for (const m of s.matchAll(/`(genclass_\w+)`/g)) expect(showsUrls(m[1]), `${m[1]} in "${s}"`).toBe(true);
+    // the line it points at is in that release's answer, with the app's URL on it
+    const label = /\(the "([^"]+)" line\)/.exec(fallback)?.[1];
+    if (label) for (const [i, a] of released.apps.entries()) expect(answer("genclass_explain", { id: `f${i + 1}` }).text.split("\n").find((l) => l.includes(label)), label).toContain(a);
+    // an origin it does not take: answered, not refused, with every app's findings, so the agent cannot wait for an
+    // error to know; the fallback says what comes back and how to tell that release by its arguments
+    const asked = answer("genclass_findings", { origin: "5173" });
+    if (!asked.isError) {
+      expect(asked.text).toBe(answer("genclass_findings", {}).text);
+      expect(fallback).toContain("returns every app's findings");
+      expect(fallback).not.toMatch(/takes no `origin` and rejects/);
+      expect(fallback).toContain("lists no such argument");
+      expect(released.arguments.genclass_findings).not.toContain("origin");
+    }
+    // the explore wait the other fallback says it rejects: it does
+    expect(answer("genclass_explore", { action: "wait" }).isError).toBe(true);
   });
 
   it("the instructions agree with the skill on what waits for a yes", () => {
