@@ -981,11 +981,12 @@ export interface InitOptions {
    * model served from your own site (model.baseUrl), the rest waiting. With the option, every part starts pending
    * and the option's own grants apply a moment after start (the code that applies a choice is a lazy chunk), so even
    * `"granted"` starts diagnostics then rather than at once. Every opt-out still wins over a grant (Global Privacy
-   * Control, `telemetry: false`, `?genclass=no-telemetry`, local hosts), and a part the app did not turn on
-   * (`analytics`, `learn.persist`) is not turned on by its consent. Read once at start (a later `GenClass.init()` on
-   * a running runtime ignores it, with one console warning); also `window.GENCLASS_CONFIG.consent`,
-   * `<meta name="genclass" content="consent=pending">` and `data-consent="pending"` on the script tag (those two take
-   * "pending" and "denied" only). Not gated: the observers (in memory), the measured visual checks and the devtools
+   * Control, `telemetry: false`, `?genclass=no-telemetry` in the URL the page started on, local hosts), and a part the
+   * app did not turn on (`analytics`, `learn.persist`) is not turned on by its consent. Read once at start (a later
+   * `GenClass.init()` on a running runtime ignores it, with one console warning); also
+   * `window.GENCLASS_CONFIG.consent`, `<meta name="genclass" content="consent=pending">` and `data-consent="pending"`
+   * on the script tag (those two take "pending" and "denied" only, and fail closed: any value but "denied", a bare
+   * key, "granted" or a typo included, is "pending"). Not gated: the observers (in memory), the measured visual checks and the devtools
    * overlay (local, nothing sent or stored), your own `sinks`, and the coding-agent link (development only).
    * Unreleased (the alpha line after 0.3.0-beta.6).
    */
@@ -1826,12 +1827,15 @@ export interface Runtime {
    * "granted") grants every part, `false` (or "denied") denies every part, an object sets the parts it names and leaves
    * the rest as they are; no argument only reads. Resolves with each part's state once applied (the consent code is a
    * small lazy chunk; null if it could not load, and then nothing changed). A grant starts that part from now:
-   * diagnostics (a new `runtime.telemetry`; every opt-out still wins), analytics the app turned on (`analytics: true` or
-   * an earlier `runtime.analytics.start()`), storage (learned state from earlier visits is read and kept from now on),
-   * the model (loaded as `model.preload` says: now for "eager", when the browser is idle for "idle", at the first
-   * salient situation for "lazy"). A denial withdraws that part now: diagnostics and analytics stop and what they had
-   * queued is dropped, GenClass's own storage entries are removed, the model is no longer consulted and its Cache
-   * Storage copy is deleted (a model already loaded stays in memory, unused, until the page closes). Without the
+   * diagnostics (a new `runtime.telemetry` whose summaries count the runtime from the grant; every opt-out still wins,
+   * a `?genclass=no-telemetry` the page started with too), analytics the app turned on (`analytics: true` or an earlier
+   * `runtime.analytics.start()`), storage (learned state from earlier visits is read and kept from now on; the
+   * session's act/observe bucket and breaker trip are read, or this page's stored), the model (loaded as
+   * `model.preload` and `model.loadIf` say: now for "eager", once the page has loaded and the browser is idle for
+   * "idle", at the first salient situation for "lazy"). A denial withdraws that part now: diagnostics and analytics
+   * stop and what they had queued is dropped, GenClass's own storage entries are removed (the analytics visit entry
+   * too), the model is no longer consulted, a download in progress stops and its Cache Storage copy is deleted (a
+   * model already loaded stays in memory, unused, until the page closes). Without the
    * `consent` option every part starts granted, and a denial withdraws what runs the same way (diagnostics already
    * sent before it stay sent: that is what the option is for). Explicit `ask()` / `decide()` calls still use a model
    * already in memory. Never rejects.

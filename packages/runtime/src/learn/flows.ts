@@ -291,13 +291,18 @@ function entries<T>(x: unknown, cap: number, fix: (v: Record<string, unknown>) =
  * the stored support), minShare, minSessions (default 3 when learned state is kept in localStorage, else 1).
  */
 export function createFlows(env: FlowEnv, learn: LearnOptions | undefined, local: boolean): FlowProfiles {
+  return new FlowProfiles(env, flowConfig(learn, local));
+}
+
+/** createFlows' thresholds; `local`: learned state is kept in localStorage. */
+export function flowConfig(learn: LearnOptions | undefined, local: boolean): FlowConfig {
   const val = (v: unknown, d: number, min: number) => (typeof v === "number" && Number.isFinite(v) && v >= min ? v : d);
-  return new FlowProfiles(env, {
+  return {
     minSupport: Math.floor(val(learn?.minSupport, DEFAULT_MIN_SUPPORT, 1)),
     minStoredSupport: Math.floor(val(learn?.minSupport, DEFAULT_MIN_STORED_SUPPORT, 1)),
     minShare: Math.min(1, val(learn?.minShare, DEFAULT_MIN_SHARE, 0)),
     minSessions: Math.floor(val(learn?.minSessions, local ? DEFAULT_MIN_SESSIONS : 1, 1)),
-  });
+  };
 }
 
 export class FlowProfiles {
@@ -316,6 +321,14 @@ export class FlowProfiles {
     private readonly env: FlowEnv,
     public cfg: FlowConfig,
   ) {}
+
+  /**
+   * Learned state is kept in localStorage from now on (a storage grant after the layer loaded in memory,
+   * InitOptions.consent): the thresholds of a stored layer, as createFlows sets them (minSessions).
+   */
+  persisted(learn: LearnOptions | undefined): void {
+    this.cfg = flowConfig(learn, true);
+  }
 
   // ------------------------------------------------------------------------------------------ records
 

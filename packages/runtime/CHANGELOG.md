@@ -17,9 +17,26 @@
   part starts granted. New reasons: `runtime.telemetry.reason` and `runtime.analytics.reason` `"consent"`, and
   `runtime.status` `{ state: "disabled", reason: "consent" }` while the built-in model waits. A consent option given to
   `GenClass.init()` after `/auto` or the script tag started GenClass is ignored with one console warning. The code that
-  applies a choice is a lazy chunk (`src/consent.ts`, `dist/consent-*.js`); the gates add 0.34 KB gzip to `/auto` and
-  0.33 KB to the main entry (docs/runtime/RESULTS.md section 29; `test/bundle.test.ts` limits raised to 109.3 /
+  applies a choice is a lazy chunk (`src/consent.ts`, `dist/consent-*.js`); the gates add 0.38 KB gzip to `/auto` and
+  0.36 KB to the main entry (docs/runtime/RESULTS.md section 29; `test/bundle.test.ts` limits raised to 109.3 /
   101.02 KB, pending the owner's OK). Recipes for Google Consent Mode v2 and IAB TCF v2.2: TELEMETRY.md "Consent".
+- Consent mode: `?genclass=no-telemetry` as the page started holds for the page load (`runtime.telemetry.reason`
+  `"url"`); a grant after a route change dropped the query no longer starts telemetry.
+- Consent mode: a storage grant reads the session's act/observe bucket and breaker trip (a stored trip caps the mode
+  again), or stores this page's.
+- Consent mode: withdrawing analytics drops the `interactions` events they had queued, also ones a refused request
+  puts back.
+- Consent mode: withdrawing the model while it downloads stops the download (the worker ends; the inline fallback
+  starts no request and writes no cache entry) before its Cache Storage copy is deleted; a later grant loads it again.
+- Consent mode: GenClass's own storage writes at a storage grant are no longer recorded as the app's `storage` events.
+- Consent mode: diagnostics granted after the page started send the summary's `runtime` counts (decisions, latency,
+  holds, denials, errors) from the grant only.
+- Consent mode: a model grant follows `model.loadIf` (a `"lazy"` verdict stays lazy), and `preload: "idle"` waits for
+  the page's load event, as without the gate.
+- Consent mode: storage denied, then granted gives the flow layer a stored layer's thresholds (`minSessions` 3).
+- Consent mode: a denial also removes the analytics visit entry (`genclass.analytics.<token>`) an earlier visit left.
+- Consent mode: the meta tag and `data-consent` fail closed: any value but `denied` (bare, `granted`, a typo) is
+  `pending`.
 
 - `@genclass/runtime/agent` (development builds only): the page tells the bridge when its mode or model state changes
   after the hello (a `runtime` event, once per change, not per status update), so `genclass_status` no longer says

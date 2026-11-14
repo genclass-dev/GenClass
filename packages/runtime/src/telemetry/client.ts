@@ -23,7 +23,7 @@
 //   event (modelState "skipped") followed by a `model` event with the reason.
 
 import type { RuntimeImpl } from "../runtime.js";
-import type { ActionRecord, Answer, Decision, ModelStatus, TelemetryStatus } from "../types.js";
+import type { ActionRecord, Answer, Decision, ModelStatus, SessionSummary, TelemetryStatus } from "../types.js";
 import { REDACTED, fnv1a, normalizePath } from "../util.js";
 import { RUNTIME_VERSION } from "../version.js";
 import { TELEMETRY_SCHEMA, type TelemetryConfig } from "./config.js";
@@ -156,6 +156,11 @@ export class TelemetryClient implements TelemetryStatus {
    * `interactions` event here, so it goes out in the same flush (src/analytics/index.ts).
    */
   pre?: (reason: string) => void;
+  /**
+   * Set by the consent chunk (src/consent.ts) when this client starts after the page did (a diagnostics grant): the
+   * summary's `runtime` counts are read from it, so they cover the session from that point, not the page load.
+   */
+  declare since?: { summary(): SessionSummary };
   private readonly c = {
     decisions: 0,
     acted: 0,
@@ -573,7 +578,7 @@ export class TelemetryClient implements TelemetryStatus {
     this.lastSummaryAt = this.rt.clock.now();
     let rs: ReturnType<RuntimeImpl["summary"]> | undefined;
     try {
-      rs = this.rt.summary();
+      rs = (this.since ?? this.rt).summary();
     } catch {
       /* ignore */
     }

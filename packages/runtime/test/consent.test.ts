@@ -8,8 +8,10 @@ import { createRuntime, GenClass } from "../src/index.js";
 import type { RuntimeImpl } from "../src/runtime.js";
 import type { CreateOptions, TelemetryTransport } from "../src/types.js";
 import { consentOf, consentState } from "../src/consent.js";
-import { DEFAULT_CACHE_NAME } from "../src/model/loader.js";
+import { DEFAULT_CACHE_NAME, fetchFile } from "../src/model/loader.js";
 import { fromDataset, fromPairs, parsePairs, readMetaConfig } from "../src/cdn/config.js";
+import type { TelemetryClient } from "../src/telemetry/client.js";
+import { VISIT_KEY } from "../src/analytics/index.js";
 import { FakeClock, drain } from "./helpers.js";
 
 const TOKEN = "gc_abcdefghijklmnopqrstuv";
@@ -27,57 +29,109 @@ function recorder(): TelemetryTransport & { sent: Ev[][] } {
   };
 }
 
-/** A Storage that records every call, so "stores nothing" means no call at all. */
-function storage(name: string, calls: string[]): Storage {
-  const m = new Map<string, string>();
-  return {
-    get length() {
-      return m.size;
-    },
-    key: (i: number) => [...m.keys()][i] ?? null,
-    getItem(k: string) {
-      calls.push(`${name}.getItem ${k}`);
-      return m.has(k) ? m.get(k)! : null;
-    },
-    setItem(k: string, v: string) {
-      calls.push(`${name}.setItem ${k}`);
-      m.set(k, String(v));
-    },
-    removeItem(k: string) {
-      calls.push(`${name}.removeItem ${k}`);
-      m.delete(k);
-    },
-    clear() {
-      calls.push(`${name}.clear`);
-      m.clear();
-    },
-  };
+/**
+ * A Storage that records every call, so "stores nothing" means no call at all. Its methods are on the prototype, as
+ * a browser's are, so the storage observer (observe.storage, src/observe/storage.ts) can wrap them; `calls` can be
+ * pointed at the next page load's list when one storage outlives a page (sessionStorage across a reload).
+ */
+class RecStorage implements Storage {
+  private m = new Map<string, string>();
+  constructor(
+    private readonly name: string,
+    public calls: string[],
+  ) {}
+  get length() {
+    return this.m.size;
+  }
+  key(i: number) {
+    return [...this.m.keys()][i] ?? null;
+  }
+  getItem(k: string) {
+    this.calls.push(`${this.name}.getItem ${k}`);
+    return this.m.has(k) ? this.m.get(k)! : null;
+  }
+  setItem(k: string, v: string) {
+    this.calls.push(`${this.name}.setItem ${k}`);
+    this.m.set(k, String(v));
+  }
+  removeItem(k: string) {
+    this.calls.push(`${this.name}.removeItem ${k}`);
+    this.m.delete(k);
+  }
+  clear() {
+    this.calls.push(`${this.name}.clear`);
+    this.m.clear();
+  }
+  /** The stored value, without recording a call. */
+  peek(k: string) {
+    return this.m.get(k) ?? null;
+  }
+  /** Store a value, without recording a call (what an earlier page load left). */
+  seed(k: string, v: string) {
+    this.m.set(k, v);
+  }
+}
+function storage(name: string, calls: string[]): RecStorage {
+  return new RecStorage(name, calls);
 }
 
-/** A model worker that never answers: counting how many were created is enough to see a download start. */
-function fakeWorker(created: { n: number }) {
+/** A model worker that never answers: counting how many were created (and ended) is enough to see a download start. */
+function fakeWorker(created: { n: number }, ended?: { n: number }) {
   return () => {
     created.n++;
-    return { postMessage() {}, terminate() {}, addEventListener() {} };
+    return {
+      postMessage() {},
+      terminate() {
+        if (ended) ended.n++;
+      },
+      addEventListener() {},
+    };
   };
 }
 
 let rt: RuntimeImpl | null = null;
 
 /** A runtime on a public host with every stored or sent part turned on, and the gate as `consent` says. */
-function page(o: { consent?: CreateOptions["consent"]; telemetry?: CreateOptions["telemetry"]; gpc?: boolean; search?: string; analytics?: boolean; learn?: CreateOptions["learn"]; preload?: "eager" | "idle" | "lazy" } = {}) {
+function page(
+  o: {
+    consent?: CreateOptions["consent"];
+    telemetry?: CreateOptions["telemetry"];
+    gpc?: boolean;
+    search?: string;
+    analytics?: boolean;
+    learn?: CreateOptions["learn"];
+    preload?: "eager" | "idle" | "lazy";
+    /** model.loadIf (default: always load). */
+    loadIf?: () => unknown;
+    /** The storages of an earlier page load in the same tab (they then record into this page's `calls`). */
+    stores?: { local: RecStorage; session: RecStorage };
+    /** The storage observer on, with a Storage class on the page. */
+    observeStorage?: boolean;
+    /** Just enough of a document and window for the analytics chunk to record. */
+    dom?: boolean;
+    transport?: TelemetryTransport;
+  } = {},
+) {
   const clock = new FakeClock();
   const transport = recorder();
   const calls: string[] = [];
   const created = { n: 0 };
+  const ended = { n: 0 };
   const fetches: string[] = [];
   const cacheDeleted: string[] = [];
+  const local = o.stores?.local ?? storage("local", calls);
+  const session = o.stores?.session ?? storage("session", calls);
+  local.calls = calls;
+  session.calls = calls;
+  const noop = () => undefined;
   const g: Record<string, unknown> = {
     location: { href: `https://shop.example/cart${o.search ?? ""}`, hostname: "shop.example", pathname: "/cart", search: o.search ?? "" },
     navigator: o.gpc ? { globalPrivacyControl: true } : {},
     crypto: globalThis.crypto,
-    localStorage: storage("local", calls),
-    sessionStorage: storage("session", calls),
+    localStorage: local,
+    sessionStorage: session,
+    ...(o.observeStorage ? { Storage: RecStorage } : {}),
+    ...(o.dom ? { addEventListener: noop, removeEventListener: noop, document: { addEventListener: noop, removeEventListener: noop, visibilityState: "visible", referrer: "" } } : {}),
     caches: {
       delete: (n: string) => {
         cacheDeleted.push(n);
@@ -94,9 +148,9 @@ function page(o: { consent?: CreateOptions["consent"]; telemetry?: CreateOptions
     clock,
     global: g,
     report: "silent",
-    observe: OFF,
-    model: { preload: o.preload ?? "eager", loadIf: () => true, workerFactory: fakeWorker(created) } as never,
-    telemetry: o.telemetry ?? { transport, flushMs: 1000 },
+    observe: o.observeStorage ? { ...OFF, storage: true } : OFF,
+    model: { preload: o.preload ?? "eager", loadIf: o.loadIf ?? (() => true), workerFactory: fakeWorker(created, ended) } as never,
+    telemetry: o.telemetry ?? { transport: o.transport ?? transport, flushMs: 1000 },
     token: TOKEN,
     analytics: o.analytics ?? true,
     // every stored part: learned state (profiles too), the act/observe bucket
@@ -105,7 +159,7 @@ function page(o: { consent?: CreateOptions["consent"]; telemetry?: CreateOptions
     ...(o.consent !== undefined ? { consent: o.consent } : {}),
   }) as RuntimeImpl;
   const sent = () => transport.sent.flat();
-  return { clock, g, transport, sent, calls, created, fetches, cacheDeleted, rt };
+  return { clock, g, transport, sent, calls, created, ended, fetches, cacheDeleted, rt, stores: { local, session } };
 }
 
 afterEach(() => {
@@ -351,7 +405,8 @@ describe("parsing the choice (src/consent.ts; the page config, src/cdn/config.ts
   it("the meta tag and data-consent take pending and denied only (they can hold GenClass back, never grant)", () => {
     expect(fromPairs(parsePairs("consent=pending"))).toEqual({ consent: "pending" });
     expect(fromPairs(parsePairs("consent=denied, mode=observe"))).toEqual({ consent: "denied", mode: "observe" });
-    expect(fromPairs(parsePairs("consent=granted"))).toEqual({});
+    // a grant is the visitor's, from the app's code: "granted" here waits as pending (fails closed)
+    expect(fromPairs(parsePairs("consent=granted"))).toEqual({ consent: "pending" });
     expect(fromDataset({ consent: "pending" })).toEqual({ consent: "pending" });
     const doc = { head: { querySelectorAll: () => [{ getAttribute: () => "consent=pending" }] } };
     expect(readMetaConfig(doc as never)).toEqual({ consent: "pending" });
@@ -428,5 +483,295 @@ describe("GenClass.consent and GenClass.init with the option (CONTRACT section 1
     m.GenClass.init({ ...QUIET, model: false, consent: "pending" });
     expect(warn.mock.calls.filter((c) => String(c[0]).includes("Nothing waits for consent"))).toHaveLength(0);
     m.GenClass.destroy();
+  });
+});
+
+describe("the URL opt-out the page started with outlives a route change (CONTRACT section 17; TELEMETRY.md Opting out)", () => {
+  it("pending: ?genclass=no-telemetry, then the SPA drops the query, then a grant: still off for the page load", async () => {
+    const p = page({ consent: "pending", search: "?genclass=no-telemetry" });
+    expect(p.rt.telemetry).toMatchObject({ enabled: false, reason: "url" });
+    (p.g.location as { search: string }).search = ""; // the router redirected to /home, or the visitor moved on
+    await p.rt.consent(true);
+    expect(p.rt.telemetry).toMatchObject({ enabled: false, reason: "url" });
+    await p.clock.advance(60_000);
+    expect(p.sent()).toEqual([]);
+  });
+
+  it("without the gate: a withdrawal and a new grant keep it off too", async () => {
+    const p = page({ search: "?genclass=no-telemetry" });
+    expect(p.rt.telemetry).toMatchObject({ enabled: false, reason: "url" });
+    (p.g.location as { search: string }).search = "";
+    await p.rt.consent(false);
+    await p.rt.consent(true);
+    expect(p.rt.telemetry).toMatchObject({ enabled: false, reason: "url" });
+    await p.clock.advance(60_000);
+    expect(p.sent()).toEqual([]);
+  });
+});
+
+describe("a storage grant reads the session's bucket and breaker trip, as without the gate (OPTIONS-SPEC 4.2, 4.5; CONTRACT section 17)", () => {
+  it("a trip stored earlier in the tab caps the mode once storage is granted; one on this page is stored", async () => {
+    // page 1: storage granted, the breaker trips (two undos), the trip is stored for the session
+    const p1 = page({ consent: "pending" });
+    await p1.rt.consent({ storage: true });
+    const b1 = p1.rt["breakerImpl"]!;
+    b1.undo("d1");
+    b1.undo("d2");
+    expect(p1.rt.breaker.tripped).toBe(true);
+    expect(p1.stores.session.peek("genclass:breaker")).not.toBeNull();
+    p1.rt.destroy();
+    // page 2, same tab: pending at start (nothing read), then the CMP grants storage
+    const p2 = page({ consent: "pending", stores: p1.stores });
+    expect(p2.rt.breaker.tripped).toBe(false);
+    expect(p2.calls).toEqual([]);
+    const seen: unknown[] = [];
+    p2.rt.on("status", (s) => seen.push(s));
+    await p2.rt.consent({ storage: true });
+    expect(p2.rt.breaker.tripped).toBe(true);
+    expect(p2.rt.status.breaker).toMatchObject({ tripped: true, reason: "undos" });
+    expect(seen.length).toBeGreaterThan(0);
+    p2.rt.destroy();
+    // a trip while storage waits is kept in memory, and stored once it is granted
+    const p3 = page({ consent: "pending" });
+    p3.rt["breakerImpl"]!.undo("d1");
+    p3.rt["breakerImpl"]!.undo("d2");
+    expect(p3.calls).toEqual([]);
+    await p3.rt.consent({ storage: true });
+    expect(p3.stores.session.peek("genclass:breaker")).not.toBeNull();
+  });
+
+  it("a reset on this page before the grant stays a reset: the stored trip is removed, not read", async () => {
+    const p = page({ consent: "pending" });
+    p.stores.session.seed("genclass:breaker", JSON.stringify({ at: 1, reason: "undos", decisionIds: ["d1"] }));
+    p.rt.breaker.reset();
+    await p.rt.consent({ storage: true });
+    expect(p.rt.breaker.tripped).toBe(false);
+    expect(p.stores.session.peek("genclass:breaker")).toBeNull();
+  });
+
+  it("the act/observe bucket: the session's stored verdict is taken; without one, this page's is stored", async () => {
+    const p = page({ consent: "pending" });
+    const mine = p.rt.status.sampled;
+    // what page 1 of this session drew and stored (the opposite of this page's draw)
+    p.stores.session.seed("genclass:bucket", `${mine ? "observe" : "act"}@0.5`);
+    await p.rt.consent({ storage: true });
+    expect(p.rt.status.sampled).toBe(!mine);
+    p.rt.destroy();
+    const q = page({ consent: "pending" });
+    expect(q.stores.session.peek("genclass:bucket")).toBeNull();
+    await q.rt.consent({ storage: true });
+    expect(q.stores.session.peek("genclass:bucket")).toBe(`${q.rt.status.sampled ? "act" : "observe"}@0.5`);
+  });
+});
+
+describe("withdrawing analytics drops their queued events (CONTRACT section 17; TELEMETRY.md Consent)", () => {
+  const ix = (evs: Ev[]) => evs.filter((e) => e.t === "interactions");
+
+  it("an interactions event queued before the withdrawal is not sent after it; diagnostics go on", async () => {
+    const p = page({ consent: "pending", dom: true });
+    await p.rt.consent({ diagnostics: true, analytics: true });
+    const client = p.rt.telemetry as unknown as TelemetryClient;
+    await vi.waitFor(() => expect(client.pre).toBeTypeOf("function"));
+    client.summary("periodic"); // the analytics chunk queues the view's event with it
+    expect(ix(client["queue"] as Ev[])).toHaveLength(1);
+    await p.rt.consent({ analytics: false });
+    expect(p.rt.telemetry?.enabled).toBe(true);
+    await p.clock.advance(1500);
+    expect(p.sent().some((e) => e.t === "summary")).toBe(true);
+    expect(ix(p.sent())).toEqual([]);
+  });
+
+  it("one in a request refused after the withdrawal (a back-off puts it back) is dropped too", async () => {
+    const sent: Ev[][] = [];
+    let refuse: ((e: unknown) => void) | null = null;
+    let first = true;
+    const transport: TelemetryTransport = {
+      send(_u, body) {
+        if (first) {
+          first = false;
+          return new Promise<void>((_r, j) => (refuse = j));
+        }
+        sent.push((JSON.parse(body) as { events: Ev[] }).events);
+        return Promise.resolve();
+      },
+    };
+    const p = page({ consent: "pending", dom: true, transport });
+    await p.rt.consent({ diagnostics: true, analytics: true });
+    const client = p.rt.telemetry as unknown as TelemetryClient;
+    await vi.waitFor(() => expect(client.pre).toBeTypeOf("function"));
+    client.summary("periodic");
+    void client.flush(); // in flight, with the interactions event
+    await p.rt.consent({ analytics: false });
+    refuse!({ status: 429 });
+    await drain();
+    await p.clock.advance(31_000);
+    await drain();
+    expect(sent.flat().some((e) => e.t === "summary")).toBe(true);
+    expect(ix(sent.flat())).toEqual([]);
+  });
+});
+
+describe("withdrawing the model while it loads stops the load (CONTRACT section 17; TELEMETRY.md Consent)", () => {
+  it("the worker ends at the withdrawal, the cached copy is deleted, and a later grant loads again", async () => {
+    const p = page({ consent: "pending" });
+    await p.rt.consent({ model: true });
+    expect(p.created.n).toBe(1);
+    expect(p.rt["decider"]!.status.state).toBe("loading");
+    await p.rt.consent({ model: false });
+    expect(p.ended.n).toBe(1); // no request and no Cache Storage write can follow
+    await drain();
+    expect(p.cacheDeleted).toEqual([DEFAULT_CACHE_NAME]);
+    expect(p.rt.status).toMatchObject({ state: "disabled", reason: "consent" });
+    await p.clock.advance(60_000);
+    expect(p.created.n).toBe(1);
+    await p.rt.consent({ model: true });
+    expect(p.created.n).toBe(2);
+  });
+
+  it('the runtime hears the host put in place: its status reaches rt.on("status")', async () => {
+    const p = page({ consent: "pending" });
+    const states: string[] = [];
+    p.rt.on("status", (s) => states.push(s.state));
+    await p.rt.consent({ model: true });
+    expect(states).toContain("loading");
+  });
+
+  it("the inline backend (no worker) stores nothing in Cache Storage once disposed during a download", async () => {
+    let disposed = false;
+    const puts: string[] = [];
+    const cache = { match: () => Promise.resolve(undefined), put: (u: string) => (puts.push(u), Promise.resolve()), delete: () => Promise.resolve(true) };
+    const env = {
+      fetch: () => {
+        disposed = true; // the withdrawal lands while the file downloads
+        return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
+      },
+      get caches() {
+        return disposed ? null : ({ open: () => Promise.resolve(cache) } as unknown as CacheStorage);
+      },
+      cacheName: DEFAULT_CACHE_NAME,
+    };
+    const out = await fetchFile(env as never, "https://cdn.example/model.onnx", { file: "model.onnx", bytes: 3 }, "tag");
+    await out.stored;
+    expect(out.bytes.byteLength).toBe(3);
+    expect(puts).toEqual([]);
+  });
+});
+
+describe("a storage grant: GenClass's own entries are not app activity (CONTRACT section 17: no consent state reaches a situation)", () => {
+  it("the probe, the session ordinal and the bucket written at the grant are not recorded by the storage observer", async () => {
+    const p = page({ consent: "pending", observeStorage: true, learn: { persist: true, expectations: true } });
+    const storageEvents: string[] = [];
+    p.rt.on("event", (e) => {
+      if (e.kind === "storage") storageEvents.push(`${e.name} ${String(e.data?.key)}`);
+    });
+    await p.rt.consent({ storage: true });
+    await p.clock.advance(6000); // the learned state's save too
+    expect(p.calls).toEqual(expect.arrayContaining(["local.setItem genclass:learn:probe", "session.setItem genclass:learn:session", "session.setItem genclass:bucket"]));
+    expect(storageEvents).toEqual([]);
+    // the app's own writes still are
+    (p.g.localStorage as Storage).setItem("cart", "1");
+    expect(storageEvents).toEqual(["localStorage.setItem cart"]);
+  });
+});
+
+describe("diagnostics granted late count the runtime from the grant (TELEMETRY.md Consent: nothing from before the grant)", () => {
+  it("the summary's runtime block leaves out the decisions, holds, denials and errors before the grant", async () => {
+    const p = page({ consent: "pending" });
+    const sum = p.rt["sum"];
+    // before the grant: a self-hosted model decided and held, a hold was denied, an error was seen
+    sum.decision(40);
+    sum.decision(60);
+    sum.held(500);
+    sum.inc(sum.s.denied, "limit:hold");
+    sum.s.errors++;
+    await p.clock.advance(5000);
+    await p.rt.consent({ diagnostics: true });
+    const client = p.rt.telemetry as unknown as TelemetryClient;
+    client.summary("periodic");
+    await p.clock.advance(1500);
+    type Summary = { runtime: { model: Record<string, unknown>; heldMs: unknown; denied: unknown; errors: number } };
+    const first = p.sent().find((e) => e.t === "summary") as unknown as Summary;
+    expect(first.runtime.model).toMatchObject({ decisions: 0 });
+    expect(first.runtime.model.p50Ms).toBeUndefined();
+    expect(first.runtime.heldMs).toEqual({ total: 0, max: 0 });
+    expect(first.runtime.denied).toEqual({});
+    expect(first.runtime.errors).toBe(0);
+    // after the grant: counted
+    sum.decision(7);
+    sum.held(30);
+    client.summary("periodic");
+    await p.clock.advance(1500);
+    const last = p.sent().filter((e) => e.t === "summary").pop() as unknown as Summary;
+    expect(last.runtime.model).toMatchObject({ decisions: 1, p50Ms: 7, p95Ms: 7 });
+    expect(last.runtime.heldMs).toEqual({ total: 30, max: 30 });
+    // the page-wide counts (Runtime.summary(), the app's sinks) are unchanged
+    expect(p.rt.summary().model.decisions).toBe(3);
+    expect(p.rt.summary().heldMs.max).toBe(500);
+  });
+});
+
+describe("a model grant loads as model.preload and model.loadIf say (CONTRACT section 17)", () => {
+  it('preload "idle" waits for the page\'s load event, as without the gate', async () => {
+    let onLoad: (() => void) | null = null;
+    vi.stubGlobal("document", { readyState: "loading" });
+    vi.stubGlobal("addEventListener", (t: string, f: () => void) => {
+      if (t === "load") onLoad = f;
+    });
+    vi.stubGlobal("removeEventListener", () => undefined);
+    const p = page({ consent: "pending", preload: "idle" });
+    await p.rt.consent({ model: true });
+    await p.clock.advance(1500);
+    expect(p.created.n).toBe(0); // the page is still loading
+    onLoad!();
+    await p.clock.advance(1000); // then idle time (the runtime's clock stands in for requestIdleCallback)
+    expect(p.created.n).toBe(1);
+  });
+
+  it('model.loadIf "lazy" (Save-Data, a predicate) keeps a granted model lazy: it loads when first asked for', async () => {
+    const p = page({ consent: "pending", preload: "eager", loadIf: () => "lazy" });
+    await p.rt.consent({ model: true });
+    await p.clock.advance(5000);
+    expect(p.created.n).toBe(0);
+    void p.rt.ready; // what the first salient situation does
+    await drain();
+    expect(p.created.n).toBe(1);
+  });
+});
+
+describe("storage denied, then granted: the flow layer takes a stored layer's thresholds (learn.expectations; CONTRACT section 17)", () => {
+  it("minSessions goes from 1 (in memory) to 3 (kept in localStorage)", async () => {
+    const p = page({ consent: "pending", learn: { expectations: true } });
+    await p.rt.consent({ storage: false });
+    await vi.waitFor(() => expect(p.rt.flows).not.toBeNull());
+    expect(p.rt.flows!.cfg.minSessions).toBe(1);
+    await p.rt.consent({ storage: true });
+    expect(p.rt.flows!.cfg.minSessions).toBe(3);
+  });
+});
+
+describe("a denial removes the analytics visit entry an earlier visit left (TELEMETRY.md Consent: storage denied)", () => {
+  it('a denial while pending, and "denied" at start, remove genclass.analytics.<token> though the chunk never ran', async () => {
+    const key = VISIT_KEY + TOKEN;
+    const p = page({ consent: "pending" });
+    p.stores.local.seed(key, JSON.stringify({ v: "0123456789abcdef", t: 1, r: 1 }));
+    await p.rt.consent(false);
+    expect(p.calls).toContain(`local.removeItem ${key}`);
+    expect(p.stores.local.peek(key)).toBeNull();
+    p.rt.destroy();
+    const local = storage("local", []);
+    local.seed(key, JSON.stringify({ v: "0123456789abcdef", t: 1, r: 1 }));
+    const q = page({ consent: "denied", stores: { local, session: storage("session", []) } });
+    await drain();
+    expect(q.calls).toContain(`local.removeItem ${key}`);
+    expect(local.peek(key)).toBeNull();
+    expect(q.calls.filter((c) => !c.includes(".removeItem "))).toEqual([]);
+  });
+});
+
+describe("the page config's consent key fails closed (src/cdn/config.ts)", () => {
+  it("a bare key, true, granted or a typo wait as pending; denied stays denied", () => {
+    for (const v of ["", "true", "granted", "pendng", "yes", "off"]) expect(fromPairs({ consent: v })).toEqual({ consent: "pending" });
+    expect(fromDataset({ consent: "" })).toEqual({ consent: "pending" });
+    expect(fromPairs({ consent: "DENIED" })).toEqual({ consent: "denied" });
   });
 });

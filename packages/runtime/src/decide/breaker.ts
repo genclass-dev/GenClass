@@ -37,7 +37,11 @@ export class Breaker {
   private undos: { t: number; d: string }[] = [];
   private errors: { t: number; d: string }[] = [];
   private actions: { t: number; keys: string[]; d: string }[] = [];
-  tripped: TripInfo | null = null;
+  /**
+   * The trip in force; undefined while it never tripped on this page, null once reset() cleared it. A storage grant
+   * (src/consent.ts, InitOptions.consent) reads a trip stored earlier in the session only while it is undefined.
+   */
+  tripped?: TripInfo | null;
 
   constructor(
     readonly cfg: BreakerConfig,

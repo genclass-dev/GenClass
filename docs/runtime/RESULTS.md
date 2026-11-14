@@ -1675,6 +1675,14 @@ it. A version that applied choices synchronously in the first load measured 1,07
 (Node 22's sizes before this branch plus the growth plus 0.05 / 0.07 KB), pending the owner's OK. CI (Node 22) was
 not run for this branch.
 
+The review fixes (branch `alpha/fix-consent`, 2026-11-14: the URL opt-out read at start, the session's bucket and
+breaker trip at a storage grant, a hook for the late session's runtime counts, the model's status listener and host
+factory for the consent chunk, the page config failing closed) grow it again, measured the same way against the
+consent branch's `dist/`: +44 B on `/auto` (109.128 KB) and +31 B on the main entry (100.926 KB), so 393 / 366 B over
+the base above. Everything else they need is in the lazy chunks (consent, analytics, flows, model). `test/bundle.test.ts`
+measures 109.13 / 100.93 KB under its unchanged limits; Node 22's sizes ran 0.146 / 0.042 KB above this Mac's for the
+base, which would put CI at about 109.27 / 100.97 KB. CI was not run.
+
 No detection numbers: the gate never feeds a decision, so recall and FIR do not change, and without the option the
 runtime runs the same code paths (the full runtime suite passes unchanged). With the option and no model consent the
 page observes without a model: no detection, nothing held, as with `model: false`.

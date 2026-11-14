@@ -8,7 +8,7 @@ import { browserClock } from "./clock.js";
 import { RuntimeImpl } from "./runtime.js";
 import { createModelHost } from "./model/host.js";
 import { deviceEnv, evalLoadIf } from "./model/device.js";
-import { startTelemetry } from "./telemetry/index.js";
+import { startTelemetry, urlOptOut } from "./telemetry/index.js";
 import { telemetryOff } from "./telemetry/client.js";
 import type { TelemetryStatus } from "./types.js";
 import { resolveToken } from "./token.js";
@@ -186,17 +186,19 @@ const tokenOf = new WeakMap<Runtime, string>();
  */
 function buildRuntime(options: CreateOptions, telemetryDefaultOn: boolean): Runtime {
   let decider: DecisionProvider | null | undefined = options.decider;
-  let owns = false;
+  let host: ((lazy?: boolean) => DecisionProvider) | undefined;
   const m = options.model;
-  // consent (CONTRACT section 17): the model loads only once the visitor grants it (src/consent.ts starts it as its
-  // preload says); until then it is a lazy host that nothing asks for (runtime.ts noModel)
+  // consent (CONTRACT section 17): the model loads only once the visitor grants it (src/consent.ts then puts a host
+  // made as the options say, model.loadIf included, in its place); until then it is a lazy host that nothing asks for
+  // (runtime.ts noModel). `host(true)`: a lazy one (also after a withdrawal).
   const gate = options.consent != null;
   if (decider === undefined && m && typeof m === "object") {
-    owns = true;
     const g = (options.global ?? globalThis) as { fetch?: typeof fetch };
     const nf = options.global ? (typeof g.fetch === "function" ? g.fetch.bind(g) : undefined) : NATIVE_FETCH;
-    decider = makeHost(gate ? { ...m, preload: "lazy" } : m, nf, options.clock, (options.global ?? globalThis) as never);
+    host = (lazy) => makeHost(lazy ? { ...m, preload: "lazy" } : m, nf, options.clock, g as never);
+    decider = host(gate);
   }
+  const owns = !!host;
   const rt = new RuntimeImpl({ ...options, decider: decider ?? null, ownsDecider: owns });
   const con = () => (rt.global.console as Console | undefined) ?? (globalThis as { console?: Console }).console;
   const token = resolveToken(options.token, (m) => con()?.warn?.(`[GenClass] ${m}`));
@@ -219,14 +221,15 @@ function buildRuntime(options: CreateOptions, telemetryDefaultOn: boolean): Runt
         },
         token,
       );
-    // with a consent gate, diagnostics start once the visitor grants them (src/consent.ts)
-    rt.telemetry = gate && options.telemetry !== false ? telemetryOff("consent") : tel();
+    // with a consent gate, diagnostics start once the visitor grants them (src/consent.ts); ?genclass=no-telemetry as
+    // the page started keeps reason "url", which a grant never restarts (an SPA route change may drop the query)
+    rt.telemetry = gate && options.telemetry !== false ? telemetryOff(urlOptOut(rt.global) ? "url" : "consent") : tel();
   }
   // interaction analytics (docs/runtime/ANALYTICS.md): off unless the app turns them on; they need telemetry and a token
   rt.analytics = startAnalytics(rt, options.analytics);
   // consent (src/consent.ts): what a later choice needs; with the gate every part starts pending (runtime.ts cs) and
   // the option itself is applied like a visitor's choice
-  rt.cx = { tel, gate, model: m };
+  rt.cx = { tel, gate, model: m, host, token };
   if (gate) void rt.consent(options.consent);
   // a token with telemetry off: say so once in debug; on a local host always (a developer trying the dashboard from
   // localhost would otherwise wait for data that never comes)

@@ -6,7 +6,7 @@ import type { TelemetryOptions, TelemetryStatus } from "../types.js";
 import { TelemetryClient, telemetryOff, type TelemetrySessionInfo } from "./client.js";
 import { TELEMETRY_NOTICE, TELEMETRY_TOKEN_NOTICE, resolveTelemetry } from "./config.js";
 
-export { DEFAULT_TELEMETRY_ENDPOINT, TELEMETRY_NOTICE, TELEMETRY_SCHEMA, resolveTelemetry } from "./config.js";
+export { DEFAULT_TELEMETRY_ENDPOINT, TELEMETRY_NOTICE, TELEMETRY_SCHEMA, resolveTelemetry, urlOptOut } from "./config.js";
 export { TelemetryClient, MAX_QUEUE, MAX_REQUEST_BYTES } from "./client.js";
 export type { TelemetrySessionInfo } from "./client.js";
 
