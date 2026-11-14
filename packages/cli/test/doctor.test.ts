@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { skillText } from "../src/actions.mjs";
 import { BUILD } from "../src/assets.mjs";
-import { checks, cspGaps, cspIn, doctor, newestFor, publicDirOf, routeHasRoot, sourceAllows, userPath } from "../src/doctor.mjs";
+import { checks, cspGaps, cspIn, doctor, newestFor, publicDirOf, routeHasPages, sourceAllows, userPath } from "../src/doctor.mjs";
 import { readSetupText } from "../src/privacy.mjs";
 import { isolate, printed, tempDir, viteApp, write } from "./helpers.js";
 
@@ -116,8 +116,85 @@ describe("genclass doctor reads a Content-Security-Policy as the browser does (s
       "middleware.ts": "export function middleware(req) { res.headers.set('Content-Security-Policy', `${buildPolicy(req)}`); res.headers.set('Content-Security-Policy', policyFor(req)); }\n",
     });
     expect(cspIn(dir).map((x) => [x.file, x.policy])).toEqual([["public/_headers", GOOD]]);
-    for (const r of ["/*", "/(.*)", "/:path*", "/((?!api|_next/static).*)", "**", "/", null]) expect(routeHasRoot(r)).toBe(true);
-    for (const r of ["/api/*", "/api/:path*", "/assets/(.*)", "**/*.@(js|css)"]) expect(routeHasRoot(r)).toBe(false);
+    for (const r of ["/*", "/(.*)", "/:path*", "/((?!api|_next/static).*)", "**", "/", null]) expect(routeHasPages(r)).toBe(true);
+    for (const r of ["/api/*", "/api/:path*", "/assets/(.*)", "**/*.@(js|css)", "/_next/static/:path*", "/*.png", "/(.*).(js|css)", "https://example.com/api/*"]) expect(routeHasPages(r)).toBe(false);
+  });
+
+  // a page route other than the home page: GenClass runs there too, so its policy is checked (fix2 doctor 0)
+  it("a policy set for a section of the site (/app/*) is checked: in _headers, netlify.toml, vercel.json and next.config", async () => {
+    for (const r of ["/app/*", "/app/:path*", "/dashboard/(.*)", "/docs", "/*.html", "/apiary/*"]) expect(routeHasPages(r)).toBe(true);
+    const BLOCKS = "default-src 'self'; connect-src 'self'; script-src 'self' 'wasm-unsafe-eval'";
+    const forms: Record<string, string> = {
+      "public/_headers": `/app/*\n  Content-Security-Policy: ${BLOCKS}\n`,
+      "netlify.toml": `[[headers]]\n  for = "/app/*"\n  [headers.values]\n    Content-Security-Policy = "${BLOCKS}"\n`,
+      "vercel.json": JSON.stringify({ headers: [{ source: "/app/(.*)", headers: [{ key: "Content-Security-Policy", value: BLOCKS }] }] }),
+      "next.config.js": `module.exports = { async headers() { return [{ source: "/app/:path*", headers: [{ key: "Content-Security-Policy", value: "${BLOCKS}" }] }]; } };\n`,
+    };
+    for (const [file, text] of Object.entries(forms)) {
+      const dir = appWith({ [file]: text });
+      expect(cspIn(dir).map((x) => x.file)).toEqual([file]);
+      const csp = byId(await checks({ cwd: dir }, OFF)).csp;
+      expect(csp).toMatchObject({ state: "bad" });
+      expect(csp.detail).toContain(`${file}: without connect-src https://genclass.dev`);
+      expect(csp.detail).toContain("connect-src https://cdn.jsdelivr.net");
+    }
+  });
+
+  // Cloudflare Pages' and Netlify's parsers trim each line, and Cloudflare's path may be an absolute URL (fix2 doctor 1)
+  it("_headers as the hosts read it: header lines without indentation, and a path line that is an absolute URL", async () => {
+    const BLOCKS = "default-src https://x.example; connect-src https://x.example; script-src 'self' 'wasm-unsafe-eval'";
+    for (const text of [`/*\nContent-Security-Policy: ${BLOCKS}\n`, `https://example.com/*\n  Content-Security-Policy: ${BLOCKS}\n`, `https://:project.pages.dev/*\nContent-Security-Policy: ${BLOCKS}\n`]) {
+      const dir = appWith({ "public/_headers": text });
+      expect(cspIn(dir).map((x) => [x.file, x.policy])).toEqual([["public/_headers", BLOCKS]]);
+      expect(byId(await checks({ cwd: dir }, OFF)).csp).toMatchObject({ state: "bad", fix: "add connect-src https://genclass.dev, connect-src https://cdn.jsdelivr.net to the policy in public/_headers" });
+    }
+    expect(routeHasPages("https://example.com/*")).toBe(true);
+    expect(routeHasPages("https://example.com")).toBe(true);
+    // a header before any path line is not applied by either host, and an API path's stays left out
+    const dir = appWith({ "public/_headers": `Content-Security-Policy: default-src 'none'\nhttps://example.com/api/*\nContent-Security-Policy: default-src 'none'\n/*\nContent-Security-Policy: ${GOOD}\n` });
+    expect(cspIn(dir).map((x) => x.policy)).toEqual([GOOD]);
+  });
+
+  // the route is the `source` of the entry the header is in, written before or after its headers (fix2 doctor 2)
+  it("a next.config header's route is its own entry's source, not the last source written before it (redirects first)", () => {
+    const dir = appWith({
+      "next.config.js": [
+        "const strip = (s) => s.replace(/[{}]/g, \"\").replace(/\\{/g, `{`);",
+        "module.exports = {",
+        "  async redirects() {",
+        '    return [{ source: "/old", destination: "/new", permanent: true }];',
+        "  },",
+        "  async headers() {",
+        "    return [",
+        `      { headers: [{ key: "X-Frame-Options", value: "DENY" }, { key: "Content-Security-Policy", value: "default-src 'self'; connect-src 'none'" }], source: "/(.*)" },`,
+        `      { headers: [{ key: "Content-Security-Policy", value: "default-src 'none'" }], "source": "/api/(.*)" },`,
+        "    ];",
+        "  },",
+        "};",
+      ].join("\n"),
+    });
+    expect(cspIn(dir).map((x) => [x.route, x.policy])).toEqual([["/(.*)", "default-src 'self'; connect-src 'none'"]]);
+    // a list kept in a constant, used by an entry further down: for every page it is used on, so it is checked
+    const kept = appWith({
+      "next.config.mjs": `const securityHeaders = [{ key: "Content-Security-Policy", value: "default-src 'self'" }];\nexport default { async redirects() { return [{ source: "/api/old", destination: "/api/new", permanent: false }]; }, async headers() { return [{ source: "/(.*)", headers: securityHeaders }]; } };\n`,
+    });
+    expect(cspIn(kept).map((x) => [x.route, x.policy])).toEqual([[null, "default-src 'self'"]]);
+  });
+
+  // the onnxruntime-web the runtime asks jsDelivr for is the version it pins, not an older one (fix2 doctor 3)
+  it("a jsDelivr source limited to the model's and onnxruntime-web's folders lets the model load, for the version the runtime pins", async () => {
+    const pin = JSON.parse(readFileSync(new URL("../../runtime/package.json", import.meta.url), "utf8")).dependencies["onnxruntime-web"];
+    const modelBase = /DEFAULT_MODEL_BASE_URL = "([^"]+)"/.exec(readFileSync(new URL("../../runtime/src/model/host.ts", import.meta.url), "utf8"))![1];
+    const policy = (ort: string) => `default-src 'self'; connect-src 'self' https://genclass.dev ${modelBase} https://cdn.jsdelivr.net/npm/onnxruntime-web@${ort}/; script-src 'self' 'wasm-unsafe-eval'`;
+    expect(cspGaps(policy(pin), defaults)).toEqual([]);
+    expect(cspGaps(policy("1.22.0"), defaults).map((g) => g.need)).toEqual(["connect-src https://cdn.jsdelivr.net"]);
+    // the WebGPU build's wasm is needed as well as the WASM build's
+    const one = `default-src 'self'; connect-src 'self' https://genclass.dev ${modelBase} https://cdn.jsdelivr.net/npm/onnxruntime-web@${pin}/dist/ort-wasm-simd-threaded.wasm; script-src 'self' 'wasm-unsafe-eval'`;
+    expect(cspGaps(one, defaults).map((g) => g.need)).toEqual(["connect-src https://cdn.jsdelivr.net"]);
+    // an app whose installed runtime pins another version: that is the one its pages load
+    const older = appWith({ "node_modules/@genclass/runtime/package.json": JSON.stringify({ name: "@genclass/runtime", version: "0.3.0-beta.6", dependencies: { "onnxruntime-web": "1.29.0" } }), "public/_headers": `/*\n  Content-Security-Policy: ${policy("1.29.0")}\n` });
+    expect(byId(await checks({ cwd: older }, OFF)).csp).toMatchObject({ state: "ok" });
+    expect(cspGaps(policy("1.29.0"), defaults, { ort: "1.29.0" })).toEqual([]);
   });
 
   it("scheme sources (https:), hosts without a scheme, wildcards, paths, keyword case and the first of a repeated directive (finding 8)", () => {
