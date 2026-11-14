@@ -73,7 +73,7 @@ also a command of its own (`npx genclass problems`), so scripts and coding agent
 checkout in the browser: 3 days free (one trial per account; the card is asked for on Stripe, and nothing is charged
 if you cancel before they end), then US$15 a developer a month, for up to 3 apps in the account. More apps come with
 Enterprise, by email. Every command but `login`, `logout`, `whoami`, `plan`, `upgrade`, `profile`, `status`,
-`privacy`, `doctor`, `remove`, `help` and `version` asks first. Without a terminal (`--yes`, `--json`, a coding agent) nothing is opened:
+`privacy`, `doctor`, `flake`, `remove`, `help` and `version` asks first. Without a terminal (`--yes`, `--json`, a coding agent) nothing is opened:
 one line with the checkout address, and exit code 1. Free stays on the website: one app's totals for the last 7 days.
 Plans bought before 13 November 2026 keep every app they cover (an app paid for on its own does not count toward
 Pro's 3); Free covers an account's oldest app and locks the others.
@@ -164,6 +164,54 @@ their command is installed; otherwise the prompt is copied (`c`) or printed (`p`
 GenClass changes no code. The agent does, in your own session with it, where you see and approve what it does.
 Nothing starts without a key press. `npx genclass fix stale --print` prints the prompt for one kind and nothing
 else, which is how an agent asks for it itself.
+
+## Flaky test, or racy app?
+
+```bash
+npx genclass flake                          # your whole Playwright suite
+npx genclass flake tests/search.spec.ts     # any arguments of "playwright test": a file, file:line, --grep, --project, -c
+```
+
+It runs your own Playwright suite with your own `@genclass/playwright`: once with responses in their natural order,
+then once per seed (5 by default, `--runs N`) with your app's API requests held for a seeded time before they leave,
+so their responses can arrive in another order. Then it says, for each test, one of four things, from what the run
+measured and nothing else:
+
+| Verdict | What it means |
+|---|---|
+| passed | it passed on every run |
+| racy | it failed on some runs, and on a failing run GenClass saw a race on the page (a late response that wrote over newer data, a request sent again while the identical one was in flight): which request, the seeds, and the command that replays one |
+| flaky | it failed on some runs and GenClass saw no race there, or could not watch those runs and says so: likely the test itself (a fixed wait, a timeout too tight for slower responses, state shared between tests) |
+| broken | it failed on every run, in the natural order too: not about the order of responses |
+
+It ends with the one command that replays a failing seed, such as
+`npx genclass flake tests/search.spec.ts:12 --project chromium --seed 2` (the same seed holds the same requests for
+the same time, so the responses come back in the order the run saw, unless your server's own timing changes it), and
+a prompt for your coding agent: what failed,
+on which seeds, what GenClass recorded, and how to prove the fix with the same seed. On a terminal, Enter starts the
+agent with it (Claude Code, Codex, Cursor's agent or Gemini CLI, as `genclass fix` does), `c` copies it and `p` prints
+it; piped, it is printed. `--json` gives the same as data, `--print` only the prompt. Exit code 0 when every test
+passed every time, 1 when one did not, 2 when nothing could be judged.
+
+What it needs: Playwright, and in the same project `npm install -D @genclass/playwright @genclass/runtime@beta`.
+Without them it prints that line (with your package manager) and runs nothing. Your tests and your `playwright.config`
+stay as they are, and so do your reporters: it adds one of its own, which writes to a temporary folder (with a
+Playwright before `--add-reporter`, it passes yours and its own as `--reporter`). Retries are off unless you pass
+`--retries` (a retry would hide the failure), and the HTML report does not open a browser. It is free and local: no
+sign-in, nothing is sent anywhere.
+
+`--seed N` starts at seed N without the natural-order run (alone, it replays that one seed), `--no-baseline` skips the
+natural-order run, `--no-chaos` repeats every run in the natural order (plain repeats, nothing held). The race files
+stay in `test-results/genclass`, one per test and seed of the last run.
+
+"No race seen" is not "no race": GenClass sees writes to the state it finds on the page (React, Redux and Zustand
+stores, and stores registered with the runtime) by the requests the run holds (same-origin `/api*` or JSON requests
+unless `GENCLASS_CHAOS_MATCH` says otherwise). A test is called racy only when a race file of one of its failing runs
+shows a race. Measured on the fixture app of [`test/e2e/flake.e2e.mjs`](test/e2e/flake.e2e.mjs) (Chromium, the
+search page of `@genclass/playwright`'s own end-to-end check, four ordinary tests, 6 runs each): in four runs of the
+command, the buggy page's test was racy each time (it failed on seeds 1, 3 and 4, with the late response seen on
+those seeds; it passed in the natural order), and the three tests on the fixed page showed no race on any of their
+72 runs (false reports on the correct variant: 0). Both replays of seed 1 failed again with the same race.
 
 ## Ask
 
@@ -294,6 +342,7 @@ again.
 | `npx genclass login`, `logout`, `whoami` | your account |
 | `npx genclass privacy` | what is sent and kept, and how to send nothing (`--out`, `--json`; free) |
 | `npx genclass doctor` | is every part in place and current (`--fix`, `--json`, `--offline`; free) |
+| `npx genclass flake [tests]` | is a failing Playwright test flaky, or is your app racy (`--runs N`, `--seed N`, `--json`, `--print`; free, local) |
 | `npx genclass remove` | take GenClass out of the app again |
 
 Options: `--app <name>`, `--range 24h|7d|30d|90d|1y`, `--all`, `--json`, `--cwd <dir>`, `--yes`, `--no-browser`.
@@ -309,6 +358,7 @@ npx genclass suggest --json    # the checks that failed, with evidence, in order
 npx genclass dashboard --json  # what GenClass found on the live site
 npx genclass problems --json   # the same by kind and page; also analytics, events, health, agent
 npx genclass fix --print       # the prompt to fix what was found (fix stale --print: one kind)
+npx genclass flake --json      # each Playwright test: passed, racy (seed, request, replay), flaky or broken; and a prompt
 npx genclass report            # the period as Markdown
 ```
 
@@ -333,3 +383,6 @@ and MCP server versions it was built with. Sources: [`src/`](src). The server si
 npm run build -w genclass          # dist/genclass.mjs
 (cd packages/cli && npx vitest run)
 ```
+
+`genclass flake` in a real browser (not in the vitest run: it needs Chromium and the built runtime and
+`@genclass/playwright`): `npm run build -w @genclass/runtime && npm run build -w @genclass/playwright && npm run build -w genclass && node packages/cli/test/e2e/flake.e2e.mjs`.

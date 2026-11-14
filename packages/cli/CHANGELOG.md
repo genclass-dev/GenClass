@@ -19,6 +19,22 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   `--fix` writes GenClass's own lines only, after showing them: the MCP pin, the skill while it has its marker, and
   in a Vite app the dev-only coding-agent link (`connectAgent(GenClass.init())` in a `genclass:init` block that
   `genclass remove` takes out). Two requests to npm's registry for dist-tags, `--offline` none.
+- **`genclass flake`** (free, local, nothing sent): "is this Playwright test flaky, or is my app racy?" It runs the
+  project's own suite (or the tests and arguments given: a file, `file:line`, `--grep`, `--project`, `-c`) through the
+  project's own `@genclass/playwright` (`genclass-playwright-run`): once in the natural order, then once per seed
+  (`--runs`, default 5) with the app's API requests held for a seeded time, retries off unless `--retries` is given.
+  A reporter of its own, added on top of the project's (`--add-reporter`; `--reporter` with both on a Playwright
+  without it), writes each attempt to a temporary folder; the race files are read after each run. Per test: passed
+  every time; racy (it failed on some runs and a race file of a failing run shows a race: a witness, or the model's
+  stale, duplicate or conflict), with the request, the seeds and `genclass flake <file:line> --seed N` to replay one;
+  flaky (it failed and GenClass saw no race there, or says it could not watch those runs); broken (it failed every
+  time, in the natural order too). It ends with the one replay command and a prompt for the coding agent (on a
+  terminal Enter starts it, as `genclass fix` does); `--json` is the same as data, `--print` the prompt alone. Without
+  Playwright, `@genclass/playwright` or `@genclass/runtime` it prints the exact install line (npm, pnpm, yarn or bun)
+  and exits 2 without running anything. Measured with `test/e2e/flake.e2e.mjs` (a four-test fixture app in a
+  temporary folder, Chromium, the built runtime and `@genclass/playwright`): the buggy page's test racy on seeds 1, 3
+  and 4 in each of four runs, both replays of seed 1 failing again with the same race, and no race on any of the 72
+  runs of the three tests on the fixed page (false reports on the correct variant: 0).
 - **`genclass suggest`, two safety checks:** `secrets-in-bundle` reads the scripts the live home page ships (same
   origin, at most 6, 1 MB each) for secret keys (Stripe secret, OpenAI, Anthropic, AWS, GitHub, Slack, SendGrid,
   private keys, a Supabase service_role JWT) and reports the kind and the script's path, never a value; on 25,365
