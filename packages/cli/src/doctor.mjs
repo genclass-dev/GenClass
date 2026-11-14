@@ -21,6 +21,8 @@
 //   for the repository's root, and `genclass --version` with the PATH a shell has (npx's folders left out). Nothing
 //   else leaves the machine.
 // - Never throws: a part that cannot be read says so ("not checked") and the others still run.
+// - A Content-Security-Policy is "bad" only when it is set for routes that serve pages; one for a route that cannot
+//   be told to (`/admin/api/(.*)`, a source built at run time) is not checked, and the row names it.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -390,7 +392,8 @@ function policiesIn(file, t) {
     const r = jsValue(t, j);
     if (!r || !r[0].trim()) continue;
     code ??= codeOnly(t);
-    found.push({ policy: r[0], route: jsRouteAt(t, code, m.index) });
+    const src = jsRouteAt(t, code, m.index);
+    found.push({ policy: r[0], route: src?.route ?? null, ...(src?.text ? { text: src.text } : {}) });
   }
   return found;
 }
@@ -462,8 +465,10 @@ function codeOnly(t) {
 
 /**
  * The route a JS or TS header at t[at] is set for: the `source` of the innermost object around it that has one, as
- * Next.js's headers() writes `{ source, headers: [...] }` (in either order); null when none does (a header a
- * middleware sets, or one in a list kept in a constant). `code`: codeOnly(t).
+ * Next.js's headers() writes `{ source, headers: [...] }` (in either order), as { route, text? }; null when none
+ * does (a header a middleware sets, or one in a list kept in a constant). A source read only in part (a template's
+ * `${base}`, a name defined elsewhere) keeps what was not read as words between spaces in `route`, and `text` is
+ * the source as the file writes it. `code`: codeOnly(t).
  */
 function jsRouteAt(t, code, at) {
   const open = [];
@@ -483,8 +488,21 @@ function jsRouteAt(t, code, at) {
       if (depth === 0 && (prev === "{" || prev === ",")) {
         const key = /^(?:source|"source"|'source')\s*:/.exec(t.slice(i, i + 20));
         if (key) {
-          const v = jsValue(t, i + key[0].length);
-          return v ? v[0] : null;
+          const from = i + key[0].length;
+          const v = jsValue(t, from);
+          if (v && !/\s/.test(v[0])) return { route: v[0] };
+          // the value's own text, to the `,` or bracket that ends it (strings are blank in `code`)
+          let end = from;
+          for (let d = 0; end < code.length; end++) {
+            const x = code[end];
+            if (x === "{" || x === "[" || x === "(") d++;
+            else if (x === "}" || x === "]" || x === ")") {
+              if (d === 0) break;
+              d--;
+            } else if (x === "," && d === 0) break;
+          }
+          const text = clean(t.slice(from, end), 80);
+          return { route: v ? v[0] : ` ${text} `, text };
         }
       }
       if (ch === "{" || ch === "[" || ch === "(") depth++;
@@ -498,30 +516,67 @@ function jsRouteAt(t, code, at) {
   return null;
 }
 
-/** The first path segments that serve no pages: API routes, and the folders frameworks and hosts serve files from. */
-const NOT_PAGES = /^\/(?:api|trpc|graphql|_next|_nuxt|_astro|_app|assets|static|fonts|\.well-known)(?:\/|$)/i;
+/** The folders that serve no pages: API routes, and the folders frameworks and hosts serve files from. */
+const NOT_PAGES_DIRS = String.raw`api|trpc|graphql|_next|_nuxt|_astro|_app|assets|static|fonts|\.well-known`;
+/** A path that starts with one of those folders. */
+const NOT_PAGES = new RegExp(String.raw`^\/(?:${NOT_PAGES_DIRS})(?:\/|$)`, "i");
+/** One of those folders as a whole segment further in (`/:locale/api/*`, `/admin/api/(.*)`): an API's, or a page's (`/docs/api/intro`). */
+const NOT_PAGES_SEGMENT = new RegExp(`^(?:${NOT_PAGES_DIRS})$`, "i");
 /** File extensions that are not pages (a pattern such as `**\/*.@(js|css)` or `/*.png` sets headers for files). */
-const FILE_EXT = /^(?:m?js|cjs|css|map|json|wasm|onnx|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|eot|txt|xml|webmanifest|mp4|webm|mp3|pdf)$/i;
+const FILE_EXT = /^(?:m?js|cjs|css|map|json|wasm|onnx|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|ttc|otf|eot|txt|xml|webmanifest|mp4|webm|mp3|pdf)$/i;
+/**
+ * A pattern for files of some kinds, at the end of its last segment: `*.js`, `*.@(js|css)`, `*.(js|css)`,
+ * `*.{js,css}`, and Next.js's `/:all*(svg|jpg|png)` (the group right after a wildcard, without a dot).
+ */
+const FILE_PATTERN = /(?:\.@?\(([\w.|]+)\)|\.\{([\w.,]+)\}|\.(\w+)|[*+?)]\(([\w.|]+)\))$/;
+/** A group of plain alternatives (`(api|trpc)`, `(?:api|trpc)`, `:lang(en|fr)?`): the pattern is each in turn. */
+const ALTERNATIVES = /(?::\w+)?\((?:\?:)?([\w./-]+(?:\|[\w./-]+)*)\)([?*+])?/;
 
 /**
- * Whether a header's path pattern takes in any of the site's pages, where GenClass runs: every pattern but those for
- * API routes (`/api/*`, `/api/:path*`) and static files (`/assets/(.*)`, `/_next/static/*`, `**\/*.@(js|css)`). So
- * `/*`, `/(.*)`, `/:path*`, `/((?!api).*)`, `**` and a section such as `/app/*` count; an absolute URL
- * (Cloudflare's `https://example.com/*`) is read by its path. A pattern that cannot be read counts.
+ * Whether a header's path pattern takes in any of the site's pages, where GenClass runs: true, false, or null when
+ * that cannot be told. False for API routes (`/api/*`, `/api/:path*`, `/(api|trpc)/(.*)`, `/(api|trpc)(.*)`) and
+ * static files (`/assets/(.*)`, `/_next/static/*`, `**\/*.@(js|css)`, `/:all*(svg|jpg|png)`). True for `/*`, `/(.*)`,
+ * `/:path*`, `/((?!api).*)`, `**` and a section such as `/app/*`; an absolute URL (Cloudflare's
+ * `https://example.com/*`) is read by its path. Null for a pattern with one of those folders further in
+ * (`/:locale/api/:path*`, `/admin/api/(.*)`: most are an API's, but `/docs/api/intro` may be a page) and one read only
+ * in part (a space in it: a JS template's `${base}/api/:path*` or a name defined elsewhere, which the reader leaves as
+ * words between spaces). A group of plain alternatives is each of them: true if any is, false if all are.
  */
 export function routeHasPages(route) {
   if (route == null) return true;
+  const partly = /\s/.test(String(route));
   let r = String(route).trim();
   const origin = /^[a-z][a-z0-9+.-]*:\/\/[^/]*/i.exec(r);
   if (origin) r = r.slice(origin[0].length) || "/";
   if (!r || r === "*" || r === "**") return true;
-  // the literal start, before the first wildcard, placeholder or group
-  const literal = /^[^*:(){}[\]?!+@]*/.exec(r)?.[0] ?? "";
-  if (NOT_PAGES.test(literal)) return false;
-  // a pattern for files of some kinds: `*.js`, `*.@(js|css)`, `*.(js|css)`, `*.{js,css}`
-  const ext = /\.(?:@?\(([\w|]+)\)|\{([\w,]+)\}|(\w+))$/.exec(r.split("/").pop() ?? "");
-  if (ext && (ext[1] ?? ext[2] ?? ext[3]).split(/[|,]/).every((e) => FILE_EXT.test(e))) return false;
-  return true;
+  const ext = FILE_PATTERN.exec(r.split("/").pop() ?? "");
+  if (ext && (ext[1] ?? ext[2] ?? ext[3] ?? ext[4]).split(/[|,]/).every((e) => FILE_EXT.test(e.split(".").pop() ?? ""))) return false;
+  let variants = [r];
+  for (let round = 0; round < 4; round++) {
+    const next = [];
+    let grew = false;
+    for (const v of variants) {
+      const g = ALTERNATIVES.exec(v);
+      if (!g) {
+        next.push(v);
+        continue;
+      }
+      grew = true;
+      const alts = g[1].split("|");
+      if (g[2] === "?" || g[2] === "*") alts.push("");
+      for (const a of alts) next.push(v.slice(0, g.index) + a + v.slice(g.index + g[0].length));
+    }
+    if (!grew || next.length > 64) break;
+    variants = next;
+  }
+  const kinds = variants.map((v) => {
+    // the literal start, before the first wildcard, placeholder, group or part not read
+    const literal = /^[^*:(){}[\]?!+@\s]*/.exec(v)?.[0] ?? "";
+    if (NOT_PAGES.test(literal)) return false;
+    if (partly || v.split("/").some((s) => NOT_PAGES_SEGMENT.test(s))) return null;
+    return true;
+  });
+  return kinds.includes(true) ? true : kinds.every((k) => k === false) ? false : null;
 }
 
 /** Whether a policy's text names a directive at all (else it was not read, as a value built at run time). */
@@ -532,17 +587,24 @@ const readable = (policy) =>
 
 /**
  * The Content-Security-Policy strings a project sets for its pages, in the files hosts and frameworks read them
- * from (and `extra`, more files relative to `dir`, as a plain HTML site's pages): [{ file, policy, route }]. A
- * policy for any of the pages counts, the home page's or a section's (`/app/*`); one set only for API routes or
- * static files (`/api/*`, `/assets/*`) is left out (routeHasPages), and so is one whose text could not be read (built
- * at run time); a report-only policy is not read (it blocks nothing).
+ * from (and `extra`, more files relative to `dir`, as a plain HTML site's pages): [{ file, policy, route, text?,
+ * unsure? }]. A policy for any of the pages counts, the home page's or a section's (`/app/*`); one set only for API
+ * routes or static files (`/api/*`, `/assets/*`) is left out (routeHasPages), and so is one whose text could not be
+ * read (built at run time); a report-only policy is not read (it blocks nothing). One for a route that may not serve
+ * pages (`/admin/api/(.*)`, a source built at run time) has `unsure: true`, so it is not checked as the pages'
+ * (`text`: the route as the file writes it, when it was read only in part).
  */
 export function cspIn(dir, extra = []) {
   const found = [];
   for (const f of [...new Set([...CSP_FILES, ...extra])]) {
     const t = read(join(dir, f));
     if (!t || !/content-security-policy/i.test(t)) continue;
-    for (const p of policiesIn(f, t)) if (routeHasPages(p.route) && readable(p.policy)) found.push({ file: f, ...p });
+    for (const p of policiesIn(f, t)) {
+      if (!readable(p.policy)) continue;
+      const pages = routeHasPages(p.route);
+      if (pages) found.push({ file: f, ...p });
+      else if (pages === null) found.push({ file: f, ...p, unsure: true });
+    }
   }
   return found;
 }
@@ -897,13 +959,25 @@ export async function checks(o = {}, deps = {}) {
     const pages = html ? (st.marked ?? []).filter((f) => /\.html?$/i.test(f)).map((f) => relative(cwd, f).split("\\").join("/")) : [];
     try {
       const byFile = new Map();
-      for (const { file, policy } of cspIn(cwd, pages)) byFile.set(file, [...(byFile.get(file) ?? []), policy]);
-      const ort = html ? null : ortPinnedFrom(cwd);
-      for (const [file, policies] of byFile) {
+      for (const p of cspIn(cwd, pages)) byFile.set(p.file, [...(byFile.get(p.file) ?? []), p]);
+      const o2 = { script: tag?.src ?? null, publicDir: publicDirOf(st.project), ort: html ? null : ortPinnedFrom(cwd) };
+      const gapsOf = (list) => {
         const gaps = [];
-        for (const p of policies) for (const g of cspGaps(p, setup, { script: tag?.src ?? null, publicDir: publicDirOf(st.project), ort })) if (!gaps.some((x) => x.need === g.need)) gaps.push(g);
-        if (gaps.length) add({ id: "csp", label: "Content policy", state: "bad", detail: `${file}: ${gaps.map((g) => `without ${g.need}, ${g.why}`).join("; ")}`, fix: `add ${gaps.map((g) => g.need).join(", ")} to the policy in ${file}` });
-        else add({ id: "csp", label: "Content policy", state: "ok", detail: `${file} allows what GenClass needs` });
+        for (const p of list) for (const g of cspGaps(p.policy, setup, o2)) if (!gaps.some((x) => x.need === g.need)) gaps.push(g);
+        return gaps;
+      };
+      for (const [file, list] of byFile) {
+        const sure = list.filter((p) => !p.unsure);
+        const gaps = gapsOf(sure);
+        // a policy for a route that may not serve pages (`/admin/api/(.*)`, a source built at run time) is not checked
+        // as the pages', and is named only when it would block GenClass: never "bad" for what may be an API's policy
+        const unsure = list.filter((p) => p.unsure && gapsOf([p]).length);
+        const routes = [...new Set(unsure.map((p) => clean(p.text ?? p.route, 80)))];
+        const one = routes.length === 1;
+        const left = routes.length ? `the ${one ? "policy" : "policies"} for ${routes.join(", ")} ${one ? "is" : "are"} not checked: GenClass cannot tell whether pages are served there (if they are, ${one ? "it needs" : "they need"} ${gapsOf(unsure).map((g) => g.need).join(", ")})` : "";
+        if (gaps.length) add({ id: "csp", label: "Content policy", state: "bad", detail: `${file}: ${gaps.map((g) => `without ${g.need}, ${g.why}`).join("; ")}${left ? `; ${left}` : ""}`, fix: `add ${gaps.map((g) => g.need).join(", ")} to the policy in ${file}` });
+        else if (sure.length) add({ id: "csp", label: "Content policy", state: "ok", detail: `${file} allows what GenClass needs${left ? `; ${left}` : ""}` });
+        else if (left) add({ id: "csp", label: "Content policy", state: "info", detail: `${file}: ${left}` });
       }
     } catch {
       add({ id: "csp", label: "Content policy", state: "info", detail: "not checked" });
