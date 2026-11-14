@@ -97,6 +97,10 @@ function closing(state) {
   const blocked = state.steps.find((s) => s.state === "blocked");
   if (blocked) {
     /* show() has said where to run it */
+  } else if (!state.signedIn) {
+    // the sign-in did not finish (the code expired, the browser said no): the way back is one command
+    out(`  ${c.bold("Not signed in yet.")}`);
+    note("Run npx genclass again for a new code: setup goes on from the sign-in.");
   } else if (state.complete) out(`  ${c.green("Everything is set up.")}`);
   else if (waiting.length) {
     out(`  ${c.bold("Nothing more to do here right now.")}`);
@@ -105,7 +109,7 @@ function closing(state) {
   out();
   out(`  ${c.gray("Day to day")}`);
   // the commands in one column with room after the longest, so the short name (genclass ...) keeps a gap too
-  out(`    ${c.cyan("npx genclass".padEnd(25))}${c.gray("where things stand")}`);
+  out(`    ${c.cyan("npx genclass".padEnd(25))}${c.gray("the prompt: commands, questions")}`);
   out(`    ${c.cyan("npx genclass suggest".padEnd(25))}${c.gray("what your app is missing")}`);
   if (state.app.token) out(`    ${c.cyan("npx genclass dashboard".padEnd(25))}${c.gray("what it found on your site")}`);
   out();
@@ -122,7 +126,10 @@ export async function status(o = {}) {
   const step = state.next;
   if (step) {
     showNext(step, !!o.all);
-    barPara(`${c.gray("Run")} ${c.cyan(step.run ?? "npx genclass setup")}${step.human ? c.gray(`  (then: ${step.human})`) : ""}`, (l) => l);
+    // inside the prompt a command is typed without npx genclass in front
+    const cmd = step.run ?? "npx genclass setup";
+    const typedHere = homeOpen() && cmd.startsWith("npx genclass ");
+    barPara(`${c.gray(typedHere ? "Type" : "Run")} ${c.cyan(typedHere ? cmd.slice("npx genclass ".length) : cmd)}${step.human ? c.gray(`  (then: ${step.human})`) : ""}`, (l) => l);
     out();
     if (!o.all) out(`  ${c.gray("Every part:")} ${c.cyan("npx genclass status --all")}`);
     out();
@@ -196,7 +203,7 @@ async function walk(o, deps, auto) {
           return deps.home({ ...o, cwd: state.cwd, app: state.app.name ?? "" });
         }
         out();
-        note("Stopped. Run npx genclass again any time: it continues from here.");
+        note(o.home === false ? "Setup stopped here. Type setup to go on with it." : "Stopped. Run npx genclass again any time: it continues from here.");
         out();
         return 0;
       }
@@ -227,8 +234,12 @@ async function walk(o, deps, auto) {
       result = step.id === "plan" ? await choosePlan(state, so) : await chooseAppPlan(state, so);
       // nothing after Pro works without it (paywall.mjs), and an app waits for its plan
       if (result === "quit") {
-        out();
-        if (!auto) note("Stopped. Run npx genclass again any time: it continues from here.");
+        // Pro's card has said how to start it later (one line is enough: the 0.3.9 user stories had three); the
+        // plan page's wait said where the page is. Inside the prompt, setup is typed again, not npx genclass
+        if (!auto && step.id !== "plan") {
+          out();
+          note(o.home === false ? "Setup stopped here. Type setup to go on with it." : "Stopped. Run npx genclass again any time: it continues from here.");
+        }
         out();
         return auto ? 1 : 0;
       }
@@ -246,8 +257,9 @@ async function walk(o, deps, auto) {
     }
     if (result === "failed") {
       failed = true;
-      // what went wrong is above, in the step's own words; this says that the walk goes on without it
-      if (!auto) {
+      // what went wrong is above, in the step's own words; this says that the walk goes on without it (not for the
+      // sign-in: every step after it needs it, so "the others go on" would not be true)
+      if (!auto && step.id !== "account") {
         out();
         warn(`${step.doing} did not finish. The steps that do not need it go on, and npx genclass offers it again next time.`);
       }
@@ -256,7 +268,10 @@ async function walk(o, deps, auto) {
     // one exception is a sign-in that did not finish (the code expired, the browser said no) while someone is at the
     // keyboard: everything after it is better with an account, so it is offered once more
     if (step.id === "account" && result === "failed" && !auto && signInTries++ < 1) note("Enter tries the sign-in again with a new code.");
-    else skip.push(step.id);
+    else {
+      if (step.id === "account" && result === "failed" && !auto) note(`Sign in any time: ${deps.home && o.home !== false ? "type login" : "npx genclass login"}.`);
+      skip.push(step.id);
+    }
     out();
     rule();
   }

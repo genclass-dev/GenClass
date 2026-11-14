@@ -17,7 +17,7 @@ import { spawn } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
-import { appView, n, RANGE_WORDS } from "./app.mjs";
+import { appView, KINDS, n, RANGE_WORDS } from "./app.mjs";
 import { fixAllPrompt, fixPrompt, infoOf, problemList } from "./kinds.mjs";
 import { agentSetup } from "./views.mjs";
 import { clean, good, note, PROMPT, typed, warn, width, wrap } from "./tui.mjs";
@@ -107,7 +107,10 @@ function listProblems(list, shown) {
     const info = infoOf(x);
     out(`    ${c.cyan(String(i + 1).padStart(wNum))}  ${c.bold(clean(info.name, 40))}  ${c.gray(`${n(x.count)} time${x.count === 1 ? "" : "s"}${x.check ? ", visual check" : ""}`)}`);
     const pages = x.where.slice(0, 3).map((w) => clean(w.route, 40)).join(", ");
-    if (pages) for (const l of wrap(`on ${pages}`, width() - 2 - 6 - wNum)) out(`    ${" ".repeat(wNum + 2)}${c.gray(l)}`);
+    // the dashboard's words for the same kind, so the two screens name it the same way (the 0.3.9 user stories)
+    const plain = KINDS[x.key];
+    const under = [plain, pages && `on ${pages}`].filter(Boolean).join(", ");
+    if (under) for (const l of wrap(under, width() - 2 - 6 - wNum)) out(`    ${" ".repeat(wNum + 2)}${c.gray(l)}`);
   });
   if (list.length > shown) out(`    ${c.gray(`and ${n(list.length - shown)} more: add --all`)}`);
 }

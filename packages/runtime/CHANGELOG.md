@@ -6,7 +6,8 @@
   command was busy (a package install) is sent once more on a new one; a token that could not be created for a
   network error says to run the command again, not to sign in again; `connect` names the host it signs in at.
   Under the `genclass` command, rows and notes wrap to the terminal (58 columns and up) and `whoami` stacks a long
-  app row; `genclass-runtime`'s own output is unchanged.
+  app row; `genclass-runtime`'s own output is unchanged. `connect`'s question names the folder only when it is
+  not the current one, and `logout`'s last line wraps under the `genclass` command.
 
 - The CLI's note under a dashboard link says what each plan shows since genclass.dev's plans changed (2026-11-12):
   Free the totals for the last 7 days; every problem, its pages, fix prompts and visitor analytics with Pro (3 days

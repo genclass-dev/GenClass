@@ -1,5 +1,6 @@
-// The command's home: what `genclass` is on a terminal once the setup is walked. It stays open. Type a command, or a
-// question about your app, as often as you like; q leaves.
+// The command's home: what `genclass` typed alone opens, straight away, and what `npx genclass` opens once the folder
+// is set up (before that it walks the setup first; `genclass setup` walks it any time). It stays open. Type a
+// command, or a question about your app, as often as you like; q leaves.
 //
 // Invariants:
 // - Everything here is also a command of its own (`genclass dashboard`, `genclass analytics`, ...): the home only
@@ -14,8 +15,9 @@
 
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
-import { installGlobally, isShort, readPrefs, savePrefs, shortNameWorks, useShortName } from "./name.mjs";
-import { inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
+import { installedVersion, installGlobally, isShort, latestOnNpm, newer, readPrefs, savePrefs, shortNameWorks, useShortName, viaNpx } from "./name.mjs";
+import { planName } from "./state.mjs";
+import { header, inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
 
 /** The commands of the home, in the order they are listed: [what is typed, what it is, shown in the short list]. */
 export const COMMANDS = [
@@ -46,6 +48,17 @@ export const COMMANDS = [
 
 const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "version", "connect", "init", "audit"];
 
+/** The short list on Free (the account has no Pro): the commands that work there, numbered on their own. */
+export const FREE_MENU = [
+  ["upgrade", "start Pro: its free trial first"],
+  ["profile", "your account and plan"],
+  ["plan", "your plan and its limits"],
+  ["status", "where the setup stands"],
+];
+
+/** Words in front of a command that change nothing ("show problems", "open dashboard"). */
+const VERBS = new Set(["show", "open", "see", "run", "view", "go", "list"]);
+
 /** A typed line as arguments: spaces separate, single or double quotes keep words together. */
 export function words(line) {
   const out = [];
@@ -55,8 +68,11 @@ export function words(line) {
   return out;
 }
 
-/** What a typed line is: { quit }, { help }, { command: argv }, { question: text } or { unknown: word }. */
-export function read(line, known = NAMES) {
+/**
+ * What a typed line is: { quit }, { help }, { command: argv }, { question: text } or { unknown: word } ({ number }
+ * too for a number no command has). `numbered`: the list the numbers are of (the short one on Free).
+ */
+export function read(line, known = NAMES, numbered = COMMANDS) {
   const text = String(line ?? "").trim();
   if (!text) return { help: true };
   let argv = words(text);
@@ -67,20 +83,39 @@ export function read(line, known = NAMES) {
   const head = argv[0].toLowerCase();
   if (["q", "quit", "exit", "bye"].includes(head)) return { quit: true };
   // a number is the command listed with it
-  if (/^\d{1,2}$/.test(head) && argv.length === 1) {
-    const cmd = COMMANDS[Number(head) - 1];
-    return cmd ? { command: [cmd[0].split(" ")[0]] } : { unknown: head };
+  if (/^\d+$/.test(head) && argv.length === 1) {
+    const cmd = numbered[Number(head) - 1];
+    return cmd ? { command: [cmd[0].split(" ")[0]] } : { unknown: head, number: true };
   }
   if (head === "help" || head === "?" || head === "commands") return { help: true, all: true };
   if (known.includes(head)) return { command: [head, ...argv.slice(1)] };
+  // "show problems": a verb in front of a command is that command
+  if (VERBS.has(head) && argv[1] && known.includes(argv[1].toLowerCase())) return { command: [argv[1].toLowerCase(), ...argv.slice(2)] };
   // a sentence, or anything ending in a question mark, is a question about the app
   if (argv.length >= 3 || /\?\s*$/.test(text)) return { question: text };
   return { unknown: argv[0] };
 }
 
-/** The list of commands: the short one, or every command. */
-export function menu(all = false) {
+/**
+ * The list of commands: the short one, or every command. On Free (`free`) the short one is FREE_MENU, the commands
+ * that work without Pro, and every command is listed by name only.
+ */
+export function menu(all = false, free = false) {
   out();
+  if (free) {
+    out(`  ${c.bold("What next?")} ${c.gray(all ? "Every command:" : "A number or a command.")}`);
+    if (all) {
+      const names = COMMANDS.map(([n]) => n);
+      for (let i = 0; i < names.length; i += 4) out(`    ${c.cyan(names.slice(i, i + 4).map((n) => n.padEnd(13)).join(""))}`);
+      note("All but upgrade, profile, plan, status, login and remove come with Pro.");
+      return;
+    }
+    const pad = Math.max(...FREE_MENU.map(([n]) => n.length)) + 2;
+    FREE_MENU.forEach(([name, what], i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${c.cyan(name.padEnd(pad))}${c.gray(what)}`));
+    out(`      ${c.cyan("help".padEnd(pad))}${c.gray("every command")}   ${c.cyan("q")} ${c.gray("leave")}`);
+    note("You are on Free: the other commands come with Pro.");
+    return;
+  }
   out(`  ${c.bold("What next?")} ${c.gray("A number, a command, or a question.")}`);
   const list = COMMANDS.map((x, i) => [...x, i + 1]).filter(([, , short]) => all || short);
   const pad = Math.max(...list.map(([n]) => n.length)) + 2;
@@ -98,16 +133,44 @@ const DAY = 24 * 60 * 60_000;
  */
 export async function installShortName(deps = {}) {
   if (isShort() || process.env.CI || process.env.GENCLASS_NO_INSTALL || !(deps.interactive ?? interactive)()) return "skipped";
-  if ((deps.works ?? shortNameWorks)()) {
-    useShortName();
-    return "skipped";
-  }
   const p = readPrefs();
   const now = deps.now ?? Date.now();
+  const install = deps.install ?? installGlobally;
+  if ((deps.works ?? shortNameWorks)()) {
+    // the installed command stays current (the 0.3.7 walk: a Mac stayed on its first version): a run through npx,
+    // which runs the newest, replaces an older installed copy; the installed copy asks npm once a day
+    const have = (deps.installedVersion ?? installedVersion)();
+    const npx = (deps.viaNpx ?? viaNpx)();
+    let want = null;
+    if (have && npx) want = newer(BUILD.version, have) ? BUILD.version : null;
+    else if (have && !(p.updateCheckedAt && now - Date.parse(p.updateCheckedAt) < DAY)) {
+      savePrefs({ updateCheckedAt: new Date(now).toISOString() });
+      const latest = await (deps.latest ?? latestOnNpm)();
+      want = latest && newer(latest, have) ? latest : null;
+    }
+    if (want && p.updateFailedAt && now - Date.parse(p.updateFailedAt) < DAY) want = null;
+    let updated = false;
+    if (want) {
+      out();
+      const sp = spinner(`Updating the genclass command, ${have} to ${want}`);
+      const r = await install(want);
+      if (r.ok) {
+        savePrefs({ updateFailedAt: null });
+        sp.stop("ok", npx ? `Updated to ${want}.` : `Updated to ${want}: the next genclass you type runs it.`);
+        updated = true;
+      } else {
+        savePrefs({ updateFailedAt: new Date(now).toISOString() });
+        sp.stop("warn", `Could not update the genclass command: it stays ${have}.`);
+        note("By hand: npm install -g genclass@latest");
+      }
+    }
+    useShortName();
+    return updated ? "updated" : "skipped";
+  }
   if (p.installFailedAt && now - Date.parse(p.installFailedAt) < DAY) return "skipped";
   out();
   const sp = spinner("Adding the genclass command to your terminal");
-  const r = await (deps.install ?? installGlobally)(BUILD.version);
+  const r = await install(BUILD.version);
   if (!r.ok) {
     savePrefs({ installFailedAt: new Date(now).toISOString() });
     sp.stop("warn", "Could not add the genclass command. npx genclass keeps working.");
@@ -119,9 +182,29 @@ export async function installShortName(deps = {}) {
   if ((deps.works ?? shortNameWorks)()) {
     useShortName();
     sp.stop("ok", "Added: type genclass from now on.");
+    // zsh remembers where commands are: a window that was open before the install may not see the new one yet
+    if (/zsh$/.test(process.env.SHELL ?? "")) note("If this window says command not found, run rehash once, or open a new window.");
   } else sp.stop("ok", "Added. Open a new terminal window and type genclass.");
   note("npm install -g genclass ran. npm uninstall -g genclass takes it out.");
   return "installed";
+}
+
+/**
+ * Where the command stands in this folder, above its prompt when `genclass` opens straight on it: the app, the account
+ * and its plan, and what setup has left (or that setup has not run here). Nothing is asked or done.
+ */
+export function opening(state) {
+  header({ app: state.app?.name, framework: state.app?.framework, account: state.account?.label, plan: planName(state), host: state.host });
+  const left = state.steps.filter((x) => x.state !== "done" && x.state !== "optional" && x.blocking !== false && x.state !== "waiting");
+  // signed out (logout, an expired session) in a folder that is set up: the app is still set up, only the sign-in is
+  // missing (the 0.3.9 user stories: after logout it said "not set up")
+  // on Free the next thing is Pro, whatever the folder (setup answers only that it goes on with Pro)
+  if (state.signedIn && state.account?.cli && !state.account.cli.paid) note(`You are on Free. Type upgrade to start ${state.account.cli.trialDays ? `your ${state.account.cli.trialDays}-day free trial of ` : ""}Pro: setup and the other commands come with it.`);
+  else if (!state.signedIn && state.app?.token) note(state.sessionProblem === "expired" ? "Your sign-in expired. Type login to sign in again." : "Not signed in. Type login to sign in again.");
+  else if (!state.signedIn) note("Not signed in, and GenClass is not in this app yet. Type setup: it starts with the sign-in.");
+  else if (!state.app?.token) note("GenClass is not set up in this folder yet. Type setup to do it, one step at a time.");
+  else if (left.length) note(`Set up. ${left.length} more step${left.length === 1 ? "" : "s"} you can add (${left.map((x) => x.title).join(", ")}): type setup.`);
+  else note("Everything is set up. Type setup any time to change something.");
 }
 
 /**
@@ -132,21 +215,34 @@ export async function installShortName(deps = {}) {
 export async function home(o = {}, deps = {}) {
   if (!interactive()) return 0;
   await installShortName(deps);
-  menu();
+  // on Free the short list is what works there; once Pro is on (upgrade, here), the whole list
+  let free = !!o.free;
+  const pro = async () => (await import("./paywall.mjs")).proSeen();
+  menu(false, free);
   inHome(o.app ?? "");
+  // the command a "Did you mean" named: y (or yes) runs it
+  let meant = null;
   for (;;) {
     out();
     const line = await typed(`  ${PROMPT()} `);
     if (line === null) break;
-    const got = read(line);
+    const yes = meant && /^\s*(y|yes)\s*$/i.test(line);
+    const got = yes ? { command: [meant] } : read(line, NAMES, free ? FREE_MENU : COMMANDS);
+    meant = null;
     if (got.quit) break;
     if (got.help) {
-      menu(!!got.all);
+      menu(!!got.all, free);
       continue;
     }
     if (got.unknown) {
+      if (got.number) {
+        warn(`No command has the number ${got.unknown}.`);
+        note(`The numbers are the ones in the list: ${free ? "1 to " + FREE_MENU.length : "help shows them all"}.`);
+        continue;
+      }
       const near = deps.nearest?.(got.unknown);
-      warn(`There is no command "${got.unknown}".${near ? ` Did you mean ${c.cyan(near)}?` : ""}`);
+      meant = near;
+      warn(`There is no command "${got.unknown}".${near ? ` Did you mean ${c.cyan(near)}? (y runs it)` : ""}`);
       note("help lists them all.");
       continue;
     }
@@ -158,13 +254,27 @@ export async function home(o = {}, deps = {}) {
     } catch (e) {
       warn(`That did not work: ${e?.message ?? e}`);
     }
-    // on Free: one line, every time, with the way up
-    if (!["upgrade", "profile", "plan", "login", "logout", "remove"].includes(argv[0])) {
+    // on Free: one line, every time, with the way up (not after the gate's own line for the same thing)
+    let stopped = false;
+    try {
+      const paywall = await import("./paywall.mjs");
+      stopped = paywall.wasRefused();
+      paywall.resetRefused();
+    } catch {
+      /* nothing to read */
+    }
+    // (not after the commands that say where the plan stands themselves: status and setup show Pro's step)
+    if (!stopped && !["upgrade", "profile", "plan", "login", "logout", "remove", "status", "setup"].includes(argv[0])) {
       try {
         await deps.afterCommand?.();
       } catch {
         /* the line is best effort */
       }
+    }
+    // Pro started here (upgrade, or the card after a command): every command works now
+    if (free && (await pro().catch(() => false))) {
+      free = false;
+      menu(false, false);
     }
     rule();
   }

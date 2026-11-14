@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.3.9
+
+- **`genclass` opens its prompt straight away**: commands and questions, with one line on where this folder's setup
+  stands. `npx genclass` does the same once the folder is set up (signed in, GenClass in the code, the app in the
+  account), and walks the setup only before that. `genclass setup` walks it any time, to add or change a part.
+- **The installed `genclass` stays current**: a run through npx replaces an older installed copy with its own version,
+  and the installed copy asks npm once a day and updates itself (`npm install -g genclass@<version>`; a failure says
+  how by hand and waits a day). After the first install, zsh is told to `rehash` if the window does not see it yet.
+- **A coding agent following `status --json` finishes**: every step it can do says `npx genclass setup --yes` (it
+  said `npx genclass init`, which writes nothing without a terminal, so an agent ran it again and again), and it is
+  never pointed at a step `setup --yes` cannot do.
+- **An app your plan already covers is done**: no third browser page right after paying, nothing to click, and
+  setup never stops there. Its plan page is in `genclass plan`.
+- **Free sees the Pro card once**: later commands say in one line that they come with Pro; the prompt lists what
+  works on Free (upgrade, profile, plan, status); the card says the price once.
+- **Fewer keys in setup**: Enter on a step is its yes, so the Vite settings and the coding agent's files are shown
+  and written without a second (Y/n) (the runtime's own diff is still asked about). Suggestions in setup show the
+  first in full and the rest by title, and Enter takes the first choice of the hand-off.
+- **Signed out says so**: after `logout`, `genclass` says to sign in again (it said the folder was not set up), and
+  the price is not quoted to someone signing in again. `plan`, `profile`, `team` and `apps` start the sign-in on a
+  terminal, as the others do. `login` (in the prompt too) is the setup's own sign-in screen. A sign-in denied twice
+  ends with how to sign in later.
+- **`login` in a folder says what is next in genclass's words**: an app already in the account needs nothing (it
+  hears which plan it is on), an app without GenClass is pointed at `setup`, which shows its change first; only an
+  app with GenClass in its code and not in the account is offered `connect`. "<app> is on your Pro plan" is said
+  once, when the app reaches the account, never before a view.
+- One line where there were three: q at Pro's card in setup, and setup inside the prompt after the card was seen
+  ("Setup goes on with Pro"); setup stopped inside the prompt says to type setup. On Free, `plan` ends with what Pro
+  adds, and neither `status` nor `setup` is followed by the Free line. `events` names each kind as `problems` does.
+  A long Waiting line wraps instead of being cut; a step that does not apply has no command in `status --json`.
+- The prompt: `y` runs what "Did you mean" named, "show problems" is `problems`, a number no command has says so.
+  `dashboard` in a web app without GenClass asks which app instead of showing another one. `fix` names each problem
+  in the dashboard's words too. The git hint is one command a line.
+- 58 columns: a wrong option, the sign-in's lines and `--version` (now two lines) fit; a label and a link go on two
+  lines when one is too wide; setup's notes follow `COLUMNS` without a terminal.
+- A team member's `plan --json` has the team's Pro as `plan` (the account's own Free is `own_plan`), with its apps,
+  history and what it includes. A grant team says "set up by GenClass" everywhere, never that the owner pays.
+- A sign-in that did not finish ends with how to get a new code; the sign-in step names the host it opens.
+
 ## 0.3.8
 
 Fixes from a signed-in walk of 0.3.7 against a fresh account, a team and a grant:

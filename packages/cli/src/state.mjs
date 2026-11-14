@@ -194,7 +194,12 @@ export async function readState(o = {}, deps = {}) {
             ? `the saved session is for ${otherHost}`
             : "",
     // said before anyone signs up: the command is Pro's, with its trial and price (the owner's call, 2026-11-13)
-    why: "Opens genclass.dev. Then Pro: 3 days free, then $15 / developer / month, with a card on Stripe.",
+    // the host the sign-in opens (genclass.dev, or GENCLASS_HOST in a test)
+    // someone signing in again (a saved session, or an app set up in this folder) already has an account and maybe
+    // Pro: the price is said only to someone new (the 0.3.9 user stories: it was quoted to a payer after logout)
+    why: creds || st.token
+      ? `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"} to sign you in again.`
+      : `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"}. Then Pro: 3 days free, then $15 / developer / month, with a card on Stripe.`,
     more: `Your account is where your apps, their dashboards and your plan live. New here? It is made on that page. Nothing is typed in the terminal. ${PRO_TERMS} Free stays on the website: one app and its totals.`,
     run: "npx genclass login",
     human: "approve the sign-in in your browser",
@@ -211,7 +216,7 @@ export async function readState(o = {}, deps = {}) {
     doing: cli && !cli.paid ? (cli.trialDays ? `Start your ${cli.trialDays}-day free trial` : `Start ${cli.plan}`) : "Pro",
     state: !me ? (creds && offline !== "expired" ? "optional" : "todo") : !cli ? "optional" : cli.paid ? "done" : "todo",
     detail: !me
-      ? creds
+      ? creds || st.token
         ? ""
         : "3 days free, then $15 / developer / month"
       : cli && !cli.paid
@@ -220,7 +225,7 @@ export async function readState(o = {}, deps = {}) {
           ? "through your team's plan"
           : cli?.paid && cli.via === "open"
             ? "open on this genclass.dev"
-            : me.plan && me.plan.id !== "free"
+            : me.plan && me.plan.id !== "free" && me.plan.name !== "Pro"
               ? me.plan.name
               : "",
     why: cli && !cli.paid ? `Every genclass command comes with ${cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free to start` : ""}.` : me ? "Every genclass command comes with Pro." : PRO_TERMS,
@@ -276,9 +281,10 @@ export async function readState(o = {}, deps = {}) {
     id: "app-plan",
     title: "App plan",
     doing: appOffer?.current ? `Continue with ${appOffer.current} for this app` : "Choose this app's plan",
-    state: appOffer ? "todo" : "optional",
-    // an app the account's plan already covers (paid, or GenClass's grant) waits on nothing: its page's Continue is
-    // offered once, never required, so a setup with --yes or a coding agent still ends complete
+    // an app the account's plan already covers (paid, in its trial, GenClass's grant) has its plan: the step is done,
+    // so no page opens and nothing waits (the 0.3.9 user stories: a third browser page right after paying, and a
+    // setup that stopped there). Its plan page stays one link away, in the detail
+    state: appOffer ? (appOffer.current && !appOffer.needs ? "done" : "todo") : app?.plan?.source && !app.needsPlan && !app.shared ? "done" : "optional",
     blocking: !(appOffer?.current && !appOffer.needs),
     detail: !me || !app?.plan
       ? (app?.shared ? "the team's owner chooses it" : "")
@@ -288,7 +294,7 @@ export async function readState(o = {}, deps = {}) {
             ? `${appOffer.current ?? "Your plan"} covers no more apps`
             : `Free covers ${appOffer.free.apps === 1 ? "one app" : `${appOffer.free.apps ?? 1} apps`}: this one needs ${appOffer.plan.name}`
           : appOffer.current
-            ? `covered by ${appOffer.current}: continue on its plan page`
+            ? `covered by ${appOffer.current}`
             : `${appOffer.plan.name}, ${appOffer.price}`
         : `${app.plan.name}${app.plan.source === "comp" ? " (set up by GenClass)" : ""}`,
     why: appOffer?.needs && appOffer.paying
@@ -441,16 +447,22 @@ export const planName = (state, token = state?.app?.token) => (state?.projects ?
 
 /** The state as plain data for `--json`: what a coding agent reads to know where things stand and what to run. */
 /** The command for a step as a coding agent runs it: without a terminal the walk does a step only with --yes. */
-const forAgent = (run) => (run === "npx genclass setup" ? "npx genclass setup --yes" : run);
+// init and connect too: without --yes they write nothing, so an agent told "npx genclass init" would read the same
+// state and be told it again, for ever (the 0.3.9 user stories); setup --yes does the step the way the walk does it
+const forAgent = (run) => (["npx genclass setup", "npx genclass init", "npx genclass connect"].includes(run) ? "npx genclass setup --yes" : run);
 
 export function stateJson(s) {
+  // a step that waits on nothing (an app the plan already covers: its page's Continue is offered, not required) is
+  // never what a coding agent is told to do next: `setup --yes` cannot click it, and would be run again and again
+  const agentNext = s.next && s.next.blocking === false ? (s.steps.find((x) => x !== s.next && x.state === "todo" && x.blocking !== false) ?? null) : s.next;
   return {
     app: s.app,
     signed_in: s.signedIn,
     account: s.account ? { label: s.account.label, plan: s.account.plan } : null,
     github: s.git.github,
-    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.state, detail: x.detail, run: x.state === "done" ? null : forAgent(x.run), human: x.state === "done" ? null : x.human })),
-    next: s.next ? { id: s.next.id, title: s.next.doing, run: forAgent(s.next.run), human: s.next.human, why: s.next.why } : null,
+    // a step that does not apply here (optional: no git repository, no tests) has nothing for an agent to run
+    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.blocking === false && x.state !== "done" ? "optional" : x.state, detail: x.detail, run: x.state === "done" || x.state === "optional" || x.blocking === false ? null : forAgent(x.run), human: x.state === "done" || x.state === "optional" ? null : x.human })),
+    next: agentNext ? { id: agentNext.id, title: agentNext.doing, run: forAgent(agentNext.run), human: agentNext.human, why: agentNext.why } : null,
     complete: s.complete,
   };
 }

@@ -26,8 +26,8 @@ import { width, wrap } from "./tui.mjs";
 /** The help's sections: [heading, [command, what it does]...]; usage() lays them out for the terminal's width. */
 const HELP = [
   [null, [
-    ["npx genclass", "where this project stands; on a terminal it walks you through the next step, then stays open for commands and questions"],
-    ["npx genclass setup", "the guided setup (--yes: no questions, for a coding agent)"],
+    ["npx genclass", "the command's prompt, for commands and questions (the first time in a folder, the setup first)"],
+    ["npx genclass setup", "the guided setup, any time, to add or change a part (--yes: no questions, for a coding agent)"],
     ["npx genclass status", "what is done, what is next (--all: every part; --json)"],
   ]],
   ["See", [
@@ -156,7 +156,7 @@ export async function run(argv, ctx = {}) {
   const po = { cwd: i >= 0 ? args[i + 1] : undefined, yes: args.includes("--yes") || args.includes("-y"), json: args.includes("--json"), noBrowser: args.includes("--no-browser") };
   const thenPlan = async (code) => {
     if (code !== 0) return code;
-    await (await import("./actions.mjs")).planNow(po).catch(() => "none");
+    await (await import("./actions.mjs")).planNow({ ...po, announce: true }).catch(() => "none");
     return code;
   };
   if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
@@ -165,10 +165,14 @@ export async function run(argv, ctx = {}) {
     // to the account (the runtime login's own question) only once Pro is on, so nothing is written before Pro's card
     const login = await import("../../runtime/bin/lib/login.mjs");
     const noConnect = args.includes("--no-connect");
-    const code = await login.run(cmd, noConnect || asksHelp ? args : [...args, "--no-connect"]);
+    // on a terminal the sign-in is the setup's own step, so it looks like the rest of genclass (the 0.3.9 user
+    // stories: typed in the prompt it was the runtime CLI's screen, which says "Ctrl-C to cancel"); other options
+    // (--json, --host, ...) go to the runtime CLI's login
+    const plain = args.every((a, i) => ["--cwd", "--no-connect", "--no-browser"].includes(a) || args[i - 1] === "--cwd");
+    const code = !asksHelp && plain && interactive() ? await ownLogin(po) : await login.run(cmd, noConnect || asksHelp ? args : [...args, "--no-connect"]);
     if (code !== 0 || asksHelp) return code;
     if (!(await (await import("./paywall.mjs")).afterLogin(po).catch(() => true))) return code;
-    return thenPlan(noConnect ? code : await login.offerConnect(args).catch(() => 1));
+    return thenPlan(noConnect ? code : await afterSignIn(po, args, login).catch(() => 1));
   }
   if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
   if (["connect", "init", "scan", "audit"].includes(cmd)) {
@@ -209,7 +213,8 @@ export async function run(argv, ctx = {}) {
     return 2;
   }
   if (o.version || cmd === "version") {
-    out(`genclass ${BUILD.version} (installs @genclass/runtime ${BUILD.runtimeVersion}, @genclass/mcp ${BUILD.mcpVersion})`);
+    out(`genclass ${BUILD.version}`);
+    out(`installs @genclass/runtime ${BUILD.runtimeVersion}, @genclass/mcp ${BUILD.mcpVersion}`);
     return 0;
   }
   if (o.help || cmd === "help") {
@@ -293,11 +298,82 @@ export async function run(argv, ctx = {}) {
   if (cmd === "setup" || cmd === null) {
     // on a terminal the command stays open when the walk ends: a prompt for commands and questions (home.mjs)
     const home = async (ho) => (await import("./home.mjs")).home(ho, { runCommand: (a) => run(a, { nested: true }), nearest, afterCommand: async () => (await import("./manage.mjs")).freeLine({ cwd: ho.cwd }) });
-    // `genclass` alone works from the first run on (home.mjs installShortName)
+    // `genclass` alone works from the first run on, and stays current (home.mjs installShortName)
     if (!ctx.nested && !o.yes && !o.json) await (await import("./home.mjs")).installShortName();
+    // `genclass` alone opens the command's prompt straight away (the owner's call, 2026-11-13: "genclass by itself
+    // directly takes you to the genclass cli"); `npx genclass` does too once this folder is set up, and walks the
+    // setup only before that. The walk itself is `genclass setup`, to change something
+    if (cmd === null && !ctx.nested && !o.yes && !o.json && interactive()) {
+      const { readState } = await import("./state.mjs");
+      const state = await readState({ cwd: o.cwd }).catch(() => null);
+      const ready = !!state?.signedIn && !!state?.app?.token;
+      if (ready || !(await import("./name.mjs")).viaNpx()) {
+        if (state) (await import("./home.mjs")).opening(state);
+        // signed in without Pro: the prompt's short list is what works on Free
+        const free = !!state?.account?.cli && !state.account.cli.paid;
+        return home({ ...o, cwd: state?.cwd ?? o.cwd, app: state?.app?.name ?? "", free });
+      }
+    }
     return setup({ ...o, ...(ctx.nested ? { home: false } : {}) }, { runSuggest, home });
   }
   return 2;
+}
+
+/**
+ * After `genclass login` with Pro on, on a terminal: what this folder's app needs next, in this command's words. An
+ * app already in the account needs nothing; an app without GenClass (or without its Vite settings) is pointed at
+ * setup, which shows its change first; only an app with GenClass in its code but not in the account is offered the
+ * runtime CLI's connect (the 0.3.9 user stories: its question ran its own picker and init in a folder without
+ * GenClass, and was asked for an app already connected). With --yes, or without a terminal, it is connect's as before.
+ */
+async function afterSignIn(po, args, login) {
+  if (po.yes || !interactive()) return login.offerConnect(args);
+  let state = null;
+  try {
+    state = await (await import("./state.mjs")).readState({ cwd: po.cwd });
+  } catch {
+    state = null;
+  }
+  if (!state?.signedIn) return login.offerConnect(args);
+  const rt = state.steps.find((x) => x.id === "runtime");
+  if (!state.app.isApp || !rt || rt.state === "done") return 0;
+  if (rt.run === "npx genclass connect") return login.offerConnect(args);
+  const { hint, note } = await import("./tui.mjs");
+  out();
+  note(`Next: ${hint("setup")} to ${rt.vite ? "add the two Vite settings this app needs" : "add GenClass to this app"}. It shows the change first.`);
+  return 0;
+}
+
+/**
+ * `genclass login` on a terminal: the header, then the setup's sign-in step (actions.mjs signIn: the link, the code,
+ * the browser, Enter stops the wait). Already signed in: says so, and how to switch. Returns the exit code.
+ */
+async function ownLogin(po) {
+  const { readCredentialsFor } = await import("../../runtime/bin/lib/account.mjs");
+  const { accountLabel, inspectProject } = await import("../../runtime/bin/lib/init.mjs");
+  const { fetchOverview } = await import("./api.mjs");
+  const { bad, header, note } = await import("./tui.mjs");
+  const h = hostConfig();
+  let project = null;
+  try {
+    project = inspectProject({ cwd: po.cwd }).project;
+  } catch {
+    project = null;
+  }
+  const saved = readCredentialsFor().creds;
+  const me = saved ? await fetchOverview(saved) : null;
+  header({ app: project?.name ?? null, framework: project?.label ?? null, account: me?.ok ? accountLabel(me.account) : null, host: h.overridden && !h.error ? h.host : null });
+  if (me?.ok) {
+    note(`Already signed in as ${accountLabel(me.account)}. To switch accounts: logout, then login.`);
+    return 0;
+  }
+  if (me && me.status !== 401) {
+    bad(`Could not reach genclass.dev (${me.reason}).`);
+    return 1;
+  }
+  if (me) note("The saved sign-in no longer works: signing in again.");
+  const r = await (await import("./actions.mjs")).signIn(po);
+  return r === "done" ? 0 : 1;
 }
 
 /** init's options that leave what it does at the telemetry switch: where, whether to ask, and what not to run. */
