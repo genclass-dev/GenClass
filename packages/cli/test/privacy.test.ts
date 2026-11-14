@@ -23,7 +23,11 @@ function appWith(opts = 'token: "gc_AbCdEfGhIjKlMnOpQrStUv"', extra: Record<stri
 
 describe("genclass privacy: the setup, read from the project's files (src/privacy.mjs)", () => {
   it("reads the options that decide what is sent and kept", () => {
-    expect(readSetupText('import "@genclass/runtime/auto";')).toMatchObject({ mode: "observe", telemetry: "on", analytics: false, situation: false, visual: "local", model: "cdn", learn: "local", sinks: [], agentLink: false });
+    expect(readSetupText('import "@genclass/runtime/auto";')).toMatchObject({ mode: "observe", telemetry: "on", analytics: false, situation: false, visual: "local", model: "cdn", learn: "none", sinks: [], agentLink: false });
+    // learned state: nothing by default; flows with learn.expectations or learn.persist (runtime.ts, EXPECTATIONS.md section 4)
+    expect(readSetupText("learn: { expectations: true }").learn).toBe("local");
+    expect(readSetupText('learn: { persist: "session" }').learn).toBe("session");
+    expect(readSetupText("learn: { expectations: true, persist: false }").learn).toBe("none");
     expect(readSetupText('import "@genclass/runtime/auto/guard"; GENCLASS_CONFIG = { telemetry: false, learn: { persist: false }, model: { baseUrl: "/genclass-model/" } }')).toMatchObject({ mode: "guard", telemetry: "off", model: "self", learn: "none" });
     expect(readSetupText('GenClass.init({ mode: "heal", telemetry: { endpoint: "https://collect.shop.example/v1", include: { situation: true } }, analytics: true, visual: { on: true, fix: true }, sinks: ["webhook:https://hooks.shop.example/g"] }); connectAgent(rt);')).toMatchObject({
       mode: "heal",
@@ -43,8 +47,11 @@ describe("genclass privacy: the setup, read from the project's files (src/privac
     expect(m.sent.map((x) => x.to.split(" ")[0])).toEqual(["genclass.dev", "cdn.jsdelivr.net"]);
     expect(m.sent[0]!.what).toContain("No page text.");
     expect(m.sent[0]!.what).toContain("stores no IP address");
-    expect(m.kept.map((x) => x.where)).toEqual(["localStorage (genclass:learn)", "Cache Storage"]);
-    expect(m.strict.map(([opt]) => opt)).toEqual(['consent: "pending"', "telemetry: false", 'model: { baseUrl: "/genclass-model/", ortWasmPaths: "/genclass-model/ort/" }', "learn: { persist: false }"]);
+    expect(m.kept.map((x) => x.where)).toEqual(["Cache Storage"]);
+    expect(m.strict.map(([opt]) => opt)).toEqual(['consent: "pending"', "telemetry: false", 'model: { baseUrl: "/genclass-model/", ortWasmPaths: "/genclass-model/ort/" }']);
+    // guard and heal: the breaker's state after a trip, for the tab's session
+    const guard = dataMap({ ...readSetupText('import "@genclass/runtime/auto/guard";'), token: true, files: [], installed: true } as any);
+    expect(guard.kept.map((x) => x.where)).toEqual(["sessionStorage (genclass:breaker)", "Cache Storage"]);
     expect(m.csp).toEqual(["connect-src https://genclass.dev", "connect-src https://cdn.jsdelivr.net", "script-src 'wasm-unsafe-eval'", "worker-src 'self' (blob: for the script tag)"]);
     expect(m.eu.join(" ")).toContain("EDPB Guidelines 2/2023");
     expect(m.us.join(" ")).toContain("Global Privacy Control");
@@ -56,8 +63,9 @@ describe("genclass privacy: the setup, read from the project's files (src/privac
     expect(m.sent).toEqual([]);
     expect(m.kept.map((x) => x.where)).toEqual(["Cache Storage"]);
     expect(m.strict).toEqual([]);
-    expect(m.eu).toHaveLength(1);
+    expect(m.eu).toHaveLength(2);
     expect(m.eu[0]).toContain("sends nothing from the visitor's browser");
+    expect(m.eu[1]).toContain("the model's files in Cache Storage");
     expect(m.csp).toEqual(["script-src 'wasm-unsafe-eval'", "worker-src 'self' (blob: for the script tag)"]);
   });
 

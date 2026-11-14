@@ -48,8 +48,13 @@ export function readSetupText(text) {
   const visualFix = visual && has(/fix\s*:\s*true/);
   const modelOff = has(/model\s*:\s*false|data-model=["']off["']/);
   const baseUrl = /baseUrl\s*:\s*["'`]([^"'`\s]+)["'`]/.exec(t)?.[1] ?? null;
+  // learned state, as runtime.ts decides it: nothing by default; flows in localStorage with learn.expectations
+  // (opt-in) or learn.persist true / "local"; both in sessionStorage with persist "session"; nothing with persist false
   const persistOff = has(/persist\s*:\s*false/);
   const persistSession = has(/persist\s*:\s*["']session["']/);
+  const persistLocal = has(/persist\s*:\s*(?:true|["']local["'])/);
+  const expectations = has(/expectations\s*:\s*true/);
+  const sample = /\bsample\s*:\s*(0?\.\d+)/.exec(t);
   const sinkHosts = [...t.matchAll(/webhook:(https?:\/\/[^"'`\s,\]]+)/g)].map((m) => hostOf(m[1])).filter(Boolean);
   // the consent gate (the runtime's InitOptions.consent): "pending" (an object leaves the parts it omits pending too)
   // or "denied"; null when it is not set and everything below starts with the page
@@ -67,7 +72,8 @@ export function readSetupText(text) {
     visual: visual ? (visualFix ? "on, with fixes" : "on") : "local",
     model: modelOff ? "off" : baseUrl ? (/^https?:\/\//.test(baseUrl) ? "other" : "self") : "cdn",
     modelHost: baseUrl && /^https?:\/\//.test(baseUrl) ? hostOf(baseUrl) : null,
-    learn: persistOff ? "none" : persistSession ? "session" : "local",
+    learn: persistOff ? "none" : persistSession ? "session" : persistLocal || expectations ? "local" : "none",
+    sampled: !!sample && Number(sample[1]) > 0 && Number(sample[1]) < 1,
     sinks: [...new Set(sinkHosts)],
     agentLink: has(/connectAgent\s*\(/),
     consent,
@@ -166,10 +172,12 @@ export function dataMap(s) {
   for (const h of s.sinks) sent.push({ to: `${h} (a webhook sink)`, what: `Each finding's route, diagnosis and action, with the redacted evidence text by default (it can hold short fragments of what users typed). Telemetry opt-outs and GPC do not turn sinks off${gated ? ", and neither does the consent gate: sinks are your configuration, so hold them yourself" : ""}.`, why: "Your own alerting.", keep: "As that endpoint keeps it." });
   if (s.agentLink) sent.push({ to: "127.0.0.1 on the developer's machine (the coding-agent link)", what: "Development builds only, on development hosts: the recording goes to GenClass's MCP server on the same machine. Inert on any page not served from the developer's machine.", why: "Debugging with a coding agent.", keep: "On the developer's machine." });
 
-  if (s.learn === "local") kept.push({ where: "localStorage (genclass:learn)", what: `Learned flows behind GenClass's expectation reports: request signatures, routes, field names, hashed action labels, counts and timings; never element text or values. It never leaves the browser.${after("storage")}`, off: "learn: { persist: false }" });
-  else if (s.learn === "session") kept.push({ where: "sessionStorage (genclass:learn)", what: `Learned flows and transition profiles for the tab's session, never element text or values. It never leaves the browser.${after("storage")}`, off: "learn: { persist: false }" });
-  if (s.analytics && (s.token || s.telemetry === "own")) kept.push({ where: "localStorage (genclass.analytics.*)", what: `A random visit id for 30 minutes and a flag that the browser visited before.${after("analytics")}`, off: "analytics: false" });
-  if (s.model !== "off") kept.push({ where: "Cache Storage", what: `The model files, so they are not downloaded again.${after("the model")}`, off: "model: false (no model: GenClass then only observes without a diagnosis)" });
+  if (s.learn === "local") kept.push({ short: "learned flows in localStorage", where: "localStorage (genclass:learn)", what: `Learned flows behind GenClass's expectation reports: request signatures, routes, field names, hashed action labels, counts and timings; never element text or values. It never leaves the browser.${after("storage")}`, off: "learn: { persist: false }" });
+  else if (s.learn === "session") kept.push({ short: "learned flows in sessionStorage", where: "sessionStorage (genclass:learn)", what: `Learned flows and transition profiles for the tab's session, never element text or values. It never leaves the browser.${after("storage")}`, off: "learn: { persist: false }" });
+  if (s.mode !== "observe") kept.push({ short: "the safety breaker's state in sessionStorage", where: "sessionStorage (genclass:breaker)", what: `Only after GenClass's safety breaker trips in ${s.mode} mode: when and why it stopped acting, so the tab stays downgraded for its session. Never page data.${after("storage")}`, off: "breaker: { persist: false } (kept in memory only)" });
+  if (s.sampled) kept.push({ short: "the session's act or observe bucket in sessionStorage", where: "sessionStorage (genclass:bucket)", what: `Whether this tab's session is one that may act or only observes (the sample option), drawn once per session.${after("storage")}`, off: "no sample option (every session acts the same)" });
+  if (s.analytics && (s.token || s.telemetry === "own")) kept.push({ short: "an analytics visit id in localStorage", where: "localStorage (genclass.analytics.*)", what: `A random visit id for 30 minutes and a flag that the browser visited before.${after("analytics")}`, off: "analytics: false" });
+  if (s.model !== "off") kept.push({ short: "the model's files in Cache Storage", where: "Cache Storage", what: `The model files, so they are not downloaded again.${after("the model")}`, off: "model: false (no model: GenClass then only observes without a diagnosis)" });
 
   const optOuts = [
     "Global Privacy Control (navigator.globalPrivacyControl): nothing is collected from that browser",
@@ -187,8 +195,10 @@ export function dataMap(s) {
   else if (sendsToGenClass) eu.push("Telemetry is on: the runtime reads facts from the visitor's device and sends them to GenClass, which also uses them to improve its model. Regulators read ePrivacy Article 5(3) as covering scripts that send device information, not only cookies (EDPB Guidelines 2/2023), and the audience-measurement exemptions (CNIL, ICO) do not cover a recipient that reuses data for itself. The careful choice for EU, EEA and UK visitors is consent: \"pending\" with your consent banner calling GenClass.consent(...), or telemetry off.");
   if (!gated && s.analytics && (s.token || s.telemetry === "own")) eu.push("Analytics are on: they are not strictly necessary for the service, so start them off there and call runtime.analytics.start() after consent, unless you rely on an exemption you have checked.");
   if (!gated && s.model === "cdn") eu.push("The model comes from jsDelivr, which receives visitors' IP addresses. A German court awarded damages over an IP address sent to a font CDN without consent (LG Munich I, 3 O 17493/20, 2022). Serving the model from your own site removes that recipient.");
-  if (!gated && s.learn !== "none") eu.push("Learned flows are stored on the device. Storing is in Article 5(3)'s scope as well as reading, even when nothing leaves the browser; learn: { persist: false } stores nothing.");
   if (!eu.length) eu.push("In this setup GenClass sends nothing from the visitor's browser and stores nothing beyond what is listed. Name it in your privacy policy as code that runs in the page; there is no recipient to disclose.");
+  // anything GenClass keeps on the device (learned flows, the breaker's state, the model's files in Cache Storage):
+  // storing is in Article 5(3)'s scope as well as reading, even when nothing leaves the browser
+  if (!gated && kept.length) eu.push(`GenClass stores ${kept.map((x) => x.short).join(", ")} on the device (listed above). Storing is in Article 5(3)'s scope as well as reading, even when nothing leaves the browser; consent: "pending" holds all of it until the visitor agrees.`);
 
   const us = [
     "Global Privacy Control is honoured for every visitor, wherever they are. GenClass does not sell or share data for advertising.",
@@ -263,7 +273,7 @@ function setupRows(s) {
     ["Analytics", s.analytics ? (s.token || s.telemetry === "own" ? "on" : "asked for, but they need the app's key or your own endpoint") : "off (the default)"],
     ["Visual checks", s.visual === "local" ? "on localhost only (the default)" : s.visual],
     ["Model", s.model === "cdn" ? "from cdn.jsdelivr.net (the default)" : s.model === "self" ? "from your own site" : s.model === "other" ? `from ${s.modelHost}` : "off"],
-    ["Stored on the device", s.learn === "none" ? "nothing (learn: { persist: false })" : s.learn === "session" ? "learned flows, for the tab's session" : "learned flows, in localStorage (the default)"],
+    ["Stored on the device", s.learn === "none" ? (s.mode === "observe" ? "nothing GenClass keeps between page loads (the default)" : "only the safety breaker's state after it trips, for the tab's session") : s.learn === "session" ? "learned flows, for the tab's session (learn.persist)" : "learned flows, in localStorage (learn.expectations or learn.persist)"],
     [
       "Consent",
       s.consent === "pending"
