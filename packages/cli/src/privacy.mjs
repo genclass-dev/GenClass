@@ -9,11 +9,14 @@
 // - Every sentence about what is sent is a fact from packages/runtime/TELEMETRY.md and the README's
 //   Content-Security-Policy section, chosen by the options found in the project. The setup is read from text, so it
 //   says when a value could not be read (the "Not read" row: set by code) instead of guessing a safe answer.
-// - Options are read only from GenClass's own places, with comments taken out: the window.GENCLASS_CONFIG object, the
+// - Options are read only from GenClass's own places, with comments taken out: what is assigned to
+//   window.GENCLASS_CONFIG (an object, a const of the same file, a ||= or ??= default, Object.assign(...), one key), the
 //   GenClass.init({...}) argument, the Nuxt module's `genclass: {...}` options, the Astro integration's genclass({...})
-//   call, the <meta name="genclass"> tag, the script tag and its data-* attributes, and the /auto import's path. Each
+//   call, the <meta name="genclass"> tag, the script tag and its data-* attributes, the /auto import's path, and
+//   createRuntime({...}) (headless use, with its own defaults: no diagnostics, model or visual checks unless set). Each
 //   key is read inside its own object (telemetry.endpoint, model.baseUrl, learn.persist, breaker.persist), never from
-//   any code that happens to share a file with GenClass. Tests, test setup files and fixtures never count.
+//   any code that happens to share a file with GenClass. Tests, test setup files and fixtures never count. Where the
+//   text cannot tell, the map takes the reading that sends more (an endpoint set by code may still be genclass.dev).
 // - The consent gate is described as working only where the project's runtime has it: 0.3.0-beta.6 and earlier
 //   ignore the option, and the map says so.
 // - It is not legal advice and says so: the guidance names the rules and the regulators' readings, and leaves the
@@ -80,6 +83,19 @@ function regexEnd(s, i) {
   return -1;
 }
 
+/** The characters after which a "/" starts a regular expression literal rather than a division ("" is the start). */
+const REGEX_AFTER = /^$|[(,=:[!&|?{};+\-*%~^]/;
+
+/**
+ * Whether the "/" at s[j] starts a regular expression literal, by the code before it (comments already out): after
+ * one of REGEX_AFTER's characters, an arrow's `=>`, or at the start.
+ */
+function regexAt(s, j) {
+  let k = j - 1;
+  while (k >= 0 && /\s/.test(s[k])) k--;
+  return k < 0 || REGEX_AFTER.test(s[k]) || (s[k] === ">" && s[k - 1] === "=");
+}
+
 /**
  * `text` without its comments: `//` and block comments and `<!-- -->`, outside strings and regular expressions, so a
  * commented-out option (or a template's note "switch to /auto/guard") is never read as set. A `//` right after `:`
@@ -116,7 +132,7 @@ export function stripComments(text) {
       i = e;
       continue;
     }
-    if (ch === "/" && /^$|[(,=:[!&|?{};+\-*%~^]/.test(prev)) {
+    if (ch === "/" && REGEX_AFTER.test(prev)) {
       const e = regexEnd(s, i);
       if (e > 0) {
         res += s.slice(i, e);
@@ -141,12 +157,20 @@ class Code {
 const SPREAD = Symbol("spread");
 const isObj = (v) => !!v && typeof v === "object" && !(v instanceof Code) && !Array.isArray(v);
 
-/** Index just after the bracket that closes the one at s[i] ("{", "[" or "("), skipping strings; s.length if unclosed. */
+/** Index just after the regular expression literal at s[j] when one starts there (regexAt), else -1. */
+const regexSkip = (s, j) => (s[j] === "/" && regexAt(s, j) ? regexEnd(s, j) : -1);
+
+/**
+ * Index just after the bracket that closes the one at s[i] ("{", "[" or "("), skipping strings and regular expression
+ * literals (a bracket or quote inside `/[(]/` is not one); s.length if unclosed.
+ */
 function closeOf(s, i) {
   let depth = 0;
   for (let j = i; j < s.length; j++) {
     const ch = s[j];
-    if (ch === '"' || ch === "'" || ch === "`") j = stringEnd(s, j) - 1;
+    const re = regexSkip(s, j);
+    if (re > 0) j = re - 1;
+    else if (ch === '"' || ch === "'" || ch === "`") j = stringEnd(s, j) - 1;
     else if (ch === "{" || ch === "[" || ch === "(") depth++;
     else if (ch === "}" || ch === "]" || ch === ")") {
       depth--;
@@ -156,13 +180,20 @@ function closeOf(s, i) {
   return s.length;
 }
 
-/** Where the expression that starts at s[i] ends: the next "," or closing bracket at its own depth (before `end`). */
-function exprEnd(s, i, end) {
+/**
+ * Where the expression that starts at s[i] ends: the next "," or closing bracket at its own depth (before `end`),
+ * skipping strings, regular expression literals and bracketed parts. `statement`: a ";", a line break or a closing
+ * tag (`</script>`) ends it too.
+ */
+function exprEnd(s, i, end, statement = false) {
   for (let j = i; j < end; j++) {
     const ch = s[j];
-    if (ch === '"' || ch === "'" || ch === "`") j = stringEnd(s, j) - 1;
+    const re = regexSkip(s, j);
+    if (re > 0) j = re - 1;
+    else if (ch === '"' || ch === "'" || ch === "`") j = stringEnd(s, j) - 1;
     else if (ch === "{" || ch === "[" || ch === "(") j = closeOf(s, j) - 1;
     else if (ch === "," || ch === "}" || ch === "]" || ch === ")") return j;
+    else if (statement && (ch === ";" || ch === "\n" || (ch === "<" && s[j + 1] === "/"))) return j;
   }
   return end;
 }
@@ -264,6 +295,66 @@ function arrayOf(s, start, end) {
 /** The object literal that starts at t[at] (which is "{"), or null. */
 const objectAt = (t, at) => (t[at] === "{" ? objectOf(t, at, closeOf(t, at)) : null);
 
+const IDENT = /^[A-Za-z_$][\w$]*$/;
+/** The object literal the text declares under `id` (`const id = {...}`, `let id: T = {...}`), or null. */
+function declaredObject(t, id) {
+  const decl = new RegExp(`(?<![\\w$.])(?:const|let|var)\\s+${esc(id)}\\s*(?::[^=;]+)?=\\s*(?=\\{)`).exec(t);
+  return decl ? objectAt(t, decl.index + decl[0].length) : null;
+}
+
+/** The options object a call passes, its source at t[at] (just after the "("): a literal, none, or a const of the same text; null when code makes it. */
+function argAt(t, at) {
+  if (t[at] === "{") return objectAt(t, at);
+  if (t[at] === ")") return Object.create(null);
+  const src = t.slice(at, exprEnd(t, at, t.length)).trim();
+  return IDENT.test(src) ? declaredObject(t, src) : null;
+}
+
+/** GENCLASS_CONFIG itself: `window.GENCLASS_CONFIG`, `globalThis["GENCLASS_CONFIG"]`, `(globalThis as T).GENCLASS_CONFIG`. */
+const SELF =
+  /^(?:(?:window|globalThis|self)\s*\??\.\s*|\(\s*(?:window|globalThis|self)\s+as\s+[^()]*\)\s*\??\.\s*)?GENCLASS_CONFIG$|^(?:window|globalThis|self)\s*(?:\?\.)?\s*\[\s*(["'`])GENCLASS_CONFIG\1\s*\]$/;
+const isSelf = (src) => SELF.test(String(src ?? "").trim());
+
+/** `GENCLASS_CONFIG || {...}` (or `??`): the object it falls back to; GENCLASS_CONFIG alone: nothing new; else null. */
+function selfDefault(src) {
+  if (isSelf(src)) return Object.create(null);
+  const m = /^([\s\S]*?)\s*(?:\|\||\?\?)\s*(\{[\s\S]*\})$/.exec(src);
+  return m && isSelf(m[1]) && closeOf(m[2], 0) === m[2].length ? objectOf(m[2], 0, m[2].length) : null;
+}
+
+/**
+ * What a value given to GENCLASS_CONFIG sets, from its source `src`: an object literal, a const of the same text, the
+ * object after `GENCLASS_CONFIG ||` (a default: `ifUnset`, it applies only while nothing set GENCLASS_CONFIG before),
+ * or Object.assign(...)'s objects in order. Parts, or null when code makes it.
+ */
+function configParts(t, src) {
+  const v = valueOf(src);
+  if (isObj(v)) return [{ opts: v }];
+  if (!(v instanceof Code)) return null;
+  if (IDENT.test(v.src)) {
+    const o = declaredObject(t, v.src);
+    return o ? [{ opts: o }] : null;
+  }
+  const self = selfDefault(v.src);
+  if (self) return [{ opts: self, ifUnset: true }];
+  const a = /^Object\s*\.\s*assign\s*(?=\()/.exec(v.src);
+  if (!a || closeOf(v.src, a[0].length) !== v.src.length) return null;
+  const parts = [];
+  for (const x of arrayOf(v.src, a[0].length, v.src.length)) {
+    const p = isObj(x) ? [{ opts: x }] : x instanceof Code ? configParts(t, x.src) : null;
+    if (!p) return null;
+    parts.push(...p);
+  }
+  return parts;
+}
+
+/**
+ * Assignments to GENCLASS_CONFIG: `=`, `||=` and `??=` (the latter two apply only while it is unset), on `window.`,
+ * `globalThis.`, `window["GENCLASS_CONFIG"]` or a bare name, and to one of its keys (`GENCLASS_CONFIG.telemetry = false`);
+ * `&&=` and deeper keys are matched only to be named as not read.
+ */
+const CONFIG_SET = /\bGENCLASS_CONFIG(?:["'`]\s*\])?((?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\[\s*(["'`])[\w$-]*\2\s*\])*)\s*(\|\|=|\?\?=|&&=|=(?![=>]))\s*/g;
+
 /** A tag's attributes, names lowercased: `<script src="x" data-mode=guard defer>` -> { src: "x", "data-mode": "guard", defer: "" }. */
 function attrsOf(tag) {
   const a = {};
@@ -312,7 +403,8 @@ function fromPairs(pairs, sameOrigin = false) {
     else if (k === "token" && v) o.token = v;
     else if (k === "sink" || k === "sinks") o.sinks = isOff(lv) ? [] : v.split(/[,+|\s]+/).filter((x) => x && !(sameOrigin && isAbsolute(webhookOf(x) ?? "")));
     else if (k === "analytics") o.analytics = !isOff(lv);
-    else if (k === "consent" && (lv === "pending" || lv === "denied")) o.consent = lv;
+    // the gate only holds GenClass back and fails closed: "denied", else "pending" (bare, "granted", "true", a typo)
+    else if (k === "consent") o.consent = lv === "denied" ? "denied" : "pending";
     else if (k === "visual") o.visual = isOff(lv) ? false : lv === "local" ? "local" : lv === "fix" ? { on: true, fix: true } : true;
   }
   if (modelOff) o.model = false;
@@ -335,7 +427,7 @@ export function genclassRegions(t) {
   // the zero-code entry's import names the mode (/auto/guard, /auto/heal); any other runtime import names none
   for (const m of t.matchAll(/(["'`])@genclass\/runtime(\/[\w./-]*)?\1/g)) {
     const sub = m[2] ?? "";
-    regions.push({ rank: 0, kind: "import", mode: /^\/auto\/(guard|heal)\b/.exec(sub)?.[1] ?? null, opts: {} });
+    regions.push({ rank: 0, kind: "import", auto: /^\/auto(?:\/|$)/.test(sub), mode: /^\/auto\/(guard|heal)\b/.exec(sub)?.[1] ?? null, opts: {} });
   }
   for (const m of t.matchAll(/<meta\b[^>]*>/gi)) {
     const a = attrsOf(m[0]);
@@ -349,9 +441,36 @@ export function genclassRegions(t) {
     for (const [k, v] of Object.entries(a)) if (k.startsWith("data-")) pairs[normKey(k.slice(5))] = v;
     regions.push({ rank: 2, kind: "script", opts: fromPairs(pairs), src, base: pairs.base || null });
   }
-  for (const m of t.matchAll(/\bGENCLASS_CONFIG\s*=(?!=)\s*/g)) {
-    const o = objectAt(t, m.index + m[0].length);
-    if (o) regions.push({ rank: 3, kind: "config", opts: o });
+  // window.GENCLASS_CONFIG. A default (||=, ??=, `GENCLASS_CONFIG || {...}`) applies only while nothing set it: it
+  // ranks under a plain assignment, and setupFrom drops it where an assignment replaces the whole object (`unset`,
+  // `replace`). Every assignment this cannot read is named as not read.
+  const config = (parts, unset = false, replace = false) =>
+    parts.forEach((p, i) => {
+      const u = unset || !!p.ifUnset;
+      regions.push({ rank: u ? 2.5 : 3, kind: "config", opts: p.opts, unset: u, replace: replace && i === 0 && !u && !(p.opts[SPREAD] ?? []).some((x) => isSelf(x.src)) });
+    });
+  const assigned = [];
+  for (const m of t.matchAll(CONFIG_SET)) {
+    const keys = [...m[1].matchAll(/\.\s*([A-Za-z_$][\w$]*)|\[\s*(["'`])([\w$-]*)\2\s*\]/g)].map((k) => k[1] ?? k[3]);
+    const op = m[3];
+    const at = m.index + m[0].length;
+    const end = exprEnd(t, at, t.length, true);
+    assigned.push([at, end]);
+    if (!keys.length && op !== "&&=") {
+      const parts = configParts(t, t.slice(at, t[at] === "{" ? closeOf(t, at) : end));
+      if (parts) config(parts, op !== "=", op === "=");
+      else unread.push("window.GENCLASS_CONFIG");
+    } else if (keys.length === 1 && op === "=") config([{ opts: Object.assign(Object.create(null), { [keys[0]]: valueOf(t.slice(at, end)) }) }]);
+    else unread.push(["window.GENCLASS_CONFIG", ...keys].join("."));
+  }
+  // Object.assign(window.GENCLASS_CONFIG, {...}) as a statement of its own: its objects, over what was set before
+  for (const m of t.matchAll(/\bObject\s*\.\s*assign\s*(?=\()/g)) {
+    if (assigned.some(([a, b]) => m.index >= a && m.index < b)) continue;
+    const open = m.index + m[0].length;
+    const args = arrayOf(t, open, closeOf(t, open));
+    if (!(args[0] instanceof Code && selfDefault(args[0].src))) continue;
+    const parts = configParts(t, t.slice(m.index, closeOf(t, open)));
+    if (parts) config(parts);
     else unread.push("window.GENCLASS_CONFIG");
   }
   // @genclass/nuxt: the `genclass` key of nuxt.config, or the module's tuple; it reads mode, token and telemetry only
@@ -371,19 +490,41 @@ export function genclassRegions(t) {
       else unread.push("the options passed to the Astro integration");
     }
   }
+  // GenClass.init({...}), GenClass.init(), or GenClass.init(options) with the object the same file declares under that name
   for (const m of t.matchAll(/\bGenClass\s*\??\.\s*init\s*\(\s*/g)) {
-    const at = m.index + m[0].length;
-    if (t[at] === "{") regions.push({ rank: 5, kind: "init", opts: objectAt(t, at) });
-    else if (t[at] === ")") regions.push({ rank: 5, kind: "init", opts: {} });
-    else {
-      // GenClass.init(options): the object the same file declares under that name
-      const id = /^[A-Za-z_$][\w$]*/.exec(t.slice(at))?.[0];
-      const decl = id && new RegExp(`\\b(?:const|let|var)\\s+${esc(id)}\\s*(?::[^=;]+)?=\\s*(?=\\{)`).exec(t);
-      if (decl) regions.push({ rank: 5, kind: "init", opts: objectAt(t, decl.index + decl[0].length) });
-      else unread.push("the options passed to GenClass.init(...)");
+    const o = argAt(t, m.index + m[0].length);
+    if (o) regions.push({ rank: 5, kind: "init", opts: o });
+    else unread.push("the options passed to GenClass.init(...)");
+  }
+  // createRuntime(...) imported from @genclass/runtime (headless use, API.md): a runtime with its own defaults
+  const calls = createRuntimeCalls(t);
+  if (calls) {
+    for (const m of t.matchAll(calls)) {
+      const o = argAt(t, m.index + m[0].length);
+      if (o) regions.push({ rank: 5, kind: "create", opts: o });
+      else unread.push(CREATE_UNREAD);
     }
   }
   return { regions, unread };
+}
+
+const CREATE_UNREAD = "the options passed to createRuntime(...)";
+
+/**
+ * The calls of @genclass/runtime's createRuntime in `t`, by the names its imports give it (`import { createRuntime }`,
+ * `createRuntime as make`, `const { createRuntime } = require(...)`, `import * as gc` then `gc.createRuntime`), as one
+ * pattern that ends just after the call's "(" (null when the text imports none): another library's createRuntime is
+ * not GenClass's.
+ */
+function createRuntimeCalls(t) {
+  const names = [];
+  for (const m of t.matchAll(/\{([^{}]*)\}\s*(?:from\s*|=\s*(?:await\s+)?(?:require|import)\s*\(\s*)(["'`])@genclass\/runtime\2/g))
+    for (const part of m[1].split(",")) {
+      const p = /^\s*createRuntime\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/.exec(part);
+      if (p) names.push(esc(p[1] ?? "createRuntime"));
+    }
+  for (const m of t.matchAll(/\bimport\s*\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\s*(["'`])@genclass\/runtime\2/g)) names.push(`${esc(m[1])}\\s*\\??\\.\\s*createRuntime`);
+  return names.length ? new RegExp(`(?<![\\w$.])(?:${[...new Set(names)].join("|")})\\s*\\(\\s*`, "g") : null;
 }
 
 /** The options an integration passes on (mode, token, telemetry); its other keys never reach the runtime. */
@@ -395,6 +536,15 @@ function integration(o, modes) {
   if (o.telemetry === false || o.telemetry instanceof Code) r.telemetry = o.telemetry;
   return r;
 }
+
+/**
+ * Whether createRuntime options turn on something that sends or keeps (createRuntime starts with none of it):
+ * telemetry, a model, analytics, sinks, learned state, the session sample, the visual checks, an acting mode, or code.
+ */
+const turnsOn = (o) =>
+  !!o?.[SPREAD] ||
+  ["telemetry", "model", "analytics", "sinks", "learn", "sample", "visual"].some((k) => o[k] !== undefined && o[k] !== false && !(Array.isArray(o[k]) && !o[k].length)) ||
+  (o.mode !== undefined && o.mode !== "observe");
 
 /** Later wins; two `model` objects are merged (the runtime's mergeConfig). */
 function mergeOptions(sources) {
@@ -421,48 +571,67 @@ const hostOf = (u) => {
 const whereOf = (u) => (isAbsolute(u) ? { at: "other", host: hostOf(u) } : { at: "self", host: null });
 
 /** The setup the regions describe (see readSetupText for the fields). `t` is the files' text, comments out. */
-function setupFrom(regions, unreadIn, t) {
+function setupFrom(found, unreadIn, t) {
   const unread = [...unreadIn];
+  // a GENCLASS_CONFIG default (||=, ??=) never applies beside an assignment of a whole new object: that one either
+  // comes later and replaces it, or comes first and leaves the default nothing to fill
+  const replaced = found.some((r) => r.replace);
+  const regions = found.filter((r) => !(replaced && r.unset));
   const code = (name, v) => {
     if (v instanceof Code) unread.push(name);
     return v instanceof Code;
   };
-  const ranked = [...regions].sort((a, b) => a.rank - b.rank);
+  // createRuntime(...) alone (headless use, API.md): no diagnostics unless its options set telemetry, no model unless
+  // they give model: {...}, no visual checks unless they turn them on (src/index.ts). Beside GenClass.init or the
+  // zero-code entries it is a second runtime: the map is theirs, and options of it that turn something on are named
+  const creates = regions.filter((r) => r.kind === "create");
+  const browser = regions.some((r) => r.kind !== "create" && (r.kind !== "import" || r.auto));
+  const headless = creates.length > 0 && !browser && !unread.includes(CREATE_UNREAD);
+  if (browser && creates.some((r) => turnsOn(r.opts))) unread.push(`${CREATE_UNREAD} (a second runtime, besides GenClass.init's)`);
+  const ranked = regions.filter((r) => !browser || r.kind !== "create").sort((a, b) => a.rank - b.rank);
   const o = mergeOptions(ranked.map((r) => r.opts));
-  for (const r of ranked) if (r.opts?.[SPREAD]) unread.push(`options spread in from code (...${r.opts[SPREAD][0].src})`);
+  // a spread of GENCLASS_CONFIG itself (`{ ...window.GENCLASS_CONFIG, telemetry: false }`) is read where it is set
+  for (const r of ranked) {
+    const spread = (r.opts?.[SPREAD] ?? []).filter((x) => !isSelf(x.src));
+    if (spread.length) unread.push(`options spread in from code (...${spread[0].src})`);
+  }
   // the mode: the import names it (the strongest of them), a mode option wins over it
   const imported = ranked.filter((r) => r.kind === "import").map((r) => r.mode ?? "observe");
   let mode = imported.includes("heal") ? "heal" : imported.includes("guard") ? "guard" : "observe";
   if (MODES.includes(o.mode)) mode = o.mode;
   else code("mode", o.mode);
   // diagnostics: off, to genclass.dev, or to the app's own collector (telemetry.endpoint)
-  let telemetry = "on";
+  const tel = o.telemetry;
+  let telemetry = headless && tel == null ? "off" : "on";
   let endpoint = null;
   let situation = false;
-  const tel = o.telemetry;
   if (tel === false) telemetry = "off";
   else if (isObj(tel)) {
-    if (typeof tel.endpoint === "string" && tel.endpoint.trim()) {
+    // the runtime takes an http(s) URL only (telemetry/config.ts resolveTelemetry): a path, a protocol-relative URL
+    // or a host without its scheme sends to genclass.dev, and so may an endpoint set by code
+    if (typeof tel.endpoint === "string" && /^https?:\/\//i.test(tel.endpoint)) {
       telemetry = "own";
-      endpoint = isAbsolute(tel.endpoint) ? hostOf(tel.endpoint) : null;
-    } else if (code("telemetry.endpoint", tel.endpoint)) telemetry = "own";
+      endpoint = hostOf(tel.endpoint);
+    } else code("telemetry.endpoint", tel.endpoint);
     if (isObj(tel.include)) situation = tel.include.situation === true;
     else code("telemetry.include", tel.include);
   } else code("telemetry", tel);
   if (telemetry === "off") situation = false;
   const analytics = o.analytics === true || isObj(o.analytics);
   code("analytics", o.analytics);
-  // the visual checks: "local" by default; on (true or { on: true }), with fixes (fix: true or a list), or off
+  // the visual checks: "local" by default (off in createRuntime); on (true or { on: true }), with fixes (fix: true or
+  // a list), or off
   const vis = o.visual;
-  const visOn = vis === true || (isObj(vis) && vis.on === true);
+  const visOn = isObj(vis) ? vis.on : vis;
   const visFix = isObj(vis) && vis.on === true && (vis.fix === true || (Array.isArray(vis.fix) && vis.fix.length > 0));
-  const visual = visOn ? (visFix ? "on, with fixes" : "on") : vis === false || (isObj(vis) && vis.on === false) ? "off" : "local";
-  // the model's files (model.baseUrl) and ONNX Runtime's wasm (model.ortWasmPaths): jsDelivr unless set
+  const visual = visOn === true ? (visFix ? "on, with fixes" : "on") : visOn === false || (headless && visOn == null) ? "off" : "local";
+  // the model's files (model.baseUrl) and ONNX Runtime's wasm (model.ortWasmPaths): jsDelivr unless set; createRuntime
+  // loads one only for model: {...}
   let model = "cdn";
   let modelHost = null;
   let ort = "cdn";
   let ortHost = null;
-  if (o.model === false) {
+  if (o.model === false || (headless && !isObj(o.model) && !(o.model instanceof Code))) {
     model = "off";
     ort = null;
   } else if (isObj(o.model)) {
@@ -578,6 +747,7 @@ function setupFrom(regions, unreadIn, t) {
     consentCall: /\b(?:GenClass|runtime|rt|genclass)\s*\??\.\s*consent\s*\(/.test(t),
     script,
     tokenInOptions: typeof o.token === "string" && o.token !== "",
+    headless,
     unread: [...new Set(unread)],
   };
 }
@@ -929,9 +1099,10 @@ function setupRows(s, m = dataMap(s)) {
     ["GenClass", s.installed ? `added (${s.files.slice(0, 3).join(", ")}${s.files.length > 3 ? ", ..." : ""})` : "not found in the project's files"],
     ["Mode", s.mode === "observe" ? "observe: reports only, changes nothing" : `${s.mode}: may change how the page handles responses`],
   ];
+  if (s.headless) rows.splice(1, 0, ["Runtime", "createRuntime(...) only (headless use): no diagnostics, model or visual checks unless its options turn them on"]);
   if (s.script) rows.push(["Script tag", s.script.host ? `from ${s.script.host}${s.script.version ? ` (@genclass/runtime ${s.script.version})` : ""}` : "from your own site"]);
   rows.push(
-    ["Diagnostics", s.telemetry === "off" ? "off" : s.telemetry === "own" ? `to your own collector (${s.endpoint ?? "telemetry.endpoint"})` : "on (the default), to genclass.dev"],
+    ["Diagnostics", s.telemetry === "off" ? "off" : s.telemetry === "own" ? `to your own collector (${s.endpoint ?? "telemetry.endpoint"})` : `on${s.headless ? "" : " (the default)"}, to genclass.dev`],
     ["Dashboard", s.token ? "this app's key is set: diagnostics also fill its dashboard" : "no app key"],
     ["Page text", s.situation ? "on (include: { situation: true })" : "off (the default)"],
     ["Analytics", s.analytics ? (s.token || s.telemetry === "own" ? "on" : "asked for, but they need the app's key or your own endpoint") : "off (the default)"],

@@ -401,9 +401,14 @@ observing with no download and no worker.
 - **Sites that ask visitors first: `consent: "pending"`** (unreleased, on the alpha line). Set it where GenClass
   starts (`window.GENCLASS_CONFIG = { consent: "pending" }` before the `/auto` import, `data-consent="pending"` on the
   script tag, `<meta name="genclass" content="consent=pending">`, or `GenClass.init({ consent: "pending" })`), and
-  GenClass observes on the page, locally only, until your consent banner answers: no diagnostics request, no
-  analytics, no read or write of its own `localStorage` / `sessionStorage` entries, and no model download (so no
-  request to cdn.jsdelivr.net, no worker, no Cache Storage). Then call
+  GenClass observes on the page until your consent banner answers, and sends, stores and downloads nothing of its
+  own: no diagnostics request, no analytics, none of its own `localStorage` / `sessionStorage` entries written (of
+  them it only reads its off switch, `localStorage.genclass`), and no model download (no worker, no Cache Storage, no
+  model request to cdn.jsdelivr.net). The gate does not hold your own `sinks` (hold them yourself), the script tag
+  and the parts it loads that the gate does not hold (the devtools overlay, the visual checks, sink adapters), or the
+  coding-agent link in development builds
+  ([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md#consent), "What
+  still runs before consent"). Then call
   `GenClass.consent({ diagnostics, analytics, storage, model })` with the visitor's choice (`true` / `false` for all):
   what is granted starts from that moment, what is denied stays off, and a later denial withdraws it (telemetry stops
   and drops its queue, GenClass's entries are removed, the cached model is deleted). Every opt-out still wins over a
