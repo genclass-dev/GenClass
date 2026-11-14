@@ -334,10 +334,6 @@ export function moneyFlows(project, files) {
 }
 
 /**
- * Suggest requests.protect for payment and sign-in endpoints (an opt-in preset; nothing is applied): protected
- * requests, their responses and what those responses write are observe-only in every mode (INTERCEPTION.md).
- */
-/**
  * Whether the genclass command runs this (every screen of it fits the window), read when printing as ui.mjs reads it.
  * Under genclass-runtime the lines below stay whole, byte for byte as they always were.
  */
@@ -375,37 +371,22 @@ function bullet(text, indent = 4) {
 /**
  * A line of code to copy, `indent` columns in. Under the genclass command it is folded to the window so that what is
  * pasted is still the same code: a trailing `// comment` goes on its own line above it, and the code breaks only at
- * spaces outside quotes, the lines after the first 4 columns further in (a piece too long for any line stays whole,
- * starting further left). Under genclass-runtime it is one line, as it always was.
+ * a space that follows `,` `;` `:` `=` `{` `(` `[` or `=>` outside quotes and comments, where JavaScript allows a
+ * line break and reads the code the same (BREAK_AFTER); the lines after the first stand 4 columns further in (a piece
+ * too long for any line stays whole, starting further left). A line it cannot read surely (breakable) is printed
+ * whole, as wide as it is. Under genclass-runtime it is one line, as it always was.
  */
 export function codeLines(line, indent = 8, cols = columns()) {
-  if (!hosted()) return [`${" ".repeat(indent)}${line}`];
+  const whole = [`${" ".repeat(indent)}${line}`];
+  if (!hosted()) return whole;
   const width = cols - 2;
-  if (indent + line.length <= width) return [`${" ".repeat(indent)}${line}`];
+  if (indent + line.length <= width) return whole;
+  const at = lineCommentAt(line);
+  const code = at < 0 ? line : line.slice(0, at).trimEnd();
+  const pieces = breakable(code);
+  if (!pieces) return whole;
   const lines = [];
-  let code = line;
-  const comment = / \/\/ ([^"'`]*)$/.exec(line);
-  if (comment) {
-    code = line.slice(0, comment.index);
-    for (const l of wrapTo(`// ${comment[1]}`, width - indent)) lines.push(`${" ".repeat(indent)}${l.startsWith("//") ? l : `// ${l}`}`);
-  }
-  // the pieces between spaces that are outside quotes
-  const pieces = [];
-  let cur = "";
-  let quote = null;
-  for (const ch of code) {
-    if (quote) {
-      cur += ch;
-      if (ch === quote) quote = null;
-    } else if (ch === '"' || ch === "'" || ch === "`") {
-      cur += ch;
-      quote = ch;
-    } else if (ch === " ") {
-      if (cur) pieces.push(cur);
-      cur = "";
-    } else cur += ch;
-  }
-  if (cur) pieces.push(cur);
+  if (at >= 0) for (const l of wrapTo(line.slice(at), width - indent)) lines.push(`${" ".repeat(indent)}${l.startsWith("//") ? l : `// ${l}`}`);
   let row = "";
   let pad = indent;
   for (const p of pieces) {
@@ -424,6 +405,93 @@ export function codeLines(line, indent = 8, cols = columns()) {
   });
 }
 
+/**
+ * A space right after one of these may become a line break: JavaScript reads the code the same either way. Nowhere
+ * else, so never before `=>` (an arrow's parameters and its `=>` stay on one line), nor after `return`, `throw`,
+ * `break`, `continue`, `yield` or `async`, nor before `++` or `--`, where a line break changes or breaks the code.
+ */
+const BREAK_AFTER = /(?:[,;:={([]|=>)$/;
+
+/**
+ * `code` (a line without its `//` comment) as the pieces a line may end with: split at the spaces outside quotes and
+ * comments that follow a BREAK_AFTER token, each piece keeping its own spaces. Null when the line cannot be read
+ * surely, and so is not folded: a `/` that is no comment (a regular expression or a division), a `<` (JSX, where a
+ * line break can change the text), a template with `${`, a quote or a comment left open.
+ */
+function breakable(code) {
+  const words = [];
+  let cur = "";
+  let open = null; // the quote, or "*/" inside a block comment
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    if (open === "*/") {
+      cur += ch;
+      if (ch === "*" && code[i + 1] === "/") {
+        cur += "/";
+        i++;
+        open = null;
+      }
+    } else if (open) {
+      if (open === "`" && ch === "$" && code[i + 1] === "{") return null;
+      cur += ch;
+      if (ch === "\\" && i + 1 < code.length) cur += code[++i];
+      else if (ch === open) open = null;
+    } else if (ch === "/") {
+      if (code[i + 1] !== "*") return null;
+      cur += "/*";
+      i++;
+      open = "*/";
+    } else if (ch === "<") return null;
+    else if (ch === '"' || ch === "'" || ch === "`") {
+      cur += ch;
+      open = ch;
+    } else if (ch === " ") {
+      if (cur) words.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  if (open) return null;
+  if (cur) words.push(cur);
+  const pieces = [];
+  let piece = "";
+  for (const w of words) {
+    piece = piece ? `${piece} ${w}` : w;
+    if (BREAK_AFTER.test(w)) {
+      pieces.push(piece);
+      piece = "";
+    }
+  }
+  if (piece) pieces.push(piece);
+  return pieces;
+}
+
+/** Where `line`'s trailing `//` comment starts (outside quotes and block comments), or -1. */
+function lineCommentAt(line) {
+  let open = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (open === "*/") {
+      if (ch === "*" && line[i + 1] === "/") {
+        i++;
+        open = null;
+      }
+    } else if (open) {
+      if (ch === "\\") i++;
+      else if (ch === open) open = null;
+    } else if (ch === '"' || ch === "'" || ch === "`") open = ch;
+    else if (ch === "/" && line[i + 1] === "/") return i;
+    else if (ch === "/" && line[i + 1] === "*") {
+      i++;
+      open = "*/";
+    }
+  }
+  return -1;
+}
+
+/**
+ * Suggest requests.protect for payment and sign-in endpoints (an opt-in preset; nothing is applied): protected
+ * requests, their responses and what those responses write are observe-only in every mode (INTERCEPTION.md).
+ */
 function printMoneyAdvice(money, cfgFile) {
   if (!money) return;
   const found = [...money.deps, ...money.paths].slice(0, 3).join(", ");

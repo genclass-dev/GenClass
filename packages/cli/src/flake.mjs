@@ -31,7 +31,10 @@
 //   before it starts when none were given. The HTML report never opens a browser and waits
 //   (PLAYWRIGHT_HTML_OPEN=never). Retries are off unless --retries is passed: a retry would hide the failure this
 //   command is looking for.
-// - Every screen fits the window (58 columns and up), the help included; an install line is kept whole.
+// - Every screen fits the window (58 columns and up), the help and the results included. What is there to be copied
+//   is never folded: an install line and the replay command under "Replay seed N of ..." (a paste of a folded one
+//   would run its first line alone) start further left to fit where they can, and are printed whole, wider than the
+//   window when they are, as the prompt for the coding agent is.
 // - With --json every exit prints one JSON object on stdout, the ones where nothing could be judged included.
 // - Text that came from the run (test titles, error messages, evidence lines) goes through clean() before it is
 //   printed or put into the prompt, and the prompt says it is data about the app, not instructions.
@@ -989,9 +992,13 @@ export async function flake(argv = [], deps = {}) {
     // the verdicts, the worst first
     const projects = new Set(report.tests.map((t) => t.project)).size;
     out();
-    out(`  ${c.bold(`GenClass flake: ${report.totals.tests} ${report.totals.tests === 1 ? "test" : "tests"}, each ${runsWords(view)}`)}`);
-    if (stopped?.why === "interrupted") out(`  ${c.yellow(sym.warn)} ${c.gray("The run was interrupted: this is what ran before it stopped.")}`);
-    if (stopped?.why === "none") out(`  ${c.gray("The seeded run ran no test, so only the natural-order run is judged.")}`);
+    heading(`GenClass flake: ${report.totals.tests} ${report.totals.tests === 1 ? "test" : "tests"}, each ${runsWords(view)}`);
+    if (stopped?.why === "interrupted") {
+      const [first = "", ...rest] = wrap("The run was interrupted: this is what ran before it stopped.", width() - 6);
+      out(`  ${c.yellow(sym.warn)} ${c.gray(first)}`);
+      for (const l of rest) out(`    ${c.gray(l)}`);
+    }
+    if (stopped?.why === "none") note("The seeded run ran no test, so only the natural-order run is judged.");
     const cols = width() - 8;
     for (const [v, inGroup] of GROUPS) {
       const group = report.tests.filter(inGroup);
@@ -1004,7 +1011,7 @@ export async function flake(argv = [], deps = {}) {
         for (const l of wrap(testLabel(t, projects), cols + 2)) out(`    ${l}`);
         for (const [text, paint] of testLines(t, view)) for (const l of wrap(text, cols)) out(`      ${paint ? paint(l) : l}`);
       }
-      if (v === "passed" && shown.length < group.length) out(`    ${c.gray(`${shown.length ? `and ${group.length - shown.length} more` : "each"} passed on every run with no race seen (--json lists them)`)}`);
+      if (v === "passed" && shown.length < group.length) for (const l of wrap(`${shown.length ? `and ${group.length - shown.length} more` : "each"} passed on every run with no race seen (--json lists them)`, cols + 2)) out(`    ${c.gray(l)}`);
     }
     out();
     note(`The race files: ${displayDir(raceDir, cwd)} (one per test and seed of the last run).`);
@@ -1019,8 +1026,10 @@ export async function flake(argv = [], deps = {}) {
     }
     if (fin) {
       const where = `${clean(fin.test.file, 80)}${fin.test.line ? `:${fin.test.line}` : ""}`;
-      out(`  ${c.bold(fin.seed !== null ? `Replay seed ${fin.seed} of ${where}:` : `Run ${where} again:`)}`);
-      out(`    ${c.cyan(fin.command)}`);
+      heading(fin.seed !== null ? `Replay seed ${fin.seed} of ${where}:` : `Run ${where} again:`);
+      // the command to copy, whole, further left when it must be (as the install line is): folded, a paste would run
+      // its first line alone
+      out(`${" ".repeat(Math.max(0, Math.min(4, width() - 2 - fin.command.length)))}${c.cyan(fin.command)}`);
       if (fin.seed !== null) note("The same seed holds the same requests for the same time, so the responses come back in the order this run saw (unless your server's own timing changes it).");
       out();
     }
@@ -1043,6 +1052,11 @@ const displayDir = (dir, cwd) => {
   const r = relative(cwd, dir);
   return (r && !r.startsWith("..") && !isAbsolute(r) ? r : dir).split(sep).join("/");
 };
+
+/** A bold heading of the results screen, wrapped to the window, every line of it bold. */
+function heading(text) {
+  for (const l of wrap(text, width() - 4)) out(`  ${c.bold(l)}`);
+}
 
 /** On a terminal: start the coding agent with the prompt (Enter), copy it (c), print it (p) or stop (q), as `genclass fix` does. */
 async function offerAgent(prompt, cwd, deps) {
