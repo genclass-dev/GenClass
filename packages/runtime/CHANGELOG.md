@@ -28,6 +28,11 @@
   puts back.
 - Consent mode: withdrawing the model while it downloads stops the download (the worker ends; the inline fallback
   starts no request and writes no cache entry) before its Cache Storage copy is deleted; a later grant loads it again.
+- Consent mode: a `runtime.ready` awaited while the model downloads resolves when the model is withdrawn, as with no
+  model, instead of rejecting with `ModelDisposedError`; an `ask()` waiting for it rejects with
+  `GenClassUnavailableError` "the model is off", as while the model waits for consent.
+- Consent mode: analytics withdrawn and granted again before a telemetry request settles keep the new view's
+  `interactions` event; only those queued before the withdrawal are dropped.
 - Consent mode: GenClass's own storage writes at a storage grant are no longer recorded as the app's `storage` events.
 - Consent mode: diagnostics granted after the page started send the summary's `runtime` counts (decisions, latency,
   holds, denials, errors) from the grant only.

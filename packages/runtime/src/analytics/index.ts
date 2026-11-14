@@ -829,20 +829,23 @@ export function startAnalytics(rt: RuntimeImpl, t: TelemetryClient, ignored: (e:
   };
   // runtime destroyed: the telemetry client's teardown (registered first) already sent this view's last event
   rt.addTeardown(off);
-  // this chunk's events still in the telemetry queue (sent with diagnostics, which may go on without analytics)
-  const unqueue = () => {
-    const q = t["queue"] ?? [];
-    for (let i = q.length; i--; ) if (q[i].t === "interactions") q.splice(i, 1);
-  };
   return {
     stop() {
       // consent withdrawn: nothing more is recorded, the counts not sent yet are dropped (those queued for telemetry
-      // too) and the visit flag removed
+      // too: sent with diagnostics, which may go on without analytics) and the visit flag removed
       view = 0;
       off();
       store(null);
+      // the events queued before now (TelemetryClient numbers every event it queues, `seq`): a later grant's
+      // analytics queue theirs after it, which are kept
+      const upTo = t["seq"] ?? Infinity;
+      const unqueue = () => {
+        const q = t["queue"] ?? [];
+        for (let i = q.length; i--; ) if (q[i].t === "interactions" && !((q[i].seq as number) >= upTo)) q.splice(i, 1);
+      };
       unqueue();
-      // a request in flight that is refused puts its events back in the queue (TelemetryClient back-off)
+      // a request in flight that is refused puts its events back in the queue (TelemetryClient back-off), maybe after
+      // a new grant
       void Promise.all([...(t["pending"] ?? [])]).then(unqueue, unqueue);
     },
   };

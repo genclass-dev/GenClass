@@ -128,7 +128,9 @@ app stores it, with the session's act/observe bucket and breaker trip read as wi
 `model.preload` and `model.loadIf` say, `idle` once the page has loaded). A denial keeps the part off; after a grant
 it withdraws it: telemetry stops and drops its queue, analytics stop and their queued events are dropped, GenClass's
 own entries are removed (the analytics visit entry too), the model is no longer consulted, a download in progress
-stops, and its Cache Storage copy is deleted. It resolves once applied (a lazy chunk, `dist/consent-*.js`; null if it
+stops (a `rt.ready` awaited for it resolves, as with no model; an `ask()` waiting for it rejects with
+`GenClassUnavailableError`), and its Cache Storage copy is deleted. Analytics granted again keep what they queue from
+then on. It resolves once applied (a lazy chunk, `dist/consent-*.js`; null if it
 could not load) and never rejects. Without the option every part starts granted.
 
 ## Options
@@ -519,7 +521,7 @@ rt.on("check", (f: CheckFinding) => void)    // a measured visual check was conf
 
 ```ts
 rt.status: ModelStatus             // { state: "off"|"loading"|"ready"|"error", progress?, device?, variant?, threads?, phase?, error?, ... }
-rt.ready: Promise<void>            // resolves when the model is ready (immediately with no model); reading it starts a lazy load
+rt.ready: Promise<void>            // resolves when the model is ready (immediately with no model or while its consent is pending or denied; at the withdrawal for one awaited during a download); reading it starts a lazy load
 rt.mode: "observe" | "guard" | "heal"
 rt.situation(trigger?): Situation  // what the model would see: { trigger, subject, state, questions, actions, salient, facts }
 rt.explain(id): Explanation | null // a decision ("d3") or action ("a1") id -> { message, decision, situationText, facts, timeline, answers, action?, changed? }
