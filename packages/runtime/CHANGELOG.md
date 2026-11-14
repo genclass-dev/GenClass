@@ -2,9 +2,17 @@
 
 ## Unreleased
 
-- CLI `remove` (shared with the `genclass` command) also takes out the coding-agent link `genclass doctor --fix`
-  writes after the `/auto` import (a `genclass:init` block: `import { GenClass }`, `import { connectAgent }` and
-  `if (import.meta.env.DEV) connectAgent(GenClass.init());`). Nothing else in `remove` changed.
+- CLI `remove` (shared with the `genclass` command) also takes out the coding-agent link the `genclass` command
+  writes (its setup's Coding agent step and `genclass doctor --fix`) after GenClass's import or after the block of a
+  file init created: a `genclass:init` block with `import { GenClass }`, `import { connectAgent }` and
+  `if (<dev check>) connectAgent(GenClass.init());` (also with braces), or, in a Next.js file where init bound
+  `genclass`, `if (<dev check>) import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));`;
+  and in Astro the marked `<script>` line with the same imports and call. Anything else in such a block is still a
+  problem and nothing is removed. Nothing else in `remove` changed.
+- CLI preview under the `genclass` command only (`globalThis.__GENCLASS_CLI__`): a diff line longer than the window
+  folds at its spaces with a hanging indent; an address is never split (it starts further left, so the "What is sent"
+  link to TELEMETRY.md fits whole at 80 columns); `--brief` lines, the Install line and the static-site note follow
+  that command's width. `genclass-runtime`'s own output is byte for byte what it was.
 
 - CLI (shared with the `genclass` command): a request to genclass.dev that fails on a connection closed while the
   command was busy (a package install) is sent once more on a new one; a token that could not be created for a

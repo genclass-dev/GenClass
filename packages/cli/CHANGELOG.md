@@ -17,8 +17,8 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   the sign-in, the runtime's version and import order, the diagnostics, the MCP server's pin, the skill, the
   coding-agent link, the bridge, the site's Content-Security-Policy, the test workflow), each with what to run.
   `--fix` writes GenClass's own lines only, after showing them: the MCP pin, the skill while it has its marker, and
-  in a Vite app the dev-only coding-agent link (`connectAgent(GenClass.init())` in a `genclass:init` block that
-  `genclass remove` takes out). Two requests to npm's registry for dist-tags, `--offline` none.
+  the dev-only coding-agent link where the Coding agent step would write it (below). Two requests to npm's
+  registry for dist-tags, `--offline` none.
 - **`genclass flake`** (free, local, nothing sent): "is this Playwright test flaky, or is my app racy?" It runs the
   project's own suite (or the tests and arguments given: a file, `file:line`, `--grep`, `--project`, `-c`) through the
   project's own `@genclass/playwright` (`genclass-playwright-run`): once in the natural order, then once per seed
@@ -35,6 +35,34 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   temporary folder, Chromium, the built runtime and `@genclass/playwright`): the buggy page's test racy on seeds 1, 3
   and 4 in each of four runs, both replays of seed 1 failing again with the same race, and no race on any of the 72
   runs of the three tests on the fixed page (false reports on the correct variant: 0).
+- **The Coding agent step links the dev page too** (`src/agentlink.mjs`): besides `.mcp.json` and the skill, it adds
+  `connectAgent` from `@genclass/runtime/agent` right after GenClass's import, in development builds only, so the
+  agent's MCP server sees the page on localhost (no more "no connected page" and a round of genclass_setup first). All
+  of it is in one preview and asked once (one Enter; `--yes` writes it, and shows it too; without a terminal nothing
+  is written). The form follows what init wrote: a `genclass:init` block with `import { GenClass }`,
+  `import { connectAgent }` and `if (<dev check>) connectAgent(GenClass.init());` after the marked `/auto` import or
+  after the block of a file init created; where init bound `genclass` in Next.js, the dynamic
+  `import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass))` that mirrors its devtools
+  line; in Astro a second marked `<script>` line. The dev check is init's own: `import.meta.env.DEV` (Vite with React,
+  Vue, Svelte, Solid or Preact, SvelteKit, Astro, React Router and Remix on Vite), `process.env.NODE_ENV ===
+  "development"` (Next.js, Create React App, webpack, rspack, rsbuild, parcel), with `typeof window !== "undefined"`
+  in a file that renders on the server too (Next's genclass-init component and pages/_app, a Remix or React Router
+  root). Angular, Nuxt's plugin, a plain script tag, another bundler and a setup by hand get the lines to add and
+  where, and nothing written. `genclass remove` takes every form out (the runtime's `remove` patterns), round-tripped
+  in tests for each framework back to the files before init.
+- **The step is done** once the MCP server is configured and the link is in, or cannot be added for this framework;
+  an agent configured before the link opens the step again for the link alone ("Link your dev page to your coding
+  agent"), which writes only it. After it, and in the Dashboard step's waiting text (and `status --json`'s `now`),
+  the command says how to see GenClass work before any deploy: start the dev server (the project's own script, as
+  `npm run dev`), open the page, read the `[GenClass]` lines in the browser console, and ask the coding agent "is
+  GenClass connected?" or to explore a flow for races.
+- **The runtime's preview fits the window under the genclass command**: a long diff line folds at its spaces with a
+  hanging indent, an address is never split (it starts further left so it fits whole where it can, as the "What is
+  sent" link to TELEMETRY.md now does at 80 columns), and init's brief lines and its static-site note follow the
+  command's width (`COLUMNS` without a terminal). `genclass-runtime`'s own output is unchanged.
+- **The starter templates have a `.gitignore`** (`templates/*`): dependencies, build output, `.env`, `.env.local`
+  and `.env.*.local`, `test-results`, `playwright-report` and `.genclass.local` (the app token and private dashboard
+  link), so an app copied with `npx degit` never commits them.
 - **`genclass suggest`, two safety checks:** `secrets-in-bundle` reads the scripts the live home page ships (same
   origin, at most 6, 1 MB each) for secret keys (Stripe secret, OpenAI, Anthropic, AWS, GitHub, Slack, SendGrid,
   private keys, a Supabase service_role JWT) and reports the kind and the script's path, never a value; on 25,365

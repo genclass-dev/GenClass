@@ -90,6 +90,17 @@ function showNext(step, details) {
   if (details && step.more) barPara(step.more);
 }
 
+/**
+ * What each step that waits on something outside this machine needs, one line each; a step that has something to
+ * see meanwhile (the dashboard: the dev server and its console) says it under its line.
+ */
+function waitingNotes(waiting) {
+  for (const s of waiting) {
+    note(`${s.title}: ${s.human ?? s.detail}.`);
+    if (s.now) note(s.now);
+  }
+}
+
 /** The lines under the steps when nothing is left to walk through. */
 function closing(state) {
   out();
@@ -100,7 +111,7 @@ function closing(state) {
   } else if (state.complete) out(`  ${c.green("Everything is set up.")}`);
   else if (waiting.length) {
     out(`  ${c.bold("Nothing more to do here right now.")}`);
-    for (const s of waiting) note(`${s.title}: ${s.human ?? s.detail}.`);
+    waitingNotes(waiting);
   }
   out();
   out(`  ${c.gray("Day to day")}`);
@@ -211,7 +222,7 @@ async function walk(o, deps, auto) {
         if (state.complete) out(`\n  ${c.green("Everything is set up.")}`);
         else if (waiting.length) {
           out();
-          for (const s of waiting) note(`${s.title}: ${s.human ?? s.detail}.`);
+          waitingNotes(waiting);
         }
         return deps.home({ ...o, cwd: state.cwd, app: state.app.name ?? "" });
       }

@@ -76,6 +76,27 @@ export function wrapTo(text, width) {
  */
 const wraps = () => !!globalThis.__GENCLASS_CLI__;
 
+/**
+ * The width a folded line of init's output may take: under the genclass command its columns() (the window, else
+ * COLUMNS, as every screen of that command); under genclass-runtime the window between 40 and 100 columns, else 100,
+ * as it always was.
+ */
+export const foldWidth = () => (wraps() ? columns() : Math.max(40, Math.min(100, Number(process.stdout.columns) || 100)));
+
+/**
+ * The indent for a line of wrapped text: `indent`, or less when the line is one word too long for its place (an
+ * address), so it starts further left and fits the terminal whole instead of being broken by it.
+ */
+const fit = (indent, line) => Math.max(0, Math.min(indent, columns() - visible(line)));
+
+/**
+ * `text` on its own line, `indent` columns in; under the genclass command the indent shrinks so a long address fits
+ * the terminal whole (an 80-character link in an 80-column window starts at its first column).
+ */
+export function outWhole(text, indent = 2, paint = (s) => s) {
+  out(`${" ".repeat(wraps() ? fit(indent, text) : indent)}${paint(text)}`);
+}
+
 /** "  ✔ Label      value" rows; under the genclass command a long value wraps under itself, within the terminal. */
 export function row(label, value, mark = c.green(sym.ok)) {
   if (!wraps()) {
@@ -84,7 +105,19 @@ export function row(label, value, mark = c.green(sym.ok)) {
   }
   const [first = "", ...rest] = wrapTo(value, columns() - 2 - 15);
   out(`  ${mark} ${c.bold(label.padEnd(10))} ${first}`);
-  for (const l of rest) out(`${" ".repeat(15)}${l}`);
+  for (const l of rest) out(`${" ".repeat(fit(15, l))}${l}`);
+}
+
+/** "  Label text" (a note); under the genclass command the text wraps under itself, within the terminal's width. */
+export function labelled(label, text) {
+  if (!wraps()) {
+    out(`  ${c.bold(label)} ${text}`);
+    return;
+  }
+  const indent = 3 + visible(label);
+  const [first = "", ...rest] = wrapTo(text, columns() - 2 - indent);
+  out(`  ${c.bold(label)} ${first}`);
+  for (const l of rest) out(`${" ".repeat(fit(indent, l))}${l}`);
 }
 
 /** Text under a row (13 columns in); under the genclass command, wrapped within the terminal's width. */
@@ -93,7 +126,7 @@ export function more(text, indent = 13) {
     out(`${" ".repeat(indent)}${text}`);
     return;
   }
-  for (const l of wrapTo(text, columns() - 2 - indent)) out(`${" ".repeat(indent)}${l}`);
+  for (const l of wrapTo(text, columns() - 2 - indent)) out(`${" ".repeat(fit(indent, l))}${l}`);
 }
 
 // ------------------------------------------------------------------------------------------------ diff
@@ -140,8 +173,8 @@ export function diffLines(a, b) {
   return ops;
 }
 
-/** Unified-diff hunks (3 lines of context) as coloured lines. */
-export function renderDiff(a, b, context = 3) {
+/** Unified-diff hunks (3 lines of context) as [op, text] rows: "@@" for a hunk's header, else "+", "-" or " ". */
+function diffRows(a, b, context = 3) {
   const ops = diffLines(a, b);
   const idx = [];
   ops.forEach((o, i) => o[0] !== " " && idx.push(i));
@@ -165,23 +198,72 @@ export function renderDiff(a, b, context = 3) {
     const slice = ops.slice(start, end);
     const aCount = slice.filter((o) => o[0] !== "+").length;
     const bCount = slice.filter((o) => o[0] !== "-").length;
-    lines.push(c.cyan(`@@ -${aCount ? aLine : aLine - 1},${aCount} +${bCount ? bLine : bLine - 1},${bCount} @@`));
-    for (const [op, text] of slice) {
-      if (op === "+") lines.push(c.green(`+ ${text}`));
-      else if (op === "-") lines.push(c.red(`- ${text}`));
-      else lines.push(c.gray(`  ${text}`));
-    }
+    lines.push(["@@", `@@ -${aCount ? aLine : aLine - 1},${aCount} +${bCount ? bLine : bLine - 1},${bCount} @@`]);
+    for (const row of slice) lines.push(row);
   }
   return lines;
 }
 
-/** Prints one file change: a heading and its diff, indented. */
+const PAINT = { "@@": (s) => c.cyan(s), "+": (s) => c.green(s), "-": (s) => c.red(s), " ": (s) => c.gray(s) };
+
+/** Unified-diff hunks (3 lines of context) as coloured lines. */
+export function renderDiff(a, b, context = 3) {
+  return diffRows(a, b, context).map(([op, text]) => (op === "@@" ? PAINT[op](text) : PAINT[op](`${op} ${text}`)));
+}
+
+/**
+ * One diff row as the lines a terminal of columns() shows without breaking a word: [{ pad, text }], `pad` columns
+ * of indent before `text`. A row that fits stays one line; a longer one is folded at its spaces, the lines after the
+ * first indented past the row's mark and its code's own indent (a hanging indent), and a word longer than its line
+ * (an address) is never split: its line starts further left so it fits whole where it can. Tabs show as two spaces.
+ */
+export function foldDiffRow(op, text, pad = 4) {
+  const width = columns() - 2;
+  const code = String(text).replace(/\t/g, "  ");
+  const lead = `${op} ${/^ */.exec(code)[0]}`;
+  const body = code.slice(lead.length - 2);
+  if (pad + visible(lead) + visible(body) <= width) return [{ pad, text: `${lead}${body}` }];
+  const hang = " ".repeat(Math.min(visible(lead) + 4, Math.floor(width / 2)));
+  const lines = [];
+  let head = lead;
+  let cur = null;
+  for (const word of body.split(" ")) {
+    if (cur !== null && cur !== "" && pad + visible(head) + visible(cur) + 1 + visible(word) > width) {
+      lines.push(`${head}${cur}`);
+      head = hang;
+      cur = word;
+    } else cur = cur === null ? word : `${cur} ${word}`;
+  }
+  lines.push(`${head}${cur ?? ""}`);
+  return lines.map((l) => {
+    if (pad + visible(l) <= columns()) return { pad, text: l };
+    // too long for its place: one word longer than the line. Further left, so it fits whole where it can
+    const t = l.startsWith(hang) && hang ? l.slice(hang.length) : l;
+    return { pad: fit(pad, t), text: t };
+  });
+}
+
+/**
+ * Prints one file change: a heading and its diff, indented. Under the genclass command a long row is folded to the
+ * terminal (foldDiffRow); under genclass-runtime every row stays one line, as it always was.
+ */
 export function printChange(change) {
   const { file, kind } = change;
   const tag = kind === "create" ? c.green("new file") : kind === "delete" ? c.red("delete") : c.yellow("modify");
   out(`  ${c.bold(file)} ${c.gray("(")}${tag}${c.gray(")")}`);
-  const lines = renderDiff(change.before ?? "", change.after ?? "");
-  for (const l of lines) out(`    ${l}`);
+  if (!wraps()) {
+    const lines = renderDiff(change.before ?? "", change.after ?? "");
+    for (const l of lines) out(`    ${l}`);
+    out();
+    return;
+  }
+  for (const [op, text] of diffRows(change.before ?? "", change.after ?? "")) {
+    if (op === "@@") {
+      out(`    ${PAINT[op](text)}`);
+      continue;
+    }
+    for (const l of foldDiffRow(op, text)) out(`${" ".repeat(l.pad)}${PAINT[op](l.text)}`);
+  }
   out();
 }
 

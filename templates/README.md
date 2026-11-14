@@ -30,7 +30,9 @@ Every template:
   integration's or module's options) to let it act when its model is confident;
 - **loads the devtools overlay in development only**;
 - **can be turned off per page load** with `?genclass=off` in the URL;
-- sends anonymous, redacted diagnostics by default; each README shows the one-line opt-out.
+- sends anonymous, redacted diagnostics by default; each README shows the one-line opt-out;
+- **has a `.gitignore`**: dependencies, build output, `.env` files, test output and `.genclass.local` (the app token
+  and private dashboard link `npx genclass` keeps there) stay out of git.
 
 They need `@genclass/runtime` 0.2.0 or later (automatic state discovery); astro and nuxt also need
 `@genclass/astro` and `@genclass/nuxt` 0.1.0 on npm. Each one builds, boots and passes the checks in

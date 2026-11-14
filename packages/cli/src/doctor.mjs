@@ -5,7 +5,8 @@
 //
 // Invariants:
 // - Read only unless --fix, and then only GenClass's own: the version pin in its MCP server entry, the skill file
-//   while it carries its marker, and the coding-agent link in a Vite entry, written between genclass:init markers so
+//   while it carries its marker, and the coding-agent link where agentlink.mjs plans it (after init's import, in the
+//   frameworks whose development builds it can tell apart), written between genclass:init markers so
 //   `genclass remove` takes it out. Each is shown before it is written; a terminal is asked once, --yes is the yes,
 //   and without a terminal and without --yes nothing is written.
 // - Two requests at most, both to npm's public registry for dist-tags (this command's and the runtime's), each
@@ -18,11 +19,10 @@ import { createConnection } from "node:net";
 import { join, relative } from "node:path";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { SKILL_MARK, SKILL_PATH, skillText } from "./actions.mjs";
+import { planAgentLink, withAgentLink } from "./agentlink.mjs";
 import { BUILD } from "./assets.mjs";
 import { agree, clean, good, header, note, warn, width, wrap } from "./tui.mjs";
 
-const AGENT_START = "// genclass:init start: the coding-agent link, development builds only: GenClass.init() returns the running runtime (genclass remove takes it out)";
-const AGENT_END = "// genclass:init end";
 const MCP_FILES = [".mcp.json", ".cursor/mcp.json", ".vscode/mcp.json", ".gemini/settings.json"];
 /** An import statement of the runtime's /auto entry (not a comment that names it, as the config file's does). */
 const AUTO_IMPORT = /^\s*import\s+(?:[\w*{}\s,]+\s+from\s+)?["']@genclass\/runtime\/auto(?:\/(?:observe|guard|heal))?["']/m;
@@ -126,22 +126,8 @@ export function cspGaps(policy, s) {
   return gaps;
 }
 
-/**
- * The entry file's lines with the coding-agent link added after GenClass's own import: a block between
- * genclass:init markers (so `genclass remove` takes it out), for a Vite app (import.meta.env.DEV). Null when there
- * is no GenClass import marked by init to put it after, or the link is already there.
- */
-export function withAgentLink(text) {
-  const t = String(text ?? "");
-  if (/connectAgent\s*\(/.test(t)) return null;
-  const eol = t.includes("\r\n") ? "\r\n" : "\n";
-  const lines = t.split(/\r?\n/);
-  const at = lines.findIndex((l) => /^\s*import\s+(?:[\w*{}\s,]+\s+from\s+)?["']@genclass\/runtime\/auto(?:\/(?:observe|guard|heal))?["'];?.*genclass:init/.test(l));
-  if (at < 0) return null;
-  const block = [AGENT_START, 'import { GenClass } from "@genclass/runtime";', 'import { connectAgent } from "@genclass/runtime/agent";', "if (import.meta.env.DEV) connectAgent(GenClass.init());", AGENT_END];
-  lines.splice(at + 1, 0, ...block);
-  return lines.join(eol);
-}
+/** The entry file's text with the coding-agent link after GenClass's own import (agentlink.mjs), Vite's check by default. */
+export { withAgentLink };
 
 /** Whether an entry file imports other code before GenClass's (GenClass must load first to see the app start). */
 export function importedFirst(text) {
@@ -236,18 +222,23 @@ export async function checks(o = {}, deps = {}) {
   else if (skill !== skillText()) add({ id: "skill", label: "Skill", state: "warn", detail: `${SKILL_PATH} is from another version`, fix: "npx genclass doctor --fix", apply: { file: join(cwd, SKILL_PATH), after: skillText(), what: `${SKILL_PATH}: this version's skill` } });
   else add({ id: "skill", label: "Skill", state: "ok", detail: SKILL_PATH });
   if (st?.project?.framework && !st.fresh) {
-    if (setup?.agentLink) add({ id: "link", label: "Agent link", state: "ok", detail: "the dev build connects to your coding agent (connectAgent)" });
+    let link = null;
+    try {
+      link = planAgentLink(st);
+    } catch {
+      link = null;
+    }
+    if (setup?.agentLink || link?.state === "linked") add({ id: "link", label: "Agent link", state: "ok", detail: "the dev build connects to your coding agent (connectAgent)" });
     else {
-      const entry = (st.marked ?? []).find((f) => AUTO_IMPORT.test(read(f) ?? ""));
-      const vite = !!st.project.deps?.vite || /vite/i.test(st.project.label ?? "") || existsSync(join(cwd, "vite.config.ts")) || existsSync(join(cwd, "vite.config.js"));
-      const after = entry && vite ? withAgentLink(read(entry)) : null;
+      const planned = link?.state === "planned" ? link.changes : null;
+      const by = `${link?.state === "manual" ? `not added here (${link.why}): ` : ""}ask your agent "is GenClass connected?": genclass_setup prints the dev-only lines for this app`;
       add({
         id: "link",
         label: "Agent link",
         state: "warn",
         detail: "the dev page does not connect to your coding agent, so genclass_status lists no page and explore and replay cannot run",
-        fix: after ? "npx genclass doctor --fix" : "ask your agent \"is GenClass connected?\": genclass_setup prints the two dev-only lines for this app",
-        ...(after ? { apply: { file: entry, after, what: `${relative(cwd, entry)}: the coding-agent link, development builds only` } } : {}),
+        fix: planned ? "npx genclass doctor --fix" : by,
+        ...(planned ? { apply: { file: planned[0].file, after: planned[0].after, writes: planned.map((ch) => ({ file: ch.file, after: ch.after })), what: planned.map((ch) => ch.what).join("; ") } } : {}),
       });
     }
   }
@@ -330,7 +321,7 @@ export async function doctor(o = {}, deps = {}) {
   for (const x of fixable) {
     try {
       if (x.apply.mkdir) (await import("node:fs")).mkdirSync(join(x.apply.file, ".."), { recursive: true });
-      writeFileSync(x.apply.file, x.apply.after);
+      for (const w of x.apply.writes ?? [x.apply]) writeFileSync(w.file, w.after);
       good(`Wrote ${x.apply.what}`);
     } catch (e) {
       failed++;

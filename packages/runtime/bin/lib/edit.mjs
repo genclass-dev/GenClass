@@ -1,6 +1,8 @@
 // Text edits for `genclass-runtime init|remove`. Everything init adds carries a marker:
 //   - single lines:  `import genclass from "@genclass/runtime/auto"; // genclass:init`
 //   - blocks (files init creates): from a line containing `genclass:init start` to one containing `genclass:init end`
+//   - the coding-agent link the `genclass` command adds (development builds only): a block right after the marked
+//     /auto import or after the block of a file init created, and in Astro one marked `<script>` line after init's
 //   - three inline forms, used only when the place to insert shares its line with other code (a one-line <head> or
 //     <body>): `<GenClassInit />{/* genclass:inline */}`, `<script>... // genclass:inline</script>` (Astro) and
 //     `<script ...></script><!-- genclass:inline -->` (HTML)
@@ -128,6 +130,11 @@ const META_CONFIG = String.raw`<metaname="genclass"content="[^"]*"/?>`;
 const DEV_LINE = String.raw`if\(${COND}\)${DEVTOOLS_CALL};?`;
 // the same with braces (ESLint's `curly` fix)
 const DEV_BLOCK = String.raw`if\(${COND}\)\{${DEVTOOLS_CALL};?\}`;
+// the coding-agent link (packages/cli/src/agentlink.mjs): the two imports and the call, or (a file with init's
+// `genclass` binding) the dynamic import that mirrors the devtools line; each also with braces
+const AGENT_IMPORTS = String.raw`import\{GenClass\}from"@genclass/runtime";?import\{connectAgent\}from"@genclass/runtime/agent";?`;
+const AGENT_CALL = String.raw`connectAgent\(GenClass\.init\(\)\)`;
+const AGENT_DYNAMIC = String.raw`import\("@genclass/runtime/agent"\)\.then\(\(\{connectAgent\}\)=>connectAgent\(genclass\)\)`;
 /** Statements init writes on one marked line (normalised, see norm()). */
 const LINE_RE = new RegExp(
   "^(?:" +
@@ -142,6 +149,8 @@ const LINE_RE = new RegExp(
       String.raw`<GenClassInit/>`,
       String.raw`<script[^<>]*></script>`,
       String.raw`<script>${IMPORT_AUTO}(?:${DEV_LINE})?</script>`,
+      // Astro: the coding-agent link's own <script> line after init's
+      String.raw`<script>${AGENT_IMPORTS}if\(${COND}\)${AGENT_CALL};?</script>`,
     ].join("|") +
     ")$",
 );
@@ -159,10 +168,13 @@ const BLOCK_RE = new RegExp(
       String.raw`exportfunctionGenClassInit\(\)\{returnnull;?\}`,
       String.raw`exportdefaultdefineNuxtPlugin\(\(\)=>\{(?:${DEV_LINE}|${DEV_BLOCK})?\}\);?`,
       String.raw`exportdefaultfunctionApp\(\{Component,pageProps\}(?::AppProps)?\)\{return\(?<Component\{\.\.\.pageProps\}/>\)?;?\}`,
-      // the coding-agent link `genclass doctor --fix` adds after the /auto import (development builds only)
+      // the coding-agent link the `genclass` command adds after GenClass's import (development builds only)
       String.raw`import\{GenClass\}from"@genclass/runtime";?`,
       String.raw`import\{connectAgent\}from"@genclass/runtime/agent";?`,
-      String.raw`if\(${COND}\)connectAgent\(GenClass\.init\(\)\);?`,
+      String.raw`if\(${COND}\)${AGENT_CALL};?`,
+      String.raw`if\(${COND}\)\{${AGENT_CALL};?\}`,
+      String.raw`if\(${COND}\)${AGENT_DYNAMIC};?`,
+      String.raw`if\(${COND}\)\{${AGENT_DYNAMIC};?\}`,
     ].join("|") +
     ")*$",
 );

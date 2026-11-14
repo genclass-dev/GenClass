@@ -536,6 +536,31 @@ describe("remove after a formatter rewrapped init's lines", () => {
     const t = `<head>\n  <script\n    src="https://x.test/genclass.global.min.js"\n    data-devtools="local"\n  ></script>\n  <!-- genclass:init -->\n  <title>x</title>\n</head>\n`;
     expect(planRemoval(t)).toEqual({ text: `<head>\n  <title>x</title>\n</head>\n`, problems: [] });
   });
+
+  it("the coding-agent link the genclass command adds (packages/cli/src/agentlink.mjs): every form, also reformatted", () => {
+    const start = "// genclass:init start: the coding-agent link, development builds only (genclass remove takes it out)";
+    const imports = `import { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\n`;
+    for (const body of [
+      `${imports}if (import.meta.env.DEV) connectAgent(GenClass.init());`,
+      `${imports.replace(/"/g, "'").replace(/;/g, "")}if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') connectAgent(GenClass.init())`,
+      `${imports}if (import.meta.env.DEV) {\n  connectAgent(GenClass.init());\n}`,
+      `if (process.env.NODE_ENV === "development") import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));`,
+      `if (process.env.NODE_ENV === "development")\n  import("@genclass/runtime/agent").then(({ connectAgent }) =>\n    connectAgent(genclass),\n  );`,
+    ]) {
+      const t = `import genclass from "@genclass/runtime/auto"; // genclass:init\n${start}\n${body}\n// genclass:init end\nx();\n`;
+      expect(planRemoval(t), body).toEqual({ text: `x();\n`, problems: [] });
+    }
+    // after the block of a file init created: the file is GenClass's alone, nothing is left
+    const made = `// genclass:init start: GenClass Runtime\nimport "@genclass/runtime/auto";\n// genclass:init end\n${start}\n${imports}if (import.meta.env.DEV) connectAgent(GenClass.init());\n// genclass:init end\n`;
+    expect(planRemoval(made)).toEqual({ text: "", problems: [] });
+    // Astro: its own marked <script> line after init's
+    const astro = `<head>\n  <title>x</title>\n  <script>import "@genclass/runtime/auto"; // genclass:init</script>\n  <script>import { GenClass } from "@genclass/runtime"; import { connectAgent } from "@genclass/runtime/agent"; if (import.meta.env.DEV) connectAgent(GenClass.init()); // genclass:init</script>\n</head>\n`;
+    expect(planRemoval(astro)).toEqual({ text: `<head>\n  <title>x</title>\n</head>\n`, problems: [] });
+    // anything else in the block is the person's: a problem, and the block stays
+    const edited = `${start}\n${imports}window.rt = GenClass.init();\n// genclass:init end\n`;
+    expect(planRemoval(edited).problems).toHaveLength(1);
+    expect(planRemoval(edited).text).toBe(edited);
+  });
 });
 
 describe("remove never deletes code init did not write", () => {

@@ -1,0 +1,20 @@
+# dependencies and build output
+node_modules
+.svelte-kit
+build
+.output
+.vercel
+.netlify
+vite.config.*.timestamp-*
+
+# secrets and local settings
+.env
+.env.local
+.env.*.local
+
+# GenClass's app token and private dashboard link (written by `npx genclass`)
+.genclass.local
+
+# test output
+test-results
+playwright-report
