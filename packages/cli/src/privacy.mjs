@@ -9,14 +9,20 @@
 // - Every sentence about what is sent is a fact from packages/runtime/TELEMETRY.md and the README's
 //   Content-Security-Policy section, chosen by the options found in the project. The setup is read from text, so it
 //   says when a value could not be read (the "Not read" row: set by code) instead of guessing a safe answer.
-// - Options are read only from GenClass's own places, with comments taken out: what is assigned to
-//   window.GENCLASS_CONFIG (an object, a const of the same file, a ||= or ??= default, Object.assign(...), one key), the
-//   GenClass.init({...}) argument, the Nuxt module's `genclass: {...}` options, the Astro integration's genclass({...})
-//   call, the <meta name="genclass"> tag, the script tag and its data-* attributes, the /auto import's path, and
-//   createRuntime({...}) (headless use, with its own defaults: no diagnostics, model or visual checks unless set). Each
-//   key is read inside its own object (telemetry.endpoint, model.baseUrl, learn.persist, breaker.persist), never from
-//   any code that happens to share a file with GenClass. Tests, test setup files and fixtures never count. Where the
-//   text cannot tell, the map takes the reading that sends more (an endpoint set by code may still be genclass.dev).
+// - Options are read only from a literal that certainly applies, with comments taken out: a whole object literal
+//   assigned to window.GENCLASS_CONFIG at the top level of its script (not in a condition, a function, a loop, a
+//   ternary or a string; not in the module that imports /auto, whose import runs first; not replaced later in that
+//   script), the literal GenClass.init({...}) or createRuntime({...}) (imported from @genclass/runtime; headless use,
+//   with its own defaults: no diagnostics, model or visual checks unless set) at the top level, the Nuxt module's
+//   `genclass: {...}` options, the Astro integration's genclass({...}) call, the <meta name="genclass"> tag, the
+//   script tag and its data-* attributes, and the /auto import's path. Each key is read inside its own object
+//   (telemetry.endpoint, model.baseUrl, learn.persist, breaker.persist), never from code that happens to share a file
+//   with GenClass. Tests, test setup files and fixtures never count.
+// - Everything else that may set GenClass's options is not read: ||= and ??= defaults, Object.assign, spreads, one key
+//   set on its own, identifiers, conditional code, GenClass.init's options where /auto or the script tag already
+//   started GenClass. It is named in the "Not read" row, and for every option it may set the map takes the reading
+//   that sends and keeps more: diagnostics on to genclass.dev, the model from jsDelivr, no consent gate, while what
+//   is off by default (analytics, page text, learned flows, sinks) stays as the files say it.
 // - The consent gate is described as working only where the project's runtime has it: 0.3.0-beta.6 and earlier
 //   ignore the option, and the map says so.
 // - It is not legal advice and says so: the guidance names the rules and the regulators' readings, and leaves the
@@ -154,8 +160,11 @@ class Code {
     this.src = src;
   }
 }
+/** An object literal's spreads (`...x`, as Code), and the keys it sets after the last of them (the only certain ones). */
 const SPREAD = Symbol("spread");
+const LATE = Symbol("late");
 const isObj = (v) => !!v && typeof v === "object" && !(v instanceof Code) && !Array.isArray(v);
+const empty = () => Object.create(null);
 
 /** Index just after the regular expression literal at s[j] when one starts there (regexAt), else -1. */
 const regexSkip = (s, j) => (s[j] === "/" && regexAt(s, j) ? regexEnd(s, j) : -1);
@@ -227,6 +236,7 @@ function valueOf(src) {
 /** The object literal s[start..end) ("{" to "}") as data; keys it cannot read are left out, spreads are noted. */
 function objectOf(s, start, end) {
   const o = Object.create(null);
+  const late = new Set();
   const stop = Math.max(start + 1, end - 1);
   for (let i = start + 1; i < stop; ) {
     i = skipSpace(s, i);
@@ -238,6 +248,7 @@ function objectOf(s, start, end) {
     if (s.startsWith("...", i)) {
       const e = exprEnd(s, i + 3, stop);
       (o[SPREAD] ??= []).push(new Code(s.slice(i + 3, e).trim()));
+      late.clear();
       i = Math.max(e, i + 3);
       continue;
     }
@@ -258,6 +269,7 @@ function objectOf(s, start, end) {
       j = i + key.length;
     }
     j = skipSpace(s, j);
+    if (key !== null) late.add(key);
     if (s[j] === ":") {
       const e = exprEnd(s, j + 1, stop);
       if (key !== null) o[key] = valueOf(s.slice(j + 1, e));
@@ -269,6 +281,7 @@ function objectOf(s, start, end) {
       i = Math.max(e, i + 1);
     }
   }
+  if (o[SPREAD]) o[LATE] = [...late];
   return o;
 }
 
@@ -295,65 +308,166 @@ function arrayOf(s, start, end) {
 /** The object literal that starts at t[at] (which is "{"), or null. */
 const objectAt = (t, at) => (t[at] === "{" ? objectOf(t, at, closeOf(t, at)) : null);
 
-const IDENT = /^[A-Za-z_$][\w$]*$/;
-/** The object literal the text declares under `id` (`const id = {...}`, `let id: T = {...}`), or null. */
-function declaredObject(t, id) {
-  const decl = new RegExp(`(?<![\\w$.])(?:const|let|var)\\s+${esc(id)}\\s*(?::[^=;]+)?=\\s*(?=\\{)`).exec(t);
-  return decl ? objectAt(t, decl.index + decl[0].length) : null;
-}
-
-/** The options object a call passes, its source at t[at] (just after the "("): a literal, none, or a const of the same text; null when code makes it. */
-function argAt(t, at) {
-  if (t[at] === "{") return objectAt(t, at);
-  if (t[at] === ")") return Object.create(null);
-  const src = t.slice(at, exprEnd(t, at, t.length)).trim();
-  return IDENT.test(src) ? declaredObject(t, src) : null;
-}
-
 /** GENCLASS_CONFIG itself: `window.GENCLASS_CONFIG`, `globalThis["GENCLASS_CONFIG"]`, `(globalThis as T).GENCLASS_CONFIG`. */
 const SELF =
   /^(?:(?:window|globalThis|self)\s*\??\.\s*|\(\s*(?:window|globalThis|self)\s+as\s+[^()]*\)\s*\??\.\s*)?GENCLASS_CONFIG$|^(?:window|globalThis|self)\s*(?:\?\.)?\s*\[\s*(["'`])GENCLASS_CONFIG\1\s*\]$/;
 const isSelf = (src) => SELF.test(String(src ?? "").trim());
 
-/** `GENCLASS_CONFIG || {...}` (or `??`): the object it falls back to; GENCLASS_CONFIG alone: nothing new; else null. */
-function selfDefault(src) {
-  if (isSelf(src)) return Object.create(null);
+/** `GENCLASS_CONFIG || {...}` (or `??`): the object it falls back to, or null. */
+function selfOr(src) {
   const m = /^([\s\S]*?)\s*(?:\|\||\?\?)\s*(\{[\s\S]*\})$/.exec(src);
   return m && isSelf(m[1]) && closeOf(m[2], 0) === m[2].length ? objectOf(m[2], 0, m[2].length) : null;
 }
 
-/**
- * What a value given to GENCLASS_CONFIG sets, from its source `src`: an object literal, a const of the same text, the
- * object after `GENCLASS_CONFIG ||` (a default: `ifUnset`, it applies only while nothing set GENCLASS_CONFIG before),
- * or Object.assign(...)'s objects in order. Parts, or null when code makes it.
- */
-function configParts(t, src) {
-  const v = valueOf(src);
-  if (isObj(v)) return [{ opts: v }];
-  if (!(v instanceof Code)) return null;
-  if (IDENT.test(v.src)) {
-    const o = declaredObject(t, v.src);
-    return o ? [{ opts: o }] : null;
+// ------------------------------------------------------------------------------- what certainly runs, from text
+
+/** After these words a "(" holds a condition, a loop's head or a caught error, not a call's arguments. */
+const KEYWORD_PAREN = /(?<![\w$.])(?:if|while|for|switch|with|catch)\s*$/;
+/** After these, a function's parameters. */
+const FUNCTION_PAREN = /(?<![\w$.])function\b[\s*]*[\w$]*\s*$/;
+/** Code that runs only sometimes: a ternary, a short circuit or optional chaining, an arrow function's body. */
+const SOMETIMES = /\?|&&|\|\||=>/;
+/** Statements whose body runs only sometimes. */
+const SOMETIMES_WORD = /(?<![\w$.])(?:if|else|while|for|do|switch|case|catch|finally|try|(?<!export\s+)default)(?![\w$])/;
+/** Words after which a line break does not end the statement. */
+const GOES_ON = /^(?:else|do|try|finally|return|throw|typeof|void|delete|new|in|of|instanceof|await|yield|case|default|extends|export|import|const|let|var|async|function|class|as|satisfies)$/;
+
+/** t[a..b) at its own depth: strings and regular expression literals as "" and 0, bracketed parts emptied. */
+function level(t, a, b) {
+  let s = "";
+  for (let j = a; j < b; j++) {
+    const ch = t[j];
+    const re = regexSkip(t, j);
+    if (re > 0) {
+      s += "0";
+      j = re - 1;
+    } else if (ch === '"' || ch === "'" || ch === "`") {
+      s += '""';
+      j = stringEnd(t, j) - 1;
+    } else if (ch === "{" || ch === "(" || ch === "[") {
+      s += ch === "{" ? "{}" : ch === "(" ? "()" : "[]";
+      j = closeOf(t, j) - 1;
+    } else s += ch;
   }
-  const self = selfDefault(v.src);
-  if (self) return [{ opts: self, ifUnset: true }];
-  const a = /^Object\s*\.\s*assign\s*(?=\()/.exec(v.src);
-  if (!a || closeOf(v.src, a[0].length) !== v.src.length) return null;
-  const parts = [];
-  for (const x of arrayOf(v.src, a[0].length, v.src.length)) {
-    const p = isObj(x) ? [{ opts: x }] : x instanceof Code ? configParts(t, x.src) : null;
-    if (!p) return null;
-    parts.push(...p);
-  }
-  return parts;
+  return s;
+}
+
+/** Whether a statement can end after the code's last character `last` (`word`: the word it ends; `head`: a ")" that closed an if/while/for head). */
+const ends = (last, word, head) => (last === ")" ? !head : last === "]" || last === "0" ? true : /[\w$]/.test(last) ? !GOES_ON.test(word) : false);
+
+/** Whether the code after a line break at t[i] goes on with the expression before it (an operator, `.`, `(`, `else`). */
+function goesOn(t, i) {
+  const k = skipSpace(t, i);
+  return /[([.?:,=+\-*/%&|^<>!~`]/.test(t[k] ?? "") || /^(?:else|catch|finally|instanceof|in|of|as|satisfies)(?![\w$])/.test(t.slice(k, k + 12));
 }
 
 /**
- * Assignments to GENCLASS_CONFIG: `=`, `||=` and `??=` (the latter two apply only while it is unset), on `window.`,
- * `globalThis.`, `window["GENCLASS_CONFIG"]` or a bare name, and to one of its keys (`GENCLASS_CONFIG.telemetry = false`);
- * `&&=` and deeper keys are matched only to be named as not read.
+ * Where the statement around t[end] starts (t[from..end) at one depth): after a ";", a block's "}", or a line break
+ * where a statement can end.
  */
-const CONFIG_SET = /\bGENCLASS_CONFIG(?:["'`]\s*\])?((?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\[\s*(["'`])[\w$-]*\2\s*\])*)\s*(\|\|=|\?\?=|&&=|=(?![=>]))\s*/g;
+function statementStart(t, from, end) {
+  let start = from;
+  let depth = 0;
+  let last = "";
+  let lastAt = -2;
+  let word = "";
+  let head = false;
+  const heads = [];
+  for (let j = from; j < end; j++) {
+    const ch = t[j];
+    const re = regexSkip(t, j);
+    if (re > 0 || ch === '"' || ch === "'" || ch === "`") {
+      j = (re > 0 ? re : stringEnd(t, j)) - 1;
+      if (depth === 0) [last, word, lastAt] = ["0", "", j];
+    } else if (ch === "(" || ch === "[" || ch === "{") {
+      heads.push(ch === "(" && KEYWORD_PAREN.test(t.slice(Math.max(from, j - 12), j)));
+      depth++;
+    } else if (ch === ")" || ch === "]" || ch === "}") {
+      const kw = heads.pop();
+      depth = Math.max(0, depth - 1);
+      if (depth > 0) continue;
+      if (ch === "}") [start, last, word] = [j + 1, "", ""];
+      else [last, word, head, lastAt] = [ch, "", !!kw, j];
+    } else if (depth > 0 || /[^\S\n]/.test(ch)) continue;
+    else if (ch === ";") [start, last, word] = [j + 1, "", ""];
+    else if (ch === "\n") {
+      if (last && ends(last, word, head) && !goesOn(t, j + 1)) [start, last, word] = [j + 1, "", ""];
+    } else {
+      word = /[\w$]/.test(ch) ? (lastAt === j - 1 && /[\w$]/.test(last) ? word + ch : ch) : "";
+      [last, lastAt] = [ch, j];
+    }
+  }
+  return start;
+}
+
+/** Whether the "(" at t[o] is a call's (or a grouping's), evaluated where it stands: not a condition's, a loop's or a function's parameters. */
+function callParen(t, from, o) {
+  const before = t.slice(Math.max(from, o - 40), o);
+  if (/\?\.\s*$/.test(before) || KEYWORD_PAREN.test(before) || FUNCTION_PAREN.test(before)) return false;
+  const c = closeOf(t, o);
+  return !/^\s*(?:=>|\{|:)/.test(t.slice(c, c + 8));
+}
+
+/**
+ * Whether the code at t[at] runs whenever its script (from t[from]) runs: at the top level, inside nothing but the
+ * arguments of calls that run, in a statement no condition, loop, function, arrow, ternary or short circuit governs,
+ * and not in a string. Text cannot tell more, so anything else is "not certain".
+ */
+function runsAlways(t, from, at) {
+  const open = [];
+  for (let j = from; j < at; j++) {
+    const ch = t[j];
+    const re = regexSkip(t, j);
+    const e = re > 0 ? re : ch === '"' || ch === "'" || ch === "`" ? stringEnd(t, j) : -1;
+    if (e > 0) {
+      if (e > at) return false;
+      j = e - 1;
+    } else if (ch === "(" || ch === "[" || ch === "{") open.push(j);
+    else if (ch === ")" || ch === "]" || ch === "}") open.pop();
+  }
+  let end = at;
+  for (let n = open.length - 1; n >= 0; n--) {
+    const o = open[n];
+    if (t[o] !== "(" || !callParen(t, from, o) || SOMETIMES.test(level(t, o + 1, end).split(",").pop())) return false;
+    end = o;
+  }
+  const seg = level(t, statementStart(t, from, end), end);
+  return !SOMETIMES.test(seg) && !SOMETIMES_WORD.test(seg);
+}
+
+/**
+ * The script units of a file's text, as a lookup from a position: each <script> element's code, and the whole text of
+ * a file that is not markup (HTML, a Vue or Svelte component); null for markup outside a script.
+ */
+function unitsOf(t) {
+  const units = [];
+  for (const m of t.matchAll(/<script\b[^>]*>/gi)) {
+    if (/\/\s*>$/.test(m[0])) continue;
+    const a = m.index + m[0].length;
+    const close = t.slice(a).search(/<\/script\s*>/i);
+    units.push([a, close < 0 ? t.length : a + close]);
+  }
+  const markup = /^\s*</.test(t);
+  return (i) => units.find(([a, b]) => i >= a && i <= b) ?? (markup ? null : [0, t.length]);
+}
+
+/** A static import of the zero-code entry (it runs before the rest of its module: ES imports are hoisted), and a require of it. */
+const AUTO_IMPORT = /(?<![\w$.])import(?:\s+(?![\s]|type\b)|(?=["'`{*]))(?:[^;'"`()]*?\bfrom\s*)?(["'`])@genclass\/runtime\/auto(?:\/[\w-]+)?\1/;
+const AUTO_REQUIRE = /(?<![\w$.])require\s*\(\s*(["'`])@genclass\/runtime\/auto(?:\/[\w-]+)?\1\s*\)/g;
+
+/** A chain of keys after GENCLASS_CONFIG (`.telemetry`, `["model"]`, with TypeScript's `!`); KEYS reads them out. */
+const CHAIN = String.raw`((?:\s*!)?(?:\s*\.\s*[A-Za-z_$][\w$]*(?:\s*!)?|\s*\[\s*(["'\`])[\w$-]*\2\s*\](?:\s*!)?)*)`;
+const KEYS = /\.\s*([A-Za-z_$][\w$]*)|\[\s*(["'`])([\w$-]*)\2\s*\]/g;
+const OP = String.raw`(\|\|=|\?\?=|&&=|=(?![=>]))`;
+/** An assignment to GENCLASS_CONFIG or one of its keys (`=`, `||=`, `??=`, `&&=`), on `window.`, `globalThis.`, `window["GENCLASS_CONFIG"]` or a bare name. */
+const CONFIG_SET = new RegExp(String.raw`\bGENCLASS_CONFIG(?:["'\`]\s*\])?${CHAIN}\s*${OP}\s*`, "g");
+/** ... to a key through a cast or parentheses: `(window.GENCLASS_CONFIG as T).telemetry = false`. */
+const CAST_SET = new RegExp(String.raw`\bGENCLASS_CONFIG\s*!?\s*(?:\b(?:as|satisfies)\s+[^()=;]*?)?\)${CHAIN}\s*${OP}\s*`, "g");
+/** A key of it changed by a call (`GENCLASS_CONFIG.sinks.push(...)`) or taken out (`delete GENCLASS_CONFIG.telemetry`). */
+const CONFIG_CALL = new RegExp(String.raw`\bGENCLASS_CONFIG(?:["'\`]\s*\])?${CHAIN}\s*\(`, "g");
+const CONFIG_DELETE = new RegExp(String.raw`\bdelete\s+(?:[\w$]+\s*\.\s*|\(\s*)*GENCLASS_CONFIG(?:["'\`]\s*\])?${CHAIN}`, "g");
+/** GENCLASS_CONFIG set on window by a call: Object.defineProperty, Reflect.set (Object.assign(window, {...}): below). */
+const CONFIG_DEFINE = /\b(?:Object\s*\.\s*defineProperty|Reflect\s*\.\s*(?:set|defineProperty))\s*\(\s*(?:window|globalThis|self)\s*,\s*(["'`])GENCLASS_CONFIG\1/g;
 
 /** A tag's attributes, names lowercased: `<script src="x" data-mode=guard defer>` -> { src: "x", "data-mode": "guard", defer: "" }. */
 function attrsOf(tag) {
@@ -416,14 +530,33 @@ function fromPairs(pairs, sameOrigin = false) {
 const webhookOf = (s) => /^\s*webhook\s*[:=]\s*(\S+)/i.exec(String(s))?.[1] ?? null;
 const esc = (s) => s.replace(/[$\\]/g, "\\$&");
 
+const GC = "window.GENCLASS_CONFIG";
+const INIT_UNREAD = "the options passed to GenClass.init(...)";
+const CREATE_UNREAD = "the options passed to createRuntime(...)";
+const SOMETIMES_NOTE = " (in a condition or a function)";
+/** The options the Nuxt module and the Astro integration pass on to the runtime. */
+const INTEGRATION_KEYS = ["mode", "token", "telemetry"];
+
 /**
  * GenClass's own option sources in one file's text (comments already out), each with its precedence (`rank`, lowest
  * first, as the zero-code entries merge them: the import's mode, the meta tag, the script tag, GENCLASS_CONFIG, the
- * integrations' options, GenClass.init). `unread` names the ones set by code.
+ * integrations' options, GenClass.init). Options are read only from a literal that certainly applies; whatever else
+ * may set them is a region of kind "taint" (the keys it may set, and the values when the text says them), named in
+ * `unread`, and setupFrom takes the reading that sends and keeps more for those keys.
  */
 export function genclassRegions(t) {
   const regions = [];
   const unread = [];
+  const taint = (target, rank, keys, vals, name, more = {}) => {
+    regions.push({ kind: "taint", target, rank, keys, vals: vals ?? null, opts: empty(), ...more });
+    if (name) unread.push(name);
+  };
+  /** A literal read as written; a spread in it may set any key but those after it. */
+  const add = (r, target) => {
+    regions.push(r);
+    const spread = r.opts[SPREAD];
+    if (spread) taint(target, r.rank, null, null, `options spread in from code (...${spread[0].src})`, { except: r.opts[LATE] ?? [] });
+  };
   // the zero-code entry's import names the mode (/auto/guard, /auto/heal); any other runtime import names none
   for (const m of t.matchAll(/(["'`])@genclass\/runtime(\/[\w./-]*)?\1/g)) {
     const sub = m[2] ?? "";
@@ -439,92 +572,223 @@ export function genclassRegions(t) {
     if (!/genclass[^/"'\s]*\.global(?:\.min)?\.js|\/@genclass\/runtime(?:@[^/"'\s]*)?\/?(?:$|[?#])/.test(src)) continue;
     const pairs = {};
     for (const [k, v] of Object.entries(a)) if (k.startsWith("data-")) pairs[normKey(k.slice(5))] = v;
-    regions.push({ rank: 2, kind: "script", opts: fromPairs(pairs), src, base: pairs.base || null });
+    // data-manual: the tag only exposes window.GenClass, and the page's own GenClass.init(...) starts it
+    const manual = pairs.manual !== undefined && pairs.manual !== "false";
+    regions.push({ rank: 2, kind: "script", opts: fromPairs(pairs), src, base: pairs.base || null, manual });
   }
-  // window.GENCLASS_CONFIG. A default (||=, ??=, `GENCLASS_CONFIG || {...}`) applies only while nothing set it: it
-  // ranks under a plain assignment, and setupFrom drops it where an assignment replaces the whole object (`unset`,
-  // `replace`). Every assignment this cannot read is named as not read.
-  const config = (parts, unset = false, replace = false) =>
-    parts.forEach((p, i) => {
-      const u = unset || !!p.ifUnset;
-      regions.push({ rank: u ? 2.5 : 3, kind: "config", opts: p.opts, unset: u, replace: replace && i === 0 && !u && !(p.opts[SPREAD] ?? []).some((x) => isSelf(x.src)) });
-    });
+
+  // window.GENCLASS_CONFIG: read only from a whole literal that certainly applies (it runs whenever its script does,
+  // and nothing later in that script replaces it); every other write to it is a taint
+  const unitAt = unitsOf(t);
+  const place = (i) => {
+    const u = unitAt(i);
+    if (!u) return { unit: -1, top: false, auto: null };
+    // the zero-code entry imported in the same module ran before (or, for a require, at) this point
+    const code = t.slice(u[0], u[1]);
+    const imp = AUTO_IMPORT.exec(code);
+    let auto = imp ? (u[0] + imp.index < i ? "after" : "before") : null;
+    for (const r of code.matchAll(AUTO_REQUIRE)) if (!auto && u[0] + r.index < i) auto = "after";
+    return { unit: u[0], top: runsAlways(t, u[0], i), auto };
+  };
+  const events = [];
   const assigned = [];
+  const keysOf = (chain) => [...chain.matchAll(KEYS)].map((k) => k[1] ?? k[3]);
+  const event = (i, e) => {
+    // `window["GENCLASS_CONFIG"]`: the statement starts at `window`
+    const h = /(?:window|globalThis|self)\s*(?:\?\.)?\s*\[\s*["'`]$/.exec(t.slice(Math.max(0, i - 40), i));
+    events.push({ pos: i, ...place(h ? i - h[0].length : i), ...e });
+  };
+  /** One key set (`GENCLASS_CONFIG.telemetry = false`): what it sets, when the text says it; else set by code. */
+  const keyEvent = (i, keys, op, value) => {
+    const name = [GC, ...keys].join(".");
+    event(i, { keys: [keys[0]], vals: { [keys[0]]: keys.length === 1 && op !== "&&=" ? value : new Code(name) }, name });
+  };
   for (const m of t.matchAll(CONFIG_SET)) {
-    const keys = [...m[1].matchAll(/\.\s*([A-Za-z_$][\w$]*)|\[\s*(["'`])([\w$-]*)\2\s*\]/g)].map((k) => k[1] ?? k[3]);
+    const keys = keysOf(m[1]);
     const op = m[3];
-    const at = m.index + m[0].length;
-    const end = exprEnd(t, at, t.length, true);
-    assigned.push([at, end]);
-    if (!keys.length && op !== "&&=") {
-      const parts = configParts(t, t.slice(at, t[at] === "{" ? closeOf(t, at) : end));
-      if (parts) config(parts, op !== "=", op === "=");
-      else unread.push("window.GENCLASS_CONFIG");
-    } else if (keys.length === 1 && op === "=") config([{ opts: Object.assign(Object.create(null), { [keys[0]]: valueOf(t.slice(at, end)) }) }]);
-    else unread.push(["window.GENCLASS_CONFIG", ...keys].join("."));
+    const v0 = m.index + m[0].length;
+    const v1 = t[v0] === "{" ? closeOf(t, v0) : exprEnd(t, v0, t.length, true);
+    assigned.push([v0, v1]);
+    const src = t.slice(v0, v1);
+    const value = valueOf(src);
+    if (keys.length) {
+      keyEvent(m.index, keys, op, value);
+      continue;
+    }
+    // its result used further by code (`(GENCLASS_CONFIG ??= {}).telemetry = false`, `Object.assign(GENCLASS_CONFIG ||= {}, ...)`)
+    const used = /^\s*[),.[]/.test(t.slice(v1, v1 + 8));
+    if (op === "=" && isObj(value) && !used) event(m.index, { literal: value });
+    else if (op === "=" && isSelf(src)) continue;
+    else {
+      // a default (`||=`, `??=`, `= GENCLASS_CONFIG || {...}`) sets its keys only when nothing set them first
+      const or = used || op === "&&=" ? null : op === "=" ? selfOr(src.trim()) : isObj(value) ? value : null;
+      event(m.index, or && !or[SPREAD] ? { keys: Object.keys(or), vals: or, name: GC } : { keys: null, vals: null, name: GC });
+    }
   }
-  // Object.assign(window.GENCLASS_CONFIG, {...}) as a statement of its own: its objects, over what was set before
+  for (const m of t.matchAll(CAST_SET)) {
+    const keys = keysOf(m[1]);
+    const v0 = m.index + m[0].length;
+    if (keys.length) keyEvent(m.index, keys, m[3], valueOf(t.slice(v0, t[v0] === "{" ? closeOf(t, v0) : exprEnd(t, v0, t.length, true))));
+  }
+  for (const m of t.matchAll(CONFIG_CALL)) {
+    const keys = keysOf(m[1]);
+    const name = [GC, ...keys.slice(0, -1)].join(".");
+    if (keys.length > 1) event(m.index, { keys: [keys[0]], vals: { [keys[0]]: new Code(name) }, name });
+  }
+  for (const m of t.matchAll(CONFIG_DELETE)) {
+    const keys = keysOf(m[1]);
+    event(m.index, keys.length ? { keys: [keys[0]], vals: { [keys[0]]: undefined }, name: [GC, ...keys].join(".") } : { keys: [], vals: empty(), replace: true, name: GC });
+  }
+  for (const m of t.matchAll(CONFIG_DEFINE)) event(m.index, { keys: null, vals: null, name: GC });
+  // Object.assign(window.GENCLASS_CONFIG, {...}) (or `|| {}`, `??= {}`, one of its keys) outside an assignment, and
+  // Object.assign(window, { GENCLASS_CONFIG: ... })
   for (const m of t.matchAll(/\bObject\s*\.\s*assign\s*(?=\()/g)) {
     if (assigned.some(([a, b]) => m.index >= a && m.index < b)) continue;
     const open = m.index + m[0].length;
     const args = arrayOf(t, open, closeOf(t, open));
-    if (!(args[0] instanceof Code && selfDefault(args[0].src))) continue;
-    const parts = configParts(t, t.slice(m.index, closeOf(t, open)));
-    if (parts) config(parts);
-    else unread.push("window.GENCLASS_CONFIG");
+    const first = args[0] instanceof Code ? args[0].src : "";
+    if (/^(?:window|globalThis|self)$/.test(first) && args.slice(1).some((x) => isObj(x) && "GENCLASS_CONFIG" in x)) {
+      event(m.index, { keys: null, vals: null, name: GC });
+      continue;
+    }
+    if (!/\bGENCLASS_CONFIG\b/.test(first)) continue;
+    const key = /GENCLASS_CONFIG(?:["'`]\s*\])?\s*!?\s*\.\s*([A-Za-z_$][\w$]*)/.exec(first)?.[1];
+    const objs = args.slice(1);
+    const lit = objs.every((x) => isObj(x) && !x[SPREAD]) ? mergeOptions(objs) : null;
+    event(m.index, key ? { keys: [key], vals: null, name: `${GC}.${key}` } : lit ? { keys: Object.keys(lit), vals: lit, name: GC } : { keys: null, vals: null, name: GC });
   }
+  // in each script unit, in order: the last literal that certainly applies replaces whatever its script set before it
+  const units = new Map();
+  for (const e of events.sort((a, b) => a.pos - b.pos)) {
+    if (!units.has(e.unit)) units.set(e.unit, []);
+    units.get(e.unit).push(e);
+  }
+  for (const list of units.values()) {
+    const last = list.findLast((e) => e.literal && e.top && !e.auto);
+    for (const e of list) {
+      if (last && !last.literal[SPREAD] && e.top && e.pos < last.pos) continue;
+      if (e.literal && e.top && !e.auto) add({ rank: 3, kind: "config", opts: e.literal }, "browser");
+      else if (e.literal && e.auto === "after") unread.push(`${GC}, set after the /auto import in the same module (GenClass has started by then and never reads it)`);
+      else if (e.literal) {
+        const lit = e.literal[SPREAD] ? null : e.literal;
+        taint("browser", 3, lit && Object.keys(lit), lit, `${GC}${e.auto ? " (set in the module that imports @genclass/runtime/auto, whose import runs first)" : SOMETIMES_NOTE}`, { replace: true });
+      } else taint("browser", 3, e.keys, e.vals, `${e.name}${e.top ? "" : SOMETIMES_NOTE}`, e.replace ? { replace: true } : {});
+    }
+  }
+
   // @genclass/nuxt: the `genclass` key of nuxt.config, or the module's tuple; it reads mode, token and telemetry only
+  const integrationRegion = (kind, o) => {
+    regions.push({ rank: 4, kind, opts: integration(o, ["observe", "guard"]) });
+    if (o[SPREAD]) taint("browser", 4, INTEGRATION_KEYS.filter((k) => !(o[LATE] ?? []).includes(k)), null, `options spread in from code (...${o[SPREAD][0].src})`);
+  };
+  const opaqueIntegration = (kind, name) => {
+    regions.push({ rank: 4, kind, opts: empty() });
+    taint("browser", 4, INTEGRATION_KEYS, null, name);
+  };
   if (/(["'`])@genclass\/nuxt\1/.test(t)) {
-    const found = [];
-    for (const m of t.matchAll(/(["'`])@genclass\/nuxt\1\s*,\s*(?=\{)/g)) found.push(objectAt(t, m.index + m[0].length));
-    for (const m of t.matchAll(/(?:^|[\s,{])genclass\s*:\s*(?=\{)/g)) found.push(objectAt(t, m.index + m[0].length));
-    for (const o of found.length ? found : [{}]) regions.push({ rank: 4, kind: "nuxt", opts: integration(o, ["observe", "guard"]) });
+    let found = 0;
+    for (const m of t.matchAll(/(["'`])@genclass\/nuxt\1\s*,\s*(?=\{)/g)) {
+      integrationRegion("nuxt", objectAt(t, m.index + m[0].length));
+      found++;
+    }
+    for (const m of t.matchAll(/(?:^|[\s,{])genclass\s*:\s*/g)) {
+      const at = m.index + m[0].length;
+      const v = valueOf(t.slice(at, t[at] === "{" ? closeOf(t, at) : exprEnd(t, at, t.length)));
+      if (isObj(v)) integrationRegion("nuxt", v);
+      else if (v instanceof Code) opaqueIntegration("nuxt", "the @genclass/nuxt options");
+      else continue;
+      found++;
+    }
+    if (!found) regions.push({ rank: 4, kind: "nuxt", opts: empty() });
   }
   // @genclass/astro: the integration's call in astro.config (`import genclass from "@genclass/astro"`)
   const astro = /\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+(["'`])@genclass\/astro\2/.exec(t);
   if (astro) {
     for (const m of t.matchAll(new RegExp(`(?<![\\w$.])${esc(astro[1])}\\s*\\(\\s*`, "g"))) {
       const at = m.index + m[0].length;
-      if (t[at] === "{") regions.push({ rank: 4, kind: "astro", opts: integration(objectAt(t, at), ["observe", "guard"]) });
-      else if (t[at] === ")") regions.push({ rank: 4, kind: "astro", opts: {} });
-      else unread.push("the options passed to the Astro integration");
+      if (t[at] === "{") integrationRegion("astro", objectAt(t, at));
+      else if (t[at] === ")") regions.push({ rank: 4, kind: "astro", opts: empty() });
+      else opaqueIntegration("astro", "the options passed to the Astro integration");
     }
   }
-  // GenClass.init({...}), GenClass.init(), or GenClass.init(options) with the object the same file declares under that name
-  for (const m of t.matchAll(/\bGenClass\s*\??\.\s*init\s*\(\s*/g)) {
-    const o = argAt(t, m.index + m[0].length);
-    if (o) regions.push({ rank: 5, kind: "init", opts: o });
-    else unread.push("the options passed to GenClass.init(...)");
+
+  // GenClass.init(...) and createRuntime(...) (headless use, API.md), through any name the imports give them: a
+  // literal that certainly runs is read; one in a condition or a function, an identifier or code is a taint (the
+  // call still starts a runtime)
+  const start = (m, kind, target, name) => {
+    const at = m.index + m[0].length;
+    if (t[at] === ")") return void regions.push({ rank: 5, kind, opts: empty() });
+    const lit = objectAt(t, at);
+    if (lit && place(m.index).top) return add({ rank: 5, kind, opts: lit }, target);
+    regions.push({ rank: 5, kind, opts: empty() });
+    const read = lit && !lit[SPREAD] ? lit : null;
+    taint(target, 5, read && Object.keys(read), read, lit ? `${name}${SOMETIMES_NOTE}` : name);
+  };
+  const names = runtimeNames(t);
+  let inits = 0;
+  for (const m of t.matchAll(names.init)) {
+    inits++;
+    start(m, "init", "browser", INIT_UNREAD);
   }
-  // createRuntime(...) imported from @genclass/runtime (headless use, API.md): a runtime with its own defaults
-  const calls = createRuntimeCalls(t);
-  if (calls) {
-    for (const m of t.matchAll(calls)) {
-      const o = argAt(t, m.index + m[0].length);
-      if (o) regions.push({ rank: 5, kind: "create", opts: o });
-      else unread.push(CREATE_UNREAD);
-    }
-  }
+  // GenClass imported under a name no init(...) call was found on: it may start a runtime all the same
+  if (names.bound.length && !inits) regions.push({ rank: 5, kind: "maybe", opts: empty(), name: `GenClass, imported as ${names.bound[0]} (no call of its init(...) was found, so it may start with GenClass.init's defaults)` });
+  if (names.create) for (const m of t.matchAll(names.create)) start(m, "create", "create", CREATE_UNREAD);
   return { regions, unread };
 }
 
-const CREATE_UNREAD = "the options passed to createRuntime(...)";
-
 /**
- * The calls of @genclass/runtime's createRuntime in `t`, by the names its imports give it (`import { createRuntime }`,
- * `createRuntime as make`, `const { createRuntime } = require(...)`, `import * as gc` then `gc.createRuntime`), as one
- * pattern that ends just after the call's "(" (null when the text imports none): another library's createRuntime is
- * not GenClass's.
+ * The names this text gives @genclass/runtime's GenClass and createRuntime (`import gc from`, `{ GenClass as G }`,
+ * `createRuntime as make`, `import * as ns` then `ns.GenClass` or `ns.default`, `require(...)`, and the script tag's
+ * global GenClass), as the patterns of their calls (each ends just after the "("): another library's createRuntime is
+ * not GenClass's. `bound`: the names imports give GenClass.
  */
-function createRuntimeCalls(t) {
-  const names = [];
-  for (const m of t.matchAll(/\{([^{}]*)\}\s*(?:from\s*|=\s*(?:await\s+)?(?:require|import)\s*\(\s*)(["'`])@genclass\/runtime\2/g))
-    for (const part of m[1].split(",")) {
-      const p = /^\s*createRuntime\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/.exec(part);
-      if (p) names.push(esc(p[1] ?? "createRuntime"));
+function runtimeNames(t) {
+  const gc = [];
+  const create = [];
+  const bound = [];
+  const parts = (list, sub) => {
+    for (const part of list.split(",")) {
+      const p = /^\s*(GenClass|createRuntime)\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/.exec(part);
+      if (!p || (p[1] === "createRuntime" && sub)) continue;
+      const name = p[2] ?? p[1];
+      if (p[1] === "createRuntime") create.push(esc(name));
+      else {
+        gc.push(esc(name));
+        bound.push(name);
+      }
     }
-  for (const m of t.matchAll(/\bimport\s*\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\s*(["'`])@genclass\/runtime\2/g)) names.push(`${esc(m[1])}\\s*\\??\\.\\s*createRuntime`);
-  return names.length ? new RegExp(`(?<![\\w$.])(?:${[...new Set(names)].join("|")})\\s*\\(\\s*`, "g") : null;
+  };
+  // a namespace: ns.GenClass, and on the main entry ns.default (GenClass) and ns.createRuntime
+  const space = (name, sub) => {
+    const n = `${esc(name)}\\s*\\??\\.\\s*`;
+    gc.push(`${n}GenClass`);
+    if (!sub) {
+      gc.push(`${n}default`);
+      create.push(`${n}createRuntime`);
+    }
+    if (new RegExp(`(?<![\\w$.])${n}(?:GenClass${sub ? "" : "|default"})(?![\\w$])`).test(t)) bound.push(name);
+  };
+  const FROM = String.raw`(["'\`])@genclass\/runtime(\/auto(?:\/[\w-]+)?)?`;
+  for (const m of t.matchAll(new RegExp(String.raw`(?<![\w$.])import\s+(?!type\b)([A-Za-z_$][\w$]*)?\s*,?\s*(?:\{([^{}]*)\}|\*\s*as\s+([A-Za-z_$][\w$]*))?\s*from\s*${FROM}\4`, "g"))) {
+    const sub = !!m[5];
+    // the main entry's default export is GenClass; /auto's is the runtime it started
+    if (m[1] && m[1] !== "from" && !sub) {
+      gc.push(esc(m[1]));
+      bound.push(m[1]);
+    }
+    if (m[2]) parts(m[2], sub);
+    if (m[3]) space(m[3], sub);
+  }
+  for (const m of t.matchAll(new RegExp(String.raw`(?:const|let|var)\s+(?:\{([^{}]*)\}|([A-Za-z_$][\w$]*))\s*=\s*(?:await\s+)?(?:require|import)\s*\(\s*${FROM}\3\s*\)`, "g"))) {
+    if (m[1]) parts(m[1], !!m[4]);
+    if (m[2]) space(m[2], !!m[4]);
+  }
+  const alt = (xs) => [...new Set(xs)].join("|");
+  return {
+    init: new RegExp(`(?:\\bGenClass${gc.length ? `|(?<![\\w$.])(?:${alt(gc)})` : ""})\\s*\\??\\.\\s*init\\s*\\(\\s*`, "g"),
+    create: create.length ? new RegExp(`(?<![\\w$.])(?:${alt(create)})\\s*\\(\\s*`, "g") : null,
+    bound: [...new Set(bound)],
+  };
 }
 
 /** The options an integration passes on (mode, token, telemetry); its other keys never reach the runtime. */
@@ -545,6 +809,66 @@ const turnsOn = (o) =>
   !!o?.[SPREAD] ||
   ["telemetry", "model", "analytics", "sinks", "learn", "sample", "visual"].some((k) => o[k] !== undefined && o[k] !== false && !(Array.isArray(o[k]) && !o[k].length)) ||
   (o.mode !== undefined && o.mode !== "observe");
+
+// ------------------------------------------------------------- options code may set: the reading that sends more
+
+/** A value no text says (code, a spread, an identifier may set anything). */
+const UNKNOWN = Symbol("unknown");
+/** Two values compared as data (Code by its source). */
+const same = (v) => JSON.stringify(v, (_k, x) => (x instanceof Code ? `\u0000${x.src}` : x)) ?? "undefined";
+const isHttp = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
+/** How much each value of an option sends or keeps, higher is more (the order the readings below take). */
+const telemetryRank = (v) => (v === false ? 0 : isObj(v) && isHttp(v.endpoint) ? 1 : 2);
+const modelRank = (v) => (v === false ? 0 : isObj(v) && typeof v.baseUrl === "string" && v.baseUrl.trim() ? (isAbsolute(v.baseUrl) ? 2 : 1) : 3);
+const consentRank = (v) => (v === undefined || v === null || v instanceof Code ? 2 : v === true || v === "granted" ? 1 : 0);
+const breakerRank = (v) => (v === false ? 0 : isObj(v) && v.persist === false ? 1 : 2);
+const learnRank = (v) => {
+  if (!isObj(v)) return 0;
+  const p = v.persist;
+  return p === false ? 0 : p === "session" ? 1 : p === true || p === "local" || p instanceof Code || v.expectations === true ? 2 : 0;
+};
+const visualRank = (v) => {
+  const on = isObj(v) ? v.on : v;
+  return on !== true ? 0 : isObj(v) && (v.fix === true || (Array.isArray(v.fix) && v.fix.length > 0)) ? 2 : 1;
+};
+const modeRank = (v) => (typeof v === "string" ? MODES.indexOf(v) : -1);
+/** The value of `vals` that ranks highest by `rank` (the first of them), or `none`. */
+const top = (vals, rank, none) => vals.reduce((best, v) => (best === none || rank(v) > rank(best) ? v : best), none);
+
+/**
+ * For each option a taint may set: the value that sends and keeps more of what the files say (`known`: the reading
+ * without the code, and what the code sets where the text says it) and what code may set (`unknown`). Code may always
+ * leave the default (telemetry on to genclass.dev, the model from jsDelivr, no consent gate, the breaker's
+ * sessionStorage entry); what is off by default (analytics, page text, learned flows, the sample, sinks, the visual
+ * checks, an acting mode, the token) stays as the files say it.
+ */
+const WIDEN = {
+  telemetry: (known, unknown) => {
+    const page = known.some((v) => isObj(v) && isObj(v.include) && v.include.situation === true);
+    const best = unknown ? true : top(known, telemetryRank, false);
+    return telemetryRank(best) === 2 ? (page ? { include: { situation: true } } : true) : best;
+  },
+  model: (known, unknown) => (unknown ? {} : modelRank(top(known, modelRank, false)) === 3 ? {} : top(known, modelRank, false)),
+  consent: (known, unknown) => (unknown ? undefined : consentRank(top(known, consentRank, false)) === 2 ? undefined : top(known, consentRank, false)),
+  breaker: (known, unknown) => (unknown ? undefined : top(known, breakerRank, false)),
+  analytics: (known) => known.find((v) => v === true || isObj(v)) ?? known[0],
+  learn: (known) => top(known, learnRank, known[0]),
+  sample: (known) => known.find((v) => typeof v === "number" && v > 0 && v < 1) ?? known[0],
+  sinks: (known) => {
+    const all = known.flatMap((v) => (Array.isArray(v) ? v : v instanceof Code ? [v] : []));
+    return all.length ? all : known[0];
+  },
+  visual: (known) => top(known, visualRank, known[0]),
+  mode: (known) => top(known, modeRank, known[0]),
+  token: (known) => known.find((v) => typeof v === "string" && v) ?? known[0],
+};
+
+/** The value of option `k` given what may set it, `vals` (the first: the reading without the code): all agree, or WIDEN's. */
+function widen(k, vals) {
+  const known = vals.filter((v) => v !== UNKNOWN);
+  if (known.length === vals.length && known.every((v) => same(v) === same(known[0]))) return known[0];
+  return WIDEN[k](known, known.length < vals.length);
+}
 
 /** Later wins; two `model` objects are merged (the runtime's mergeConfig). */
 function mergeOptions(sources) {
@@ -573,32 +897,65 @@ const whereOf = (u) => (isAbsolute(u) ? { at: "other", host: hostOf(u) } : { at:
 /** The setup the regions describe (see readSetupText for the fields). `t` is the files' text, comments out. */
 function setupFrom(found, unreadIn, t) {
   const unread = [...unreadIn];
-  // a GENCLASS_CONFIG default (||=, ??=) never applies beside an assignment of a whole new object: that one either
-  // comes later and replaces it, or comes first and leaves the default nothing to fill
-  const replaced = found.some((r) => r.replace);
-  const regions = found.filter((r) => !(replaced && r.unset));
+  const taints = found.filter((r) => r.kind === "taint");
+  let regions = found.filter((r) => r.kind !== "taint");
   const code = (name, v) => {
     if (v instanceof Code) unread.push(name);
     return v instanceof Code;
   };
+  // window.GENCLASS_CONFIG set whole in more than one file or script: one of them applies, by the order they run, so
+  // the keys they disagree on are not read
+  const configs = regions.filter((r) => r.kind === "config");
+  if (configs.length > 1) {
+    const keys = [...new Set(configs.flatMap((r) => Object.keys(r.opts)))];
+    const differ = keys.filter((k) => new Set(configs.map((r) => same(r.opts[k]))).size > 1);
+    if (differ.length) {
+      for (const r of configs) taints.push({ target: "browser", rank: 3, keys: differ, vals: r.opts });
+      unread.push(`${GC} (set in more than one place)`);
+    }
+  }
+  const configKeys = new Set(configs.flatMap((r) => Object.keys(r.opts)));
+  // GenClass started from the /auto import or the script tag (without data-manual) when the app's code runs: a later
+  // GenClass.init(...) returns that runtime and ignores its options
+  if (regions.some((r) => (r.kind === "import" && r.auto) || (r.kind === "script" && !r.manual))) {
+    regions = regions.map((r) => {
+      if (r.kind !== "init" || !Object.keys(r.opts).length) return r;
+      taints.push({ target: "browser", rank: 5, keys: Object.keys(r.opts), vals: r.opts });
+      unread.push(`${INIT_UNREAD} (GenClass may already run from the /auto import or the script tag, which ignores a later call's options)`);
+      return { ...r, opts: empty() };
+    });
+  }
   // createRuntime(...) alone (headless use, API.md): no diagnostics unless its options set telemetry, no model unless
-  // they give model: {...}, no visual checks unless they turn them on (src/index.ts). Beside GenClass.init or the
-  // zero-code entries it is a second runtime: the map is theirs, and options of it that turn something on are named
+  // they give model: {...}, no visual checks unless they turn them on (src/index.ts). Options of it that are not read
+  // may turn any of them on: GenClass.init's defaults then, which send more. Beside GenClass.init or the zero-code
+  // entries it is a second runtime: the map is theirs, and a createRuntime that may turn something on is named
   const creates = regions.filter((r) => r.kind === "create");
-  const browser = regions.some((r) => r.kind !== "create" && (r.kind !== "import" || r.auto));
-  const headless = creates.length > 0 && !browser && !unread.includes(CREATE_UNREAD);
-  if (browser && creates.some((r) => turnsOn(r.opts))) unread.push(`${CREATE_UNREAD} (a second runtime, besides GenClass.init's)`);
+  const started = regions.some((r) => r.kind !== "create" && r.kind !== "maybe" && (r.kind !== "import" || r.auto)) || taints.some((x) => x.target === "browser");
+  const maybe = regions.find((r) => r.kind === "maybe");
+  if (!started && maybe && creates.length) unread.push(maybe.name);
+  const browser = started || !!maybe;
+  const createTaint = taints.some((x) => x.target === "create");
+  const headless = creates.length > 0 && !browser && !createTaint;
+  if (browser && (creates.some((r) => turnsOn(r.opts)) || createTaint)) unread.push(`${CREATE_UNREAD} (a second runtime, besides GenClass.init's)`);
   const ranked = regions.filter((r) => !browser || r.kind !== "create").sort((a, b) => a.rank - b.rank);
   const o = mergeOptions(ranked.map((r) => r.opts));
-  // a spread of GENCLASS_CONFIG itself (`{ ...window.GENCLASS_CONFIG, telemetry: false }`) is read where it is set
-  for (const r of ranked) {
-    const spread = (r.opts?.[SPREAD] ?? []).filter((x) => !isSelf(x.src));
-    if (spread.length) unread.push(`options spread in from code (...${spread[0].src})`);
+  // what code may set (a taint), where no source of a higher rank sets it for certain: the reading that sends and
+  // keeps more
+  const active = taints.filter((x) => x.target === "browser" || !browser);
+  const setAt = Object.create(null);
+  for (const r of ranked) for (const [k, v] of Object.entries(r.opts)) if (v !== undefined) setAt[k] = r.rank;
+  const widened = new Set();
+  for (const k of Object.keys(WIDEN)) {
+    const ts = active.filter((x) => x.rank >= (setAt[k] ?? -1) && (x.keys ? x.keys.includes(k) || (!!x.replace && configKeys.has(k)) : !(x.except ?? []).includes(k)));
+    if (!ts.length || o[k] instanceof Code) continue;
+    o[k] = widen(k, [o[k], ...ts.map((x) => (x.vals ? x.vals[k] : UNKNOWN))]);
+    widened.add(k);
   }
-  // the mode: the import names it (the strongest of them), a mode option wins over it
+  // the mode: the import names it (the strongest of them), a mode option wins over it (or, set by code that is not
+  // read, adds to it)
   const imported = ranked.filter((r) => r.kind === "import").map((r) => r.mode ?? "observe");
   let mode = imported.includes("heal") ? "heal" : imported.includes("guard") ? "guard" : "observe";
-  if (MODES.includes(o.mode)) mode = o.mode;
+  if (MODES.includes(o.mode)) mode = widened.has("mode") ? top([mode, o.mode], modeRank, mode) : o.mode;
   else code("mode", o.mode);
   // diagnostics: off, to genclass.dev, or to the app's own collector (telemetry.endpoint)
   const tel = o.telemetry;
@@ -754,13 +1111,20 @@ function setupFrom(found, unreadIn, t) {
 
 /**
  * The options that decide what is sent and kept, read from text (not executed): GenClass's own places in it (see the
- * module header), comments out. Text with none of them is read as the inside of an options object
- * (`telemetry: false, model: false`).
+ * module header), comments out. `text` is one file's text, or several files' (an array, each its own module). Text
+ * with none of GenClass's places is read as the inside of an options object (`telemetry: false, model: false`).
  */
 export function readSetupText(text) {
-  const t = stripComments(text);
-  let { regions, unread } = genclassRegions(t);
-  if (!regions.length && t.trim()) regions = [{ rank: 3, kind: "text", opts: objectOf(`{${t}}`, 0, t.length + 2) }];
+  const texts = (Array.isArray(text) ? text : [text]).map(stripComments);
+  const regions = [];
+  const unread = [];
+  for (const t of texts) {
+    const r = genclassRegions(t);
+    regions.push(...r.regions);
+    unread.push(...r.unread);
+  }
+  const t = texts.join("\n");
+  if (!regions.length && !unread.length && t.trim()) regions.push({ rank: 3, kind: "text", opts: objectOf(`{${t}}`, 0, t.length + 2) });
   return setupFrom(regions, unread, t);
 }
 
@@ -1116,7 +1480,7 @@ function setupRows(s, m = dataMap(s)) {
     ["Stored on the device", m.kept.length ? m.kept.map((x) => `${x.short}${x.held ? " (after consent)" : ""}`).join(", ") : "nothing"],
     ["Consent", consentRow(s, rtName)],
   );
-  if (s.unread?.length) rows.push(["Not read", `${list(s.unread)}: set by code, so this map shows what the files say without them`]);
+  if (s.unread?.length) rows.push(["Not read", `${list(s.unread)}: set by code, or not certain to apply, so for what they may set this map takes the reading that sends and keeps more`]);
   return rows;
 }
 

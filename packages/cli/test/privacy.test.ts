@@ -28,7 +28,8 @@ describe("genclass privacy: the setup, read from the project's files (src/privac
     expect(readSetupText("learn: { expectations: true }").learn).toBe("local");
     expect(readSetupText('learn: { persist: "session" }').learn).toBe("session");
     expect(readSetupText("learn: { expectations: true, persist: false }").learn).toBe("none");
-    expect(readSetupText('import "@genclass/runtime/auto/guard"; GENCLASS_CONFIG = { telemetry: false, learn: { persist: false }, model: { baseUrl: "/genclass-model/" } }')).toMatchObject({ mode: "guard", telemetry: "off", model: "self", learn: "none" });
+    // the config in its own file, as init writes it (in the import's own module it would run after GenClass started)
+    expect(readSetupText(['import "@genclass/runtime/auto/guard";', 'GENCLASS_CONFIG = { telemetry: false, learn: { persist: false }, model: { baseUrl: "/genclass-model/" } }'])).toMatchObject({ mode: "guard", telemetry: "off", model: "self", learn: "none" });
     expect(readSetupText('GenClass.init({ mode: "heal", telemetry: { endpoint: "https://collect.shop.example/v1", include: { situation: true } }, analytics: true, visual: { on: true, fix: true }, sinks: ["webhook:https://hooks.shop.example/g"] }); connectAgent(rt);')).toMatchObject({
       mode: "heal",
       telemetry: "own",
@@ -82,7 +83,7 @@ describe("genclass privacy: the setup, read from the project's files (src/privac
   });
 
   it('under consent: "pending" each recipient and stored entry waits for its part, the EU guidance says so, and a missing banner call is named', () => {
-    const s = { ...readSetupText('import "@genclass/runtime/auto"; GENCLASS_CONFIG = { consent: "pending", analytics: true }'), token: true, files: [], installed: true, app: "shop" } as any;
+    const s = { ...readSetupText(['import "@genclass/runtime/auto";', 'GENCLASS_CONFIG = { consent: "pending", analytics: true }']), token: true, files: [], installed: true, app: "shop" } as any;
     const m = dataMap(s);
     expect(m.sent.map((x) => x.to.split(" ")[0])).toEqual(["genclass.dev", "genclass.dev,", "cdn.jsdelivr.net"]);
     expect(m.sent[0]!.why).toContain("Only after the visitor grants diagnostics");
@@ -160,8 +161,8 @@ describe("genclass privacy: the setup, read from the project's files (src/privac
   });
 });
 
-/** dataMap of a setup read from text, with a token and as installed. */
-const mapOf = (text: string, over: Record<string, unknown> = {}) => {
+/** dataMap of a setup read from text (one file's, or several), with a token and as installed. */
+const mapOf = (text: string | string[], over: Record<string, unknown> = {}) => {
   const s = { ...readSetupText(text), token: true, files: [], installed: true, app: "shop", ...over } as any;
   return { s, m: dataMap(s) };
 };
@@ -326,7 +327,7 @@ describe("genclass privacy: options read from GenClass's own places only, each i
   });
 
   it("the opt-outs say what they stop: diagnostics and analytics, not sinks, the model or storage (finding 38)", () => {
-    const { m } = mapOf('import "@genclass/runtime/auto/guard"; GENCLASS_CONFIG = { sinks: ["webhook:https://hooks.example.com/x"] }');
+    const { m } = mapOf(['import "@genclass/runtime/auto/guard";', 'GENCLASS_CONFIG = { sinks: ["webhook:https://hooks.example.com/x"] }']);
     expect(m.optOuts[0]).toContain("no diagnostics or analytics are sent from that browser");
     expect(m.optOuts[0]).toContain("webhook sinks still post findings");
     expect(m.optOuts[0]).toContain("the model still downloads from cdn.jsdelivr.net");
@@ -442,32 +443,51 @@ describe("genclass privacy: read as the runtime reads it, so the map never says 
     expect(list.find((x: any) => x.id === "privacy").detail).toBe("on: anonymous counts to genclass.dev from public hosts");
   });
 
-  it("every way of setting window.GENCLASS_CONFIG is read, or named as not read", () => {
-    const off = [
-      "window.GENCLASS_CONFIG ||= { telemetry: false };",
-      "window.GENCLASS_CONFIG ??= { telemetry: false };",
+  it("window.GENCLASS_CONFIG is read only from a whole literal that certainly applies; every other way is named, with the reading that sends more", () => {
+    const IMPORT = 'import "@genclass/runtime/auto";';
+    // a literal at the top level of its own file (or of a script before the tag), on window, globalThis, window["..."]
+    for (const src of [
+      "window.GENCLASS_CONFIG = { telemetry: false };",
       'window["GENCLASS_CONFIG"] = { telemetry: false };',
-      "const config = { telemetry: false };\nwindow.GENCLASS_CONFIG = config;",
-      "(window as any).GENCLASS_CONFIG = config as InitOptions;\nconst config: InitOptions = { telemetry: false };",
-      "window.GENCLASS_CONFIG = Object.assign(window.GENCLASS_CONFIG || {}, { telemetry: false });",
-      "Object.assign(window.GENCLASS_CONFIG, { telemetry: false });",
-      "window.GENCLASS_CONFIG = window.GENCLASS_CONFIG || { telemetry: false };",
-      "window.GENCLASS_CONFIG = { ...window.GENCLASS_CONFIG, telemetry: false };",
-      "window.GENCLASS_CONFIG.telemetry = false;\nstart();",
-      "<script>window.GENCLASS_CONFIG = { telemetry: false }</script><script src=\"/g/genclass.global.min.js\"></script>",
-    ];
-    for (const src of off) expect([src, readSetupText(`import "@genclass/runtime/auto";\n${src}`)]).toMatchObject([src, { telemetry: "off", unread: [] }]);
-    // a default (??=) never applies beside an assignment of a whole new object; one key set later does
-    expect(readSetupText('window.GENCLASS_CONFIG ??= { telemetry: false };\nwindow.GENCLASS_CONFIG = { token: "gc_AbCdEfGhIjKlMnOpQrStUv" };')).toMatchObject({ telemetry: "on", tokenInOptions: true });
-    expect(readSetupText('window.GENCLASS_CONFIG ??= { telemetry: false };\nwindow.GENCLASS_CONFIG.mode = "guard";')).toMatchObject({ telemetry: "off", mode: "guard" });
-    // what cannot be read is said, and the map keeps what it would send without it
+      "(globalThis as { GENCLASS_CONFIG?: object }).GENCLASS_CONFIG = { telemetry: false } as const;",
+      "const a = 1\nif (b) start()\nwindow.GENCLASS_CONFIG = { telemetry: false }",
+      "window.GENCLASS_CONFIG = { telemetry: false }\nObject.assign(window, { a: 1 })\ndeclare global { interface Window { GENCLASS_CONFIG: object } }",
+      // a later whole literal replaces what came before it in the same script
+      "window.GENCLASS_CONFIG ??= { model: false };\nwindow.GENCLASS_CONFIG.mode = 'heal';\nwindow.GENCLASS_CONFIG = { telemetry: false };",
+    ])
+      expect([src, readSetupText([IMPORT, src])]).toMatchObject([src, { telemetry: "off", model: "cdn", mode: "observe", unread: [] }]);
+    expect(readSetupText('<script>window.GENCLASS_CONFIG = { telemetry: false }</script><script src="/g/genclass.global.min.js"></script>')).toMatchObject({ telemetry: "off", unread: [] });
+    // a key after a spread is certain; the spread is named
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG = { ...window.GENCLASS_CONFIG, telemetry: false };"])).toMatchObject({ telemetry: "off", unread: ["options spread in from code (...window.GENCLASS_CONFIG)"] });
+    // a default, Object.assign, an identifier, code, one key set on its own: named, and telemetry stays on
     for (const [src, name] of [
+      ["window.GENCLASS_CONFIG ||= { telemetry: false };", "window.GENCLASS_CONFIG"],
+      ["window.GENCLASS_CONFIG ??= { telemetry: false };", "window.GENCLASS_CONFIG"],
+      ["const config = { telemetry: false };\nwindow.GENCLASS_CONFIG = config;", "window.GENCLASS_CONFIG"],
+      ["window.GENCLASS_CONFIG = Object.assign(window.GENCLASS_CONFIG || {}, { telemetry: false });", "window.GENCLASS_CONFIG"],
+      ["Object.assign(window.GENCLASS_CONFIG, { telemetry: false });", "window.GENCLASS_CONFIG"],
+      ["window.GENCLASS_CONFIG = window.GENCLASS_CONFIG || { telemetry: false };", "window.GENCLASS_CONFIG"],
+      ["window.GENCLASS_CONFIG.telemetry = false;\nstart();", "window.GENCLASS_CONFIG.telemetry"],
       ["window.GENCLASS_CONFIG = makeConfig();", "window.GENCLASS_CONFIG"],
       ["window.GENCLASS_CONFIG &&= { telemetry: false };", "window.GENCLASS_CONFIG"],
       ['window.GENCLASS_CONFIG.telemetry.endpoint = "https://c.example/v1";', "window.GENCLASS_CONFIG.telemetry.endpoint"],
       ["window.GENCLASS_CONFIG = Object.assign(window.GENCLASS_CONFIG || {}, defaults());", "window.GENCLASS_CONFIG"],
+      ["delete window.GENCLASS_CONFIG.telemetry;", "window.GENCLASS_CONFIG.telemetry"],
+      ['Object.defineProperty(window, "GENCLASS_CONFIG", { value: { telemetry: false } });', "window.GENCLASS_CONFIG"],
+      ["Object.assign(window, { GENCLASS_CONFIG: { telemetry: false } });", "window.GENCLASS_CONFIG"],
     ])
-      expect([src, readSetupText(src)]).toMatchObject([src, { telemetry: "on", unread: [name] }]);
+      expect([src, readSetupText([IMPORT, src])]).toMatchObject([src, { telemetry: "on", unread: [name] }]);
+    // where every way says the same, that is the reading
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG = { telemetry: false };\nif (dnt) window.GENCLASS_CONFIG.telemetry = false;"])).toMatchObject({ telemetry: "off" });
+    // a sink added by code is a recipient set up in code
+    const pushed = mapOf([IMPORT, "window.GENCLASS_CONFIG = { telemetry: false, model: false };\nwindow.GENCLASS_CONFIG.sinks.push(hook);"]);
+    expect(pushed.s).toMatchObject({ telemetry: "off", sinkCode: 1, unread: ["window.GENCLASS_CONFIG.sinks"] });
+    expect(pushed.m.sent.map((x) => x.to)).toEqual(["a sink set up in code (its recipient is not read from the files)"]);
+    // a default (??=) never applies beside an assignment of a whole new object
+    expect(readSetupText('window.GENCLASS_CONFIG ??= { telemetry: false };\nwindow.GENCLASS_CONFIG = { token: "gc_AbCdEfGhIjKlMnOpQrStUv" };')).toMatchObject({ telemetry: "on", tokenInOptions: true });
+    // what a not-read write turns on stays on (analytics as the text says), and an acting mode counts
+    expect(readSetupText('window.GENCLASS_CONFIG ??= { telemetry: false };\nwindow.GENCLASS_CONFIG.mode = "guard";')).toMatchObject({ telemetry: "on", mode: "guard" });
+    expect(readSetupText("window.GENCLASS_CONFIG = { telemetry: false };\nObject.assign(window.GENCLASS_CONFIG, { analytics: true });")).toMatchObject({ telemetry: "off", analytics: true });
     // comparisons and type declarations are not assignments
     expect(readSetupText("if (window.GENCLASS_CONFIG == null) start(window.GENCLASS_CONFIG === x);\ndeclare global { interface Window { GENCLASS_CONFIG?: object } }")).toMatchObject({ telemetry: "on", unread: [] });
   });
@@ -517,6 +537,134 @@ describe("genclass privacy: read as the runtime reads it, so the map never says 
     const { s, m } = mapOf(tag('data-consent="granted"'));
     expect(markdown(s, m, "2026-11-14")).not.toContain("| Consent | no consent gate");
     expect(m.eu[0]).toContain('GenClass waits for consent (consent: "pending")');
+  });
+
+  it("a key set inside a condition does not always apply: telemetry and the model stay on, and it is named (round 3, item 1)", () => {
+    const IMPORT = 'import "@genclass/runtime/auto";';
+    const dnt = mapOf([IMPORT, 'window.GENCLASS_CONFIG = { token };\nif (navigator.doNotTrack === "1") window.GENCLASS_CONFIG.telemetry = false;']);
+    expect(dnt.s).toMatchObject({ telemetry: "on", unread: ["window.GENCLASS_CONFIG.telemetry (in a condition or a function)"] });
+    expect(dnt.m.sent[0]!.to).toMatch(/^genclass\.dev/);
+    expect(markdown(dnt.s, dnt.m, "2026-11-14")).toContain("| Not read | window.GENCLASS_CONFIG.telemetry (in a condition or a function): set by code, or not certain to apply, so for what they may set this map takes the reading that sends and keeps more |");
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG = { telemetry: false };\nif (slow) window.GENCLASS_CONFIG.model = false;"])).toMatchObject({ telemetry: "off", model: "cdn" });
+    // in a function or a ternary, too; page text the literal asked for stays on
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG = {};\nexport function quiet() { window.GENCLASS_CONFIG.telemetry = false; }"]).telemetry).toBe("on");
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG = {};\ndnt ? (window.GENCLASS_CONFIG.telemetry = false) : 0;"]).telemetry).toBe("on");
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG = { telemetry: { include: { situation: true } } };\nif (x) window.GENCLASS_CONFIG.telemetry = false;"])).toMatchObject({ telemetry: "on", situation: true });
+  });
+
+  it("Object.assign(window.GENCLASS_CONFIG || {}, ...) on its own is not read as setting GENCLASS_CONFIG (round 3, item 2)", () => {
+    for (const src of ["Object.assign(window.GENCLASS_CONFIG || {}, { telemetry: false });", "Object.assign(window.GENCLASS_CONFIG ?? {}, { telemetry: false });"])
+      expect([src, readSetupText(['import "@genclass/runtime/auto";', src])]).toMatchObject([src, { telemetry: "on", unread: ["window.GENCLASS_CONFIG"] }]);
+  });
+
+  it("two defaults are not merged: only the first ||= that runs applies (round 3, item 3)", () => {
+    expect(readSetupText(['import "@genclass/runtime/auto";', "window.GENCLASS_CONFIG ||= { telemetry: false };\nwindow.GENCLASS_CONFIG ||= { model: false };"])).toMatchObject({ telemetry: "on", model: "cdn", unread: ["window.GENCLASS_CONFIG"] });
+  });
+
+  it("an identifier given to GENCLASS_CONFIG is not looked up: a function's const, a later const, another script's (round 3, item 4)", () => {
+    for (const src of [
+      "function a() { const config = { telemetry: false } }\nconst config = { mode: 'guard' };\nwindow.GENCLASS_CONFIG = config;",
+      "(window as any).GENCLASS_CONFIG = config as InitOptions;\nconst config = { telemetry: false };",
+    ])
+      expect([src, readSetupText(['import "@genclass/runtime/auto";', src])]).toMatchObject([src, { telemetry: "on", mode: "observe", unread: ["window.GENCLASS_CONFIG"] }]);
+    expect(readSetupText('<script>window.GENCLASS_CONFIG = cfg</script><script>const cfg = { telemetry: false }</script><script src="/g/genclass.global.min.js"></script>')).toMatchObject({ telemetry: "on", unread: ["window.GENCLASS_CONFIG"] });
+  });
+
+  it("order: a write after a self-spread is not dropped, and a key set before a whole new object is (round 3, item 5)", () => {
+    const IMPORT = 'import "@genclass/runtime/auto";';
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG = { ...window.GENCLASS_CONFIG, mode: 'guard' };\nwindow.GENCLASS_CONFIG ??= { telemetry: false };"])).toMatchObject({ telemetry: "on", mode: "guard" });
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG.telemetry = false;\nwindow.GENCLASS_CONFIG = { mode: 'guard' };"])).toMatchObject({ telemetry: "on", mode: "guard", unread: [] });
+    // two whole literals in one script: the later one is GenClass's
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG = { telemetry: false, analytics: true };\nwindow.GENCLASS_CONFIG = { mode: 'guard' };"])).toMatchObject({ telemetry: "on", analytics: false, mode: "guard" });
+    // in two files, either may run last: what they disagree on is not read
+    expect(readSetupText([IMPORT, "window.GENCLASS_CONFIG = { telemetry: false, model: false };", "window.GENCLASS_CONFIG = { model: false };"])).toMatchObject({ telemetry: "on", model: "off", unread: ["window.GENCLASS_CONFIG (set in more than one place)"] });
+  });
+
+  it("writes through ||= {}, ??= {} and TypeScript's ! are named (round 3, item 6)", () => {
+    for (const [src, name] of [
+      ["Object.assign(window.GENCLASS_CONFIG ||= {}, { telemetry: false });", "window.GENCLASS_CONFIG"],
+      ["(window.GENCLASS_CONFIG ??= {}).telemetry = false;", "window.GENCLASS_CONFIG"],
+      ["window.GENCLASS_CONFIG!.telemetry = false;", "window.GENCLASS_CONFIG.telemetry"],
+      ["(window.GENCLASS_CONFIG as InitOptions).telemetry = false;", "window.GENCLASS_CONFIG.telemetry"],
+    ])
+      expect([src, readSetupText(['import "@genclass/runtime/auto";', src])]).toMatchObject([src, { telemetry: "on", unread: [name] }]);
+  });
+
+  it("createRuntime with a spread is not read as headless: the spread may turn telemetry and the model on (round 3, item 7)", () => {
+    const IMPORT = 'import { createRuntime } from "@genclass/runtime";\n';
+    for (const [src, spread] of [
+      ["createRuntime({ ...window.GENCLASS_CONFIG })", "window.GENCLASS_CONFIG"],
+      ["createRuntime({ ...base })", "base"],
+    ])
+      expect([src, readSetupText(`${IMPORT}${src}`)]).toMatchObject([src, { headless: false, telemetry: "on", model: "cdn", unread: [`options spread in from code (...${spread})`] }]);
+    // a key after the spread is certain
+    expect(readSetupText(`${IMPORT}createRuntime({ ...base, telemetry: false })`)).toMatchObject({ telemetry: "off", model: "cdn" });
+  });
+
+  it("GenClass.init through the default import or a namespace counts as a browser runtime (round 3, item 8)", () => {
+    expect(readSetupText('import gc, { createRuntime } from "@genclass/runtime";\ngc.init({});\ncreateRuntime();')).toMatchObject({ headless: false, telemetry: "on", model: "cdn" });
+    expect(readSetupText('import * as gc from "@genclass/runtime";\ngc.GenClass.init();\ngc.createRuntime();')).toMatchObject({ headless: false, telemetry: "on" });
+    expect(readSetupText('import * as gc from "@genclass/runtime";\ngc.default.init();\ngc.createRuntime();')).toMatchObject({ headless: false, telemetry: "on" });
+    expect(readSetupText('import { GenClass as G, createRuntime } from "@genclass/runtime";\nG.init({ telemetry: false });\ncreateRuntime();')).toMatchObject({ headless: false, telemetry: "off", model: "cdn" });
+    // imported, but no init(...) call found on it: it may still start one, and that is said
+    expect(readSetupText('import gc, { createRuntime } from "@genclass/runtime";\nstart(gc);\ncreateRuntime();')).toMatchObject({
+      headless: false,
+      telemetry: "on",
+      unread: ["GenClass, imported as gc (no call of its init(...) was found, so it may start with GenClass.init's defaults)"],
+    });
+    // another entry's default export is not GenClass
+    expect(readSetupText('import { createRuntime } from "@genclass/runtime";\nimport hook from "@genclass/runtime/sinks/webhook";\ncreateRuntime({ telemetry: false });')).toMatchObject({ headless: true, unread: [] });
+  });
+
+  it("GenClass.init(options) with an identifier is not read, in any form: the defaults, which send more, and a Not read row (round 3, item 9)", () => {
+    for (const arg of ["o", "o as InitOptions", "o!"])
+      expect([arg, readSetupText(`const o = { telemetry: false };\nGenClass.init(${arg});`)]).toMatchObject([arg, { telemetry: "on", model: "cdn", unread: ["the options passed to GenClass.init(...)"] }]);
+  });
+
+  it("a spread of GENCLASS_CONFIG into GenClass.init is named as not read (round 3, item 10)", () => {
+    expect(readSetupText("GenClass.init({ ...window.GENCLASS_CONFIG, mode: 'guard' })")).toMatchObject({ mode: "guard", telemetry: "on", unread: ["options spread in from code (...window.GENCLASS_CONFIG)"] });
+  });
+
+  it("GENCLASS_CONFIG in the module that imports /auto is set after GenClass starts (ES imports run first)", () => {
+    expect(readSetupText('import "@genclass/runtime/auto";\nwindow.GENCLASS_CONFIG = { telemetry: false };')).toMatchObject({
+      telemetry: "on",
+      unread: ["window.GENCLASS_CONFIG, set after the /auto import in the same module (GenClass has started by then and never reads it)"],
+    });
+    expect(readSetupText('window.GENCLASS_CONFIG = { telemetry: false };\nimport "@genclass/runtime/auto";')).toMatchObject({
+      telemetry: "on",
+      unread: ["window.GENCLASS_CONFIG (set in the module that imports @genclass/runtime/auto, whose import runs first)"],
+    });
+    // a require runs in place: a config set before it applies
+    expect(readSetupText('window.GENCLASS_CONFIG = { telemetry: false };\nrequire("@genclass/runtime/auto");').telemetry).toBe("off");
+    // its own file, or a classic script before a module: applies
+    expect(readSetupText(["window.GENCLASS_CONFIG = { telemetry: false };", 'import "@genclass/runtime/auto";']).telemetry).toBe("off");
+    expect(readSetupText('<script>window.GENCLASS_CONFIG = { telemetry: false }</script>\n<script type="module">import "@genclass/runtime/auto";</script>').telemetry).toBe("off");
+  });
+
+  it("GenClass.init's options are not read where GenClass already starts from /auto or the script tag, nor inside a condition or a function", () => {
+    expect(readSetupText(['import "@genclass/runtime/auto";', 'import { GenClass } from "@genclass/runtime";\nGenClass.init({ telemetry: false });'])).toMatchObject({
+      telemetry: "on",
+      unread: ["the options passed to GenClass.init(...) (GenClass may already run from the /auto import or the script tag, which ignores a later call's options)"],
+    });
+    const tag = (attrs: string) => `<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.4.0/dist/genclass.global.min.js"${attrs}></script>\n<script>GenClass.init({ telemetry: false })</script>`;
+    expect(readSetupText(tag("")).telemetry).toBe("on");
+    expect(readSetupText(tag(" data-manual")).telemetry).toBe("off");
+    for (const src of [
+      "useEffect(() => { GenClass.init({ telemetry: false }) }, [])",
+      "if (consented) GenClass.init({ telemetry: false })",
+      "cond ? GenClass.init({ telemetry: false }) : null",
+      "import.meta.env.PROD && GenClass.init({ telemetry: false })",
+      "export function start() {\n  return GenClass.init({ telemetry: false });\n}",
+    ])
+      expect([src, readSetupText(src)]).toMatchObject([src, { telemetry: "on", unread: ["the options passed to GenClass.init(...) (in a condition or a function)"] }]);
+    // at the top level it is read: in a declaration, an export, a call's arguments, after an if on its own line
+    for (const src of [
+      "export const rt: Runtime = GenClass.init({ telemetry: false });",
+      "connectAgent(GenClass.init({ telemetry: false }));",
+      "if (dev) setup()\nGenClass.init({ telemetry: false })",
+      "if (dev) { setup(); }\nGenClass.init({ telemetry: false });",
+    ])
+      expect([src, readSetupText(src)]).toMatchObject([src, { telemetry: "off", unread: [] }]);
   });
 
   it("the runtime README says what still runs before consent, as the CLI's pending line does (finding 81)", () => {
