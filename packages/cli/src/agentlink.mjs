@@ -5,41 +5,51 @@
 // `genclass doctor --fix` (doctor.mjs).
 //
 // Invariants:
-// - Pure: reads files and returns the changes ({ file, rel, kind: "modify", before, after, what }); nothing is written
-//   here. The caller shows them and asks first.
-// - Only next to init's own lines: right after the /auto import init marked, or after the block of a file init
-//   created, never in code the person wrote (a setup by hand gets the lines to add instead). Imports stay in the
-//   import section (ESLint's import/first, an error in Create React App's build): when more imports follow that
-//   place, only the two imports go there and the call goes in a block of its own right after the last of them, so it
-//   still runs before the app's own code (an entry that throws while the page loads, or awaits at the top, is linked
-//   before it does). Only where the end of the imports cannot be read safely does the call go at the end of the file.
-//   A call followed by a line a missing semicolon would join to it (`(`, `[`, a template) ends with one.
+// - Pure: reads files and returns the changes ({ file, rel, kind: "create" | "modify", before, after, what }); nothing
+//   is written here. The caller shows them, asks first, and writes them in their order: the link's file before the
+//   line that imports it.
+// - The person's code is never parsed or edited. The link is a file of its own next to the entry (genclass.agent.ts,
+//   or genclass.agent.js beside a JavaScript entry; beside Next.js's pages/_app the folder above, as init does for
+//   genclass.config), one genclass:init block from its first line to its last. The entry gets one marked line,
+//   `import "./genclass.agent"; // genclass:init` (".js" on a JavaScript file's), right after init's own marked /auto
+//   import, or after the block of a file init created. Imports stay first (ESLint's import/first, an error in Create
+//   React App's build), and a module's imports run in their order before its own code, so the link runs right after
+//   /auto and before the app's code (an entry that throws while the page loads, or awaits at the top, is linked
+//   before it does). The line follows a whole line of init's, and an import declaration ends at a line break before
+//   anything but `with {`, so it never joins the line after it, whatever the app's own code is.
 // - Every form written here is one `genclass remove` takes out (packages/runtime/bin/lib/edit.mjs LINE_RE and
-//   BLOCK_RE): blocks between genclass:init markers, or in Astro one marked <script> line after init's. The runtime
-//   package's own `remove` knows them from the release after 0.3.0-beta.6 (beta.6's refuses a linked file).
+//   BLOCK_RE): the import line, and the file, whose first line is init's created-file header, so remove deletes it as
+//   it does genclass.config; in Astro one marked <script> line after init's. The runtime package's own `remove`
+//   knows them from the release after 0.3.0-beta.6 (beta.6's refuses a linked file).
 // - Only where the installed @genclass/runtime has the agent entry (its package.json exports "./agent", 0.3.0-beta.1
 //   and later): an older one (0.2.x, npm's latest) or none installed gets the upgrade to run instead, never a link
 //   that would stop the dev server and the build from resolving @genclass/runtime/agent. Plug'n'Play installs (Yarn's
 //   default, pnpm's node-linker=pnp) have no node_modules: there the lockfile next to .pnp.cjs gives the version.
 // - Development builds only, with the check init itself uses for the framework's devtools line: import.meta.env.DEV
 //   (Vite, SvelteKit, Astro, React Router and Remix on Vite), process.env.NODE_ENV === "development" (Next.js, Create
-//   React App, webpack, rspack, rsbuild, parcel), with `typeof window !== "undefined"` in a file that also runs on the
-//   server. A production build drops the branch and, with it, the agent entry.
+//   React App, webpack, rspack, rsbuild, parcel), with `typeof window !== "undefined"` where the entry also runs on
+//   the server. A production build drops the branch and, with it, the agent entry. In Next.js the file starts with
+//   "use client", as init's genclass-init component does.
 // - A framework it cannot plan safely (Angular, Nuxt's plugin, a plain HTML script tag, a bundler that may not define
 //   process.env.NODE_ENV) gets no change: the lines to add by hand, and where (for Nuxt, a marked block remove takes
-//   out with the plugin).
+//   out with the plugin). So does a project with a genclass.agent file of its own where the link's file would go.
 
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { isFile, readText } from "../../runtime/bin/lib/detect.mjs";
-import { appendEnd, codeStyle } from "../../runtime/bin/lib/edit.mjs";
+import { codeStyle, eolOf } from "../../runtime/bin/lib/edit.mjs";
 import { channelOf, compareVersions, VERSION } from "../../runtime/bin/lib/version.mjs";
 import { lockVersion } from "./suggest/repo.mjs";
 
+/**
+ * The first line of the link's file: init's created-file header ("genclass:init start: GenClass Runtime"), so
+ * `remove` deletes the file once its block is out, as it does the files init creates.
+ */
+export const AGENT_FILE_START = "// genclass:init start: GenClass Runtime's coding-agent link, development builds only, imported right after GenClass's import (npx genclass remove deletes this file)";
+/** The start of a marked block holding the link, as the lines to add for Nuxt's plugin are. */
 export const AGENT_START = "// genclass:init start: the coding-agent link, development builds only: GenClass.init() returns the running runtime (npx genclass remove takes it out)";
-export const AGENT_START_BOUND = "// genclass:init start: the coding-agent link, development builds only: genclass is the running runtime (npx genclass remove takes it out)";
-/** The block of the link's two imports when the app's own imports follow them (its call is after those, in a second block). */
-export const AGENT_IMPORTS_START = "// genclass:init start: the coding-agent link's imports; its call is in a second block after this file's imports (npx genclass remove takes both out)";
 export const AGENT_END = "// genclass:init end";
+/** The link's file next to the entry, without its extension. */
+export const AGENT_FILE = "genclass.agent";
 /** The first runtime release with the agent entry (@genclass/runtime/agent). */
 export const AGENT_SINCE = "0.3.0-beta.1";
 
@@ -59,6 +69,8 @@ const AUTO_IMPORT = /^\s*import\s+(?:[\w*{}\s,]+\s+from\s+)?["']@genclass\/runti
 const BOUND = /^\s*import\s+genclass\s+from\s+["']@genclass\/runtime\/auto(?:\/(?:observe|guard|heal))?["']/m;
 /** Astro: init's marked <script> line in a layout's <head>. */
 const ASTRO_SCRIPT = /^\s*<script>\s*import\s+(?:genclass\s+from\s+)?["']@genclass\/runtime\/auto(?:\/(?:observe|guard|heal))?["'].*\/\/\s*genclass:init\s*<\/script>\s*$/;
+/** The entry's marked import of the link's file; group 1 is its specifier. */
+const LINK_IMPORT = /^\s*import\s+["']((?:\.{1,2}\/)+(?:[\w.-]+\/)*genclass\.agent(?:\.[cm]?[jt]s)?)["'];?\s*\/\/\s*genclass:init\s*$/;
 /** Tests, fixtures and end-to-end specs: a generated regression test names connectAgent without being the link. */
 const TEST_FILE = /(?:^|\/)(?:tests?|__tests__|e2e|fixtures?|__mocks__)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/;
 /** The link in a file: a call of connectAgent, in a file that names the agent entry. */
@@ -67,167 +79,119 @@ const LINKED = (t) => /@genclass\/runtime\/agent/.test(t) && /connectAgent\s*\(/
 const posix = (p) => p.split(sep).join("/");
 /** Lines with their terminators: "a\nb" -> ["a\n", "b"]. */
 const partsOf = (text) => text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+const linesOf = (text) => partsOf(text).map((p) => p.replace(/\r?\n$/, ""));
 const indentOf = (line) => (/^[ \t]*/.exec(line) ?? [""])[0];
+/** Whether `text` is the link's file as this command writes it: its header first, and the link in it. */
+const isLinkFile = (text) => String(text ?? "").replace(/^﻿/, "").startsWith(AGENT_FILE_START) && LINKED(String(text));
 
-/** The text with `block` (lines, no terminators) inserted after line `i`, each line ended like that line. */
-function insertAfter(text, i, block) {
+/** The text with `line` (no terminator) inserted after line `i`, ended as that line is. */
+function insertAfter(text, i, line) {
   const parts = partsOf(text);
   const own = /\r\n$/.test(parts[i]) ? "\r\n" : parts[i].endsWith("\n") ? "\n" : null;
   if (own) {
-    parts.splice(i + 1, 0, block.map((l) => `${l}${own}`).join(""));
+    parts.splice(i + 1, 0, `${line}${own}`);
     return parts.join("");
   }
-  // the last line had no line break: the block goes after one, and the file still ends without one
-  const eol = text.includes("\r\n") ? "\r\n" : "\n";
-  return `${parts.join("")}${eol}${block.join(eol)}`;
+  // the last line had no line break: the line goes after one, and the file still ends without one
+  return `${parts.join("")}${eolOf(text)}${line}`;
 }
 
 /**
- * The lines of the link, in a file's quote and semicolon style. `bound`: the file has init's `genclass` binding, and
- * the link is the dynamic import that mirrors init's devtools line (Next.js); else the two static imports and the
- * call (`GenClass.init()` returns the runtime /auto started). `last`: what ends the call (default `semi`).
+ * Where init's own /auto import is in an entry's lines: its marked line, else the end of the block of a file init
+ * created that holds it; -1 when there is none.
  */
-export function linkBlock(cond, { q = '"', semi = ";", bound = false, last = semi } = {}) {
-  if (bound) return [AGENT_START_BOUND, `if (${cond}) import(${q}@genclass/runtime/agent${q}).then(({ connectAgent }) => connectAgent(genclass))${last}`, AGENT_END];
-  return [AGENT_START, ...linkImports({ q, semi }), linkCall(cond, { semi: last }), AGENT_END];
-}
-
-const linkImports = ({ q = '"', semi = ";" } = {}) => [`import { GenClass } from ${q}@genclass/runtime${q}${semi}`, `import { connectAgent } from ${q}@genclass/runtime/agent${q}${semi}`];
-const linkCall = (cond, { semi = ";" } = {}) => `if (${cond}) connectAgent(GenClass.init())${semi}`;
-
-/** The first line of an import declaration (not import() or import.meta). */
-const IMPORT_DECL = /^import(?:\s|[{*"']|$)/;
-const NOT_DECL = /^import\s*[(.]/;
-/** What ends an import declaration's clause: `from "x"`, a bare `import "x"`, TypeScript's `= require("x")`. */
-const SPECIFIER = /^import\s*["'][^"'\n]*["']|\bfrom\s*["'][^"'\n]*["']|=\s*require\s*\(\s*["'][^"'\n]*["']\s*\)/;
-/** A line that would continue a statement before it that has no semicolon (ASI does not end it there). */
-const CONTINUES = /^(?:[([`+\-<]|\/(?![/*]))/;
-/** How many lines one import declaration may take before the scan gives up. */
-const MAX_DECL = 200;
-const dropComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-
-/**
- * The last line of import declaration `i` (one line or several, with import attributes), or -1 when it cannot be
- * read safely (no module specifier, or code after it on its line).
- */
-function declEnd(lines, i) {
-  let text = lines[i].trim();
-  for (let j = i; j < lines.length && j < i + MAX_DECL; j++) {
-    if (j > i) text += `\n${lines[j]}`;
-    if (NOT_DECL.test(text)) return -1;
-    const m = SPECIFIER.exec(text);
-    if (!m) continue;
-    let rest = text.slice(m.index + m[0].length);
-    let k = j;
-    if (/^\s*(?:with|assert)\s*\{/.test(rest)) {
-      while (!rest.includes("}")) {
-        if (++k >= lines.length || k >= i + MAX_DECL) return -1;
-        rest += `\n${lines[k]}`;
-      }
-      rest = rest.slice(rest.indexOf("}") + 1);
+function autoLine(lines) {
+  const at = lines.findIndex((l) => MARKED_AUTO.test(l));
+  if (at >= 0) return at;
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes("genclass:init start")) start = i;
+    else if (lines[i].includes("genclass:init end")) {
+      if (start >= 0 && lines.slice(start + 1, i).some((l) => AUTO_IMPORT.test(l))) return i;
+      start = -1;
     }
-    return /^\s*;?\s*$/.test(dropComments(rest)) ? k : -1;
   }
   return -1;
 }
 
 /**
- * The last line of the imports that follow line `at` (comments and blank lines between them skipped), before the
- * app's first other statement: `at` itself when that statement (or nothing) comes right after it. -1 when the import
- * section cannot be read safely: a comment that shares its line with code, a declaration whose end is unclear.
+ * Where the link's file goes for `entry`: next to it, except beside Next.js's pages/_app, where pages/ is routed (a
+ * file there would be a page): then the folder above, as init's genclass.config. genclass.agent.ts beside a
+ * TypeScript entry, else genclass.agent.js.
  */
-function importsEnd(lines, at) {
-  let last = at;
-  for (let i = at + 1; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (t === "" || t.startsWith("//")) continue;
-    if (t.startsWith("/*")) {
-      let j = i;
-      let close = lines[i].indexOf("*/", lines[i].indexOf("/*") + 2);
-      while (close < 0 && ++j < lines.length) close = lines[j].indexOf("*/");
-      if (close < 0 || dropComments(lines[j].slice(close + 2)).trim() !== "") return -1;
-      i = j;
-      continue;
-    }
-    if (!IMPORT_DECL.test(t) || NOT_DECL.test(t)) return last;
-    const end = declEnd(lines, i);
-    if (end < 0) return -1;
-    last = i = end;
-  }
-  return last;
-}
-
-/** Whether the first code after line `i` would join a statement on line `i` that has no semicolon. */
-function continuesAfter(lines, i) {
-  for (let j = i + 1; j < lines.length; j++) {
-    const t = lines[j].trim();
-    if (t === "" || t.startsWith("//")) continue;
-    return CONTINUES.test(t) && !t.startsWith("/*");
-  }
-  return false;
+export function linkFileFor(project, entry) {
+  const ts = /\.[cm]?tsx?$/.test(entry);
+  let dir = dirname(entry);
+  if (project?.framework === "next" && /[\\/]pages[\\/]_app\.[cm]?[jt]sx?$/.test(entry)) dir = dirname(dir);
+  return join(dir, `${AGENT_FILE}.${ts ? "ts" : "js"}`);
 }
 
 /**
- * The entry file's text with the coding-agent link added after GenClass's own import: right after init's marked
- * /auto import line, or after the end of the block init created around it. When more imports follow that place, the
- * import section stays imports only (import/first): the two imports go there in a block of their own and the call
- * in a second block right after the last of those imports, before the app's own code (the dynamic form, one
- * statement, goes there whole); only when the end of the imports cannot be read safely does the call go at the end
- * of the file. Null when there is no such import to put it after, or the file has the link already. `cond`: the
- * development-build check (default Vite's); `bound`: use the dynamic form when the file has init's `genclass` binding.
+ * How `entry` imports the link's `file`: a relative specifier, with ".js" for a JavaScript file (Node's ESM and
+ * webpack's fully specified imports need it, and every bundler takes it) and none for TypeScript (as init imports
+ * genclass.config).
+ */
+export function linkSpecifier(entry, file) {
+  let r = posix(relative(dirname(entry), file));
+  if (/\.ts$/.test(r)) r = r.slice(0, -3);
+  return r.startsWith(".") ? r : `./${r}`;
+}
+
+/**
+ * The link's file: one genclass:init block, its header first. `cond`: the development-build check; `client`: "use
+ * client" first (Next.js, as init's genclass-init component); `bound`: init bound `genclass` in the entry (Next.js's
+ * devtools line), and the agent entry is imported as that line imports the devtools, dynamically behind the check;
+ * else the two static imports and the call. `q`, `semi`: the entry's quote and semicolon style; `eol`: its line end.
+ */
+export function agentFileText(cond, { q = '"', semi = ";", bound = false, client = false, eol = "\n" } = {}) {
+  const from = (name, spec) => `import { ${name} } from ${q}${spec}${q}${semi}`;
+  const lines = [
+    AGENT_FILE_START,
+    ...(client ? [`${q}use client${q}${semi}`, ""] : []),
+    from("GenClass", "@genclass/runtime"),
+    ...(bound ? [] : [from("connectAgent", "@genclass/runtime/agent")]),
+    "",
+    bound ? `if (${cond}) import(${q}@genclass/runtime/agent${q}).then(({ connectAgent }) => connectAgent(GenClass.init()))${semi}` : `if (${cond}) connectAgent(GenClass.init())${semi}`,
+    AGENT_END,
+  ];
+  return `${lines.join(eol)}${eol}`;
+}
+
+/** The specifiers of the link's file that a text's marked lines import. */
+const linkImportsIn = (text) => linesOf(String(text ?? "")).flatMap((l) => LINK_IMPORT.exec(l)?.[1] ?? []);
+
+/**
+ * The entry's text with one marked line importing the link's file (`spec`, default "./genclass.agent.js") right
+ * after GenClass's own import: init's marked /auto import line, or the end of the block of a file init created. The
+ * rest of the file is not read: the line goes after a whole line of init's, in the file's quote and semicolon style.
+ * Null when there is no such import to put it after, or the file imports the link's file or calls connectAgent
+ * already.
  */
 export function withAgentLink(text, o = {}) {
   const t = String(text ?? "");
-  if (/connectAgent\s*\(/.test(t)) return null;
-  const cond = o.cond ?? DEV.vite;
-  const lines = partsOf(t).map((p) => p.replace(/\r?\n$/, ""));
-  let at = lines.findIndex((l) => MARKED_AUTO.test(l));
-  if (at < 0) {
-    // a file init created: the import is inside its block; the link goes after the block's end
-    let start = -1;
-    for (let i = 0; i < lines.length && at < 0; i++) {
-      if (lines[i].includes("genclass:init start")) start = i;
-      else if (lines[i].includes("genclass:init end")) {
-        if (start >= 0 && lines.slice(start + 1, i).some((l) => AUTO_IMPORT.test(l))) at = i;
-        start = -1;
-      }
-    }
-  }
+  if (/connectAgent\s*\(/.test(t) || linkImportsIn(t).length) return null;
+  const lines = linesOf(t);
+  const at = autoLine(lines);
   if (at < 0) return null;
   const { q, semi } = codeStyle(t);
-  const bound = !!o.bound && BOUND.test(t);
-  const indent = indentOf(lines[at]);
-  const end = importsEnd(lines, at);
-  // the call's own semicolon where the next line would otherwise continue it
-  const callSemi = (i) => (semi || !continuesAfter(lines, i) ? semi : ";");
-  // no other import after that place (the app's code, or nothing, follows): the whole link there, in one block
-  if (end === at) return insertAfter(t, at, linkBlock(cond, { q, semi, bound, last: callSemi(at) }).map((l) => `${indent}${l}`));
-  // the end of the imports unclear: the call (or the dynamic form, whole) at the end of the file
-  if (end < 0) {
-    if (bound) return appendEnd(t, linkBlock(cond, { q, semi, bound }));
-    const imports = insertAfter(t, at, [AGENT_IMPORTS_START, ...linkImports({ q, semi }), AGENT_END].map((l) => `${indent}${l}`));
-    return appendEnd(imports, [AGENT_START, linkCall(cond, { semi }), AGENT_END]);
-  }
-  // after the last import (inserted first, so line `at` stays where it is), then the imports after GenClass's
-  if (bound) return insertAfter(t, end, linkBlock(cond, { q, semi, bound, last: callSemi(end) }).map((l) => `${indent}${l}`));
-  const call = insertAfter(t, end, [AGENT_START, linkCall(cond, { semi: callSemi(end) }), AGENT_END].map((l) => `${indent}${l}`));
-  return insertAfter(call, at, [AGENT_IMPORTS_START, ...linkImports({ q, semi }), AGENT_END].map((l) => `${indent}${l}`));
+  const spec = o.spec ?? `./${AGENT_FILE}.js`;
+  return insertAfter(t, at, `${indentOf(lines[at])}import ${q}${spec}${q}${semi} // genclass:init`);
 }
 
 /** Astro: the layout's text with a second marked <script> line, the link's, right after init's. Null otherwise. */
 export function withAstroAgentLink(text) {
   const t = String(text ?? "");
   if (/connectAgent\s*\(/.test(t)) return null;
-  const lines = partsOf(t).map((p) => p.replace(/\r?\n$/, ""));
+  const lines = linesOf(t);
   const at = lines.findIndex((l) => ASTRO_SCRIPT.test(l));
   if (at < 0) return null;
   const code = `import { GenClass } from "@genclass/runtime"; import { connectAgent } from "@genclass/runtime/agent"; if (${DEV.vite}) connectAgent(GenClass.init());`;
-  return insertAfter(t, at, [`${indentOf(lines[at])}<script>${code} // genclass:init</script>`]);
+  return insertAfter(t, at, `${indentOf(lines[at])}<script>${code} // genclass:init</script>`);
 }
 
 /**
- * The development-build check for the link in `file` of `project` (detectProject's), as init writes it there for the
- * devtools line; null for a framework where the link is not planned (see the header).
+ * The development-build check for the link of entry `file` of `project` (detectProject's), as init writes it there
+ * for the devtools line; null for a framework where the link is not planned (see the header).
  */
 export function devCondition(project, file = "") {
   const f = posix(String(file));
@@ -374,8 +338,10 @@ export function runtimeUpgrade(pm) {
 
 /**
  * The link for a project, from the runtime CLI's inspectProject (`st`): `state` is
- * - "linked": the app's code calls connectAgent already (`files`);
- * - "planned": `changes` add it (a file each, shown and asked before they are written);
+ * - "linked": the app's code calls connectAgent already (`files`); the link's own file counts once a marked line
+ *   imports it;
+ * - "planned": `changes` add it (the link's file, then the line in the entry that imports it; shown and asked before
+ *   they are written, in that order);
  * - "manual": it is not planned here (`why`), and `lines` are what to add by hand, `where`; `upgrade`, when the
  *   installed runtime has no agent entry (or none is installed), is the command to run first;
  * - "none": there is no GenClass setup in this folder to link (not a web app, or GenClass not added yet).
@@ -387,12 +353,18 @@ export function planAgentLink(st, deps = {}) {
   const cwd = st?.cwd ?? project?.dir ?? ".";
   const rel = (f) => posix(relative(cwd, f));
   if (!project?.framework || project.refused) return { state: "none", changes: null, lines: null, why: "no web app in this folder" };
-  const files = [...new Set([...(st.marked ?? []), ...(st.files ?? [])])];
+  const marked = st.marked ?? [];
+  const files = [...new Set([...marked, ...(st.files ?? [])])];
+  // the link's files the marked lines import (an extensionless specifier names the .ts file)
+  const imported = new Set(marked.flatMap((m) => linkImportsIn(read(m)).map((s) => resolve(dirname(m), /\.[cm]?[jt]s$/.test(s) ? s : `${s}.ts`))));
   const linked = [];
   for (const f of files) {
     if (TEST_FILE.test(rel(f))) continue;
     const t = read(f);
-    if (t && t.includes("connectAgent") && LINKED(t)) linked.push(rel(f));
+    if (!t || !t.includes("connectAgent") || !LINKED(t)) continue;
+    // the link's own file whose import line was taken out by hand links nothing: planned again (the line alone)
+    if (isLinkFile(t) && !imported.has(resolve(f))) continue;
+    linked.push(rel(f));
   }
   if (linked.length) return { state: "linked", changes: null, lines: null, files: linked };
   if (st.fresh) return { state: "none", changes: null, lines: null, why: "GenClass is not added to this app yet" };
@@ -406,20 +378,42 @@ export function planAgentLink(st, deps = {}) {
     const by = linkLines(project, file);
     return { state: "manual", changes: null, ...by, why: needs && by.lines.length ? `${why}; ${needs}` : why, ...(upgrade ? { upgrade } : {}) };
   };
-  if (st.handWritten || !(st.marked ?? []).length) return manual("GenClass was added by hand, so its lines are yours to change");
-  const plugin = project.framework === "nuxt" ? (st.marked.find((f) => /(?:^|\/)plugins\/genclass\.client\.[cm]?[jt]s$/.test(posix(f))) ?? null) : null;
+  if (st.handWritten || !marked.length) return manual("GenClass was added by hand, so its lines are yours to change");
+  const plugin = project.framework === "nuxt" ? (marked.find((f) => /(?:^|\/)plugins\/genclass\.client\.[cm]?[jt]s$/.test(posix(f))) ?? null) : null;
   if (project.framework !== "astro" && devCondition(project, "entry.client.js") === null) return manual(notPlannedWhy(project), plugin);
   if (upgrade) return { state: "manual", changes: null, ...linkLines(project), why: needs, upgrade };
-  const changes = [];
-  for (const f of st.marked) {
+  const made = [];
+  const edits = [];
+  let taken = null;
+  for (const f of marked) {
     const before = read(f);
     if (before === null) continue;
-    let after = null;
-    if (project.framework === "astro") after = /\.astro$/.test(f) ? withAstroAgentLink(before) : null;
-    else if (/\.[cm]?[jt]sx?$/.test(f)) after = withAgentLink(before, { cond: devCondition(project, f), bound: project.framework === "next" });
-    if (after !== null && after !== before) changes.push({ file: f, rel: rel(f), kind: "modify", before, after, what: `${rel(f)}: the coding-agent link, development builds only` });
+    if (project.framework === "astro") {
+      const after = /\.astro$/.test(f) ? withAstroAgentLink(before) : null;
+      if (after !== null && after !== before) edits.push({ file: f, rel: rel(f), kind: "modify", before, after, what: `${rel(f)}: the coding-agent link, development builds only` });
+      continue;
+    }
+    if (!/\.[cm]?[jt]sx?$/.test(f) || autoLine(linesOf(before)) < 0) continue;
+    const file = linkFileFor(project, f);
+    const own = read(file);
+    // a file of the person's own by that name (or one of GenClass's that was edited) is left alone
+    if (own !== null && !isLinkFile(own)) {
+      taken = rel(file);
+      continue;
+    }
+    if (own === null && !made.some((ch) => ch.file === file)) {
+      const { q, semi } = codeStyle(before);
+      const after = agentFileText(devCondition(project, f), { q, semi, eol: eolOf(before), client: project.framework === "next", bound: project.framework === "next" && BOUND.test(before) });
+      made.push({ file, rel: rel(file), kind: "create", before: "", after, what: `${rel(file)}: the coding-agent link, development builds only` });
+    }
+    const after = withAgentLink(before, { spec: linkSpecifier(f, file) });
+    if (after !== null && after !== before) edits.push({ file: f, rel: rel(f), kind: "modify", before, after, what: `${rel(f)}: the line that imports ${rel(file)}, right after GenClass's import` });
   }
-  if (!changes.length) return manual(project.framework === "astro" ? "GenClass's script shares its line with other code in <head>" : notPlannedWhy(project));
+  const changes = [...made, ...edits];
+  if (!changes.length) {
+    if (taken) return manual(`${taken} is there already and is not GenClass's link, so it was left alone`);
+    return manual(project.framework === "astro" ? "GenClass's script shares its line with other code in <head>" : notPlannedWhy(project));
+  }
   return { state: "planned", changes, lines: null };
 }
 

@@ -590,6 +590,59 @@ describe("remove after a formatter rewrapped init's lines", () => {
     expect(planRemoval(`${header}\nimport "@genclass/runtime/auto";\nexport default defineNuxtPlugin(() => {\n  track();\n});\n// genclass:init end\n`).problems).toHaveLength(1);
   });
 
+  it("the coding-agent link in a file of its own and one import line after init's: remove deletes the file and the line, byte for byte; init again leaves both", () => {
+    const header = "// genclass:init start: GenClass Runtime's coding-agent link, development builds only, imported right after GenClass's import (npx genclass remove deletes this file)";
+    const linkFile = (cond: string, { client = false, bound = false, q = '"', semi = ";" } = {}) =>
+      [
+        header,
+        ...(client ? [`${q}use client${q}${semi}`, ""] : []),
+        `import { GenClass } from ${q}@genclass/runtime${q}${semi}`,
+        ...(bound ? [] : [`import { connectAgent } from ${q}@genclass/runtime/agent${q}${semi}`]),
+        "",
+        bound ? `if (${cond}) import(${q}@genclass/runtime/agent${q}).then(({ connectAgent }) => connectAgent(GenClass.init()))${semi}` : `if (${cond}) connectAgent(GenClass.init())${semi}`,
+        "// genclass:init end",
+        "",
+      ].join("\n");
+    const next16 = { "package.json": pkg({ next: "16.0.0", react: "^19" }), "tsconfig.json": "{}\n", "node_modules/next/package.json": JSON.stringify({ name: "next", version: "16.0.1" }), "src/app/layout.tsx": "export default function L({ children }) { return <html><body>{children}</body></html>; }\n" };
+    const node = 'process.env.NODE_ENV === "development"';
+    for (const [files, entry, file, text, spec, args] of [
+      // a file without semicolons whose code opens with a JSDoc comment and an IIFE: the line never joins it
+      [{ "package.json": pkg({ vite: "^8" }), "src/main.js": `import { start } from "./app.js"\n\n/**\n * Start the app.\n */\n(async () => { start() })()\n` }, "src/main.js", "src/genclass.agent.js", linkFile("import.meta.env.DEV", { semi: "" }), "./genclass.agent.js", ["--no-devtools"]],
+      // the block of a file init created (Next.js 16's instrumentation-client), with init's `genclass` binding
+      [next16, "src/instrumentation-client.ts", "src/genclass.agent.ts", linkFile(node, { client: true, bound: true }), "./genclass.agent", []],
+      // Next.js 14's pages/_app of the app's own: the link's file in the folder above pages/
+      [{ "package.json": pkg({ next: "14.2.0" }), "pages/_app.js": `import "../styles/globals.css";\n\nexport default function App({ Component, pageProps }) {\n  return <Component {...pageProps} />;\n}\n` }, "pages/_app.js", "genclass.agent.js", linkFile(`${node} && typeof window !== "undefined"`, { client: true }), "../genclass.agent.js", ["--no-devtools"]],
+    ] as [Record<string, string>, string, string, string, string, string[]][]) {
+      const dir = project(files);
+      const before = snapshot(dir);
+      expect(cli(dir, "init", "--yes", "--no-install", ...args).code).toBe(0);
+      const f = join(dir, entry);
+      const inited = readFileSync(f, "utf8").split("\n");
+      const at = inited.findIndex((l) => /@genclass\/runtime\/auto.*\/\/ genclass:init$/.test(l));
+      const after = at >= 0 ? at : inited.indexOf("// genclass:init end");
+      const semi = /;\s*\/\/ genclass:init$/.test(inited[after] ?? "") || inited[after] === "// genclass:init end" ? ";" : "";
+      inited.splice(after + 1, 0, `import "${spec}"${semi} // genclass:init`);
+      writeFileSync(f, inited.join("\n"));
+      writeFileSync(join(dir, file), text);
+      // init again: GenClass is there, nothing to do (the link's file names no mode, no option)
+      const linked = snapshot(dir);
+      expect(cli(dir, "init", "--yes", "--no-install", ...args).code).toBe(0);
+      expect(snapshot(dir)).toEqual(linked);
+      const dry = cli(dir, "remove", "--dry-run");
+      expect(dry.code, dry.out).toBe(0);
+      expect(dry.out).toContain(`${file} (delete)`);
+      const r = cli(dir, "remove", "--yes");
+      expect(r.code, r.out).toBe(0);
+      expect(snapshot(dir), entry).toEqual(before);
+    }
+    // the line on its own, in single quotes, without a semicolon
+    expect(planRemoval(`import '@genclass/runtime/auto' // genclass:init\nimport '../genclass.agent.js' // genclass:init\nx()\n`)).toEqual({ text: "x()\n", problems: [] });
+    // the link's file is one remove deletes (init's created-file header first), and only while nothing else is in it
+    expect(createdByInit(linkFile("import.meta.env.DEV"), planRemoval(linkFile("import.meta.env.DEV")).text)).toBe(true);
+    expect(planRemoval(`${linkFile("import.meta.env.DEV")}x();\n`)).toEqual({ text: "x();\n", problems: [] });
+    expect(createdByInit(`${linkFile("import.meta.env.DEV")}x();\n`, "x();\n")).toBe(false);
+  });
+
   it("a file the person had, empty, that init and the coding-agent link only added to: remove gives it back, never deletes it", () => {
     const link = `// genclass:init start: the coding-agent link, development builds only\nimport { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\nif (COND) connectAgent(GenClass.init());\n// genclass:init end\n`;
     const next16 = { "package.json": pkg({ next: "16.0.0", react: "^19" }), "tsconfig.json": "{}\n", "node_modules/next/package.json": JSON.stringify({ name: "next", version: "16.0.1" }), "src/app/layout.tsx": "export default function L({ children }) { return <html><body>{children}</body></html>; }\n" };

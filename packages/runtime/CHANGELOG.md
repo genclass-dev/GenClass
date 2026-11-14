@@ -60,6 +60,10 @@
   - Also the link split around the app's imports (its two imports in a block after GenClass's import, its call in a
     second block after the file's last import or at the end of the file), and the call inside Nuxt's
     `defineNuxtPlugin` in the plugin init created.
+  - And the link as a file of its own, which the `genclass` command now writes: `genclass.agent.ts` or `.js`, init's
+    created-file header first, is deleted (as `genclass.config` is), and the entry's marked
+    `import "./genclass.agent"; // genclass:init` line taken out; in that file the dynamic agent import calls
+    `connectAgent(GenClass.init())`.
   - `remove` deletes only a file init created (its first line is init's own header block): an entry file of the
     app's own that was empty before init is written back empty, not deleted, once the link is in it.
   - The published 0.3.0-beta.6's `remove` does not know the link: in a linked project

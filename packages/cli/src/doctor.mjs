@@ -5,8 +5,8 @@
 //
 // Invariants:
 // - Read only unless --fix, and then only GenClass's own: the version pin in its MCP server entry, the skill file
-//   while it carries its marker, and the coding-agent link where agentlink.mjs plans it (after init's import, in the
-//   frameworks whose development builds it can tell apart), written between genclass:init markers so
+//   while it carries its marker, and the coding-agent link where agentlink.mjs plans it (its own file, imported right
+//   after init's import, in the frameworks whose development builds it can tell apart), marked genclass:init so
 //   `genclass remove` takes it out. Each change is shown (its diff; a new skill file by name and size) before it is
 //   written, with --yes too; a terminal is asked once, --yes is the yes, and without a terminal and without --yes
 //   nothing is written. With --json, stdout is one JSON object only (the report and the changes go to stderr) and
@@ -709,7 +709,7 @@ export function cspGaps(policy, s, o = {}) {
 
 // ------------------------------------------------------------------------------------------------ the checks
 
-/** The entry file's text with the coding-agent link after GenClass's own import (agentlink.mjs), Vite's check by default. */
+/** The entry file's text with the marked import of the coding-agent link's file right after GenClass's own import (agentlink.mjs). */
 export { withAgentLink };
 
 /** Whether an entry file imports other code before GenClass's (GenClass must load first to see the app start). */

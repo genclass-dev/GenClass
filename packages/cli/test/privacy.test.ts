@@ -541,19 +541,13 @@ describe("genclass doctor: what GenClass added, in place and current (src/doctor
     expect(compareVersions("1.2.3", "1.2.3")).toBe(0);
   });
 
-  it("the coding-agent link's imports go right after GenClass's import, its call right after the last import (imports first, the call before the app's code), once, and `remove` takes it out again", () => {
+  it("the entry gets one marked line importing the coding-agent link's file, right after GenClass's import (imports first, before the app's code), once, and `remove` takes it out again", () => {
     const after = withAgentLink(INIT_ENTRY)!;
     expect(after.split("\n")).toEqual([
       'import "./genclass.config"; // genclass:init',
       'import "@genclass/runtime/auto"; // genclass:init',
-      "// genclass:init start: the coding-agent link's imports; its call is in a second block after this file's imports (npx genclass remove takes both out)",
-      'import { GenClass } from "@genclass/runtime";',
-      'import { connectAgent } from "@genclass/runtime/agent";',
-      "// genclass:init end",
+      'import "./genclass.agent.js"; // genclass:init',
       'import { createRoot } from "react-dom/client";',
-      "// genclass:init start: the coding-agent link, development builds only: GenClass.init() returns the running runtime (npx genclass remove takes it out)",
-      "if (import.meta.env.DEV) connectAgent(GenClass.init());",
-      "// genclass:init end",
       "",
       'createRoot(document.getElementById("root")).render(null);',
       "",
@@ -609,7 +603,8 @@ describe("genclass doctor: what GenClass added, in place and current (src/doctor
     expect(mcp.mcpServers.genclass.args[1]).not.toBe("@genclass/mcp@0.1.0");
     expect(mcp.mcpServers.other).toEqual({ command: "x" });
     expect(readFileSync(join(dir, ".claude/skills/genclass/SKILL.md"), "utf8")).toContain("genclass:init");
-    expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toContain("connectAgent(GenClass.init())");
+    expect(readFileSync(join(dir, "src/genclass.agent.js"), "utf8")).toContain("connectAgent(GenClass.init())");
+    expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toContain('import "./genclass.agent.js"; // genclass:init');
     expect(readFileSync(join(dir, "index.html"), "utf8")).toContain("default-src 'self'; script-src 'self'");
     const again = Object.fromEntries((await checks({ cwd: dir }, deps)).map((x: any) => [x.id, x.state]));
     expect(again).toMatchObject({ mcp: "ok", skill: "ok", link: "ok" });

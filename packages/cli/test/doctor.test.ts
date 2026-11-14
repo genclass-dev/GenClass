@@ -378,18 +378,19 @@ describe("genclass doctor --fix shows each change, and --json stays JSON (src/do
     let code = -1;
     const run = await both(async () => (code = await doctor({ cwd: dir, fix: true, yes: true, json: true }, OFF)));
     const j = JSON.parse(run.out);
-    expect(j.fixed).toEqual([`.mcp.json: @genclass/mcp 0.1.0 to ${BUILD.mcpVersion}`, ".claude/skills/genclass/SKILL.md: the skill", "src/main.jsx: the coding-agent link, development builds only"]);
+    expect(j.fixed).toEqual([`.mcp.json: @genclass/mcp 0.1.0 to ${BUILD.mcpVersion}`, ".claude/skills/genclass/SKILL.md: the skill", "src/genclass.agent.js: the coding-agent link, development builds only; src/main.jsx: the line that imports src/genclass.agent.js, right after GenClass's import"]);
     expect(j.failed).toEqual([]);
     expect(j.ok).toBe(code === 0);
     expect(j.checks.find((x: any) => x.id === "mcp")).toMatchObject({ state: "warn", fixable: true });
     expect(plain(run.err)).toContain("Wrote .mcp.json");
-    expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toContain("connectAgent(GenClass.init())");
+    expect(readFileSync(join(dir, "src/genclass.agent.js"), "utf8")).toContain("connectAgent(GenClass.init())");
+    expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toContain('import "./genclass.agent.js"; // genclass:init');
   });
 
   it("after linking the dev page, the agent is asked about the page only when its configuration names GenClass's server (finding 76)", async () => {
     const none = appWith();
     const said = plain((await both(async () => doctor({ cwd: none, fix: true, yes: true }, OFF))).out).replace(/\s+/g, " ");
-    expect(said).toContain("Wrote src/main.jsx");
+    expect(said).toContain("Wrote src/genclass.agent.js: the coding-agent link");
     expect(said).not.toContain("genclass_status lists the page");
     expect(said).toContain(`Your coding agent has no GenClass tools in this project yet: npx -y @genclass/mcp@${BUILD.mcpVersion} init adds GenClass's server`);
     const configured = appWith({ ".mcp.json": MCP() });
