@@ -36,9 +36,10 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   terminal Enter starts it, as `genclass fix` does); `--json` is the same as data, `--print` the prompt alone. Without
   Playwright, `@genclass/playwright` or `@genclass/runtime` it prints the exact install line (npm, pnpm, yarn or bun)
   and exits 2 without running anything. Measured with `test/e2e/flake.e2e.mjs` (a four-test fixture app in a
-  temporary folder, Chromium, the built runtime and `@genclass/playwright`): the buggy page's test racy on seeds 1, 3
-  and 4 in each of four runs, both replays of seed 1 failing again with the same race, and no race on any of the 72
-  runs of the three tests on the fixed page (false reports on the correct variant: 0).
+  temporary folder, Chromium, the built runtime and `@genclass/playwright`; one page, one planted bug): the buggy
+  page's test racy on seeds 1, 3 and 4 in each of four runs, the four replays of seed 1 and the four of seed 3
+  failing again with the same race, and no race on any of the 72 runs of the three tests on the fixed page (false
+  reports on the correct variant: 0), RESULTS.md section 30.
 - **The Coding agent step links the dev page too** (`src/agentlink.mjs`): besides `.mcp.json` and the skill, it adds
   `connectAgent` from `@genclass/runtime/agent` right after GenClass's import, in development builds only, so the
   agent's MCP server sees the page on localhost (no more "no connected page" and a round of genclass_setup first). All
@@ -69,8 +70,9 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   link), so an app copied with `npx degit` never commits them.
 - **`genclass suggest`, two safety checks:** `secrets-in-bundle` reads the scripts the live home page ships (same
   origin, at most 6, 1 MB each) for secret keys (Stripe secret, OpenAI, Anthropic, AWS, GitHub, Slack, SendGrid,
-  private keys, a Supabase service_role JWT) and reports the kind and the script's path, never a value; on 25,365
-  library files (339 MB of node_modules) it matched one, a test certificate's private key. `framework-cve` reads
+  private keys, a Supabase service_role JWT) and reports the kind and the script's path, never a value; on 13,448
+  library files (126 MB of node_modules) it matched one, a test certificate's private key (recall not measured;
+  RESULTS.md section 30). `framework-cve` reads
   the installed Next.js and react-server-dom-* versions (node_modules, else the npm, pnpm, yarn or bun lockfile)
   against CVE-2025-55182 (remote code execution in React Server Components; App Router only) and CVE-2025-29927
   (Next.js middleware skipped; self-hosted with a middleware file only), with the release that fixes each.
@@ -90,6 +92,27 @@ Fixed from the walk:
   without a price no longer prints "Pro is ."
 - A mistyped command or option says one line and `npx genclass help`, instead of the whole help.
 - `funnels` lines its counts up in one column.
+
+Fixed from the review (2026-11-14):
+
+- At a setup step only Enter, `y` or `yes` starts it: `n` and `no` skip it, as `s` does, and any other answer is
+  asked again. Before, `n` started the step (the test workflow was written, the sign-in and GitHub pages opened).
+- The home runs `privacy`, `doctor` and `flake` (it said "There is no command" and named the same word), and lists
+  them in `help`.
+- `flake --seed` and `--no-baseline` runs that fail every time are listed as "Failed on every seed (no
+  natural-order run)", with the command that adds the natural order; they no longer say "in the natural order too".
+- `flake` on a Playwright without `--add-reporter` says before the run that the config's reporters are replaced,
+  and how to keep them (`--reporter`).
+- `flake --json` prints one JSON object on every exit: the run could not start, no such folder, a wrong number.
+- `flake`'s missing-package screen and its `--help` fit the window; an app that lists `@genclass/runtime` in its
+  dependencies is told to install it without `-D`.
+- `--no-browser` no longer stops `init`, `connect`, `scan`, `audit`, `whoami`, `logout`, `remove` or `flake` with
+  "unknown option".
+- A setup that ends with a step still to do (a sign-in that failed, a step skipped) names it and its command;
+  `suggest` is under "Day to day" only with Pro.
+- Offline, with a saved session, the header says the account "(not checked)" instead of "not signed in".
+- Under `genclass`, init's Optional and Payments blocks and its question about the account fit the window (a
+  code line's `//` comment goes above it).
 
 ## 0.3.8
 

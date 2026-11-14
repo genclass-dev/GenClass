@@ -13,6 +13,7 @@ import {
   findTools,
   flake,
   flakePrompt,
+  flakeUsage,
   isRace,
   judge,
   missingTools,
@@ -24,10 +25,12 @@ import {
   replayCommand,
   REPORTER_SOURCE,
   RESULTS_ENV,
+  runtimeListed,
   seedWords,
   testLines,
 } from "../src/flake.mjs";
 import { isolate, tempDir, write } from "./helpers.ts";
+import { plainLines, tooWide } from "./stats.ts";
 
 isolate();
 
@@ -557,5 +560,124 @@ describe("genclass flake: the help and the docs", () => {
     const root = dirname(dirname(new URL(import.meta.url).pathname));
     expect(readFileSync(join(root, "README.md"), "utf8")).toContain("npx genclass flake");
     expect(readFileSync(join(root, "CHANGELOG.md"), "utf8")).toContain("genclass flake");
+  });
+});
+
+describe("genclass flake: review fixes (alpha, 2026-11-14)", () => {
+  const ALWAYS: TestDef = { file: "tests/cart.spec.ts", line: 8, titles: ["cart", "adds one item"], outcome: () => ({ ok: false, error: "Error: expect(locator).toHaveText(expected) failed" }) };
+  /** What `fn` printed with the window `cols` wide. */
+  async function at(cols: number, fn: () => unknown) {
+    const before = process.stdout.columns;
+    process.stdout.columns = cols;
+    try {
+      return await captured(fn);
+    } finally {
+      process.stdout.columns = before;
+    }
+  }
+
+  it("a seed replay (or --no-baseline) that fails every time with no race is not said to fail in the natural order", async () => {
+    // the replay flake itself prints for a flaky test: one seed, no natural-order run, and it failed again
+    const dir = tempDir();
+    const said = await captured(async () => expect(await flake(["tests/cart.spec.ts:8", "--project", "chromium", "--seed", "3"], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, [ALWAYS]), interactive: false })).toBe(1));
+    const o = flat(said.out);
+    expect(o).toContain("Failed on every seed (no natural-order run) (1)");
+    expect(o).not.toContain("Broken: fails every time");
+    expect(o).not.toContain("in the natural order too:");
+    expect(o).toContain("GenClass saw no race on the failing run");
+    expect(o).toContain("with the natural order too: npx genclass flake tests/cart.spec.ts:8 --project chromium");
+    const prompt = said.out.slice(said.out.indexOf("A prompt for your coding agent:"));
+    expect(prompt).not.toContain("it fails in the natural order too");
+    expect(prompt).not.toContain("Failing every time (not about the order of responses)");
+    expect(prompt).toContain("Failing on every seed, with no natural-order run (so this does not say whether the order of responses matters):");
+    expect(prompt).toContain("With the natural order too: npx genclass flake tests/cart.spec.ts:8 --project chromium");
+    // --no-baseline: the same, on every seed; --json says it as data, with the run that checks the order
+    const nb = await captured(async () => expect(await flake(["--no-baseline", "--json"], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, [ALWAYS]) })).toBe(1));
+    const t = JSON.parse(nb.out).tests[0];
+    expect(t).toMatchObject({ verdict: "broken", natural: null, failed_seeds: [1, 2, 3, 4, 5], order_check: "npx genclass flake tests/cart.spec.ts:8 --project chromium" });
+    expect(JSON.parse(nb.out).prompt).not.toContain("it fails in the natural order too");
+    // with a natural-order run that failed too, it is broken, as before, and has no such command
+    const whole = await captured(async () => expect(await flake(["--json"], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, [ALWAYS]) })).toBe(1));
+    const b = JSON.parse(whole.out);
+    expect(b.tests[0]).toMatchObject({ verdict: "broken", natural: "failed", order_check: null });
+    expect(b.prompt).toContain("it fails in the natural order too");
+  });
+
+  it("a Playwright without --add-reporter is said to replace the config's reporters, unless --reporter names them", async () => {
+    const dir = tempDir();
+    const old = { ...TOOLS, playwright: { ...TOOLS.playwright, version: "1.50.0", addReporter: false } };
+    const said = await captured(async () => await flake([], { cwd: dir, env: {}, tools: old, spawn: standIn(dir, [SUITE[1]]), interactive: false }));
+    expect(flat(said.out)).toContain("Your @playwright/test 1.50.0 has no --add-reporter, so for these runs the reporters in your playwright.config are replaced by GenClass's");
+    expect(flat(said.out)).toContain("--reporter html,junit");
+    expect(tooWide(said.out, 78)).toEqual([]);
+    // passed with --reporter, or on a Playwright that adds ours: nothing to say
+    const given = await captured(async () => await flake(["--reporter", "dot"], { cwd: dir, env: {}, tools: old, spawn: standIn(dir, [SUITE[1]]), interactive: false }));
+    expect(given.out).not.toContain("has no --add-reporter");
+    const added = await captured(async () => await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, [SUITE[1]]), interactive: false }));
+    expect(added.out).not.toContain("has no --add-reporter");
+  });
+
+  it("--json prints one JSON object on every exit, also when the run cannot start, the folder is missing or a number is wrong", async () => {
+    const dir = tempDir();
+    const start = await captured(async () => expect(await flake(["--json"], { cwd: dir, env: {}, tools: TOOLS, spawn: async () => ({ code: null, signal: null, error: "spawn EACCES" }) })).toBe(2));
+    expect(JSON.parse(start.out)).toEqual({ ok: false, error: "start", ran: false, message: "could not start genclass-playwright-run (spawn EACCES)" });
+    expect(start.err).toContain("could not start genclass-playwright-run (spawn EACCES). Nothing was judged.");
+    const nowhere = await captured(async () => expect(await flake(["--json", "--cwd", "nowhere"], { cwd: dir, env: {}, tools: TOOLS, spawn: vi.fn() })).toBe(2));
+    expect(JSON.parse(nowhere.out)).toMatchObject({ ok: false, error: "no-folder", ran: false });
+    const usage = await captured(async () => expect(await flake(["--json", "--runs", "x"], { cwd: dir, env: {}, tools: TOOLS, spawn: vi.fn() })).toBe(2));
+    expect(JSON.parse(usage.out)).toEqual({ ok: false, error: "usage", ran: false, message: "--runs needs a whole number from 1 to 50 (got x)" });
+    // without --json, stdout stays empty there
+    const plain = await captured(async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: async () => ({ code: null, signal: null, error: "spawn EACCES" }) })).toBe(2));
+    expect(plain.out).not.toContain("{");
+  });
+
+  it("the missing-package screen and --help fit a 58-column window; the install line stays whole", async () => {
+    const dir = tempDir();
+    write(dir, { "package.json": JSON.stringify({ name: "shop", private: true }) });
+    const none = { playwright: null, genclassPlaywright: null, runtime: null };
+    for (const cols of [58, 80]) {
+      const said = await at(cols, async () => expect(await flake([], { cwd: dir, env: {}, tools: none, spawn: vi.fn() })).toBe(2));
+      expect(tooWide(said.out, Math.max(58, cols - 2))).toEqual([]);
+      expect(plainLines(said.out).map((l) => l.trim())).toContain("npm install -D @genclass/playwright @genclass/runtime@beta");
+      expect(flat(plainLines(said.out).join(" "))).toContain("genclass flake runs your Playwright tests with GenClass, and this project is missing what it needs. Nothing was run.");
+      expect(flat(plainLines(said.out).join(" "))).toContain("@genclass/playwright: it runs your suite with GenClass on the pages your tests open");
+      const help = await at(cols, async () => expect(await flake(["--help"])).toBe(0));
+      expect(tooWide(help.out, Math.max(58, cols - 2))).toEqual([]);
+      expect(plainLines(help.out).map((l) => l.trim())).toContain("npm install -D @genclass/playwright @genclass/runtime@beta");
+    }
+    for (const cols of [60, 80, 96]) expect(flakeUsage(cols).split("\n").filter((l) => l.length > cols - 2)).toEqual([]);
+    // the same words at every width
+    expect(flat(flakeUsage(60))).toBe(flat(FLAKE_USAGE));
+  });
+
+  it("an app that ships the runtime in its dependencies is told to install it without -D, so it stays there", () => {
+    const old = { ...TOOLS, runtime: { version: "0.2.3", dir: "/p/node_modules/@genclass/runtime/dist", given: false, ok: false, why: "no-agent" } };
+    expect(runtimeListed({ dependencies: { "@genclass/runtime": "^0.2.3" } })).toBe("dependencies");
+    expect(runtimeListed({ devDependencies: { "@genclass/runtime": "^0.2.3" } })).toBe("devDependencies");
+    expect(runtimeListed({ dependencies: {} })).toBeNull();
+    expect(runtimeListed(null)).toBeNull();
+    expect(missingTools(old, "npm", "dependencies")[0].run).toEqual(["npm install @genclass/runtime@beta"]);
+    expect(missingTools(old, "pnpm", "dependencies")[0].run).toEqual(["pnpm add @genclass/runtime@beta"]);
+    expect(missingTools(old, "yarn", "dependencies")[0].run).toEqual(["yarn add @genclass/runtime@beta"]);
+    expect(missingTools(old, "bun", "dependencies")[0].run).toEqual(["bun add @genclass/runtime@beta"]);
+    // a dev dependency, or not listed: -D as before
+    expect(missingTools(old, "npm", "devDependencies")[0].run).toEqual(["npm install -D @genclass/runtime@beta"]);
+    expect(missingTools(old, "npm", null)[0].run).toEqual(["npm install -D @genclass/runtime@beta"]);
+    // @genclass/playwright missing too: it is a dev dependency, the runtime stays where it is
+    const both = { ...old, genclassPlaywright: null };
+    expect(missingTools(both, "npm", "dependencies")[0].run).toEqual(["npm install -D @genclass/playwright", "npm install @genclass/runtime@beta"]);
+    expect(missingTools(both, "npm", null)[0].run).toEqual(["npm install -D @genclass/playwright @genclass/runtime@beta"]);
+  });
+
+  it("reads the project's package.json for where the runtime is listed", async () => {
+    const dir = tempDir();
+    write(dir, { "package.json": JSON.stringify({ name: "shop", private: true, dependencies: { "@genclass/runtime": "^0.2.3" } }) });
+    const old = { ...TOOLS, runtime: { version: "0.2.3", dir: join(dir, "node_modules/@genclass/runtime/dist"), given: false, ok: false, why: "no-agent" } };
+    const said = await captured(async () => expect(await flake(["--json"], { cwd: dir, env: {}, tools: old, spawn: vi.fn() })).toBe(2));
+    expect(JSON.parse(said.out).install[0].run).toEqual(["npm install @genclass/runtime@beta"]);
+  });
+
+  it("--no-browser, which the genclass help lists for every command, is not passed to playwright test", () => {
+    expect(parseFlakeArgs(["tests/a.spec.ts", "--no-browser", "--grep", "x"]).pw).toEqual(["tests/a.spec.ts", "--grep", "x"]);
   });
 });

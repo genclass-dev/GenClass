@@ -66,8 +66,9 @@ When the walk is done (or you press `q` to leave it for later), the command does
   ❯ which page loses the most visitors?
 ```
 
-Type a number, a command, or a sentence: a sentence is a question about your app. `q` leaves. Everything here is
-also a command of its own (`npx genclass problems`), so scripts and coding agents use the same things.
+Type a number, a command, or a sentence: a sentence is a question about your app. `q` leaves. Every command works
+here, the free local ones too (`privacy`, `doctor --fix`, `flake`), and everything here is also a command of its own
+(`npx genclass problems`), so scripts and coding agents use the same things.
 
 **The command comes with Pro.** Right after the sign-in, an account without Pro sees Pro's card, and Enter opens its
 checkout in the browser: 3 days free (one trial per account; the card is asked for on Stripe, and nothing is charged
@@ -96,7 +97,8 @@ it off). After that you type `genclass`, and every screen says `genclass` instea
 | Coding agent | Gives Claude Code, Cursor and other agents GenClass's tools and its skill (ask what went wrong, replay it, check the fix), and links your dev page to them: `connectAgent` from `@genclass/runtime/agent`, in development builds only, so the agent sees each click, request and response on localhost and can run them again in another order. All of it is in one preview and one yes. Then it says how to see it work now: the dev server, the `[GenClass]` lines in the browser console, and "is GenClass connected?" for the agent. Done once the MCP server is configured and the link is in (or cannot be added for this framework: Angular, Nuxt and a plain script tag get the lines to add instead). | `.mcp.json` (or `.cursor/mcp.json`), `.claude/skills/genclass/SKILL.md`, and a `genclass:init` block right after GenClass's import (Vite apps, SvelteKit and React Router: `import.meta.env.DEV`; Next.js and Create React App: `process.env.NODE_ENV === "development"`; Astro: a second `<script>` line in the layout). `genclass remove` takes it out. |
 | Suggestions | Tells you what your app is missing, most important first. | Nothing in your project. |
 
-On a terminal, Enter starts a step and is the yes for what its sentence says it writes. While a step waits for you
+On a terminal, Enter (or `y`) starts a step and is the yes for what its sentence says it writes; `s` or `n` skips it,
+`q` stops, and any other answer is asked again, so a "no" never writes a file or opens a page. While a step waits for you
 in the browser (the sign-in, GitHub), Enter stops the wait and the walk goes on. Pro and the app's plan are the
 exception: nothing after them runs until they are done. A part that does not apply
 is left out and says why: no Playwright tests, not a GitHub repository, not a web app.
@@ -182,7 +184,7 @@ measured and nothing else:
 | passed | it passed on every run |
 | racy | it failed on some runs, and on a failing run GenClass saw a race on the page (a late response that wrote over newer data, a request sent again while the identical one was in flight): which request, the seeds, and the command that replays one |
 | flaky | it failed on some runs and GenClass saw no race there, or could not watch those runs and says so: likely the test itself (a fixed wait, a timeout too tight for slower responses, state shared between tests) |
-| broken | it failed on every run, in the natural order too: not about the order of responses |
+| broken | it failed on every run, in the natural order too: not about the order of responses. With `--seed` or `--no-baseline` there is no natural-order run: a test that failed on every seed with no race seen is listed apart ("Failed on every seed"), with the command that runs it in the natural order too |
 
 It ends with the one command that replays a failing seed, such as
 `npx genclass flake tests/search.spec.ts:12 --project chromium --seed 2` (the same seed holds the same requests for
@@ -194,11 +196,13 @@ it; piped, it is printed. `--json` gives the same as data, `--print` only the pr
 passed every time, 1 when one did not, 2 when nothing could be judged.
 
 What it needs: Playwright, and in the same project `npm install -D @genclass/playwright @genclass/runtime@beta`.
-Without them it prints that line (with your package manager) and runs nothing. Your tests and your `playwright.config`
-stay as they are, and so do your reporters: it adds one of its own, which writes to a temporary folder (with a
-Playwright before `--add-reporter`, it passes yours and its own as `--reporter`). Retries are off unless you pass
-`--retries` (a retry would hide the failure), and the HTML report does not open a browser. It is free and local: no
-sign-in, nothing is sent anywhere.
+Without them it prints that line (with your package manager) and runs nothing; an app that lists `@genclass/runtime`
+in its dependencies is told to install it without `-D`, so a production install keeps it. Your tests and your
+`playwright.config` stay as they are. It adds a reporter of its own, which writes to a temporary folder, on top of
+yours with `--add-reporter`. A Playwright without `--add-reporter` only has `--reporter`, which replaces the
+config's reporters for these runs: `genclass flake` says so before it starts, and the reporters you pass with
+`--reporter` run next to its own. Retries are off unless you pass `--retries` (a retry would hide the failure), and
+the HTML report does not open a browser. It is free and local: no sign-in, nothing is sent anywhere.
 
 `--seed N` starts at seed N without the natural-order run (alone, it replays that one seed), `--no-baseline` skips the
 natural-order run, `--no-chaos` repeats every run in the natural order (plain repeats, nothing held). The race files
@@ -208,10 +212,12 @@ stay in `test-results/genclass`, one per test and seed of the last run.
 stores, and stores registered with the runtime) by the requests the run holds (same-origin `/api*` or JSON requests
 unless `GENCLASS_CHAOS_MATCH` says otherwise). A test is called racy only when a race file of one of its failing runs
 shows a race. Measured on the fixture app of [`test/e2e/flake.e2e.mjs`](test/e2e/flake.e2e.mjs) (Chromium, the
-search page of `@genclass/playwright`'s own end-to-end check, four ordinary tests, 6 runs each): in four runs of the
-command, the buggy page's test was racy each time (it failed on seeds 1, 3 and 4, with the late response seen on
-those seeds; it passed in the natural order), and the three tests on the fixed page showed no race on any of their
-72 runs (false reports on the correct variant: 0). Both replays of seed 1 failed again with the same race.
+search page of `@genclass/playwright`'s own end-to-end check, four ordinary tests, 6 runs each; one page and one
+planted bug by this team, so not a recall figure for real suites): in four runs of the e2e, the buggy page's test was
+racy each time (it failed on seeds 1, 3 and 4, with the late response seen on all 12 failing runs; it passed in the
+natural order), and the three tests on the fixed page showed no race on any of their 72 runs (false reports on the
+correct variant: 0, counted and required by the e2e). All four replays of seed 1 and all four of seed 3 failed again
+with the same race ([RESULTS.md §30](../../docs/runtime/RESULTS.md)).
 
 ## Ask
 

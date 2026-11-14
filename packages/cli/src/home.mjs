@@ -8,7 +8,9 @@
 //   A number runs that command. A mistyped command names the nearest one. A line that is not a command and reads
 //   like a sentence is a question (ask.mjs).
 // - After every command, an app on Free that can have a paid plan here is told so in one line (the owner's call,
-//   2026-11-12: every query says it), with the way up: upgrade.
+//   2026-11-12: every query says it), with the way up: upgrade. Not after privacy, doctor and flake: they send
+//   nothing, and that line asks genclass.dev.
+// - Every command the command line has is a command here (cli.mjs COMMANDS), never a question or "no command".
 // - It never opens without someone at a terminal: piped, in CI or with --yes the command prints and ends as before.
 // - A command that fails does not end the home: its message is printed and the prompt comes back.
 
@@ -42,9 +44,17 @@ export const COMMANDS = [
   ["setup", "walk the setup again", false],
   ["login", "sign in (logout, whoami)", false],
   ["remove", "take GenClass out of this app", false],
+  // free and local (cli.mjs FREE_COMMANDS): after them the home asks genclass.dev nothing (LOCAL)
+  ["privacy", "what is sent and kept (free)", false],
+  ["doctor", "is the setup whole (doctor --fix)", false],
+  ["flake [tests]", "flaky test or racy app (free)", false],
 ];
 
-const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "version", "connect", "init", "audit"];
+/** Every command the home hands to the command line: its own list and the ones it does not list. */
+export const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "version", "connect", "init", "audit"];
+
+/** The commands that send nothing: no line about the plan follows them (that line asks genclass.dev). */
+const LOCAL = ["privacy", "doctor", "flake"];
 
 /** A typed line as arguments: spaces separate, single or double quotes keep words together. */
 export function words(line) {
@@ -159,7 +169,7 @@ export async function home(o = {}, deps = {}) {
       warn(`That did not work: ${e?.message ?? e}`);
     }
     // on Free: one line, every time, with the way up
-    if (!["upgrade", "profile", "plan", "login", "logout", "remove"].includes(argv[0])) {
+    if (!["upgrade", "profile", "plan", "login", "logout", "remove", ...LOCAL].includes(argv[0])) {
       try {
         await deps.afterCommand?.();
       } catch {

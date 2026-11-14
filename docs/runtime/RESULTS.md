@@ -45,6 +45,7 @@ round 1, `r17-v2a` to `r17-v2c` and model 0.1.0 (`r17-v2b`) are superseded and k
 | Measured visual checks (deterministic, not the model) | fixture pages: 35 of 35 planted faults found, 0 false reports. Bench: 0 false reports and 0 fixes in 128 page views of the demos, templates and compat apps; recall 1.00 on 20 of 23 planted fault kinds (run 4), 19 of 23 (run 5); public sites: 8 findings in 96 loads in run 4 (5 confirmed real, 0 check errors, 3 unconfirmed), 6 findings in 97 loads in run 5 (after the review; not looked at) | §13, §14 |
 | Flow expectations (opt-in) | false-report rate not measured yet | §5 |
 | Coding agents: `genclass_explore` and `genclass_replay` on one real page (train VM, headless Chromium, 2026-10-20; one page, one bug class, not a recall figure) | explore found the stale-results race in 5 of 6 reordered runs of the buggy page and reported nothing on the fixed page (0 of 6 differ: no false report); replay reproduced it before the fix and not after; the generated Playwright test failed before and passed after | §18 |
+| `genclass flake` on one fixture (development Mac, headless Chromium 153 through Playwright 1.63.0, 2026-11-14; one page, one planted bug, not a recall figure) | four runs of `test/e2e/flake.e2e.mjs`: the buggy page's test racy in 4 of 4, the race seen on all 12 of its failing runs; no race seen on any of the 72 runs of the three tests on the fixed page (false reports on the correct variant: 0 of 72); replays of seeds 1 and 3 failed again with the same race in 4 of 4 each | §30 |
 
 ## 1. Model stages compared (held-out simulated apps)
 
@@ -514,6 +515,7 @@ walk, which missed the two shared chunks (2.74 + 0.19 KB).
 | + review of the mode-raise fix: `normalizeRoute`, the `mode` validation and its warning, the sample bucket's `act@<sample>` form, `readWindowConfig`'s mode check (branch `security/advisory-mode-raise`, 0.3.0-beta.5; local, 2026-10-27, `test/first-load-size.mjs` and gzip -9 against main `49c8c03`'s dist: 108.36 / 100.28 / 128.55 KB) | **108.63 KB** (+0.27) | **100.46 KB** (+0.17) | **128.83 KB** (387.4 KB minified, +0.28) |
 | limit in `bundle.test.ts` for 0.3.0-beta.5, owner OK 2026-10-28 (`/auto`: CI's Node 22 gzip measures 108.83 KB where Node 25 measures 108.63 KB, so the limit follows CI plus 0.07 KB; the main entry: CI measures 100.55 KB where Node 25 measures 100.46 KB, limit 100.60 KB) | 108.90 KB | 100.60 KB | none |
 | limit in `bundle.test.ts` for 0.3.0-beta.5 with the measured visual checks' counts in telemetry (VISUAL.md section 10), owner OK 2026-11-02: the `session` event's `visual` and `fix` fields grow both entries by 0.06 KB on Node 22 (`/auto` 108.89 KB, the main entry 100.61 KB); the summary counts live in the checks' own chunk | 109.00 KB | 100.70 KB | none |
+| limit in `bundle.test.ts` with the consent gate (branch `alpha/consent-mode`, §29), **pending the owner's OK**: Node 22's sizes before that branch plus its growth (349 / 335 B on Node 25) plus 0.05 / 0.07 KB; CI (Node 22) was not run for it | 109.30 KB | 101.02 KB | none |
 
 Removing the vendor adapters changes no first load (they were lazy chunks of `/auto` and files the script tag loaded
 from the CDN). The one warning for the names `sentry`, `posthog` and `datadog` (`src/cdn/sinks.ts` `applySinks`: the
@@ -1679,3 +1681,43 @@ No detection numbers: the gate never feeds a decision, so recall and FIR do not 
 runtime runs the same code paths (the full runtime suite passes unchanged). With the option and no model consent the
 page observes without a model: no detection, nothing held, as with `model: false`.
 
+## 30. `genclass flake` on its fixture, and the secrets check on library files (development Mac, 2026-11-14, branch `alpha/fix-cli-misc`)
+
+**`genclass flake`.** `packages/cli/test/e2e/flake.e2e.mjs`, run four times one after another on the development Mac
+(Node 25.6, `@playwright/test` 1.63.0, headless Chromium 153.0.8010.12, the runtime, `@genclass/playwright` and
+`genclass` built from this branch, base `6a2dc716`). Each run makes a Playwright project in a temporary folder that
+names GenClass nowhere: the search page of `@genclass/playwright`'s own end-to-end check (a buggy page, where a slower
+older answer can land over newer results, and the fixed page, which keeps only the latest) and four ordinary tests.
+`genclass flake --json --runs 5` runs each test once in the natural order and on seeds 1 to 5 (6 runs per test),
+then the e2e replays the seed the command printed and a failing seed of 2 or more. About 32 s per command.
+
+| measure | run 1 | run 2 | run 3 | run 4 | all |
+|---|---|---|---|---|---|
+| the buggy page's test (asserts the results of the last query) | racy | racy | racy | racy | racy in 4 of 4 |
+| its failing runs, and those with the race seen (`overwrote-newer` on `GET /api/search`) | seeds 1, 3, 4: 3 of 3 | 3 of 3 | 3 of 3 | 3 of 3 | 12 of 12 |
+| its natural-order run | passed | passed | passed | passed | passed in 4 of 4 |
+| the three tests on the fixed page: runs, runs with a race file, runs with a race seen | 18, 18, 0 | 18, 18, 0 | 18, 18, 0 | 18, 18, 0 | **72 runs, 72 watched, 0 false reports** |
+| the planted flake (fails on its third repeat whatever the network did) | flaky, seed 3 only, no race | same | same | same | flaky in 4 of 4 |
+| the test that asserts what the page never shows | broken | broken | broken | broken | broken in 4 of 4 |
+| the printed replay (`--seed 1`): failed again with the same race | yes | yes | yes | yes | 4 of 4 |
+| a replay of a later failing seed (`--seed 3`): failed again with the same race | yes | yes | yes | yes | 4 of 4 |
+
+What this covers: one fixture written by this team, one planted bug class (a stale response written over newer
+data), one browser, one machine. The seeds are the same in every run (1 to 5), so the four runs show that the
+verdicts repeat, not four independent samples of response orders; the race was also seen on the buggy page's two
+passing seeds (2 and 5), where the order did not break what the test checks. It is not a recall figure for real
+suites: what GenClass sees is limited to the state it finds on the page and the requests the run holds (CLI README,
+`genclass flake`). Before this branch the e2e checked race-freedom only on the fixed page's main test (6 runs per
+command; the README's "72 runs" was not re-derivable from what the script printed) and replayed seed 1 only; it now
+counts, prints and requires 0 on every run of the three fixed-page tests, and replays a failing seed of 2 or more
+(which checks that a run's seed is its base plus Playwright's repeat index).
+
+**`secrets-in-bundle` (`genclass suggest`) on library files.** The check's own function, `bundleSecrets` in
+`packages/cli/src/suggest/site.mjs`, over every `.js`, `.mjs` and `.cjs` file of at most 1 MB (its per-script cap) in
+this checkout's root `node_modules` (links into the workspace packages not followed): 13,448 files, 126 MB. It matched 1
+file, kind `private-key`: `happy-dom/lib/fetch/certificate/FetchHTTPSCertificate.js`, the private key of the test
+certificate that library ships. False matches: 1 in 13,448 library files. An earlier count in the CLI's CHANGELOG
+(1 in 25,365 files, 339 MB, the same kind of match) came from a tree that is not recorded. These are library files,
+mostly not minified: a minified production bundle is denser in random-looking strings, and its false-match rate is not
+measured. Recall (keys that are in a shipped bundle and found) is not measured on real sites; the unit tests plant one
+key of some kinds (`test/suggest-site.test.ts`) and check the examples and public keys that must not match.
