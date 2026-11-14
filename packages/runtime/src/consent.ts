@@ -278,8 +278,11 @@ function model(rt: RuntimeImpl, on: boolean): void {
 function swap(rt: RuntimeImpl, next: DecisionProvider): void {
   const old = rt["decider"];
   if (old === next) return;
-  // src/model/host.ts ModelHost: the ready() and load() promises it has not settled (it rejects them when disposed)
-  const waiting = (old as { readyWaiters?: { resolve(): void; reject(e: unknown): void }[] } | null)?.readyWaiters?.splice(0) ?? [];
+  // src/model/host.ts ModelHost: the ready() and load() promises it has not settled (it rejects them when disposed);
+  // with model.unloadAfterIdleMs, on the host the IdleUnloadProvider wraps (index.ts: its ready() is that host's)
+  type Held = { readyWaiters?: { resolve(): void; reject(e: unknown): void }[]; host?: Held | null };
+  const o = old as Held | null;
+  const waiting = (o?.readyWaiters ?? o?.host?.readyWaiters)?.splice(0) ?? [];
   old?.dispose?.();
   rt["decider"] = next;
   const f = rt.onModel as ((s: ModelStatus) => void) | undefined;

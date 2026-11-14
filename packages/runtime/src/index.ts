@@ -162,8 +162,9 @@ export class IdleUnloadProvider implements DecisionProvider {
     if (this.timer !== null) this.clock.clearTimeout(this.timer);
     this.timer = null;
     this.unsub?.();
+    // the disposed host stays: this then reads as it does (status "off", ready() and evaluate() reject), not as
+    // "unloaded", which ready() would load again (an ask() waiting at a consent withdrawal reads it: "the model is off")
     this.host?.dispose?.();
-    this.host = null;
   }
 }
 
