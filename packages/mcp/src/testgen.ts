@@ -5,8 +5,10 @@
 // newer data in that field, no identical request from a second click, the error does not recur, the state and page
 // text the request-order baseline ended with). For a race it also holds the page to what the request-order baselines
 // showed (the lines the failing run lacked, and those naming what the user typed): what the user should see, not only
-// what must not be there; other findings get a marked place for that assertion. A test it cannot give a generic
-// assertion fails until one is written: it never passes while asserting nothing. The file opens with what it needs
+// what must not be there; other findings get a marked place for that assertion. A line both orders show, only not as
+// often, is asserted by its count. A test it cannot give a generic assertion that tells the failing order from request
+// order (the lines naming what was typed do not: the failing run shows them too) fails until one is written: it never
+// passes while asserting nothing. The file opens with what it needs
 // and the command that runs it, declares only the records its assertions read, and names a locator used twice once.
 //
 // Every string from the page goes into the file as a JSON string literal (never as code); patterns are built at run
@@ -136,20 +138,28 @@ function pathPattern(path: string): string {
 
 /**
  * Lines every baseline showed at its end (the page with responses in request order) that the test holds the fixed page
- * to: those the failing run lacked, then those naming a value the user typed (at least 3 characters, any case), so
- * the test checks what the user should see and not only what must not be there. Never a line with an age in it or one
- * the failing run showed more often; at most 4.
+ * to, at most 4 in all: `onlyBase`, those the failing run lacked (or showed fewer times), and `naming`, those naming a
+ * value the user typed (at least 3 characters, any case) with no other digit in them (a clock time, a date or a count
+ * beside the typed value reads differently on another day), so the test checks what the user should see and not only
+ * what must not be there. Only `onlyBase` tells the failing run from the baseline: the failing run shows the `naming`
+ * lines too, so they are checks beside the assertion, never the assertion. Never a line with an age in it or one the
+ * failing run showed more often.
  */
-export function keptLines(ev: Record<string, unknown>, baselines: Run[], acts: ActStep[]): string[] {
-  const onlyBase = ((ev.textOnlyBaseline as string[] | undefined) ?? []).filter((l) => typeof l === "string" && !agesIn(l));
+export function keptLines(ev: Record<string, unknown>, baselines: Run[], acts: ActStep[]): { onlyBase: string[]; naming: string[] } {
+  const onlyBase = [...new Set(((ev.textOnlyBaseline as string[] | undefined) ?? []).filter((l) => typeof l === "string" && !agesIn(l)))].slice(0, 4);
   const onlyRun = new Set((ev.textOnlyRun as string[] | undefined) ?? []);
   const texts = baselines.map((b) => b.snapshot?.text).filter((t): t is string[] => Array.isArray(t) && t.length > 0);
   const common = texts.length ? texts.slice(1).reduce((acc, t) => acc.filter((l) => t.includes(l)), [...new Set(texts[0])]) : [];
   const last = new Map<string, string>();
   for (const a of acts) if (a.kind === "type" && a.value !== undefined && a.value !== "[redacted]") last.set(a.target ?? "", a.value);
   const typed = [...last.values()].map((v) => v.trim().toLowerCase()).filter((v) => v.length >= 3);
-  const naming = common.filter((l) => !agesIn(l) && !onlyRun.has(l) && typed.some((v) => l.toLowerCase().includes(v)));
-  return [...new Set([...onlyBase, ...naming])].slice(0, 4);
+  const names = (l: string): boolean => {
+    const low = l.toLowerCase();
+    // the digits of what was typed ("order 42") are the user's; any other is a value of the moment
+    return typed.some((v) => low.includes(v)) && !/\d/.test(typed.reduce((s, v) => s.split(v).join(" "), low));
+  };
+  const naming = common.filter((l) => !agesIn(l) && !onlyRun.has(l) && !onlyBase.includes(l) && names(l));
+  return { onlyBase, naming: naming.slice(0, 4 - onlyBase.length) };
 }
 
 /** A readable constant name for a locator ('searchbox "Search"' → searchSearchbox), unique among `taken`. */
@@ -266,18 +276,38 @@ export function regressionTest(f: Finding, run: Run | undefined, spec: ScheduleS
     // what the page shows with responses in request order, which the fixed page keeps showing: the baseline's lines the
     // failing run lacked, and those naming what the user typed (compared with the agent's own snapshot, the same line
     // splitting as the recording; a line with an age in it reads differently a minute later and is never one)
-    kept = keptLines(ev, baselines, acts);
+    const lines = keptLines(ev, baselines, acts);
+    kept = [...lines.onlyBase, ...lines.naming];
     if (kept.length) {
       const ids = baselines.map((b) => clean(b.id, 20)).join(", ");
       checks.push(`  // what the page shows with responses in request order${ids ? ` (baseline ${baselines.length > 1 ? "runs" : "run"} ${ids})` : ""}: the fixed page keeps showing it`);
     }
-    for (const l of kept) {
-      checks.push(`  expect(snap.text, "the page shows what it shows with responses in request order").toContain(${lit(l)});`);
+    // a line both sides showed, only not as often (a stale result shown a second time), is asserted by its count, as the
+    // replay's verdict counts it (store.ts raceVerdict): its mere presence or absence says nothing
+    const counts = (ev.textCounts as Record<string, { baseline?: unknown; run?: unknown }> | undefined) ?? {};
+    // numbers go into the file as code: only ever a whole number
+    const int = (v: unknown) => Math.max(0, Math.min(1_000_000, Math.floor(Number(v)) || 0));
+    const countOf = (l: string) => {
+      const c = Object.prototype.hasOwnProperty.call(counts, l) ? counts[l] : undefined;
+      return c && typeof c === "object" ? { baseline: int(c.baseline), run: int(c.run) } : undefined;
+    };
+    const timesShown = (l: string) => `(snap.text ?? []).filter((x: string) => x === ${lit(l)}).length`;
+    for (const l of lines.onlyBase) {
+      const c = countOf(l);
+      if (c && (c.run > 0 || c.baseline > 1)) checks.push(`  expect(${timesShown(l)}, "the page shows this line as often as with responses in request order (${c.baseline} times; ${c.run} in the failing order)").toBeGreaterThanOrEqual(${c.baseline});`);
+      else checks.push(`  expect(snap.text, "the page shows what it shows with responses in request order").toContain(${lit(l)});`);
       reads.snap = true;
       asserts++;
     }
+    // the lines naming what the user typed: the failing run showed them too, so they are checks, not the assertion
+    for (const l of lines.naming) {
+      checks.push(`  expect(snap.text, "the page shows what it shows with responses in request order").toContain(${lit(l)});`);
+      reads.snap = true;
+    }
     for (const l of onlyRun.filter((x) => !agesIn(x)).slice(0, 3)) {
-      checks.push(`  expect(snap.text, "the page does not show what only the failing order showed").not.toContain(${lit(l)});`);
+      const c = countOf(l);
+      if (c && c.baseline > 0) checks.push(`  expect(${timesShown(l)}, "the page shows this line fewer times than the failing order did (${c.run} times; ${c.baseline} with responses in request order)")${c.run > c.baseline ? `.toBeLessThan(${c.run})` : `.toBeLessThanOrEqual(${c.baseline})`};`);
+      else checks.push(`  expect(snap.text, "the page does not show what only the failing order showed").not.toContain(${lit(l)});`);
       reads.snap = true;
       asserts++;
     }

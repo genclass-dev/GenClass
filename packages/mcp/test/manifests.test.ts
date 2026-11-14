@@ -233,6 +233,23 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
     expect(TOOLS.find((t) => t.name === "genclass_explore")!.description).toContain("instead of sleeping in a shell");
   });
 
+  it("the skill also works with the released server the CLI pins beside it: what that release lacks comes with what to do without it (finding 45)", () => {
+    // the explore actions and the genclass_status / genclass_findings arguments of the newest @genclass/mcp on npm
+    // (mcp-v0.2.2): `genclass` writes this skill next to an .mcp.json pinned to it, whose schemas reject anything newer
+    const RELEASED = { explore: ["start", "report", "stop"], origin: false };
+    const chunks = body.split(/\n\s*\n|\n(?=\s*\d+\. )/).map((c) => c.replace(/\s+/g, " "));
+    let checked = 0;
+    for (const c of chunks) {
+      const newer = [...c.matchAll(/genclass_explore \{action:"(\w+)"/g)].map((m) => m[1]).filter((a) => !RELEASED.explore.includes(a));
+      const origin = !RELEASED.origin && /`origin`/.test(c) && /genclass_(?:status|findings)/.test(c);
+      if (!newer.length && !origin) continue;
+      checked++;
+      expect(c, c.slice(0, 100)).toMatch(/An older release of the server (?:has no|takes no)/);
+      if (newer.includes("wait")) expect(c).toContain("call `genclass_status`");
+    }
+    expect(checked).toBeGreaterThanOrEqual(2);
+  });
+
   it("the instructions agree with the skill on what waits for a yes", () => {
     expect(INSTRUCTIONS).toContain("genclass_setup prints an install line and the dev-only lines; show them to the user and wait for a yes before you run or add them.");
     expect(INSTRUCTIONS).toContain("If the user only asked what broke, report the cause and wait for a yes before you write a fix or a test.");

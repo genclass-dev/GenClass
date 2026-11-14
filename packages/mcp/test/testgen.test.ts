@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { actionLines, locator, parseTarget, regressionTest } from "../src/testgen.js";
 import { clean, pathShape, q } from "../src/text.js";
+import { nameDifference } from "../src/compare.js";
 import type { Finding, Run } from "../src/types.js";
 import { act } from "./helpers.js";
 
@@ -217,6 +218,81 @@ describe("testgen: a file an agent can run as it is (AGENT.md §5.3)", () => {
     const t = regressionTest(finding("duplicate-request", { subject: "POST /api/pay" }), run([act(0, "click", 'button "Pay"')]), undefined)!;
     expect(t.match(/TODO/g)).toHaveLength(1);
     expect(t).toContain('// TODO: assert what the user should see after these steps, e.g. await expect(page.getByText("...")).toBeVisible();');
+  });
+
+  /**
+   * Run a generated test against a page whose agent link answers `snapshot`, `witnesses` and `errors`: undefined when it
+   * passes, its assertion error when it fails. The page is a stand-in (locators do nothing); the assertions are the
+   * file's own, run with vitest's expect, which takes the same (value, message) form as Playwright's.
+   */
+  async function runOn(src: string, agent: { text?: string[]; witnesses?: unknown[]; errors?: unknown[] }): Promise<Error | undefined> {
+    const { transform } = await import("esbuild");
+    const js = (await transform(src.replace(/^import .*$/m, ""), { loader: "ts" })).code;
+    const chain: any = new Proxy(function () {}, { get: (_t, k) => (k === "then" ? undefined : chain), apply: () => chain });
+    const page: any = new Proxy({}, { get: (_t, k) => (k === "evaluate" ? async (fn: (a?: unknown) => unknown, a?: unknown) => fn(a) : k === "goto" || k === "addInitScript" ? async () => {} : k === "then" ? undefined : () => chain) });
+    const win = { __GENCLASS_AGENT__: { whenSettled: async () => {}, snapshot: () => ({ t: 1, state: {}, requests: {}, text: agent.text ?? [], fields: {} }), witnesses: () => agent.witnesses ?? [], errors: () => agent.errors ?? [] } };
+    let body: ((a: { page: unknown }) => Promise<void>) | undefined;
+    new Function("test", "expect", "window", js)((_title: string, fn: typeof body) => (body = fn), expect, win);
+    try {
+      await body!({ page });
+      return undefined;
+    } catch (e) {
+      return e as Error;
+    }
+  }
+
+  it("a line the failing run showed more often than the baselines is asserted by its count, so the fixed page passes (finding 21)", async () => {
+    // a stale response renders "Milk" a second time; the page shows it once in request order
+    const add = [act(0, "click", 'button "Add"')];
+    const base = [baseline("r7", ["Groceries", "Milk", "Bread"]), baseline("r8", ["Groceries", "Milk", "Bread"])];
+    const ev = { fields: [], textOnlyBaseline: [], textOnlyRun: ["Milk"], textCounts: { Milk: { baseline: 1, run: 2 } }, errors: [], witnesses: [], baselines: ["r7", "r8"] };
+    const t = regressionTest(finding("race", ev), run(add), { order: "seeded", seed: 1 }, base)!;
+    expect(t).not.toContain('not.toContain("Milk")');
+    expect(t).toContain('expect((snap.text ?? []).filter((x: string) => x === "Milk").length, "the page shows this line fewer times than the failing order did (2 times; 1 with responses in request order)").toBeLessThan(2);');
+    expect(await runOn(t, { text: ["Groceries", "Milk", "Bread"] })).toBeUndefined();
+    expect(await runOn(t, { text: ["Groceries", "Milk", "Bread", "Milk"] })).toBeInstanceOf(Error);
+    // the other way round: a line the baselines showed twice and the failing run once
+    const lamp = { fields: [], textOnlyBaseline: ["Reading lamp"], textOnlyRun: [], textCounts: { "Reading lamp": { baseline: 2, run: 1 } }, errors: [], witnesses: [] };
+    const l = regressionTest(finding("race", lamp), run(add), { order: "seeded", seed: 1 })!;
+    expect(l).toContain(".toBeGreaterThanOrEqual(2);");
+    expect(await runOn(l, { text: ["Reading lamp", "Reading lamp"] })).toBeUndefined();
+    expect(await runOn(l, { text: ["Reading lamp"] })).toBeInstanceOf(Error);
+    // a line only one side shows keeps its plain assertion; counts from a file are numbers in the code, nothing else
+    const plain = regressionTest(finding("race", { ...ev, textCounts: { Milk: { baseline: 0, run: 1 } } }), run(add), { order: "seeded", seed: 1 }, base)!;
+    expect(plain).toContain('not.toContain("Milk")');
+    const evil = regressionTest(finding("race", { ...ev, textCounts: { Milk: { baseline: "1); process.exit(1", run: "2" } } }), run(add), { order: "seeded", seed: 1 }, base)!;
+    expect(evil).not.toContain("process.exit");
+    // the report's words say so too
+    expect(nameDifference({ fields: [], textOnlyBaseline: [], textOnlyRun: ["Milk"], errors: [], textCounts: { Milk: { baseline: 1, run: 2 } } })).toBe('it shows "Milk" twice, the baseline once');
+    expect(nameDifference({ fields: [], textOnlyBaseline: ["Reading lamp"], textOnlyRun: [], errors: [], textCounts: { "Reading lamp": { baseline: 2, run: 1 } } })).toBe('it shows "Reading lamp" once, the baseline twice');
+    expect(nameDifference({ fields: [], textOnlyBaseline: [], textOnlyRun: ["Milk"], errors: [] })).toBe('it shows "Milk", which the baseline does not');
+  });
+
+  it("lines naming what was typed are checks, not the assertion: with nothing else to assert the test still fails until one is written (finding 22)", async () => {
+    // the only difference is a field with nothing but a generated name, and lines with an age: nothing to assert
+    const ev = { fields: [{ where: "field", name: "*", baseline: "react", run: "reac" }], textOnlyBaseline: ["Updated just now"], textOnlyRun: ["Updated 5 minutes ago"], errors: [], witnesses: [] };
+    const base = [baseline("r7", ["Search", "Results for react"]), baseline("r8", ["Search", "Results for react"])];
+    const t = regressionTest(finding("race", ev), run(typing), { order: "seeded", seed: 3 }, base)!;
+    expect(t).toContain('toContain("Results for react")');
+    expect(t).toContain('expect(false, "GenClass could not derive a generic assertion');
+    // the failing page shows "Results for react" too: the test must not pass on it
+    expect(await runOn(t, { text: ["Search", "Results for react"] })).toBeInstanceOf(Error);
+    // a witness is the assertion then, as before the naming lines came
+    const w = regressionTest(finding("race", { ...ev, witnesses: ["overwrote-newer search.results by GET /api/search"] }), run(typing), { order: "seeded", seed: 3 }, base)!;
+    expect(w).toContain('w.kind === "overwrote-newer" && SUBJECT.test(w.subject)');
+    expect(w).not.toContain("could not derive");
+    expect(await runOn(w, { text: ["Search", "Results for react"], witnesses: [{ kind: "overwrote-newer", subject: "search.results" }] })).toBeInstanceOf(Error);
+    expect(await runOn(w, { text: ["Search", "Results for react"] })).toBeUndefined();
+  });
+
+  it("a line naming what was typed is kept only without other digits: a clock time or a date beside it is a value of the moment (finding 67)", () => {
+    const acts = [act(0, "type", 'textbox "Message"', "hello there"), act(1, "type", 'textbox "Reference"', "order 42")];
+    const lines = ["10:42 You: hello there", "Buy milk · Nov 14 hello there", "Order 42 placed", "Hello there, Sam"];
+    const t = regressionTest(finding("race", { fields: [], textOnlyBaseline: [], textOnlyRun: ["You: hello ther"], errors: [], witnesses: [] }), run(acts), { order: "seeded", seed: 3 }, [baseline("r7", lines), baseline("r8", lines)])!;
+    expect(t).not.toContain("10:42");
+    expect(t).not.toContain("Nov 14");
+    expect(t).toContain('toContain("Order 42 placed")'); // its digits are the ones the user typed
+    expect(t).toContain('toContain("Hello there, Sam")');
   });
 
   it("every variant is valid TypeScript", async () => {

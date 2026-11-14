@@ -39,6 +39,15 @@ describe("explain: one numbering (AGENT.md §4.2)", () => {
     expect(withStepNames(SITUATION, undefined)).toBe(SITUATION);
   });
 
+  it("a number inside a quoted page value is the page's data and stays, wherever it sits in the value (finding 68)", () => {
+    const ops = { "3": "GET /api/orders#1", "4": 1, "7": 1, "5": "GET /api/search#1" };
+    expect(withStepNames('+0.20s write order.title = "Order #3 shipped" (by #5)', ops)).toBe('+0.20s write order.title = "Order #3 shipped" (by GET /api/search#1)');
+    expect(withStepNames('the user typed "ticket #7" and "pages #3–#4" (#4)', ops)).toBe('the user typed "ticket #7" and "pages #3–#4" (action 1)');
+    expect(withStepNames('a value with a quote in it: "say \\"#3\\" twice" then #3', ops)).toBe('a value with a quote in it: "say \\"#3\\" twice" then GET /api/orders#1');
+    // a value cut short before its closing quote does not swallow the next line
+    expect(withStepNames('order.note = "Order is on its w…\n+0.30s start GET /x (#5) "done #3"', ops).split("\n")[1]).toBe('+0.30s start GET /x (GET /api/search#1) "done #3"');
+  });
+
   it("a stale-write explanation shows the model's text in the steps' numbering, from the page's operation names", async () => {
     const { tool, load } = setup();
     const r = load();

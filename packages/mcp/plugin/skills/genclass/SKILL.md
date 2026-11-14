@@ -19,7 +19,9 @@ the lines for the app's browser entry, behind a development check. Show the user
 you run or add any of them. Then load a page of the dev server.
 
 Pages and findings are grouped by app (page origin). When several dev servers run on this machine, pass the one you
-work on to `genclass_status` and `genclass_findings` as `origin` (`http://localhost:5173`, or the port `5173`).
+work on to `genclass_status` and `genclass_findings` as `origin` (`http://localhost:5173`, or the port `5173`). An
+older release of the server takes no `origin` and rejects the call: call them without it, and tell the apps apart by
+each page load's URL in `genclass_status` (its findings name a route, not an app).
 
 ## 1. From a finding to a proven fix
 
@@ -53,7 +55,10 @@ shows which pages and endpoints the GenClass dashboard flagged.
    script you write for this out of the repo, and wait for a yes before adding Playwright to a project that has none.
 3. `genclass_explore {action:"wait"}` returns once every armed load is in (or after `timeout_s`, default 120) and says
    how many are ("6 of 9 loads in"). Call it after your script, or while the person does the loads; do not sleep in a
-   shell instead.
+   shell instead. An older release of the server has no `wait` (its explore takes only start, report and stop, and
+   rejects the call): a script that awaited `whenSettled()` on every load is done with them when it ends; while a
+   person does them, call `genclass_status` now and then until its Explore line has every planned load assigned and
+   the newest page load says "settled".
 4. `genclass_explore {action:"report"}` and read the verdict per scenario:
    - "No race found" with the reordered runs compared ("Compared: 6 of 6"): done.
    - "NO VERDICT", "No verdict" or "0 compared": nothing was compared, so it is not a negative result; run it again

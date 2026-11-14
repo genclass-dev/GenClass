@@ -193,9 +193,30 @@ describe("mcp: genclass_setup in a project that already starts GenClass with /au
   });
 
   it("connectAgent already there: nothing to add, only how to check it", () => {
-    const t = setupText(project({ "src/main.tsx": MAIN, "src/dev.ts": "connectAgent(GenClass.init());\n" }));
-    expect(t).toContain("src/main.tsx starts it with @genclass/runtime/auto and already calls connectAgent.");
+    const link = 'import { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\nif (import.meta.env.DEV) connectAgent(GenClass.init());\n';
+    const t = setupText(project({ "src/main.tsx": MAIN, "src/dev.ts": link }));
+    expect(t).toContain("src/main.tsx starts it with @genclass/runtime/auto, and src/dev.ts already calls connectAgent.");
     expect(t).not.toContain("```ts");
+    const same = setupText(project({ "src/main.tsx": `${MAIN}if (import.meta.env.DEV) void import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));\n` }));
+    expect(same).toContain("src/main.tsx starts it with @genclass/runtime/auto and already calls connectAgent.");
+  });
+
+  it("a generated regression test, a fixture or a link commented out is not the link: the lines to add stay (finding 90)", () => {
+    // what genclass_explain's test says in its assertion message, saved under src/ with the app
+    const spec = 'expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);\n';
+    const commented = `${MAIN}// import { connectAgent } from "@genclass/runtime/agent";\n// connectAgent(GenClass.init());\n/* connectAgent(rt) from "@genclass/runtime/agent" */\n`;
+    for (const files of [
+      { "src/main.tsx": MAIN, "src/e2e/genclass-f3.spec.ts": spec },
+      { "src/main.tsx": MAIN, "src/tests/agent.ts": spec },
+      { "src/main.tsx": MAIN, "src/fixtures/link.ts": 'import { connectAgent } from "@genclass/runtime/agent";\nconnectAgent(rt);\n' },
+      { "src/main.tsx": commented },
+      // a call without the agent entry in its file is some other connectAgent
+      { "src/main.tsx": MAIN, "src/other.ts": "export function connectAgent(x) { return x; }\nconnectAgent(1);\n" },
+    ]) {
+      const t = setupText(project(files));
+      expect(t, Object.keys(files).join(", ")).not.toContain("already calls connectAgent");
+      expect(t).toContain("1. In src/main.tsx, below that import:");
+    }
   });
 
   it("node_modules and build output are not read; without an /auto import the usual lines stay", () => {
