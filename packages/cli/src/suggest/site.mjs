@@ -13,7 +13,7 @@
 //   come from a short fixed list or are an error code, never a server's own words.
 
 import { resolveMx as nodeResolveMx, resolveTxt as nodeResolveTxt } from "node:dns/promises";
-import { isPlaceholder } from "./keys.mjs";
+import { isDocumentedKey, isPlaceholder } from "./keys.mjs";
 
 /**
  * @typedef {Object} HomeFacts
@@ -191,8 +191,8 @@ function headerReader(headers) {
 }
 
 /**
- * At most `max` bytes of a response's body, as text. `cut`: the body went on past `max` (or may have: the stream was
- * still open when `max` bytes were in), so the rest was not read.
+ * At most `max` bytes of a response's body, as text. `cut`: the body went on past `max`, so the rest was not read. A
+ * body of exactly `max` bytes is whole: when the chunks in reach `max` exactly, one more read tells its end from more.
  */
 async function readBody(res, max) {
   try {
@@ -202,6 +202,7 @@ async function readBody(res, max) {
       const chunks = [];
       let n = 0;
       let ended = false;
+      let over = false;
       while (n < max) {
         const { done, value } = await reader.read();
         if (done) {
@@ -209,9 +210,15 @@ async function readBody(res, max) {
           break;
         }
         if (!value || !value.length) continue;
-        const take = value.length > max - n ? value.subarray(0, max - n) : value;
+        over = value.length > max - n;
+        const take = over ? value.subarray(0, max - n) : value;
         chunks.push(take);
         n += take.length;
+      }
+      while (!ended && !over) {
+        const { done, value } = await reader.read();
+        if (done) ended = true;
+        else if (value && value.length) over = true;
       }
       try {
         Promise.resolve(reader.cancel()).catch(() => {});
@@ -493,19 +500,24 @@ const BUNDLE_SECRETS = [
 /**
  * An AWS access key ID. The ID alone signs nothing, and pages share it on purpose inside pre-signed links
  * (X-Amz-Credential=AKIA.../20250101/..., AWSAccessKeyId=AKIA...), so one there is skipped, and one elsewhere counts
- * only with a secret access key (AWS_SECRET) near it.
+ * only with a secret access key (AWS_SECRET) near it. Only those two parameter names mark a pre-signed link: an ID
+ * after any other name (accessKeyId=AKIA... in a query string, AWS_ACCESS_KEY_ID=AKIA... in a .env) is looked at.
  */
-const AWS_ID = /(?<![A-Za-z0-9])(?<!(?:[Cc]redential|[Aa]ccess[Kk]ey[Ii]d)(?:=|%3[Dd]))AKIA([0-9A-Z]{16})(?![0-9A-Z])(?!(?:\/|%2[Ff]|\\u002[Ff]|\\\/)\d{8}(?:\/|%2[Ff]|\\u002[Ff]|\\\/))/g;
-/** A secret access key: exactly 40 characters of base64 with capitals, small letters and digits (a SHA-1 is not). */
-const AWS_SECRET = /(?<![A-Za-z0-9/+=])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+=])/g;
+const AWS_ID = /(?<![A-Za-z0-9])(?<!(?:[Xx]-[Aa]mz-[Cc]redential|AWSAccessKeyId)(?:=|%3[Dd]))AKIA([0-9A-Z]{16})(?![0-9A-Z])(?!(?:\/|%2[Ff]|\\u002[Ff]|\\\/)\d{8}(?:\/|%2[Ff]|\\u002[Ff]|\\\/))/g;
+/**
+ * A secret access key: exactly 40 characters of base64 with capitals, small letters and digits (a SHA-1 is not).
+ * Not part of a longer run of base64, and not followed by "=" padding; an "=" before it is the NAME=value of a .env
+ * or credentials file (aws_secret_access_key=...), so it may stand right after one.
+ */
+const AWS_SECRET = /(?<![A-Za-z0-9/+])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+=])/g;
 /** How far from an access key ID its secret is looked for, in characters on either side. */
 const AWS_NEAR = 400;
 const JWT = /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.(eyJ[A-Za-z0-9_-]{10,})\.[A-Za-z0-9_-]{20,}/g;
 
-/** Whether a match's body (its first capture group that matched) is a real-looking key. */
+/** Whether a match's body (its first capture group that matched) is a real-looking key no provider documents. */
 const realKey = (m) => {
   const body = m.slice(1).find((g) => g !== undefined);
-  return !isPlaceholder(body);
+  return !isPlaceholder(body) && !isDocumentedKey(body);
 };
 
 /** Whether an AWS access key ID in `t` has a secret access key near it. */
