@@ -64,7 +64,8 @@ fixed and proved a stale-search race with these tools, and lost time on each of 
   typed value is no longer one of them.
 - `genclass_explain` leaves a `#3` inside a quoted page value (`"Order #3 shipped"`) as it is.
   A value the runtime cut short (`{title: "Buy milk and eggs f…`, with no closing quote) ends at its `…`, so the
-  operation numbers after it on the line (`(started 0.10s after #4); #8 {title: "x"}`) are request keys again.
+  operation numbers after it on the line (`(started 0.10s after #4); #8 {title: "x"}`) are request keys again, also
+  when the next value starts with neither a letter nor a digit (`""`, `"$5 coupon"`, `"(no title)"`, a space).
 - `genclass_setup` no longer takes a generated regression test, a fixture or a commented-out call for the agent link,
   and names the file that has it.
 - `genclass_replay` and `genclass_explore` name the origin they wait for, and say when a load of the page came from

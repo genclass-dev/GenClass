@@ -273,6 +273,11 @@ export function withStepNames(text: string, ops: Record<string, string | number>
     .join("\n");
 }
 
+/** What the runtime's renderer writes right after a value's closing quote (tested on the one character after it). */
+const AFTER_VALUE = /^(?:$|[\s,}\])…;.:])/;
+/** Where its `describe()` opens a value: after a key's ": ", a list's "[" or ", " (tested on what comes before the quote). */
+const BEFORE_VALUE = /(?:: |, |\[)$/;
+
 /**
  * The quoted values on one line of the runtime's text, as [start, end) spans. The renderer writes a value as a JSON
  * string (no raw quote inside it), and its `truncate()` may cut one short: the value then ends at the "…" it appends,
@@ -280,10 +285,12 @@ export function withStepNames(text: string, ops: Record<string, string | number>
  * (`#6 {title: "Buy milk and eggs f… (started after #4); #8 {title: "x"}`). So a value ends either at its closing
  * quote or at a "…" not right before a quote (a "…" right before one is the end of a string the renderer shortened
  * inside its quotes, or the page's own text). Each line is read so that every quote it opens ends one of those two
- * ways, which tells a cut value from a closed one; where both readings hold, a quote followed by a letter or digit is
- * read as the opening of the next value (the renderer writes punctuation or a space after a value), any other one as
- * the closing quote. A line no reading fits (a stray quote) is read the same way, value by value, and a quote with no
- * end at all is plain text. Linear in the line's length.
+ * ways, which tells a cut value from a closed one; where both readings hold, a quote is read as closing only when what
+ * the renderer writes after a value follows it (the end of the line, a space, `,` `}` `]` `)` `;` `.` `:` or its own
+ * "…") and it does not stand where `describe()` opens a value (after a key's `: `, a list's `[` or `, `), and as the
+ * opening of the next value otherwise: that value may start with anything (`""`, `"$5 off"`, `"(no title)"`,
+ * `"#3 priority"`, `" milk"`). A line no reading fits (a stray quote) is read the same way, value by value, and a
+ * quote with no end at all is plain text. Linear in the line's length.
  */
 export function quotedValues(line: string): [number, number][] {
   const n = line.length;
@@ -315,8 +322,10 @@ export function quotedValues(line: string): [number, number][] {
     const good = goodCut[p + 1] === NONE ? NONE : goodCut[p + 1] + 1;
     const first = cut[p + 1] === NONE ? NONE : cut[p + 1] + 1;
     const fitsShut = shut !== NONE && fits[shut] === 1;
-    // a quote followed by a letter or digit opens the next value: the cut reading first
-    const end = shut !== NONE && !/^[\p{L}\p{N}_]/u.test(line.slice(shut, shut + 2)) ? (fitsShut || good === NONE ? shut : good) : good !== NONE ? good : fitsShut ? shut : first !== NONE ? first : shut;
+    // a quote in the place of an opening one, or not followed by what follows a value, opens the next value: the cut
+    // reading first
+    const closing = shut !== NONE && AFTER_VALUE.test(line.slice(shut, shut + 1)) && !BEFORE_VALUE.test(line.slice(Math.max(p + 1, shut - 3), shut - 1));
+    const end = closing ? (fitsShut || good === NONE ? shut : good) : good !== NONE ? good : fitsShut ? shut : first !== NONE ? first : shut;
     if (end === NONE) continue;
     spans.push([p, end]);
     p = end - 1;

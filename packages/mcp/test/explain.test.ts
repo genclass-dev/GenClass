@@ -69,6 +69,34 @@ describe("explain: one numbering (AGENT.md §4.2)", () => {
     expect(withStepNames('a stray " before #4', ops)).toBe('a stray " before POST /api/todos#1');
   });
 
+  it("after a value cut short, the next value may start with anything: an empty string, $, (, #, [, an emoji, a space", () => {
+    // the runtime's own describe() and truncate() in the in-flight facts' shapes (situation/facts.ts: `#id detail
+    // (started …)` and `#id detail started …`); round 2 read the next value's opening quote as the cut value's closing
+    // one unless a letter or digit followed it, and left the numbers between raw
+    const ops = { "4": "POST /api/todos#1", "6": "POST /api/todos#2", "8": "POST /api/todos#3", "9": "POST /api/todos#4", "3": "GET /api/orders#1" };
+    // the line with every #4, #6, #8 and #9 written as its key (none of them is inside a value in these lines)
+    const named = (s: string) => s.replace(/#([4689])\b/g, (_m, n: string) => ops[n as "4"]);
+    const two = '2 other POST /api/todos requests with different input are in flight: #6 {title: "Buy milk and eggs fr… (started 0.10s after #4); #8 {title: "", note: "bring cash… (started 0.10s after #4).';
+    expect(withStepNames(two, ops)).toBe(named(two));
+    for (const mid of ['{title: "$5 coupon"}', '{title: "", done: false}', '{title: "(no title)"}', '{title: "[draft] plan"}', '{title: "🙂 smile"}']) {
+      const line = `3 other POST /api/todos requests with different input are in flight: #6 {title: "Buy milk and eggs fr… (started 0.10s after #4); #8 ${mid} (started 0.10s after #4); #9 {title: "Call the plumber abo… (started 0.10s after #4).`;
+      expect(withStepNames(line, ops), mid).toBe(named(line));
+    }
+    // a "#3" inside the next value is the page's and stays
+    const hash = '3 other POST /api/todos requests with different input are in flight: #6 {title: "Buy milk and eggs fr… (started 0.10s after #4); #8 {title: "#3 priority"} (started 0.10s after #4); #9 {title: "Call the plumber abo… (started 0.10s after #4).';
+    expect(withStepNames(hash, ops)).toBe(named(hash));
+    expect(withStepNames(hash, ops)).toContain('{title: "#3 priority"}');
+    // a value that starts with a space: its quote follows a key's ": " or a list's "[", where describe() opens values
+    for (const line of [
+      '2 other POST /api/todos operations are in flight (1 newer than #4): #6 {title: "Call the plumber ab… started 0.10s after #4; #8 {title: " lead space", note:… started 0.10s after #4.',
+      '2 other POST /api/todos operations are in flight (1 newer than #4): #6 {title: "Buy milk and eggs fr… started 0.10s after #4; #8 2 items [" lead space", "#3 n… started 0.10s after #4.',
+    ])
+      expect(withStepNames(line, ops)).toBe(named(line));
+    // a "…" inside a closed value is still the page's text, inside an object or a list
+    expect(withStepNames('#6 {title: "Loading… #3 left", note: "Buy milk and eggs f… (started 0.10s after #4)', ops)).toBe('POST /api/todos#2 {title: "Loading… #3 left", note: "Buy milk and eggs f… (started 0.10s after POST /api/todos#1)');
+    expect(withStepNames('#6 2 items ["Loading… #3 left", "Buy milk and eggs f… (started 0.10s after #4)', ops)).toBe('POST /api/todos#2 2 items ["Loading… #3 left", "Buy milk and eggs f… (started 0.10s after POST /api/todos#1)');
+  });
+
   it("quotedValues reads a long line in one pass", () => {
     expect(quotedValues('"a" b "c… d "e"')).toEqual([
       [0, 3],
