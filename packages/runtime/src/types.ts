@@ -965,8 +965,31 @@ export interface InitOptions {
    * `data-analytics="on"`, `<meta name="genclass" content="analytics=on">`, `window.GENCLASS_CONFIG.analytics`.
    * Since 0.3.0-beta.1 (`npm install @genclass/runtime@beta`; 0.2.x, npm's `latest` until 0.3.0, ignores it). When the
    * analytics code does not load, `runtime.analytics.reason` is "error" (the script tag also warns on the console).
+   * Under `consent` they also wait for the visitor's `analytics` (and `diagnostics`) consent.
    */
   analytics?: boolean;
+  /**
+   * A consent gate, for sites that ask visitors first (the EU, EEA and UK: ePrivacy Article 5(3) covers reading
+   * device facts and sending them, and storing on the device; TELEMETRY.md "Consent"). **Unset (the default): no
+   * gate**, everything works as without this option. `"pending"`: GenClass starts and observes on the page, locally
+   * only, until the app calls `runtime.consent(...)` (or `GenClass.consent(...)`) with the visitor's choice: no
+   * diagnostics request, no analytics, no read or write of GenClass's own `localStorage` / `sessionStorage` entries
+   * and no model download (so no request to cdn.jsdelivr.net, no worker, no Cache Storage). Each part then starts
+   * when it is granted, from that point (diagnostics never include what happened before), and stays off while it is
+   * pending or denied. `"denied"`: every part denied (a later grant still starts it). `"granted"`: every part
+   * granted. An object grants (true) or denies (false) single parts; the parts it leaves out are pending: `{ model: true }` for a
+   * model served from your own site (model.baseUrl), the rest waiting. With the option, every part starts pending
+   * and the option's own grants apply a moment after start (the code that applies a choice is a lazy chunk), so even
+   * `"granted"` starts diagnostics then rather than at once. Every opt-out still wins over a grant (Global Privacy
+   * Control, `telemetry: false`, `?genclass=no-telemetry`, local hosts), and a part the app did not turn on
+   * (`analytics`, `learn.persist`) is not turned on by its consent. Read once at start (a later `GenClass.init()` on
+   * a running runtime ignores it, with one console warning); also `window.GENCLASS_CONFIG.consent`,
+   * `<meta name="genclass" content="consent=pending">` and `data-consent="pending"` on the script tag (those two take
+   * "pending" and "denied" only). Not gated: the observers (in memory), the measured visual checks and the devtools
+   * overlay (local, nothing sent or stored), your own `sinks`, and the coding-agent link (development only).
+   * Unreleased (the alpha line after 0.3.0-beta.6).
+   */
+  consent?: "pending" | "granted" | "denied" | ConsentChoices;
   /**
    * Automatic state discovery: find the app's state without registering stores. **Default: on in the zero-code
    * entries** (`@genclass/runtime/auto*`, the script tag); off with `GenClass.init()` / `createRuntime()` unless set
@@ -1010,6 +1033,35 @@ export interface InitOptions {
    */
   scope?: "app" | "functions";
 }
+
+/**
+ * The visitor's choice per part of GenClass (InitOptions.consent, Runtime.consent): true granted, false denied, left
+ * out unchanged (pending at start). Map them from your consent banner's categories (TELEMETRY.md "Consent").
+ */
+export interface ConsentChoices {
+  /** Anonymous diagnostics (InitOptions.telemetry) to genclass.dev, or to your own `telemetry.endpoint`. */
+  diagnostics?: boolean;
+  /**
+   * Interaction analytics (InitOptions.analytics) with their one `localStorage` entry, the visit id. They are sent as
+   * diagnostics, so they need `diagnostics` too.
+   */
+  analytics?: boolean;
+  /**
+   * GenClass's own `localStorage` and `sessionStorage` entries: learned state (`learn.persist`,
+   * `learn.expectations`; "genclass:learn" and its session ordinal), the act/observe bucket (`sample`) and the
+   * breaker's trip ("genclass:bucket", "genclass:breaker"). Not given: GenClass keeps them in memory for the page.
+   */
+  storage?: boolean;
+  /**
+   * Downloading and running the on-device model (InitOptions.model): its files and ONNX Runtime's wasm come from
+   * cdn.jsdelivr.net unless `model.baseUrl` / `ortWasmPaths` name your own site, and are kept in Cache Storage
+   * ("genclass-runtime-v1", or `model.cacheName`). Not given: no worker, no download, observe without a diagnosis.
+   */
+  model?: boolean;
+}
+
+/** Runtime.consent(): each part's state now. Without InitOptions.consent every part starts "granted". */
+export type ConsentState = { readonly [K in keyof ConsentChoices]-?: "granted" | "denied" | "pending" };
 
 /**
  * InitOptions.learn: what GenClass learns about the page (transition profiles per operation, flow expectations per
@@ -1358,7 +1410,10 @@ export interface TelemetryTransport {
 /** runtime.telemetry: whether this page sends diagnostics, and why not. */
 export interface TelemetryStatus {
   readonly enabled: boolean;
-  /** Off: "option", "headless", "url", "localStorage", "gpc", "sampled-out", "no-crypto", "no-transport", "kill-switch". */
+  /**
+   * Off: "option", "headless", "url", "localStorage", "gpc", "sampled-out", "no-crypto", "no-transport",
+   * "kill-switch", "local", "disabled", "consent" (InitOptions.consent: `diagnostics` pending or denied).
+   */
   readonly reason?: string;
   readonly endpoint?: string;
   /** Random per page load (not persisted). */
@@ -1378,12 +1433,13 @@ export interface AnalyticsStatus {
   /**
    * Off: "option" (not turned on), "telemetry-off" (telemetry is off: an opt-out, Global Privacy Control, a local
    * host), "no-token" (no app token and the default endpoint), "stopped" (`stop()`), "error" (the analytics code did
-   * not load).
+   * not load), "consent" (InitOptions.consent: `analytics` or `diagnostics` pending or denied).
    */
   readonly reason?: string;
   /**
    * Start recording now (after the visitor consented, or to turn analytics on without the init option). Returns
-   * whether they are on; does nothing while telemetry is off or without a token.
+   * whether they are on; does nothing while telemetry is off, without a token, or under InitOptions.consent before
+   * the visitor granted `analytics` and `diagnostics` (with `analytics: true` set, that grant starts them itself).
    */
   start(): boolean;
   /**
@@ -1765,6 +1821,22 @@ export interface Runtime {
   readonly telemetry?: TelemetryStatus;
   /** Interaction analytics for this page (InitOptions.analytics): whether they are recorded, and the consent switch. */
   readonly analytics?: AnalyticsStatus;
+  /**
+   * The visitor's consent (InitOptions.consent; TELEMETRY.md "Consent"), from your consent banner: `true` (or
+   * "granted") grants every part, `false` (or "denied") denies every part, an object sets the parts it names and leaves
+   * the rest as they are; no argument only reads. Resolves with each part's state once applied (the consent code is a
+   * small lazy chunk; null if it could not load, and then nothing changed). A grant starts that part from now:
+   * diagnostics (a new `runtime.telemetry`; every opt-out still wins), analytics the app turned on (`analytics: true` or
+   * an earlier `runtime.analytics.start()`), storage (learned state from earlier visits is read and kept from now on),
+   * the model (loaded as `model.preload` says: now for "eager", when the browser is idle for "idle", at the first
+   * salient situation for "lazy"). A denial withdraws that part now: diagnostics and analytics stop and what they had
+   * queued is dropped, GenClass's own storage entries are removed, the model is no longer consulted and its Cache
+   * Storage copy is deleted (a model already loaded stays in memory, unused, until the page closes). Without the
+   * `consent` option every part starts granted, and a denial withdraws what runs the same way (diagnostics already
+   * sent before it stay sent: that is what the option is for). Explicit `ask()` / `decide()` calls still use a model
+   * already in memory. Never rejects.
+   */
+  consent(choices?: boolean | ConsentChoices | InitOptions["consent"]): Promise<ConsentState | null>;
   /**
    * The last `n` measured visual check findings (InitOptions.visual), oldest first; at most 200 are kept. An empty
    * list until the checks have run (or when they are off).

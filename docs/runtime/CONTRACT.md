@@ -606,3 +606,25 @@ anything" (section 13), on these terms:
   maps no fact to a diagnosis or an action. Model-visible text is unchanged (`situation-v2.3`).
 - **Nothing leaves the machine.** It talks only to a loopback URL; telemetry is unchanged.
 - **Determinism (section 0 rule 3).** Timing uses the injected `Clock`; schedules are hashes of a seed and a request key.
+
+## 17. The consent gate (added 2026-11-14, branch `alpha/consent-mode`; owner to confirm before merge)
+
+`InitOptions.consent` and `Runtime.consent()` (`src/consent.ts`, a lazy chunk; the gates in `src/runtime.ts`,
+`src/index.ts`, `src/analytics/start.ts`; TELEMETRY.md "Consent"). It only narrows what GenClass does, on these terms:
+
+- **Opt-in, and nothing changes without it.** Unset, every part (`diagnostics`, `analytics`, `storage`, `model`) is
+  granted and the runtime behaves as before; the existing tests run unchanged.
+- **Pending means local only.** A part not granted sends nothing (no telemetry request, no analytics), stores and
+  reads none of GenClass's own `localStorage` / `sessionStorage` entries (`storage()` answers nothing; removal is
+  always allowed), and downloads nothing (the built-in model is a lazy host that is never asked for: no worker, no
+  request, no Cache Storage; `noModel()`). The observers, situations without a model, the visual checks, the
+  devtools overlay, the app's own sinks and the coding-agent link are not gated.
+- **Grants start, denials withdraw.** A grant starts that part from that point, through the same code as at start
+  (`startTelemetry`, so every opt-out in section 8 and TELEMETRY.md "Opting out" still wins; analytics and learned
+  state only where the app turned them on). A denial keeps it off; after a grant it stops it now (telemetry drops its
+  queue; GenClass's entries are removed; the model is no longer consulted and its Cache Storage copy is deleted).
+- **Never model input (section 0 rules 1 and 2).** No consent state reaches a situation, a fact, the gate or the
+  model; model-visible text is unchanged (`situation-v2.3`). Without model consent the runtime fails open as with no
+  model (section 8).
+- **Determinism (section 0 rule 3).** No clock reads or randomness of its own; the idle start of the model uses the
+  runtime's `Clock` (or the runtime global's `requestIdleCallback`).

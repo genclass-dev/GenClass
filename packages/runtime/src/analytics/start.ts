@@ -1,7 +1,8 @@
 // Interaction analytics: the first-load stub (docs/runtime/ANALYTICS.md section 2). It answers runtime.analytics and,
 // once the app turned analytics on (InitOptions.analytics or runtime.analytics.start()) while telemetry runs with the
-// app's token or a custom endpoint, imports the chunk (src/analytics/index.ts) that records. Off means nothing: no
-// listener, no import. Everything else lives in the chunk, so this file stays small (test/bundle.test.ts).
+// app's token or a custom endpoint (and, under InitOptions.consent, the visitor granted analytics), imports the chunk
+// (src/analytics/index.ts) that records. Off means nothing: no listener, no import. Everything else lives in the
+// chunk, so this file stays small (test/bundle.test.ts).
 
 import type { RuntimeImpl } from "../runtime.js";
 import type { AnalyticsStatus } from "../types.js";
@@ -27,7 +28,8 @@ export function startAnalytics(rt: RuntimeImpl, on: unknown): AnalyticsStatus {
     start(): boolean {
       const t = rt.telemetry;
       if (!s.enabled) {
-        s.reason = !t?.enabled ? "telemetry-off" : t.token || t.endpoint != DEFAULT_TELEMETRY_ENDPOINT ? undefined : "no-token";
+        // consent (InitOptions.consent): the visitor's `analytics` choice (diagnostics waiting: "telemetry-off")
+        s.reason = !rt.cs.analytics ? "consent" : !t?.enabled ? "telemetry-off" : t.token || t.endpoint != DEFAULT_TELEMETRY_ENDPOINT ? undefined : "no-token";
         if (!s.reason) {
           s.enabled = true;
           const n = ++gen;

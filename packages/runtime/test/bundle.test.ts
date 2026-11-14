@@ -99,7 +99,13 @@ describe.skipIf(!built)("dist as an app bundles it", () => {
   // The main entry likewise: CI measures 100.55 KB (Node 25: 100.46 KB); its growth from the same fixes is 0.15 KB.
   // 0.3.0-beta.5 (owner OK 2026-11-02): the session event's two visual-checks fields (`visual`, `fix`; VISUAL.md
   // section 10) grow both by 0.06 KB (Node 22: /auto 108.89 KB, the main entry 100.61 KB); the limits follow.
-  const LIMIT_KB: Record<string, number> = { "auto.js": 109.0, "index.js": 100.7 };
+  // The consent gate (InitOptions.consent, alpha/consent-mode; raise pending the owner's OK): only the gates are in the
+  // first load (runtime.ts cs, storage(), noModel(); index.ts telemetry and lazy model; the analytics reason; the
+  // meta/data key on /auto); grants and withdrawals are a lazy chunk (src/consent.ts). Measured with
+  // test/first-load-size.mjs against genclass-alpha's dist on Node 25: +349 B on /auto (109.09 KB), +335 B on the main
+  // entry (100.90 KB). The limits are Node 22's sizes before it (108.89 / 100.61 KB) plus that growth plus 0.05 / 0.07
+  // KB, as before.
+  const LIMIT_KB: Record<string, number> = { "auto.js": 109.3, "index.js": 101.02 };
   it("first-load cost of /auto and the main entry, minified + gzip: under the limits", async () => {
     const { build } = await import("esbuild");
     const uses: Record<string, string> = { "auto.js": "", "index.js": "GenClass.init({});" };
@@ -164,6 +170,9 @@ describe.skipIf(!built)("dist as an app bundles it", () => {
       expect(code, entry).toContain("genclass-visual");
       // interaction analytics stay out of first load too: only the stub (ANALYTICS.md section 2)
       for (const marker of ANALYTICS_MARKERS) expect(code, `${entry}: ${marker}`).not.toContain(marker);
+      // the consent chunk too: only the gates (src/consent.ts, CONTRACT section 17)
+      expect(code, entry).not.toContain("consent could not be applied");
+      expect(code, entry).not.toContain("genclass-runtime-v1");
     }
   });
 

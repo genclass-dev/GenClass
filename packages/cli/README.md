@@ -257,7 +257,10 @@ npx genclass doctor
 it keeps on their devices, the opt-outs it honours, what that means for EU, UK and US visitors, the exact options that
 make it send and keep nothing, and the Content-Security-Policy lines it needs. It reads your project's files and
 nothing else, needs no account, and is not legal advice. `--out genclass-privacy.md` writes it for your privacy
-policy or a vendor questionnaire.
+policy or a vendor questionnaire. For sites that ask visitors first (the EU, EEA and UK) it names the runtime's
+consent gate, `consent: "pending"`: with it set, the map says that each recipient and stored entry waits for the
+visitor's grant, and whether your project's GenClass files pass the choice on with
+`GenClass.consent({ diagnostics, analytics, storage, model })`.
 
 `doctor` checks every part GenClass added (this command's version and the one on your PATH, the runtime and its
 import order, the MCP server's pin, the skill, the coding-agent link, the bridge, your site's

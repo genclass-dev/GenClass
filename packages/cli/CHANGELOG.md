@@ -12,7 +12,11 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   service-provider terms, regulated sites); the exact options that make it send and keep nothing; and the
   Content-Security-Policy it needs. Read from the project's files (tests excluded). `--out genclass-privacy.md`
   writes it as Markdown for a privacy policy or a vendor questionnaire; `--json` as data. Not legal advice, and it
-  says so.
+  says so. It knows the runtime's consent gate (`consent: "pending"` in the config, `consent=pending` in the meta
+  tag, `data-consent` on the script tag): with it, every recipient and stored entry says it waits for the visitor's
+  grant, the EU guidance says what the gate does and whether the project's GenClass files call
+  `GenClass.consent(...)`, and a new `Consent` row says which applies; without it, `consent: "pending"` is the first
+  line under "To send and keep nothing", for sites that need consent.
 - **`genclass doctor`** (free): one line per part GenClass added (this command and the `genclass` on the PATH, Node,
   the sign-in, the runtime's version and import order, the diagnostics, the MCP server's pin, the skill, the
   coding-agent link, the bridge, the site's Content-Security-Policy, the test workflow), each with what to run.
