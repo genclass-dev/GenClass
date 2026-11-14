@@ -1,28 +1,32 @@
 // `genclass flake`: "is this Playwright test flaky, or is my app racy?" It runs the project's own Playwright suite
-// through the project's own @genclass/playwright (its command, genclass-playwright-run): once with responses in their
-// natural order, then once per seed (--runs, default 5) with the app's API responses held for a seeded time, so they
-// can arrive in another order, and reads the race file that run writes for each test and seed. Per test it says one
-// of four things, from what was measured only:
+// through the project's own @genclass/playwright (its command, genclass-playwright-run): by default once with
+// responses in their natural order, then once per seed (--runs, default 5) with the app's API responses held for a
+// seeded time, so they can arrive in another order (--seed, --no-baseline and --no-chaos change that: parseFlakeArgs),
+// and reads the race file that run writes for each test and seed. Per test it says one of four things, from what was
+// measured only:
 //   - passed every time;
 //   - racy: it failed on some runs, and on a failing run GenClass recorded a race (a late response that wrote over
 //     newer data, a request sent again while the identical one was in flight, or a model diagnosis about order):
-//     which request, the seed, and the command that replays that seed;
+//     which request, on which seeds (or in the natural order), and the command that runs it again: the replay of a
+//     failing seed, one with the race on it when there is one, else the natural order again (--no-chaos);
 //   - flaky: it failed on some runs and GenClass recorded no race on any failing run (or could not watch them):
 //     likely the test itself (a fixed wait, a timeout, state shared between tests);
 //   - broken: it failed on every run, in the natural order too. Without a natural-order run (--seed, --no-baseline)
 //     a test that failed on every seed with no race seen is listed apart, as failing on every seed with the order
 //     not checked, and the command that checks it is given; it is never said to fail "in the natural order too".
-// It ends with the one command that replays a failing seed and a prompt for the coding agent.
+// When a test did not pass it ends with one command to run (finalReplay: the replay of a racy test's failing seed,
+// else of a flaky test's, else the first failing test's own command) and the prompt for the coding agent: printed, or
+// on a terminal offered to start the agent with, to copy or to print.
 //
 // Invariants:
 // - Local and free: nothing is sent anywhere, no sign-in, no Pro (cli.mjs FREE_COMMANDS). It runs the person's tests
 //   with the Playwright and @genclass/playwright installed in their project; it never installs anything, and when
-//   either (or @genclass/runtime) is missing it prints the exact install line and exits 2 without running anything.
-//   A runtime the app already lists in its dependencies (it ships GenClass) is installed without -D, so it stays
-//   there; everything else is a dev dependency.
+//   either (or @genclass/runtime) is missing or unusable (too old, not built) it prints the exact install line and
+//   exits 2 without running anything. A runtime the app already lists in its dependencies (it ships GenClass) is
+//   installed without -D, so it stays there; everything else is a dev dependency.
 // - A test is called racy only when the race file of one of its failing runs shows a race. A run GenClass saw
-//   nothing on is said as "GenClass saw no race there", never as "there is no race"; a run it could not watch (no race
-//   file, the agent entry not connected) is said as that.
+//   nothing on is said as GenClass seeing no race there ("GenClass saw no race on the failing run"), never as "there
+//   is no race"; a run it could not watch (no race file, the agent entry not connected) is said as that.
 // - It writes nothing in the project but what the run itself writes (Playwright's test-results, the race files in
 //   test-results/genclass). Its reporter and the results it collects live in a temporary folder removed at the end.
 // - The person's own reporters stay on a Playwright that has --add-reporter: ours is added on top. An older one only
@@ -31,15 +35,24 @@
 //   before it starts when none were given. The HTML report never opens a browser and waits
 //   (PLAYWRIGHT_HTML_OPEN=never). Retries are off unless --retries is passed: a retry would hide the failure this
 //   command is looking for.
-// - Every screen fits the window (58 columns and up), the help and the results included. What is there to be copied
-//   is never folded: an install line and the replay command under "Replay seed N of ..." (a paste of a folded one
-//   would run its first line alone) start further left to fit where they can, and are printed whole, wider than the
-//   window when they are, as the prompt for the coding agent is.
-// - With --json every exit prints one JSON object on stdout, the ones where nothing could be judged included.
+// - Every screen fits the window (58 columns and up): the help, the results, the missing-package screen and the ones
+//   where nothing could be judged. Prose folds at its spaces; a word longer than a line (an address, a long path)
+//   stays whole, and so do an option with its value and a command named in a sentence (wrapKeeping, tui.mjs wrap):
+//   `--cwd apps/web`, `"npx playwright test"`, `npx genclass flake`. The results' title folds only between its
+//   phrases, so no word is left on a line of its own. A message on stderr that starts `genclass flake:` (an error,
+//   --print with nothing to fix) is one line, as wide as it is.
+// - A command to copy is never folded (a paste of a folded one would run its first line alone): an install line, the
+//   replay under "Replay seed N of ...", and each test's own ("replay seed N:", "run it again:", "run it alone:",
+//   "with the natural order too:"), which follows its label when the two fit the window and stands on the line under
+//   it when they do not (commandLines). On a line of its own it starts further left to fit where it can and is
+//   printed whole, wider than the window when it is (copyLine), as the prompt for the coding agent is.
+// - With --json every exit but --help's (the help is text) prints one JSON object on stdout, the ones where nothing
+//   could be judged included.
 // - Text that came from the run (test titles, error messages, evidence lines) goes through clean() before it is
 //   printed or put into the prompt, and the prompt says it is data about the app, not instructions.
-// - Exit code: 0 when every test passed every time, 1 when one did not, 2 when nothing could be judged (a missing
-//   package, a usage error, Playwright ran no test), 128 plus the signal when the run was interrupted.
+// - Exit code: 0 when every test passed every time (and after --help), 1 when one did not, 2 when nothing could be
+//   judged (a missing package or browser, a usage error, a run that could not start or ran no test), 128 plus the
+//   signal when the run was interrupted.
 
 import { spawn as spawnChild } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -98,7 +111,7 @@ const HELP = {
 export function flakeUsage(cols = width()) {
   const w = Math.max(40, cols - 2);
   const lines = [];
-  const prose = (t, first = "", next = first) => wrap(t, w - next.length).forEach((l, i) => lines.push(`${i ? next : first}${l}`));
+  const prose = (t, first = "", next = first) => wrapKeeping(t, w - next.length, ['"playwright test"']).forEach((l, i) => lines.push(`${i ? next : first}${l}`));
   const table = (rows, pad) => {
     for (const [name, what] of rows) wrap(what, w - 2 - pad).forEach((l, i) => lines.push(`${i ? " ".repeat(2 + pad) : `  ${name.padEnd(pad)}`}${l}`));
   };
@@ -584,11 +597,19 @@ const GROUPS = [
 
 /** How each test ran, in words: "once in the natural order, then on seeds 1 to 5". */
 export function runsWords(plan) {
-  if (!plan.chaos) return plan.runs === 1 ? "once in the natural order" : `${plan.runs} times in the natural order`;
-  return `${plan.baseline ? "once in the natural order, then " : ""}on ${seedWords(plan.seeds)}`;
+  return runsParts(plan).join(" ");
 }
 
-/** One test's lines under its heading (each a [text, paint] pair). */
+/** runsWords in the phrases a heading may break between: ["once in the natural order,", "then on seeds 1 to 5"]. */
+export function runsParts(plan) {
+  if (!plan.chaos) return [plan.runs === 1 ? "once in the natural order" : `${plan.runs} times in the natural order`];
+  return plan.baseline ? ["once in the natural order,", `then on ${seedWords(plan.seeds)}`] : [`on ${seedWords(plan.seeds)}`];
+}
+
+/**
+ * One test's lines under its heading, each a [text, paint] pair; a command to copy is [text, paint, command], its
+ * text "<label>: <command>", which the screen keeps whole (commandLines).
+ */
 export function testLines(t, plan) {
   const lines = [];
   if (t.verdict === "passed") {
@@ -619,8 +640,8 @@ export function testLines(t, plan) {
   if (t.other.length) lines.push([`GenClass also flagged ${listWords(t.other.slice(0, 3).map((g) => g.words))} on the failing runs (not a race)`, c.gray]);
   if (t.alsoSeen.length && t.verdict !== "racy") lines.push([`GenClass saw a race only on runs that passed: ${listWords(t.alsoSeen.map((g) => g.words))}`, c.gray]);
   if (t.error) lines.push([`first error: ${t.error}`, c.gray]);
-  if (t.replay) lines.push([`${t.replaySeed !== null ? `replay seed ${t.replaySeed}` : t.verdict === "broken" ? "run it alone" : "run it again"}: ${t.replay}`, c.cyan]);
-  if (t.orderCheck) lines.push([`with the natural order too: ${t.orderCheck}`, c.cyan]);
+  if (t.replay) lines.push([`${t.replaySeed !== null ? `replay seed ${t.replaySeed}` : t.verdict === "broken" ? "run it alone" : "run it again"}: ${t.replay}`, c.cyan, t.replay]);
+  if (t.orderCheck) lines.push([`with the natural order too: ${t.orderCheck}`, c.cyan, t.orderCheck]);
   return lines;
 }
 
@@ -865,7 +886,6 @@ export async function flake(argv = [], deps = {}) {
     }
     const w = a.print ? err : out;
     // folded to the window like every other screen; an install line stays whole (further left when it must be)
-    const whole = (text, indent) => w(`${" ".repeat(Math.max(0, Math.min(indent, width() - 2 - text.length)))}${c.cyan(text)}`);
     w();
     const [head = "", ...rest] = wrap("genclass flake runs your Playwright tests with GenClass, and this project is missing what it needs.", width() - 6);
     w(`  ${c.yellow(sym.warn)} ${c.bold(head)}`);
@@ -876,10 +896,10 @@ export async function flake(argv = [], deps = {}) {
       const [first = "", ...more] = wrap(`${m.what}: ${m.why}`, width() - 4);
       w(`  ${first.startsWith(`${m.what}:`) ? `${c.bold(m.what)}${c.gray(first.slice(m.what.length))}` : c.gray(first)}`);
       for (const l of more) w(`  ${c.gray(l)}`);
-      for (const r of m.run) whole(r, 4);
+      for (const r of m.run) w(copyLine(r, 4, c.cyan));
     }
     w();
-    for (const l of wrap(`Then: npx genclass flake. Run it in the folder with your playwright.config (or --cwd apps/web), where "npx playwright test" works.`, width() - 4)) w(`  ${c.gray(l)}`);
+    folded(w, `Then: npx genclass flake. Run it in the folder with your playwright.config (or --cwd apps/web), where "npx playwright test" works.`, 2, c.gray, ["--cwd apps/web", '"npx playwright test"']);
     w();
     return 2;
   }
@@ -906,7 +926,7 @@ export async function flake(argv = [], deps = {}) {
     const runEnv = { ...env };
     if (/^(off|0|false|no)$/i.test(String(env.GENCLASS_PLAYWRIGHT ?? "").trim())) {
       delete runEnv.GENCLASS_PLAYWRIGHT;
-      say(`  ${c.gray(`GENCLASS_PLAYWRIGHT=${clean(env.GENCLASS_PLAYWRIGHT, 10)} is set in your shell: it is left out of these runs, which need GenClass on.`)}`);
+      folded(say, `GENCLASS_PLAYWRIGHT=${clean(env.GENCLASS_PLAYWRIGHT, 10)} is set in your shell: it is left out of these runs, which need GenClass on.`, 2, c.gray);
     }
     const named = (pkg, v) => (v ? `${pkg} ${v}` : pkg);
     const intro = `Running your Playwright suite with ${named(tools.playwright.name, tools.playwright.version)} and ${named("@genclass/playwright", tools.genclassPlaywright.version)}, each test ${runsWords(view)}${a.chaos ? ", with your app's API responses held for a seeded time on each seed" : ""}. Retries are ${a.retries ? "as you asked" : "off"}; nothing is sent anywhere.`;
@@ -915,9 +935,7 @@ export async function flake(argv = [], deps = {}) {
     if (!tools.playwright.addReporter && !a.reporter) {
       say();
       const why = `Your ${named(tools.playwright.name, tools.playwright.version)} has no --add-reporter, so for these runs the reporters in your playwright.config are replaced by GenClass's (Playwright still prints its own lines here). To keep yours, pass them: --reporter html,junit (yours run next to GenClass's), or use a Playwright that has --add-reporter.`;
-      const [first = "", ...rest] = wrap(why, width() - 6);
-      say(`  ${c.yellow(sym.warn)} ${first}`);
-      for (const l of rest) say(`    ${l}`);
+      marked(say, c.yellow(sym.warn), why, undefined, ["--reporter html,junit"]);
     }
     const raceDir = raceDirOf(cwd, env);
     const done = [];
@@ -959,9 +977,9 @@ export async function flake(argv = [], deps = {}) {
       if (a.json) out(JSON.stringify({ ok: false, error: stopped?.why === "interrupted" ? "interrupted" : "no-tests", ran: true, exit: last?.exit ?? null, playwright_errors: errors.slice(0, 5) }, null, 2));
       else {
         err();
-        err(`  ${c.yellow(sym.warn)} Playwright ran no test${last ? ` (its exit code ${last.exit})` : ""}, so there is nothing to judge. Its own output is above.`);
-        for (const e of errors.slice(0, 3)) err(`    ${c.gray(e)}`);
-        err(`    ${c.gray('Run it where "npx playwright test" runs your tests; a file, --grep or --project narrows it.')}`);
+        marked(err, c.yellow(sym.warn), `Playwright ran no test${last ? ` (its exit code ${last.exit})` : ""}, so there is nothing to judge. Its own output is above.`);
+        for (const e of errors.slice(0, 3)) folded(err, e, 4, c.gray);
+        folded(err, 'Run it where "npx playwright test" runs your tests; a file, --grep or --project narrows it.', 4, c.gray, ['"npx playwright test"']);
       }
       return stopped?.why === "interrupted" ? stopped.code : 2;
     }
@@ -971,8 +989,8 @@ export async function flake(argv = [], deps = {}) {
       if (a.json) out(JSON.stringify({ ok: false, error: "browsers", ran: true, install: [{ package: "Playwright's browsers", run: ["npx playwright install chromium"] }] }, null, 2));
       else {
         err();
-        err(`  ${c.yellow(sym.warn)} Every test failed because Playwright's browsers are not installed here:`);
-        err(`    ${c.cyan("npx playwright install chromium")}`);
+        marked(err, c.yellow(sym.warn), "Every test failed because Playwright's browsers are not installed here:");
+        err(copyLine("npx playwright install chromium", 4, c.cyan));
         err(`    ${c.gray("Then: npx genclass flake")}`);
       }
       return 2;
@@ -992,12 +1010,9 @@ export async function flake(argv = [], deps = {}) {
     // the verdicts, the worst first
     const projects = new Set(report.tests.map((t) => t.project)).size;
     out();
-    heading(`GenClass flake: ${report.totals.tests} ${report.totals.tests === 1 ? "test" : "tests"}, each ${runsWords(view)}`);
-    if (stopped?.why === "interrupted") {
-      const [first = "", ...rest] = wrap("The run was interrupted: this is what ran before it stopped.", width() - 6);
-      out(`  ${c.yellow(sym.warn)} ${c.gray(first)}`);
-      for (const l of rest) out(`    ${c.gray(l)}`);
-    }
+    const [each, ...then] = runsParts(view);
+    heading([`GenClass flake: ${report.totals.tests} ${report.totals.tests === 1 ? "test" : "tests"},`, `each ${each}`, ...then]);
+    if (stopped?.why === "interrupted") marked(out, c.yellow(sym.warn), "The run was interrupted: this is what ran before it stopped.", c.gray);
     if (stopped?.why === "none") note("The seeded run ran no test, so only the natural-order run is judged.");
     const cols = width() - 8;
     for (const [v, inGroup] of GROUPS) {
@@ -1009,7 +1024,10 @@ export async function flake(argv = [], deps = {}) {
       const shown = v === "passed" && group.length > 8 ? group.filter((t) => t.alsoSeen.length) : group;
       for (const t of shown) {
         for (const l of wrap(testLabel(t, projects), cols + 2)) out(`    ${l}`);
-        for (const [text, paint] of testLines(t, view)) for (const l of wrap(text, cols)) out(`      ${paint ? paint(l) : l}`);
+        for (const [text, paint, command] of testLines(t, view)) {
+          const lines = command ? commandLines(text.slice(0, text.length - command.length).trimEnd(), command, 6) : wrap(text, cols).map((l) => `      ${l}`);
+          for (const l of lines) out(painted(l, paint));
+        }
       }
       if (v === "passed" && shown.length < group.length) for (const l of wrap(`${shown.length ? `and ${group.length - shown.length} more` : "each"} passed on every run with no race seen (--json lists them)`, cols + 2)) out(`    ${c.gray(l)}`);
     }
@@ -1020,7 +1038,7 @@ export async function flake(argv = [], deps = {}) {
       good(`Every test passed on every run${a.chaos ? ", whatever order the responses came in" : ""}.`);
       const latent = report.tests.filter((t) => t.alsoSeen.length).length;
       if (latent) note(`GenClass saw a race on ${latent === 1 ? "one of them" : `${latent} of them`} (above): a test that passes through a race may not check what the page shows after the last response.`);
-      else if (a.chaos) note("A race needs the order that causes it: more seeds try more orders (--runs 20).");
+      else if (a.chaos) folded(out, "A race needs the order that causes it: more seeds try more orders (--runs 20).", 2, c.gray, ["--runs 20"]);
       out();
       return ended(true);
     }
@@ -1029,7 +1047,7 @@ export async function flake(argv = [], deps = {}) {
       heading(fin.seed !== null ? `Replay seed ${fin.seed} of ${where}:` : `Run ${where} again:`);
       // the command to copy, whole, further left when it must be (as the install line is): folded, a paste would run
       // its first line alone
-      out(`${" ".repeat(Math.max(0, Math.min(4, width() - 2 - fin.command.length)))}${c.cyan(fin.command)}`);
+      out(copyLine(fin.command, 4, c.cyan));
       if (fin.seed !== null) note("The same seed holds the same requests for the same time, so the responses come back in the order this run saw (unless your server's own timing changes it).");
       out();
     }
@@ -1053,9 +1071,70 @@ const displayDir = (dir, cwd) => {
   return (r && !r.startsWith("..") && !isAbsolute(r) ? r : dir).split(sep).join("/");
 };
 
-/** A bold heading of the results screen, wrapped to the window, every line of it bold. */
-function heading(text) {
-  for (const l of wrap(text, width() - 4)) out(`  ${c.bold(l)}`);
+/**
+ * A bold heading of the results screen, folded to the window between its phrases (`parts`, a string or an array): the
+ * title's "GenClass flake: 5 tests, each once in the natural order," above "then on seeds 1 to 5", not "... on seeds
+ * 1 to" above a lone "5". A phrase too long for a line folds at its spaces. Every line bold.
+ */
+function heading(parts) {
+  for (const l of headingLines(parts)) out(`  ${c.bold(l)}`);
+}
+
+/** heading's lines for `cols` columns of text (the window less its margins). */
+export function headingLines(parts, cols = width() - 4) {
+  const lines = [];
+  for (const p of [parts].flat()) {
+    const last = lines.length - 1;
+    if (last >= 0 && lines[last].length + 1 + p.length <= cols) lines[last] = `${lines[last]} ${p}`;
+    else lines.push(...wrap(p, cols));
+  }
+  return lines;
+}
+
+/**
+ * Text to copy (a command, an install line), whole, `indent` columns in, further left when it must be so that it fits
+ * the window where it can, and wider than the window when it is: folded, a paste would run its first line alone.
+ * `paint` colours the text, not its indent.
+ */
+export function copyLine(text, indent, paint = (s) => s) {
+  return `${" ".repeat(Math.max(0, Math.min(indent, width() - 2 - text.length)))}${paint(text)}`;
+}
+
+/**
+ * A test's command under its label ("replay seed 2:"), `indent` columns in: "<label> <command>" on one line when it
+ * fits the window, else the label alone above the command, which is whole (copyLine). Unpainted lines.
+ */
+export function commandLines(label, command, indent) {
+  if (indent + label.length + 1 + command.length <= width() - 2) return [`${" ".repeat(indent)}${label} ${command}`];
+  return [`${" ".repeat(indent)}${label}`, copyLine(command, indent)];
+}
+
+/** `line` with its text painted and its indent left as it is. */
+const painted = (line, paint) => {
+  const text = line.trimStart();
+  return `${line.slice(0, line.length - text.length)}${paint ? paint(text) : text}`;
+};
+
+/**
+ * wrap() that keeps each phrase of `keep` on one line: an option with its value or a command named in a sentence
+ * (`--cwd apps/web`, `"npx playwright test"`), which folded would read as two words.
+ */
+export function wrapKeeping(text, cols, keep = []) {
+  let t = String(text);
+  for (const k of keep) t = t.split(k).join(k.replace(/ /g, "\u00a0"));
+  return wrap(t, cols).map((l) => l.replace(/\u00a0/g, " "));
+}
+
+/** `text` behind `mark` through `write` (out or err), wrapped to the window: the lines after the first under its text. */
+function marked(write, mark, text, paint = (s) => s, keep = []) {
+  const [first = "", ...rest] = wrapKeeping(text, width() - 6, keep);
+  write(`  ${mark} ${paint(first)}`);
+  for (const l of rest) write(`    ${paint(l)}`);
+}
+
+/** `text` through `write` (out or err), wrapped to the window `indent` columns in, every line painted (`keep`: wrapKeeping). */
+function folded(write, text, indent, paint = (s) => s, keep = []) {
+  for (const l of wrapKeeping(text, width() - 2 - indent, keep)) write(`${" ".repeat(indent)}${paint(l)}`);
 }
 
 /** On a terminal: start the coding agent with the prompt (Enter), copy it (c), print it (p) or stop (q), as `genclass fix` does. */

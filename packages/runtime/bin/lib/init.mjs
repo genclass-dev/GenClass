@@ -372,9 +372,11 @@ function bullet(text, indent = 4) {
  * A line of code to copy, `indent` columns in. Under the genclass command it is folded to the window so that what is
  * pasted is still the same code: a trailing `// comment` goes on its own line above it, and the code breaks only at
  * a space that follows `,` `;` `:` `=` `{` `(` `[` or `=>` outside quotes and comments, where JavaScript allows a
- * line break and reads the code the same (BREAK_AFTER); the lines after the first stand 4 columns further in (a piece
- * too long for any line stays whole, starting further left). A line it cannot read surely (breakable) is printed
- * whole, as wide as it is. Under genclass-runtime it is one line, as it always was.
+ * line break and reads the code the same (BREAK_AFTER), except in an import, which breaks only right before or after
+ * its `from` (`import { genclassEnhancer } from` above `"@genclass/runtime/redux";`), never inside its braces; the
+ * lines after the first stand 4 columns further in (a piece too long for any line stays whole, starting further
+ * left). A line it cannot read surely (breakable) is printed whole, as wide as it is. Under genclass-runtime it is one
+ * line, as it always was.
  */
 export function codeLines(line, indent = 8, cols = columns()) {
   const whole = [`${" ".repeat(indent)}${line}`];
@@ -414,9 +416,10 @@ const BREAK_AFTER = /(?:[,;:={([]|=>)$/;
 
 /**
  * `code` (a line without its `//` comment) as the pieces a line may end with: split at the spaces outside quotes and
- * comments that follow a BREAK_AFTER token, each piece keeping its own spaces. Null when the line cannot be read
- * surely, and so is not folded: a `/` that is no comment (a regular expression or a division), a `<` (JSX, where a
- * line break can change the text), a template with `${`, a quote or a comment left open.
+ * comments that follow a BREAK_AFTER token (in an import, only at the spaces around its `from`), each piece keeping
+ * its own spaces. Null when the line cannot be read surely, and so is not folded: a `/` that is no comment (a regular
+ * expression or a division), a `<` (JSX, where a line break can change the text), a template with `${`, a quote or a
+ * comment left open.
  */
 function breakable(code) {
   const words = [];
@@ -454,14 +457,32 @@ function breakable(code) {
   if (cur) words.push(cur);
   const pieces = [];
   let piece = "";
-  for (const w of words) {
-    piece = piece ? `${piece} ${w}` : w;
-    if (BREAK_AFTER.test(w)) {
-      pieces.push(piece);
-      piece = "";
+  const cut = () => {
+    if (piece) pieces.push(piece);
+    piece = "";
+  };
+  // an import (or an `export {...} from`, `export * from`) breaks only right before and after its `from`, never
+  // inside its braces nor after its default name's comma: folded there it reads as an `import {` left open
+  let declaration = false;
+  let depth = 0;
+  for (const [i, w] of words.entries()) {
+    if (i === 0 || /;$/.test(words[i - 1])) {
+      declaration = w === "import" || (w === "export" && /^[{*]/.test(words[i + 1] ?? ""));
+      depth = 0;
     }
+    if (!declaration) {
+      piece = piece ? `${piece} ${w}` : w;
+      if (BREAK_AFTER.test(w)) cut();
+      continue;
+    }
+    // the keyword `from`: outside the braces, right before the module's quoted name (`import { from } from "x"`)
+    const keyword = w === "from" && depth === 0 && /^["']/.test(words[i + 1] ?? "");
+    if (keyword) cut();
+    piece = piece ? `${piece} ${w}` : w;
+    for (const ch of w) depth += ch === "{" ? 1 : ch === "}" ? -1 : 0;
+    if (keyword || /;$/.test(w)) cut();
   }
-  if (piece) pieces.push(piece);
+  cut();
   return pieces;
 }
 

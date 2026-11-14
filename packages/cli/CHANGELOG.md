@@ -216,6 +216,13 @@ Fixed from the review (2026-11-14):
   and a line it cannot read surely is printed whole.
 - `flake`'s results fit the window too (the title, the replay's heading, an interrupted run, a long list of passing
   tests); the replay command at the end stays whole, further left when it must be.
+- `flake`'s title folds between its phrases: at 80 columns (also in a pipe or a CI log) it no longer leaves a lone
+  "5" under "...then on seeds 1 to".
+- Under `genclass`, init folds an import only around its `from` (`import { genclassEnhancer } from` above
+  `"@genclass/runtime/redux";`), never inside its braces.
+- `flake` keeps each test's command whole ("replay seed 2:", "run it alone:" and the others), under its label when
+  both do not fit on one line; the screens for no test run, missing browsers and `GENCLASS_PLAYWRIGHT=off` fit the
+  window, and an option with its value (`--cwd apps/web`, `--runs 20`) stays on one line.
 
 ## 0.3.8
 
