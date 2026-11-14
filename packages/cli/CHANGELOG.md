@@ -81,12 +81,18 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   and `.env.*.local`, `test-results`, `playwright-report` and `.genclass.local` (the app token and private dashboard
   link), so an app copied with `npx degit` never commits them.
 - **`genclass suggest`, two safety checks:** `secrets-in-bundle` reads the scripts the live home page ships (same
-  origin, at most 6, 1 MB each) for secret keys (Stripe secret, OpenAI, Anthropic, AWS, GitHub, Slack, SendGrid,
-  private keys, a Supabase service_role JWT) and reports the kind and the script's path, never a value; on 25,365
-  library files (339 MB of node_modules) it matched one, a test certificate's private key. `framework-cve` reads
-  the installed Next.js and react-server-dom-* versions (node_modules, else the npm, pnpm, yarn or bun lockfile)
-  against CVE-2025-55182 (remote code execution in React Server Components; App Router only) and CVE-2025-29927
-  (Next.js middleware skipped; self-hosted with a middleware file only), with the release that fixes each.
+  origin, not the `nomodule` polyfills, at most 20, 1 MB each; on a Next.js page the chunks of its own components
+  first, the framework's runtime last) for secret keys (sk_live_ and sk_test_ keys, named for no one provider since
+  Stripe, Clerk and others use them; Stripe restricted, OpenAI, OpenRouter, Anthropic, Supabase sb_secret_ and
+  service_role, an AWS key ID with its secret, GitHub, Slack, SendGrid, private keys) and reports the kind and the
+  script's path, never a value. Placeholders (sk_live_xxxx, AWS's ...EXAMPLE IDs), keys providers document and an
+  AWS key ID in a pre-signed link are not reported. Scripts left unread, or cut at 1 MB, make it unknown, not a
+  pass. On 13,473 library files (186 MB of node_modules) it matched one, a test certificate's private key.
+  `framework-cve` reads the installed Next.js and react-server-dom-* versions (node_modules, else the npm, pnpm, yarn
+  or bun lockfile, this app's own entry in a monorepo's) against CVE-2025-55182 (remote code execution in React
+  Server Components; the App Router as Next.js finds it, not a static export) and CVE-2025-29927 (Next.js
+  middleware skipped; self-hosted with a middleware file only: Vercel and Netlify count only from their config, the
+  linked folder or a deploy workflow, never from a library such as @vercel/otel), with the release that fixes each.
 - **A newer genclass** is said in one line when the command opens on a terminal, from a check of npm's dist-tags at
   most once a day (never in CI, piped, `--json`, `--yes`, `NO_UPDATE_NOTIFIER` or `GENCLASS_NO_UPDATE`).
 - **The fix prompts** let an agent that can drive a browser do the page loads itself (Playwright from a script kept

@@ -1,6 +1,6 @@
 // Facts measured from a live site (src/suggest/site.mjs), against a stand-in site and stand-in DNS: no network.
 import { describe, expect, it } from "vitest";
-import { AI_CRAWLERS, bundleSecrets, collectSiteFacts, emptySiteFacts, isPublicHost, parseHtml, parseRobots, robotsBlocks, scriptSources } from "../src/suggest/site.mjs";
+import { AI_CRAWLERS, bundleSecrets, collectSiteFacts, emptySiteFacts, isPublicHost, MAX_SCRIPTS, parseHtml, parseRobots, robotsBlocks, scriptSources } from "../src/suggest/site.mjs";
 
 type Page = { status?: number; headers?: Record<string, string>; body?: string };
 
@@ -271,19 +271,132 @@ describe("genclass suggest: the scripts a page ships, read for secret keys (src/
     expect(bundleSecrets("")).toEqual([]);
   });
 
-  it("lists the page's own scripts and module preloads, at most six, never another origin's", () => {
-    const html = `<script src="/assets/a.js"></script><script src="https://cdn.other.example/b.js"></script><link rel="modulepreload" href="/assets/c.js"><script>inline</script><script src=""></script><script src="data:text/javascript,1"></script>${Array.from({ length: 9 }, (_, i) => `<script src="/s${i}.js"></script>`).join("")}`;
+  it("lists the page's own scripts and module preloads, each once, never another origin's or a nomodule one", () => {
+    const html = `<script src="/assets/a.js"></script><script src="https://cdn.other.example/b.js"></script><link rel="modulepreload" href="/assets/c.js"><script>inline</script><script src=""></script><script src="data:text/javascript,1"></script><script src="/legacy.js" nomodule></script><link rel="modulepreload" href="/assets/a.js">${Array.from({ length: 9 }, (_, i) => `<script src="/s${i}.js"></script>`).join("")}`;
     const srcs = scriptSources(html, "https://shop.example/");
     expect(srcs.slice(0, 3)).toEqual(["https://shop.example/assets/a.js", "https://shop.example/s0.js", "https://shop.example/s1.js"]);
-    expect(srcs).toHaveLength(6);
+    expect(srcs).toHaveLength(11);
+    expect(srcs.at(-1)).toBe("https://shop.example/assets/c.js");
     expect(srcs.every((s) => s.startsWith("https://shop.example/"))).toBe(true);
+    expect(srcs).not.toContain("https://shop.example/legacy.js");
   });
 
   it("a live page whose bundle holds a key: the kind and the script's path, with no query", async () => {
     const page = `<!doctype html><html><head><title>Shop</title><script type="module" src="/assets/index-a1.js?v=tok123"></script></head><body><h1>Shop</h1></body></html>`;
     const w = fakeWeb({ "https://shop.example/": { body: page }, "https://shop.example/assets/index-a1.js?v=tok123": text(`const k="${openai}";`, "text/javascript") });
     const f = await collectSiteFacts("https://shop.example/", { fetchFn: w.fetchFn, dns: dnsOf() });
-    expect(f.bundle).toEqual({ scanned: 1, found: [{ path: "/assets/index-a1.js", kind: "openai-key" }] });
+    expect(f.bundle).toEqual({ scanned: 1, unread: 0, partial: [], found: [{ path: "/assets/index-a1.js", kind: "openai-key" }] });
     expect(JSON.stringify(f)).not.toContain(openai);
+  });
+});
+
+describe("genclass suggest: which scripts are read, and how much of each (src/suggest/site.mjs scriptSources, collectSiteFacts)", () => {
+  const jwt = (role: string, iss = "supabase") => ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", Buffer.from(JSON.stringify({ iss, ref: "abcdefgh", role, iat: 1 })).toString("base64url"), "abcdefghijklmnopqrstuvwxyz012345"].join(".");
+  const js = (body: string): Page => text(body, "text/javascript");
+  const chunk = (name: string) => `/_next/static/chunks/${name}.js`;
+
+  // A Next.js 16 App Router home page as Turbopack builds it: the runtime's chunks first (one also preloaded, and
+  // given again last with the bootstrap's id), the metadata chunk, the page's five chunks, then the polyfills for
+  // old browsers; the payload names the chunks of the page's client components.
+  const runtime = ["0d8wrqgf5wrm5", "3zn4q-rnqdnfg", "1u3un9vtebfyh", "turbopack-0ie61feraln2o"];
+  const pageChunks = ["1qo6c542q5lnx", "110_cr1g3s2vn", "15nigigry8hy_", "1omwgckp_atno", "0mae80qyldj00"];
+  const nextHome = (extra = "") =>
+    `<!doctype html><html><head><title>Troy</title><link rel="preload" as="script" fetchPriority="low" href="${chunk("0-9slcls78bw1")}"/>${runtime.map((c) => `<script src="${chunk(c)}" async=""></script>`).join("")}<script src="${chunk("3dlqm4t3lwqe9")}" async=""></script>${pageChunks.map((c) => `<script src="${chunk(c)}" async=""></script>`).join("")}${extra}<script src="${chunk("0cz1d0mv5g_q7")}" noModule=""></script><script src="${chunk("0-9slcls78bw1")}" id="_R_" async=""></script></head><body><h1>Talk to Troy</h1><script>self.__next_f.push([1,"5:I[42089,[\\"/_next/static/chunks/3dlqm4t3lwqe9.js\\"],\\"default\\"]\\n7:I[51234,[\\"/_next/static/chunks/1omwgckp_atno.js\\",\\"/_next/static/chunks/15nigigry8hy_.js\\"],\\"LandingActions\\"]\\n"])</script></body></html>`;
+
+  it("a Next.js App Router page: a key in the 9th script, the page's client component, is found (finding 11)", async () => {
+    const pages: Record<string, Page> = { "https://troy.example/": { body: nextHome() } };
+    for (const c of [...runtime, "3dlqm4t3lwqe9", ...pageChunks, "0-9slcls78bw1", "0cz1d0mv5g_q7"]) pages[`https://troy.example${chunk(c)}`] = js(`/* ${c} */`);
+    pages[`https://troy.example${chunk("1omwgckp_atno")}`] = js(`createClient(u,"${jwt("service_role")}")`);
+    const w = fakeWeb(pages);
+    const f = await collectSiteFacts("https://troy.example/", { fetchFn: w.fetchFn, dns: dnsOf() });
+    // eleven scripts: the polyfills (nomodule) are never requested
+    expect(f.bundle).toEqual({ scanned: 11, unread: 0, partial: [], found: [{ path: chunk("1omwgckp_atno"), kind: "supabase-service-role" }] });
+    expect(w.calls.some((c) => c.url.includes("0cz1d0mv5g_q7"))).toBe(false);
+  });
+
+  it("the chunks the payload names and the route's chunks come first, Next.js's runtime by name last, and the cap is counted", () => {
+    const filler = Array.from({ length: 24 }, (_, i) => `<script src="${chunk(`f${String(i).padStart(2, "0")}`)}" async></script>`).join("");
+    const html = `<script src="${chunk("webpack-1a2b3c")}"></script><script src="${chunk("main-app-9f8e7d")}"></script>${filler}<script src="${chunk("app/page-77aa")}"></script>${nextHome()}`;
+    const srcs = scriptSources(html, "https://troy.example/").map((s) => new URL(s).pathname);
+    // the route's chunk by name and the ones the payload names, in page order
+    expect(srcs.slice(0, 4)).toEqual([chunk("app/page-77aa"), chunk("3dlqm4t3lwqe9"), chunk("15nigigry8hy_"), chunk("1omwgckp_atno")]);
+    expect(srcs.slice(-3)).toEqual([chunk("webpack-1a2b3c"), chunk("main-app-9f8e7d"), chunk("turbopack-0ie61feraln2o")]);
+    expect(srcs).toHaveLength(2 + 24 + 1 + 11);
+  });
+
+  it("past MAX_SCRIPTS, the scripts left are counted as not read", async () => {
+    const many = Array.from({ length: MAX_SCRIPTS + 5 }, (_, i) => `/assets/c${i}.js`);
+    const pages: Record<string, Page> = { "https://many.example/": { body: `<title>Many</title>${many.map((s) => `<script type="module" src="${s}"></script>`).join("")}` } };
+    for (const s of many) pages[`https://many.example${s}`] = js("export {};");
+    const w = fakeWeb(pages);
+    const f = await collectSiteFacts("https://many.example/", { fetchFn: w.fetchFn, dns: dnsOf() });
+    expect(f.bundle).toEqual({ scanned: MAX_SCRIPTS, unread: 5, partial: [], found: [] });
+    expect(w.calls.filter((c) => c.url.includes("/assets/")).length).toBe(MAX_SCRIPTS);
+  });
+
+  it("a script over 1 MB is read to 1 MB and marked as read in part, never as read whole (finding 54)", async () => {
+    // Vite and Rollup put the app's own modules at the end of the bundle, after the libraries
+    const big = `${"var vendor=1;".repeat(Math.ceil((1.2 * 1024 * 1024) / 13))}const sb=createClient(u,"${jwt("service_role")}");`;
+    const head = `const sb=createClient(u,"${jwt("service_role")}");${"var vendor=1;".repeat(Math.ceil((1.2 * 1024 * 1024) / 13))}`;
+    const site = (body: string) => fakeWeb({ "https://big.example/": { body: `<title>Big</title><script type="module" src="/assets/index-a1.js"></script>` }, "https://big.example/assets/index-a1.js": js(body) });
+    const tail = await collectSiteFacts("https://big.example/", { fetchFn: site(big).fetchFn, dns: dnsOf() });
+    expect(tail.bundle).toEqual({ scanned: 1, unread: 0, partial: ["/assets/index-a1.js"], found: [] });
+    const front = await collectSiteFacts("https://big.example/", { fetchFn: site(head).fetchFn, dns: dnsOf() });
+    expect(front.bundle.found).toEqual([{ path: "/assets/index-a1.js", kind: "supabase-service-role" }]);
+    expect(front.bundle.partial).toEqual(["/assets/index-a1.js"]);
+    // a page that fits is read whole
+    const small = await collectSiteFacts("https://big.example/", { fetchFn: site("export {};").fetchFn, dns: dnsOf() });
+    expect(small.bundle.partial).toEqual([]);
+  });
+});
+
+describe("genclass suggest: which key-shaped strings count as a secret in a bundle (src/suggest/site.mjs bundleSecrets)", () => {
+  // key-shaped strings put together here, so that no key-shaped text is in this file
+  const join = (...parts: string[]) => parts.join("");
+  const awsId = join("AKIA", "Q3RZ7WJ2M5XK8PLB");
+  const awsSecret = join("wJa1rXUtnF", "EMI/K7MDNG", "bPxRfiCYtQ", "Z9b8c7d6e5");
+  const jwt = (role: string, iss: string) => ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", Buffer.from(JSON.stringify({ iss, role, exp: 1983812996 })).toString("base64url"), "abcdefghijklmnopqrstuvwxyz012345"].join(".");
+
+  it("an AWS access key ID inside a pre-signed link is shared on purpose; with its secret next to it, it is a leak (finding 12)", () => {
+    const v4 = `<img src="https://up.s3.amazonaws.com/u/a.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&amp;X-Amz-Credential=${awsId}%2F20250101%2Fus-east-1%2Fs3%2Faws4_request&amp;X-Amz-Date=20250101T000000Z&amp;X-Amz-Expires=900&amp;X-Amz-SignedHeaders=host&amp;X-Amz-Signature=${"a1".repeat(32)}">`;
+    const v2 = `<img src="https://up.s3.amazonaws.com/u/b.png?AWSAccessKeyId=${awsId}&amp;Expires=1735689600&amp;Signature=Zm9vYmFy%2Bbaz%3D">`;
+    const rsc = `self.__next_f.push([1,"{\\"src\\":\\"https://up.s3.amazonaws.com/c.png?X-Amz-Credential=${awsId}%2F20250101%2Fus-east-1%2Fs3%2Faws4_request\\"}"])`;
+    expect(bundleSecrets(v4 + v2 + rsc)).toEqual([]);
+    // the ID alone signs nothing
+    expect(bundleSecrets(`const id="${awsId}";`)).toEqual([]);
+    expect(bundleSecrets(`new S3Client({region:"us-east-1",credentials:{accessKeyId:"${awsId}",secretAccessKey:"${awsSecret}"}})`)).toEqual(["aws-access-key"]);
+    // a SHA-1 (40 hex digits, no capitals) is no secret access key
+    expect(bundleSecrets(`const id="${awsId}",sha="${"0123456789abcdef0123456789abcdef01234567"}";`)).toEqual([]);
+  });
+
+  it("placeholders and the keys providers document are no secret (finding 52)", () => {
+    const docs = [
+      join("STRIPE_SECRET_KEY=sk_live_", "x".repeat(24)),
+      join("OPENAI_API_KEY=sk-proj-", "x".repeat(48)),
+      join("sk_test_", "BQokikJOvBiI2HlWgH4olfQ2"),
+      join("sk_test_", "4eC39HqLyjWDarjtT1zdp7dc"),
+      join("accessKeyId:'AKIA", "I44QH8DHBEXAMPLE',secretAccessKey:'wJalrXUtnFEMI/K7MDENG/bPxRfiCY", "EXAMPLEKEY'"),
+      join("accessKeyId:'AKIA", "XXXXXXXXXXXXXXXX',secretAccessKey:'", awsSecret, "'"),
+      join("ghp_", "yourGithubTokenHere", "yourGithubTokenHere"),
+      // the Supabase CLI's local service_role key: public, it opens only a local copy
+      jwt("service_role", "supabase-demo"),
+    ];
+    for (const d of docs) expect(bundleSecrets(d), d.slice(0, 30)).toEqual([]);
+    expect(bundleSecrets(jwt("service_role", "supabase"))).toEqual(["supabase-service-role"]);
+  });
+
+  it("Supabase secret keys, OpenRouter keys and encrypted private keys are found; publishable keys are not (finding 56)", () => {
+    expect(bundleSecrets(`createClient(u,"${join("sb_secret_", "N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz")}")`)).toEqual(["supabase-secret-key"]);
+    expect(bundleSecrets(`createClient(u,"${join("sb_publishable_", "N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz")}")`)).toEqual([]);
+    expect(bundleSecrets(`{Authorization:"Bearer ${join("sk-or-v1-", "3f9a0c1b2d4e5f60718293a4b5c6d7e8f9012a3b4c5d6e7f8091a2b3c4d5e6f7")}"}`)).toEqual(["openrouter-key"]);
+    expect(bundleSecrets(join("-----BEGIN ENCRYPTED ", "PRIVATE KEY-----\\nMIIFHDBOBgkqhkiG9w0BBQ0wQTApBgkqhkiG9w0BBQwwHAQI3pX7ZQ"))).toEqual(["private-key"]);
+  });
+
+  it("sk_live_ and sk_test_ keys are not named for Stripe alone: Clerk's and Paystack's start the same way (finding 59)", () => {
+    const body = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0";
+    expect(bundleSecrets(`clerk({secretKey:"${join("sk_live_", body)}"})`)).toEqual(["sk-live-secret-key"]);
+    expect(bundleSecrets(`"${join("sk_test_", body)}"`)).toEqual(["sk-test-secret-key"]);
+    // rk_live_ is Stripe's restricted key: Stripe alone
+    expect(bundleSecrets(`"${join("rk_live_", body)}"`)).toEqual(["stripe-secret-live"]);
   });
 });

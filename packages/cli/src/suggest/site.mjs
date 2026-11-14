@@ -13,6 +13,7 @@
 //   come from a short fixed list or are an error code, never a server's own words.
 
 import { resolveMx as nodeResolveMx, resolveTxt as nodeResolveTxt } from "node:dns/promises";
+import { isPlaceholder } from "./keys.mjs";
 
 /**
  * @typedef {Object} HomeFacts
@@ -62,9 +63,11 @@ import { resolveMx as nodeResolveMx, resolveTxt as nodeResolveTxt } from "node:d
  * @property {{ status: number | null }} notFound  the answer for a path that cannot exist; 200 is a "soft 404"
  * @property {{ mx: boolean | null, spf: boolean | null, dmarc: boolean | null }} dns
  *   on the host without a leading "www."; null when a lookup failed for a reason other than "no records"
- * @property {{ scanned: number | null, found: { path: string, kind: string }[] }} bundle
- *   the home page's own scripts (same origin, at most MAX_SCRIPTS, 1 MB each), read for secret keys: `scanned` how
- *   many answered (null: the home page was not read), `found` the kind of key and the script's path, never a value
+ * @property {{ scanned: number | null, unread: number, partial: string[], found: { path: string, kind: string }[] }} bundle
+ *   the home page's own scripts (same origin, not `nomodule`, the app's own first, at most MAX_SCRIPTS, 1 MB each),
+ *   read for secret keys: `scanned` how many answered (null: the home page was not read); `unread` how many more the
+ *   page lists past MAX_SCRIPTS, not requested; `partial` the paths of those over 1 MB, of which only the first 1 MB
+ *   was read; `found` the kind of key and the script's path, never a value
  */
 
 const USER_AGENT = "genclass-cli (+https://genclass.dev)";
@@ -187,7 +190,10 @@ function headerReader(headers) {
   };
 }
 
-/** At most `max` bytes of a response's body, as text. */
+/**
+ * At most `max` bytes of a response's body, as text. `cut`: the body went on past `max` (or may have: the stream was
+ * still open when `max` bytes were in), so the rest was not read.
+ */
 async function readBody(res, max) {
   try {
     const body = res.body;
@@ -195,9 +201,13 @@ async function readBody(res, max) {
       const reader = body.getReader();
       const chunks = [];
       let n = 0;
+      let ended = false;
       while (n < max) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          ended = true;
+          break;
+        }
         if (!value || !value.length) continue;
         const take = value.length > max - n ? value.subarray(0, max - n) : value;
         chunks.push(take);
@@ -214,22 +224,22 @@ async function readBody(res, max) {
         all.set(chunk, at);
         at += chunk.length;
       }
-      return { text: new TextDecoder("utf-8").decode(all), bytes: n };
+      return { text: new TextDecoder("utf-8").decode(all), bytes: n, cut: !ended };
     }
     if (typeof res.text === "function") {
       const bytes = new TextEncoder().encode(String(await res.text()));
-      const cut = bytes.length > max ? bytes.subarray(0, max) : bytes;
-      return { text: new TextDecoder("utf-8").decode(cut), bytes: cut.length };
+      const head = bytes.length > max ? bytes.subarray(0, max) : bytes;
+      return { text: new TextDecoder("utf-8").decode(head), bytes: head.length, cut: bytes.length > max };
     }
   } catch {
     /* an unreadable body is an empty one */
   }
-  return { text: "", bytes: 0 };
+  return { text: "", bytes: 0, cut: false };
 }
 
 /**
- * One GET, never followed, never rejecting.
- * @returns {Promise<{ ok: true, status: number, header: (name: string) => string | null, text: string, bytes: number } | { ok: false, error: string }>}
+ * One GET, never followed, never rejecting. `cut`: only the first MAX_BODY bytes of the body were read.
+ * @returns {Promise<{ ok: true, status: number, header: (name: string) => string | null, text: string, bytes: number, cut: boolean } | { ok: false, error: string }>}
  */
 async function getOnce(fetchFn, url, timeoutMs) {
   let u;
@@ -264,10 +274,10 @@ async function getOnce(fetchFn, url, timeoutMs) {
         } catch {
           /* nothing to cancel */
         }
-        return { ok: true, status, header, text: "", bytes: 0 };
+        return { ok: true, status, header, text: "", bytes: 0, cut: false };
       }
       const body = await readBody(res, MAX_BODY);
-      return { ok: true, status, header, text: body.text, bytes: body.bytes };
+      return { ok: true, status, header, text: body.text, bytes: body.bytes, cut: body.cut };
     } catch (e) {
       return { ok: false, error: errorName(e) };
     }
@@ -457,41 +467,86 @@ export function parseHtml(html, baseUrl) {
 
 // ---- the scripts the home page ships: secret keys -----------------------------------------------------------------
 
-const MAX_SCRIPTS = 6;
+/** The most scripts read per run, the app's own first (scriptSources); the rest are counted as not read. */
+export const MAX_SCRIPTS = 20;
 
 /**
  * The secret keys that must never reach a browser, as they look in shipped JavaScript. Precise shapes only (a
- * minified bundle is full of short random strings): each one is a provider's documented prefix and length.
+ * minified bundle is full of short random strings): each one is a provider's documented prefix and length. The
+ * capture groups hold the part after the prefix, which the placeholder test (keys.mjs) reads. Keys that start with
+ * sk_live_ or sk_test_ are not named for one provider: Stripe, Clerk and Paystack all use those prefixes (rk_live_
+ * is Stripe's alone).
  */
 const BUNDLE_SECRETS = [
-  ["stripe-secret-live", /(?<![A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,}/],
-  ["stripe-secret-test", /(?<![A-Za-z0-9_])sk_test_(?!4eC39HqLyjWDarjtT1zdp7dc)[A-Za-z0-9]{20,}/],
-  ["openai-key", /(?<![A-Za-z0-9_-])sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{40,}|(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}/],
-  ["anthropic-key", /(?<![A-Za-z0-9_-])sk-ant-(?:api|admin)\d\d-[A-Za-z0-9_-]{60,}/],
-  ["aws-access-key", /(?<![A-Za-z0-9])AKIA(?!IOSFODNN7EXAMPLE)[0-9A-Z]{16}(?![0-9A-Z])/],
-  ["github-token", /(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})/],
-  ["slack-token", /(?<![A-Za-z0-9])xox[baprs]-\d{6,}-[A-Za-z0-9-]{10,}/],
-  ["sendgrid-key", /(?<![A-Za-z0-9])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/],
-  ["private-key", /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----(?:\\n|\s)*[A-Za-z0-9+/]{40,}/],
+  ["stripe-secret-live", /(?<![A-Za-z0-9_])rk_live_([A-Za-z0-9]{20,})/g],
+  ["sk-live-secret-key", /(?<![A-Za-z0-9_])sk_live_([A-Za-z0-9]{20,})/g],
+  ["sk-test-secret-key", /(?<![A-Za-z0-9_])sk_test_([A-Za-z0-9]{20,})/g],
+  ["openai-key", /(?<![A-Za-z0-9_-])sk-(?:proj|svcacct|admin)-([A-Za-z0-9_-]{40,})|(?<![A-Za-z0-9_-])sk-([A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20})/g],
+  ["openrouter-key", /(?<![A-Za-z0-9_-])sk-or-v1-([0-9a-f]{64})(?![0-9a-f])/g],
+  ["anthropic-key", /(?<![A-Za-z0-9_-])sk-ant-(?:api|admin)\d\d-([A-Za-z0-9_-]{60,})/g],
+  ["supabase-secret-key", /(?<![A-Za-z0-9_])sb_secret_([A-Za-z0-9_-]{20,})/g],
+  ["github-token", /(?<![A-Za-z0-9_])(?:gh[pousr]_([A-Za-z0-9]{36,})|github_pat_([A-Za-z0-9_]{60,}))/g],
+  ["slack-token", /(?<![A-Za-z0-9])xox[baprs]-(\d{6,}-[A-Za-z0-9-]{10,})/g],
+  ["sendgrid-key", /(?<![A-Za-z0-9])SG\.([A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})(?![A-Za-z0-9_-])/g],
+  ["private-key", /-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----(?:\\n|\s)*([A-Za-z0-9+/]{40,})/g],
 ];
+/**
+ * An AWS access key ID. The ID alone signs nothing, and pages share it on purpose inside pre-signed links
+ * (X-Amz-Credential=AKIA.../20250101/..., AWSAccessKeyId=AKIA...), so one there is skipped, and one elsewhere counts
+ * only with a secret access key (AWS_SECRET) near it.
+ */
+const AWS_ID = /(?<![A-Za-z0-9])(?<!(?:[Cc]redential|[Aa]ccess[Kk]ey[Ii]d)(?:=|%3[Dd]))AKIA([0-9A-Z]{16})(?![0-9A-Z])(?!(?:\/|%2[Ff]|\\u002[Ff]|\\\/)\d{8}(?:\/|%2[Ff]|\\u002[Ff]|\\\/))/g;
+/** A secret access key: exactly 40 characters of base64 with capitals, small letters and digits (a SHA-1 is not). */
+const AWS_SECRET = /(?<![A-Za-z0-9/+=])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+=])/g;
+/** How far from an access key ID its secret is looked for, in characters on either side. */
+const AWS_NEAR = 400;
 const JWT = /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.(eyJ[A-Za-z0-9_-]{10,})\.[A-Za-z0-9_-]{20,}/g;
 
+/** Whether a match's body (its first capture group that matched) is a real-looking key. */
+const realKey = (m) => {
+  const body = m.slice(1).find((g) => g !== undefined);
+  return !isPlaceholder(body);
+};
+
+/** Whether an AWS access key ID in `t` has a secret access key near it. */
+function awsKeyPair(t) {
+  if (!t.includes("AKIA")) return false;
+  for (const id of t.matchAll(AWS_ID)) {
+    if (!realKey(id)) continue;
+    const near = t.slice(Math.max(0, id.index - AWS_NEAR), id.index + id[0].length + AWS_NEAR);
+    for (const s of near.matchAll(AWS_SECRET)) {
+      const v = s[0];
+      if (/[A-Z]/.test(v) && /[a-z]/.test(v) && /\d/.test(v) && !isPlaceholder(v)) return true;
+    }
+  }
+  return false;
+}
+
 /**
- * The kinds of secret key in a script's text, each once: the shapes above, and a Supabase key whose role is
- * service_role (it skips every row-level security rule; the anon key is meant to be public and is not reported).
- * Never a value.
+ * The kinds of secret key in a script's text, each once: the shapes above (a match whose body is a placeholder, such
+ * as sk_live_xxxx or AWS's documented ...EXAMPLE ID, or a key a provider documents, is not reported), an AWS access
+ * key ID with its secret near it, and a Supabase key whose role is service_role (it skips every row-level security
+ * rule; the anon key is meant to be public, and the Supabase CLI's local demo key opens only a local copy). Never a
+ * value.
  * @param {string} text
  * @returns {string[]}
  */
 export function bundleSecrets(text) {
   const t = String(text ?? "");
   const kinds = [];
-  for (const [kind, re] of BUNDLE_SECRETS) if (re.test(t)) kinds.push(kind);
+  for (const [kind, re] of BUNDLE_SECRETS) {
+    for (const m of t.matchAll(re)) {
+      if (!realKey(m)) continue;
+      kinds.push(kind);
+      break;
+    }
+  }
+  if (awsKeyPair(t)) kinds.push("aws-access-key");
   if (t.includes("eyJ")) {
     for (const m of t.matchAll(JWT)) {
       try {
         const payload = JSON.parse(Buffer.from(m[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-        if (payload && payload.role === "service_role") {
+        if (payload && payload.role === "service_role" && payload.iss !== "supabase-demo") {
           kinds.push("supabase-service-role");
           break;
         }
@@ -503,7 +558,25 @@ export function bundleSecrets(text) {
   return kinds;
 }
 
-/** The addresses of the page's own scripts (same origin as `base`), in order, at most MAX_SCRIPTS. */
+// Which of a page's scripts hold the app's own code. On a Next.js page the framework's runtime comes first in the
+// HTML (the webpack or Turbopack runtime, React, Next's client, the polyfills), and the route's own chunks after it.
+/** Next.js's runtime and manifests, by name: they hold no app code. */
+const FRAMEWORK_RUNTIME = /\/_next\/static\/(?:chunks\/(?:webpack|framework|main|main-app|polyfills|turbopack|react-refresh)-[\w-]+\.js|[\w-]+\/_(?:buildManifest|ssgManifest|clientMiddlewareManifest)\.js)$/;
+/** A Next.js route's own chunk, by name (webpack builds): chunks/app/... or chunks/pages/... */
+const ROUTE_CHUNK = /\/_next\/static\/chunks\/(?:app|pages)\//;
+/** A chunk address inside a Next.js App Router page's payload (self.__next_f), where each client component names its chunks. */
+const PAYLOAD_CHUNK = /static\/chunks\/[^"'\\\s<>]+?\.js(?=["'\\])/g;
+
+/**
+ * The addresses of the page's own scripts (same origin as `base`): script tags and script preloads, each once, the
+ * app's own code first. On a Next.js page that is the chunks its payload names for its client components and the
+ * route's chunks (chunks/app/, chunks/pages/), then the rest in page order, then the framework's runtime by name.
+ * A `nomodule` script (the polyfills old browsers load instead) is left out. Every address is returned; the caller
+ * reads the first MAX_SCRIPTS.
+ * @param {string} html
+ * @param {string} base  the page's address
+ * @returns {string[]}
+ */
 export function scriptSources(html, base) {
   const out = [];
   let origin = "";
@@ -513,23 +586,44 @@ export function scriptSources(html, base) {
     return out;
   }
   const doc = String(html ?? "").replace(/<!--[\s\S]*?-->/g, " ");
+  const seen = new Set();
   const add = (href) => {
     const h = collapse(String(href ?? ""));
     if (!h || /^(?:data|blob|javascript):/i.test(h)) return;
     const a = absolute(h, base);
-    if (!a || out.includes(a) || out.length >= MAX_SCRIPTS) return;
+    if (!a || seen.has(a)) return;
+    seen.add(a);
     try {
       if (new URL(a).origin === origin) out.push(a);
     } catch {
       /* not an address */
     }
   };
-  for (const m of doc.matchAll(tagRe("script"))) add(attrs(m[1]).src);
+  const named = new Set();
+  for (const m of doc.matchAll(new RegExp(`<script\\b(${TAG_BODY})>([\\s\\S]*?)(?:<\\/script\\s*>|$)`, "gi"))) {
+    const a = attrs(m[1]);
+    if ("nomodule" in a) continue;
+    if (a.src) add(a.src);
+    else if (m[2].includes("__next_f")) for (const c of m[2].matchAll(PAYLOAD_CHUNK)) named.add(c[0]);
+  }
   for (const m of doc.matchAll(tagRe("link"))) {
     const a = attrs(m[1]);
     if (/\bmodulepreload\b/i.test(a.rel || "") || (/\bpreload\b/i.test(a.rel || "") && /^script$/i.test(a.as || ""))) add(a.href);
   }
-  return out;
+  const rank = (address) => {
+    let path = "";
+    try {
+      path = new URL(address).pathname;
+    } catch {
+      return 1;
+    }
+    if (ROUTE_CHUNK.test(path)) return 0;
+    for (const c of named) if (path.endsWith(`/${c}`)) return 0;
+    return FRAMEWORK_RUNTIME.test(path) ? 2 : 1;
+  };
+  const ranked = out.map((address, i) => ({ address, i, r: rank(address) }));
+  ranked.sort((x, y) => x.r - y.r || x.i - y.i);
+  return ranked.map((x) => x.address);
 }
 
 // ---- robots.txt ----------------------------------------------------------------------------------------------------
@@ -662,7 +756,7 @@ export function emptySiteFacts(url) {
     llms: { status: null, html: false },
     notFound: { status: null },
     dns: { mx: null, spf: null, dmarc: null },
-    bundle: { scanned: null, found: [] },
+    bundle: { scanned: null, unread: 0, partial: [], found: [] },
   };
 }
 
@@ -751,18 +845,21 @@ async function measure(facts, u, o) {
       noindex: page.noindex || /\b(?:noindex|none)\b/i.test(r.res.header("x-robots-tag") || ""),
       hsts: Boolean(r.res.header("strict-transport-security")),
     };
-    // the scripts it ships, read for secret keys (only the kinds are kept)
-    const srcs = scriptSources(r.res.text, r.finalUrl);
+    // the scripts it ships, the app's own first, read for secret keys (only the kinds are kept)
+    const all = scriptSources(r.res.text, r.finalUrl);
+    const srcs = all.slice(0, MAX_SCRIPTS);
     const inline = bundleSecrets(r.res.text);
     const read = await Promise.all(srcs.map((src) => get(src)));
     const found = inline.map((kind) => ({ path: pathOf(r.finalUrl), kind }));
+    const partial = [];
     let scanned = 0;
     read.forEach((x, i) => {
       if (!x.ok || x.status !== 200) return;
       scanned++;
+      if (x.cut && partial.length < 20) partial.push(pathOf(srcs[i]));
       for (const kind of bundleSecrets(x.text)) found.push({ path: pathOf(srcs[i]), kind });
     });
-    facts.bundle = { scanned, found: found.slice(0, 20) };
+    facts.bundle = { scanned, unread: all.length - srcs.length, partial, found: found.slice(0, 20) };
   });
 
   const httpsTask = get(httpsUrl).then((r) => {

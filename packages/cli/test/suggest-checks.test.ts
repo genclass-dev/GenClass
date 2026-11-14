@@ -45,7 +45,7 @@ const goodSite = (): any => ({
   llms: { status: 200, html: false },
   notFound: { status: 404 },
   dns: { mx: true, spf: true, dmarc: true },
-  bundle: { scanned: 3, found: [] },
+  bundle: { scanned: 3, unread: 0, partial: [], found: [] },
 });
 
 /** A repository where every check passes. */
@@ -62,12 +62,12 @@ const goodRepo = (): any => ({
   env: { files: [".env", ".env.example"], tracked: [], example: true, ignored: true },
   secrets: [],
   payments: { provider: "stripe", testKeyInProduction: [], secretInClient: [] },
-  hosting: { provider: "vercel", previews: true, staging: null },
+  hosting: { provider: "vercel", from: "config", previews: true, staging: null },
   readme: { exists: true, chars: 900, boilerplate: false },
   monitoring: { genclass: true, sentry: false, other: [] },
   seo: { robots: true, sitemap: true, llms: true, ogImage: true, manifest: true },
   site: { url: "https://example.com", from: "package.json homepage" },
-  versions: { packages: [{ name: "next", version: "15.5.9" }], from: "node_modules", appRouter: true, middleware: "middleware.ts" },
+  versions: { packages: [{ name: "next", version: "15.5.9" }], from: "node_modules", appRouter: true, middleware: "middleware.ts", staticExport: false },
 });
 
 const site = (change?: (s: any) => void) => {
@@ -714,5 +714,50 @@ describe("suggest checks: secrets in the shipped bundle and framework advisories
     // react-server-dom-* outside Next.js
     const rsd = one("framework-cve", { repo: repo((x) => ((x.pkg.deps = { "react-server-dom-webpack": "19.1.1" }), (x.versions.packages = [{ name: "react-server-dom-webpack", version: "19.1.1" }]), (x.versions.from = "pnpm-lock.yaml"))) });
     expect(rsd.evidence).toEqual(["react-server-dom-webpack 19.1.1 (pnpm-lock.yaml): remote code execution (CVE-2025-55182) is fixed in 19.1.2"]);
+  });
+
+  it("secrets-in-bundle is no pass while a script was left unread or read only to 1 MB", () => {
+    // more scripts than are read: the ones left could hold the key (finding 11)
+    const left = one("secrets-in-bundle", { site: site((x) => (x.bundle = { scanned: 20, unread: 6, partial: [], found: [] })) });
+    expect(left).toMatchObject({ status: "unknown", evidence: ["no secret key in the 20 scripts read", "6 more scripts the home page loads were not read"] });
+    // a bundle over 1 MB: Vite puts the app's own code at its end, which was not read (finding 54)
+    const cut = one("secrets-in-bundle", { site: site((x) => (x.bundle = { scanned: 1, unread: 0, partial: ["/assets/index-a1.js"], found: [] })) });
+    expect(cut).toMatchObject({ status: "unknown", evidence: ["no secret key in the 1 script read", "/assets/index-a1.js is over 1 MB: only its first 1 MB was read"] });
+    // a key found is a fail either way
+    expect(status("secrets-in-bundle", { site: site((x) => (x.bundle = { scanned: 20, unread: 6, partial: ["/a.js"], found: [{ path: "/a.js", kind: "sk-live-secret-key" }] })) })).toBe("fail");
+    // facts from before these fields: read whole
+    expect(status("secrets-in-bundle", { site: site((x) => (x.bundle = { scanned: 2, found: [] })) })).toBe("pass");
+    // the words do not tie sk_live_ to one provider (Clerk's secret keys start with it too: finding 59)
+    const words = CHECKS.find((c) => c.id === "secrets-in-bundle")!;
+    expect(words.why).toContain("Clerk");
+    expect(words.why).not.toMatch(/a Stripe secret key/);
+  });
+
+  it("framework-cve: only a deployment setting exempts Vercel or Netlify from CVE-2025-29927 (finding 13)", () => {
+    const mw = (change: (r: any) => void) =>
+      one("framework-cve", { repo: repo((x) => {
+        x.versions.packages = [{ name: "next", version: "14.2.10" }];
+        change(x);
+      }) });
+    const line = "next 14.2.10 with middleware.ts: middleware can be skipped (CVE-2025-29927), fixed in 14.2.25";
+    // vercel.json, the .vercel link or a deploy workflow: not affected
+    for (const from of ["config", "link", "workflow"]) expect(mw((x) => (x.hosting = { provider: "vercel", from, previews: true, staging: null })).status, from).toBe("pass");
+    expect(mw((x) => (x.hosting = { provider: "netlify", from: "config", previews: true, staging: null })).status).toBe("pass");
+    // only a library such as @vercel/otel: a guess, so it is reported, saying who is not affected
+    const deps = mw((x) => (x.hosting = { provider: "vercel", from: "deps", previews: true, staging: null }));
+    expect(deps).toMatchObject({ status: "fail", evidence: [`${line}; Vercel and Netlify are not affected`] });
+    // a Dockerfile at the top says it runs on a server of its own, even with vercel.json
+    const docker = mw((x) => ((x.hosting = { provider: "vercel", from: "config", previews: true, staging: null }), (x.files = [...x.files, "Dockerfile"])));
+    expect(docker).toMatchObject({ status: "fail", evidence: [line] });
+    // no host found at all (a Vercel Git deploy has no file): reported, with the same note
+    expect(mw((x) => (x.hosting = { provider: null, from: null, previews: null, staging: null })).evidence).toEqual([`${line}; Vercel and Netlify are not affected`]);
+  });
+
+  it("framework-cve: a static export runs no server, so neither advisory applies (finding 53)", () => {
+    const r = one("framework-cve", { repo: repo((x) => ((x.versions.packages = [{ name: "next", version: "15.1.0" }]), (x.versions.staticExport = true), (x.hosting = { provider: "github-pages", from: "deps", previews: null, staging: false }))) });
+    expect(r.status).toBe("pass");
+    expect(r.evidence).toEqual(['next 15.1.0: a static export (output: "export") runs no server, so CVE-2025-55182 and CVE-2025-29927 do not apply']);
+    // the same version with a server is failed
+    expect(status("framework-cve", { repo: repo((x) => (x.versions.packages = [{ name: "next", version: "15.1.0" }])) })).toBe("fail");
   });
 });
