@@ -222,6 +222,10 @@ describe("genclass: the home (src/home.mjs)", () => {
     expect(fresh).toContain("Not signed in, and GenClass is not in this app yet. Type setup");
     const unset = plainLines(await at58(() => opening({ ...base, app: { name: "shop", token: null }, signedIn: true, sessionProblem: null } as never))).join(" ");
     expect(unset).toContain("GenClass is not set up in this folder yet.");
+    // on Free the next thing is Pro, not setup
+    const free = plainLines(await at58(() => opening({ ...base, app: { name: "shop", token: null }, signedIn: true, sessionProblem: null, account: { cli: { paid: false, trialDays: 3 } } } as never))).join(" ").replace(/\s+/g, " ");
+    expect(free).toContain("You are on Free. Type upgrade to start your 3-day free trial of Pro");
+    expect(free).not.toContain("Type setup");
   });
 
   it("a command typed with a word it does not take is told so, not run as something else", async () => {

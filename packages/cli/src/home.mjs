@@ -198,7 +198,9 @@ export function opening(state) {
   const left = state.steps.filter((x) => x.state !== "done" && x.state !== "optional" && x.blocking !== false && x.state !== "waiting");
   // signed out (logout, an expired session) in a folder that is set up: the app is still set up, only the sign-in is
   // missing (the 0.3.9 user stories: after logout it said "not set up")
-  if (!state.signedIn && state.app?.token) note(state.sessionProblem === "expired" ? "Your sign-in expired. Type login to sign in again." : "Not signed in. Type login to sign in again.");
+  // on Free the next thing is Pro, whatever the folder (setup answers only that it goes on with Pro)
+  if (state.signedIn && state.account?.cli && !state.account.cli.paid) note(`You are on Free. Type upgrade to start ${state.account.cli.trialDays ? `your ${state.account.cli.trialDays}-day free trial of ` : ""}Pro: setup and the other commands come with it.`);
+  else if (!state.signedIn && state.app?.token) note(state.sessionProblem === "expired" ? "Your sign-in expired. Type login to sign in again." : "Not signed in. Type login to sign in again.");
   else if (!state.signedIn) note("Not signed in, and GenClass is not in this app yet. Type setup: it starts with the sign-in.");
   else if (!state.app?.token) note("GenClass is not set up in this folder yet. Type setup to do it, one step at a time.");
   else if (left.length) note(`Set up. ${left.length} more step${left.length === 1 ? "" : "s"} you can add (${left.map((x) => x.title).join(", ")}): type setup.`);

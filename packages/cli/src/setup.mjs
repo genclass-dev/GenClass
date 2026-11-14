@@ -126,7 +126,10 @@ export async function status(o = {}) {
   const step = state.next;
   if (step) {
     showNext(step, !!o.all);
-    barPara(`${c.gray("Run")} ${c.cyan(step.run ?? "npx genclass setup")}${step.human ? c.gray(`  (then: ${step.human})`) : ""}`, (l) => l);
+    // inside the prompt a command is typed without npx genclass in front
+    const cmd = step.run ?? "npx genclass setup";
+    const typedHere = homeOpen() && cmd.startsWith("npx genclass ");
+    barPara(`${c.gray(typedHere ? "Type" : "Run")} ${c.cyan(typedHere ? cmd.slice("npx genclass ".length) : cmd)}${step.human ? c.gray(`  (then: ${step.human})`) : ""}`, (l) => l);
     out();
     if (!o.all) out(`  ${c.gray("Every part:")} ${c.cyan("npx genclass status --all")}`);
     out();
