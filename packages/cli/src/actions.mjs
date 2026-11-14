@@ -216,8 +216,10 @@ export async function projectPlan(offer, o = {}, deps = {}) {
       : offer.needs && offer.paying
         ? `Your plan covers no more apps: add ${offer.appsPerUnit} more for ${name} on its plan page.`
         : offer.needs
-          ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more: it needs ${offer.plan.name}, ${offer.price}.`
-          : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`,
+          ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more: it needs ${offer.plan.name}${offer.price ? `, ${offer.price}` : ""}.`
+          : offer.price
+            ? `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`
+            : `${offer.plan.name}, or ${offer.free.name.toLowerCase()} for now (limited), on this app's plan page.`,
   );
   if (o.yes || !interactive()) {
     out(`  Open  ${c.cyan(offer.checkoutUrl)}`);

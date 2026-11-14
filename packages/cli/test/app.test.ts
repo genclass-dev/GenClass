@@ -64,9 +64,9 @@ describe("genclass dashboard: the view (src/app.mjs render, spark)", () => {
   it("short by default: the numbers, the top five problems in plain words, one line per other part", async () => {
     const said = await printed(() => render(APP as never, STATE as never, { now: NOW }));
     expect(said).toContain("last 7 days · last page 3 hours ago");
-    expect(said).toMatch(/Page loads\s+1,204\s+Problems found\s+17\n/);
+    expect(said).toMatch(/Page loads\s+1,204\s+Problems found\s+26\n/);
     expect(said).toMatch(/Problems\s+▁▃▂▇▅▁█\s+over the period/);
-    expect(said).toMatch(/Handled\s+3\s+Visual checks\s+9/);
+    expect(said).toMatch(/Handled\s+3\s+Of them checks\s+9/);
     // what happened in plain words first, then the page; largest first
     expect(said).toMatch(/12\s+the same request went out twice\s+\/checkout\n/);
     expect(said).toMatch(/4\s+old data replaced newer data\s+\/orders\/:id\n/);

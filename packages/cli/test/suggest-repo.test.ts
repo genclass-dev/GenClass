@@ -1,6 +1,6 @@
 // Facts read from a project folder (src/suggest/repo.mjs): small projects built in a temp folder, a stand-in git.
 import { describe, expect, it } from "vitest";
-import { collectRepoFacts, emptyRepoFacts, redactSecrets } from "../src/suggest/repo.mjs";
+import { collectRepoFacts, emptyRepoFacts, lockVersion, redactSecrets } from "../src/suggest/repo.mjs";
 import { isolate, tempDir, write } from "./helpers.js";
 
 isolate();
@@ -207,5 +207,42 @@ describe("genclass suggest: the facts of a project (src/suggest/repo.mjs)", () =
     const m = collectRepoFacts(other, { runGit: noGit }).monitoring;
     expect(m).toMatchObject({ genclass: false, sentry: false });
     expect(m.other.sort()).toEqual(["datadog", "posthog"]);
+  });
+});
+
+describe("genclass suggest: installed framework versions (src/suggest/repo.mjs readVersions, lockVersion)", () => {
+  isolate();
+
+  it("reads node_modules first, then the lockfile, and notes the App Router and a middleware file", () => {
+    const dir = tempDir();
+    write(dir, {
+      "package.json": JSON.stringify({ name: "web", dependencies: { next: "^15.1.0", react: "^19.0.0" } }),
+      "package-lock.json": JSON.stringify({ lockfileVersion: 3, packages: { "": {}, "node_modules/next": { version: "15.1.0" }, "node_modules/react": { version: "19.0.0" } } }),
+      "app/page.tsx": "export default function Page() { return null; }",
+      "middleware.ts": "export function middleware() {}",
+    });
+    let f = collectRepoFacts(dir, { runGit: () => null });
+    expect(f.versions).toEqual({ packages: [{ name: "next", version: "15.1.0" }], from: "package-lock.json", appRouter: true, middleware: "middleware.ts" });
+    write(dir, { "node_modules/next/package.json": JSON.stringify({ name: "next", version: "15.1.9" }) });
+    f = collectRepoFacts(dir, { runGit: () => null });
+    expect(f.versions.packages).toEqual([{ name: "next", version: "15.1.9" }]);
+    expect(f.versions.from).toBe("node_modules");
+  });
+
+  it("an app without Next.js or React Server Components has no versions to read", () => {
+    const dir = tempDir();
+    write(dir, { "package.json": JSON.stringify({ name: "web", dependencies: { vite: "^8.0.0" } }) });
+    expect(collectRepoFacts(dir, { runGit: () => null }).versions).toEqual({ packages: [], from: null, appRouter: false, middleware: null });
+  });
+
+  it("lockVersion reads npm, pnpm, yarn and bun lockfiles", () => {
+    expect(lockVersion("npm", JSON.stringify({ packages: { "node_modules/next": { version: "15.3.1" } } }), "next")).toBe("15.3.1");
+    expect(lockVersion("npm", "not json", "next")).toBeNull();
+    expect(lockVersion("pnpm", "packages:\n\n  next@15.4.2(react@19.1.0):\n    resolution: {}\n", "next")).toBe("15.4.2");
+    expect(lockVersion("pnpm", "packages:\n  /next@14.2.3:\n    resolution: {}\n", "next")).toBe("14.2.3");
+    expect(lockVersion("yarn", '"next@^15.0.0":\n  version "15.0.3"\n', "next")).toBe("15.0.3");
+    expect(lockVersion("yarn", '"next@npm:^15.0.0":\n  version: 15.0.4\n', "next")).toBe("15.0.4");
+    expect(lockVersion("bun", '{ "packages": { "next": ["next@16.0.6", "", {}] } }', "next")).toBe("16.0.6");
+    expect(lockVersion("pnpm", "packages:\n  next-auth@4.0.0:\n", "next")).toBeNull();
   });
 });

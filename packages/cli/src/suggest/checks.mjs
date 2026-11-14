@@ -58,6 +58,27 @@ const quote = (text, max = 90) => {
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const baseOf = (path) => String(path).slice(String(path).lastIndexOf("/") + 1);
 
+// The affected ranges of the advisories `framework-cve` reports, from the vendors' own pages (nextjs.org/blog/
+// CVE-2025-66478, react.dev 2025-12-03, nextjs.org/blog/cve-2025-29927): [first affected, first fixed] per release
+// line. A prerelease (a canary) is not judged.
+/** Next.js App Router, CVE-2025-55182 (filed for Next.js as CVE-2025-66478). 13.x and 14.x stable are not affected. */
+const NEXT_RSC_FIXED = [["15.0.0", "15.0.5"], ["15.1.0", "15.1.9"], ["15.2.0", "15.2.6"], ["15.3.0", "15.3.6"], ["15.4.0", "15.4.8"], ["15.5.0", "15.5.7"], ["16.0.0", "16.0.7"]];
+/** Next.js middleware skipped with the x-middleware-subrequest header, CVE-2025-29927 (self-hosted `next start`). */
+const NEXT_MIDDLEWARE_FIXED = [["11.1.4", "12.3.5"], ["13.0.0", "13.5.9"], ["14.0.0", "14.2.25"], ["15.0.0", "15.2.3"]];
+/** react-server-dom-webpack, -turbopack and -parcel, CVE-2025-55182. */
+const RSD_FIXED = [["19.0.0", "19.0.1"], ["19.1.0", "19.1.2"], ["19.2.0", "19.2.1"]];
+/** [major, minor, patch] of a plain release ("15.1.0"), null for a prerelease or anything else. */
+const semverOf = (v) => {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(v ?? "").trim());
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+};
+const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+/** The first fixed release of the range `ver` falls in, or null when it is outside every range. */
+const fixedIn = (ver, ranges) => {
+  for (const [lo, hi] of ranges) if (cmp(ver, semverOf(lo)) >= 0 && cmp(ver, semverOf(hi)) < 0) return hi;
+  return null;
+};
+
 /** The home page's facts, or the "unknown" result that says why there are none. */
 function page(site) {
   if (!site) return { home: null, miss: unknown(NO_SITE) };
@@ -542,6 +563,70 @@ export const CHECKS = [
       const line = (s) => `${s.kind} in ${s.file}, line ${s.line}`;
       if (found.length <= MAX_EVIDENCE) return fail(...found.map(line));
       return fail(...found.slice(0, 2).map(line), `and ${found.length - 2} more`);
+    },
+  },
+  {
+    id: "secrets-in-bundle",
+    area: "safety",
+    title: "A secret key ships to every visitor's browser",
+    weight: 5,
+    why: "Your live site's JavaScript holds a secret key: anyone can copy it from the browser's developer tools, and bots read public bundles for keys. A Supabase service_role key skips every row-level security rule; an OpenAI or Anthropic key spends your money; a Stripe secret key moves payments.",
+    fix: "Roll the key at its provider now, then call that provider only from server code that reads the key from an environment variable.",
+    prompt:
+      "My live site's JavaScript bundle contains a secret key (the report names the kind of key and the script it is in, never the value). Find where the app reads it: an environment variable with a public prefix (NEXT_PUBLIC_, VITE_, PUBLIC_, EXPO_PUBLIC_, REACT_APP_) or a key written in client code. Move every call that needs it into server code (an API route, a server action, an edge or serverless function) that reads it from a variable without the public prefix, and have the browser call that route instead. For a Supabase service_role key, use the anon key in the browser and keep service_role on the server only. Do not print the key. Then tell me which key to roll at its provider, because the old one has already been public.",
+    needs: ["site"],
+    run({ site }) {
+      const { home, miss } = page(site);
+      if (!home) return miss;
+      const b = site.bundle;
+      if (!b || b.scanned === null || b.scanned === undefined) return unknown("the page's scripts were not read");
+      const found = Array.isArray(b.found) ? b.found : [];
+      if (!found.length) return b.scanned ? pass(`no secret key in the ${plural(b.scanned, "script", "scripts")} the home page loads`) : unknown("the home page loads no script of its own that answered");
+      const line = (x) => `${x.kind} in ${x.path}`;
+      if (found.length <= MAX_EVIDENCE) return fail(...found.map(line));
+      return fail(...found.slice(0, 2).map(line), `and ${found.length - 2} more`);
+    },
+  },
+  {
+    id: "framework-cve",
+    area: "safety",
+    title: "Your framework version has a known critical security hole",
+    weight: 5,
+    why: "React Server Components had a flaw (CVE-2025-55182, December 2025) that lets anyone run code on your server with one request; attacks began within days. Older Next.js also let a request skip middleware, where many apps check sign-in (CVE-2025-29927). This app installs an affected version.",
+    fix: "Upgrade to the newest patch release of the version you use, then build, test and deploy.",
+    prompt:
+      "The framework this repository installs has a known critical security advisory (the report lists the package, the installed version and the release that fixes it). Upgrade next (and react and react-dom with it) to the newest patch release of the major version the project already uses, so nothing else changes: for example npm install next@15 react@19 react-dom@19, or the same with pnpm or yarn, keeping the lockfile. For react-server-dom-webpack, -turbopack or -parcel, upgrade to the newest 19.x. Then run the build and the tests and tell me the versions before and after. The fixed releases are listed at https://nextjs.org/blog/CVE-2025-66478 and on react.dev's security advisories.",
+    needs: ["repo"],
+    run({ repo }) {
+      if (!repo) return unknown(NO_REPO);
+      const v = repo.versions || {};
+      const deps = (repo.pkg && repo.pkg.deps) || {};
+      const uses = ["next", "react-server-dom-webpack", "react-server-dom-turbopack", "react-server-dom-parcel"].filter((n) => Object.prototype.hasOwnProperty.call(deps, n));
+      if (!repo.pkg) return unknown("there is no readable package.json");
+      if (!uses.length) return skip("no Next.js or React Server Components package in this app");
+      const pkgs = Array.isArray(v.packages) ? v.packages : [];
+      if (!pkgs.length) return unknown("the installed versions could not be read: no node_modules and no lockfile that lists them");
+      const from = v.from ? ` (${v.from})` : "";
+      const bad = [];
+      let read = 0;
+      for (const p of pkgs) {
+        const ver = semverOf(p.version);
+        if (!ver) continue;
+        read++;
+        if (p.name === "next") {
+          const rce = v.appRouter ? fixedIn(ver, NEXT_RSC_FIXED) : null;
+          if (rce) bad.push(`next ${p.version}${from}: remote code execution (CVE-2025-55182) is fixed in ${rce}`);
+          const host = repo.hosting && repo.hosting.provider;
+          const mw = v.middleware && host !== "vercel" && host !== "netlify" ? fixedIn(ver, NEXT_MIDDLEWARE_FIXED) : null;
+          if (mw) bad.push(`next ${p.version} with ${v.middleware}: middleware can be skipped (CVE-2025-29927), fixed in ${mw}`);
+        } else {
+          const rce = fixedIn(ver, RSD_FIXED);
+          if (rce) bad.push(`${p.name} ${p.version}${from}: remote code execution (CVE-2025-55182) is fixed in ${rce}`);
+        }
+      }
+      if (!read) return unknown("only prerelease versions are installed; check them against the advisories by hand");
+      if (bad.length) return fail(...bad.slice(0, MAX_EVIDENCE));
+      return pass(pkgs.map((p) => `${p.name} ${p.version}`).join(", ") + ": outside the affected ranges of CVE-2025-55182 and CVE-2025-29927");
     },
   },
   {

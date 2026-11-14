@@ -765,7 +765,9 @@ export async function funnels(o = {}, deps = {}) {
       if (!current.length) note("No funnel yet. A funnel is a list of pages in order; it counts the visits that reach each one.");
       for (const f of app.more.funnels) {
         out(`  ${c.bold(clean(f.name, 60))}`);
-        f.steps.forEach((step, i) => out(`    ${c.cyan(clean(step, room() - 30))}  ${c.bold(n(f.counts[i] ?? 0))}${i && f.counts[0] ? c.gray(`  ${Math.round(((f.counts[i] ?? 0) / f.counts[0]) * 100)}% of step 1`) : ""}`));
+        // the counts in one column, as `analytics funnels` lays them out (views.mjs)
+        const wStep = Math.min(room() - 30, Math.max(...f.steps.map((x) => String(x).length), 4));
+        f.steps.forEach((step, i) => out(`    ${c.cyan(clean(step, wStep).padEnd(wStep))}  ${c.bold(n(f.counts[i] ?? 0).padStart(6))}${i && f.counts[0] ? c.gray(`  ${Math.round(((f.counts[i] ?? 0) / f.counts[0]) * 100)}% of step 1`) : ""}`));
       }
       out();
       out(`  ${c.gray("Add:   ")} ${c.cyan('npx genclass funnels add "Checkout" /cart /checkout /thanks')}`);

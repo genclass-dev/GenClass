@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.4.0-alpha.0 (genclass-alpha)
+
+The alpha line: new commands from a full walk of 0.3.8 against a local genclass.dev, a coding agent fixing a real race
+with `genclass fix`'s prompt, and research on what developers ask for and on compliance.
+
+- **`genclass privacy`** (free, no sign-in, no network): what this project's GenClass setup sends from its visitors'
+  browsers, to whom, why and for how long; what it keeps on their devices (the learned flows in `localStorage`, the
+  model in Cache Storage, the analytics visit id); the opt-outs it honours; what that means for EU, EEA and UK
+  visitors (ePrivacy Article 5(3), EDPB Guidelines 2/2023, the CDN's view of IP addresses) and US ones (GPC, CCPA
+  service-provider terms, regulated sites); the exact options that make it send and keep nothing; and the
+  Content-Security-Policy it needs. Read from the project's files (tests excluded). `--out genclass-privacy.md`
+  writes it as Markdown for a privacy policy or a vendor questionnaire; `--json` as data. Not legal advice, and it
+  says so.
+- **`genclass doctor`** (free): one line per part GenClass added (this command and the `genclass` on the PATH, Node,
+  the sign-in, the runtime's version and import order, the diagnostics, the MCP server's pin, the skill, the
+  coding-agent link, the bridge, the site's Content-Security-Policy, the test workflow), each with what to run.
+  `--fix` writes GenClass's own lines only, after showing them: the MCP pin, the skill while it has its marker, and
+  in a Vite app the dev-only coding-agent link (`connectAgent(GenClass.init())` in a `genclass:init` block that
+  `genclass remove` takes out). Two requests to npm's registry for dist-tags, `--offline` none.
+- **`genclass suggest`, two safety checks:** `secrets-in-bundle` reads the scripts the live home page ships (same
+  origin, at most 6, 1 MB each) for secret keys (Stripe secret, OpenAI, Anthropic, AWS, GitHub, Slack, SendGrid,
+  private keys, a Supabase service_role JWT) and reports the kind and the script's path, never a value; on 25,365
+  library files (339 MB of node_modules) it matched one, a test certificate's private key. `framework-cve` reads
+  the installed Next.js and react-server-dom-* versions (node_modules, else the npm, pnpm, yarn or bun lockfile)
+  against CVE-2025-55182 (remote code execution in React Server Components; App Router only) and CVE-2025-29927
+  (Next.js middleware skipped; self-hosted with a middleware file only), with the release that fixes each.
+- **A newer genclass** is said in one line when the command opens on a terminal, from a check of npm's dist-tags at
+  most once a day (never in CI, piped, `--json`, `--yes`, `NO_UPDATE_NOTIFIER` or `GENCLASS_NO_UPDATE`).
+- **The fix prompts** let an agent that can drive a browser do the page loads itself (Playwright from a script kept
+  outside the repo, then `whenSettled()`), and only otherwise ask the person; the same sentence is on the dashboard
+  page (`telemetry-worker/src/pages.ts`).
+
+Fixed from the walk:
+
+- With `genclass` installed, `help`'s first column was 4 characters short of the rest (the names were shortened
+  after the layout); it is laid out with the name as printed.
+- `genclass dashboard` said "Problems found 16" where `problems`, `report` and the browser dashboard said 59 for the
+  same period: it now counts the measured checks in, like them, with "Of them checks" beside it.
+- A server that sells nothing (self-hosted, a local `wrangler dev`) no longer has an app-plan step, and an offer
+  without a price no longer prints "Pro is ."
+- A mistyped command or option says one line and `npx genclass help`, instead of the whole help.
+- `funnels` lines its counts up in one column.
+
 ## 0.3.8
 
 Fixes from a signed-in walk of 0.3.7 against a fresh account, a team and a grant:

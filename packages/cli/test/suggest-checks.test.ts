@@ -45,6 +45,7 @@ const goodSite = (): any => ({
   llms: { status: 200, html: false },
   notFound: { status: 404 },
   dns: { mx: true, spf: true, dmarc: true },
+  bundle: { scanned: 3, found: [] },
 });
 
 /** A repository where every check passes. */
@@ -54,7 +55,7 @@ const goodRepo = (): any => ({
   git: { repo: true, tracked: ["package.json", "src/main.ts", ".env.example"], remote: "https://github.com/acme/app.git", github: "acme/app", branch: "main" },
   files: ["package.json", "src/main.ts", ".env", ".env.example"],
   truncated: false,
-  pkg: { name: "acme", scripts: { test: "vitest run" }, deps: { stripe: "^17.0.0", vitest: "^3.0.0" }, engines: null, homepage: null },
+  pkg: { name: "acme", scripts: { test: "vitest run" }, deps: { next: "^15.5.0", stripe: "^17.0.0", vitest: "^3.0.0" }, engines: null, homepage: null },
   lockfile: "npm",
   tests: { files: 4, script: "vitest run", playwright: false, runner: "vitest" },
   ci: { workflows: [{ file: ".github/workflows/ci.yml", onPullRequest: true, runsTests: true, deploys: false }], other: [] },
@@ -66,6 +67,7 @@ const goodRepo = (): any => ({
   monitoring: { genclass: true, sentry: false, other: [] },
   seo: { robots: true, sitemap: true, llms: true, ogImage: true, manifest: true },
   site: { url: "https://example.com", from: "package.json homepage" },
+  versions: { packages: [{ name: "next", version: "15.5.9" }], from: "node_modules", appRouter: true, middleware: "middleware.ts" },
 });
 
 const site = (change?: (s: any) => void) => {
@@ -113,6 +115,8 @@ const IDS = [
   ["pricing-visible", "payments", 3],
   ["env-committed", "safety", 5],
   ["secrets-in-repo", "safety", 5],
+  ["secrets-in-bundle", "safety", 5],
+  ["framework-cve", "safety", 5],
   ["env-example", "safety", 1],
   ["tests", "quality", 2],
   ["ci", "quality", 3],
@@ -597,6 +601,7 @@ describe("suggest checks: evidence", () => {
       s.llms = { status: 404, html: false };
       s.notFound = { status: 200 };
       s.dns = { mx: true, spf: false, dmarc: false };
+      s.bundle = { scanned: 5, found: [{ path: `/assets/${"deep/".repeat(40)}index.js`, kind: "openai-key" }, { path: "/assets/b.js", kind: "aws-access-key" }, { path: "/assets/c.js", kind: "private-key" }, { path: "/assets/d.js", kind: "slack-token" }] };
     }),
     repo: repo((r) => {
       r.env = { files: [".env"], tracked: [".env", ".env.local", ".env.production", "api/.env"], example: false, ignored: false };
@@ -608,6 +613,7 @@ describe("suggest checks: evidence", () => {
       r.monitoring = { genclass: false, sentry: false, other: [] };
       r.readme = { exists: false, chars: 0, boilerplate: false };
       r.lockfile = null;
+      r.versions = { packages: [{ name: "next", version: "15.2.0" }], from: "package-lock.json", appRouter: true, middleware: "src/middleware.ts" };
     }),
   });
 
@@ -665,5 +671,48 @@ describe("suggest checks: evidence", () => {
     const canonical = one("canonical", { site: site((s) => (s.home.canonical = "https://user:hunter2pass@example.com/")) });
     expect(canonical.status).toBe("pass");
     expect(canonical.evidence[0]).toBe("canonical: https://example.com/");
+  });
+});
+
+describe("suggest checks: secrets in the shipped bundle and framework advisories (genclass-alpha)", () => {
+  it("secrets-in-bundle names the kind and the script, never a value; nothing read is unknown", () => {
+    const r = one("secrets-in-bundle", { site: site((x) => (x.bundle = { scanned: 2, found: [{ path: "/assets/index-a1.js", kind: "openai-key" }, { path: "/assets/index-a1.js", kind: "supabase-service-role" }] })) });
+    expect(r.status).toBe("fail");
+    expect(r.evidence).toEqual(["openai-key in /assets/index-a1.js", "supabase-service-role in /assets/index-a1.js"]);
+    const many = one("secrets-in-bundle", { site: site((x) => (x.bundle = { scanned: 4, found: ["a", "b", "c", "d"].map((k) => ({ path: `/${k}.js`, kind: "github-token" })) })) });
+    expect(many.evidence).toEqual(["github-token in /a.js", "github-token in /b.js", "and 2 more"]);
+    expect(one("secrets-in-bundle").evidence).toEqual(["no secret key in the 3 scripts the home page loads"]);
+    expect(status("secrets-in-bundle", { site: site((x) => (x.bundle = { scanned: null, found: [] })) })).toBe("unknown");
+    expect(status("secrets-in-bundle", { site: site((x) => (x.bundle = { scanned: 0, found: [] })) })).toBe("unknown");
+    expect(status("secrets-in-bundle", { site: null })).toBe("unknown");
+  });
+
+  it("framework-cve fails inside the affected ranges, with the release that fixes each, and passes outside them", () => {
+    const at = (version: string, change?: (r: any) => void) =>
+      one("framework-cve", { repo: repo((x) => {
+        x.versions.packages = [{ name: "next", version }];
+        change?.(x);
+      }) });
+    expect(at("15.1.0").status).toBe("fail");
+    expect(at("15.1.0").evidence[0]).toBe("next 15.1.0 (node_modules): remote code execution (CVE-2025-55182) is fixed in 15.1.9");
+    expect(at("16.0.6").evidence[0]).toContain("fixed in 16.0.7");
+    for (const ok of ["15.1.9", "15.5.7", "16.0.7", "16.1.2", "14.2.30", "13.5.11"]) expect(at(ok).status, ok).toBe("pass");
+    // the Pages Router does not run React Server Components
+    expect(at("15.1.0", (x) => (x.versions.appRouter = false)).status).toBe("pass");
+    // CVE-2025-29927: self-hosted with a middleware file only (Vercel and Netlify were not exposed)
+    const mw = at("14.2.10", (x) => (x.hosting.provider = "docker"));
+    expect(mw.status).toBe("fail");
+    expect(mw.evidence).toEqual(["next 14.2.10 with middleware.ts: middleware can be skipped (CVE-2025-29927), fixed in 14.2.25"]);
+    expect(at("14.2.10").status).toBe("pass");
+    expect(at("14.2.10", (x) => ((x.hosting.provider = "docker"), (x.versions.middleware = null))).status).toBe("pass");
+    // both at once on 15.2.0, self-hosted
+    expect(at("15.2.0", (x) => (x.hosting.provider = null)).evidence).toHaveLength(2);
+    // a prerelease is not judged; nothing read is unknown; no RSC framework is skip
+    expect(at("15.6.0-canary.3").status).toBe("unknown");
+    expect(status("framework-cve", { repo: repo((x) => (x.versions.packages = [])) })).toBe("unknown");
+    expect(status("framework-cve", { repo: repo((x) => (x.pkg.deps = { vite: "^8.0.0" })) })).toBe("skip");
+    // react-server-dom-* outside Next.js
+    const rsd = one("framework-cve", { repo: repo((x) => ((x.pkg.deps = { "react-server-dom-webpack": "19.1.1" }), (x.versions.packages = [{ name: "react-server-dom-webpack", version: "19.1.1" }]), (x.versions.from = "pnpm-lock.yaml"))) });
+    expect(rsd.evidence).toEqual(["react-server-dom-webpack 19.1.1 (pnpm-lock.yaml): remote code execution (CVE-2025-55182) is fixed in 19.1.2"]);
   });
 });

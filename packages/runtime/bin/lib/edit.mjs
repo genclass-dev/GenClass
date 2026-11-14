@@ -159,6 +159,10 @@ const BLOCK_RE = new RegExp(
       String.raw`exportfunctionGenClassInit\(\)\{returnnull;?\}`,
       String.raw`exportdefaultdefineNuxtPlugin\(\(\)=>\{(?:${DEV_LINE}|${DEV_BLOCK})?\}\);?`,
       String.raw`exportdefaultfunctionApp\(\{Component,pageProps\}(?::AppProps)?\)\{return\(?<Component\{\.\.\.pageProps\}/>\)?;?\}`,
+      // the coding-agent link `genclass doctor --fix` adds after the /auto import (development builds only)
+      String.raw`import\{GenClass\}from"@genclass/runtime";?`,
+      String.raw`import\{connectAgent\}from"@genclass/runtime/agent";?`,
+      String.raw`if\(${COND}\)connectAgent\(GenClass\.init\(\)\);?`,
     ].join("|") +
     ")*$",
 );

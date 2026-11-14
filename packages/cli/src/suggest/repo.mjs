@@ -48,6 +48,10 @@ import { basename, join, resolve } from "node:path";
  * @property {{ genclass: boolean, sentry: boolean, other: string[] }} monitoring
  * @property {{ robots: boolean, sitemap: boolean, llms: boolean, ogImage: boolean, manifest: boolean }} seo
  * @property {{ url: string | null, from: string | null }} site  the production address, guessed
+ * @property {{ packages: { name: string, version: string }[], from: string | null, appRouter: boolean, middleware: string | null }} versions
+ *   the installed versions of the packages the `framework-cve` check knows (next and the react-server-dom-* packages):
+ *   from node_modules, else the lockfile (`from` names which); appRouter: an app/ or src/app/ folder (Next.js's App
+ *   Router, where React Server Components run); middleware: Next.js's middleware file, when there is one
  */
 
 const MAX_FILES = 4000;
@@ -239,6 +243,7 @@ export function emptyRepoFacts(dir) {
     monitoring: { genclass: false, sentry: false, other: [] },
     seo: { robots: false, sitemap: false, llms: false, ogImage: false, manifest: false },
     site: { url: null, from: null },
+    versions: { packages: [], from: null, appRouter: false, middleware: null },
   };
 }
 
@@ -289,6 +294,7 @@ export function collectRepoFacts(dir, opts) {
   attempt(() => readHosting(facts, ctx));
   attempt(() => readSeo(facts));
   attempt(() => readSite(facts, ctx));
+  attempt(() => readVersions(facts, ctx));
   return facts;
 }
 
@@ -995,5 +1001,111 @@ function readSite(facts, ctx) {
       facts.site = { url: `https://${host}`, from: file };
       return;
     }
+  }
+}
+
+// ---- installed versions: the packages with a known critical advisory (checks.mjs framework-cve) ---------------------
+
+/** The packages whose installed version the `framework-cve` check reads. */
+export const VERSIONED = ["next", "react-server-dom-webpack", "react-server-dom-turbopack", "react-server-dom-parcel"];
+const MAX_LOCK = 8 * 1024 * 1024;
+const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+/** A text file of at most 8 MB (a lockfile), or null. */
+function readLock(path) {
+  try {
+    const st = statSync(path);
+    if (!st.isFile() || st.size > MAX_LOCK) return null;
+    const fd = openSync(path, "r");
+    try {
+      const buf = Buffer.allocUnsafe(st.size);
+      let n = 0;
+      while (n < st.size) {
+        const got = readSync(fd, buf, n, st.size - n, null);
+        if (got <= 0) break;
+        n += got;
+      }
+      return buf.subarray(0, n).toString("utf8");
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The version of `name` a lockfile installs at the top of the tree: package-lock's `node_modules/<name>` entry,
+ * pnpm's `/<name>@<version>` or `<name>@<version>` key, yarn's `"<name>@...": version "..."`, bun's `"<name>":
+ * ["<name>@<version>"`. Null when it is not there.
+ */
+export function lockVersion(kind, text, name) {
+  const t = String(text ?? "");
+  const n = escapeRe(name);
+  let m = null;
+  if (kind === "npm") {
+    try {
+      const j = JSON.parse(t);
+      const v = j?.packages?.[`node_modules/${name}`]?.version ?? j?.dependencies?.[name]?.version;
+      return typeof v === "string" && VERSION.test(v) ? v : null;
+    } catch {
+      return null;
+    }
+  }
+  if (kind === "pnpm") m = new RegExp(`^\\s{2,4}['"]?/?${n}@(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)[(':]`, "m").exec(t);
+  else if (kind === "yarn") m = new RegExp(`^"?${n}@[^\\n]*:\\n\\s+version:?\\s+"?(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)"?`, "m").exec(t);
+  else if (kind === "bun") m = new RegExp(`"${n}":\\s*\\["${n}@(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)"`).exec(t);
+  return m ? m[1] : null;
+}
+
+function readVersions(facts, ctx) {
+  const deps = facts.pkg ? facts.pkg.deps : {};
+  const wanted = VERSIONED.filter((name) => Object.prototype.hasOwnProperty.call(deps, name));
+  const has = (rel) => ctx.fileSet.has(rel) || exists(join(ctx.root, rel));
+  facts.versions.appRouter = ["app", "src/app"].some((d) => {
+    try {
+      return statSync(join(ctx.root, d)).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+  facts.versions.middleware = ["middleware.ts", "middleware.js", "middleware.mjs", "src/middleware.ts", "src/middleware.js", "src/middleware.mjs"].find(has) ?? null;
+  if (!wanted.length) return;
+  // the installed copy first: what runs is what node_modules holds
+  const installed = [];
+  for (const name of wanted) {
+    const text = readHead(join(ctx.root, "node_modules", name, "package.json"));
+    try {
+      const v = text === null ? null : JSON.parse(text).version;
+      if (typeof v === "string" && VERSION.test(v)) installed.push({ name, version: v });
+    } catch {
+      /* not installed there */
+    }
+  }
+  if (installed.length === wanted.length) {
+    facts.versions.packages = installed;
+    facts.versions.from = "node_modules";
+    return;
+  }
+  const files = { npm: ["package-lock.json", "npm-shrinkwrap.json"], pnpm: ["pnpm-lock.yaml"], yarn: ["yarn.lock"], bun: ["bun.lock"] };
+  const dirs = ctx.gitRoot === ctx.root ? [ctx.root] : [ctx.root, ctx.gitRoot];
+  for (const dir of dirs) {
+    for (const [kind, names] of Object.entries(files)) {
+      for (const file of names) {
+        const text = readLock(join(dir, file));
+        if (text === null) continue;
+        const found = wanted.map((name) => ({ name, version: lockVersion(kind, text, name) })).filter((x) => x.version);
+        if (!found.length) continue;
+        facts.versions.packages = found;
+        facts.versions.from = file;
+        return;
+      }
+    }
+  }
+  if (installed.length) {
+    facts.versions.packages = installed;
+    facts.versions.from = "node_modules";
   }
 }

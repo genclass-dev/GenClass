@@ -21,6 +21,7 @@
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { c, err, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
+import { isShort, shorten } from "./name.mjs";
 import { width, wrap } from "./tui.mjs";
 
 /** The help's sections: [heading, [command, what it does]...]; usage() lays them out for the terminal's width. */
@@ -59,6 +60,10 @@ const HELP = [
     ["npx genclass login", "sign in (logout, whoami)"],
     ["npx genclass remove", "take GenClass out of this app again"],
   ]],
+  ["Trust", [
+    ["npx genclass privacy", "what GenClass sends from your visitors' browsers and keeps on their devices, and the lines that make it send nothing (--out file.md for a privacy policy; free, no sign-in)"],
+    ["npx genclass doctor", "check that everything GenClass added is in place and current, and what to run when it is not"],
+  ]],
 ];
 
 /**
@@ -73,13 +78,18 @@ export function usage(cols = width()) {
   };
   text("genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.");
   lines.push("");
-  text("The genclass command comes with Pro: 3 days free, then $15 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, remove, help. Free is on the website: https://genclass.dev", "  ");
+  text("The genclass command comes with Pro: 3 days free, then $15 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, privacy, doctor, remove, help. Free is on the website: https://genclass.dev", "  ");
   const side = w >= 78;
   const col = 30;
+  // laid out with the name as it is printed: once `genclass` is installed every `npx genclass` is shortened on its
+  // way out (name.mjs), so padding the long form would leave the first column four characters short
+  const named = (t) => (isShort() ? shorten(t) : t);
   for (const [head, rows] of HELP) {
     lines.push("");
     if (head) lines.push(`  ${head}`);
-    for (const [cmd, what] of rows) {
+    for (const [cmd0, what0] of rows) {
+      const cmd = named(cmd0);
+      const what = named(what0);
       if (side) {
         const words = wrap(what, w - col);
         lines.push(`  ${cmd.padEnd(col - 2)}${words[0] ?? ""}`);
@@ -100,7 +110,7 @@ export function usage(cols = width()) {
 /** The help at the default width (80 columns), for tests and anything that wants it as one string. */
 export const USAGE = usage(80);
 
-const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open", print: "print", copy: "copy" };
+const BOOL = { md: "md", fix: "fix", offline: "offline", yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open", print: "print", copy: "copy" };
 const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range", from: "from", to: "to", format: "format", out: "out", agent: "agent" };
 
 /** The flags this file knows, and what is left ({ o, rest }); an unknown flag stays in `rest` for the command it is for. */
@@ -247,7 +257,8 @@ export async function run(argv, ctx = {}) {
   }
   if (cmd !== null && !COMMANDS.includes(cmd)) {
     const near = nearest(cmd);
-    err(`genclass: unknown command ${c.bold(cmd)}${near ? `. Did you mean ${c.cyan(`npx genclass ${near}`)}?` : ""}\n\n${usage()}`);
+    // one line and the way to the list: a typo is not worth 60 lines of help (the alpha walk, 2026-11-13)
+    err(`genclass: unknown command ${c.bold(cmd)}${near ? `. Did you mean ${c.cyan(`npx genclass ${near}`)}?` : ""}\n  Every command: ${c.cyan("npx genclass help")}`);
     return 2;
   }
   // the commands that take words after their name: sections, picks, subcommands, a question
@@ -256,7 +267,7 @@ export async function run(argv, ctx = {}) {
   const WORDY = ["analytics", "fix", "ask", "connections", "agent", "funnels", "apps", "team"];
   if (flags.length || (words.length && !WORDY.includes(cmd))) {
     const bad = flags[0] ?? words[0];
-    err(`genclass: unknown ${bad.startsWith("-") ? "option" : "command"} ${c.bold(bad)}\n\n${usage()}`);
+    err(`genclass: unknown ${bad.startsWith("-") ? "option" : "command"} ${c.bold(bad)}${cmd ? ` for ${cmd}` : ""}\n  Every command and option: ${c.cyan("npx genclass help")}`);
     return 2;
   }
   // the words of the commands that take them, before anything is asked of genclass.dev
@@ -273,6 +284,9 @@ export async function run(argv, ctx = {}) {
   // printed as before, with no sign-in and no Pro (it is on this machine already)
   const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", [...(o.cwd ? ["--cwd", o.cwd] : []), ...(o.open ? ["--open"] : [])]);
   if (cmd === "dashboard" && !o.json && !o.app && (await privateLinkHere(o.cwd))) return fallback();
+  // read only and local, for everyone: what is sent and kept (privacy.mjs), and whether the setup is whole (doctor.mjs)
+  if (cmd === "privacy") return (await import("./privacy.mjs")).privacy(o);
+  if (cmd === "doctor") return (await import("./doctor.mjs")).doctor(o);
   if (cmd !== null && !["setup", "status"].includes(cmd)) {
     const gate = await paid();
     if (gate !== 0) return gate;
@@ -295,6 +309,19 @@ export async function run(argv, ctx = {}) {
     const home = async (ho) => (await import("./home.mjs")).home(ho, { runCommand: (a) => run(a, { nested: true }), nearest, afterCommand: async () => (await import("./manage.mjs")).freeLine({ cwd: ho.cwd }) });
     // `genclass` alone works from the first run on (home.mjs installShortName)
     if (!ctx.nested && !o.yes && !o.json) await (await import("./home.mjs")).installShortName();
+    // a newer genclass on npm: one line, from what yesterday's check found; today's runs alongside (update.mjs)
+    if (!ctx.nested) {
+      try {
+        const up = await import("./update.mjs");
+        if (up.updateAllowed(o)) {
+          const line = up.updateLine(BUILD.version);
+          if (line) out(`\n  ${c.yellow("▲")} ${line.text}`);
+          void up.refreshLatest();
+        }
+      } catch {
+        /* the notice is never in the way */
+      }
+    }
     return setup({ ...o, ...(ctx.nested ? { home: false } : {}) }, { runSuggest, home });
   }
   return 2;
@@ -359,12 +386,12 @@ async function privateLinkHere(cwd) {
 }
 
 /** The commands that work without Pro: signing in and out, the plan itself, where things stand, help, the version, and taking GenClass out. */
-export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version"];
+export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version", "privacy", "doctor"];
 
 /** Every command, for the "did you mean" of a mistyped one. */
 export const COMMANDS = [
   "setup", "status", "suggest", "dashboard", "problems", "analytics", "events", "health", "report", "export", "fix", "ask", "scan", "connections", "agent", "funnels",
-  "apps", "plan", "upgrade", "profile", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version",
+  "apps", "plan", "upgrade", "profile", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version", "privacy", "doctor",
 ];
 
 /** The command a mistyped one is closest to (at most two edits away), or null. */

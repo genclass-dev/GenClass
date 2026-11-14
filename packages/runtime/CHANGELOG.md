@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- CLI `remove` (shared with the `genclass` command) also takes out the coding-agent link `genclass doctor --fix`
+  writes after the `/auto` import (a `genclass:init` block: `import { GenClass }`, `import { connectAgent }` and
+  `if (import.meta.env.DEV) connectAgent(GenClass.init());`). Nothing else in `remove` changed.
+
 - CLI (shared with the `genclass` command): a request to genclass.dev that fails on a connection closed while the
   command was busy (a package install) is sent once more on a new one; a token that could not be created for a
   network error says to run the command again, not to sign in again; `connect` names the host it signs in at.

@@ -62,6 +62,9 @@ import { resolveMx as nodeResolveMx, resolveTxt as nodeResolveTxt } from "node:d
  * @property {{ status: number | null }} notFound  the answer for a path that cannot exist; 200 is a "soft 404"
  * @property {{ mx: boolean | null, spf: boolean | null, dmarc: boolean | null }} dns
  *   on the host without a leading "www."; null when a lookup failed for a reason other than "no records"
+ * @property {{ scanned: number | null, found: { path: string, kind: string }[] }} bundle
+ *   the home page's own scripts (same origin, at most MAX_SCRIPTS, 1 MB each), read for secret keys: `scanned` how
+ *   many answered (null: the home page was not read), `found` the kind of key and the script's path, never a value
  */
 
 const USER_AGENT = "genclass-cli (+https://genclass.dev)";
@@ -297,6 +300,15 @@ async function follow(get, url) {
   return { ok: false, error: "too many redirects", chain, finalUrl: current, res: null };
 }
 
+/** An address's path, for an evidence line: no query (it can carry a token), at most 100 characters. */
+const pathOf = (url) => {
+  try {
+    const p = new URL(url).pathname;
+    return p.length > 100 ? `${p.slice(0, 97)}...` : p;
+  } catch {
+    return "/";
+  }
+};
 const hostOf = (url) => {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -443,6 +455,83 @@ export function parseHtml(html, baseUrl) {
   };
 }
 
+// ---- the scripts the home page ships: secret keys -----------------------------------------------------------------
+
+const MAX_SCRIPTS = 6;
+
+/**
+ * The secret keys that must never reach a browser, as they look in shipped JavaScript. Precise shapes only (a
+ * minified bundle is full of short random strings): each one is a provider's documented prefix and length.
+ */
+const BUNDLE_SECRETS = [
+  ["stripe-secret-live", /(?<![A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,}/],
+  ["stripe-secret-test", /(?<![A-Za-z0-9_])sk_test_(?!4eC39HqLyjWDarjtT1zdp7dc)[A-Za-z0-9]{20,}/],
+  ["openai-key", /(?<![A-Za-z0-9_-])sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{40,}|(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}/],
+  ["anthropic-key", /(?<![A-Za-z0-9_-])sk-ant-(?:api|admin)\d\d-[A-Za-z0-9_-]{60,}/],
+  ["aws-access-key", /(?<![A-Za-z0-9])AKIA(?!IOSFODNN7EXAMPLE)[0-9A-Z]{16}(?![0-9A-Z])/],
+  ["github-token", /(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})/],
+  ["slack-token", /(?<![A-Za-z0-9])xox[baprs]-\d{6,}-[A-Za-z0-9-]{10,}/],
+  ["sendgrid-key", /(?<![A-Za-z0-9])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/],
+  ["private-key", /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----(?:\\n|\s)*[A-Za-z0-9+/]{40,}/],
+];
+const JWT = /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.(eyJ[A-Za-z0-9_-]{10,})\.[A-Za-z0-9_-]{20,}/g;
+
+/**
+ * The kinds of secret key in a script's text, each once: the shapes above, and a Supabase key whose role is
+ * service_role (it skips every row-level security rule; the anon key is meant to be public and is not reported).
+ * Never a value.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function bundleSecrets(text) {
+  const t = String(text ?? "");
+  const kinds = [];
+  for (const [kind, re] of BUNDLE_SECRETS) if (re.test(t)) kinds.push(kind);
+  if (t.includes("eyJ")) {
+    for (const m of t.matchAll(JWT)) {
+      try {
+        const payload = JSON.parse(Buffer.from(m[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+        if (payload && payload.role === "service_role") {
+          kinds.push("supabase-service-role");
+          break;
+        }
+      } catch {
+        /* not a token */
+      }
+    }
+  }
+  return kinds;
+}
+
+/** The addresses of the page's own scripts (same origin as `base`), in order, at most MAX_SCRIPTS. */
+export function scriptSources(html, base) {
+  const out = [];
+  let origin = "";
+  try {
+    origin = new URL(base).origin;
+  } catch {
+    return out;
+  }
+  const doc = String(html ?? "").replace(/<!--[\s\S]*?-->/g, " ");
+  const add = (href) => {
+    const h = collapse(String(href ?? ""));
+    if (!h || /^(?:data|blob|javascript):/i.test(h)) return;
+    const a = absolute(h, base);
+    if (!a || out.includes(a) || out.length >= MAX_SCRIPTS) return;
+    try {
+      if (new URL(a).origin === origin) out.push(a);
+    } catch {
+      /* not an address */
+    }
+  };
+  for (const m of doc.matchAll(tagRe("script"))) add(attrs(m[1]).src);
+  for (const m of doc.matchAll(tagRe("link"))) {
+    const a = attrs(m[1]);
+    if (/\bmodulepreload\b/i.test(a.rel || "") || (/\bpreload\b/i.test(a.rel || "") && /^script$/i.test(a.as || ""))) add(a.href);
+  }
+  return out;
+}
+
 // ---- robots.txt ----------------------------------------------------------------------------------------------------
 
 /**
@@ -573,6 +662,7 @@ export function emptySiteFacts(url) {
     llms: { status: null, html: false },
     notFound: { status: null },
     dns: { mx: null, spf: null, dmarc: null },
+    bundle: { scanned: null, found: [] },
   };
 }
 
@@ -661,6 +751,18 @@ async function measure(facts, u, o) {
       noindex: page.noindex || /\b(?:noindex|none)\b/i.test(r.res.header("x-robots-tag") || ""),
       hsts: Boolean(r.res.header("strict-transport-security")),
     };
+    // the scripts it ships, read for secret keys (only the kinds are kept)
+    const srcs = scriptSources(r.res.text, r.finalUrl);
+    const inline = bundleSecrets(r.res.text);
+    const read = await Promise.all(srcs.map((src) => get(src)));
+    const found = inline.map((kind) => ({ path: pathOf(r.finalUrl), kind }));
+    let scanned = 0;
+    read.forEach((x, i) => {
+      if (!x.ok || x.status !== 200) return;
+      scanned++;
+      for (const kind of bundleSecrets(x.text)) found.push({ path: pathOf(srcs[i]), kind });
+    });
+    facts.bundle = { scanned, found: found.slice(0, 20) };
   });
 
   const httpsTask = get(httpsUrl).then((r) => {

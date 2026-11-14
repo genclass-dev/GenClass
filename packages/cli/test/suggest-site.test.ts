@@ -1,6 +1,6 @@
 // Facts measured from a live site (src/suggest/site.mjs), against a stand-in site and stand-in DNS: no network.
 import { describe, expect, it } from "vitest";
-import { AI_CRAWLERS, collectSiteFacts, emptySiteFacts, isPublicHost, parseHtml, parseRobots, robotsBlocks } from "../src/suggest/site.mjs";
+import { AI_CRAWLERS, bundleSecrets, collectSiteFacts, emptySiteFacts, isPublicHost, parseHtml, parseRobots, robotsBlocks, scriptSources } from "../src/suggest/site.mjs";
 
 type Page = { status?: number; headers?: Record<string, string>; body?: string };
 
@@ -118,7 +118,8 @@ describe("genclass suggest: a well-made site (src/suggest/site.mjs)", () => {
     const urls = w.calls.map((c) => c.url).sort();
     expect(new Set(urls).size).toBe(urls.length);
     expect(urls).toEqual(
-      ["http://polarparts.example/", "https://polarparts.example/", "https://polarparts.example/genclass-check-404-b7f3k9q2x", "https://polarparts.example/llms.txt", "https://polarparts.example/robots.txt", "https://polarparts.example/sitemap.xml", "https://www.polarparts.example/"].sort(),
+      // app.js: the page's own script, read for secret keys (secrets-in-bundle)
+      ["http://polarparts.example/", "https://polarparts.example/", "https://polarparts.example/app.js", "https://polarparts.example/genclass-check-404-b7f3k9q2x", "https://polarparts.example/llms.txt", "https://polarparts.example/robots.txt", "https://polarparts.example/sitemap.xml", "https://www.polarparts.example/"].sort(),
     );
     for (const c of w.calls) expect([c.method, c.redirect, c.agent]).toEqual(["GET", "manual", "genclass-cli (+https://genclass.dev)"]);
   });
@@ -255,5 +256,34 @@ describe("genclass suggest: robots.txt and HTML parsing (src/suggest/site.mjs pa
     expect(parseHtml("", "https://x.example/")).toMatchObject({ title: null, description: null, h1: [], textChars: 0, scripts: 0 });
     for (const t of ["Vite + React", "create next app", "React App", "Document", "  Home "]) expect(parseHtml(`<title>${t}</title>`).defaultTitle, t).toBe(true);
     expect(parseHtml("<title>Home of the best pies in town</title>").defaultTitle).toBe(false);
+  });
+});
+
+describe("genclass suggest: the scripts a page ships, read for secret keys (src/suggest/site.mjs bundleSecrets, scriptSources)", () => {
+  // key-shaped strings put together here, so that no key-shaped text is in this file
+  const openai = ["sk", "proj", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v2W3x4"].join("-");
+  const jwt = (role: string) => ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", Buffer.from(JSON.stringify({ iss: "supabase", ref: "abcdefgh", role, iat: 1 })).toString("base64url"), "abcdefghijklmnopqrstuvwxyz012345"].join(".");
+
+  it("finds the kinds, never returns a value, and leaves public keys and examples alone", () => {
+    expect(bundleSecrets(`var a="${openai}",b="${jwt("service_role")}"`)).toEqual(["openai-key", "supabase-service-role"]);
+    // the anon key is meant to be public; AWS's documented example key; a locale code; Stripe's documented sample
+    expect(bundleSecrets(`x="${jwt("anon")}";y="sk-SK";z="AKIA" + "IOSFODNN7EXAMPLE";k="AKIAIOSFODNN7EXAMPLE";w="${["sk", "test", "4eC39HqLyjWDarjtT1zdp7dc"].join("_")}"`)).toEqual([]);
+    expect(bundleSecrets("")).toEqual([]);
+  });
+
+  it("lists the page's own scripts and module preloads, at most six, never another origin's", () => {
+    const html = `<script src="/assets/a.js"></script><script src="https://cdn.other.example/b.js"></script><link rel="modulepreload" href="/assets/c.js"><script>inline</script><script src=""></script><script src="data:text/javascript,1"></script>${Array.from({ length: 9 }, (_, i) => `<script src="/s${i}.js"></script>`).join("")}`;
+    const srcs = scriptSources(html, "https://shop.example/");
+    expect(srcs.slice(0, 3)).toEqual(["https://shop.example/assets/a.js", "https://shop.example/s0.js", "https://shop.example/s1.js"]);
+    expect(srcs).toHaveLength(6);
+    expect(srcs.every((s) => s.startsWith("https://shop.example/"))).toBe(true);
+  });
+
+  it("a live page whose bundle holds a key: the kind and the script's path, with no query", async () => {
+    const page = `<!doctype html><html><head><title>Shop</title><script type="module" src="/assets/index-a1.js?v=tok123"></script></head><body><h1>Shop</h1></body></html>`;
+    const w = fakeWeb({ "https://shop.example/": { body: page }, "https://shop.example/assets/index-a1.js?v=tok123": text(`const k="${openai}";`, "text/javascript") });
+    const f = await collectSiteFacts("https://shop.example/", { fetchFn: w.fetchFn, dns: dnsOf() });
+    expect(f.bundle).toEqual({ scanned: 1, found: [{ path: "/assets/index-a1.js", kind: "openai-key" }] });
+    expect(JSON.stringify(f)).not.toContain(openai);
   });
 });

@@ -139,7 +139,7 @@ export const RANGE_IN = { "24h": "In the last 24 hours", "7d": "In the last 7 da
 
 /** Page loads the agent needs: it says what to do, then waits for them itself. */
 const WAIT =
-  "When a step needs page loads on the dev page, tell me in one line exactly what to do there (for example: reload it and repeat the search fast), then wait for the loads yourself: check every 10 seconds (sleep 10 in a shell in between), for up to 5 minutes, instead of ending your turn.";
+  "When a step needs page loads on the dev page and you can drive a browser (Playwright from a script kept outside the repo, or a browser tool), do them yourself: load the page, do the steps, then await window.__GENCLASS_AGENT__.whenSettled(). Otherwise tell me in one line exactly what to do there (for example: reload it and repeat the search fast), then wait for the loads yourself: check every 10 seconds (sleep 10 in a shell in between), for up to 5 minutes, instead of ending your turn.";
 /** The package the prompts name. */
 export const MCP_PKG = "@genclass/mcp";
 

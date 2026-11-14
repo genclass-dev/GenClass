@@ -271,7 +271,8 @@ export async function readState(o = {}, deps = {}) {
   // (the owner's call, 2026-11-13: the paywall for everyone, and a paying account clicks Continue with Pro), and an
   // app past the ones its plan covers waits there (past Free's one: Pro; past Pro's: Enterprise, by email). An app of
   // a team the account is in has nothing to choose: its owner does.
-  const appOffer = appPlanOffer(app, me?.offer ?? null, accountPaid(me));
+  // a genclass.dev that sells nothing (self-hosted, or a local `wrangler dev`: cli.via "open") has no plan page to wait on
+  const appOffer = me?.cli?.via === "open" ? null : appPlanOffer(app, me?.offer ?? null, accountPaid(me));
   steps.push({
     id: "app-plan",
     title: "App plan",
@@ -289,7 +290,7 @@ export async function readState(o = {}, deps = {}) {
             : `Free covers ${appOffer.free.apps === 1 ? "one app" : `${appOffer.free.apps ?? 1} apps`}: this one needs ${appOffer.plan.name}`
           : appOffer.current
             ? `covered by ${appOffer.current}: continue on its plan page`
-            : `${appOffer.plan.name}, ${appOffer.price}`
+            : appOffer.price ? `${appOffer.plan.name}, ${appOffer.price}` : appOffer.plan.name
         : `${app.plan.name}${app.plan.source === "comp" ? " (set up by GenClass)" : ""}`,
     why: appOffer?.needs && appOffer.paying
       ? "Your plan covers no more apps. More apps come with Enterprise, by email."

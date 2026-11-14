@@ -73,7 +73,7 @@ also a command of its own (`npx genclass problems`), so scripts and coding agent
 checkout in the browser: 3 days free (one trial per account; the card is asked for on Stripe, and nothing is charged
 if you cancel before they end), then US$15 a developer a month, for up to 3 apps in the account. More apps come with
 Enterprise, by email. Every command but `login`, `logout`, `whoami`, `plan`, `upgrade`, `profile`, `status`,
-`remove`, `help` and `version` asks first. Without a terminal (`--yes`, `--json`, a coding agent) nothing is opened:
+`privacy`, `doctor`, `remove`, `help` and `version` asks first. Without a terminal (`--yes`, `--json`, a coding agent) nothing is opened:
 one line with the checkout address, and exit code 1. Free stays on the website: one app's totals for the last 7 days.
 Plans bought before 13 November 2026 keep every app they cover (an app paid for on its own does not count toward
 Pro's 3); Free covers an account's oldest app and locks the others.
@@ -117,8 +117,8 @@ suggestions run left to do.
   ────────────────────────────────────────────────────────────────────────────
   last 7 days · last page 3 hours ago
 
-  Visits watched 1,204      Problems found 17         ▁▃▂▇▅▁█
-  Handled        3          Visual checks  9
+  Page loads     1,204      Problems found 26         ▁▃▂▇▅▁█
+  Handled        3          Of them checks 9
 
   Problems
     12  duplicate  /checkout    the same request went out twice
@@ -228,7 +228,9 @@ It measures your repository and your live site against a list of checks, in plai
 - **AI assistants:** whether ChatGPT, Claude and Perplexity may read the site, and whether the page has any text
   before JavaScript runs.
 - **Payments:** test keys on the live site, a secret key in browser code, a price people can see.
-- **Safety:** a `.env` file in git, keys in tracked files.
+- **Safety:** a `.env` file in git, keys in tracked files, secret keys in the JavaScript your live site ships (the
+  kind and the script, never the value), and a Next.js or React Server Components version with a known critical
+  hole (CVE-2025-55182, CVE-2025-29927).
 - **Quality:** tests, a workflow that runs them, something that reports errors from real users.
 - **Email:** SPF and DMARC, so your mail does not land in spam.
 
@@ -243,6 +245,25 @@ what was sent.
 
 **What Pro shows.** Every check, with its evidence, and the plan for all of them: why it matters for your app, the
 first step and the agent prompt, with the model's own ideas and website designs.
+
+## Privacy and health checks
+
+```bash
+npx genclass privacy
+npx genclass doctor
+```
+
+`privacy` says what this project's GenClass setup sends from your visitors' browsers, to whom and for how long, what
+it keeps on their devices, the opt-outs it honours, what that means for EU, UK and US visitors, the exact options that
+make it send and keep nothing, and the Content-Security-Policy lines it needs. It reads your project's files and
+nothing else, needs no account, and is not legal advice. `--out genclass-privacy.md` writes it for your privacy
+policy or a vendor questionnaire.
+
+`doctor` checks every part GenClass added (this command's version and the one on your PATH, the runtime and its
+import order, the MCP server's pin, the skill, the coding-agent link, the bridge, your site's
+Content-Security-Policy, the test workflow) and says what to run for each. `--fix` writes GenClass's own lines only,
+after showing them: the MCP pin, the skill, and in a Vite app the dev-only coding-agent link, which `remove` takes out
+again.
 
 ## Commands
 
@@ -271,6 +292,8 @@ first step and the agent prompt, with the model's own ideas and website designs.
 | `npx genclass apps`, `plan`, `team` | your apps, your plan, the people on it |
 | `npx genclass profile`, `upgrade` | your account and each app's plan; start Pro |
 | `npx genclass login`, `logout`, `whoami` | your account |
+| `npx genclass privacy` | what is sent and kept, and how to send nothing (`--out`, `--json`; free) |
+| `npx genclass doctor` | is every part in place and current (`--fix`, `--json`, `--offline`; free) |
 | `npx genclass remove` | take GenClass out of the app again |
 
 Options: `--app <name>`, `--range 24h|7d|30d|90d|1y`, `--all`, `--json`, `--cwd <dir>`, `--yes`, `--no-browser`.
