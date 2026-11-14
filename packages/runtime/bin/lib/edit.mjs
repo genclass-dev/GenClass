@@ -2,7 +2,8 @@
 //   - single lines:  `import genclass from "@genclass/runtime/auto"; // genclass:init`
 //   - blocks (files init creates): from a line containing `genclass:init start` to one containing `genclass:init end`
 //   - the coding-agent link the `genclass` command adds (development builds only): a block right after the marked
-//     /auto import or after the block of a file init created, and in Astro one marked `<script>` line after init's
+//     /auto import or after the block of a file init created (or there its two imports, and its call in a second
+//     block at the end of the file), and in Astro one marked `<script>` line after init's
 //   - three inline forms, used only when the place to insert shares its line with other code (a one-line <head> or
 //     <body>): `<GenClassInit />{/* genclass:inline */}`, `<script>... // genclass:inline</script>` (Astro) and
 //     `<script ...></script><!-- genclass:inline -->` (HTML)
@@ -135,6 +136,8 @@ const DEV_BLOCK = String.raw`if\(${COND}\)\{${DEVTOOLS_CALL};?\}`;
 const AGENT_IMPORTS = String.raw`import\{GenClass\}from"@genclass/runtime";?import\{connectAgent\}from"@genclass/runtime/agent";?`;
 const AGENT_CALL = String.raw`connectAgent\(GenClass\.init\(\)\)`;
 const AGENT_DYNAMIC = String.raw`import\("@genclass/runtime/agent"\)\.then\(\(\{connectAgent\}\)=>connectAgent\(genclass\)\)`;
+// the link's call as a statement (also with braces), as it stands in a block, or inside Nuxt's plugin function
+const AGENT_STMT = String.raw`if\(${COND}\)${AGENT_CALL};?|if\(${COND}\)\{${AGENT_CALL};?\}`;
 /** Statements init writes on one marked line (normalised, see norm()). */
 const LINE_RE = new RegExp(
   "^(?:" +
@@ -166,13 +169,13 @@ const BLOCK_RE = new RegExp(
       DEV_BLOCK,
       String.raw`importtype\{AppProps\}from"next/app";?`,
       String.raw`exportfunctionGenClassInit\(\)\{returnnull;?\}`,
-      String.raw`exportdefaultdefineNuxtPlugin\(\(\)=>\{(?:${DEV_LINE}|${DEV_BLOCK})?\}\);?`,
+      // Nuxt's plugin: empty, or the devtools line; the link's call may stand in it too (lines added by hand)
+      String.raw`exportdefaultdefineNuxtPlugin\(\(\)=>\{(?:${DEV_LINE}|${DEV_BLOCK}|${AGENT_STMT})*\}\);?`,
       String.raw`exportdefaultfunctionApp\(\{Component,pageProps\}(?::AppProps)?\)\{return\(?<Component\{\.\.\.pageProps\}/>\)?;?\}`,
       // the coding-agent link the `genclass` command adds after GenClass's import (development builds only)
       String.raw`import\{GenClass\}from"@genclass/runtime";?`,
       String.raw`import\{connectAgent\}from"@genclass/runtime/agent";?`,
-      String.raw`if\(${COND}\)${AGENT_CALL};?`,
-      String.raw`if\(${COND}\)\{${AGENT_CALL};?\}`,
+      AGENT_STMT,
       String.raw`if\(${COND}\)${AGENT_DYNAMIC};?`,
       String.raw`if\(${COND}\)\{${AGENT_DYNAMIC};?\}`,
     ].join("|") +
@@ -345,6 +348,20 @@ function stripInline(text) {
 
 /** The text without what init added (see planRemoval; unrecognised marked lines are kept). */
 export const removeMarked = (text) => planRemoval(text).text;
+
+// The first line of every file init creates (plan.mjs createFile, the Svelte add-on): its own block's start marker.
+const CREATED_HEADER = new RegExp(String.raw`^\s*//\s*${MARK} start: GenClass Runtime\b`);
+
+/**
+ * Whether remove deletes the file rather than writes `after` (planRemoval's text) back: init created it, so it starts
+ * with init's own header block, and nothing is left once init's lines are out. A file of the person's own, empty
+ * too, that init or the coding-agent link only added lines or blocks to is written back as it was.
+ */
+export function createdByInit(before, after) {
+  if (String(after ?? "").trim() !== "") return false;
+  const first = partsOf(String(before ?? "").replace(/^\uFEFF/, "")).find((l) => l.trim() !== "") ?? "";
+  return CREATED_HEADER.test(first);
+}
 
 // ------------------------------------------------------------------------------------------ mode switch
 

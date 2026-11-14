@@ -8,23 +8,35 @@
 // - Pure: reads files and returns the changes ({ file, rel, kind: "modify", before, after, what }); nothing is written
 //   here. The caller shows them and asks first.
 // - Only next to init's own lines: right after the /auto import init marked, or after the block of a file init
-//   created, never in code the person wrote (a setup by hand gets the lines to add instead).
+//   created, never in code the person wrote (a setup by hand gets the lines to add instead). Imports stay in the
+//   import section (ESLint's import/first, an error in Create React App's build): when the app's own code follows
+//   that place, only the two imports go there and the call goes at the end of the file, as init's devtools line does.
 // - Every form written here is one `genclass remove` takes out (packages/runtime/bin/lib/edit.mjs LINE_RE and
-//   BLOCK_RE): a block between genclass:init markers, or in Astro one marked <script> line after init's.
+//   BLOCK_RE): blocks between genclass:init markers, or in Astro one marked <script> line after init's. The runtime
+//   package's own `remove` knows them from the release after 0.3.0-beta.6 (beta.6's refuses a linked file).
+// - Only where the installed @genclass/runtime has the agent entry (its package.json exports "./agent", 0.3.0-beta.1
+//   and later): an older one (0.2.x, npm's latest) or none installed gets the upgrade to run instead, never a link
+//   that would stop the dev server and the build from resolving @genclass/runtime/agent.
 // - Development builds only, with the check init itself uses for the framework's devtools line: import.meta.env.DEV
 //   (Vite, SvelteKit, Astro, React Router and Remix on Vite), process.env.NODE_ENV === "development" (Next.js, Create
 //   React App, webpack, rspack, rsbuild, parcel), with `typeof window !== "undefined"` in a file that also runs on the
 //   server. A production build drops the branch and, with it, the agent entry.
 // - A framework it cannot plan safely (Angular, Nuxt's plugin, a plain HTML script tag, a bundler that may not define
-//   process.env.NODE_ENV) gets no change: the lines to add by hand, and where.
+//   process.env.NODE_ENV) gets no change: the lines to add by hand, and where (for Nuxt, a marked block remove takes
+//   out with the plugin).
 
-import { relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { readText } from "../../runtime/bin/lib/detect.mjs";
-import { codeStyle } from "../../runtime/bin/lib/edit.mjs";
+import { appendEnd, codeStyle } from "../../runtime/bin/lib/edit.mjs";
+import { channelOf, compareVersions, VERSION } from "../../runtime/bin/lib/version.mjs";
 
-export const AGENT_START = "// genclass:init start: the coding-agent link, development builds only: GenClass.init() returns the running runtime (genclass remove takes it out)";
-export const AGENT_START_BOUND = "// genclass:init start: the coding-agent link, development builds only: genclass is the running runtime (genclass remove takes it out)";
+export const AGENT_START = "// genclass:init start: the coding-agent link, development builds only: GenClass.init() returns the running runtime (npx genclass remove takes it out)";
+export const AGENT_START_BOUND = "// genclass:init start: the coding-agent link, development builds only: genclass is the running runtime (npx genclass remove takes it out)";
+/** The block of the link's two imports when its call is at the end of the file (the app's own code is in between). */
+export const AGENT_IMPORTS_START = "// genclass:init start: the coding-agent link's imports; its call is at the end of this file (npx genclass remove takes both out)";
 export const AGENT_END = "// genclass:init end";
+/** The first runtime release with the agent entry (@genclass/runtime/agent). */
+export const AGENT_SINCE = "0.3.0-beta.1";
 
 const DEV = {
   vite: "import.meta.env.DEV",
@@ -72,14 +84,19 @@ function insertAfter(text, i, block) {
  */
 export function linkBlock(cond, { q = '"', semi = ";", bound = false } = {}) {
   if (bound) return [AGENT_START_BOUND, `if (${cond}) import(${q}@genclass/runtime/agent${q}).then(({ connectAgent }) => connectAgent(genclass))${semi}`, AGENT_END];
-  return [AGENT_START, `import { GenClass } from ${q}@genclass/runtime${q}${semi}`, `import { connectAgent } from ${q}@genclass/runtime/agent${q}${semi}`, `if (${cond}) connectAgent(GenClass.init())${semi}`, AGENT_END];
+  return [AGENT_START, ...linkImports({ q, semi }), linkCall(cond, { semi }), AGENT_END];
 }
+
+const linkImports = ({ q = '"', semi = ";" } = {}) => [`import { GenClass } from ${q}@genclass/runtime${q}${semi}`, `import { connectAgent } from ${q}@genclass/runtime/agent${q}${semi}`];
+const linkCall = (cond, { semi = ";" } = {}) => `if (${cond}) connectAgent(GenClass.init())${semi}`;
 
 /**
  * The entry file's text with the coding-agent link added after GenClass's own import: right after init's marked
- * /auto import line, or after the end of the block init created around it. Null when there is no such import to put
- * it after, or the file has the link already. `cond`: the development-build check (default Vite's); `bound`: use the
- * dynamic form when the file has init's `genclass` binding.
+ * /auto import line, or after the end of the block init created around it. When the app's own code follows that
+ * place, the import section stays imports only (import/first): the two imports go there in a block of their own and
+ * the call in a second block at the end of the file (the dynamic form, one statement, goes there whole). Null when
+ * there is no such import to put it after, or the file has the link already. `cond`: the development-build check
+ * (default Vite's); `bound`: use the dynamic form when the file has init's `genclass` binding.
  */
 export function withAgentLink(text, o = {}) {
   const t = String(text ?? "");
@@ -100,9 +117,13 @@ export function withAgentLink(text, o = {}) {
   }
   if (at < 0) return null;
   const { q, semi } = codeStyle(t);
-  const block = linkBlock(cond, { q, semi, bound: !!o.bound && BOUND.test(t) });
+  const bound = !!o.bound && BOUND.test(t);
   const indent = indentOf(lines[at]);
-  return insertAfter(t, at, block.map((l) => `${indent}${l}`));
+  // nothing of the app's after that place: the whole link there, in one block
+  if (lines.slice(at + 1).every((l) => l.trim() === "")) return insertAfter(t, at, linkBlock(cond, { q, semi, bound }).map((l) => `${indent}${l}`));
+  if (bound) return appendEnd(t, linkBlock(cond, { q, semi, bound }));
+  const imports = insertAfter(t, at, [AGENT_IMPORTS_START, ...linkImports({ q, semi }), AGENT_END].map((l) => `${indent}${l}`));
+  return appendEnd(imports, [AGENT_START, linkCall(cond, { semi }), AGENT_END]);
 }
 
 /** Astro: the layout's text with a second marked <script> line, the link's, right after init's. Null otherwise. */
@@ -146,23 +167,35 @@ export function devCondition(project, file = "") {
   }
 }
 
+/** Nuxt: GenClass's plugin as init names it (<srcDir>/plugins/genclass.client.ts), relative to the project. */
+function nuxtPlugin(project, file) {
+  if (file) return posix(relative(project?.dir ?? ".", file));
+  const src = project?.details?.srcDir && project?.dir ? posix(relative(project.dir, project.details.srcDir)) : "";
+  return `${src ? `${src}/` : ""}plugins/genclass.client.ts`;
+}
+
 /**
  * The lines to add by hand where the link is not planned: { where, lines } (lines empty when there is nothing to
- * add, as for the script tag, which has no agent entry yet).
+ * add, as for the script tag, which has no agent entry yet). `file`: GenClass's own file for the link, where known
+ * (Nuxt's plugin).
  */
-export function linkLines(project) {
+export function linkLines(project, file = null) {
   const imports = ['import { GenClass } from "@genclass/runtime";', 'import { connectAgent } from "@genclass/runtime/agent";'];
   switch (project?.framework) {
     case "angular":
-      return { where: "src/main.ts, right after GenClass's import", lines: ['import { isDevMode } from "@angular/core";', ...imports, "if (isDevMode()) connectAgent(GenClass.init());"] };
+      return { where: "src/main.ts: the imports right after GenClass's import, the if line at the end of the file", lines: ['import { isDevMode } from "@angular/core";', ...imports, "if (isDevMode()) connectAgent(GenClass.init());"] };
     case "nuxt":
-      return { where: "GenClass's plugin (plugins/genclass.client.ts), inside defineNuxtPlugin", lines: [...imports, "// inside defineNuxtPlugin(() => { ... }):", "if (import.meta.dev) connectAgent(GenClass.init());"] };
+      // a block of its own after the plugin's: remove takes both out, and the file init created with them
+      return {
+        where: `the end of GenClass's plugin (${nuxtPlugin(project, file)}), after its "// genclass:init end" line, markers included`,
+        lines: [AGENT_START, ...imports, "if (import.meta.dev) connectAgent(GenClass.init());", AGENT_END],
+      };
     case "html":
       return { where: "", lines: [] };
     default: {
       // a bundler that may not define `process`: a check that is false there instead of a ReferenceError
       const cond = devCondition(project, "entry.client.js") ?? 'typeof process !== "undefined" && process.env.NODE_ENV === "development"';
-      return { where: "the app's browser entry, right after GenClass's import", lines: [...imports, `if (${cond}) connectAgent(GenClass.init());`] };
+      return { where: "the app's browser entry: the imports right after GenClass's import, the if line at the end of the file (imports stay first)", lines: [...imports, `if (${cond}) connectAgent(GenClass.init());`] };
     }
   }
 }
@@ -173,7 +206,7 @@ function notPlannedWhy(project) {
     case "angular":
       return "an Angular app tells development builds apart with isDevMode()";
     case "nuxt":
-      return "in Nuxt the link goes inside GenClass's plugin";
+      return "in Nuxt the link goes at the end of GenClass's plugin, by hand";
     case "html":
       return "a page with GenClass's script tag has no development build, and the agent entry is a module (ESM) only";
     case "webpack":
@@ -184,10 +217,45 @@ function notPlannedWhy(project) {
 }
 
 /**
+ * The @genclass/runtime installed for the project in `cwd`, as Node finds it (its node_modules, else a parent's):
+ * { version, agent } (`agent`: it has the agent entry, exports["./agent"]; a package.json without `exports` goes by
+ * its version), or null when none is installed. `read`: a file's text or null.
+ */
+export function installedRuntime(cwd, read = readText) {
+  for (let d = resolve(cwd); ; d = dirname(d)) {
+    const text = read(join(d, "node_modules", "@genclass", "runtime", "package.json"));
+    if (typeof text === "string") {
+      let pkg = null;
+      try {
+        pkg = JSON.parse(text);
+      } catch {
+        pkg = null;
+      }
+      const version = typeof pkg?.version === "string" ? pkg.version : null;
+      const ex = pkg?.exports;
+      const agent = ex && typeof ex === "object" && !Array.isArray(ex) ? Object.prototype.hasOwnProperty.call(ex, "./agent") : ex === undefined && version !== null && (compareVersions(version, AGENT_SINCE) ?? -1) >= 0;
+      return { version, agent };
+    }
+    if (dirname(d) === d) return null;
+  }
+}
+
+/** The command that installs the newest runtime line (`npm install @genclass/runtime@beta` while it is a prerelease). */
+export function runtimeUpgrade(pm) {
+  const ch = channelOf(VERSION);
+  const spec = ch ? `@genclass/runtime@${ch}` : "@genclass/runtime";
+  if (pm === "pnpm") return `pnpm add ${spec}`;
+  if (pm === "yarn") return `yarn add ${spec}`;
+  if (pm === "bun") return `bun add ${spec}`;
+  return `npm install ${spec}`;
+}
+
+/**
  * The link for a project, from the runtime CLI's inspectProject (`st`): `state` is
  * - "linked": the app's code calls connectAgent already (`files`);
  * - "planned": `changes` add it (a file each, shown and asked before they are written);
- * - "manual": it is not planned here (`why`), and `lines` are what to add by hand, `where`;
+ * - "manual": it is not planned here (`why`), and `lines` are what to add by hand, `where`; `upgrade`, when the
+ *   installed runtime has no agent entry (or none is installed), is the command to run first;
  * - "none": there is no GenClass setup in this folder to link (not a web app, or GenClass not added yet).
  * Only "planned" has changes; the others have `changes: null`.
  */
@@ -206,9 +274,19 @@ export function planAgentLink(st, deps = {}) {
   }
   if (linked.length) return { state: "linked", changes: null, lines: null, files: linked };
   if (st.fresh) return { state: "none", changes: null, lines: null, why: "GenClass is not added to this app yet" };
-  const manual = (why) => ({ state: "manual", changes: null, ...linkLines(project), why });
+  // the agent entry must be there to import: 0.2.x (npm's latest) has none, and a link to it stops the dev server
+  // and the build; the script tag needs no package
+  const rt = project.framework === "html" ? { agent: true } : installedRuntime(cwd, read);
+  const upgrade = rt?.agent ? null : runtimeUpgrade(project.pm);
+  const needs = !upgrade ? null : rt ? `the installed @genclass/runtime${rt.version ? ` ${rt.version}` : ""} has no agent entry (it came in ${AGENT_SINCE}): first run ${upgrade}` : `@genclass/runtime is not installed in node_modules: first run ${upgrade}`;
+  const manual = (why, file = null) => {
+    const by = linkLines(project, file);
+    return { state: "manual", changes: null, ...by, why: needs && by.lines.length ? `${why}; ${needs}` : why, ...(upgrade ? { upgrade } : {}) };
+  };
   if (st.handWritten || !(st.marked ?? []).length) return manual("GenClass was added by hand, so its lines are yours to change");
-  if (project.framework !== "astro" && devCondition(project, "entry.client.js") === null) return manual(notPlannedWhy(project));
+  const plugin = project.framework === "nuxt" ? (st.marked.find((f) => /(?:^|\/)plugins\/genclass\.client\.[cm]?[jt]s$/.test(posix(f))) ?? null) : null;
+  if (project.framework !== "astro" && devCondition(project, "entry.client.js") === null) return manual(notPlannedWhy(project), plugin);
+  if (upgrade) return { state: "manual", changes: null, ...linkLines(project), why: needs, upgrade };
   const changes = [];
   for (const f of st.marked) {
     const before = read(f);
