@@ -80,12 +80,33 @@ export function subjectOf(r: Report): string {
   const p0 = r.items.filter((i) => i.p === 0);
   if (r.kind === "alert" && p0[0]) return `${test}[P0] ${p0[0].app}: ${p0[0].title}${p0.length > 1 ? ` (+${p0.length - 1} more)` : ""}`.slice(0, 200);
   const c = counts(counted(r));
-  const name = r.apps.length === 1 ? r.apps[0]!.name : `${r.apps.length} apps`;
   const adj = ADJ[r.every] || "daily";
+  if (!r.apps.length) return `${test}GenClass ${adj} report: add your first app`;
+  const name = r.apps.length === 1 ? r.apps[0]!.name : `${r.apps.length} apps`;
   const lead = `${test}GenClass ${adj} report, ${name}`;
   if (c[0] || (c[1] && measured(r).length)) return `${lead}: ${[c[0] ? `${c[0]} critical` : "", c[1] ? `${c[1]} important` : ""].filter(Boolean).join(", ")}`.slice(0, 200);
   if (!measured(r).length) return `${lead}: finish setting up`;
   return `${lead}: all clear`;
+}
+
+const hiddenProblems = (r: Report): number => r.problemsHidden.reduce((n, x) => n + x.counts[0] + x.counts[1] + x.counts[2], 0);
+/** What Free's half of this report leaves out, as short phrases (empty when nothing is left out). */
+function leftOut(r: Report): string[] {
+  const hp = hiddenProblems(r);
+  return [
+    hp ? `${plural(hp, "more problem", "more problems")} with ${hp === 1 ? "its" : "their"} pages and fix prompts` : "",
+    r.actionsHidden ? `${plural(r.actionsHidden, "next step", "next steps")} from the summary, each with a prompt` : "",
+    r.suggestionsHidden ? plural(r.suggestionsHidden, "more suggestion", "more suggestions") : "",
+    r.designsHidden ? plural(r.designsHidden, "more website design", "more website designs") : "",
+    r.apps.some((x) => x.visitorsLimited && x.visitors) ? "where your visitors come from and what they read" : "",
+  ].filter(Boolean);
+}
+/** "1 critical, 2 important" for counts by priority. */
+const byP = (c: Record<Priority, number>): string => ([0, 1, 2] as Priority[]).filter((k) => c[k]).map((k) => `${fmt(c[k])} ${PRIORITY_WORDS[k].toLowerCase()}`).join(", ");
+/** One quiet line that says something is Pro's, with the upgrade link. */
+function lockedLine(r: Report, text: string): string {
+  const u = r.upgrade;
+  return `<p style="margin:12px 0 0;padding:10px 12px;border:1px dashed ${C.rule};border-radius:8px;font-size:13px;line-height:20px;color:${C.ink2}">🔒&nbsp; ${text}${u ? ` &nbsp;${a(u.url, `Unlock with ${u.plan} →`)}` : ""}</p>`;
 }
 
 /** The headline at the top of the report: what matters most, in a few words. */
@@ -93,6 +114,7 @@ function headlineOf(r: Report): { text: string; tone: Priority | null } {
   const c = counts(counted(r));
   if (r.kind === "alert") return { text: r.items.length === 1 ? "Something critical needs you" : `${fmt(r.items.length)} critical problems need you`, tone: 0 };
   if (c[0]) return { text: `${plural(c[0], "critical problem", "critical problems")}${c[1] ? ` and ${plural(c[1], "important one", "important ones")}` : ""}`, tone: 0 };
+  if (!r.apps.length) return { text: "Add your first app to GenClass", tone: 1 };
   if (!measured(r).length) return { text: notSending(r), tone: 1 };
   if (c[1]) return { text: `${plural(c[1], "important thing", "important things")} to look at`, tone: 1 };
   return { text: "All clear on your apps", tone: null };
@@ -214,8 +236,22 @@ function hero(r: Report): string {
     : "";
   return card(`<p style="margin:0 0 6px;font-size:11px;line-height:16px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:${C.ink3}">${esc(kicker)}</p>
 <h1 style="margin:0;font-size:24px;line-height:31px;font-weight:700;color:${C.ink}"><span style="color:${dot}">●</span>&nbsp;${esc(h.text)}</h1>
-<p style="margin:6px 0 0;font-size:14px;line-height:21px;color:${C.ink3}">${esc(plural(r.apps.length, "app", "apps"))} · ${esc(period)}</p>
+<p style="margin:6px 0 0;font-size:14px;line-height:21px;color:${C.ink3}">${r.apps.length ? `${esc(plural(r.apps.length, "app", "apps"))} · ${esc(period)}` : "Your GenClass account"}</p>
 ${r.kind === "alert" ? "" : `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 0"><tr>${legend}</tr></table>`}${tileRow}`);
+}
+
+/** For an account with a Free app: this report is half, what the other half holds, and the trial. */
+function halfCard(r: Report): string {
+  const u = r.upgrade;
+  if (!u || !r.apps.length) return "";
+  const out = leftOut(r);
+  const list = out.length ? `<p style="margin:6px 0 0;font-size:14px;line-height:21px;color:${C.ink2}">${esc(u.plan)} shows the other half: ${esc(out.join(", "))}.</p>` : `<p style="margin:6px 0 0;font-size:14px;line-height:21px;color:${C.ink2}">${esc(u.plan)} shows everything: every problem with its pages and fix prompts, the summary's next steps, every suggestion and design, and your visitors.</p>`;
+  return card(
+    `<p style="margin:0;font-size:15px;line-height:22px;font-weight:650;color:${C.ink}">You're seeing half of this report on Free</p>${list}${button(u.url, u.trialDays ? `Start the ${u.trialDays}-day free trial` : `Upgrade to ${u.plan}`)}<p style="margin:8px 0 0;font-size:12px;line-height:18px;color:${C.ink3}">${esc(u.price)}${u.trialDays ? `, ${u.trialDays} days free to start` : ""}. Cancel any time.</p>`,
+    "",
+    "",
+    `border:1px solid ${C.green};background:${C.greenBg}`,
+  );
 }
 
 function summaryCard(r: Report): string {
@@ -232,7 +268,7 @@ function summaryCard(r: Report): string {
   return card(
     `<p style="margin:0 0 6px;font-size:11px;line-height:16px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:${C.green}">GenClass summary</p>
 <p style="margin:0 0 6px;font-size:17px;line-height:25px;font-weight:650;color:${C.ink}">${esc(s.headline)}</p>
-<p style="margin:0 0 ${acts ? 8 : 0}px;font-size:14px;line-height:21px;color:${C.ink2}">${esc(s.text)}</p>${acts}${note("Written by a model from the numbers below; the priorities are GenClass's own rules.")}`,
+<p style="margin:0 0 ${acts ? 8 : 0}px;font-size:14px;line-height:21px;color:${C.ink2}">${esc(s.text)}</p>${acts}${r.actionsHidden ? lockedLine(r, `${plural(r.actionsHidden, "next step", "next steps")}, each with a prompt for your coding agent, ${r.actionsHidden === 1 ? "is" : "are"} in the other half.`) : ""}${note("Written by a model from the numbers below; the priorities are GenClass's own rules.")}`,
     "",
     "",
     `border-left:4px solid ${C.green}`,
@@ -242,18 +278,17 @@ function summaryCard(r: Report): string {
 function needsCard(r: Report): string {
   const now = problemItems(r).filter((i) => i.p <= 1);
   const sec = r.items.filter((i) => i.section === "security" && i.p <= 1).length;
-  if (now.length) return card(itemRows(r, now, true), now.some((i) => i.p === 0) ? "Fix these first" : "Worth fixing", plural(now.length, "item", "items"));
+  // Free's half: the problems it leaves out, counted per app, never named
+  const locked = r.problemsHidden.map((x) => lockedLine(r, `${plural(x.counts[0] + x.counts[1] + x.counts[2], "more problem", "more problems")} on <strong style="color:${C.ink}">${esc(x.app)}</strong> (${esc(byP(x.counts))}), with ${x.counts[0] + x.counts[1] + x.counts[2] === 1 ? "its" : "their"} pages and fix prompts.`)).join("");
+  if (now.length) return card(itemRows(r, now, true) + locked, now.some((i) => i.p === 0) ? "Fix these first" : "Worth fixing", plural(now.length, "item", "items"));
+  if (locked) return card(p("The problems in the free half of this report are below.", "margin:8px 0 0") + locked, "Problems");
   if (!measured(r).length) return "";
   return card(p(`Nothing critical or important on your apps.${sec ? ` ${plural(sec, "item needs", "items need")} a look under Security.` : ""}`, "margin:0"), "Needs you");
 }
 
-function freeCard(r: Report): string {
-  const free = r.apps.filter((x) => !x.pro && x.totals.problems + x.totals.checks > 0);
-  if (!free.length || !r.upgrade) return "";
-  return card(p(`${free.map((x) => `<strong style="color:${C.ink}">${esc(x.name)}</strong> ${esc(plural(x.totals.problems + x.totals.checks, "problem", "problems"))}`).join(" &nbsp;·&nbsp; ")}`, "margin:0") + note(`Free shows the totals. ${esc(r.upgrade.plan)} lists each one with its pages and a fix prompt.`, "margin-top:4px"), "Found on Free apps");
-}
 
 function appsCard(r: Report): string {
+  if (!r.apps.length) return "";
   const hourly = r.every === "hourly";
   const fixed = r.apps.some((x) => !x.demo && x.totals.fixed > 0);
   const th = (t: string, right = true) => `<th style="padding:0 0 8px 8px;font-size:12px;line-height:16px;font-weight:600;color:${C.ink3};text-align:${right ? "right" : "left"};border-bottom:1px solid ${C.rule};white-space:nowrap">${esc(t)}</th>`;
@@ -320,7 +355,7 @@ function visitorsCard(r: Report): string {
         const list = (l: { key: string; count: number }[]) => l.map((y) => `${esc(y.key)} <span style="color:${C.ink3}">${fmt(y.count)}</span>`).join(" &nbsp;·&nbsp; ");
         const facts = [plural(v.visits, "visit", "visits"), plural(v.views, "page view", "page views"), v.seconds !== null ? `${fmt(v.seconds)} s a page` : "", v.rage ? plural(v.rage, "rage click", "rage clicks") : "", v.dead ? plural(v.dead, "dead click", "dead clicks") : ""].filter(Boolean);
         const line = (k: string, l: { key: string; count: number }[]) => (l.length ? `<p style="margin:4px 0 0;font-size:13px;line-height:20px;color:${C.ink2}"><span style="color:${C.ink3}">${k}</span> &nbsp;${list(l)}</p>` : "");
-        return `${withV.length > 1 || r.apps.length > 1 ? title(x.name) : ""}<p style="margin:0 0 4px;font-size:14px;line-height:21px;color:${C.ink}">${esc(facts.join(" · "))}</p>${line("Top pages", v.pages)}${line("From", v.sources)}${line("Countries", v.countries)}${line("Devices", v.devices)}`;
+        return `${withV.length > 1 || r.apps.length > 1 ? title(x.name) : ""}<p style="margin:0 0 4px;font-size:14px;line-height:21px;color:${C.ink}">${esc(facts.join(" · "))}</p>${line("Top pages", v.pages)}${line("From", v.sources)}${line("Countries", v.countries)}${line("Devices", v.devices)}${x.visitorsLimited ? lockedLine(r, "The pages they read, where they came from, their countries and devices are in the other half.") : ""}`;
       }),
     ),
     "Visitors",
@@ -353,7 +388,7 @@ function suggestionsCard(r: Report): string {
       (s, k) => `<p style="margin:0 0 3px;font-size:15px;line-height:22px;font-weight:600;color:${C.ink}"><span style="color:${C.green}">${k + 1}.</span>&nbsp; ${esc(s.title)}</p>${s.why ? detail(s.why) : ""}${s.prompt ? promptAction(r, s.prompt, "Copy the prompt", true) : ""}`,
     ),
   );
-  const more = r.suggestionsHidden && r.upgrade ? p(`${plural(r.suggestionsHidden, "more suggestion", "more suggestions")} with ${esc(r.upgrade.plan)}.`, "margin:12px 0 0") : "";
+  const more = r.suggestionsHidden && r.upgrade ? lockedLine(r, `${plural(r.suggestionsHidden, "more suggestion", "more suggestions")}, each with a prompt, ${r.suggestionsHidden === 1 ? "is" : "are"} in the other half.`) : "";
   return card(`${list}${more}${note("From your last genclass suggest: measured checks ordered by a model, and the model's own ideas (not measured).")}`, "Suggestions for your app", plural(r.suggestions.length, "idea", "ideas"));
 }
 
@@ -377,9 +412,10 @@ function designCard(r: Report): string {
     );
   } else if (r.designsHidden && r.upgrade) {
     out.push(p(`${plural(r.designsHidden, "design", "designs")} picked for your company, each with a full redesign prompt, ${r.designsHidden === 1 ? "comes" : "come"} with ${esc(r.upgrade.plan)}.`, "margin:12px 0 0"));
-  } else {
+  } else if (!r.designs.length) {
     out.push(p(`For designs picked for your company, run ${code("npx genclass suggest")} once: it reads what your site is about and finds the best sites in your field.`, "margin:12px 0 0"));
   }
+  if (r.designs.length && r.designsHidden) out.push(lockedLine(r, `${plural(r.designsHidden, "more design", "more designs")} picked for your company, each with a redesign prompt, ${r.designsHidden === 1 ? "is" : "are"} in the other half.`));
   const name = r.apps[0]?.name ?? "my app";
   out.push(`<p style="margin:20px 0 0;font-size:11px;line-height:16px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:${C.ink3}">Sites to learn from today</p>`);
   out.push(
@@ -398,6 +434,7 @@ function designCard(r: Report): string {
  * measured app, no genclass suggest answer): what the next reports hold for them, by name, and how to get ideas now.
  */
 function nextCard(r: Report): string {
+  if (!r.apps.length) return "";
   const name = appsName(r);
   return card(
     `${p(`Once ${esc(name)} ${r.apps.length === 1 ? "sends its" : "send their"} first page load, this report lists what breaks there with the pages it happens on, ${r.apps.some((x) => x.analytics) ? "who visits and what they click, " : ""}and contrast and layout problems measured on your visitors' screens.`, "margin:8px 0 0")}${p(`For ideas picked for ${esc(name)} today, run ${code("npx genclass suggest")} in ${r.apps.length === 1 ? "its" : "an app's"} folder: GenClass checks the repository and the live site, then suggests what to fix and website designs from sites in your field.`, "margin:8px 0 0")}`,
@@ -408,10 +445,11 @@ function nextCard(r: Report): string {
 function upgradeCard(r: Report): string {
   const u = r.upgrade;
   if (!u) return "";
-  const hidden = r.apps.filter((x) => !x.pro).reduce((s, x) => s + x.totals.problems + x.totals.checks, 0);
+  if (!r.apps.length) return "";
+  const out = leftOut(r);
   return card(
-    `<p style="margin:0 0 6px;font-size:17px;line-height:25px;font-weight:650;color:${C.ink}">See everything in this report with ${esc(u.plan)}</p>
-<p style="margin:0;font-size:14px;line-height:21px;color:${C.ink2}">${hidden ? `${plural(hidden, "problem", "problems")} on your Free ${r.apps.filter((x) => !x.pro).length === 1 ? "app" : "apps"} with their pages and fix prompts, ` : "Every problem with its pages and fix prompts, "}the GenClass summary, visitors, and website designs picked for your company. ${esc(u.price)}${u.trialDays ? `, ${u.trialDays} days free to start` : ""}.</p>
+    `<p style="margin:0 0 6px;font-size:17px;line-height:25px;font-weight:650;color:${C.ink}">Upgrade to see the whole report</p>
+<p style="margin:0;font-size:14px;line-height:21px;color:${C.ink2}">${out.length ? `The other half: ${esc(out.join(", "))}. ` : ""}${esc(u.plan)} also watches every app every day with every problem's pages and fix prompts. ${esc(u.price)}${u.trialDays ? `, ${u.trialDays} days free to start` : ""}.</p>
 ${button(u.url, u.trialDays ? `Start the ${u.trialDays}-day free trial` : `Get ${u.plan}`)}`,
     "",
     "",
@@ -463,9 +501,9 @@ export function htmlOf(r: Report): string {
       ? [hero(r), card(itemRows(r, r.items, true), "What GenClass saw")].join("")
       : [
           hero(r),
+          halfCard(r),
           summaryCard(r),
           needsCard(r),
-          freeCard(r),
           setupFirst ? setupCard(r) : "",
           appsCard(r),
           prsCard(r),
@@ -514,6 +552,7 @@ export function textOf(r: Report): string {
   }
   const now = problemItems(r).filter((i) => i.p <= 1);
   out.push("WHAT NEEDS DOING", ...(now.length ? now.flatMap(textItem) : ["Nothing critical or important in this period.", ""]));
+  for (const x of r.problemsHidden) out.push(`Locked: ${plural(x.counts[0] + x.counts[1] + x.counts[2], "more problem", "more problems")} on ${x.app} (${byP(x.counts)}): in the other half, with ${r.upgrade?.plan ?? "Pro"}.`, "");
   if (r.kind !== "alert") {
     out.push("YOUR APPS");
     for (const x of r.apps) {
@@ -542,7 +581,10 @@ export function textOf(r: Report): string {
       out.push("WHAT THIS REPORT WILL SHOW", `Once ${appsName(r)} sends its first page load: what breaks there and on which pages, and contrast and layout problems on your visitors' screens.`, "For ideas now, run npx genclass suggest in the app's folder.");
     }
     out.push("");
-    if (r.upgrade) out.push(`${r.upgrade.plan}: everything in this report, ${r.upgrade.price}${r.upgrade.trialDays ? `, ${r.upgrade.trialDays} days free to start` : ""}: ${r.upgrade.url}`, "");
+    if (r.upgrade && r.apps.length) {
+      const lo = leftOut(r);
+      out.push(`You're seeing half of this report on Free.${lo.length ? ` ${r.upgrade.plan} shows the other half: ${lo.join(", ")}.` : ""} ${r.upgrade.price}${r.upgrade.trialDays ? `, ${r.upgrade.trialDays} days free to start` : ""}: ${r.upgrade.url}`, "");
+    }
   }
   out.push("--", `Sent to ${r.account.email} for your GenClass account.`, r.links.settings ? `Change how often, or stop these emails: ${r.links.settings}` : `Change how often: ${r.links.account}`, "Reply to reach a person at GenClass.");
   return out.join("\n");
