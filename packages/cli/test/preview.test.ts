@@ -172,6 +172,54 @@ describe("the init preview under the genclass command (runtime ui.mjs)", () => {
     ]) expect(codeLines(line, 8, 60)).toEqual([`        ${line}`]);
   });
 
+  it("init's folded imports break only around their `from`, never inside their braces (review, round 3)", async () => {
+    const { codeLines } = await import("../../runtime/bin/lib/init.mjs");
+    const { spawnSync } = await import("node:child_process");
+    const { join } = await import("node:path");
+    const { writeFileSync } = await import("node:fs");
+    g.__GENCLASS_CLI__ = HOST;
+    // the imports init recommends (recommendations), and a few it could
+    const IMPORTS = [
+      'import { genclassEnhancer } from "@genclass/runtime/redux";',
+      'import { useGenClassState } from "@genclass/runtime/react";',
+      'import { genclass } from "@genclass/runtime/zustand";',
+      'import { GenClass } from "@genclass/runtime";',
+      'import Default, { from, useGenClassState as useState } from "@genclass/runtime/a-long-module-name";',
+      'export { genclassEnhancer, genclass as zustand } from "@genclass/runtime/a-long-module-name";',
+      'import { GenClass } from "@genclass/runtime"; GenClass.init({ mode: "observe", telemetry: false, devtools: true });',
+    ];
+    // the 56 to 68 columns the review saw: as before round 2, `from` ends the first line and the module stands under it
+    for (let cols = 56; cols <= 68; cols++) {
+      expect(codeLines(IMPORTS[0], 8, cols), `${cols} columns`).toEqual(["        import { genclassEnhancer } from", '            "@genclass/runtime/redux";']);
+      expect(codeLines(IMPORTS[1], 8, cols), `${cols} columns`).toEqual(["        import { useGenClassState } from", '            "@genclass/runtime/react";']);
+      if (cols <= 62) expect(codeLines(IMPORTS[2], 8, cols), `${cols} columns`).toEqual(["        import { genclass } from", '            "@genclass/runtime/zustand";']);
+    }
+    const scratch = tempDir();
+    const seen = new Set<string>();
+    const braces = (l: string) => (l.match(/{/g) ?? []).length - (l.match(/}/g) ?? []).length;
+    for (const line of IMPORTS) {
+      for (let cols = 20; cols <= 140; cols++) {
+        const folded = codeLines(line, 8, cols);
+        // the same code; an import's braces close on the line that opened them, and nothing breaks but at `from`
+        expect(folded.map((l) => l.trim()).join(" "), `${cols} columns`).toBe(line);
+        const imports = line === IMPORTS[6] ? folded.filter((l) => l.includes("import {")) : folded;
+        for (const l of imports) expect(braces(l.slice(0, l.includes(";") ? l.indexOf(";") : l.length)), `${cols} columns: ${l}`).toBe(0);
+        for (const [i, l] of folded.entries()) if (i && imports.includes(folded[i - 1]) && !folded[i - 1].includes(";")) expect(/ from$/.test(folded[i - 1]) || /^\s*from\b/.test(l), `${cols} columns:\n${folded.join("\n")}`).toBe(true);
+        seen.add(folded.join("\n"));
+      }
+    }
+    // each distinct fold is a module node reads
+    let n = 0;
+    for (const code of seen) {
+      const file = join(scratch, `fold-${n++}.mjs`);
+      writeFileSync(file, `${code}\n`);
+      const check = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
+      expect(check.status, `${code}\n${check.stderr}`).toBe(0);
+    }
+    // after an import's `;` the code folds by the usual rule again
+    expect(codeLines(IMPORTS[6], 8, 90)).toEqual(['        import { GenClass } from "@genclass/runtime"; GenClass.init({ mode: "observe",', "            telemetry: false, devtools: true });"]);
+  });
+
   it("init --dry-run on Zustand and Redux Toolkit apps at 58 to 61 columns: each Optional block's code parses as a module", async () => {
     const { spawnSync } = await import("node:child_process");
     const { join } = await import("node:path");

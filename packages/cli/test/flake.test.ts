@@ -8,12 +8,15 @@ import { describe, expect, it, vi } from "vitest";
 import { FREE_COMMANDS, run, USAGE } from "../src/cli.mjs";
 import {
   addCommand,
+  commandLines,
+  copyLine,
   errorLine,
   FLAKE_USAGE,
   findTools,
   flake,
   flakePrompt,
   flakeUsage,
+  headingLines,
   isRace,
   judge,
   missingTools,
@@ -28,6 +31,7 @@ import {
   runtimeListed,
   seedWords,
   testLines,
+  wrapKeeping,
 } from "../src/flake.mjs";
 import { isolate, tempDir, write } from "./helpers.ts";
 import { plainLines, tooWide } from "./stats.ts";
@@ -650,14 +654,14 @@ describe("genclass flake: review fixes (alpha, 2026-11-14)", () => {
     expect(flat(flakeUsage(60))).toBe(flat(FLAKE_USAGE));
   });
 
-  it("the results screen fits a 58-column window too; only the replay command and the prompt to copy are printed whole", async () => {
+  it("the results screen fits a 58-column window too; only the commands and the prompt to copy are printed whole", async () => {
     const dir = tempDir();
     const REPLAY = "npx genclass flake tests/search.spec.ts:12 --project chromium --seed 2";
     const said = await at(58, async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, SUITE), interactive: false })).toBe(1));
     const screen = said.out.slice(0, said.out.indexOf("A prompt for your coding agent:"));
-    // the title (81 columns before) and the replay's heading fold; the command is whole, at the first column, as the
-    // install line is
-    expect(tooWide(screen, 58)).toEqual([REPLAY]);
+    // the title (81 columns before) and the replay's heading fold; the commands are whole, at the first column, as the
+    // install line is: each test's own (round 3), then the replay at the end
+    expect(tooWide(screen, 58)).toEqual([REPLAY, "npx genclass flake tests/api.spec.ts:3 --project chromium --seed 5", "npx genclass flake tests/cart.spec.ts:8 --project chromium --seed 3", "npx playwright test tests/login.spec.ts:5 --project chromium", REPLAY]);
     expect(plainLines(screen)).toContain(REPLAY);
     expect(flat(plainLines(screen).join(" "))).toContain("GenClass flake: 5 tests, each once in the natural order, then on seeds 1 to 5");
     expect(flat(plainLines(screen).join(" "))).toContain(`Replay seed 2 of tests/search.spec.ts:12: ${REPLAY}`);
@@ -707,5 +711,136 @@ describe("genclass flake: review fixes (alpha, 2026-11-14)", () => {
 
   it("--no-browser, which the genclass help lists for every command, is not passed to playwright test", () => {
     expect(parseFlakeArgs(["tests/a.spec.ts", "--no-browser", "--grep", "x"]).pw).toEqual(["tests/a.spec.ts", "--grep", "x"]);
+  });
+});
+
+describe("genclass flake: review fixes, round 3 (alpha, 2026-11-14)", () => {
+  /** What `fn` printed with the window `cols` wide. */
+  async function at(cols: number, fn: () => unknown) {
+    const before = process.stdout.columns;
+    process.stdout.columns = cols;
+    try {
+      return await captured(fn);
+    } finally {
+      process.stdout.columns = before;
+    }
+  }
+  /** The window flake draws in at `cols` (tui width(): 60 to 96 columns) less its 2-column margin. */
+  const room = (cols: number) => Math.max(60, Math.min(96, cols)) - 2;
+  const screenOf = (out: string) => out.slice(0, out.indexOf("A prompt for your coding agent:"));
+  /** The results' title: its lines, from "GenClass flake:" to the blank line under it. */
+  const titleOf = (out: string) => {
+    const lines = plainLines(out);
+    const t: string[] = [];
+    for (let i = lines.findIndex((l) => l.startsWith("  GenClass flake: ")); i >= 0 && lines[i]?.trim(); i++) t.push(lines[i]);
+    return t;
+  };
+  const REPLAY = "npx genclass flake tests/search.spec.ts:12 --project chromium --seed 2";
+  const COMMANDS: [string, string][] = [
+    ["replay seed 2:", REPLAY],
+    ["replay seed 5:", "npx genclass flake tests/api.spec.ts:3 --project chromium --seed 5"],
+    ["replay seed 3:", "npx genclass flake tests/cart.spec.ts:8 --project chromium --seed 3"],
+    ["run it alone:", "npx playwright test tests/login.spec.ts:5 --project chromium"],
+  ];
+
+  it("the results' title folds only between its phrases: at 80 columns (also a pipe's or a CI log's) no word is left alone", async () => {
+    const dir = tempDir();
+    // round 2 printed "...then on seeds 1 to" above a lone "5" here
+    const said = await at(80, async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, SUITE), interactive: false })).toBe(1));
+    expect(titleOf(said.out)).toEqual(["  GenClass flake: 5 tests, each once in the natural order,", "  then on seeds 1 to 5"]);
+    // one line where it fits (96), and at every width and plan two words or more on each line, within the window
+    const widest = await at(96, async () => await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, SUITE), interactive: false }));
+    expect(titleOf(widest.out)).toEqual(["  GenClass flake: 5 tests, each once in the natural order, then on seeds 1 to 5"]);
+    const TWO = [SUITE[1], SUITE[2]];
+    for (const cols of [58, 60, 79, 80, 81, 96]) {
+      for (const argv of [[], ["--runs", "20"], ["--seed", "7", "--runs", "12"], ["--no-chaos", "--runs", "3"], ["--no-baseline"]]) {
+        const o = await at(cols, async () => await flake(argv, { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, TWO), interactive: false }));
+        const t = titleOf(o.out);
+        expect(flat(t.join(" ")).trim(), `${cols} columns, ${argv.join(" ")}`).toMatch(/^GenClass flake: 2 tests, each (once in the natural order, then on seeds 1 to (5|20)|on seeds \d+ to \d+|3 times in the natural order)$/);
+        for (const l of t) {
+          expect(l.trim().split(" ").length, `${cols} columns, ${argv.join(" ")}: "${l}"`).toBeGreaterThan(1);
+          expect(l.length, `${cols} columns: "${l}"`).toBeLessThanOrEqual(room(cols));
+        }
+      }
+    }
+    // the heading's own rule: whole phrases, a phrase too long for a line folded at its spaces
+    expect(headingLines(["GenClass flake: 5 tests,", "each once in the natural order,", "then on seeds 1 to 5"], 76)).toEqual(["GenClass flake: 5 tests, each once in the natural order,", "then on seeds 1 to 5"]);
+    expect(headingLines("Replay seed 2 of tests/search.spec.ts:12:", 30)).toEqual(["Replay seed 2 of", "tests/search.spec.ts:12:"]);
+  });
+
+  it("each test's command is never folded: after its label when both fit the window, else whole on the line under it", async () => {
+    const dir = tempDir();
+    for (const cols of [58, 60, 66, 72, 80, 88, 96, 100]) {
+      const said = await at(cols, async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, SUITE), interactive: false })).toBe(1));
+      const screen = screenOf(said.out);
+      const lines = plainLines(screen);
+      for (const [label, command] of COMMANDS) {
+        const i = lines.findIndex((l) => l.trim() === `${label} ${command}` || l.trim() === label);
+        expect(i, `${cols} columns: ${label}`).toBeGreaterThan(-1);
+        if (lines[i].trim() === label) {
+          // on its own line only when the two would not fit; the command whole under it, as far in as it fits
+          expect(`      ${label} ${command}`.length, `${cols} columns`).toBeGreaterThan(room(cols));
+          expect(lines[i]).toBe(`      ${label}`);
+          expect(lines[i + 1]).toBe(`${" ".repeat(Math.max(0, Math.min(6, room(cols) - command.length)))}${command}`);
+        } else expect(lines[i]).toBe(`      ${label} ${command}`);
+      }
+      // nothing else is wider than the window
+      expect(tooWide(screen, room(cols)).filter((l) => !COMMANDS.some(([, c]) => c === l.trim())), `${cols} columns`).toEqual([]);
+    }
+    // in an 80-column window (and a pipe's) each command stands under its label, at its indent
+    const eighty = plainLines(screenOf((await at(80, async () => await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, SUITE), interactive: false }))).out));
+    expect(eighty).toContain("      replay seed 2:");
+    expect(eighty).toContain(`      ${REPLAY}`);
+    expect(eighty).toContain("      npx playwright test tests/login.spec.ts:5 --project chromium");
+    // the run that checks the order, after a seed replay that failed again
+    const ALWAYS: TestDef = { file: "tests/cart.spec.ts", line: 8, titles: ["cart", "adds one item"], outcome: () => ({ ok: false, error: "Error: expect(locator).toHaveText(expected) failed" }) };
+    const seed = plainLines((await at(58, async () => await flake(["tests/cart.spec.ts:8", "--project", "chromium", "--seed", "3"], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, [ALWAYS]), interactive: false }))).out);
+    const k = seed.indexOf("      with the natural order too:");
+    expect(k).toBeGreaterThan(-1);
+    expect(seed[k + 1]).toBe("npx genclass flake tests/cart.spec.ts:8 --project chromium");
+    // the pieces: one line when it fits, else the label above the command, which starts further left as it must
+    const before = process.stdout.columns;
+    try {
+      process.stdout.columns = 96;
+      expect(commandLines("replay seed 2:", REPLAY, 6)).toEqual([`      replay seed 2: ${REPLAY}`]);
+      process.stdout.columns = 80;
+      expect(commandLines("replay seed 2:", REPLAY, 6)).toEqual(["      replay seed 2:", `      ${REPLAY}`]);
+      expect(copyLine(`${REPLAY} -c a`, 6)).toBe(`${" ".repeat(78 - REPLAY.length - 5)}${REPLAY} -c a`);
+      process.stdout.columns = 58;
+      expect(commandLines("replay seed 2:", REPLAY, 6)).toEqual(["      replay seed 2:", REPLAY]);
+    } finally {
+      process.stdout.columns = before;
+    }
+  });
+
+  it("the screens where nothing could be judged fit the window; an option with its value or a quoted command stays on one line", async () => {
+    const dir = tempDir();
+    write(dir, { "package.json": JSON.stringify({ name: "shop", private: true }) });
+    const browsers: TestDef[] = [{ file: "tests/a.spec.ts", line: 1, titles: ["a"], outcome: () => ({ ok: false, error: "Error: browserType.launch: Executable doesn't exist at /x\n Looks like Playwright was just installed or updated. Please run the following command to download new browsers: npx playwright install" }) }];
+    for (const cols of [58, 80]) {
+      // GENCLASS_PLAYWRIGHT=off said, then Playwright ran no test: 101 and 102 columns wide in round 2
+      const none = await at(cols, async () => expect(await flake([], { cwd: dir, env: { GENCLASS_PLAYWRIGHT: "off" }, tools: TOOLS, spawn: standIn(dir, [], { result: () => ({ code: 1, signal: null }) }) })).toBe(2));
+      expect(tooWide(`${none.out}\n${none.err}`, room(cols)), `${cols} columns`).toEqual([]);
+      expect(flat(plainLines(none.out).join(" "))).toContain("GENCLASS_PLAYWRIGHT=off is set in your shell: it is left out of these runs, which need GenClass on.");
+      expect(flat(plainLines(none.err).join(" "))).toContain('Playwright ran no test (its exit code 1), so there is nothing to judge. Its own output is above. Run it where "npx playwright test" runs your tests; a file, --grep or --project narrows it.');
+      const missing = await at(cols, async () => expect(await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, browsers) })).toBe(2));
+      expect(tooWide(missing.err, room(cols)), `${cols} columns`).toEqual([]);
+      expect(plainLines(missing.err)).toContain("    npx playwright install chromium");
+      expect(flat(plainLines(missing.err).join(" "))).toContain("Every test failed because Playwright's browsers are not installed here:");
+    }
+    // a command named in a sentence, and an option with its value, at every width: never split between two lines
+    const nothing = { playwright: null, genclassPlaywright: null, runtime: null };
+    const old = { ...TOOLS, playwright: { ...TOOLS.playwright, version: "1.50.0", addReporter: false } };
+    for (let cols = 58; cols <= 100; cols++) {
+      const screens: [string, string, string[]][] = [
+        ["missing", (await at(cols, async () => await flake([], { cwd: dir, env: {}, tools: nothing, spawn: vi.fn() }))).out, ['"npx playwright test"', "--cwd apps/web"]],
+        ["no --add-reporter", (await at(cols, async () => await flake([], { cwd: dir, env: {}, tools: old, spawn: standIn(dir, [SUITE[1]]), interactive: false }))).out, ["--reporter html,junit", "--runs 20"]],
+        ["no test", (await at(cols, async () => await flake([], { cwd: dir, env: {}, tools: TOOLS, spawn: standIn(dir, []) }))).err, ['"npx playwright test"']],
+        ["help", (await at(cols, async () => await flake(["--help"]))).out, ['"playwright test"', "npm install -D @genclass/playwright @genclass/runtime@beta"]],
+      ];
+      for (const [name, text, keep] of screens) for (const k of keep) expect(plainLines(text).some((l) => l.includes(k)), `${cols} columns, ${name}: ${k}`).toBe(true);
+    }
+    expect(wrapKeeping('a b "npx playwright test" c d', 12, ['"npx playwright test"'])).toEqual(["a b", '"npx playwright test"', "c d"]);
+    expect(wrapKeeping("or --cwd apps/web here", 8, ["--cwd apps/web"])).toEqual(["or", "--cwd apps/web", "here"]);
   });
 });
