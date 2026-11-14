@@ -21,7 +21,7 @@ import { appView, fit, KINDS, n, RANGE_WORDS, spark } from "./app.mjs";
 import { brand } from "./art.mjs";
 import { ACTION_NAMES, checkFixed, checkOf, didAct, markdown } from "./kinds.mjs";
 import { agentConfigs } from "./state.mjs";
-import { ago, bad, clean, good, note, width, wrap } from "./tui.mjs";
+import { ago, bad, clean, good, linkLine, note, width, wrap } from "./tui.mjs";
 
 /** The longest line that fits the window. */
 const room = () => width() - 2;
@@ -235,7 +235,7 @@ export function renderAnalytics(app, o = {}) {
     out(`  ${c.gray("One part:")} ${c.cyan("npx genclass analytics pages")}`);
     out(`  ${c.gray(`also ${ANALYTICS_SECTIONS.slice(1).join(", ")}`)}`);
   }
-  if (app.dashboardUrl) out(`  ${c.gray("In the browser")}  ${c.cyan(app.dashboardUrl)}`);
+  if (app.dashboardUrl) linkLine("In the browser", app.dashboardUrl);
   out();
 }
 

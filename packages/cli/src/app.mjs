@@ -16,7 +16,7 @@ import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { openBrowser, planNow, signIn } from "./actions.mjs";
 import { fetchApp, signInIsOld } from "./api.mjs";
 import { planName, readState } from "./state.mjs";
-import { ago, bad, clean, header, note, proBox, PROMPT, typed, visible, warn, width, wrap } from "./tui.mjs";
+import { ago, bad, clean, header, linkLine, note, proBox, PROMPT, typed, visible, warn, width, wrap } from "./tui.mjs";
 
 /** The views a Free app does not have (the server sends their data to Pro only), and what the Pro box says about each. */
 const PRO_VIEWS = {
@@ -166,7 +166,7 @@ export function render(app, state, o = {}) {
   const sg = state?.steps?.find((s) => s.id === "suggestions");
   if (sg) part("Suggestions", sg.detail ? (sg.state === "done" ? clean(sg.detail, 60) : `${clean(sg.detail, 60)}${c.gray(" · npx genclass suggest")}`) : c.gray("not run yet: npx genclass suggest"));
   out();
-  if (app.dashboardUrl) out(`  ${c.gray("In the browser")}  ${c.cyan(app.dashboardUrl)}`);
+  if (app.dashboardUrl) linkLine("In the browser", app.dashboardUrl);
   if (!all) out(`  ${c.gray("Every row:")} ${c.cyan("npx genclass dashboard --all")}`);
   out();
 }
@@ -319,7 +319,7 @@ export async function appView(o = {}, deps = {}, view) {
       if (app.reauth) warn(`This sign-in is from before the command could show dashboards. Run ${c.cyan("npx genclass login")} once, then ${c.cyan(`npx genclass ${view.name}`)}.`);
       else if (app.missing) note("This genclass.dev cannot show a dashboard in the terminal yet.");
       else bad(`Could not read the dashboard: ${clean(app.reason, 200)}`);
-      if (target.dashboard_url) out(`  ${c.gray("In the browser")}  ${c.cyan(target.dashboard_url)}`);
+      if (target.dashboard_url) linkLine("In the browser", target.dashboard_url);
       else out(`  ${c.gray("Your apps")}  ${c.cyan(hostUrl("/account"))}`);
       out();
     }

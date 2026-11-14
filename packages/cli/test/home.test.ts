@@ -1,12 +1,13 @@
 // The command's home (src/home.mjs): after the setup the command stays open for commands and questions. And how the
 // command is typed on this machine (src/name.mjs): `genclass` once it is installed, `npx genclass` until then.
+import { BUILD } from "../src/assets.mjs";
 import { chmodSync } from "node:fs";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMMANDS as ALL, nearest, run } from "../src/cli.mjs";
 import { COMMANDS, home, installShortName, menu, read, words } from "../src/home.mjs";
-import { readPrefs, savePrefs, shorten, shortNameWorks } from "../src/name.mjs";
+import { forgetShortName, readPrefs, savePrefs, shorten, shortNameWorks } from "../src/name.mjs";
 import { isolate, printed, tempDir, write } from "./helpers.js";
 import { plainLines, tooWide } from "./stats.js";
 
@@ -82,11 +83,44 @@ describe("genclass: how the command is typed here (src/name.mjs)", () => {
       expect(await installShortName({ interactive: () => true, now: Date.now() + 25 * 60 * 60_000, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("installed");
       expect(ran).toHaveLength(2);
       // already there, no terminal, or CI: nothing runs
-      expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => true })).toBe("skipped");
+      expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => true, installedVersion: () => null })).toBe("skipped");
       expect(await installShortName({ interactive: () => false, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
       process.env.CI = "1";
       expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
       expect(ran).toHaveLength(2);
+    } finally {
+      if (before === undefined) delete process.env.CI;
+      else process.env.CI = before;
+    }
+  });
+
+  it("the installed command stays current: npx replaces an older copy, the installed one asks npm once a day (the 0.3.7 walk)", async () => {
+    const before = process.env.CI;
+    delete process.env.CI;
+    try {
+      const ran: string[] = [];
+      const install = async (v: string) => (ran.push(v), { ok: true, text: "" });
+      const fresh = () => forgetShortName();
+      // npx runs the newest: an older installed copy is replaced by this version
+      fresh();
+      const up = await at58(async () => expect(await installShortName({ interactive: () => true, install, works: () => true, installedVersion: () => "0.3.6", viaNpx: () => true })).toBe("updated"));
+      expect(ran).toEqual([BUILD.version]);
+      expect(plainLines(up).join(" ")).toContain(`Updating the genclass command, 0.3.6 to ${BUILD.version}`);
+      expect(tooWide(up)).toEqual([]);
+      // the same version installed: nothing to do, and nothing asked of npm
+      let asked = 0;
+      const latest = async () => (asked++, "99.0.0");
+      fresh();
+      expect(await installShortName({ interactive: () => true, install, works: () => true, installedVersion: () => BUILD.version, viaNpx: () => true, latest })).toBe("skipped");
+      expect(asked).toBe(0);
+      // the installed copy asks npm, at most once a day, and updates to what npm has
+      const now = Date.now() + 3 * 24 * 60 * 60_000;
+      fresh();
+      expect(await installShortName({ interactive: () => true, install, works: () => true, installedVersion: () => BUILD.version, viaNpx: () => false, latest, now })).toBe("updated");
+      expect(ran).toEqual([BUILD.version, "99.0.0"]);
+      fresh();
+      expect(await installShortName({ interactive: () => true, install, works: () => true, installedVersion: () => BUILD.version, viaNpx: () => false, latest, now: now + 60_000 })).toBe("skipped");
+      expect(asked).toBe(1);
     } finally {
       if (before === undefined) delete process.env.CI;
       else process.env.CI = before;

@@ -1,5 +1,6 @@
-// The command's home: what `genclass` is on a terminal once the setup is walked. It stays open. Type a command, or a
-// question about your app, as often as you like; q leaves.
+// The command's home: what `genclass` typed alone opens, straight away, and what `npx genclass` opens once the folder
+// is set up (before that it walks the setup first; `genclass setup` walks it any time). It stays open. Type a
+// command, or a question about your app, as often as you like; q leaves.
 //
 // Invariants:
 // - Everything here is also a command of its own (`genclass dashboard`, `genclass analytics`, ...): the home only
@@ -14,8 +15,9 @@
 
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
-import { installGlobally, isShort, readPrefs, savePrefs, shortNameWorks, useShortName } from "./name.mjs";
-import { inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
+import { installedVersion, installGlobally, isShort, latestOnNpm, newer, readPrefs, savePrefs, shortNameWorks, useShortName, viaNpx } from "./name.mjs";
+import { planName } from "./state.mjs";
+import { header, inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
 
 /** The commands of the home, in the order they are listed: [what is typed, what it is, shown in the short list]. */
 export const COMMANDS = [
@@ -98,16 +100,44 @@ const DAY = 24 * 60 * 60_000;
  */
 export async function installShortName(deps = {}) {
   if (isShort() || process.env.CI || process.env.GENCLASS_NO_INSTALL || !(deps.interactive ?? interactive)()) return "skipped";
-  if ((deps.works ?? shortNameWorks)()) {
-    useShortName();
-    return "skipped";
-  }
   const p = readPrefs();
   const now = deps.now ?? Date.now();
+  const install = deps.install ?? installGlobally;
+  if ((deps.works ?? shortNameWorks)()) {
+    // the installed command stays current (the 0.3.7 walk: a Mac stayed on its first version): a run through npx,
+    // which runs the newest, replaces an older installed copy; the installed copy asks npm once a day
+    const have = (deps.installedVersion ?? installedVersion)();
+    const npx = (deps.viaNpx ?? viaNpx)();
+    let want = null;
+    if (have && npx) want = newer(BUILD.version, have) ? BUILD.version : null;
+    else if (have && !(p.updateCheckedAt && now - Date.parse(p.updateCheckedAt) < DAY)) {
+      savePrefs({ updateCheckedAt: new Date(now).toISOString() });
+      const latest = await (deps.latest ?? latestOnNpm)();
+      want = latest && newer(latest, have) ? latest : null;
+    }
+    if (want && p.updateFailedAt && now - Date.parse(p.updateFailedAt) < DAY) want = null;
+    let updated = false;
+    if (want) {
+      out();
+      const sp = spinner(`Updating the genclass command, ${have} to ${want}`);
+      const r = await install(want);
+      if (r.ok) {
+        savePrefs({ updateFailedAt: null });
+        sp.stop("ok", npx ? `Updated to ${want}.` : `Updated to ${want}: the next genclass you type runs it.`);
+        updated = true;
+      } else {
+        savePrefs({ updateFailedAt: new Date(now).toISOString() });
+        sp.stop("warn", `Could not update the genclass command: it stays ${have}.`);
+        note("By hand: npm install -g genclass@latest");
+      }
+    }
+    useShortName();
+    return updated ? "updated" : "skipped";
+  }
   if (p.installFailedAt && now - Date.parse(p.installFailedAt) < DAY) return "skipped";
   out();
   const sp = spinner("Adding the genclass command to your terminal");
-  const r = await (deps.install ?? installGlobally)(BUILD.version);
+  const r = await install(BUILD.version);
   if (!r.ok) {
     savePrefs({ installFailedAt: new Date(now).toISOString() });
     sp.stop("warn", "Could not add the genclass command. npx genclass keeps working.");
@@ -119,9 +149,23 @@ export async function installShortName(deps = {}) {
   if ((deps.works ?? shortNameWorks)()) {
     useShortName();
     sp.stop("ok", "Added: type genclass from now on.");
+    // zsh remembers where commands are: a window that was open before the install may not see the new one yet
+    if (/zsh$/.test(process.env.SHELL ?? "")) note("If this window says command not found, run rehash once, or open a new window.");
   } else sp.stop("ok", "Added. Open a new terminal window and type genclass.");
   note("npm install -g genclass ran. npm uninstall -g genclass takes it out.");
   return "installed";
+}
+
+/**
+ * Where the command stands in this folder, above its prompt when `genclass` opens straight on it: the app, the account
+ * and its plan, and what setup has left (or that setup has not run here). Nothing is asked or done.
+ */
+export function opening(state) {
+  header({ app: state.app?.name, framework: state.app?.framework, account: state.account?.label, plan: planName(state), host: state.host });
+  const left = state.steps.filter((x) => x.state !== "done" && x.state !== "optional" && x.blocking !== false && x.state !== "waiting");
+  if (!state.signedIn || !state.app?.token) note("GenClass is not set up in this folder yet. Type setup to do it, one step at a time.");
+  else if (left.length) note(`Set up. ${left.length} more step${left.length === 1 ? "" : "s"} you can add (${left.map((x) => x.title).join(", ")}): type setup.`);
+  else note("Everything is set up. Type setup any time to change something.");
 }
 
 /**

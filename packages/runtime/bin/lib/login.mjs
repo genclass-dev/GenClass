@@ -32,7 +32,7 @@ import { apiHost, hostConfig, hostUrl } from "./host.mjs";
 import { FREE_LINES, UsageError, accountLabel, hostNotice, init, inspectProject, parse, versionNotice } from "./init.mjs";
 import { AUTO } from "./plan.mjs";
 import { LOCAL_FILE, tokenInFiles } from "./token.mjs";
-import { banner, c, choose, columns, confirm, err, interactive, more, out, row, sym } from "./ui.mjs";
+import { banner, c, choose, columns, confirm, err, interactive, more, out, row, sym, wrapTo } from "./ui.mjs";
 import { CMD, HOST_CLI } from "./version.mjs";
 
 export const USAGE = `Usage:
@@ -458,7 +458,7 @@ async function login(o) {
     out();
     return 1;
   }
-  out(`  Open this link, sign in (Google, email and password, GitHub or a passkey) and approve the code:`);
+  more("Open this link, sign in (Google, email and password, GitHub or a passkey) and approve the code:", 2);
   out(`    ${c.bold(c.cyan(dev.verification_uri_complete))}`);
   out();
   row("Code", `${c.bold(dev.user_code)} ${c.gray("(check that the page shows the same code)")}`);
@@ -466,7 +466,7 @@ async function login(o) {
   if (openBrowser(dev.verification_uri_complete, o)) out(`  ${c.gray("Opening it in your browser.")}`);
   else out(`  ${c.gray("Open the link in a browser on any device.")}`);
   const minutes = Math.max(1, Math.round(dev.expires_in / 60));
-  out(`  Waiting for approval ${c.gray(`(the code expires in ${minutes} minute${minutes === 1 ? "" : "s"}; Ctrl-C to cancel)`)}`);
+  more(`Waiting for approval ${c.gray(`(the code expires in ${minutes} minute${minutes === 1 ? "" : "s"}; Ctrl-C to cancel)`)}`, 2);
 
   const ctl = new AbortController();
   const onSigint = () => ctl.abort();
@@ -502,7 +502,7 @@ async function login(o) {
   }
   out();
   row("Signed in", `${c.bold(accountLabel(creds.account))}${creds.account.github_login && creds.account.email ? c.gray(` (GitHub ${creds.account.github_login})`) : ""}`);
-  out(`  ${c.gray(`Session saved in ${tilde(path)} (only you can read it).`)}`);
+  more(c.gray(`Session saved in ${tilde(path)} (only you can read it).`), 2);
   out(`  ${c.gray(`Sign out: ${CMD} logout`)}`);
   out();
   return afterLogin(o, creds, null);
@@ -668,13 +668,14 @@ export async function run(cmd, argv) {
   } catch (e) {
     if (e instanceof UsageError) {
       // under the genclass command, one short line: its own help names every command, within 58 columns
-      err(HOST_CLI ? `${SELF} ${cmd}: ${e.message}. Every command and option: ${CMD} help` : `${SELF} ${cmd}: ${e.message}\n\n${usage()}`);
+      if (HOST_CLI) for (const l of wrapTo(`${SELF} ${cmd}: ${e.message}. Every command and option: ${CMD} help`, columns() - 2)) err(l);
+      else err(`${SELF} ${cmd}: ${e.message}\n\n${usage()}`);
       return 2;
     }
     throw e;
   }
   if (o.help) {
-    if (HOST_CLI) more(`${CMD} ${cmd}: ${HOST_HELP[cmd] ?? ""} Every command and option: ${CMD} help`, 2);
+    if (HOST_CLI) more(`${CMD} ${cmd}: ${HOST_HELP[cmd] ?? ""} All commands: ${CMD} help`, 2);
     else out(usage());
     return 0;
   }

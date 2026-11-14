@@ -26,8 +26,8 @@ import { width, wrap } from "./tui.mjs";
 /** The help's sections: [heading, [command, what it does]...]; usage() lays them out for the terminal's width. */
 const HELP = [
   [null, [
-    ["npx genclass", "where this project stands; on a terminal it walks you through the next step, then stays open for commands and questions"],
-    ["npx genclass setup", "the guided setup (--yes: no questions, for a coding agent)"],
+    ["npx genclass", "the command's prompt, for commands and questions (the first time in a folder, the setup first)"],
+    ["npx genclass setup", "the guided setup, any time, to add or change a part (--yes: no questions, for a coding agent)"],
     ["npx genclass status", "what is done, what is next (--all: every part; --json)"],
   ]],
   ["See", [
@@ -209,7 +209,8 @@ export async function run(argv, ctx = {}) {
     return 2;
   }
   if (o.version || cmd === "version") {
-    out(`genclass ${BUILD.version} (installs @genclass/runtime ${BUILD.runtimeVersion}, @genclass/mcp ${BUILD.mcpVersion})`);
+    out(`genclass ${BUILD.version}`);
+    out(`installs @genclass/runtime ${BUILD.runtimeVersion}, @genclass/mcp ${BUILD.mcpVersion}`);
     return 0;
   }
   if (o.help || cmd === "help") {
@@ -293,8 +294,20 @@ export async function run(argv, ctx = {}) {
   if (cmd === "setup" || cmd === null) {
     // on a terminal the command stays open when the walk ends: a prompt for commands and questions (home.mjs)
     const home = async (ho) => (await import("./home.mjs")).home(ho, { runCommand: (a) => run(a, { nested: true }), nearest, afterCommand: async () => (await import("./manage.mjs")).freeLine({ cwd: ho.cwd }) });
-    // `genclass` alone works from the first run on (home.mjs installShortName)
+    // `genclass` alone works from the first run on, and stays current (home.mjs installShortName)
     if (!ctx.nested && !o.yes && !o.json) await (await import("./home.mjs")).installShortName();
+    // `genclass` alone opens the command's prompt straight away (the owner's call, 2026-11-13: "genclass by itself
+    // directly takes you to the genclass cli"); `npx genclass` does too once this folder is set up, and walks the
+    // setup only before that. The walk itself is `genclass setup`, to change something
+    if (cmd === null && !ctx.nested && !o.yes && !o.json && interactive()) {
+      const { readState } = await import("./state.mjs");
+      const state = await readState({ cwd: o.cwd }).catch(() => null);
+      const ready = !!state?.signedIn && !!state?.app?.token;
+      if (ready || !(await import("./name.mjs")).viaNpx()) {
+        if (state) (await import("./home.mjs")).opening(state);
+        return home({ ...o, cwd: state?.cwd ?? o.cwd, app: state?.app?.name ?? "" });
+      }
+    }
     return setup({ ...o, ...(ctx.nested ? { home: false } : {}) }, { runSuggest, home });
   }
   return 2;

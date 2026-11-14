@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.9
+
+- **`genclass` opens its prompt straight away**: commands and questions, with one line on where this folder's setup
+  stands. `npx genclass` does the same once the folder is set up (signed in, GenClass in the code, the app in the
+  account), and walks the setup only before that. `genclass setup` walks it any time, to add or change a part.
+- **The installed `genclass` stays current**: a run through npx replaces an older installed copy with its own version,
+  and the installed copy asks npm once a day and updates itself (`npm install -g genclass@<version>`; a failure says
+  how by hand and waits a day). After the first install, zsh is told to `rehash` if the window does not see it yet.
+- `status --json` never points a coding agent at a step `setup --yes` cannot do (an app the plan already covers),
+  so an agent following `next.run` no longer runs the same setup again and again.
+- 58 columns: a wrong option, the sign-in's lines and `--version` (now two lines) fit; a label and a link go on two
+  lines when one is too wide; setup's notes follow `COLUMNS` without a terminal.
+- A team member's `plan --json` has the team's Pro as `plan` (the account's own Free is `own_plan`), with its apps,
+  history and what it includes. A grant team says "set up by GenClass" everywhere, never that the owner pays.
+- A sign-in that did not finish ends with how to get a new code; the sign-in step names the host it opens.
+
 ## 0.3.8
 
 Fixes from a signed-in walk of 0.3.7 against a fresh account, a team and a grant:

@@ -123,6 +123,15 @@ export function para(text, indent = "  ", paint = (s) => s) {
   for (const l of wrap(text, width() - 2 - indent.length)) out(`${indent}${paint(l)}`);
 }
 
+/** "  Label  url": on one line when it fits the window, else the link on its own line under the label. */
+export function linkLine(label, url) {
+  if (2 + visible(label) + 2 + visible(url) <= width() - 2) out(`  ${c.gray(label)}  ${c.cyan(url)}`);
+  else {
+    out(`  ${c.gray(label)}`);
+    out(`    ${c.cyan(url)}`);
+  }
+}
+
 /** A horizontal rule as wide as the text. */
 export const rule = () => out(`  ${c.gray((unicode ? "─" : "-").repeat(width() - 4))}`);
 

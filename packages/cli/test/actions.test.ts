@@ -249,7 +249,7 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
 
   it("help, the version and an unknown command", async () => {
     expect(await printed(async () => expect(await run(["--help"])).toBe(0))).toContain(USAGE);
-    expect(await printed(async () => expect(await run(["version"])).toBe(0))).toBe(`genclass ${BUILD.version} (installs @genclass/runtime ${BUILD.runtimeVersion}, @genclass/mcp ${BUILD.mcpVersion})\n`);
+    expect(await printed(async () => expect(await run(["version"])).toBe(0))).toBe(`genclass ${BUILD.version}\ninstalls @genclass/runtime ${BUILD.runtimeVersion}, @genclass/mcp ${BUILD.mcpVersion}\n`);
     expect(await run(["frobnicate"])).toBe(2);
     // the form that runs without installing, everywhere a command is named
     expect(USAGE).toContain("npx genclass dashboard");

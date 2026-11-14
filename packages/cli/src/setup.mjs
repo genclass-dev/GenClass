@@ -97,6 +97,10 @@ function closing(state) {
   const blocked = state.steps.find((s) => s.state === "blocked");
   if (blocked) {
     /* show() has said where to run it */
+  } else if (!state.signedIn) {
+    // the sign-in did not finish (the code expired, the browser said no): the way back is one command
+    out(`  ${c.bold("Not signed in yet.")}`);
+    note("Run npx genclass again for a new code: setup goes on from the sign-in.");
   } else if (state.complete) out(`  ${c.green("Everything is set up.")}`);
   else if (waiting.length) {
     out(`  ${c.bold("Nothing more to do here right now.")}`);
@@ -105,7 +109,7 @@ function closing(state) {
   out();
   out(`  ${c.gray("Day to day")}`);
   // the commands in one column with room after the longest, so the short name (genclass ...) keeps a gap too
-  out(`    ${c.cyan("npx genclass".padEnd(25))}${c.gray("where things stand")}`);
+  out(`    ${c.cyan("npx genclass".padEnd(25))}${c.gray("the prompt: commands, questions")}`);
   out(`    ${c.cyan("npx genclass suggest".padEnd(25))}${c.gray("what your app is missing")}`);
   if (state.app.token) out(`    ${c.cyan("npx genclass dashboard".padEnd(25))}${c.gray("what it found on your site")}`);
   out();

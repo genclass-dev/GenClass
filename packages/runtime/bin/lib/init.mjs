@@ -433,7 +433,7 @@ function briefTelemetry(cfg) {
  * words (a narrow terminal would otherwise break a word of it in two, "--n" and "o-audit").
  */
 function commandLine(label, cmd) {
-  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || 100));
+  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || Number(process.env.COLUMNS) || 100));
   if (2 + label.length + 2 + cmd.length <= cols) {
     out(`  ${c.bold(label)}  ${c.cyan(cmd)}`);
     return;
@@ -451,7 +451,7 @@ function commandLine(label, cmd) {
 
 /** A grey sentence of the compact (--brief) output, folded to the window (40 to 100 columns), every line indented. */
 function briefLines(text, paint = c.gray) {
-  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || 100)) - 4;
+  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || Number(process.env.COLUMNS) || 100)) - 4;
   let line = "";
   for (const word of String(text).split(/\s+/).filter(Boolean)) {
     if (line && line.length + 1 + word.length > cols) {

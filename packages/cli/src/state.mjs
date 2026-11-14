@@ -194,7 +194,8 @@ export async function readState(o = {}, deps = {}) {
             ? `the saved session is for ${otherHost}`
             : "",
     // said before anyone signs up: the command is Pro's, with its trial and price (the owner's call, 2026-11-13)
-    why: "Opens genclass.dev. Then Pro: 3 days free, then $15 / developer / month, with a card on Stripe.",
+    // the host the sign-in opens (genclass.dev, or GENCLASS_HOST in a test)
+    why: `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"}. Then Pro: 3 days free, then $15 / developer / month, with a card on Stripe.`,
     more: `Your account is where your apps, their dashboards and your plan live. New here? It is made on that page. Nothing is typed in the terminal. ${PRO_TERMS} Free stays on the website: one app and its totals.`,
     run: "npx genclass login",
     human: "approve the sign-in in your browser",
@@ -444,13 +445,16 @@ export const planName = (state, token = state?.app?.token) => (state?.projects ?
 const forAgent = (run) => (run === "npx genclass setup" ? "npx genclass setup --yes" : run);
 
 export function stateJson(s) {
+  // a step that waits on nothing (an app the plan already covers: its page's Continue is offered, not required) is
+  // never what a coding agent is told to do next: `setup --yes` cannot click it, and would be run again and again
+  const agentNext = s.next && s.next.blocking === false ? (s.steps.find((x) => x !== s.next && x.state === "todo" && x.blocking !== false) ?? null) : s.next;
   return {
     app: s.app,
     signed_in: s.signedIn,
     account: s.account ? { label: s.account.label, plan: s.account.plan } : null,
     github: s.git.github,
-    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.state, detail: x.detail, run: x.state === "done" ? null : forAgent(x.run), human: x.state === "done" ? null : x.human })),
-    next: s.next ? { id: s.next.id, title: s.next.doing, run: forAgent(s.next.run), human: s.next.human, why: s.next.why } : null,
+    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.blocking === false && x.state !== "done" ? "optional" : x.state, detail: x.detail, run: x.state === "done" || x.blocking === false ? null : forAgent(x.run), human: x.state === "done" ? null : x.human })),
+    next: agentNext ? { id: agentNext.id, title: agentNext.doing, run: forAgent(agentNext.run), human: agentNext.human, why: agentNext.why } : null,
     complete: s.complete,
   };
 }
