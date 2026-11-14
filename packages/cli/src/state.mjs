@@ -378,6 +378,12 @@ export async function readState(o = {}, deps = {}) {
   // all this step writes, and it says what to add
   const linkOpen = link?.state === "planned";
   const linkFiles = linkOpen ? link.changes.map((ch) => ch.rel) : [];
+  // the link's own file and the entry that imports it (agentlink.mjs planAgentLink), or Astro's layouts
+  const linkMade = linkOpen ? link.changes.filter((ch) => ch.kind === "create").map((ch) => ch.rel) : [];
+  const linkEdited = linkOpen ? link.changes.filter((ch) => ch.kind !== "create").map((ch) => ch.rel) : [];
+  const linkWhere = linkMade.length
+    ? `A dev-only file, ${linkMade.join(", ")}${linkEdited.length ? `, imported right after GenClass's import in ${linkEdited.join(", ")},` : ""}`
+    : `A dev-only line after GenClass's import in ${linkFiles.join(", ")}`;
   steps.push({
     id: "agent",
     title: "Coding agent",
@@ -385,9 +391,9 @@ export async function readState(o = {}, deps = {}) {
     state: !isApp ? "optional" : agents.length && !linkOpen ? "done" : "todo",
     detail: agents.length ? `${agents.join(", ")}${link?.state === "linked" ? " · dev page linked" : linkOpen ? " · dev page not linked yet" : link?.state === "manual" ? " · dev page: link by hand" : ""}` : "",
     why: agents.length && linkOpen
-      ? `A dev-only block after GenClass's import in ${linkFiles.join(", ")} lets your agent see the page you run. You see it first.`
+      ? `${linkWhere} lets your agent see the page you run. You see it first.`
       : `Adds GenClass's tools and its skill to Claude Code, Cursor and other agents in this project${linkOpen ? ", and links your dev page to them" : ""}.`,
-    more: `It adds GenClass's MCP server to the project's agent configuration (.mcp.json) and the skill that tells the agent how to use it (.claude/skills/genclass/SKILL.md). The server runs on your machine and lets an agent ask what went wrong on a page, replay it and check its fix.${linkOpen ? ` It also links your dev page to it: a block right after GenClass's import in ${linkFiles.join(", ")} calls connectAgent in development builds only (a production build leaves it out, and npx genclass remove takes it out), so the agent sees each click, request and response on localhost and can run them again in another order.` : link?.state === "manual" ? ` The link from your dev page to it is not added here (${link.why}): ask the agent "is GenClass connected?" and it shows the dev-only lines for this app.` : ""}`,
+    more: `It adds GenClass's MCP server to the project's agent configuration (.mcp.json) and the skill that tells the agent how to use it (.claude/skills/genclass/SKILL.md). The server runs on your machine and lets an agent ask what went wrong on a page, replay it and check its fix.${linkOpen ? ` It also links your dev page to it: ${linkWhere.replace(/^A/, "a")} calls connectAgent in development builds only (a production build leaves it out, and npx genclass remove takes it out), so the agent sees each click, request and response on localhost and can run them again in another order.` : link?.state === "manual" ? ` The link from your dev page to it is not added here (${link.why}): ask the agent "is GenClass connected?" and it shows the dev-only lines for this app.` : ""}`,
     run: "npx genclass setup",
     human: null,
   });

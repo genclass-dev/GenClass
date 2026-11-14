@@ -79,16 +79,17 @@ idempotent and returns that runtime here. `genclass_setup` prints this form, bec
 production, where `GenClass.init()` would run for every visitor and send anonymous diagnostics from public hosts by default.
 
 In an app `init` set up, the `genclass` command writes the link itself (its setup's Coding agent step, in the same
-preview and yes as `.mcp.json`, and `genclass doctor --fix`; `packages/cli/src/agentlink.mjs`): a `genclass:init`
-block right after init's `/auto` import (or after the block of a file init created) holding the two imports and
-`if (<dev check>) connectAgent(GenClass.init());` (with more of the app's imports after it, the call goes in a second
-block right after the last of them: imports stay first, and the call still runs before the app's own code), with the
-check init uses there for the devtools line
+preview and yes as `.mcp.json`, and `genclass doctor --fix`; `packages/cli/src/agentlink.mjs`): a file of its own
+next to the entry, `genclass.agent.ts` (`.js` beside a JavaScript entry), one `genclass:init` block holding the two
+imports and `if (<dev check>) connectAgent(GenClass.init());` with the check init uses there for the devtools line
 (`import.meta.env.DEV` on Vite, `process.env.NODE_ENV === "development"` in Next.js and Create React App, plus
-`typeof window !== "undefined"` in a file that also renders on the server). In a Next.js file where init bound
-`genclass`, the block holds `import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass))`
-behind the check instead; in Astro the link is a second marked `<script>` line. `genclass remove` takes every form
-out. Angular, Nuxt, the script tag and a setup by hand get these lines to add instead.
+`typeof window !== "undefined"` where the entry also renders on the server), and one marked line in the entry,
+`import "./genclass.agent"; // genclass:init`, right after init's `/auto` import (or after the block of a file init
+created). The app's own code is never read or changed; imports stay first, and the link runs right after `/auto`,
+before the app's code. In Next.js the file starts with `"use client"`, and where init bound `genclass` it holds
+`import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(GenClass.init()))` behind the check
+instead of the static agent import; in Astro the link is a second marked `<script>` line. `genclass remove` deletes the
+file and takes the line out. Angular, Nuxt, the script tag and a setup by hand get these lines to add instead.
 
 It runs only on pages served from this machine (`localhost`, `127.x`, `[::1]`, `*.localhost`: names the browser itself
 resolves to loopback) and talks only to a loopback URL; elsewhere it returns an inert connection. A page on a `*.test`

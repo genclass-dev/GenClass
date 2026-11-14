@@ -1,10 +1,11 @@
 // Text edits for `genclass-runtime init|remove`. Everything init adds carries a marker:
 //   - single lines:  `import genclass from "@genclass/runtime/auto"; // genclass:init`
 //   - blocks (files init creates): from a line containing `genclass:init start` to one containing `genclass:init end`
-//   - the coding-agent link the `genclass` command adds (development builds only): a block right after the marked
-//     /auto import or after the block of a file init created (or there its two imports, and its call in a second
-//     block right after the file's last import, or at the end of the file), and in Astro one marked `<script>` line
-//     after init's; a block is taken out wherever it stands
+//   - the coding-agent link the `genclass` command adds (development builds only): a file of its own,
+//     genclass.agent.(ts|js), that starts with init's created-file header (deleted as genclass.config is), and one
+//     marked line importing it right after the marked /auto import or after the block of a file init created; in
+//     Astro one marked `<script>` line after init's. Earlier alpha forms (a block in the entry, or its imports and its
+//     call in two blocks) are taken out wherever they stand
 //   - three inline forms, used only when the place to insert shares its line with other code (a one-line <head> or
 //     <body>): `<GenClassInit />{/* genclass:inline */}`, `<script>... // genclass:inline</script>` (Astro) and
 //     `<script ...></script><!-- genclass:inline -->` (HTML)
@@ -132,11 +133,14 @@ const META_CONFIG = String.raw`<metaname="genclass"content="[^"]*"/?>`;
 const DEV_LINE = String.raw`if\(${COND}\)${DEVTOOLS_CALL};?`;
 // the same with braces (ESLint's `curly` fix)
 const DEV_BLOCK = String.raw`if\(${COND}\)\{${DEVTOOLS_CALL};?\}`;
-// the coding-agent link (packages/cli/src/agentlink.mjs): the two imports and the call, or (a file with init's
-// `genclass` binding) the dynamic import that mirrors the devtools line; each also with braces
+// the coding-agent link (packages/cli/src/agentlink.mjs): the two imports and the call, or (Next.js, where init bound
+// `genclass`) the dynamic import that mirrors the devtools line, with the runtime as GenClass.init() in the link's
+// own file (`genclass` in the entry, as the earlier alpha wrote it); each also with braces
 const AGENT_IMPORTS = String.raw`import\{GenClass\}from"@genclass/runtime";?import\{connectAgent\}from"@genclass/runtime/agent";?`;
 const AGENT_CALL = String.raw`connectAgent\(GenClass\.init\(\)\)`;
-const AGENT_DYNAMIC = String.raw`import\("@genclass/runtime/agent"\)\.then\(\(\{connectAgent\}\)=>connectAgent\(genclass\)\)`;
+const AGENT_DYNAMIC = String.raw`import\("@genclass/runtime/agent"\)\.then\(\(\{connectAgent\}\)=>connectAgent\((?:genclass|GenClass\.init\(\))\)\)`;
+// the entry's line importing the link's file (genclass.agent.ts, imported without its extension, or genclass.agent.js)
+const IMPORT_AGENT = String.raw`import"(?:\.{1,2}/)+(?:[\w.-]+/)*genclass\.agent(?:\.[cm]?[jt]s)?";?`;
 // the link's call as a statement (also with braces), as it stands in a block, or inside Nuxt's plugin function
 const AGENT_STMT = String.raw`if\(${COND}\)${AGENT_CALL};?|if\(${COND}\)\{${AGENT_CALL};?\}`;
 /** Statements init writes on one marked line (normalised, see norm()). */
@@ -145,6 +149,7 @@ const LINE_RE = new RegExp(
     [
       IMPORT_AUTO,
       IMPORT_CONFIG,
+      IMPORT_AGENT,
       META_CONFIG,
       DEV_LINE,
       DEV_BLOCK,
@@ -173,7 +178,8 @@ const BLOCK_RE = new RegExp(
       // Nuxt's plugin: empty, or the devtools line; the link's call may stand in it too (lines added by hand)
       String.raw`exportdefaultdefineNuxtPlugin\(\(\)=>\{(?:${DEV_LINE}|${DEV_BLOCK}|${AGENT_STMT})*\}\);?`,
       String.raw`exportdefaultfunctionApp\(\{Component,pageProps\}(?::AppProps)?\)\{return\(?<Component\{\.\.\.pageProps\}/>\)?;?\}`,
-      // the coding-agent link the `genclass` command adds after GenClass's import (development builds only)
+      // the coding-agent link the `genclass` command writes (development builds only): its own file's block, or (the
+      // earlier alpha) a block after GenClass's import
       String.raw`import\{GenClass\}from"@genclass/runtime";?`,
       String.raw`import\{connectAgent\}from"@genclass/runtime/agent";?`,
       AGENT_STMT,
@@ -350,7 +356,8 @@ function stripInline(text) {
 /** The text without what init added (see planRemoval; unrecognised marked lines are kept). */
 export const removeMarked = (text) => planRemoval(text).text;
 
-// The first line of every file init creates (plan.mjs createFile, the Svelte add-on): its own block's start marker.
+// The first line of every file init creates (plan.mjs createFile, the Svelte add-on) and of the coding-agent link's
+// file (packages/cli/src/agentlink.mjs AGENT_FILE_START): its own block's start marker.
 const CREATED_HEADER = new RegExp(String.raw`^\s*//\s*${MARK} start: GenClass Runtime\b`);
 
 /**

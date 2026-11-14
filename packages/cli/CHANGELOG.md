@@ -44,19 +44,23 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
   `connectAgent` from `@genclass/runtime/agent` right after GenClass's import, in development builds only, so the
   agent's MCP server sees the page on localhost (no more "no connected page" and a round of genclass_setup first). All
   of it is in one preview and asked once (one Enter; `--yes` writes it, and shows it too; without a terminal nothing
-  is written). The form follows what init wrote: a `genclass:init` block with `import { GenClass }`,
-  `import { connectAgent }` and `if (<dev check>) connectAgent(GenClass.init());` after the marked `/auto` import or
-  after the block of a file init created (with more of the app's imports after that place, the two imports stay
-  there and the call goes in a second block right after the file's last import, so imports stay first and the call
-  still runs before the app's code); where init bound `genclass` in Next.js, the dynamic
-  `import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass))` that mirrors its devtools
-  line; in Astro a second marked `<script>` line. The dev check is init's own: `import.meta.env.DEV` (Vite with React,
-  Vue, Svelte, Solid or Preact, SvelteKit, Astro, React Router and Remix on Vite), `process.env.NODE_ENV ===
-  "development"` (Next.js, Create React App, webpack, rspack, rsbuild, parcel), with `typeof window !== "undefined"`
-  in a file that renders on the server too (Next's genclass-init component and pages/_app, a Remix or React Router
-  root). Angular, Nuxt's plugin, a plain script tag, another bundler and a setup by hand get the lines to add and
-  where, and nothing written. `genclass remove` takes every form out (the runtime's `remove` patterns), round-tripped
-  in tests for each framework back to the files before init.
+  is written). The link is a file of its own next to the entry, `genclass.agent.ts` (`genclass.agent.js` beside a
+  JavaScript entry; for Next.js's `pages/_app` in the folder above `pages/`, as init's `genclass.config`): one
+  `genclass:init` block with `import { GenClass }`, `import { connectAgent }` and
+  `if (<dev check>) connectAgent(GenClass.init());`, `"use client"` first in Next.js, and where init bound `genclass`
+  there the agent entry imported behind the check as its devtools line does
+  (`import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(GenClass.init()))`). The entry gets
+  one marked line, `import "./genclass.agent"; // genclass:init` (`./genclass.agent.js` for a JavaScript file),
+  right after init's marked `/auto` import or after the block of a file init created: imports stay first, and the
+  link runs right after `/auto`, before the app's code. In Astro a second marked `<script>` line. The dev check is
+  init's own: `import.meta.env.DEV` (Vite with React, Vue, Svelte, Solid or Preact, SvelteKit, Astro, React Router
+  and Remix on Vite), `process.env.NODE_ENV === "development"` (Next.js, Create React App, webpack, rspack, rsbuild,
+  parcel), with `typeof window !== "undefined"` where the entry renders on the server too (Next's genclass-init
+  component and pages/_app, a Remix or React Router root). Angular, Nuxt's plugin, a plain script tag, another
+  bundler, a setup by hand and a `genclass.agent` file of the app's own get the lines to add and where, and nothing
+  written. `genclass remove` deletes the link's file and takes the line out (the runtime's `remove` patterns),
+  round-tripped in tests for each framework back to the files before init; every file the step writes or edits is
+  parsed with esbuild in those tests.
   - No link while the installed `@genclass/runtime` has no `./agent` export (0.2.x, npm's `latest`; or none is
     installed): the step and `doctor` say the upgrade to run first (`npm install @genclass/runtime@beta`), since the
     link would stop the dev server and the build.
@@ -65,10 +69,12 @@ with `genclass fix`'s prompt, and research on what developers ask for and on com
     planned, as before).
   - Create React App keeps building: the link's call is no longer above the app's imports (react-app's
     `import/first` error).
-  - The link's call stays before the app's own code: right after the file's last import, not at the end of the file,
-    so an entry that throws while the page loads (a wrong root element id) or awaits at the top is still linked
-    first. A call whose next line opens with `(`, `[` or a template ends with `;` in a file without semicolons. Only
-    where the end of the imports cannot be read safely (code on an import's line) does it go at the end.
+  - The link no longer reads or changes the app's own code, so it cannot break it: placed after the entry's last
+    import, its call joined a `(`, `[` or template line after a block or JSDoc comment in a file without semicolons
+    (`connectAgent(...) is not a function`, or the app's start inside the dead branch in production), and it landed
+    inside a multi-line import with a comment that names a path, or before import attributes on their own line (the
+    dev server and the build failed). Its own file runs right after `/auto` and before the app's code all the same: an
+    entry that throws while the page loads, or awaits at the top, is still linked first.
   - Nuxt's lines to add are a marked block for the end of GenClass's plugin, which `genclass remove` takes out with
     the plugin.
   - `genclass remove` gives back an entry file of the app's own that was empty before init (it deleted it once the

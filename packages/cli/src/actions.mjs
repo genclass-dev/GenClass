@@ -678,11 +678,11 @@ export function afterAgent(state, link) {
 
 /**
  * The Coding agent step (state.mjs, step "agent"): GenClass's MCP server in the project's agent configuration and the
- * skill next to it (unless a configuration names GenClass's server already), and the dev-only coding-agent link
- * after GenClass's import (agentlink.mjs) where it can be planned. Everything it writes is shown first, in one
- * preview, and asked once (Enter is the yes; --yes writes without asking); without a terminal and without --yes
- * nothing is written. "done" once the MCP server is configured and the link is in, or cannot be planned here (then
- * the lines to add are printed instead).
+ * skill next to it (unless a configuration names GenClass's server already), and the dev-only coding-agent link (a
+ * file of its own, imported right after GenClass's import; agentlink.mjs) where it can be planned. Everything it
+ * writes is shown first, in one preview, and asked once (Enter is the yes; --yes writes without asking); without a
+ * terminal and without --yes nothing is written. "done" once the MCP server is configured and the link is in, or
+ * cannot be planned here (then the lines to add are printed instead).
  */
 export async function connectAgent(state, o = {}) {
   const cwd = state.cwd;
@@ -731,14 +731,18 @@ export async function connectAgent(state, o = {}) {
   }
   // the skill is the procedure the agent follows with those tools; a file the person made their own is left alone
   if (skill && writeSkill(cwd) === "written") good(`Wrote ${c.bold(SKILL_PATH)} ${c.gray("(how the agent uses them)")}`);
+  // in their order, the link's file before the line that imports it: a write that fails stops the rest, so the entry
+  // never imports a file that is not there
   let failed = false;
   for (const ch of linkChanges) {
     try {
       writeFileSync(ch.file, ch.after);
-      good(`Linked ${c.bold(ch.rel)} to your coding agent ${c.gray("(development builds only)")}`);
+      if (ch.kind === "create") good(`Wrote ${c.bold(ch.rel)} ${c.gray("(the coding-agent link, development builds only)")}`);
+      else good(`Linked ${c.bold(ch.rel)} to your coding agent ${c.gray("(one import line after GenClass's)")}`);
     } catch (e) {
       failed = true;
       bad(`Could not write ${ch.rel}: ${e?.message ?? e}`);
+      break;
     }
   }
   afterAgent(state, failed ? null : link);
