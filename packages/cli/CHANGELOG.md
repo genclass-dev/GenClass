@@ -91,6 +91,29 @@ Fixed from the walk:
 - A mistyped command or option says one line and `npx genclass help`, instead of the whole help.
 - `funnels` lines its counts up in one column.
 
+Fixed in `genclass doctor` and the update notice:
+
+- A Content-Security-Policy with quoted sources (`'self'`) is read whole, so a correct policy is no longer reported as
+  blocking GenClass; vercel.json, firebase.json and staticwebapp.config.json are read, as are JS policies built from
+  templates, joined arrays and constants, a header's several policies, and only the policies set for the pages.
+- Sources are matched the way browsers match them: `https:`, hosts without a scheme, `*.` wildcards, ports and paths.
+- The model's worker is checked (`worker-src`, else `child-src`, `script-src`, `default-src`): `'self'`, or `blob:`
+  for the script tag, whose tag also needs `script-src`.
+- The self-hosting route names the folder: `fetch-model public/genclass-model, then init --model-url /genclass-model/`.
+- A runtime hoisted to a workspace root counts as installed, and the MCP server is found in the files `status` reads
+  (`.codex/config.toml`, `genclass-mcp`), in the app's folder and at the repository's root.
+- A plain HTML site's script tag is the runtime (its version is compared with npm's), and its agent link is not a warning.
+- The skill `npx @genclass/mcp init` wrote, or one checked out with CRLF line ends, is current; one from a newer
+  `@genclass/mcp` is never replaced by an older copy.
+- `--fix` shows each change (its diff) before writing it, with `--yes` too.
+- `--json --fix` prints one JSON object (with `fixed`, `failed`, `skipped`), the report on stderr, and never asks.
+- Under `npx`, the "genclass on PATH" check runs the installed `genclass`, not npx's own copy.
+- Signed out, the fixes name what needs Pro and the free commands (`npx @genclass/runtime@beta init`,
+  `npx -y @genclass/mcp@<version> init`).
+- After linking the dev page, the agent is asked about the page only when its configuration names GenClass's server.
+- An alpha build is compared with the `alpha` dist-tag as well as `latest`, in `doctor` and in the update notice,
+  which then says `npm install -g genclass@alpha`.
+
 ## 0.3.8
 
 Fixes from a signed-in walk of 0.3.7 against a fresh account, a team and a grant:
