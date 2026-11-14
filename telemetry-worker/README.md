@@ -425,7 +425,7 @@ The daily cron also deletes expired challenges and device codes and expired or r
 |---|---|---|---|
 | `AUTH_ORIGIN` | var | `https://genclass.dev` | expected `Origin`, WebAuthn origin, OAuth redirect URIs, cookie `Secure` |
 | `AUTH_RP_ID` | var | `genclass.dev` | WebAuthn RP ID |
-| `RUNTIME_ON_NPM` | var (wrangler.toml) | `0.3.0-beta.5` | the newest `@genclass/runtime` on npm, on any dist-tag; below `0.3.0-beta.0` the Connect dialog, `/start` and private dashboards say first that keys and `login` are not published yet. Set it with `src/pages.ts` `SNIPPET_RUNTIME` to every release once release.yml has published it and jsDelivr serves it, then deploy; at `0.3.0` also set `RUNTIME_PKG` (the snippets pin the script tag to `SNIPPET_RUNTIME` and name the `@beta` dist-tag in their commands while it is a prerelease) |
+| `RUNTIME_ON_NPM` | var (wrangler.toml) | `0.3.0-beta.6` | the newest `@genclass/runtime` on npm, on any dist-tag; below `0.3.0-beta.0` the Connect dialog, `/start` and private dashboards say first that keys and `login` are not published yet. Set it with `src/pages.ts` `SNIPPET_RUNTIME` to every release once release.yml has published it and jsDelivr serves it, then deploy; at `0.3.0` also set `RUNTIME_PKG` (the snippets pin the script tag to `SNIPPET_RUNTIME` and name the `@beta` dist-tag in their commands while it is a prerelease) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | secret | unset | Google sign-in, the first way in; both needed. An email and a password are offered either way |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | secret | unset | GitHub sign-in; both needed |
 
@@ -1366,7 +1366,7 @@ GenClass.init({ token: "gc_...", telemetry: { endpoint: "https://<your worker>/v
 
 ```html
 <script>window.GENCLASS_CONFIG = { telemetry: { endpoint: "https://<your worker>/v1/events" } };</script>
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5" data-token="gc_..."></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.6" data-token="gc_..."></script>
 ```
 
 Accounts work on it as on genclass.dev (an email and a password, and passkeys; Google and GitHub with your own OAuth

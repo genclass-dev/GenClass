@@ -6,7 +6,7 @@ app's token (or a custom telemetry endpoint), are turned off by every telemetry 
 never record element text, and never reach the model or a decision. Status: merged into `main` on 2026-10-18 and
 shipped in `@genclass/runtime` 0.3.0-beta.1 (2026-10-22, npm's `beta` dist-tag); visits, funnels, navigation paths
 and the version check (sections 1.2, 3.1, 11 and 4.1) followed in 0.3.0-beta.2 (2026-10-25); the newest release is
-0.3.0-beta.5 (2026-11-02). npm's `latest`, 0.2.3, has no analytics (section 4.1).
+0.3.0-beta.6 (2026-11-11). npm's `latest`, 0.2.3, has no analytics (section 4.1).
 
 Design written 2026-10-17 and **approved by the owner the same day** with every recommendation in
 [section 9](#9-decisions-for-the-owner) (AGENTS.md rule 8: widening what telemetry sends needs that OK). **Built**
@@ -240,7 +240,7 @@ GenClass.init({ token: "gc_…", analytics: true });
 
 Interaction analytics first shipped in `@genclass/runtime` **0.3.0-beta.1**, on npm's `beta` dist-tag (install it with
 `npm install @genclass/runtime@beta`, `npx @genclass/runtime@beta init`, or a script tag pinned to the exact version,
-`@0.3.0-beta.5` on 2026-11-03). npm's `latest` is still `0.2.3` until 0.3.0 is stable, and `0.2.x` and `0.3.0-beta.0`
+`@0.3.0-beta.6` on 2026-11-11). npm's `latest` is still `0.2.3` until 0.3.0 is stable, and `0.2.x` and `0.3.0-beta.0`
 have no analytics: they ignore `analytics: true` without a word (reproduced on 0.2.2 in jsdom: no warning, no
 `runtime.analytics`, nothing sent; a TypeScript app gets a type error for the unknown option). Those releases cannot
 change, so every path that the newest line controls says it instead:

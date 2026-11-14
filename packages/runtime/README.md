@@ -50,7 +50,7 @@ import "@genclass/runtime/auto"; // first line of your entry file (Next.js 15.3+
 Or with no build step, first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.6"></script>
 ```
 
 That is the whole setup. Network traffic, user actions, errors and timing are observed, and so is your app's state:
@@ -59,7 +59,7 @@ React component state, Redux and Redux Toolkit stores, and Zustand stores with `
 are not: there, stale responses are reported only for stores you register (double submits need no state).
 
 **Versions:** this README describes `0.3.0` with model `@genclass/runtime-model@0.2.0`. The newest line is
-`0.3.0-beta.5`, npm's `beta` dist-tag (`0.3.0-beta.1` to `beta.5` were released between 2026-10-22 and 2026-11-02);
+`0.3.0-beta.6`, npm's `beta` dist-tag (`0.3.0-beta.1` to `beta.6` were released between 2026-10-22 and 2026-11-11);
 npm's `latest` is still the older `0.2.3` (`npm view @genclass/runtime dist-tags` shows them now). Every npm and npx
 command here names `@beta`: without it npm installs `0.2.x`, which has no token, dashboard, interaction analytics,
 visual checks or agent link and ignores those options without a word (a TypeScript app gets a type error for
@@ -486,11 +486,11 @@ dist-tag it came from, asks npm's dist-tags once (`npm view @genclass/runtime di
 on npm, with the command that runs it:
 
 ```
-  ✔ Version    @genclass/runtime 0.3.0-beta.4 (npm dist-tag beta)
-  ▲ Newer      @genclass/runtime 0.3.0-beta.5 is on npm (dist-tag beta): run npx @genclass/runtime@beta init instead
+  ✔ Version    @genclass/runtime 0.3.0-beta.5 (npm dist-tag beta)
+  ▲ Newer      @genclass/runtime 0.3.0-beta.6 is on npm (dist-tag beta): run npx @genclass/runtime@beta init instead
 ```
 
-It installs its own version (`@genclass/runtime@^0.3.0-beta.5` today), and a project that already has an older one
+It installs its own version (`@genclass/runtime@^0.3.0-beta.6` today), and a project that already has an older one
 (a `0.2.x` from `npx @genclass/runtime init` without `@beta`) is upgraded, after the same diff and question. Every
 command it prints names `@beta` while it is a prerelease.
 
@@ -519,7 +519,7 @@ Options go in `window.GENCLASS_CONFIG = { ... }` (any `InitOptions`, set before 
 **3. One script tag** (no build step), first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5" data-mode="observe" data-devtools="local"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.6" data-mode="observe" data-devtools="local"></script>
 ```
 
 It exposes `window.GenClass` and loads the model worker and the overlay on demand from the same version; `data-mode`,

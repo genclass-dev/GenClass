@@ -4,10 +4,10 @@ GenClass Runtime (`@genclass/runtime`), an open-source browser library that repo
 sends anonymous diagnostics about its own decisions to its maintainers, by default on public websites; this page lists
 every event and field it sends, where they are stored and for how long, and every way to turn it off.
 
-> **Version.** Written for `@genclass/runtime` 0.3.0-beta.5 (2026-11-02), the version on GitHub `main`, in
+> **Version.** Written for `@genclass/runtime` 0.3.0-beta.6 (2026-11-11), the version on GitHub `main`, in
 > `package.json` and in the `runtime` field of every batch. The copy in an npm package describes that package's version.
-> As of 2026-11-02, `npm i @genclass/runtime@beta` installs 0.3.0-beta.5 (the newest line; 0.3.0-beta.1 to beta.5 were
-> released 2026-10-22 to 2026-11-02) and `npm i @genclass/runtime` installs the stable line, 0.2.3 (`latest`,
+> As of 2026-11-11, `npm i @genclass/runtime@beta` installs 0.3.0-beta.6 (the newest line; 0.3.0-beta.1 to beta.6 were
+> released 2026-10-22 to 2026-11-11) and `npm i @genclass/runtime` installs the stable line, 0.2.3 (`latest`,
 > 2026-10-28). Items
 > marked 0.3.0 are not in 0.2.x; interaction analytics are marked 0.3.0-beta.1, visits and navigation paths
 > 0.3.0-beta.2.
@@ -106,7 +106,7 @@ segment holding an `@`, such as an e-mail address, is `:id` too).
   "token": "gc_…",           // only when the app configured a valid token (InitOptions.token); see "App tokens"
   "sid": "3f9c…",            // 24 hex chars from crypto.getRandomValues, new on every page load, never stored
   "sent": 12034,             // ms since this page's GenClass started (no wall-clock time is sent)
-  "runtime": "0.3.0-beta.5", // @genclass/runtime version
+  "runtime": "0.3.0-beta.6", // @genclass/runtime version
   "model": "2.0.0-rc4t",     // model card version, or null without a model
   "events": [ /* ≤ 100 events, ≤ 60 KB per request */ ]
 }

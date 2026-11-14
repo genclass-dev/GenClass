@@ -21,7 +21,7 @@ End card (your edit): **Detect → Hotfix → Permanently fix → Monitor.**
 
 1. **Live versions.** These three must be live (Claude Code reports each one when it is done):
    - genclass.dev: collector version `5602614c` (the Snowday estimate in the dashboard and in MCP).
-   - npm: `@genclass/runtime@0.3.0-beta.5` (the widget counts checks; the measured checks' counts reach telemetry).
+   - npm: `@genclass/runtime@0.3.0-beta.6` (the widget counts checks; the measured checks' counts reach telemetry).
    - snowday-predictor.ca: `~/snowday-demo` deployed with beta.4 (`cd ~/snowday-demo && npm run deploy`).
 2. **Google's overlay ads off** for the recording (they cover the page and steal clicks; a click during the test opened
    an advertiser's site): AdSense → Ads → By site → snowday-predictor.ca → Edit → Ad formats → **Overlay formats**:
