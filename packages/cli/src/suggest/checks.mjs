@@ -570,10 +570,10 @@ export const CHECKS = [
     area: "safety",
     title: "A secret key ships to every visitor's browser",
     weight: 5,
-    why: "Your live site's JavaScript holds a secret key: anyone can copy it from the browser's developer tools, and bots read public bundles for keys. A Supabase service_role key skips every row-level security rule; an OpenAI or Anthropic key spends your money; a Stripe secret key moves payments.",
+    why: "Your live site's JavaScript holds a secret key: anyone can copy it from the browser, and bots read public bundles for keys. A Supabase service_role or sb_secret_ key skips row-level security; an AI provider's key spends your money; an sk_live_ key (Stripe, Clerk and others) controls payments or user accounts.",
     fix: "Roll the key at its provider now, then call that provider only from server code that reads the key from an environment variable.",
     prompt:
-      "My live site's JavaScript bundle contains a secret key (the report names the kind of key and the script it is in, never the value). Find where the app reads it: an environment variable with a public prefix (NEXT_PUBLIC_, VITE_, PUBLIC_, EXPO_PUBLIC_, REACT_APP_) or a key written in client code. Move every call that needs it into server code (an API route, a server action, an edge or serverless function) that reads it from a variable without the public prefix, and have the browser call that route instead. For a Supabase service_role key, use the anon key in the browser and keep service_role on the server only. Do not print the key. Then tell me which key to roll at its provider, because the old one has already been public.",
+      "My live site's JavaScript bundle contains a secret key (the report names the kind of key and the script it is in, never the value). Find where the app reads it: an environment variable with a public prefix (NEXT_PUBLIC_, VITE_, PUBLIC_, EXPO_PUBLIC_, REACT_APP_) or a key written in client code. A key that starts with sk_live_ or sk_test_ can be Stripe's, Clerk's or another provider's: tell from the code which one it is. Move every call that needs it into server code (an API route, a server action, an edge or serverless function) that reads it from a variable without the public prefix, and have the browser call that route instead. For a Supabase service_role or sb_secret_ key, use the anon or publishable key in the browser and keep the secret one on the server only. Do not print the key. Then tell me which key to roll at its provider, because the old one has already been public.",
     needs: ["site"],
     run({ site }) {
       const { home, miss } = page(site);
@@ -581,10 +581,21 @@ export const CHECKS = [
       const b = site.bundle;
       if (!b || b.scanned === null || b.scanned === undefined) return unknown("the page's scripts were not read");
       const found = Array.isArray(b.found) ? b.found : [];
-      if (!found.length) return b.scanned ? pass(`no secret key in the ${plural(b.scanned, "script", "scripts")} the home page loads`) : unknown("the home page loads no script of its own that answered");
-      const line = (x) => `${x.kind} in ${x.path}`;
-      if (found.length <= MAX_EVIDENCE) return fail(...found.map(line));
-      return fail(...found.slice(0, 2).map(line), `and ${found.length - 2} more`);
+      if (found.length) {
+        const line = (x) => `${x.kind} in ${x.path}`;
+        if (found.length <= MAX_EVIDENCE) return fail(...found.map(line));
+        return fail(...found.slice(0, 2).map(line), `and ${found.length - 2} more`);
+      }
+      if (!b.scanned) return unknown("the home page loads no script of its own that answered");
+      // a script that was not read, or read only in part, could hold the key: that is no pass
+      const unread = Number.isInteger(b.unread) && b.unread > 0 ? b.unread : 0;
+      const partial = Array.isArray(b.partial) ? b.partial : [];
+      if (!unread && !partial.length) return pass(`no secret key in the ${plural(b.scanned, "script", "scripts")} the home page loads`);
+      const lines = [`no secret key in the ${plural(b.scanned, "script", "scripts")} read`];
+      if (unread) lines.push(`${plural(unread, "more script", "more scripts")} the home page loads ${unread === 1 ? "was" : "were"} not read`);
+      if (partial.length === 1) lines.push(`${partial[0]} is over 1 MB: only its first 1 MB was read`);
+      else if (partial.length) lines.push(`${partial.length} scripts are over 1 MB, such as ${partial[0]}: only the first 1 MB of each was read`);
+      return unknown(...lines);
     },
   },
   {
@@ -607,6 +618,14 @@ export const CHECKS = [
       const pkgs = Array.isArray(v.packages) ? v.packages : [];
       if (!pkgs.length) return unknown("the installed versions could not be read: no node_modules and no lockfile that lists them");
       const from = v.from ? ` (${v.from})` : "";
+      // CVE-2025-29927 reached apps that run their own server (next start). Vercel and Netlify were not exposed, but
+      // only a deployment setting says the app runs there: a library such as @vercel/otel runs anywhere, and a
+      // Dockerfile at the top says it runs on a server of its own.
+      const h = repo.hosting || {};
+      const files = Array.isArray(repo.files) ? repo.files : [];
+      const docker = files.some((f) => /^(?:Dockerfile|docker-compose\.ya?ml|compose\.ya?ml)$/.test(String(f)));
+      const managed = (h.provider === "vercel" || h.provider === "netlify") && (h.from === "config" || h.from === "link" || h.from === "workflow") && !docker;
+      const unsure = !managed && !docker && (!h.provider || h.from === "deps");
       const bad = [];
       let read = 0;
       for (const p of pkgs) {
@@ -614,11 +633,12 @@ export const CHECKS = [
         if (!ver) continue;
         read++;
         if (p.name === "next") {
+          // a static export (output: "export") runs no server, where both flaws live
+          if (v.staticExport) continue;
           const rce = v.appRouter ? fixedIn(ver, NEXT_RSC_FIXED) : null;
           if (rce) bad.push(`next ${p.version}${from}: remote code execution (CVE-2025-55182) is fixed in ${rce}`);
-          const host = repo.hosting && repo.hosting.provider;
-          const mw = v.middleware && host !== "vercel" && host !== "netlify" ? fixedIn(ver, NEXT_MIDDLEWARE_FIXED) : null;
-          if (mw) bad.push(`next ${p.version} with ${v.middleware}: middleware can be skipped (CVE-2025-29927), fixed in ${mw}`);
+          const mw = v.middleware && !managed ? fixedIn(ver, NEXT_MIDDLEWARE_FIXED) : null;
+          if (mw) bad.push(`next ${p.version} with ${v.middleware}: middleware can be skipped (CVE-2025-29927), fixed in ${mw}${unsure ? "; Vercel and Netlify are not affected" : ""}`);
         } else {
           const rce = fixedIn(ver, RSD_FIXED);
           if (rce) bad.push(`${p.name} ${p.version}${from}: remote code execution (CVE-2025-55182) is fixed in ${rce}`);
@@ -626,7 +646,9 @@ export const CHECKS = [
       }
       if (!read) return unknown("only prerelease versions are installed; check them against the advisories by hand");
       if (bad.length) return fail(...bad.slice(0, MAX_EVIDENCE));
-      return pass(pkgs.map((p) => `${p.name} ${p.version}`).join(", ") + ": outside the affected ranges of CVE-2025-55182 and CVE-2025-29927");
+      const list = pkgs.map((p) => `${p.name} ${p.version}`).join(", ");
+      if (v.staticExport && pkgs.some((p) => p.name === "next")) return pass(`${list}: a static export (output: "export") runs no server, so CVE-2025-55182 and CVE-2025-29927 do not apply`);
+      return pass(`${list}: outside the affected ranges of CVE-2025-55182 and CVE-2025-29927`);
     },
   },
   {

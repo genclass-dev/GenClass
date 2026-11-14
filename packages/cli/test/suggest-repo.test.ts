@@ -178,7 +178,7 @@ describe("genclass suggest: the facts of a project (src/suggest/repo.mjs)", () =
     expect(host({ "wrangler.toml": 'name = "x"\n\n[env.staging]\nname = "x-staging"\n' }).hosting).toMatchObject({ provider: "cloudflare", previews: true });
     expect(host({ "fly.toml": 'app = "x"\n' }).hosting.provider).toBe("fly");
     expect(host({ Dockerfile: "FROM node:22\n" }).hosting.provider).toBe("docker");
-    expect(host({}).hosting).toEqual({ provider: null, previews: null, staging: null });
+    expect(host({}).hosting).toEqual({ provider: null, from: null, previews: null, staging: null });
     // npm's placeholder test script is no test script; other CI systems are named
     const f = host({ ".gitlab-ci.yml": "test:\n  script: npm test\n", ".circleci/config.yml": "version: 2\n", "pnpm-lock.yaml": "lockfileVersion: 9\n" });
     expect(f.tests.script).toBeNull();
@@ -222,7 +222,7 @@ describe("genclass suggest: installed framework versions (src/suggest/repo.mjs r
       "middleware.ts": "export function middleware() {}",
     });
     let f = collectRepoFacts(dir, { runGit: () => null });
-    expect(f.versions).toEqual({ packages: [{ name: "next", version: "15.1.0" }], from: "package-lock.json", appRouter: true, middleware: "middleware.ts" });
+    expect(f.versions).toEqual({ packages: [{ name: "next", version: "15.1.0" }], from: "package-lock.json", appRouter: true, middleware: "middleware.ts", staticExport: false });
     write(dir, { "node_modules/next/package.json": JSON.stringify({ name: "next", version: "15.1.9" }) });
     f = collectRepoFacts(dir, { runGit: () => null });
     expect(f.versions.packages).toEqual([{ name: "next", version: "15.1.9" }]);
@@ -232,7 +232,104 @@ describe("genclass suggest: installed framework versions (src/suggest/repo.mjs r
   it("an app without Next.js or React Server Components has no versions to read", () => {
     const dir = tempDir();
     write(dir, { "package.json": JSON.stringify({ name: "web", dependencies: { vite: "^8.0.0" } }) });
-    expect(collectRepoFacts(dir, { runGit: () => null }).versions).toEqual({ packages: [], from: null, appRouter: false, middleware: null });
+    expect(collectRepoFacts(dir, { runGit: () => null }).versions).toEqual({ packages: [], from: null, appRouter: false, middleware: null, staticExport: false });
+  });
+
+  const nextApp = (files: Record<string, string>, next = "15.1.0") => {
+    const dir = tempDir();
+    write(dir, { "package.json": JSON.stringify({ name: "web", dependencies: { next } }), "node_modules/next/package.json": JSON.stringify({ version: next }), ...files });
+    return collectRepoFacts(dir, { runGit: () => null }).versions;
+  };
+
+  it("the App Router is the folder Next.js reads, with a route in it; a static export is noted (finding 53)", () => {
+    expect(nextApp({ "app/layout.tsx": "x", "app/page.tsx": "x" }).appRouter).toBe(true);
+    expect(nextApp({ "src/app/(shop)/cart/page.tsx": "x" }).appRouter).toBe(true);
+    // pages/ at the top: Next.js does not read src/, so a src/app/ folder (a Redux store) is no App Router
+    expect(nextApp({ "pages/index.tsx": "x", "src/app/store.ts": "x" }).appRouter).toBe(false);
+    // an app/ folder with no page, layout or route file in it
+    expect(nextApp({ "app/store.ts": "x", "pages/index.tsx": "x" }).appRouter).toBe(false);
+    // output: "export" in next.config, but not in a comment
+    expect(nextApp({ "app/page.tsx": "x", "next.config.mjs": "export default { output: 'export', images: { unoptimized: true } };\n" }).staticExport).toBe(true);
+    expect(nextApp({ "app/page.tsx": "x", "next.config.ts": 'const config = {\n  // output: "export",\n  reactStrictMode: true,\n};\nexport default config;\n' }).staticExport).toBe(false);
+    expect(nextApp({ "app/page.tsx": "x" }).staticExport).toBe(false);
+  });
+
+  it("middleware in every extension Next.js loads, and 12.0-12.1's pages/_middleware (finding 57)", () => {
+    expect(nextApp({ "middleware.tsx": "x" }, "14.2.10").middleware).toBe("middleware.tsx");
+    expect(nextApp({ "src/middleware.jsx": "x" }, "14.2.10").middleware).toBe("src/middleware.jsx");
+    expect(nextApp({ "pages/index.tsx": "x", "pages/admin/_middleware.ts": "x" }, "12.1.0").middleware).toBe("pages/admin/_middleware.ts");
+    expect(nextApp({ "pages/index.tsx": "x" }, "14.2.10").middleware).toBeNull();
+  });
+
+  it("the hosting guess says what it rests on: only a library is a guess (finding 13)", () => {
+    const host = (files: Record<string, string>, deps: Record<string, string> = {}) => {
+      const d = tempDir();
+      write(d, { "package.json": JSON.stringify({ name: "x", dependencies: { next: "14.2.10", ...deps } }), ...files });
+      return collectRepoFacts(d, { runGit: () => null }).hosting;
+    };
+    expect(host({ "vercel.json": "{}" })).toMatchObject({ provider: "vercel", from: "config" });
+    expect(host({ ".vercel/project.json": "{}" })).toMatchObject({ provider: "vercel", from: "link" });
+    expect(host({ Dockerfile: "FROM node:22\n" }, { "@vercel/otel": "^1.0.0" })).toMatchObject({ provider: "vercel", from: "deps" });
+    expect(host({ ".github/workflows/deploy.yml": "on: push\njobs:\n  d:\n    steps:\n      - run: npx netlify deploy --prod\n" })).toMatchObject({ provider: "netlify", from: "workflow" });
+    expect(host({ Dockerfile: "FROM node:22\n" })).toMatchObject({ provider: "docker", from: "docker" });
+  });
+
+  it("a monorepo's lockfile at the git root: this app's own version, not the first or the hoisted one (finding 55)", () => {
+    // git says the app is apps/web inside the repository
+    const gitIn = (cdup: string) => (args: string[]) => {
+      const a = args.join(" ");
+      if (a.includes("--is-inside-work-tree")) return "true";
+      if (a.includes("--show-cdup")) return cdup;
+      if (a.includes("ls-files")) return "";
+      return null;
+    };
+    const mono = (files: Record<string, string>, web: object = { name: "web", dependencies: { next: "15.1.0" } }) => {
+      const root = tempDir();
+      write(root, { "apps/docs/package.json": JSON.stringify({ name: "docs", dependencies: { next: "14.2.3" } }), "apps/web/package.json": JSON.stringify(web), ...files });
+      return collectRepoFacts(`${root}/apps/web`, { runGit: gitIn("../../") }).versions;
+    };
+    const pnpm = [
+      "lockfileVersion: '9.0'",
+      "",
+      "importers:",
+      "",
+      "  apps/docs:",
+      "    dependencies:",
+      "      next:",
+      "        specifier: 14.2.3",
+      "        version: 14.2.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)",
+      "",
+      "  apps/web:",
+      "    dependencies:",
+      "      next:",
+      "        specifier: 15.1.0",
+      "        version: 15.1.0(react-dom@19.0.0(react@19.0.0))(react@19.0.0)",
+      "",
+      "packages:",
+      "",
+      "  next@14.2.3:",
+      "    resolution: {integrity: sha512-x}",
+      "",
+      "  next@15.1.0:",
+      "    resolution: {integrity: sha512-y}",
+      "",
+    ].join("\n");
+    expect(mono({ "pnpm-lock.yaml": pnpm })).toMatchObject({ packages: [{ name: "next", version: "15.1.0" }], from: "pnpm-lock.yaml" });
+    const npm = JSON.stringify({ lockfileVersion: 3, packages: { "": {}, "node_modules/next": { version: "14.2.3" }, "apps/web/node_modules/next": { version: "15.1.0" } } });
+    expect(mono({ "package-lock.json": npm })).toMatchObject({ packages: [{ name: "next", version: "15.1.0" }], from: "package-lock.json" });
+    // a workspace without its own copy uses the hoisted one
+    const hoisted = JSON.stringify({ lockfileVersion: 3, packages: { "": {}, "node_modules/next": { version: "15.1.0" } } });
+    expect(mono({ "package-lock.json": hoisted })).toMatchObject({ packages: [{ name: "next", version: "15.1.0" }] });
+    // yarn: the entry for the range this app's package.json asks for
+    const yarn = '"next@14.2.3":\n  version "14.2.3"\n\n"next@^15.1.0":\n  version "15.1.0"\n';
+    expect(mono({ "yarn.lock": yarn }, { name: "web", dependencies: { next: "^15.1.0" } })).toMatchObject({ packages: [{ name: "next", version: "15.1.0" }], from: "yarn.lock" });
+    // two versions and nothing that says which one is this app's: not guessed
+    expect(lockVersion("pnpm", "packages:\n\n  next@14.2.3:\n    resolution: {}\n\n  next@15.1.0:\n    resolution: {}\n", "next")).toBeNull();
+    expect(lockVersion("yarn", yarn, "next")).toBeNull();
+    // bun: the workspace's own entry, else the hoisted one
+    const bun = '{ "packages": { "next": ["next@14.2.3", "", {}], "web/next": ["next@15.1.0", "", {}] } }';
+    expect(lockVersion("bun", bun, "next", { importer: "apps/web", workspace: "web" })).toBe("15.1.0");
+    expect(lockVersion("bun", bun, "next")).toBe("14.2.3");
   });
 
   it("lockVersion reads npm, pnpm, yarn and bun lockfiles", () => {
@@ -244,5 +341,20 @@ describe("genclass suggest: installed framework versions (src/suggest/repo.mjs r
     expect(lockVersion("yarn", '"next@npm:^15.0.0":\n  version: 15.0.4\n', "next")).toBe("15.0.4");
     expect(lockVersion("bun", '{ "packages": { "next": ["next@16.0.6", "", {}] } }', "next")).toBe("16.0.6");
     expect(lockVersion("pnpm", "packages:\n  next-auth@4.0.0:\n", "next")).toBeNull();
+  });
+
+  it("lockVersion reads pnpm lockfile 5 keys and importers, and Windows line endings (finding 58)", () => {
+    expect(lockVersion("pnpm", "lockfileVersion: 5.4\n\npackages:\n\n  /next/12.3.1_biqbaboplfbrettd7655fr4n2y:\n    resolution: {}\n", "next")).toBe("12.3.1");
+    expect(lockVersion("pnpm", "lockfileVersion: 5.4\n\nspecifiers:\n  next: 12.3.1\n\ndependencies:\n  next: 12.3.1_biqbaboplfbrettd7655fr4n2y\n\npackages:\n\n  /next/12.3.1_biqbaboplfbrettd7655fr4n2y:\n    resolution: {}\n", "next")).toBe("12.3.1");
+    expect(lockVersion("pnpm", "lockfileVersion: 5.4\n\nimporters:\n\n  apps/web:\n    specifiers:\n      next: 13.4.0\n    dependencies:\n      next: 13.4.0_react@18.2.0\n", "next", { importer: "apps/web" })).toBe("13.4.0");
+    expect(lockVersion("yarn", 'next@^15.1.0:\r\n  version "15.1.0"\r\n  resolved "https://registry.yarnpkg.com/next/-/next-15.1.0.tgz"\r\n', "next")).toBe("15.1.0");
+    expect(lockVersion("pnpm", "lockfileVersion: '9.0'\r\n\r\nimporters:\r\n\r\n  .:\r\n    dependencies:\r\n      next:\r\n        specifier: ^14.2.0\r\n        version: 14.2.10(react@18.3.1)\r\n", "next")).toBe("14.2.10");
+  });
+
+  it("a pnpm-lock.yaml over 8 MB is read to 8 MB, where the importers are", () => {
+    const dir = tempDir();
+    const top = "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      next:\n        specifier: 14.2.10\n        version: 14.2.10(react@18.3.1)\n\npackages:\n\n";
+    write(dir, { "package.json": JSON.stringify({ name: "big", dependencies: { next: "14.2.10" } }), "pnpm-lock.yaml": top + "  left-pad@1.3.0:\n    resolution: {integrity: sha512-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}\n".repeat(110_000) });
+    expect(collectRepoFacts(dir, { runGit: () => null }).versions).toMatchObject({ packages: [{ name: "next", version: "14.2.10" }], from: "pnpm-lock.yaml" });
   });
 });
