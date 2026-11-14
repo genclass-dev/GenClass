@@ -156,7 +156,7 @@ export async function run(argv, ctx = {}) {
   const po = { cwd: i >= 0 ? args[i + 1] : undefined, yes: args.includes("--yes") || args.includes("-y"), json: args.includes("--json"), noBrowser: args.includes("--no-browser") };
   const thenPlan = async (code) => {
     if (code !== 0) return code;
-    await (await import("./actions.mjs")).planNow(po).catch(() => "none");
+    await (await import("./actions.mjs")).planNow({ ...po, announce: true }).catch(() => "none");
     return code;
   };
   if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
@@ -172,7 +172,7 @@ export async function run(argv, ctx = {}) {
     const code = !asksHelp && plain && interactive() ? await ownLogin(po) : await login.run(cmd, noConnect || asksHelp ? args : [...args, "--no-connect"]);
     if (code !== 0 || asksHelp) return code;
     if (!(await (await import("./paywall.mjs")).afterLogin(po).catch(() => true))) return code;
-    return thenPlan(noConnect ? code : await login.offerConnect(args).catch(() => 1));
+    return thenPlan(noConnect ? code : await afterSignIn(po, args, login).catch(() => 1));
   }
   if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
   if (["connect", "init", "scan", "audit"].includes(cmd)) {
@@ -317,6 +317,31 @@ export async function run(argv, ctx = {}) {
     return setup({ ...o, ...(ctx.nested ? { home: false } : {}) }, { runSuggest, home });
   }
   return 2;
+}
+
+/**
+ * After `genclass login` with Pro on, on a terminal: what this folder's app needs next, in this command's words. An
+ * app already in the account needs nothing; an app without GenClass (or without its Vite settings) is pointed at
+ * setup, which shows its change first; only an app with GenClass in its code but not in the account is offered the
+ * runtime CLI's connect (the 0.3.9 user stories: its question ran its own picker and init in a folder without
+ * GenClass, and was asked for an app already connected). With --yes, or without a terminal, it is connect's as before.
+ */
+async function afterSignIn(po, args, login) {
+  if (po.yes || !interactive()) return login.offerConnect(args);
+  let state = null;
+  try {
+    state = await (await import("./state.mjs")).readState({ cwd: po.cwd });
+  } catch {
+    state = null;
+  }
+  if (!state?.signedIn) return login.offerConnect(args);
+  const rt = state.steps.find((x) => x.id === "runtime");
+  if (!state.app.isApp || !rt || rt.state === "done") return 0;
+  if (rt.run === "npx genclass connect") return login.offerConnect(args);
+  const { hint, note } = await import("./tui.mjs");
+  out();
+  note(`Next: ${hint("setup")} to ${rt.vite ? "add the two Vite settings this app needs" : "add GenClass to this app"}. It shows the change first.`);
+  return 0;
 }
 
 /**

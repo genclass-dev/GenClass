@@ -22,6 +22,14 @@
   the price is not quoted to someone signing in again. `plan`, `profile`, `team` and `apps` start the sign-in on a
   terminal, as the others do. `login` (in the prompt too) is the setup's own sign-in screen. A sign-in denied twice
   ends with how to sign in later.
+- **`login` in a folder says what is next in genclass's words**: an app already in the account needs nothing (it
+  hears which plan it is on), an app without GenClass is pointed at `setup`, which shows its change first; only an
+  app with GenClass in its code and not in the account is offered `connect`. "<app> is on your Pro plan" is said
+  once, when the app reaches the account, never before a view.
+- One line where there were three: q at Pro's card in setup, and setup inside the prompt after the card was seen
+  ("Setup goes on with Pro"); setup stopped inside the prompt says to type setup. On Free, `plan` ends with what Pro
+  adds, and neither `status` nor `setup` is followed by the Free line. `events` names each kind as `problems` does.
+  A long Waiting line wraps instead of being cut; a step that does not apply has no command in `status --json`.
 - The prompt: `y` runs what "Did you mean" named, "show problems" is `problems`, a number no command has says so.
   `dashboard` in a web app without GenClass asks which app instead of showing another one. `fix` names each problem
   in the dashboard's words too. The git hint is one command a line.

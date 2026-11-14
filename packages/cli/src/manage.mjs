@@ -106,7 +106,7 @@ export async function apps(o = {}, deps = {}) {
           out(`    ${c.cyan(made.planUrl)}`);
         }
         // its plan is chosen now, on its page (Pro, or Free with a reason)
-        if (made?.id && !full) await planNow({ cwd: o.cwd, noBrowser: o.noBrowser }, deps, made.id);
+        if (made?.id && !full) await planNow({ cwd: o.cwd, noBrowser: o.noBrowser, announce: true }, deps, made.id);
         note("To put GenClass into that app's code, run npx genclass in its folder and pick this app.");
       }
       out();
@@ -223,7 +223,7 @@ export async function plan(o = {}, deps = {}) {
     }
   }
   if (pro) {
-    await (await import("./paywall.mjs")).startPro(pro, state.account?.offer ?? (a.ok ? a.offer : null), { ...o, card: true, short: true }, deps);
+    await (await import("./paywall.mjs")).startPro(pro, state.account?.offer ?? (a.ok ? a.offer : null), { ...o, card: true, again: `${clean(pro.plan, 20)} has every genclass command.` }, deps);
     out();
     return 0;
   }

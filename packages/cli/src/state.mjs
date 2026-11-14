@@ -460,7 +460,8 @@ export function stateJson(s) {
     signed_in: s.signedIn,
     account: s.account ? { label: s.account.label, plan: s.account.plan } : null,
     github: s.git.github,
-    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.blocking === false && x.state !== "done" ? "optional" : x.state, detail: x.detail, run: x.state === "done" || x.blocking === false ? null : forAgent(x.run), human: x.state === "done" ? null : x.human })),
+    // a step that does not apply here (optional: no git repository, no tests) has nothing for an agent to run
+    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.blocking === false && x.state !== "done" ? "optional" : x.state, detail: x.detail, run: x.state === "done" || x.state === "optional" || x.blocking === false ? null : forAgent(x.run), human: x.state === "done" || x.state === "optional" ? null : x.human })),
     next: agentNext ? { id: agentNext.id, title: agentNext.doing, run: forAgent(agentNext.run), human: agentNext.human, why: agentNext.why } : null,
     complete: s.complete,
   };

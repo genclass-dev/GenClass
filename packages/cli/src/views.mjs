@@ -19,7 +19,7 @@ import { join, resolve } from "node:path";
 import { c, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { appView, fit, KINDS, n, RANGE_WORDS, spark } from "./app.mjs";
 import { brand } from "./art.mjs";
-import { ACTION_NAMES, checkFixed, checkOf, didAct, markdown } from "./kinds.mjs";
+import { ACTION_NAMES, checkFixed, checkOf, didAct, markdown, TYPES } from "./kinds.mjs";
 import { agentConfigs } from "./state.mjs";
 import { ago, bad, clean, good, linkLine, note, width, wrap } from "./tui.mjs";
 
@@ -362,14 +362,16 @@ export function renderEvents(app, o = {}) {
   }
   const short = (iso) => ago(iso, o.now).replace(/ minutes? ago/, " min ago").replace(/ hours? ago/, " h ago");
   const wWhen = Math.max(...rows.map((r) => short(r.at).length));
-  const wKind = Math.max(4, Math.min(14, Math.max(...rows.map((r) => plain(r.kind ?? r.trigger ?? "").length))));
+  // a kind by the name `problems` and `fix` give it ("Double submits", not "duplicate": the 0.3.9 user stories)
+  const kindName = (r) => (r.kind && TYPES[r.kind]?.name) || plain(r.kind ?? r.trigger ?? "");
+  const wKind = Math.max(4, Math.min(18, Math.max(...rows.map((r) => kindName(r).length))));
   // 4 of indent, when, 2, kind, 2, how sure (4), 2, the page
   const wPage = Math.max(8, room() - 14 - wWhen - wKind);
   head(`The latest ${rows.length} event${rows.length === 1 ? "" : "s"}`, "Newest first. sure: how confident the model was.");
   out(`    ${c.gray("when".padEnd(wWhen))}  ${c.gray("kind".padEnd(wKind))}  ${c.gray("sure")}  ${c.gray("page")}`);
   for (const r of rows) {
     const sure = r.confidence === null ? "" : `${Math.round(r.confidence * 100)}%`;
-    out(`    ${c.gray(short(r.at).padEnd(wWhen))}  ${clean(plain(r.kind ?? r.trigger ?? ""), wKind).padEnd(wKind)}  ${sure.padStart(4)}  ${c.cyan(clean(r.route ?? "", wPage))}`.trimEnd());
+    out(`    ${c.gray(short(r.at).padEnd(wWhen))}  ${clean(kindName(r), wKind).padEnd(wKind)}  ${sure.padStart(4)}  ${c.cyan(clean(r.route ?? "", wPage))}`.trimEnd());
     const did = didAct(r) ? actionWords(r.ran) : null;
     if (did) out(`    ${" ".repeat(wWhen)}  ${c.green(`${sym.arrow} ${clean(did, 60)}`)}`);
     if (all) {

@@ -112,7 +112,8 @@ export async function signIn(o = {}) {
 export async function choosePlan(state, o = {}, deps = {}) {
   const cli = state.steps.find((s) => s.id === "plan")?.cli;
   if (!cli || cli.paid) return "skipped";
-  return (await (await import("./paywall.mjs")).startPro(cli, state.account?.offer ?? null, o, deps)) ? "done" : "quit";
+  // seen once already in this process (the prompt): one line, not the card again
+  return (await (await import("./paywall.mjs")).startPro(cli, state.account?.offer ?? null, { ...o, again: "Setup goes on with Pro." }, deps)) ? "done" : "quit";
 }
 
 /** This app's plan page, in the walk (state.mjs, step "app-plan"): projectPlan with the step's offer. */
@@ -167,10 +168,14 @@ export async function planNow(o = {}, deps = {}, id = null) {
     return "locked";
   }
   if (o.json) return offer.current ? "covered" : "open";
-  // covered by the account's plan: it has its plan, so nothing opens and nothing waits (its page is in `genclass plan`)
+  // covered by the account's plan: it has its plan, so nothing opens and nothing waits (its page is in `genclass plan`).
+  // Said once, right after the app reached the account (o.announce: login, connect, init, apps new), never before
+  // a view (the 0.3.9 user stories: four times in one session)
   if (offer.current && !offer.needs) {
-    out();
-    note(`${clean(app.name, 40)} is on your ${clean(offer.current, 20)} plan.`);
+    if (o.announce) {
+      out();
+      note(`${clean(app.name, 40)} is on your ${clean(offer.current, 20)} plan.`);
+    }
     return "covered";
   }
   if (o.yes || !interactive()) {

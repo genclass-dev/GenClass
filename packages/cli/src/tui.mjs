@@ -358,9 +358,11 @@ export function summary(steps) {
   const next = steps.find((s) => s.state === "next");
   const later = steps.filter((s) => s.state === "todo");
   if (done.length) line(MARK.done(), pad("Done"), names(done));
-  for (const b of steps.filter((s) => s.state === "blocked")) line(MARK.blocked(), pad(b.title), c.gray(clean(b.detail ?? "", room)));
+  // a detail that does not fit goes on under itself, never cut short (the 0.3.9 user stories: "checked 14 minutes a…")
+  const lines = (text) => wrap(text, room);
+  for (const b of steps.filter((s) => s.state === "blocked")) line(MARK.blocked(), pad(b.title), lines(clean(b.detail ?? "", 200)));
   if (next) line(MARK.next(), c.bold(pad("Next")), c.bold(clean(next.doing ?? next.title, room)));
-  for (const w of steps.filter((s) => s.state === "waiting")) line(MARK.waiting(), pad("Waiting"), c.gray(clean(`${w.title}: ${w.detail ?? ""}`, room)));
+  for (const w of steps.filter((s) => s.state === "waiting")) line(MARK.waiting(), pad("Waiting"), lines(clean(`${w.title}: ${w.detail ?? ""}`, 200)));
   if (later.length) line(MARK.todo(), c.gray(pad("Later")), names(later));
 }
 

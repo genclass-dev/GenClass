@@ -230,6 +230,8 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     // told "npx genclass init" again and again
     expect(j.next).toMatchObject({ id: "runtime", title: "Add GenClass to this app", run: "npx genclass setup --yes", human: null });
     expect(j.steps.find((x) => x.id === "runtime")?.run).toBe("npx genclass setup --yes");
+    // a step that does not apply here (no git repository) has nothing to run
+    expect(j.steps.find((x) => x.id === "workflow")).toMatchObject({ state: "optional", run: null, human: null });
     // every step has a short name, what doing it is called, one sentence and a fuller one
     for (const x of [...s.steps, ...pro.steps]) expect([x.title.length > 0, x.doing.length > 0, x.why.length > 0 && x.why.length < 100, x.more.length > 0], x.id).toEqual([true, true, true, true]);
     expect(j.steps.map((x) => x.id)).toEqual(["account", "plan", "runtime", "app-plan", "dashboard", "workflow", "github-app", "agent", "suggestions"]);
@@ -502,12 +504,14 @@ describe("genclass: Pro right after the sign-in, and each app's plan page (src/s
     const read = (p: object) => readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ ...PRO, projects: [p] }) } }).fetchFn });
     // an app Pro covers has a plan: one line says so, and nothing opens or waits (on a terminal either)
     let r = "";
-    const said = await printed(async () => (r = await planNow({ cwd: dir }, { readState: async () => read(app({})) })));
+    const said = await printed(async () => (r = await planNow({ cwd: dir, announce: true }, { readState: async () => read(app({})) })));
     expect(r).toBe("covered");
     expect(flat(said)).toContain("shop is on your Pro plan.");
+    // before a view it is said nothing: the app has its plan
+    expect(await printed(async () => expect(await planNow({ cwd: dir }, { readState: async () => read(app({})) })).toBe("covered"))).toBe("");
     expect(flat(said)).not.toMatch(/has no plan yet|Open |Waiting/);
     // the app named by its id, the same
-    expect(await printed(async () => expect(await planNow({ cwd: dir }, { readState: async () => read(app({})) }, "p1")).toBe("covered"))).toContain("on your Pro plan");
+    expect(await printed(async () => expect(await planNow({ cwd: dir, announce: true }, { readState: async () => read(app({})) }, "p1")).toBe("covered"))).toContain("on your Pro plan");
     // a fourth app on Pro: nothing to pay for (more apps are Enterprise's), so nothing is opened or waited for
     const fourth = app({ plan: { id: "free", name: "Free", source: null }, needs_plan: true });
     const locked = await printed(async () => expect(await planNow({ cwd: dir }, { readState: async () => read(fourth) })).toBe("locked"));

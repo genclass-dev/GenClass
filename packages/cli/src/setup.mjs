@@ -200,7 +200,7 @@ async function walk(o, deps, auto) {
           return deps.home({ ...o, cwd: state.cwd, app: state.app.name ?? "" });
         }
         out();
-        note("Stopped. Run npx genclass again any time: it continues from here.");
+        note(o.home === false ? "Setup stopped here. Type setup to go on with it." : "Stopped. Run npx genclass again any time: it continues from here.");
         out();
         return 0;
       }
@@ -231,8 +231,12 @@ async function walk(o, deps, auto) {
       result = step.id === "plan" ? await choosePlan(state, so) : await chooseAppPlan(state, so);
       // nothing after Pro works without it (paywall.mjs), and an app waits for its plan
       if (result === "quit") {
-        out();
-        if (!auto) note("Stopped. Run npx genclass again any time: it continues from here.");
+        // Pro's card has said how to start it later (one line is enough: the 0.3.9 user stories had three); the
+        // plan page's wait said where the page is. Inside the prompt, setup is typed again, not npx genclass
+        if (!auto && step.id !== "plan") {
+          out();
+          note(o.home === false ? "Setup stopped here. Type setup to go on with it." : "Stopped. Run npx genclass again any time: it continues from here.");
+        }
         out();
         return auto ? 1 : 0;
       }

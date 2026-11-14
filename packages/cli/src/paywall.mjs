@@ -129,9 +129,11 @@ export async function startPro(cli, offer, o = {}, deps = {}) {
   const start = cli.trialDays ? `start your ${cli.trialDays}-day free trial` : `start ${clean(cli.plan, 20)}`;
   // seen once in this process: one line from then on (the 0.3.9 user stories: the same card three times in four
   // commands). `genclass upgrade` and `plan` (o.card) are asked for it, so they show it again
-  if (cardShown && o.short) {
+  // `again`: the command's own words for that line (plan: what Pro has; setup: it goes on with Pro)
+  if (cardShown && (o.short || o.again)) {
     out();
-    note(`That comes with ${clean(cli.plan, 20)}. ${homeOpen() ? "Type upgrade" : "Run npx genclass upgrade"} to ${start}.`);
+    note(`${o.again ?? `That comes with ${clean(cli.plan, 20)}.`} ${homeOpen() ? "Type upgrade" : "Run npx genclass upgrade"} to ${start}.`);
+    refused = true;
     return false;
   }
   cardShown = true;
@@ -153,6 +155,8 @@ export async function startPro(cli, offer, o = {}, deps = {}) {
   if (a === null || !/^(y|yes)?$/i.test(a.trim())) {
     out();
     note(`Not started. ${homeOpen() ? "Type upgrade" : "Run npx genclass upgrade"} any time to ${start}.`);
+    // the line above is the way up: the prompt's Free line is not said again after it
+    refused = true;
     return false;
   }
   const { checkout } = await import("./actions.mjs");

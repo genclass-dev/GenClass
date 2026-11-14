@@ -52,7 +52,7 @@ const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "v
 export const FREE_MENU = [
   ["upgrade", "start Pro: its free trial first"],
   ["profile", "your account and plan"],
-  ["plan", "what Pro includes"],
+  ["plan", "your plan and its limits"],
   ["status", "where the setup stands"],
 ];
 
@@ -261,7 +261,8 @@ export async function home(o = {}, deps = {}) {
     } catch {
       /* nothing to read */
     }
-    if (!stopped && !["upgrade", "profile", "plan", "login", "logout", "remove"].includes(argv[0])) {
+    // (not after the commands that say where the plan stands themselves: status and setup show Pro's step)
+    if (!stopped && !["upgrade", "profile", "plan", "login", "logout", "remove", "status", "setup"].includes(argv[0])) {
       try {
         await deps.afterCommand?.();
       } catch {

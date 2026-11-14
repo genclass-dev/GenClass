@@ -258,7 +258,8 @@ describe("genclass: the walk leads into the home (src/setup.mjs)", () => {
     const nested = await at58(async () => expect(await setup({ cwd: dir, home: false }, { home: async () => (opened.push({}), 0) })).toBe(0));
     expect(opened).toHaveLength(1);
     expect(nested).toContain("q stop");
-    expect(plainLines(nested).join(" ")).toContain("Stopped. Run npx genclass again any time");
+    // inside the prompt, setup is typed again
+    expect(plainLines(nested).join(" ")).toContain("Setup stopped here. Type setup to go on with it.");
   });
 
   it("in the home a view is not headed again, and names its app only when it is another one", async () => {
