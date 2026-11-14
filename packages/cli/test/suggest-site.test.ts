@@ -1,6 +1,7 @@
 // Facts measured from a live site (src/suggest/site.mjs), against a stand-in site and stand-in DNS: no network.
 import { describe, expect, it } from "vitest";
-import { AI_CRAWLERS, collectSiteFacts, emptySiteFacts, isPublicHost, parseHtml, parseRobots, robotsBlocks } from "../src/suggest/site.mjs";
+import { runChecks } from "../src/suggest/checks.mjs";
+import { AI_CRAWLERS, bundleSecrets, collectSiteFacts, emptySiteFacts, isPublicHost, MAX_SCRIPTS, parseHtml, parseRobots, robotsBlocks, scriptSources } from "../src/suggest/site.mjs";
 
 type Page = { status?: number; headers?: Record<string, string>; body?: string };
 
@@ -118,7 +119,8 @@ describe("genclass suggest: a well-made site (src/suggest/site.mjs)", () => {
     const urls = w.calls.map((c) => c.url).sort();
     expect(new Set(urls).size).toBe(urls.length);
     expect(urls).toEqual(
-      ["http://polarparts.example/", "https://polarparts.example/", "https://polarparts.example/genclass-check-404-b7f3k9q2x", "https://polarparts.example/llms.txt", "https://polarparts.example/robots.txt", "https://polarparts.example/sitemap.xml", "https://www.polarparts.example/"].sort(),
+      // app.js: the page's own script, read for secret keys (secrets-in-bundle)
+      ["http://polarparts.example/", "https://polarparts.example/", "https://polarparts.example/app.js", "https://polarparts.example/genclass-check-404-b7f3k9q2x", "https://polarparts.example/llms.txt", "https://polarparts.example/robots.txt", "https://polarparts.example/sitemap.xml", "https://www.polarparts.example/"].sort(),
     );
     for (const c of w.calls) expect([c.method, c.redirect, c.agent]).toEqual(["GET", "manual", "genclass-cli (+https://genclass.dev)"]);
   });
@@ -255,5 +257,278 @@ describe("genclass suggest: robots.txt and HTML parsing (src/suggest/site.mjs pa
     expect(parseHtml("", "https://x.example/")).toMatchObject({ title: null, description: null, h1: [], textChars: 0, scripts: 0 });
     for (const t of ["Vite + React", "create next app", "React App", "Document", "  Home "]) expect(parseHtml(`<title>${t}</title>`).defaultTitle, t).toBe(true);
     expect(parseHtml("<title>Home of the best pies in town</title>").defaultTitle).toBe(false);
+  });
+});
+
+describe("genclass suggest: the scripts a page ships, read for secret keys (src/suggest/site.mjs bundleSecrets, scriptSources)", () => {
+  // key-shaped strings put together here, so that no key-shaped text is in this file
+  const openai = ["sk", "proj", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v2W3x4"].join("-");
+  const jwt = (role: string) => ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", Buffer.from(JSON.stringify({ iss: "supabase", ref: "abcdefgh", role, iat: 1 })).toString("base64url"), "abcdefghijklmnopqrstuvwxyz012345"].join(".");
+
+  it("finds the kinds, never returns a value, and leaves public keys and examples alone", () => {
+    expect(bundleSecrets(`var a="${openai}",b="${jwt("service_role")}"`)).toEqual(["openai-key", "supabase-service-role"]);
+    // the anon key is meant to be public; AWS's documented example key; a locale code; Stripe's documented sample
+    expect(bundleSecrets(`x="${jwt("anon")}";y="sk-SK";z="AKIA" + "IOSFODNN7EXAMPLE";k="AKIAIOSFODNN7EXAMPLE";w="${["sk", "test", "4eC39HqLyjWDarjtT1zdp7dc"].join("_")}"`)).toEqual([]);
+    expect(bundleSecrets("")).toEqual([]);
+  });
+
+  it("lists the page's own scripts and module preloads, each once, never another origin's or a nomodule one", () => {
+    const html = `<script src="/assets/a.js"></script><script src="https://cdn.other.example/b.js"></script><link rel="modulepreload" href="/assets/c.js"><script>inline</script><script src=""></script><script src="data:text/javascript,1"></script><script src="/legacy.js" nomodule></script><link rel="modulepreload" href="/assets/a.js">${Array.from({ length: 9 }, (_, i) => `<script src="/s${i}.js"></script>`).join("")}`;
+    const srcs = scriptSources(html, "https://shop.example/");
+    expect(srcs.slice(0, 3)).toEqual(["https://shop.example/assets/a.js", "https://shop.example/s0.js", "https://shop.example/s1.js"]);
+    expect(srcs).toHaveLength(11);
+    expect(srcs.at(-1)).toBe("https://shop.example/assets/c.js");
+    expect(srcs.every((s) => s.startsWith("https://shop.example/"))).toBe(true);
+    expect(srcs).not.toContain("https://shop.example/legacy.js");
+
+    // below the cap the preloads are in the list: a module preload and a script preload, not a style's (a Vite
+    // app whose entry chunk is only preloaded is still read for keys)
+    expect(scriptSources(`<script type="module" src="/assets/a.js"></script><link rel="modulepreload" href="/assets/c.js"><link rel="preload" as="script" href="/assets/d.js"><link rel="preload" as="style" href="/assets/e.css"><link rel="modulepreload" href="https://cdn.other.example/f.js">`, "https://shop.example/")).toEqual(["https://shop.example/assets/a.js", "https://shop.example/assets/c.js", "https://shop.example/assets/d.js"]);
+  });
+
+  it("a live page whose bundle holds a key: the kind and the script's path, with no query", async () => {
+    const page = `<!doctype html><html><head><title>Shop</title><script type="module" src="/assets/index-a1.js?v=tok123"></script></head><body><h1>Shop</h1></body></html>`;
+    const w = fakeWeb({ "https://shop.example/": { body: page }, "https://shop.example/assets/index-a1.js?v=tok123": text(`const k="${openai}";`, "text/javascript") });
+    const f = await collectSiteFacts("https://shop.example/", { fetchFn: w.fetchFn, dns: dnsOf() });
+    expect(f.bundle).toEqual({ scanned: 1, unread: 0, partial: [], found: [{ path: "/assets/index-a1.js", kind: "openai-key" }] });
+    expect(JSON.stringify(f)).not.toContain(openai);
+  });
+});
+
+describe("genclass suggest: which scripts are read, and how much of each (src/suggest/site.mjs scriptSources, collectSiteFacts)", () => {
+  const jwt = (role: string, iss = "supabase") => ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", Buffer.from(JSON.stringify({ iss, ref: "abcdefgh", role, iat: 1 })).toString("base64url"), "abcdefghijklmnopqrstuvwxyz012345"].join(".");
+  const js = (body: string): Page => text(body, "text/javascript");
+  const chunk = (name: string) => `/_next/static/chunks/${name}.js`;
+
+  // A Next.js 16 App Router home page as Turbopack builds it: the runtime's chunks first (one also preloaded, and
+  // given again last with the bootstrap's id), the metadata chunk, the page's five chunks, then the polyfills for
+  // old browsers; the payload names the chunks of the page's client components.
+  const runtime = ["0d8wrqgf5wrm5", "3zn4q-rnqdnfg", "1u3un9vtebfyh", "turbopack-0ie61feraln2o"];
+  const pageChunks = ["1qo6c542q5lnx", "110_cr1g3s2vn", "15nigigry8hy_", "1omwgckp_atno", "0mae80qyldj00"];
+  const nextHome = (extra = "") =>
+    `<!doctype html><html><head><title>Troy</title><link rel="preload" as="script" fetchPriority="low" href="${chunk("0-9slcls78bw1")}"/>${runtime.map((c) => `<script src="${chunk(c)}" async=""></script>`).join("")}<script src="${chunk("3dlqm4t3lwqe9")}" async=""></script>${pageChunks.map((c) => `<script src="${chunk(c)}" async=""></script>`).join("")}${extra}<script src="${chunk("0cz1d0mv5g_q7")}" noModule=""></script><script src="${chunk("0-9slcls78bw1")}" id="_R_" async=""></script></head><body><h1>Talk to Troy</h1><script>self.__next_f.push([1,"5:I[42089,[\\"/_next/static/chunks/3dlqm4t3lwqe9.js\\"],\\"default\\"]\\n7:I[51234,[\\"/_next/static/chunks/1omwgckp_atno.js\\",\\"/_next/static/chunks/15nigigry8hy_.js\\"],\\"LandingActions\\"]\\n"])</script></body></html>`;
+
+  it("a Next.js App Router page: a key in the 9th script, the page's client component, is found (finding 11)", async () => {
+    const pages: Record<string, Page> = { "https://troy.example/": { body: nextHome() } };
+    for (const c of [...runtime, "3dlqm4t3lwqe9", ...pageChunks, "0-9slcls78bw1", "0cz1d0mv5g_q7"]) pages[`https://troy.example${chunk(c)}`] = js(`/* ${c} */`);
+    pages[`https://troy.example${chunk("1omwgckp_atno")}`] = js(`createClient(u,"${jwt("service_role")}")`);
+    const w = fakeWeb(pages);
+    const f = await collectSiteFacts("https://troy.example/", { fetchFn: w.fetchFn, dns: dnsOf() });
+    // eleven scripts: the polyfills (nomodule) are never requested
+    expect(f.bundle).toEqual({ scanned: 11, unread: 0, partial: [], found: [{ path: chunk("1omwgckp_atno"), kind: "supabase-service-role" }] });
+    expect(w.calls.some((c) => c.url.includes("0cz1d0mv5g_q7"))).toBe(false);
+  });
+
+  it("the chunks the payload names and the route's chunks come first, Next.js's runtime by name last, and the cap is counted", () => {
+    const filler = Array.from({ length: 24 }, (_, i) => `<script src="${chunk(`f${String(i).padStart(2, "0")}`)}" async></script>`).join("");
+    const html = `<script src="${chunk("webpack-1a2b3c")}"></script><script src="${chunk("main-app-9f8e7d")}"></script>${filler}<script src="${chunk("app/page-77aa")}"></script>${nextHome()}`;
+    const srcs = scriptSources(html, "https://troy.example/").map((s) => new URL(s).pathname);
+    // the route's chunk by name and the ones the payload names, in page order
+    expect(srcs.slice(0, 4)).toEqual([chunk("app/page-77aa"), chunk("3dlqm4t3lwqe9"), chunk("15nigigry8hy_"), chunk("1omwgckp_atno")]);
+    expect(srcs.slice(-3)).toEqual([chunk("webpack-1a2b3c"), chunk("main-app-9f8e7d"), chunk("turbopack-0ie61feraln2o")]);
+    expect(srcs).toHaveLength(2 + 24 + 1 + 11);
+  });
+
+  it("past MAX_SCRIPTS, the scripts left are counted as not read", async () => {
+    const many = Array.from({ length: MAX_SCRIPTS + 5 }, (_, i) => `/assets/c${i}.js`);
+    const pages: Record<string, Page> = { "https://many.example/": { body: `<title>Many</title>${many.map((s) => `<script type="module" src="${s}"></script>`).join("")}` } };
+    for (const s of many) pages[`https://many.example${s}`] = js("export {};");
+    const w = fakeWeb(pages);
+    const f = await collectSiteFacts("https://many.example/", { fetchFn: w.fetchFn, dns: dnsOf() });
+    expect(f.bundle).toEqual({ scanned: MAX_SCRIPTS, unread: 5, partial: [], found: [] });
+    expect(w.calls.filter((c) => c.url.includes("/assets/")).length).toBe(MAX_SCRIPTS);
+  });
+
+  it("a script over 1 MB is read to 1 MB and marked as read in part, never as read whole (finding 54)", async () => {
+    // Vite and Rollup put the app's own modules at the end of the bundle, after the libraries
+    const big = `${"var vendor=1;".repeat(Math.ceil((1.2 * 1024 * 1024) / 13))}const sb=createClient(u,"${jwt("service_role")}");`;
+    const head = `const sb=createClient(u,"${jwt("service_role")}");${"var vendor=1;".repeat(Math.ceil((1.2 * 1024 * 1024) / 13))}`;
+    const site = (body: string) => fakeWeb({ "https://big.example/": { body: `<title>Big</title><script type="module" src="/assets/index-a1.js"></script>` }, "https://big.example/assets/index-a1.js": js(body) });
+    const tail = await collectSiteFacts("https://big.example/", { fetchFn: site(big).fetchFn, dns: dnsOf() });
+    expect(tail.bundle).toEqual({ scanned: 1, unread: 0, partial: ["/assets/index-a1.js"], found: [] });
+    const front = await collectSiteFacts("https://big.example/", { fetchFn: site(head).fetchFn, dns: dnsOf() });
+    expect(front.bundle.found).toEqual([{ path: "/assets/index-a1.js", kind: "supabase-service-role" }]);
+    expect(front.bundle.partial).toEqual(["/assets/index-a1.js"]);
+    // a page that fits is read whole
+    const small = await collectSiteFacts("https://big.example/", { fetchFn: site("export {};").fetchFn, dns: dnsOf() });
+    expect(small.bundle.partial).toEqual([]);
+  });
+
+  it("a script of exactly 1 MB is read whole, one byte more is read in part, however the chunks fall", async () => {
+    const MB = 1024 * 1024;
+    const page = `<title>Edge</title><script type="module" src="/assets/index-a1.js"></script>`;
+    const bundle = async (body: Page | (() => Promise<Response>)) => (await collectSiteFacts("https://edge.example/", { fetchFn: fakeWeb({ "https://edge.example/": { body: page }, "https://edge.example/assets/index-a1.js": body }).fetchFn, dns: dnsOf() })).bundle;
+    expect(await bundle(js("x".repeat(MB)))).toEqual({ scanned: 1, unread: 0, partial: [], found: [] });
+    expect((await bundle(js("x".repeat(MB + 1)))).partial).toEqual(["/assets/index-a1.js"]);
+    // a stream whose chunks add up to 1 MB exactly, then ends after an empty chunk, or then sends one byte more
+    const stream = (sizes: number[]) => async () => {
+      const chunks = sizes.map((n) => new Uint8Array(n).fill(120));
+      return new Response(new ReadableStream({ pull(c) { const next = chunks.shift(); if (next) c.enqueue(next); else c.close(); } }), { status: 200, headers: { "content-type": "text/javascript" } });
+    };
+    expect((await bundle(stream([MB / 2, MB / 2, 0]))).partial).toEqual([]);
+    expect((await bundle(stream([MB / 2, MB / 2, 1]))).partial).toEqual(["/assets/index-a1.js"]);
+    // so a clean page with such a script is a pass, not "over 1 MB"
+    const f = await collectSiteFacts("https://edge.example/", { fetchFn: fakeWeb({ "https://edge.example/": { body: page }, "https://edge.example/assets/index-a1.js": js("x".repeat(MB)) }).fetchFn, dns: dnsOf() });
+    expect(runChecks({ repo: null, site: f }).find((r) => r.id === "secrets-in-bundle")?.status).toBe("pass");
+  });
+
+  // A script sent as a stream of `parts`, which then ends, breaks off ("terminated", as undici says on a reset) or
+  // stalls: the server sends nothing more and never closes.
+  const MB = 1024 * 1024;
+  const live = ["sk", "live", "4kQ9zT2mXv7LpR3wN8bY6cHd"].join("_");
+  const bytes = (head: string, size: number) => {
+    const b = new Uint8Array(size).fill(0x3b);
+    b.set(new TextEncoder().encode(head));
+    return b;
+  };
+  const streamed = (parts: () => Uint8Array[], end: "close" | "error" | "stall") => async () => {
+    const left = parts();
+    return new Response(
+      new ReadableStream({
+        pull(c) {
+          const next = left.shift();
+          if (next) c.enqueue(next);
+          else if (end === "error") c.error(new TypeError("terminated"));
+          else if (end === "stall") return new Promise<void>(() => undefined);
+          else c.close();
+        },
+      }),
+      { status: 200, headers: { "content-type": "text/javascript" } },
+    );
+  };
+  const keyed = (size: number) => () => [bytes(`const k="${live}";`, size / 2), bytes("", size / 2)];
+  const clean = (size: number) => () => [bytes("", size / 2), bytes("", size / 2)];
+  const edgePage = (n: number) => `<title>Edge</title>${Array.from({ length: n }, (_, i) => `<script type="module" src="/assets/s${i}.js"></script>`).join("")}`;
+  const edge = (scripts: (Page | (() => Promise<Response>))[], timeoutMs = 3000) => {
+    const pages: Record<string, Page | (() => Promise<Response>)> = { "https://edge.example/": { body: edgePage(scripts.length) } };
+    scripts.forEach((s, i) => (pages[`https://edge.example/assets/s${i}.js`] = s));
+    return collectSiteFacts("https://edge.example/", { fetchFn: fakeWeb(pages).fetchFn, dns: dnsOf(), timeoutMs });
+  };
+  const verdict = (f: Awaited<ReturnType<typeof collectSiteFacts>>) => runChecks({ repo: null, site: f }).find((r) => r.id === "secrets-in-bundle")!;
+
+  it("an error on the read past exactly 1 MB keeps the 1 MB read, marked as read in part (fix3, suggest 1)", async () => {
+    const leak = await edge([streamed(keyed(MB), "error")]);
+    expect(leak.bundle).toEqual({ scanned: 1, unread: 0, partial: ["/assets/s0.js"], found: [{ path: "/assets/s0.js", kind: "sk-live-secret-key" }] });
+    expect(verdict(leak).status).toBe("fail");
+    // with no key in it, the script may go on past 1 MB: no pass
+    const none = await edge([streamed(clean(MB), "error")]);
+    expect(none.bundle).toEqual({ scanned: 1, unread: 0, partial: ["/assets/s0.js"], found: [] });
+    expect(verdict(none).status).toBe("unknown");
+    // one that ends there is still read whole
+    expect((await edge([streamed(clean(MB), "close")])).bundle).toEqual({ scanned: 1, unread: 0, partial: [], found: [] });
+  });
+
+  it("a server that stalls right after exactly 1 MB is not waited for: the 1 MB is kept, read in part (fix3, suggest 2)", async () => {
+    const started = Date.now();
+    const leak = await edge([streamed(keyed(MB), "stall")], 3000);
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(leak.bundle).toEqual({ scanned: 1, unread: 0, partial: ["/assets/s0.js"], found: [{ path: "/assets/s0.js", kind: "sk-live-secret-key" }] });
+    expect(verdict(leak).status).toBe("fail");
+    // next to a small clean script, it makes the check unknown, never a pass
+    const two = await edge([streamed(clean(MB), "stall"), js("export {};")], 3000);
+    expect(two.bundle).toEqual({ scanned: 2, unread: 0, partial: ["/assets/s0.js"], found: [] });
+    expect(verdict(two).status).toBe("unknown");
+    expect(verdict(two).evidence).toContain("/assets/s0.js is over 1 MB: only its first 1 MB was read");
+  });
+
+  it("a script that breaks off, stalls or fails before its end counts as not read; a key in the part that came is found (fix3, suggest 2)", async () => {
+    const part = 300 * 1024;
+    // broke off: the part that came is read for keys, the script is not counted as read whole
+    const broke = await edge([streamed(keyed(part), "error"), js("export {};")]);
+    expect(broke.bundle).toEqual({ scanned: 1, unread: 1, partial: [], found: [{ path: "/assets/s0.js", kind: "sk-live-secret-key" }] });
+    expect(verdict(broke).status).toBe("fail");
+    const brokeClean = await edge([streamed(clean(part), "error"), js("export {};")]);
+    expect(brokeClean.bundle).toEqual({ scanned: 1, unread: 1, partial: [], found: [] });
+    expect(verdict(brokeClean)).toMatchObject({ status: "unknown", evidence: ["no secret key in the 1 script read", "1 more script the home page loads was not read"] });
+    // stalled: the request's timeout ends its read with what came
+    const stalled = await edge([streamed(keyed(part), "stall"), js("export {};")], 400);
+    expect(stalled.bundle).toEqual({ scanned: 1, unread: 1, partial: [], found: [{ path: "/assets/s0.js", kind: "sk-live-secret-key" }] });
+    const stalledClean = await edge([streamed(clean(part), "stall"), js("export {};")], 400);
+    expect(stalledClean.bundle).toEqual({ scanned: 1, unread: 1, partial: [], found: [] });
+    expect(verdict(stalledClean).status).toBe("unknown");
+    // no answer at all (the script's address fails like a dead host), or a hung request
+    const pages: Record<string, Page | (() => Promise<Response>)> = { "https://edge.example/": { body: edgePage(3) }, "https://edge.example/assets/s1.js": () => new Promise<Response>(() => undefined), "https://edge.example/assets/s2.js": js("export {};") };
+    const dead = await collectSiteFacts("https://edge.example/", { fetchFn: fakeWeb(pages).fetchFn, dns: dnsOf(), timeoutMs: 400 });
+    expect(dead.bundle).toEqual({ scanned: 1, unread: 2, partial: [], found: [] });
+    expect(verdict(dead).status).toBe("unknown");
+    // a script that is not there (404) is none the browser runs either
+    expect((await edge([{ status: 404, body: "Not found" }, js("export {};")])).bundle).toEqual({ scanned: 1, unread: 0, partial: [], found: [] });
+  });
+
+  it("a home page whose body breaks off is a failed request, never an empty page read as the site (fix3)", async () => {
+    const half = await collectSiteFacts("https://half.example/", { fetchFn: fakeWeb({ "https://half.example/": streamed(() => [bytes("<!doctype html><title>Half a page", 4096)], "error") }).fetchFn, dns: dnsOf() });
+    expect(half).toMatchObject({ reachable: false, error: "request failed", home: null, bundle: { scanned: null } });
+    // the same verdicts as a home page that never answered: no title, h1 or description "missing"
+    const failed = async (f: Promise<Awaited<ReturnType<typeof collectSiteFacts>>>) => runChecks({ repo: null, site: await f }).filter((r) => r.status === "fail").map((r) => r.id);
+    expect(await failed(Promise.resolve(half))).toEqual(await failed(collectSiteFacts("https://half.example/", { fetchFn: fakeWeb({}).fetchFn, dns: dnsOf() })));
+    const hung = await collectSiteFacts("https://half.example/", { fetchFn: fakeWeb({ "https://half.example/": streamed(() => [bytes("<!doctype html><title>Half a page", 4096)], "stall") }).fetchFn, dns: dnsOf(), timeoutMs: 200 });
+    expect(hung).toMatchObject({ reachable: false, error: "timeout", home: null });
+  });
+});
+
+describe("genclass suggest: which key-shaped strings count as a secret in a bundle (src/suggest/site.mjs bundleSecrets)", () => {
+  // key-shaped strings put together here, so that no key-shaped text is in this file
+  const join = (...parts: string[]) => parts.join("");
+  const awsId = join("AKIA", "Q3RZ7WJ2M5XK8PLB");
+  const awsSecret = join("wJa1rXUtnF", "EMI/K7MDNG", "bPxRfiCYtQ", "Z9b8c7d6e5");
+  const jwt = (role: string, iss: string) => ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", Buffer.from(JSON.stringify({ iss, role, exp: 1983812996 })).toString("base64url"), "abcdefghijklmnopqrstuvwxyz012345"].join(".");
+
+  it("an AWS access key ID inside a pre-signed link is shared on purpose; with its secret next to it, it is a leak (finding 12)", () => {
+    const v4 = `<img src="https://up.s3.amazonaws.com/u/a.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&amp;X-Amz-Credential=${awsId}%2F20250101%2Fus-east-1%2Fs3%2Faws4_request&amp;X-Amz-Date=20250101T000000Z&amp;X-Amz-Expires=900&amp;X-Amz-SignedHeaders=host&amp;X-Amz-Signature=${"a1".repeat(32)}">`;
+    const v2 = `<img src="https://up.s3.amazonaws.com/u/b.png?AWSAccessKeyId=${awsId}&amp;Expires=1735689600&amp;Signature=Zm9vYmFy%2Bbaz%3D">`;
+    const rsc = `self.__next_f.push([1,"{\\"src\\":\\"https://up.s3.amazonaws.com/c.png?X-Amz-Credential=${awsId}%2F20250101%2Fus-east-1%2Fs3%2Faws4_request\\"}"])`;
+    expect(bundleSecrets(v4 + v2 + rsc)).toEqual([]);
+    // the ID alone signs nothing
+    expect(bundleSecrets(`const id="${awsId}";`)).toEqual([]);
+    expect(bundleSecrets(`new S3Client({region:"us-east-1",credentials:{accessKeyId:"${awsId}",secretAccessKey:"${awsSecret}"}})`)).toEqual(["aws-access-key"]);
+    // a SHA-1 (40 hex digits, no capitals) is no secret access key
+    expect(bundleSecrets(`const id="${awsId}",sha="${"0123456789abcdef0123456789abcdef01234567"}";`)).toEqual([]);
+  });
+
+  it("an AWS key pair written as NAME=value is found: a .env, a credentials file, a .env shipped as a string, a query string", () => {
+    const dotenv = join("AWS_ACCESS_KEY_ID=", awsId, "\nAWS_SECRET_ACCESS_KEY=", awsSecret, "\n");
+    const credentials = join("[default]\naws_access_key_id=", awsId, "\naws_secret_access_key=", awsSecret, "\n");
+    // what a Vite ?raw import of the .env ships: the text as a JavaScript string
+    const raw = `const env=${JSON.stringify(dotenv)};`;
+    const query = join('fetch("/api/upload?accessKeyId=', awsId, "&secretAccessKey=", awsSecret, '")');
+    // only X-Amz-Credential= and AWSAccessKeyId= mark a pre-signed link; accessKeyId= is the app's own query string
+    const queryId = join('fetch("/api/upload?accessKeyId=', awsId, '",{headers:{"x-secret":"', awsSecret, '"}})');
+    for (const t of [dotenv, credentials, raw, query, queryId]) expect(bundleSecrets(t), t.slice(0, 24)).toEqual(["aws-access-key"]);
+    // with spaces and quotes, as before
+    expect(bundleSecrets(join('AWS_ACCESS_KEY_ID = "', awsId, '"\nAWS_SECRET_ACCESS_KEY = "', awsSecret, '"'))).toEqual(["aws-access-key"]);
+    // the ID alone after "=" still signs nothing, and base64 padding after 40 characters is a longer value
+    expect(bundleSecrets(join("AWS_ACCESS_KEY_ID=", awsId, "\n"))).toEqual([]);
+    expect(bundleSecrets(join("AWS_ACCESS_KEY_ID=", awsId, "\nINTEGRITY=", awsSecret, "=\n"))).toEqual([]);
+  });
+
+  it("placeholders and the keys providers document are no secret (finding 52)", () => {
+    const docs = [
+      join("STRIPE_SECRET_KEY=sk_live_", "x".repeat(24)),
+      join("OPENAI_API_KEY=sk-proj-", "x".repeat(48)),
+      join("sk_test_", "BQokikJOvBiI2HlWgH4olfQ2"),
+      join("sk_test_", "4eC39HqLyjWDarjtT1zdp7dc"),
+      join("accessKeyId:'AKIA", "I44QH8DHBEXAMPLE',secretAccessKey:'wJalrXUtnFEMI/K7MDENG/bPxRfiCY", "EXAMPLEKEY'"),
+      join("accessKeyId:'AKIA", "XXXXXXXXXXXXXXXX',secretAccessKey:'", awsSecret, "'"),
+      join("ghp_", "yourGithubTokenHere", "yourGithubTokenHere"),
+      // the Supabase CLI's local service_role key: public, it opens only a local copy
+      jwt("service_role", "supabase-demo"),
+    ];
+    for (const d of docs) expect(bundleSecrets(d), d.slice(0, 30)).toEqual([]);
+    expect(bundleSecrets(jwt("service_role", "supabase"))).toEqual(["supabase-service-role"]);
+  });
+
+  it("Supabase secret keys, OpenRouter keys and encrypted private keys are found; publishable keys are not (finding 56)", () => {
+    expect(bundleSecrets(`createClient(u,"${join("sb_secret_", "N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz")}")`)).toEqual(["supabase-secret-key"]);
+    expect(bundleSecrets(`createClient(u,"${join("sb_publishable_", "N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz")}")`)).toEqual([]);
+    expect(bundleSecrets(`{Authorization:"Bearer ${join("sk-or-v1-", "3f9a0c1b2d4e5f60718293a4b5c6d7e8f9012a3b4c5d6e7f8091a2b3c4d5e6f7")}"}`)).toEqual(["openrouter-key"]);
+    expect(bundleSecrets(join("-----BEGIN ENCRYPTED ", "PRIVATE KEY-----\\nMIIFHDBOBgkqhkiG9w0BBQ0wQTApBgkqhkiG9w0BBQwwHAQI3pX7ZQ"))).toEqual(["private-key"]);
+  });
+
+  it("sk_live_ and sk_test_ keys are not named for Stripe alone: Clerk's and Paystack's start the same way (finding 59)", () => {
+    const body = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0";
+    expect(bundleSecrets(`clerk({secretKey:"${join("sk_live_", body)}"})`)).toEqual(["sk-live-secret-key"]);
+    expect(bundleSecrets(`"${join("sk_test_", body)}"`)).toEqual(["sk-test-secret-key"]);
+    // rk_live_ is Stripe's restricted key: Stripe alone
+    expect(bundleSecrets(`"${join("rk_live_", body)}"`)).toEqual(["stripe-secret-live"]);
   });
 });

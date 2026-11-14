@@ -65,28 +65,29 @@ describe("genclass: how the command is typed here (src/name.mjs)", () => {
     expect(readPrefs()).toEqual({ installAsked: true, askTold: true });
   });
 
+  const STABLE = "0.4.0"; // these two are about the stable line (a prerelease build never installs itself: below)
   it("a run through npx on a terminal installs the command itself and says so; a failure waits a day; never in CI", async () => {
     const before = process.env.CI;
     delete process.env.CI;
     try {
       const ran: string[] = [];
-      const yes = await at58(async () => expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("installed"));
+      const yes = await at58(async () => expect(await installShortName({ version: STABLE, interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("installed"));
       expect(tooWide(yes)).toEqual([]);
       expect(ran).toHaveLength(1);
       const flat = plainLines(yes).join(" ").replace(/\s+/g, " ");
       expect(flat).toContain("Added. Open a new terminal window and type genclass.");
       expect(flat).toContain("npm uninstall -g genclass takes it out.");
       // a failure says how by hand, and is not tried again for a day
-      const failed = await at58(async () => expect(await installShortName({ interactive: () => true, install: async () => ({ ok: false, text: "EACCES" }), works: () => false })).toBe("failed"));
+      const failed = await at58(async () => expect(await installShortName({ version: STABLE, interactive: () => true, install: async () => ({ ok: false, text: "EACCES" }), works: () => false })).toBe("failed"));
       expect(plainLines(failed).join(" ").replace(/\s+/g, " ")).toContain("npm install -g genclass (some systems need sudo in front)");
-      expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
-      expect(await installShortName({ interactive: () => true, now: Date.now() + 25 * 60 * 60_000, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("installed");
+      expect(await installShortName({ version: STABLE, interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
+      expect(await installShortName({ version: STABLE, interactive: () => true, now: Date.now() + 25 * 60 * 60_000, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("installed");
       expect(ran).toHaveLength(2);
       // already there, no terminal, or CI: nothing runs
-      expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => true, installedVersion: () => null })).toBe("skipped");
-      expect(await installShortName({ interactive: () => false, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
+      expect(await installShortName({ version: STABLE, interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => true, installedVersion: () => null })).toBe("skipped");
+      expect(await installShortName({ version: STABLE, interactive: () => false, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
       process.env.CI = "1";
-      expect(await installShortName({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
+      expect(await installShortName({ version: STABLE, interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), works: () => false })).toBe("skipped");
       expect(ran).toHaveLength(2);
     } finally {
       if (before === undefined) delete process.env.CI;
@@ -103,28 +104,49 @@ describe("genclass: how the command is typed here (src/name.mjs)", () => {
       const fresh = () => forgetShortName();
       // npx runs the newest: an older installed copy is replaced by this version
       fresh();
-      const up = await at58(async () => expect(await installShortName({ interactive: () => true, install, works: () => true, installedVersion: () => "0.3.6", viaNpx: () => true })).toBe("updated"));
-      expect(ran).toEqual([BUILD.version]);
-      expect(plainLines(up).join(" ")).toContain(`Updating the genclass command, 0.3.6 to ${BUILD.version}`);
+      const up = await at58(async () => expect(await installShortName({ version: STABLE, interactive: () => true, install, works: () => true, installedVersion: () => "0.3.6", viaNpx: () => true })).toBe("updated"));
+      expect(ran).toEqual([STABLE]);
+      expect(plainLines(up).join(" ")).toContain(`Updating the genclass command, 0.3.6 to ${STABLE}`);
       expect(tooWide(up)).toEqual([]);
       // the same version installed: nothing to do, and nothing asked of npm
       let asked = 0;
       const latest = async () => (asked++, "99.0.0");
       fresh();
-      expect(await installShortName({ interactive: () => true, install, works: () => true, installedVersion: () => BUILD.version, viaNpx: () => true, latest })).toBe("skipped");
+      expect(await installShortName({ version: STABLE, interactive: () => true, install, works: () => true, installedVersion: () => STABLE, viaNpx: () => true, latest })).toBe("skipped");
       expect(asked).toBe(0);
       // the installed copy asks npm, at most once a day, and updates to what npm has
       const now = Date.now() + 3 * 24 * 60 * 60_000;
       fresh();
-      expect(await installShortName({ interactive: () => true, install, works: () => true, installedVersion: () => BUILD.version, viaNpx: () => false, latest, now })).toBe("updated");
-      expect(ran).toEqual([BUILD.version, "99.0.0"]);
+      expect(await installShortName({ version: STABLE, interactive: () => true, install, works: () => true, installedVersion: () => STABLE, viaNpx: () => false, latest, now })).toBe("updated");
+      expect(ran).toEqual([STABLE, "99.0.0"]);
       fresh();
-      expect(await installShortName({ interactive: () => true, install, works: () => true, installedVersion: () => BUILD.version, viaNpx: () => false, latest, now: now + 60_000 })).toBe("skipped");
+      expect(await installShortName({ version: STABLE, interactive: () => true, install, works: () => true, installedVersion: () => STABLE, viaNpx: () => false, latest, now: now + 60_000 })).toBe("skipped");
       expect(asked).toBe(1);
     } finally {
       if (before === undefined) delete process.env.CI;
       else process.env.CI = before;
     }
+  });
+
+  it("a prerelease (genclass@alpha) never installs itself or replaces an installed copy; a stable run never replaces an installed alpha; the update opt-outs stop the refresh (pre-release check)", async () => {
+    const { installShortName } = await import("../src/home.mjs");
+    const { newer, lineOf } = await import("../src/name.mjs");
+    const ran: string[] = [];
+    const install = async (v: string) => (ran.push(v), { ok: true, text: "" });
+    expect(await installShortName({ version: "0.4.0-alpha.0", interactive: () => true, install, works: () => true, installedVersion: () => "0.3.9", viaNpx: () => true })).toBe("skipped");
+    expect(await installShortName({ version: "0.4.0-alpha.0", interactive: () => true, install, works: () => false })).toBe("skipped");
+    expect(await installShortName({ version: "0.4.0", interactive: () => true, install, works: () => true, installedVersion: () => "0.4.0-alpha.3", viaNpx: () => true })).toBe("skipped");
+    process.env.NO_UPDATE_NOTIFIER = "1";
+    try {
+      expect(await installShortName({ version: "0.4.0", interactive: () => true, install, works: () => true, installedVersion: () => "0.3.6", viaNpx: () => true })).toBe("skipped");
+    } finally {
+      delete process.env.NO_UPDATE_NOTIFIER;
+    }
+    expect(ran).toEqual([]);
+    expect(newer("0.4.0-alpha.10", "0.4.0-alpha.9")).toBe(true);
+    expect(newer("0.4.0-alpha.9", "0.4.0-alpha.10")).toBe(false);
+    expect(newer("0.4.0", "0.4.0-alpha.9")).toBe(true);
+    expect([lineOf("0.4.0-alpha.0"), lineOf("0.3.9"), lineOf("1.0.0-beta.2")]).toEqual(["alpha", "", "beta"]);
   });
 });
 
@@ -188,6 +210,26 @@ describe("genclass: the home (src/home.mjs)", () => {
     type("dashboard", "q");
     const after = await at58(async () => expect(await home({}, { runCommand: async () => Promise.reject(new Error("boom")), nearest })).toBe(0));
     expect(after).toContain("That did not work: boom");
+  });
+
+  it("every command the command line has is a command here, the free local ones included (privacy, doctor, flake)", async () => {
+    // never "There is no command" for a command that exists, and never a question
+    for (const cmd of ALL.filter((x) => x !== "help")) expect(read(cmd), cmd).toEqual({ command: [cmd] });
+    expect(read("doctor --fix")).toEqual({ command: ["doctor", "--fix"] });
+    expect(read("privacy --out p.md")).toEqual({ command: ["privacy", "--out", "p.md"] });
+    expect(read("flake tests/a.spec.ts --seed 3")).toEqual({ command: ["flake", "tests/a.spec.ts", "--seed", "3"] });
+    expect(read("npx genclass doctor --fix")).toEqual({ command: ["doctor", "--fix"] });
+    // help lists them, within 58 columns
+    const full = await at58(() => menu(true));
+    for (const name of ["privacy", "doctor", "flake"]) expect(full).toContain(name);
+    expect(tooWide(full)).toEqual([]);
+    // they run in the folder of the home; no line about the plan follows them (it would ask genclass.dev)
+    const ran: string[][] = [];
+    let after = 0;
+    type("doctor --fix", "privacy", "flake tests/a.spec.ts", "problems", "q");
+    await at58(async () => expect(await home({ cwd: "/app" }, { runCommand: async (a: string[]) => (ran.push(a), 0), nearest, afterCommand: async () => void after++ })).toBe(0));
+    expect(ran).toEqual([["doctor", "--fix", "--cwd", "/app"], ["privacy", "--cwd", "/app"], ["flake", "tests/a.spec.ts", "--cwd", "/app"], ["problems", "--cwd", "/app"]]);
+    expect(after).toBe(1);
   });
 
   it("y runs what a 'Did you mean' named; a number no command has says so; on Free the list is what works there (the 0.3.9 user stories)", async () => {

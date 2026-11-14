@@ -9,6 +9,8 @@
 //   account without it, and offers to connect this folder's app once Pro is on. `remove` is the runtime CLI's,
 //   followed by what this command's other steps wrote (remove.mjs). `dashboard` is this command's own view
 //   (app.mjs); signed out, in a folder with an app's private link, it prints that link (the runtime CLI's own).
+//   `flake` takes Playwright's arguments, so it reads its own words (flake.mjs); it runs locally, sends nothing and
+//   is free, like `privacy` and `doctor`.
 // - The command is Pro's (the owner's call, 2026-11-13): every command but FREE_COMMANDS passes paywall.mjs
 //   requirePro first (signed out: the sign-in, then Pro with its free trial), the home's commands (ctx.nested)
 //   included. The walk (`genclass`, `setup`) has Pro as its own step right after the sign-in (state.mjs).
@@ -21,6 +23,7 @@
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { c, err, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
+import { isShort, shorten } from "./name.mjs";
 import { width, wrap } from "./tui.mjs";
 
 /** The help's sections: [heading, [command, what it does]...]; usage() lays them out for the terminal's width. */
@@ -44,6 +47,7 @@ const HELP = [
     ['npx genclass ask "..."', "ask about your app in plain words; the model answers from its numbers"],
     ["npx genclass suggest [url]", "what your app is missing, most important first (--yes, --no-model, --all)"],
     ["npx genclass scan <url>", "23 visual checks on one page"],
+    ["npx genclass flake [tests]", "is a failing Playwright test flaky, or is your app racy? Runs your suite on seeded response orders and says which, with the seed that replays it (--runs N, --seed N, --json; free, local)"],
   ]],
   ["Connect", [
     ["npx genclass connections", "where alerts go (Slack, Sentry, PostHog, Datadog, a webhook), GitHub, agent (connections add | test | on | off | remove <kind>)"],
@@ -59,7 +63,22 @@ const HELP = [
     ["npx genclass login", "sign in (logout, whoami)"],
     ["npx genclass remove", "take GenClass out of this app again"],
   ]],
+  ["Trust", [
+    ["npx genclass privacy", "what GenClass sends from your visitors' browsers and keeps on their devices, and the lines that make it send nothing (--out file.md for a privacy policy; free, no sign-in)"],
+    ["npx genclass doctor", "check that everything GenClass added is in place and current, and what to run when it is not"],
+  ]],
 ];
+
+/**
+ * A help line with the command named as this run prints it: `genclass` once installed (name.mjs shortens it), or
+ * `npx genclass@alpha` for a prerelease run through npx (name.mjs useTaggedName): laid out with that name, so the
+ * columns line up after the output is rewritten.
+ */
+function named0(t) {
+  if (isShort()) return shorten(t);
+  const cmd = globalThis.__GENCLASS_CLI__?.cmd ?? "npx genclass";
+  return cmd !== "npx genclass" && cmd.startsWith("npx genclass@") ? String(t).replace(/(^|[^\w-])npx genclass(?![@\w-])/g, `$1${cmd}`) : t;
+}
 
 /**
  * The help, laid out for `cols` columns (the terminal's): a command and its words side by side on a wide terminal,
@@ -73,13 +92,20 @@ export function usage(cols = width()) {
   };
   text("genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.");
   lines.push("");
-  text("The genclass command comes with Pro: 3 days free, then $15 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, remove, help. Free is on the website: https://genclass.dev", "  ");
+  text("The genclass command comes with Pro: 3 days free, then $15 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, privacy, doctor, flake, remove, help. Free is on the website: https://genclass.dev", "  ");
   const side = w >= 78;
-  const col = 30;
+  // the command column fits the longest name as it is printed (npx genclass@alpha suggest [url] is 32 wide)
+  const longest = Math.max(...HELP.flatMap(([, rows]) => rows.map(([cmd]) => named0(cmd).length)));
+  const col = Math.max(30, Math.min(40, longest + 4));
+  // laid out with the name as it is printed: once `genclass` is installed every `npx genclass` is shortened on its
+  // way out (name.mjs), so padding the long form would leave the first column four characters short
+  const named = named0;
   for (const [head, rows] of HELP) {
     lines.push("");
     if (head) lines.push(`  ${head}`);
-    for (const [cmd, what] of rows) {
+    for (const [cmd0, what0] of rows) {
+      const cmd = named(cmd0);
+      const what = named(what0);
       if (side) {
         const words = wrap(what, w - col);
         lines.push(`  ${cmd.padEnd(col - 2)}${words[0] ?? ""}`);
@@ -93,14 +119,16 @@ export function usage(cols = width()) {
   lines.push("");
   text("Options: --app <name>  --range 24h|7d|30d|90d|1y  --all  --json  --cwd <dir>  --yes  --no-browser  --help  --version", "  ");
   lines.push("");
-  text('Run it in your web app\'s folder. npx runs it without installing; "npm install -g genclass" makes it just "genclass". Every part GenClass sets up is listed by "npx genclass status --all". Docs: https://genclass.dev/docs/cli', "  ");
+  // a prerelease is installed by its tag: plain "genclass" on npm is the stable line, which lacks this line's commands
+  const line = /^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/.exec(BUILD.version)?.[1] ?? "";
+  text(`Run it in your web app's folder. npx runs it without installing; "npm install -g genclass${line ? `@${line}` : ""}" makes it just "genclass". Every part GenClass sets up is listed by "npx genclass status --all". Docs: https://genclass.dev/docs/cli`, "  ");
   return lines.join("\n");
 }
 
 /** The help at the default width (80 columns), for tests and anything that wants it as one string. */
 export const USAGE = usage(80);
 
-const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open", print: "print", copy: "copy" };
+const BOOL = { md: "md", fix: "fix", offline: "offline", yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open", print: "print", copy: "copy" };
 const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range", from: "from", to: "to", format: "format", out: "out", agent: "agent" };
 
 /** The flags this file knows, and what is left ({ o, rest }); an unknown flag stays in `rest` for the command it is for. */
@@ -114,7 +142,8 @@ export function parseArgs(argv) {
     if (key && BOOL[key] && eq < 0) o[BOOL[key]] = true;
     else if (key && VALUE[key]) {
       const v = eq > 0 ? a.slice(eq + 1) : argv[++i];
-      if (v === undefined || v === "") return { o, rest, error: `--${key} needs a value` };
+      // a flag where the value should be (privacy --out --json) is a missing value, never a file named "--json"
+      if (v === undefined || v === "" || (eq < 0 && /^--?[A-Za-z]/.test(v))) return { o, rest, error: `--${key} needs a value` };
       o[VALUE[key]] = v;
     } else rest.push(a);
   }
@@ -159,7 +188,11 @@ export async function run(argv, ctx = {}) {
     await (await import("./actions.mjs")).planNow({ ...po, announce: true }).catch(() => "none");
     return code;
   };
-  if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
+  // --no-browser is one of this command's options for every command (the help lists it so): the runtime CLI's
+  // commands that do not take it (connect, init, scan, audit, logout, whoami, remove) get their words without it,
+  // and it is kept in `po` and in what paywall.mjs reads
+  const rargs = args.filter((a) => a !== "--no-browser");
+  if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, rargs);
   if (cmd === "login") {
     // the sign-in only; then Pro (paywall.mjs afterLogin) for an account without it; this folder's app is offered
     // to the account (the runtime login's own question) only once Pro is on, so nothing is written before Pro's card
@@ -174,17 +207,19 @@ export async function run(argv, ctx = {}) {
     if (!(await (await import("./paywall.mjs")).afterLogin(po).catch(() => true))) return code;
     return thenPlan(noConnect ? code : await afterSignIn(po, args, login).catch(() => 1));
   }
-  if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
+  if (cmd === "remove") return (await import("./remove.mjs")).remove(rargs);
+  // free and local, and its words are Playwright's: it reads them itself (flake.mjs)
+  if (cmd === "flake") return (await import("./flake.mjs")).flake(args);
   if (["connect", "init", "scan", "audit"].includes(cmd)) {
     // words the command does not take: its own usage error, before anything is asked of genclass.dev
-    if (!asksHelp && !(await argsRight(cmd, args))) {
-      if (cmd === "connect") return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
-      if (cmd === "init") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args);
-      return (await import("../../runtime/bin/lib/scan.mjs")).run(cmd, args);
+    if (!asksHelp && !(await argsRight(cmd, rargs))) {
+      if (cmd === "connect") return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, rargs);
+      if (cmd === "init") return (await import("../../runtime/bin/lib/init.mjs")).run(cmd, rargs);
+      return (await import("../../runtime/bin/lib/scan.mjs")).run(cmd, rargs);
     }
     // the opt-out the setup prints works for everyone (AGENTS.md rule 8): on an app with GenClass in it, init
     // --no-telemetry (or --telemetry, to undo it) changes that one option, here on this machine
-    const optOut = cmd === "init" && telemetryOnly(args) && !(await import("../../runtime/bin/lib/init.mjs")).inspectProject({ cwd: po.cwd }).fresh;
+    const optOut = cmd === "init" && telemetryOnly(rargs) && !(await import("../../runtime/bin/lib/init.mjs")).inspectProject({ cwd: po.cwd }).fresh;
     const gate = optOut ? 0 : await paid();
     if (gate !== 0) {
       if (cmd !== "scan" && cmd !== "audit") return gate;
@@ -199,17 +234,17 @@ export async function run(argv, ctx = {}) {
       return 2;
     }
   }
-  if (cmd === "connect") return thenPlan(await (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args));
-  if (cmd === "init") return thenPlan(await (await import("../../runtime/bin/lib/init.mjs")).run(cmd, args));
+  if (cmd === "connect") return thenPlan(await (await import("../../runtime/bin/lib/login.mjs")).run(cmd, rargs));
+  if (cmd === "init") return thenPlan(await (await import("../../runtime/bin/lib/init.mjs")).run(cmd, rargs));
   if (cmd === "scan" || cmd === "audit") {
     // this command carries no copy of the runtime's script-tag build, so the page check runs on genclass.dev unless asked otherwise
-    const withHost = args.includes("--local") || args.includes("--hosted") || args.includes("--help") ? args : [...args, "--hosted"];
+    const withHost = rargs.includes("--local") || rargs.includes("--hosted") || rargs.includes("--help") ? rargs : [...rargs, "--hosted"];
     return (await import("../../runtime/bin/lib/scan.mjs")).run(cmd, withHost);
   }
 
   const { o, rest, error } = parseArgs(args);
   if (error) {
-    err(`genclass: ${error}\n\n${usage()}`);
+    err(`genclass: ${error}\n  Every command and option: ${c.cyan("npx genclass help")}`);
     return 2;
   }
   if (o.version || cmd === "version") {
@@ -252,7 +287,8 @@ export async function run(argv, ctx = {}) {
   }
   if (cmd !== null && !COMMANDS.includes(cmd)) {
     const near = nearest(cmd);
-    err(`genclass: unknown command ${c.bold(cmd)}${near ? `. Did you mean ${c.cyan(`npx genclass ${near}`)}?` : ""}\n\n${usage()}`);
+    // one line and the way to the list: a typo is not worth 60 lines of help (the alpha walk, 2026-11-13)
+    err(`genclass: unknown command ${c.bold(cmd)}${near ? `. Did you mean ${c.cyan(`npx genclass ${near}`)}?` : ""}\n  Every command: ${c.cyan("npx genclass help")}`);
     return 2;
   }
   // the commands that take words after their name: sections, picks, subcommands, a question
@@ -261,7 +297,7 @@ export async function run(argv, ctx = {}) {
   const WORDY = ["analytics", "fix", "ask", "connections", "agent", "funnels", "apps", "team"];
   if (flags.length || (words.length && !WORDY.includes(cmd))) {
     const bad = flags[0] ?? words[0];
-    err(`genclass: unknown ${bad.startsWith("-") ? "option" : "command"} ${c.bold(bad)}\n\n${usage()}`);
+    err(`genclass: unknown ${bad.startsWith("-") ? "option" : "command"} ${c.bold(bad)}${cmd ? ` for ${cmd}` : ""}\n  Every command and option: ${c.cyan("npx genclass help")}`);
     return 2;
   }
   // the words of the commands that take them, before anything is asked of genclass.dev
@@ -278,6 +314,9 @@ export async function run(argv, ctx = {}) {
   // printed as before, with no sign-in and no Pro (it is on this machine already)
   const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", [...(o.cwd ? ["--cwd", o.cwd] : []), ...(o.open ? ["--open"] : [])]);
   if (cmd === "dashboard" && !o.json && !o.app && (await privateLinkHere(o.cwd))) return fallback();
+  // read only and local, for everyone: what is sent and kept (privacy.mjs), and whether the setup is whole (doctor.mjs)
+  if (cmd === "privacy") return (await import("./privacy.mjs")).privacy(o);
+  if (cmd === "doctor") return (await import("./doctor.mjs")).doctor(o);
   if (cmd !== null && !["setup", "status"].includes(cmd)) {
     const gate = await paid();
     if (gate !== 0) return gate;
@@ -300,6 +339,19 @@ export async function run(argv, ctx = {}) {
     const home = async (ho) => (await import("./home.mjs")).home(ho, { runCommand: (a) => run(a, { nested: true }), nearest, afterCommand: async () => (await import("./manage.mjs")).freeLine({ cwd: ho.cwd }) });
     // `genclass` alone works from the first run on, and stays current (home.mjs installShortName)
     if (!ctx.nested && !o.yes && !o.json) await (await import("./home.mjs")).installShortName();
+    // a newer genclass on npm: one line, from what yesterday's check found; today's runs alongside (update.mjs)
+    if (!ctx.nested) {
+      try {
+        const up = await import("./update.mjs");
+        if (up.updateAllowed(o)) {
+          const line = up.updateLine(BUILD.version);
+          if (line) out(`\n  ${c.yellow("▲")} ${line.text}`);
+          void up.refreshLatest();
+        }
+      } catch {
+        /* the notice is never in the way */
+      }
+    }
     // `genclass` alone opens the command's prompt straight away (the owner's call, 2026-11-13: "genclass by itself
     // directly takes you to the genclass cli"); `npx genclass` does too once this folder is set up, and walks the
     // setup only before that. The walk itself is `genclass setup`, to change something
@@ -434,13 +486,13 @@ async function privateLinkHere(cwd) {
   }
 }
 
-/** The commands that work without Pro: signing in and out, the plan itself, where things stand, help, the version, and taking GenClass out. */
-export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version"];
+/** The commands that work without Pro: signing in and out, the plan itself, where things stand, help, the version, taking GenClass out, and the local checks that send nothing (privacy, doctor, flake). */
+export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version", "privacy", "doctor", "flake"];
 
 /** Every command, for the "did you mean" of a mistyped one. */
 export const COMMANDS = [
   "setup", "status", "suggest", "dashboard", "problems", "analytics", "events", "health", "report", "export", "fix", "ask", "scan", "connections", "agent", "funnels",
-  "apps", "plan", "upgrade", "profile", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version",
+  "apps", "plan", "upgrade", "profile", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version", "privacy", "doctor", "flake",
 ];
 
 /** The command a mistyped one is closest to (at most two edits away), or null. */

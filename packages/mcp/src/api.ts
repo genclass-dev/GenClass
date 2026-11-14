@@ -3,6 +3,7 @@
 // sessions), and the prompt hook calls it for its digest. Results carry the recorded data; tools.ts turns them into
 // text for the model.
 
+import { originFilter, runOrigin } from "./origin.js";
 import { regressionTest } from "./testgen.js";
 import { replaySpecOf, type Store } from "./store.js";
 import { scenarioOf, settledAfterActs } from "./compare.js";
@@ -19,6 +20,7 @@ function args(p: unknown): Record<string, unknown> {
 export function runSummary(r: Run, now: number) {
   return {
     id: r.id,
+    origin: runOrigin(r),
     route: r.page.route,
     url: r.page.url,
     title: r.page.title,
@@ -38,8 +40,16 @@ export function runSummary(r: Run, now: number) {
   };
 }
 
-export function findingSummary(f: Finding) {
-  return { id: f.id, kind: f.kind, title: f.title, route: f.route, count: f.count, runs: f.runs.length, first: f.first, last: f.last, replays: f.replays.slice(-3) };
+export function findingSummary(f: Finding, origin = f.origin) {
+  return { id: f.id, kind: f.kind, title: f.title, route: f.route, origin, count: f.count, runs: f.runs.length, first: f.first, last: f.last, replays: f.replays.slice(-3) };
+}
+
+/** The `origin` argument as a filter; an error when one was given that is neither an origin nor a port. */
+function originArg(v: unknown): ReturnType<typeof originFilter> {
+  if (v === undefined || v === null || v === "") return null;
+  const f = originFilter(v);
+  if (!f) throw new Error("origin must be a page origin (http://localhost:5173) or a port (5173)");
+  return f;
 }
 
 export function makeApi(store: Store, info: { url: string; port: number }): Api {
@@ -48,36 +58,67 @@ export function makeApi(store: Store, info: { url: string; port: number }): Api 
     const now = store.now();
     switch (m) {
       case "status": {
-        const runs = [...store.runs.values()].sort((x, y) => y.lastSeen - x.lastSeen);
+        const want = originArg(a.origin);
+        const all = [...store.runs.values()].sort((x, y) => y.lastSeen - x.lastSeen);
+        const active = (r: Run) => now - r.lastSeen < ACTIVE_MS && !r.ended;
+        // every app on this machine, newest first, so a filtered answer still says which others there are
+        const origins = new Map<string, { origin: string; runs: number; active: number }>();
+        for (const r of all) {
+          const o = runOrigin(r) ?? "";
+          const e = origins.get(o) ?? { origin: o, runs: 0, active: 0 };
+          e.runs++;
+          if (active(r)) e.active++;
+          origins.set(o, e);
+        }
+        const runs = want ? all.filter((r) => want.test(runOrigin(r))) : all;
         const counts: Record<string, number> = {};
-        for (const f of store.findings.values()) counts[f.kind] = (counts[f.kind] ?? 0) + 1;
+        const byOrigin: Record<string, Record<string, number>> = {};
+        for (const f of store.findings.values()) {
+          const o = store.findingOrigin(f);
+          if (want && !want.test(o)) continue;
+          counts[f.kind] = (counts[f.kind] ?? 0) + 1;
+          const g = (byOrigin[o ?? ""] ??= {});
+          g[f.kind] = (g[f.kind] ?? 0) + 1;
+        }
         const x = store.latestExplore();
         return {
           bridge: info,
+          ...(want ? { origin: want.label } : {}),
+          origins: [...origins.values()],
           pages: runs.slice(0, 12).map((r) => runSummary(r, now)),
-          activePages: runs.filter((r) => now - r.lastSeen < ACTIVE_MS && !r.ended).length,
+          activePages: runs.filter(active).length,
           totalRuns: runs.length,
           findings: counts,
-          explore: x ? { id: x.id, state: x.state, planned: x.plan.length, assigned: x.next, runs: x.runs, route: x.route } : null,
-          replays: store.replays.filter((r) => r.remaining > 0).map((r) => ({ finding: r.finding, remaining: r.remaining, route: r.route })),
+          findingsByOrigin: byOrigin,
+          explore: x ? { id: x.id, state: x.state, planned: x.plan.length, assigned: x.next, runs: x.runs, route: x.route, origin: x.origin } : null,
+          replays: store.replays.filter((r) => r.remaining > 0).map((r) => ({ finding: r.finding, remaining: r.remaining, route: r.route, origin: r.origin })),
         };
       }
       case "findings": {
         const sinceMs = typeof a.sinceMinutes === "number" ? a.sinceMinutes * 60_000 : undefined;
-        return store.ranked({ ...(typeof a.kind === "string" ? { kind: a.kind } : {}), ...(typeof a.route === "string" ? { route: a.route } : {}), ...(sinceMs ? { sinceMs } : {}), limit: typeof a.limit === "number" ? a.limit : 20 }).map(findingSummary);
+        const want = originArg(a.origin);
+        return store
+          .ranked({ ...(typeof a.kind === "string" ? { kind: a.kind } : {}), ...(typeof a.route === "string" ? { route: a.route } : {}), ...(sinceMs ? { sinceMs } : {}), ...(want ? { origin: want.test } : {}), limit: typeof a.limit === "number" ? a.limit : 20 })
+          .map((f) => findingSummary(f, store.findingOrigin(f)));
       }
       case "finding": {
         const f = store.findings.get(String(a.id ?? ""));
         if (!f) return null;
         const run = f.run ? store.runs.get(f.run) : undefined;
         const replay = replaySpecOf(f, run);
+        // what a race was compared against, for the test's assertion of what the page keeps showing: the request-order
+        // baselines, or the run with no added delay when a slow response alone made the difference
+        const ev = f.evidence as Record<string, unknown>;
+        const baseIds: unknown[] = f.kind !== "race" ? [] : ev.delayOnly ? [ev.plainBaseline] : Array.isArray(ev.baselines) ? ev.baselines : [];
+        const baselines = baseIds.map((id) => (typeof id === "string" ? store.runs.get(id) : undefined)).filter((x): x is Run => !!x);
+        const origin = store.findingOrigin(f);
         return {
-          finding: f,
-          run: run ? { ...runSummary(run, now), steps: run.steps.slice(-160), lost: run.lost, order: run.order.slice(-200), witnesses: run.witnesses.slice(0, 20), errors: run.errors.slice(0, 10), snapshot: run.snapshot, detections: run.detections.slice(-5) } : null,
+          finding: origin && !f.origin ? { ...f, origin } : f,
+          run: run ? { ...runSummary(run, now), steps: run.steps.slice(-160), lost: run.lost, order: run.order.slice(-200), witnesses: run.witnesses.slice(0, 20), errors: run.errors.slice(0, 10), snapshot: run.snapshot, detections: run.detections.slice(-5), ...(run.ops ? { ops: run.ops } : {}) } : null,
           scenario: run ? (run.steps.filter((s) => s.k === "act") as ActStep[]) : [],
           replay,
           runGone: !!f.run && !run,
-          test: replay ? regressionTest(f, run, replay) : null,
+          test: replay ? regressionTest(f, run, replay, baselines) : null,
         };
       }
       case "explore.start": {
@@ -95,8 +136,10 @@ export function makeApi(store: Store, info: { url: string; port: number }): Api 
         const r = store.reportExplore(typeof a.id === "string" ? a.id : undefined);
         if (!r) return null;
         const runs = r.session.runs.map((id) => store.runs.get(id)).filter((x): x is Run => !!x);
-        return { session: r.session, runs: runs.map((x) => ({ ...runSummary(x, now), scenario: scenarioOf(x) })), groups: r.groups, findings: r.findings.map(findingSummary) };
+        return { session: r.session, runs: runs.map((x) => ({ ...runSummary(x, now), scenario: scenarioOf(x) })), groups: r.groups, findings: r.findings.map((f) => findingSummary(f)) };
       }
+      case "explore.progress":
+        return store.exploreProgress(typeof a.id === "string" ? a.id : undefined);
       case "explore.stop":
         return store.stopExplore();
       case "replay.arm":

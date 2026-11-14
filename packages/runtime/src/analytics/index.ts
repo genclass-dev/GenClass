@@ -831,10 +831,22 @@ export function startAnalytics(rt: RuntimeImpl, t: TelemetryClient, ignored: (e:
   rt.addTeardown(off);
   return {
     stop() {
-      // consent withdrawn: nothing more is recorded, the counts not sent yet are dropped and the visit flag removed
+      // consent withdrawn: nothing more is recorded, the counts not sent yet are dropped (those queued for telemetry
+      // too: sent with diagnostics, which may go on without analytics) and the visit flag removed
       view = 0;
       off();
       store(null);
+      // the events queued before now (TelemetryClient numbers every event it queues, `seq`): a later grant's
+      // analytics queue theirs after it, which are kept
+      const upTo = t["seq"] ?? Infinity;
+      const unqueue = () => {
+        const q = t["queue"] ?? [];
+        for (let i = q.length; i--; ) if (q[i].t === "interactions" && !((q[i].seq as number) >= upTo)) q.splice(i, 1);
+      };
+      unqueue();
+      // a request in flight that is refused puts its events back in the queue (TelemetryClient back-off), maybe after
+      // a new grant
+      void Promise.all([...(t["pending"] ?? [])]).then(unqueue, unqueue);
     },
   };
 }

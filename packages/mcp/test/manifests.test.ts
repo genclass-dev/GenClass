@@ -13,12 +13,13 @@
 // stub otherwise; from npm in the daily sync), and nothing Anthropic's directory holds a plugin for: no package.json,
 // no lockfile, nothing to install.
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CLIENTS, PACKAGE, RUNTIME_VERSION, hookCommand, installMarkdown, pinned, serverConfig } from "../src/clients.js";
 import { VERSION } from "../src/http.js";
+import { Store } from "../src/store.js";
 import { INSTRUCTIONS, TOOLS } from "../src/tools.js";
 
 const pkgDir = join(__dirname, "..");
@@ -156,6 +157,45 @@ describe("versions and pinned launchers (every manifest names package.json's ver
   });
 });
 
+/** What test/fixtures/record-released.mjs records of a release: its version and tag, its arguments and explore actions, its answers. */
+interface Released {
+  release: string;
+  tag: string | null;
+  apps: string[];
+  arguments: Record<string, string[]>;
+  exploreActions: string[];
+  calls: { tool: string; args: Record<string, unknown>; isError: boolean; text: string }[];
+}
+
+/** Semver order of two versions (`0.2.2`, `0.3.0-beta.1`): negative when a comes first. */
+function compareVersions(a: string, b: string): number {
+  const parse = (v: string) => {
+    const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(v);
+    if (!m) throw new Error(`not a version: ${v}`);
+    return { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4]?.split(".") ?? [] };
+  };
+  const x = parse(a);
+  const y = parse(b);
+  for (let i = 0; i < 3; i++) if (x.core[i] !== y.core[i]) return x.core[i] - y.core[i];
+  if (!x.pre.length || !y.pre.length) return y.pre.length - x.pre.length;
+  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
+    const [p, q] = [x.pre[i], y.pre[i]];
+    if (p === undefined || q === undefined) return p === undefined ? -1 : 1;
+    if (p === q) continue;
+    const [m, n] = [/^\d+$/.test(p), /^\d+$/.test(q)];
+    return m && n ? Number(p) - Number(q) : m ? -1 : n ? 1 : p < q ? -1 : 1;
+  }
+  return 0;
+}
+
+/** The versions a routine bump moves `v` to: the next prerelease and the release (from a prerelease), the next patch, minor and major. */
+function nextVersions(v: string): string[] {
+  const m = /^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/.exec(v)!;
+  const [x, y, z] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const pre = m[4] ? [`${x}.${y}.${z}-${m[4].replace(/\d+$/, (d) => String(Number(d) + 1))}`, `${x}.${y}.${z}`] : [];
+  return [...pre, `${x}.${y}.${z + 1}`, `${x}.${y + 1}.0`, `${x + 1}.0.0`].filter((n) => compareVersions(n, v) > 0);
+}
+
 /** The symptom words a client matches on: in the instructions' first 500 characters and early in the skill's description. */
 const SYMPTOMS = ['"sometimes"', '"randomly"', '"only in production"', '"on slow connections"', '"flips back"', "stale or old results", "lost edits", "double submits", "scrolls sideways"];
 
@@ -168,6 +208,13 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
     if (i > 0) fields[line.slice(0, i).trim()] = line.slice(i + 1).trim();
   }
   const body = parts?.[2] ?? "";
+  // the skill's paragraphs and numbered steps, each on one line
+  const chunks = body.split(/\n\s*\n|\n(?=\s*\d+\. )/).map((c) => c.replace(/\s+/g, " "));
+  // what a released @genclass/mcp answers with two apps on this machine, recorded from its own code by
+  // test/fixtures/record-released.mjs (its arguments, its explore actions, its answers): 0.2.2, the newest release
+  // without explore wait and origin, which a project set up before them still pins. The checks below go by what the
+  // recorded release lacks, so a version bump (`npm run sync`) needs no new recording
+  const released = JSON.parse(readFileSync(join(pkgDir, "test", "fixtures", "released-mcp.json"), "utf8")) as Released;
 
   it("the frontmatter parses: name genclass, one-line description of at most 1,024 characters (Claude Code's limit) with the symptom words early", () => {
     expect(parts, "frontmatter between --- lines").not.toBeNull();
@@ -215,6 +262,114 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
     expect(flat).toContain("runs for every visitor and sends anonymous diagnostics from public hosts by default");
     expect(flat).toContain("a new finding is not a request to act on it");
   });
+
+  it("the skill's explore load counts are the ones the tool arms, and it waits with the tool instead of a shell (a real run lost time over both)", () => {
+    const s = new Store();
+    const slow = s.armExplore({ runs: 6, delay: { minMs: 0, maxMs: 600 } }).plan;
+    const plain = s.armExplore({ runs: 6 }).plan;
+    expect(slow.filter((p) => p.order === "fifo")).toHaveLength(3);
+    expect(plain.filter((p) => p.order === "fifo")).toHaveLength(2);
+    const flat = body.replace(/\s+/g, " ");
+    expect(flat).toContain("2 baselines in request order, a third with no added delay (because of `slow_ms`), then the `runs` reordered ones.");
+    expect(flat).toContain(`That is ${slow.length} loads here, and ${plain.length} for \`runs: 6\` without \`slow_ms\`: go by the number the answer gives.`);
+    expect(flat).toContain(`--repeat-each ${slow.length} --workers 1`);
+    expect(flat).toContain('`genclass_explore {action:"wait"}` returns once every armed load is in');
+    expect(flat).toContain("do not sleep in a shell instead");
+    expect(INSTRUCTIONS).toContain('genclass_explore {action:"wait"}, which returns once every armed load is in');
+    expect(TOOLS.find((t) => t.name === "genclass_explore")!.description).toContain("instead of sleeping in a shell");
+  });
+
+  /**
+   * The skill's fallbacks for a server release without what it names (finding 45), against `rel`'s recording with this
+   * package at `version`: the recording is of a release up to that version, and every paragraph or step that names an
+   * explore action or the `origin` argument `rel` lacks says what to do without it, explore wait and `origin`
+   * included when `rel` lacks them. Returns what those fallbacks cover; nothing is asked of them for what `rel` has, so
+   * the checks need no new recording when the version moves.
+   */
+  function fallbacksFor(rel: Released, version: string): string[] {
+    expect(compareVersions(rel.release, version), `recorded ${rel.release}, package ${version}`).toBeLessThanOrEqual(0);
+    const hasOrigin = ["genclass_status", "genclass_findings"].every((t) => rel.arguments[t]?.includes("origin"));
+    const covered = new Set<string>();
+    for (const c of chunks) {
+      const newer = [...c.matchAll(/genclass_explore \{action:"(\w+)"/g)].map((m) => m[1]).filter((a) => !rel.exploreActions.includes(a));
+      const origin = !hasOrigin && /`origin`/.test(c) && /genclass_(?:status|findings)/.test(c);
+      if (!newer.length && !origin) continue;
+      expect(c, c.slice(0, 100)).toMatch(/An older release of the server (?:has no|takes no)/);
+      if (newer.includes("wait")) expect(c).toContain("call `genclass_status`");
+      for (const a of newer) covered.add(a);
+      if (origin) covered.add("origin");
+    }
+    for (const a of [...(rel.exploreActions.includes("wait") ? [] : ["wait"]), ...(hasOrigin ? [] : ["origin"])]) expect([...covered], `${rel.release} lacks ${a}`).toContain(a);
+    return [...covered].sort();
+  }
+
+  /** The skill's advice for a release without `origin` or explore wait, against `rel`'s recorded answers (nothing to check for what `rel` has). */
+  function adviceOnAnswers(rel: Released): void {
+    const answer = (tool: string, args: Record<string, unknown>) => rel.calls.find((c) => c.tool === tool && JSON.stringify(c.args) === JSON.stringify(args));
+    // the explore wait the other fallback says it rejects: it does
+    if (!rel.exploreActions.includes("wait")) expect(answer("genclass_explore", { action: "wait" })?.isError, `${rel.release} refuses wait`).toBe(true);
+    if (rel.arguments.genclass_findings?.includes("origin")) return;
+    const c = chunks.find((x) => /An older release of the server takes no `origin`/.test(x));
+    expect(c, "the origin fallback").toBeDefined();
+    const fallback = c!.slice(c!.indexOf("An older release"));
+    // a tool whose recorded answers (without an error) name every app's page URL
+    const showsUrls = (tool: string) => rel.apps.every((a) => rel.calls.some((x) => x.tool === tool && !x.isError && x.text.includes(a)));
+    const named = [...new Set([...fallback.matchAll(/`(genclass_\w+)`/g)].map((m) => m[1]))];
+    expect(named.filter(showsUrls), `${named.join(", ")}: none shows the apps' URLs on ${rel.release}`).not.toEqual([]);
+    // every tool a sentence of the fallback names next to "URL" shows them (0.2.2's genclass_status shows routes only)
+    for (const s of fallback.split(/(?<=[.;:])\s/)) if (/\bURL\b/.test(s)) for (const m of s.matchAll(/`(genclass_\w+)`/g)) expect(showsUrls(m[1]), `${m[1]} in "${s}"`).toBe(true);
+    // the line it points at is in that release's answer, with the app's URL on it
+    const label = /\(the "([^"]+)" line\)/.exec(fallback)?.[1];
+    if (label) for (const [i, a] of rel.apps.entries()) expect(answer("genclass_explain", { id: `f${i + 1}` })?.text.split("\n").find((l) => l.includes(label)), label).toContain(a);
+    // an origin it does not take: answered, not refused, with every app's findings, so the agent cannot wait for an
+    // error to know; the fallback says what comes back and how to tell that release by its arguments
+    const asked = answer("genclass_findings", { origin: "5173" })!;
+    if (!asked.isError) {
+      expect(asked.text).toBe(answer("genclass_findings", {})?.text);
+      expect(fallback).toContain("returns every app's findings");
+      expect(fallback).not.toMatch(/takes no `origin` and rejects/);
+      expect(fallback).toContain("lists no such argument");
+    }
+  }
+
+  it("the skill also works with the released server a project may still pin: what that release lacks comes with what to do without it (finding 45)", () => {
+    // the explore actions and the genclass_status / genclass_findings arguments of the recorded release, from its own
+    // code: `genclass` from before explore wait and origin wrote this skill's procedure next to an .mcp.json pinned to it
+    expect(released.tag, "test/fixtures/released-mcp.json is recorded from a release's tag").toBe(`mcp-v${released.release}`);
+    const covered = fallbacksFor(released, V);
+    // and each fallback the skill carries is checked against it: the recording is of a release that lacks what they
+    // name (a newer recording would leave them unchecked; mcp-v0.2.2 stays the one, whatever the version)
+    const fallbacks = chunks.filter((c) => /An older release of the server/.test(c));
+    expect(covered.length, `the skill's ${fallbacks.length} fallbacks are for what ${released.release} has: record mcp-v0.2.2 instead`).toBeGreaterThanOrEqual(fallbacks.length);
+  });
+
+  it("the skill's advice for a release without `origin` works on that release's recorded answers: where each app's URL shows, what an origin it does not take returns (finding 45)", () => {
+    adviceOnAnswers(released);
+  });
+
+  it("a version bump needs no new recording, and a release with explore wait and origin records without hanging (finding 45)", () => {
+    // the routine bump (`npm run sync` after a new version in package.json) leaves the recording as it is
+    const now = fallbacksFor(released, V);
+    for (const next of nextVersions(V)) expect(fallbacksFor(released, next), next).toEqual(now);
+    // this package's own server, recorded as a release would be: its wait is not called (it blocks, and with the
+    // recorder's fixed clock never returned), and nothing is asked of the fallbacks for what it has
+    const dir = mkdtempSync(join(tmpdir(), "gc-own-release-"));
+    const file = join(dir, "own.json");
+    const t0 = Date.now();
+    try {
+      execFileSync(process.execPath, [join(pkgDir, "test", "fixtures", "record-released.mjs"), "--src", join(pkgDir, "src"), "--out", file], { timeout: 60_000, stdio: "pipe" });
+      expect(Date.now() - t0).toBeLessThan(30_000);
+      const own = JSON.parse(readFileSync(file, "utf8")) as Released;
+      expect(own.release).toBe(VERSION);
+      expect(own.exploreActions).toContain("wait");
+      expect(own.arguments.genclass_findings).toContain("origin");
+      expect(own.calls.filter((c) => c.tool === "genclass_explore").map((c) => c.args.action)).toEqual(["start"]);
+      for (const v of [V, ...nextVersions(V)]) expect(fallbacksFor(own, v), v).toEqual([]);
+      adviceOnAnswers(own);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 90_000);
 
   it("the instructions agree with the skill on what waits for a yes", () => {
     expect(INSTRUCTIONS).toContain("genclass_setup prints an install line and the dev-only lines; show them to the user and wait for a yes before you run or add them.");

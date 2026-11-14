@@ -20,6 +20,7 @@ import { readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
 import { detectProject } from "../../runtime/bin/lib/detect.mjs";
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { accountLabel, inspectProject } from "../../runtime/bin/lib/init.mjs";
+import { planAgentLink, seeItNow } from "./agentlink.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { gitInfo, renamedRepo } from "./git.mjs";
 import { readNotes } from "./store.mjs";
@@ -41,6 +42,7 @@ export const WORKFLOW_PATH = ".github/workflows/genclass.yml";
  * @property {string} more     the fuller explanation (shown when the list is expanded)
  * @property {string | null} run    the command that does it, or null when a person has to do something else
  * @property {string | null} human  what a person has to do that no command can (approve in a browser, deploy)
+ * @property {string} [now]   what can be seen right now while the step waits (the dashboard: the dev server and its console)
  */
 
 const read = (file) => {
@@ -177,6 +179,15 @@ export async function readState(o = {}, deps = {}) {
   // what this command remembers about the project between runs (store.mjs): its site, the last suggestions, the plan chosen
   const notes = readNotes(cwd);
   const isApp = !project.refused && !!project.framework;
+  // the coding agent: GenClass's MCP server in a configuration here (or at the repository's root), and the dev page's
+  // link to it (agentlink.mjs: read from the files, nothing written)
+  const agents = [...new Set([...agentConfigs(cwd), ...(git.root && git.root !== cwd ? agentConfigs(git.root) : [])])];
+  let link = null;
+  try {
+    link = isApp ? planAgentLink(st) : null;
+  } catch {
+    link = null;
+  }
 
   // 1. the account
   steps.push({
@@ -276,7 +287,8 @@ export async function readState(o = {}, deps = {}) {
   // (the owner's call, 2026-11-13: the paywall for everyone, and a paying account clicks Continue with Pro), and an
   // app past the ones its plan covers waits there (past Free's one: Pro; past Pro's: Enterprise, by email). An app of
   // a team the account is in has nothing to choose: its owner does.
-  const appOffer = appPlanOffer(app, me?.offer ?? null, accountPaid(me));
+  // a genclass.dev that sells nothing (self-hosted, or a local `wrangler dev`: cli.via "open") has no plan page to wait on
+  const appOffer = me?.cli?.via === "open" ? null : appPlanOffer(app, me?.offer ?? null, accountPaid(me));
   steps.push({
     id: "app-plan",
     title: "App plan",
@@ -295,7 +307,7 @@ export async function readState(o = {}, deps = {}) {
             : `Free covers ${appOffer.free.apps === 1 ? "one app" : `${appOffer.free.apps ?? 1} apps`}: this one needs ${appOffer.plan.name}`
           : appOffer.current
             ? `covered by ${appOffer.current}`
-            : `${appOffer.plan.name}, ${appOffer.price}`
+            : appOffer.price ? `${appOffer.plan.name}, ${appOffer.price}` : appOffer.plan.name
         : `${app.plan.name}${app.plan.source === "comp" ? " (set up by GenClass)" : ""}`,
     why: appOffer?.needs && appOffer.paying
       ? "Your plan covers no more apps. More apps come with Enterprise, by email."
@@ -318,9 +330,10 @@ export async function readState(o = {}, deps = {}) {
     state: !isApp ? "optional" : app?.last_event ? "done" : app ? "waiting" : "todo",
     detail: !isApp ? "" : app?.last_event ? `last page ${ago(app.last_event, now)}` : app ? "deploy, then open your site once" : "",
     why: "It fills once your live site has been opened.",
-    more: "GenClass sends nothing from localhost, so the dashboard starts with your deployed site. Deploy as you normally do, open the site, and run npx genclass again.",
+    more: `GenClass sends nothing from localhost, so the dashboard starts with your deployed site. Deploy as you normally do, open the site, and run npx genclass again. ${seeItNow(project, { agent: agents.length > 0 })}`,
     run: null,
     human: "deploy your app and open the live site once",
+    now: seeItNow(project, { agent: agents.length > 0 }),
     // nothing to watch for until the app is in the account: the walk does not offer it before
     after: "runtime",
   });
@@ -366,16 +379,27 @@ export async function readState(o = {}, deps = {}) {
     more: `The app reads the race files the test workflow uploads and posts one check and one comment, with the steps to see the problem. You install it on GitHub in your browser; this command only waits for GitHub's answer.${git.renamedFrom ? ` GitHub now calls this repository ${git.github} (this checkout's remote still says ${git.renamedFrom}); to update it: git remote set-url origin https://github.com/${git.github}.git` : ""}`,
   });
 
-  // 6. the coding agent
-  const agents = [...new Set([...agentConfigs(cwd), ...(git.root && git.root !== cwd ? agentConfigs(git.root) : [])])];
+  // 6. the coding agent: done once its MCP server is configured and the dev page is linked to it, or the link cannot
+  // be planned here (a framework agentlink.mjs leaves to the person, GenClass not added yet): then the MCP server is
+  // all this step writes, and it says what to add
+  const linkOpen = link?.state === "planned";
+  const linkFiles = linkOpen ? link.changes.map((ch) => ch.rel) : [];
+  // the link's own file and the entry that imports it (agentlink.mjs planAgentLink), or Astro's layouts
+  const linkMade = linkOpen ? link.changes.filter((ch) => ch.kind === "create").map((ch) => ch.rel) : [];
+  const linkEdited = linkOpen ? link.changes.filter((ch) => ch.kind !== "create").map((ch) => ch.rel) : [];
+  const linkWhere = linkMade.length
+    ? `A dev-only file, ${linkMade.join(", ")}${linkEdited.length ? `, imported right after GenClass's import in ${linkEdited.join(", ")},` : ""}`
+    : `A dev-only line after GenClass's import in ${linkFiles.join(", ")}`;
   steps.push({
     id: "agent",
     title: "Coding agent",
-    doing: "Connect your coding agent",
-    state: !isApp ? "optional" : agents.length ? "done" : "todo",
-    detail: agents.length ? agents.join(", ") : "",
-    why: "Adds GenClass's tools and its skill to Claude Code, Cursor and other agents in this project.",
-    more: "It adds GenClass's MCP server to the project's agent configuration (.mcp.json) and the skill that tells the agent how to use it (.claude/skills/genclass/SKILL.md). The server runs on your machine and lets an agent ask what went wrong on a page, replay it and check its fix.",
+    doing: agents.length && linkOpen ? "Link your dev page to your coding agent" : "Connect your coding agent",
+    state: !isApp ? "optional" : agents.length && !linkOpen ? "done" : "todo",
+    detail: agents.length ? `${agents.join(", ")}${link?.state === "linked" ? " · dev page linked" : linkOpen ? " · dev page not linked yet" : link?.state === "manual" ? " · dev page: link by hand" : ""}` : "",
+    why: agents.length && linkOpen
+      ? `${linkWhere} lets your agent see the page you run. You see it first.`
+      : `Adds GenClass's tools and its skill to Claude Code, Cursor and other agents in this project${linkOpen ? ", and links your dev page to them" : ""}.`,
+    more: `It adds GenClass's MCP server to the project's agent configuration (.mcp.json) and the skill that tells the agent how to use it (.claude/skills/genclass/SKILL.md). The server runs on your machine and lets an agent ask what went wrong on a page, replay it and check its fix.${linkOpen ? ` It also links your dev page to it: ${linkWhere.replace(/^A/, "a")} calls connectAgent in development builds only (a production build leaves it out, and npx genclass remove takes it out), so the agent sees each click, request and response on localhost and can run them again in another order.` : link?.state === "manual" ? ` The link from your dev page to it is not added here (${link.why}): ask the agent "is GenClass connected?" and it shows the dev-only lines for this app.` : ""}`,
     run: "npx genclass setup",
     human: null,
   });
@@ -408,6 +432,9 @@ export async function readState(o = {}, deps = {}) {
     host: host.overridden && !host.error ? host.host : null,
     app: { name: app?.name ?? project.name ?? null, framework: project.label || null, isApp, token: st.token ?? null, dashboardUrl: app?.dashboard_url ?? st.local?.dashboardUrl ?? null, site: notes.site ?? null, ...(isApp ? {} : { below: appsBelow(cwd) }) },
     account: me ? { label: accountLabel(me.account), plan: me.plan, suggestions: me.suggestions, billingUrl: me.billingUrl, github: me.github, offer: me.offer ?? null, cli: me.cli ?? null, teamPlan: me.account?.teamPlan ?? null } : null,
+    /** the saved session's account when genclass.dev could not be asked (offline): the Account step counts it as
+     * done, so the header names it (as not checked); `account` stays null, since nothing confirmed the session */
+    savedAccount: !me && creds && offline && offline !== "expired" ? accountLabel(creds.account) : null,
     signedIn: !!me,
     /** the account's apps as genclass.dev lists them ([] signed out) */
     projects: me?.projects ?? [],
@@ -461,7 +488,7 @@ export function stateJson(s) {
     account: s.account ? { label: s.account.label, plan: s.account.plan } : null,
     github: s.git.github,
     // a step that does not apply here (optional: no git repository, no tests) has nothing for an agent to run
-    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.blocking === false && x.state !== "done" ? "optional" : x.state, detail: x.detail, run: x.state === "done" || x.state === "optional" || x.blocking === false ? null : forAgent(x.run), human: x.state === "done" || x.state === "optional" ? null : x.human })),
+    steps: s.steps.map((x) => ({ id: x.id, title: x.title, state: x.blocking === false && x.state !== "done" ? "optional" : x.state, detail: x.detail, run: x.state === "done" || x.state === "optional" || x.blocking === false ? null : forAgent(x.run), human: x.state === "done" || x.state === "optional" ? null : x.human , ...(x.now && x.state === "waiting" ? { now: x.now } : {}) })),
     next: agentNext ? { id: agentNext.id, title: agentNext.doing, run: forAgent(agentNext.run), human: agentNext.human, why: agentNext.why } : null,
     complete: s.complete,
   };

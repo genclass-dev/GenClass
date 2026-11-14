@@ -153,6 +153,103 @@ describe("mcp: genclass_setup installs the newest runtime line at the exact vers
   });
 });
 
+describe("mcp: genclass_setup in a project that already starts GenClass with /auto (README Install)", () => {
+  /** A Vite project with the runtime installed and `files` written (path → text). */
+  const project = (files: Record<string, string>, deps: Record<string, string> = { vite: "^7" }) => {
+    const dir = mkdtempSync(join(tmpdir(), "gc-auto-"));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "app", dependencies: { "@genclass/runtime": `^${RUNTIME_VERSION}`, ...deps } }));
+    for (const [f, text] of Object.entries(files)) {
+      mkdirSync(join(dir, f, ".."), { recursive: true });
+      writeFileSync(join(dir, f), text);
+    }
+    return dir;
+  };
+  const first = (t: string) => /```ts\n([\s\S]*?)```/.exec(t)![1];
+  const MAIN = 'import "@genclass/runtime/auto"; // genclass:init\nimport { createRoot } from "react-dom/client";\n';
+
+  it("a bare import: the static form first, behind import.meta.env.DEV, and GenClass.init() said to return the runtime /auto started", () => {
+    const t = setupText(project({ "src/main.tsx": MAIN }));
+    expect(t).toContain('@genclass/runtime is installed. src/main.tsx starts it: import "@genclass/runtime/auto".');
+    expect(t).toContain("1. In src/main.tsx, below that import:");
+    expect(first(t)).toBe('import { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\n\n// development builds only: a production build drops the agent link\nif (import.meta.env.DEV) connectAgent(GenClass.init());\n');
+    expect(t).toContain("GenClass.init() starts nothing new here: it returns the runtime @genclass/runtime/auto already started, with the options it read.");
+    // the other form, with a genclass binding, comes second
+    expect(t).toContain('if (import.meta.env.DEV) void import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));');
+    expect(t.indexOf("connectAgent(GenClass.init())")).toBeLessThan(t.indexOf("connectAgent(genclass)"));
+    expect(t).toContain("@genclass/runtime/auto keeps running in every build, as it does now; only the agent link is for development.");
+  });
+
+  it("a bound import: the dynamic form with that name first; the mode entry's name is kept", () => {
+    const t = setupText(project({ "src/main.ts": 'import gc from "@genclass/runtime/auto/guard";\n' }));
+    expect(t).toContain('src/main.ts starts it: import gc from "@genclass/runtime/auto/guard" (gc is that runtime).');
+    expect(first(t)).toBe('// development builds only: a production build drops the agent link\nif (import.meta.env.DEV) void import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(gc));\n');
+    expect(t).toContain("GenClass.init() starts nothing new here: it returns the runtime @genclass/runtime/auto/guard already started");
+  });
+
+  it("Next.js (genclass.ts beside instrumentation-client.ts): the development check is process.env.NODE_ENV", () => {
+    const t = setupText(project({ "instrumentation-client.ts": 'if (process.env.NEXT_PUBLIC_GENCLASS === "on") require("./genclass");\n', "genclass.ts": 'import genclass from "@genclass/runtime/auto";\n' }, { next: "^15" }));
+    expect(t).toContain("genclass.ts starts it");
+    expect(first(t)).toContain('if (process.env.NODE_ENV === "development") void import("@genclass/runtime/agent")');
+  });
+
+  it("connectAgent already there: nothing to add, only how to check it", () => {
+    const link = 'import { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\nif (import.meta.env.DEV) connectAgent(GenClass.init());\n';
+    const t = setupText(project({ "src/main.tsx": MAIN, "src/dev.ts": link }));
+    expect(t).toContain("src/main.tsx starts it with @genclass/runtime/auto, and src/dev.ts already calls connectAgent.");
+    expect(t).not.toContain("```ts");
+    const same = setupText(project({ "src/main.tsx": `${MAIN}if (import.meta.env.DEV) void import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));\n` }));
+    expect(same).toContain("src/main.tsx starts it with @genclass/runtime/auto and already calls connectAgent.");
+  });
+
+  it("a generated regression test, a fixture or a link commented out is not the link: the lines to add stay (finding 90)", () => {
+    // what genclass_explain's test says in its assertion message, saved under src/ with the app
+    const spec = 'expect(await page.evaluate(() => !!(window as any).__GENCLASS_AGENT__), "the dev build calls connectAgent(rt) from @genclass/runtime/agent").toBe(true);\n';
+    const commented = `${MAIN}// import { connectAgent } from "@genclass/runtime/agent";\n// connectAgent(GenClass.init());\n/* connectAgent(rt) from "@genclass/runtime/agent" */\n`;
+    for (const files of [
+      { "src/main.tsx": MAIN, "src/e2e/genclass-f3.spec.ts": spec },
+      { "src/main.tsx": MAIN, "src/tests/agent.ts": spec },
+      { "src/main.tsx": MAIN, "src/fixtures/link.ts": 'import { connectAgent } from "@genclass/runtime/agent";\nconnectAgent(rt);\n' },
+      { "src/main.tsx": commented },
+      // a call without the agent entry in its file is some other connectAgent
+      { "src/main.tsx": MAIN, "src/other.ts": "export function connectAgent(x) { return x; }\nconnectAgent(1);\n" },
+    ]) {
+      const t = setupText(project(files));
+      expect(t, Object.keys(files).join(", ")).not.toContain("already calls connectAgent");
+      expect(t).toContain("1. In src/main.tsx, below that import:");
+    }
+  });
+
+  it("node_modules and build output are not read; without an /auto import the usual lines stay", () => {
+    const t = setupText(project({ "node_modules/x/src/main.ts": MAIN, "dist/main.js": MAIN }));
+    expect(t).not.toContain("starts it");
+    expect(first(t)).toContain("const rt = GenClass.init();");
+  });
+
+  it("Vite is found by any of its config file names, and SvelteKit and Astro are Vite: import.meta.env.DEV", () => {
+    for (const f of ["vite.config.mts", "vite.config.mjs", "vite.config.cjs"]) expect(first(setupText(project({ [f]: "export default {}" }, {})))).toContain("if (import.meta.env.DEV) {");
+    expect(first(setupText(project({}, { "@sveltejs/kit": "^2" })))).toContain("if (import.meta.env.DEV) {");
+    expect(setupText(project({}, { "@sveltejs/kit": "^2" }))).toContain("In src/hooks.client.ts (or .js), at the top:");
+    expect(first(setupText(project({}, { astro: "^5" })))).toContain("if (import.meta.env.DEV) {");
+    expect(first(setupText(project({}, {})))).toContain('if (process.env.NODE_ENV !== "production") {');
+  });
+
+  // a real build of the /auto forms (needs the runtime built): the agent link is dropped from production, kept in development
+  const built = existsSync(join(__dirname, "..", "..", "runtime", "dist", "auto.js"));
+  it.skipIf(!built)("a production build of either /auto form has no agent link; a development build has it", async () => {
+    const { build } = await import("esbuild");
+    for (const files of [{ "src/main.tsx": MAIN }, { "src/main.tsx": 'import genclass from "@genclass/runtime/auto";\n' }]) {
+      const t = setupText(project(files));
+      const head = files["src/main.tsx"].includes("genclass from") ? 'import genclass from "@genclass/runtime/auto";\n' : 'import "@genclass/runtime/auto";\n';
+      const bundle = async (dev: boolean) => {
+        const r = await build({ stdin: { contents: `${head}${first(t)}`, resolveDir: __dirname, loader: "ts" }, bundle: true, minify: true, format: "esm", splitting: false, write: false, define: { "import.meta.env.DEV": String(dev) }, external: ["onnxruntime-web"], logLevel: "silent" });
+        return r.outputFiles.map((o) => o.text).join("\n");
+      };
+      expect(await bundle(false)).not.toContain("__GENCLASS_AGENT__");
+      expect(await bundle(true)).toContain("__GENCLASS_AGENT__");
+    }
+  });
+});
+
 describe("mcp: protocol", () => {
   it("initialize: version negotiation, instructions, tools and the channel capability", async () => {
     const { c, init } = await start();

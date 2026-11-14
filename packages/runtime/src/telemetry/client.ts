@@ -23,7 +23,7 @@
 //   event (modelState "skipped") followed by a `model` event with the reason.
 
 import type { RuntimeImpl } from "../runtime.js";
-import type { ActionRecord, Answer, Decision, ModelStatus, TelemetryStatus } from "../types.js";
+import type { ActionRecord, Answer, Decision, ModelStatus, SessionSummary, TelemetryStatus } from "../types.js";
 import { REDACTED, fnv1a, normalizePath } from "../util.js";
 import { RUNTIME_VERSION } from "../version.js";
 import { TELEMETRY_SCHEMA, type TelemetryConfig } from "./config.js";
@@ -156,6 +156,11 @@ export class TelemetryClient implements TelemetryStatus {
    * `interactions` event here, so it goes out in the same flush (src/analytics/index.ts).
    */
   pre?: (reason: string) => void;
+  /**
+   * Set by the consent chunk (src/consent.ts) when this client starts after the page did (a diagnostics grant): the
+   * summary's `runtime` counts are read from it, so they cover the session from that point, not the page load.
+   */
+  declare since?: { summary(): SessionSummary };
   private readonly c = {
     decisions: 0,
     acted: 0,
@@ -573,33 +578,16 @@ export class TelemetryClient implements TelemetryStatus {
     this.lastSummaryAt = this.rt.clock.now();
     let rs: ReturnType<RuntimeImpl["summary"]> | undefined;
     try {
-      rs = this.rt.summary();
+      rs = (this.since ?? this.rt).summary();
     } catch {
       /* ignore */
     }
-    const c = this.c;
     this.push({
       t: "summary",
       reason,
-      counts: {
-        decisions: c.decisions,
-        acted: c.acted,
-        detections: c.detections,
-        possibleDetections: c.possibleDetections,
-        actionsOk: c.actionsOk,
-        actionsFailed: c.actionsFailed,
-        lateReverts: c.lateReverts,
-        undos: c.undos,
-        vetoes: c.vetoes,
-        breakerTrips: c.breakerTrips,
-        byTrigger: { ...c.byTrigger },
-        byDiagnosis: { ...c.byDiagnosis },
-        byAction: { ...c.byAction },
-        detectionsByDiagnosis: { ...c.detectionsByDiagnosis },
-        limits: { ...c.limits },
-        modelErrors: { ...c.modelErrors },
-        failOpen: { ...c.failOpen },
-      },
+      // every counter of `c`, in the order it declares them, each tally copied (written out key by key this cost the
+      // first load 72 B gzip; test/telemetry.test.ts pins the keys and their order)
+      counts: Object.fromEntries(Object.entries(this.c).map(([k, v]) => [k, typeof v == "number" ? v : { ...v }])),
       runtime: rs
         ? {
             model: compact({ state: rs.model.state, p50Ms: r4(rs.model.p50Ms), p95Ms: r4(rs.model.p95Ms), decisions: rs.model.decisions, dropped: rs.model.dropped, hiddenSkipped: rs.model.hiddenSkipped }),
@@ -774,15 +762,20 @@ export class TelemetryClient implements TelemetryStatus {
     }
   }
 
-  /** Final summary and flush (runtime destroyed). */
-  stop(): void {
+  /**
+   * Final summary and flush (runtime destroyed). `withdrawn` (the visitor withdrew diagnostics consent,
+   * InitOptions.consent): nothing more is sent, and what is queued is dropped.
+   */
+  stop(withdrawn?: boolean): void {
     if (this.stopped) return;
-    try {
-      this.summary("destroy");
-      void this.flush(false);
-    } catch {
-      /* ignore */
-    }
+    if (withdrawn) this.queue.length = 0;
+    else
+      try {
+        this.summary("destroy");
+        void this.flush(false);
+      } catch {
+        /* ignore */
+      }
     this.stopped = true;
     if (this.timer !== null) {
       try {

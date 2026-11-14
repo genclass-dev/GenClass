@@ -120,9 +120,10 @@ export function render(app, state, o = {}) {
     for (const l of rest) out(`    ${l}`);
     out();
   }
-  // the dashboard page's own words: a page load is one page GenClass watched
-  out(`  ${cell("Page loads", n(t.visits))}  ${cell("Problems found", n(t.found))}`.trimEnd());
-  out(`  ${cell("Handled", n(t.handled))}  ${cell("Visual checks", n(t.checks))}`.trimEnd());
+  // the dashboard page's own words: a page load is one page GenClass watched; "Problems found" is the model's findings
+  // and the measured checks together, as on the page (pages.ts problemsOf) and in `genclass problems` and `report`
+  out(`  ${cell("Page loads", n(t.visits))}  ${cell("Problems found", n(t.found + t.checks))}`.trimEnd());
+  out(`  ${cell("Handled", n(t.handled))}  ${cell("Of them checks", n(t.checks))}`.trimEnd());
   if (line) out(`  ${c.gray("Problems".padEnd(15))}${c.green(line)}  ${c.gray("over the period")}`);
 
   if (!t.visits && !t.found && !t.checks) {

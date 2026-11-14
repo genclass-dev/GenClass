@@ -13,6 +13,7 @@
 //   come from a short fixed list or are an error code, never a server's own words.
 
 import { resolveMx as nodeResolveMx, resolveTxt as nodeResolveTxt } from "node:dns/promises";
+import { isDocumentedKey, isPlaceholder } from "./keys.mjs";
 
 /**
  * @typedef {Object} HomeFacts
@@ -62,6 +63,13 @@ import { resolveMx as nodeResolveMx, resolveTxt as nodeResolveTxt } from "node:d
  * @property {{ status: number | null }} notFound  the answer for a path that cannot exist; 200 is a "soft 404"
  * @property {{ mx: boolean | null, spf: boolean | null, dmarc: boolean | null }} dns
  *   on the host without a leading "www."; null when a lookup failed for a reason other than "no records"
+ * @property {{ scanned: number | null, unread: number, partial: string[], found: { path: string, kind: string }[] }} bundle
+ *   the home page's own scripts (same origin, not `nomodule`, the app's own first, at most MAX_SCRIPTS, 1 MB each),
+ *   read for secret keys: `scanned` how many answered and were read, to their end or to 1 MB (null: the home page was
+ *   not read); `unread` how many more were not: the ones the page lists past MAX_SCRIPTS (not requested), and the ones
+ *   whose request failed or timed out or whose body broke off before its end; `partial` the paths of those over 1 MB
+ *   (or of exactly 1 MB whose end did not come), of which only the first 1 MB was read; `found` the kind of key and
+ *   the script's path, never a value, also from the part of a script that came before it broke off
  */
 
 const USER_AGENT = "genclass-cli (+https://genclass.dev)";
@@ -184,49 +192,114 @@ function headerReader(headers) {
   };
 }
 
-/** At most `max` bytes of a response's body, as text. */
-async function readBody(res, max) {
+/**
+ * How long the one read past `max` waits to tell a body of exactly `max` bytes from a longer one, in milliseconds:
+ * the end of a body comes right after its last bytes, and a server that sends nothing more is not waited for.
+ */
+const TAIL_MS = 250;
+
+/**
+ * At most `max` bytes of a response's body, as text. Never rejects, and never throws away what was read.
+ * `cut`: the body was not read to its end: it went on past `max`, or it broke off. `broken`: why it broke off before
+ * `max` bytes or its end (an error code, or "timeout" when `stop` came first), else null. A body of exactly `max`
+ * bytes is whole when one more read, within TAIL_MS (and before `stop`), says it ended; when that read brings more,
+ * fails or does not answer, the `max` bytes are kept and marked cut, as a longer body's would be.
+ * @param {any} res  a fetch Response
+ * @param {number} max
+ * @param {Promise<unknown>} [stop]  settles when the request's time is up
+ * @returns {Promise<{ text: string, bytes: number, cut: boolean, broken: string | null }>}
+ */
+async function readBody(res, max, stop) {
+  const STOPPED = Symbol("stopped");
+  const until = stop ? Promise.resolve(stop).then(() => STOPPED, () => STOPPED) : new Promise(() => {});
+  const chunks = [];
+  let n = 0;
+  const result = (cut, broken) => {
+    const all = new Uint8Array(n);
+    let at = 0;
+    for (const chunk of chunks) {
+      all.set(chunk, at);
+      at += chunk.length;
+    }
+    return { text: new TextDecoder("utf-8").decode(all), bytes: n, cut, broken };
+  };
+  let body = null;
   try {
-    const body = res.body;
-    if (body && typeof body.getReader === "function") {
-      const reader = body.getReader();
-      const chunks = [];
-      let n = 0;
+    body = res ? res.body : null;
+  } catch {
+    /* no body to read */
+  }
+  if (body && typeof body.getReader === "function") {
+    let reader = null;
+    try {
+      reader = body.getReader();
+      let ended = false;
+      let over = false;
       while (n < max) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const r = await Promise.race([reader.read(), until]);
+        if (r === STOPPED) return result(true, "timeout");
+        if (r.done) {
+          ended = true;
+          break;
+        }
+        const value = r.value;
         if (!value || !value.length) continue;
-        const take = value.length > max - n ? value.subarray(0, max - n) : value;
+        over = value.length > max - n;
+        const take = over ? value.subarray(0, max - n) : value;
         chunks.push(take);
         n += take.length;
       }
+      if (!ended && !over) {
+        // exactly `max` bytes so far: one short read tells the end from more; what it brings is not kept
+        let timer = null;
+        const wait = new Promise((done) => {
+          timer = setTimeout(() => done(STOPPED), TAIL_MS);
+        });
+        try {
+          while (!ended && !over) {
+            const r = await Promise.race([reader.read(), until, wait]);
+            if (r === STOPPED) break;
+            if (r.done) ended = true;
+            else if (r.value && r.value.length) over = true;
+          }
+        } catch {
+          /* it broke off at the end: the `max` bytes are kept, marked cut */
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      return result(!ended, null);
+    } catch (e) {
+      return result(true, errorName(e));
+    } finally {
       try {
-        Promise.resolve(reader.cancel()).catch(() => {});
+        if (reader) Promise.resolve(reader.cancel()).catch(() => {});
       } catch {
         /* the stream is already closed */
       }
-      const all = new Uint8Array(n);
-      let at = 0;
-      for (const chunk of chunks) {
-        all.set(chunk, at);
-        at += chunk.length;
-      }
-      return { text: new TextDecoder("utf-8").decode(all), bytes: n };
     }
-    if (typeof res.text === "function") {
-      const bytes = new TextEncoder().encode(String(await res.text()));
-      const cut = bytes.length > max ? bytes.subarray(0, max) : bytes;
-      return { text: new TextDecoder("utf-8").decode(cut), bytes: cut.length };
-    }
-  } catch {
-    /* an unreadable body is an empty one */
   }
-  return { text: "", bytes: 0 };
+  try {
+    if (res && typeof res.text === "function") {
+      const t = await Promise.race([Promise.resolve(res.text()), until]);
+      if (t === STOPPED) return result(true, "timeout");
+      const bytes = new TextEncoder().encode(String(t));
+      const head = bytes.length > max ? bytes.subarray(0, max) : bytes;
+      chunks.push(head);
+      n = head.length;
+      return result(bytes.length > max, null);
+    }
+  } catch (e) {
+    return result(true, errorName(e));
+  }
+  return result(false, null);
 }
 
 /**
- * One GET, never followed, never rejecting.
- * @returns {Promise<{ ok: true, status: number, header: (name: string) => string | null, text: string, bytes: number } | { ok: false, error: string }>}
+ * One GET, never followed, never rejecting. `cut`: the body was not read to its end, because it went on past
+ * MAX_BODY bytes or broke off; `broken`: why it broke off (an error code or "timeout"), else null. Once the answer's
+ * status is in, the timeout stops the body's read and what was read is kept.
+ * @returns {Promise<{ ok: true, status: number, header: (name: string) => string | null, text: string, bytes: number, cut: boolean, broken: string | null } | { ok: false, error: string }>}
  */
 async function getOnce(fetchFn, url, timeoutMs) {
   let u;
@@ -239,14 +312,21 @@ async function getOnce(fetchFn, url, timeoutMs) {
 
   const ctrl = new AbortController();
   let timer = null;
+  let answered = false;
+  let timeUp = () => {};
+  const stop = new Promise((done) => {
+    timeUp = done;
+  });
   const timeout = new Promise((done) => {
     timer = setTimeout(() => {
+      timeUp();
       try {
         ctrl.abort();
       } catch {
         /* already gone */
       }
-      done({ ok: false, error: "timeout" });
+      // with the answer in, its body's read ends at `stop` with what it has
+      if (!answered) done({ ok: false, error: "timeout" });
     }, timeoutMs);
   });
   const work = (async () => {
@@ -261,10 +341,11 @@ async function getOnce(fetchFn, url, timeoutMs) {
         } catch {
           /* nothing to cancel */
         }
-        return { ok: true, status, header, text: "", bytes: 0 };
+        return { ok: true, status, header, text: "", bytes: 0, cut: false, broken: null };
       }
-      const body = await readBody(res, MAX_BODY);
-      return { ok: true, status, header, text: body.text, bytes: body.bytes };
+      answered = true;
+      const body = await readBody(res, MAX_BODY, stop);
+      return { ok: true, status, header, text: body.text, bytes: body.bytes, cut: body.cut, broken: body.broken };
     } catch (e) {
       return { ok: false, error: errorName(e) };
     }
@@ -276,13 +357,17 @@ async function getOnce(fetchFn, url, timeoutMs) {
   }
 }
 
-/** GET with redirects followed by hand. `chain` lists each hop; `res` is the last answer. */
+/**
+ * GET with redirects followed by hand. `chain` lists each hop; `res` is the last answer. An answer whose body broke
+ * off is a failed request here: its facts are unknown, never read from part of a page.
+ */
 async function follow(get, url) {
   const chain = [];
   let current = url;
   for (let hop = 0; hop <= MAX_HOPS; hop++) {
     const res = await get(current);
     if (!res.ok) return { ok: false, error: res.error, chain, finalUrl: current, res: null };
+    if (res.broken) return { ok: false, error: res.broken, chain, finalUrl: current, res: null };
     chain.push({ url: current, status: res.status });
     const location = res.status >= 300 && res.status < 400 ? res.header("location") : null;
     if (!location) return { ok: true, error: null, chain, finalUrl: current, res };
@@ -297,6 +382,15 @@ async function follow(get, url) {
   return { ok: false, error: "too many redirects", chain, finalUrl: current, res: null };
 }
 
+/** An address's path, for an evidence line: no query (it can carry a token), at most 100 characters. */
+const pathOf = (url) => {
+  try {
+    const p = new URL(url).pathname;
+    return p.length > 100 ? `${p.slice(0, 97)}...` : p;
+  } catch {
+    return "/";
+  }
+};
 const hostOf = (url) => {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -443,6 +537,172 @@ export function parseHtml(html, baseUrl) {
   };
 }
 
+// ---- the scripts the home page ships: secret keys -----------------------------------------------------------------
+
+/** The most scripts read per run, the app's own first (scriptSources); the rest are counted as not read. */
+export const MAX_SCRIPTS = 20;
+
+/**
+ * The secret keys that must never reach a browser, as they look in shipped JavaScript. Precise shapes only (a
+ * minified bundle is full of short random strings): each one is a provider's documented prefix and length. The
+ * capture groups hold the part after the prefix, which the placeholder test (keys.mjs) reads. Keys that start with
+ * sk_live_ or sk_test_ are not named for one provider: Stripe, Clerk and Paystack all use those prefixes (rk_live_
+ * is Stripe's alone).
+ */
+const BUNDLE_SECRETS = [
+  ["stripe-secret-live", /(?<![A-Za-z0-9_])rk_live_([A-Za-z0-9]{20,})/g],
+  ["sk-live-secret-key", /(?<![A-Za-z0-9_])sk_live_([A-Za-z0-9]{20,})/g],
+  ["sk-test-secret-key", /(?<![A-Za-z0-9_])sk_test_([A-Za-z0-9]{20,})/g],
+  ["openai-key", /(?<![A-Za-z0-9_-])sk-(?:proj|svcacct|admin)-([A-Za-z0-9_-]{40,})|(?<![A-Za-z0-9_-])sk-([A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20})/g],
+  ["openrouter-key", /(?<![A-Za-z0-9_-])sk-or-v1-([0-9a-f]{64})(?![0-9a-f])/g],
+  ["anthropic-key", /(?<![A-Za-z0-9_-])sk-ant-(?:api|admin)\d\d-([A-Za-z0-9_-]{60,})/g],
+  ["supabase-secret-key", /(?<![A-Za-z0-9_])sb_secret_([A-Za-z0-9_-]{20,})/g],
+  ["github-token", /(?<![A-Za-z0-9_])(?:gh[pousr]_([A-Za-z0-9]{36,})|github_pat_([A-Za-z0-9_]{60,}))/g],
+  ["slack-token", /(?<![A-Za-z0-9])xox[baprs]-(\d{6,}-[A-Za-z0-9-]{10,})/g],
+  ["sendgrid-key", /(?<![A-Za-z0-9])SG\.([A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})(?![A-Za-z0-9_-])/g],
+  ["private-key", /-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----(?:\\n|\s)*([A-Za-z0-9+/]{40,})/g],
+];
+/**
+ * An AWS access key ID. The ID alone signs nothing, and pages share it on purpose inside pre-signed links
+ * (X-Amz-Credential=AKIA.../20250101/..., AWSAccessKeyId=AKIA...), so one there is skipped, and one elsewhere counts
+ * only with a secret access key (AWS_SECRET) near it. Only those two parameter names mark a pre-signed link: an ID
+ * after any other name (accessKeyId=AKIA... in a query string, AWS_ACCESS_KEY_ID=AKIA... in a .env) is looked at.
+ */
+const AWS_ID = /(?<![A-Za-z0-9])(?<!(?:[Xx]-[Aa]mz-[Cc]redential|AWSAccessKeyId)(?:=|%3[Dd]))AKIA([0-9A-Z]{16})(?![0-9A-Z])(?!(?:\/|%2[Ff]|\\u002[Ff]|\\\/)\d{8}(?:\/|%2[Ff]|\\u002[Ff]|\\\/))/g;
+/**
+ * A secret access key: exactly 40 characters of base64 with capitals, small letters and digits (a SHA-1 is not).
+ * Not part of a longer run of base64, and not followed by "=" padding; an "=" before it is the NAME=value of a .env
+ * or credentials file (aws_secret_access_key=...), so it may stand right after one.
+ */
+const AWS_SECRET = /(?<![A-Za-z0-9/+])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+=])/g;
+/** How far from an access key ID its secret is looked for, in characters on either side. */
+const AWS_NEAR = 400;
+const JWT = /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.(eyJ[A-Za-z0-9_-]{10,})\.[A-Za-z0-9_-]{20,}/g;
+
+/** Whether a match's body (its first capture group that matched) is a real-looking key no provider documents. */
+const realKey = (m) => {
+  const body = m.slice(1).find((g) => g !== undefined);
+  return !isPlaceholder(body) && !isDocumentedKey(body);
+};
+
+/** Whether an AWS access key ID in `t` has a secret access key near it. */
+function awsKeyPair(t) {
+  if (!t.includes("AKIA")) return false;
+  for (const id of t.matchAll(AWS_ID)) {
+    if (!realKey(id)) continue;
+    const near = t.slice(Math.max(0, id.index - AWS_NEAR), id.index + id[0].length + AWS_NEAR);
+    for (const s of near.matchAll(AWS_SECRET)) {
+      const v = s[0];
+      if (/[A-Z]/.test(v) && /[a-z]/.test(v) && /\d/.test(v) && !isPlaceholder(v)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The kinds of secret key in a script's text, each once: the shapes above (a match whose body is a placeholder, such
+ * as sk_live_xxxx or AWS's documented ...EXAMPLE ID, or a key a provider documents, is not reported), an AWS access
+ * key ID with its secret near it, and a Supabase key whose role is service_role (it skips every row-level security
+ * rule; the anon key is meant to be public, and the Supabase CLI's local demo key opens only a local copy). Never a
+ * value.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function bundleSecrets(text) {
+  const t = String(text ?? "");
+  const kinds = [];
+  for (const [kind, re] of BUNDLE_SECRETS) {
+    for (const m of t.matchAll(re)) {
+      if (!realKey(m)) continue;
+      kinds.push(kind);
+      break;
+    }
+  }
+  if (awsKeyPair(t)) kinds.push("aws-access-key");
+  if (t.includes("eyJ")) {
+    for (const m of t.matchAll(JWT)) {
+      try {
+        const payload = JSON.parse(Buffer.from(m[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+        if (payload && payload.role === "service_role" && payload.iss !== "supabase-demo") {
+          kinds.push("supabase-service-role");
+          break;
+        }
+      } catch {
+        /* not a token */
+      }
+    }
+  }
+  return kinds;
+}
+
+// Which of a page's scripts hold the app's own code. On a Next.js page the framework's runtime comes first in the
+// HTML (the webpack or Turbopack runtime, React, Next's client, the polyfills), and the route's own chunks after it.
+/** Next.js's runtime and manifests, by name: they hold no app code. */
+const FRAMEWORK_RUNTIME = /\/_next\/static\/(?:chunks\/(?:webpack|framework|main|main-app|polyfills|turbopack|react-refresh)-[\w-]+\.js|[\w-]+\/_(?:buildManifest|ssgManifest|clientMiddlewareManifest)\.js)$/;
+/** A Next.js route's own chunk, by name (webpack builds): chunks/app/... or chunks/pages/... */
+const ROUTE_CHUNK = /\/_next\/static\/chunks\/(?:app|pages)\//;
+/** A chunk address inside a Next.js App Router page's payload (self.__next_f), where each client component names its chunks. */
+const PAYLOAD_CHUNK = /static\/chunks\/[^"'\\\s<>]+?\.js(?=["'\\])/g;
+
+/**
+ * The addresses of the page's own scripts (same origin as `base`): script tags and script preloads, each once, the
+ * app's own code first. On a Next.js page that is the chunks its payload names for its client components and the
+ * route's chunks (chunks/app/, chunks/pages/), then the rest in page order, then the framework's runtime by name.
+ * A `nomodule` script (the polyfills old browsers load instead) is left out. Every address is returned; the caller
+ * reads the first MAX_SCRIPTS.
+ * @param {string} html
+ * @param {string} base  the page's address
+ * @returns {string[]}
+ */
+export function scriptSources(html, base) {
+  const out = [];
+  let origin = "";
+  try {
+    origin = new URL(base).origin;
+  } catch {
+    return out;
+  }
+  const doc = String(html ?? "").replace(/<!--[\s\S]*?-->/g, " ");
+  const seen = new Set();
+  const add = (href) => {
+    const h = collapse(String(href ?? ""));
+    if (!h || /^(?:data|blob|javascript):/i.test(h)) return;
+    const a = absolute(h, base);
+    if (!a || seen.has(a)) return;
+    seen.add(a);
+    try {
+      if (new URL(a).origin === origin) out.push(a);
+    } catch {
+      /* not an address */
+    }
+  };
+  const named = new Set();
+  for (const m of doc.matchAll(new RegExp(`<script\\b(${TAG_BODY})>([\\s\\S]*?)(?:<\\/script\\s*>|$)`, "gi"))) {
+    const a = attrs(m[1]);
+    if ("nomodule" in a) continue;
+    if (a.src) add(a.src);
+    else if (m[2].includes("__next_f")) for (const c of m[2].matchAll(PAYLOAD_CHUNK)) named.add(c[0]);
+  }
+  for (const m of doc.matchAll(tagRe("link"))) {
+    const a = attrs(m[1]);
+    if (/\bmodulepreload\b/i.test(a.rel || "") || (/\bpreload\b/i.test(a.rel || "") && /^script$/i.test(a.as || ""))) add(a.href);
+  }
+  const rank = (address) => {
+    let path = "";
+    try {
+      path = new URL(address).pathname;
+    } catch {
+      return 1;
+    }
+    if (ROUTE_CHUNK.test(path)) return 0;
+    for (const c of named) if (path.endsWith(`/${c}`)) return 0;
+    return FRAMEWORK_RUNTIME.test(path) ? 2 : 1;
+  };
+  const ranked = out.map((address, i) => ({ address, i, r: rank(address) }));
+  ranked.sort((x, y) => x.r - y.r || x.i - y.i);
+  return ranked.map((x) => x.address);
+}
+
 // ---- robots.txt ----------------------------------------------------------------------------------------------------
 
 /**
@@ -573,6 +833,7 @@ export function emptySiteFacts(url) {
     llms: { status: null, html: false },
     notFound: { status: null },
     dns: { mx: null, spf: null, dmarc: null },
+    bundle: { scanned: null, unread: 0, partial: [], found: [] },
   };
 }
 
@@ -661,6 +922,31 @@ async function measure(facts, u, o) {
       noindex: page.noindex || /\b(?:noindex|none)\b/i.test(r.res.header("x-robots-tag") || ""),
       hsts: Boolean(r.res.header("strict-transport-security")),
     };
+    // the scripts it ships, the app's own first, read for secret keys (only the kinds are kept)
+    const all = scriptSources(r.res.text, r.finalUrl);
+    const srcs = all.slice(0, MAX_SCRIPTS);
+    const inline = bundleSecrets(r.res.text);
+    const read = await Promise.all(srcs.map((src) => get(src)));
+    const found = inline.map((kind) => ({ path: pathOf(r.finalUrl), kind }));
+    const partial = [];
+    let scanned = 0;
+    let failed = 0;
+    read.forEach((x, i) => {
+      // no answer, or a body that broke off before its end: not read (a key in the part that came still counts)
+      if (!x.ok) {
+        failed++;
+        return;
+      }
+      if (x.status !== 200) return;
+      for (const kind of bundleSecrets(x.text)) found.push({ path: pathOf(srcs[i]), kind });
+      if (x.broken) {
+        failed++;
+        return;
+      }
+      scanned++;
+      if (x.cut && partial.length < 20) partial.push(pathOf(srcs[i]));
+    });
+    facts.bundle = { scanned, unread: all.length - srcs.length + failed, partial, found: found.slice(0, 20) };
   });
 
   const httpsTask = get(httpsUrl).then((r) => {

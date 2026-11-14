@@ -2,7 +2,7 @@
 // run; these exports are for embedding the bridge in another tool and for tests.
 
 export { Store, mergeOrder, replaySpecOf } from "./store.js";
-export type { StoreOptions, FindingEvent } from "./store.js";
+export type { StoreOptions, FindingEvent, ExploreProgress } from "./store.js";
 export { startBridge, probeBridge, callBridge, devOrigin, VERSION } from "./http.js";
 export type { Bridge, BridgeOptions } from "./http.js";
 export { makeApi, analytics } from "./api.js";

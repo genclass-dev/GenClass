@@ -1,5 +1,6 @@
 // What each step of `genclass setup` does when it is its turn: sign in, add the runtime, watch for the first page,
-// add the workflow file and check the GitHub App, connect a coding agent. Each returns "done", "skipped" or "failed".
+// add the workflow file and check the GitHub App, connect a coding agent (its MCP server, the skill, and the dev page's
+// link to it, agentlink.mjs). Each returns "done", "skipped" or "failed".
 //
 // Invariants:
 // - Nothing is written before the person has seen what will be written and said yes (or passed --yes). The runtime is
@@ -26,8 +27,9 @@ import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
 import { c, interactive, out, printChange, stopOnEnter, sym } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "./assets.mjs";
-import { accountPaid, appPlanOffer, WORKFLOW_PATH } from "./state.mjs";
-import { agree, bad, clean, good, note, planCard, spinner, warn } from "./tui.mjs";
+import { devCommand, planAgentLink } from "./agentlink.mjs";
+import { accountPaid, agentConfigs, appPlanOffer, WORKFLOW_PATH } from "./state.mjs";
+import { agree, bad, clean, good, note, planCard, spinner, warn, width, wrap } from "./tui.mjs";
 import { planViteSettings } from "./vite.mjs";
 
 /** Resolves after `ms`, or at once when `signal` aborts. */
@@ -227,8 +229,10 @@ export async function projectPlan(offer, o = {}, deps = {}) {
       : offer.needs && offer.paying
         ? `Your plan covers no more apps: add ${offer.appsPerUnit} more for ${name} on its plan page.`
         : offer.needs
-          ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more: it needs ${offer.plan.name}, ${offer.price}.`
-          : `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`,
+          ? `Free covers ${offer.free.apps === 1 ? "one app" : `${offer.free.apps ?? 1} apps`} and this is one more: it needs ${offer.plan.name}${offer.price ? `, ${offer.price}` : ""}.`
+          : offer.price
+            ? `${offer.plan.name} is ${offer.price}. Or try ${offer.free.name.toLowerCase()} for now (limited), on the same page.`
+            : `${offer.plan.name}, or ${offer.free.name.toLowerCase()} for now (limited), on this app's plan page.`,
   );
   if (o.yes || !interactive()) {
     out(`  Open  ${c.cyan(offer.checkoutUrl)}`);
@@ -411,6 +415,7 @@ export async function watchFirstPage(state, o = {}) {
     const ok = await agree("Is your site deployed with GenClass in it? I will watch for its first page for two minutes", false);
     if (!ok) {
       note("No problem. Deploy as you normally do, open the live site once, and run genclass again: this step turns green by itself.");
+      nowNote(state);
       return "skipped";
     }
   } else return "skipped";
@@ -429,7 +434,14 @@ export async function watchFirstPage(state, o = {}) {
   }
   await stop.done();
   sp.stop("warn", "Nothing arrived yet. GenClass sends nothing from localhost or a private address; run npx genclass again after the live site was opened.");
+  nowNote(state);
   return "skipped";
+}
+
+/** The dashboard step's line on what can be seen before any deploy (state.mjs, its `now`), when there is one. */
+function nowNote(state) {
+  const now = state.steps?.find((s) => s.id === "dashboard")?.now;
+  if (now) note(now);
 }
 
 // ------------------------------------------------------------------------------------------------ 4. pull requests
@@ -624,40 +636,134 @@ export function writeSkill(dir) {
   }
 }
 
-/** Adds the MCP server to the project's agent configuration after showing the change, and the skill next to it. */
+/** The dev-only coding-agent link for the folder (agentlink.mjs planAgentLink), or null when it cannot be read. */
+export function agentLinkPlan(cwd) {
+  try {
+    return planAgentLink(inspectProject({ cwd }));
+  } catch {
+    return null;
+  }
+}
+
+/** Numbered lines, each wrapped under its own text (not under its number). */
+function numbered(items) {
+  items.forEach((text, i) => {
+    const [first = "", ...rest] = wrap(text, width() - 2 - 7);
+    out(`    ${c.gray(`${i + 1}.`)} ${first}`);
+    for (const l of rest) out(`       ${l}`);
+  });
+}
+
+/**
+ * What to do once the agent is configured: the lines to add by hand where the link was not planned, and how to see
+ * GenClass work now, before any deploy (the dev server, the [GenClass] lines in the browser console, the question for
+ * the agent).
+ */
+export function afterAgent(state, link) {
+  let project = null;
+  try {
+    project = detectProject(state.cwd);
+  } catch {
+    project = null;
+  }
+  if (!link || link.state === "none") {
+    note('Restart your coding agent in this folder, then ask it "is GenClass connected?". The first time, it shows two dev-only lines that connect your running app and adds them when you say yes.');
+    return;
+  }
+  if (link.state === "manual") {
+    out();
+    warn(`Your dev page is not linked to the agent yet: ${link.why}.`);
+    if (link.lines?.length) {
+      note(`Add these lines to ${link.where} (development builds only):`);
+      for (const l of link.lines) out(`    ${c.cyan(l)}`);
+    }
+  }
+  const dev = devCommand(project);
+  out();
+  out(`  ${c.bold("See it work now")} ${c.gray("(before any deploy)")}`);
+  numbered([
+    `Start your dev server${dev ? ` (${c.cyan(dev)})` : ""} and open the page on localhost.`,
+    "GenClass prints [GenClass] lines in the browser console: what it watches, and anything it flags.",
+    link.state === "manual" && link.lines?.length
+      ? 'Restart your coding agent in this folder, then ask it "is GenClass connected?": it lists your page once those lines are in.'
+      : link.state === "manual"
+        ? "Restart your coding agent in this folder: without the link its GenClass tools still audit any page you name (genclass_scan)."
+        : 'Restart your coding agent in this folder, then ask it "is GenClass connected?", or to explore a flow (search, save, checkout) for races.',
+  ]);
+}
+
+/**
+ * The Coding agent step (state.mjs, step "agent"): GenClass's MCP server in the project's agent configuration and the
+ * skill next to it (unless a configuration names GenClass's server already), and the dev-only coding-agent link (a
+ * file of its own, imported right after GenClass's import; agentlink.mjs) where it can be planned. Everything it
+ * writes is shown first, in one preview, and asked once (Enter is the yes; --yes writes without asking); without a
+ * terminal and without --yes nothing is written. "done" once the MCP server is configured and the link is in, or
+ * cannot be planned here (then the lines to add are printed instead).
+ */
 export async function connectAgent(state, o = {}) {
-  const plan = planAgentConfig(state.cwd);
-  if (!plan.change) {
+  const cwd = state.cwd;
+  const root = state.git?.root;
+  const configured = [...new Set([...agentConfigs(cwd), ...(root && root !== cwd ? agentConfigs(root) : [])])];
+  const plan = configured.length ? null : planAgentConfig(cwd);
+  const link = agentLinkPlan(cwd);
+  const linkChanges = link?.state === "planned" ? link.changes : [];
+  // the skill goes with the MCP server (a rerun replaces it while it has its marker), or alone when it is missing
+  const skill = !!plan?.change || (configured.length > 0 && !existsSync(join(cwd, SKILL_PATH)));
+  if (plan && !plan.change) {
     warn(`${plan.reason}, so it was left alone. Add this to its "mcpServers" by hand:`);
     out(`    ${c.cyan(`"genclass": ${JSON.stringify(mcpServer())}`)}`);
-    return "skipped";
   }
-  // what is written is shown first; it is asked for on its own, and in the walk the step's Enter was the yes (its
-  // sentence says what it adds, as the workflow step's does); --yes writes it
-  if (!o.yes) {
-    out();
-    printChange(plan.change);
-    note(`And ${SKILL_PATH}: how the agent uses GenClass's tools (a file you changed is left alone).`);
-    out();
+  const names = [...(plan?.change ? [plan.file] : []), ...(skill ? ["the skill"] : []), ...(linkChanges.length ? ["the dev-only link"] : [])];
+  if (!names.length) {
+    if (plan && !plan.change) return "skipped";
+    afterAgent(state, link);
+    return "done";
   }
-  if (!o.yes && !o.confirmed) {
+  const what = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+  // what is written is shown first, in one preview, as the runtime step's change is (with --yes too, so a coding
+  // agent that ran it sees what changed); one question for all of it
+  out();
+  if (plan?.change) printChange(plan.change);
+  for (const ch of linkChanges) printChange({ ...ch, file: ch.rel });
+  if (skill) note(`And ${SKILL_PATH}: how the agent uses GenClass's tools (a file you changed is left alone).`);
+  if (linkChanges.length) note("The link runs in development builds only, on pages served from this machine: a production build leaves it out, and npx genclass remove takes it out.");
+  out();
+  // in the walk (o.confirmed) the step's Enter was the yes for the MCP server and the skill, as its sentence says (the
+  // 0.3.9 rule); an edit to the app's own source (the link's import line) is asked for after its diff, as the runtime
+  // step's init and doctor --fix ask (pre-release check, 2026-11-14)
+  if (!o.yes && (!o.confirmed || linkChanges.length > 0)) {
     if (!interactive()) {
-      note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write it.`);
+      note(`Not a terminal: run ${c.cyan("npx genclass setup --yes")} to write ${what}.`);
       return "skipped";
     }
-    if (!(await agree(`Write ${plan.file} and the skill?`))) return "skipped";
+    if (!(await agree(`Write ${what}?`))) return "skipped";
   }
-  try {
-    mkdirSync(dirname(plan.path), { recursive: true });
-    writeFileSync(plan.path, plan.change.after);
-  } catch (e) {
-    bad(`Could not write ${plan.file}: ${e?.message ?? e}`);
-    return "failed";
+  if (plan?.change) {
+    try {
+      mkdirSync(dirname(plan.path), { recursive: true });
+      writeFileSync(plan.path, plan.change.after);
+    } catch (e) {
+      bad(`Could not write ${plan.file}: ${e?.message ?? e}`);
+      return "failed";
+    }
+    good(`${plan.change.kind === "create" ? "Wrote" : "Updated"} ${c.bold(plan.file)} ${c.gray("(GenClass's MCP server)")}`);
   }
-  good(`${plan.change.kind === "create" ? "Wrote" : "Updated"} ${c.bold(plan.file)} ${c.gray("(GenClass's MCP server)")}`);
   // the skill is the procedure the agent follows with those tools; a file the person made their own is left alone
-  const skill = writeSkill(state.cwd);
-  if (skill === "written") good(`Wrote ${c.bold(SKILL_PATH)} ${c.gray("(how the agent uses them)")}`);
-  note('Restart your coding agent in this folder, then ask it "is GenClass connected?". The first time, it shows two dev-only lines that connect your running app and adds them when you say yes.');
-  return "done";
+  if (skill && writeSkill(cwd) === "written") good(`Wrote ${c.bold(SKILL_PATH)} ${c.gray("(how the agent uses them)")}`);
+  // in their order, the link's file before the line that imports it: a write that fails stops the rest, so the entry
+  // never imports a file that is not there
+  let failed = false;
+  for (const ch of linkChanges) {
+    try {
+      writeFileSync(ch.file, ch.after);
+      if (ch.kind === "create") good(`Wrote ${c.bold(ch.rel)} ${c.gray("(the coding-agent link, development builds only)")}`);
+      else good(`Linked ${c.bold(ch.rel)} to your coding agent ${c.gray("(one import line after GenClass's)")}`);
+    } catch (e) {
+      failed = true;
+      bad(`Could not write ${ch.rel}: ${e?.message ?? e}`);
+      break;
+    }
+  }
+  afterAgent(state, failed ? null : link);
+  return failed ? "failed" : plan && !plan.change ? "skipped" : "done";
 }

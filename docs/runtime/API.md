@@ -35,6 +35,7 @@ GenClass.init(options?: InitOptions): Runtime   // idempotent: a second call ret
 GenClass.runtime: Runtime | null
 GenClass.destroy(): void                        // uninstall observers, restore globals, terminate the model worker
 GenClass.protect: typeof protect                // the same as the named export below (0.3.0: not in 0.2.x)
+GenClass.consent(choices?): Promise<ConsentState | null> // the visitor's consent for the running runtime (unreleased; see Consent); null before init
 
 // named exports (0.3.0: not in 0.2.x)
 protect<F extends (...args: never[]) => unknown>(name: string, fn: F): F   // see "Protected functions"
@@ -101,6 +102,37 @@ warns once with both versions. `0.2.x` (npm's `latest` until 0.3.0)
 and `0.3.0-beta.0` have no analytics and ignore the option silently: install `@genclass/runtime@beta`
 ([ANALYTICS.md](ANALYTICS.md) section 4.1).
 
+**Consent** (unreleased, the alpha line; CONTRACT section 17,
+[TELEMETRY.md](../../packages/runtime/TELEMETRY.md#consent)). `consent: "pending"` (also
+`window.GENCLASS_CONFIG.consent`, `consent=pending` in the meta tag, `data-consent="pending"`) makes GenClass observe
+locally only until the app passes the visitor's choice: no telemetry request, no analytics, no read or write of
+GenClass's own `localStorage` / `sessionStorage` entries, no model download, worker or Cache Storage
+(`rt.telemetry.reason`, `rt.analytics.reason` and, for the built-in model, `rt.status.reason` are `"consent"`;
+`rt.telemetry.reason` is `"url"` when the page started with `?genclass=no-telemetry`, which then holds for the page
+load). The meta tag and `data-consent` fail closed: `denied` denies, any other value (bare, `granted`, a typo) is
+`pending`.
+
+```ts
+type ConsentChoices = { diagnostics?: boolean; analytics?: boolean; storage?: boolean; model?: boolean };
+type ConsentState = Record<keyof ConsentChoices, "granted" | "denied" | "pending">;
+consent?: "pending" | "granted" | "denied" | ConsentChoices   // InitOptions: unset = no gate; an object leaves the parts it omits pending
+rt.consent(choices?: boolean | "granted" | "denied" | ConsentChoices): Promise<ConsentState | null>
+GenClass.consent(choices?)                                    // the same, on GenClass.runtime (null before init)
+```
+
+`true` grants every part, `false` denies every part, an object sets the parts it names; no argument reads. A grant
+starts the part from that point (diagnostics through the usual opt-out checks, so Global Privacy Control,
+`telemetry: false`, `?genclass=no-telemetry` as the page started and local hosts still win, and a late session's
+summary counts the runtime from the grant; analytics only when the app turned them on; learned state only where the
+app stores it, with the session's act/observe bucket and breaker trip read as without the gate; the model as
+`model.preload` and `model.loadIf` say, `idle` once the page has loaded). A denial keeps the part off; after a grant
+it withdraws it: telemetry stops and drops its queue, analytics stop and their queued events are dropped, GenClass's
+own entries are removed (the analytics visit entry too), the model is no longer consulted, a download in progress
+stops (a `rt.ready` awaited for it resolves, as with no model; an `ask()` waiting for it rejects with
+`GenClassUnavailableError`), and its Cache Storage copy is deleted. Analytics granted again keep what they queue from
+then on. It resolves once applied (a lazy chunk, `dist/consent-*.js`; null if it
+could not load) and never rejects. Without the option every part starts granted.
+
 ## Options
 
 ```ts
@@ -151,6 +183,8 @@ interface InitOptions {
                                                         // (0.3.0-beta.2); navigation within a page load (how each view was reached, the previous route,
                                                         // the first interaction, the end and the path); needs telemetry and the token
   scope?: "app" | "functions";                          // (0.3.0) ["app"]; "functions": decisions and standing questions only for activity inside protect()ed functions (rt.ask() still answered)
+  consent?: "pending" | "granted" | "denied" | ConsentChoices; // (unreleased) [unset: no gate] wait for the visitor's consent: nothing sent, stored or
+                                                        // downloaded until rt.consent() / GenClass.consent() grants it (see Consent)
 
   // batch 12 (docs/runtime/OPTIONS-SPEC.md); defaults in brackets
   enabled?: boolean | (() => boolean | Promise<boolean>) | { get(): boolean | Promise<boolean>; subscribe?(cb: () => void): () => void };
@@ -487,7 +521,7 @@ rt.on("check", (f: CheckFinding) => void)    // a measured visual check was conf
 
 ```ts
 rt.status: ModelStatus             // { state: "off"|"loading"|"ready"|"error", progress?, device?, variant?, threads?, phase?, error?, ... }
-rt.ready: Promise<void>            // resolves when the model is ready (immediately with no model); reading it starts a lazy load
+rt.ready: Promise<void>            // resolves when the model is ready (immediately with no model or while its consent is pending or denied; at the withdrawal for one awaited during a download); reading it starts a lazy load
 rt.mode: "observe" | "guard" | "heal"
 rt.situation(trigger?): Situation  // what the model would see: { trigger, subject, state, questions, actions, salient, facts }
 rt.explain(id): Explanation | null // a decision ("d3") or action ("a1") id -> { message, decision, situationText, facts, timeline, answers, action?, changed? }
@@ -504,8 +538,9 @@ rt.learned(): Learned              // learned flows per user action and route, r
 rt.checks(n?): CheckFinding[]      // the last measured visual check findings (at most 200; empty while the checks are off or not loaded)
 rt.checkNow(): Promise<CheckFinding[]> // run a measured visual check pass now (loads the checks if needed) and resolve with what it confirmed
 rt.setMode(mode); rt.pause(); rt.resume(); rt.destroy()
-rt.telemetry?: { enabled; reason?; endpoint?; sessionId?; flush(): Promise<void> } // reason when off: option, headless, url, localStorage, gpc, sampled-out, kill-switch, disabled, ...
-rt.analytics?: { enabled; reason?; start(): boolean; stop(): void } // interaction analytics (0.3.0-beta.1); reason when off: option, telemetry-off, no-token, stopped, error
+rt.telemetry?: { enabled; reason?; endpoint?; sessionId?; flush(): Promise<void> } // reason when off: option, headless, url, localStorage, gpc, sampled-out, kill-switch, disabled, consent, ...
+rt.analytics?: { enabled; reason?; start(): boolean; stop(): void } // interaction analytics (0.3.0-beta.1); reason when off: option, telemetry-off, no-token, stopped, error, consent
+rt.consent(choices?): Promise<ConsentState | null> // the visitor's consent (unreleased; see Consent under Init and modes)
 ```
 
 `pause()` stops consulting the model (everything proceeds unchanged, tracing continues); `destroy()` uninstalls

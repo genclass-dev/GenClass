@@ -9,13 +9,15 @@
 //   A number runs that command. A mistyped command names the nearest one. A line that is not a command and reads
 //   like a sentence is a question (ask.mjs).
 // - After every command, an app on Free that can have a paid plan here is told so in one line (the owner's call,
-//   2026-11-12: every query says it), with the way up: upgrade.
+//   2026-11-12: every query says it), with the way up: upgrade. Not after privacy, doctor and flake: they send
+//   nothing, and that line asks genclass.dev.
+// - Every command the command line has is a command here (cli.mjs COMMANDS), never a question or "no command".
 // - It never opens without someone at a terminal: piped, in CI or with --yes the command prints and ends as before.
 // - A command that fails does not end the home: its message is printed and the prompt comes back.
 
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
-import { installedVersion, installGlobally, isShort, latestOnNpm, newer, readPrefs, savePrefs, shortNameWorks, useShortName, viaNpx } from "./name.mjs";
+import { installedVersion, installGlobally, isShort, latestOnNpm, lineOf, newer, readPrefs, savePrefs, shortNameWorks, useShortName, viaNpx } from "./name.mjs";
 import { planName } from "./state.mjs";
 import { header, inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
 
@@ -44,9 +46,17 @@ export const COMMANDS = [
   ["setup", "walk the setup again", false],
   ["login", "sign in (logout, whoami)", false],
   ["remove", "take GenClass out of this app", false],
+  // free and local (cli.mjs FREE_COMMANDS): after them the home asks genclass.dev nothing (LOCAL)
+  ["privacy", "what is sent and kept (free)", false],
+  ["doctor", "is the setup whole (doctor --fix)", false],
+  ["flake [tests]", "flaky test or racy app (free)", false],
 ];
 
-const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "version", "connect", "init", "audit"];
+/** Every command the home hands to the command line: its own list and the ones it does not list. */
+export const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "version", "connect", "init", "audit"];
+
+/** The commands that send nothing: no line about the plan follows them (that line asks genclass.dev). */
+const LOCAL = ["privacy", "doctor", "flake"];
 
 /** The short list on Free (the account has no Pro): the commands that work there, numbered on their own. */
 export const FREE_MENU = [
@@ -107,7 +117,7 @@ export function menu(all = false, free = false) {
     if (all) {
       const names = COMMANDS.map(([n]) => n);
       for (let i = 0; i < names.length; i += 4) out(`    ${c.cyan(names.slice(i, i + 4).map((n) => n.padEnd(13)).join(""))}`);
-      note("All but upgrade, profile, plan, status, login and remove come with Pro.");
+      note("Without Pro: upgrade, profile, plan, status, login, remove, and the local privacy, doctor and flake. The others come with Pro.");
       return;
     }
     const pad = Math.max(...FREE_MENU.map(([n]) => n.length)) + 2;
@@ -133,6 +143,11 @@ const DAY = 24 * 60 * 60_000;
  */
 export async function installShortName(deps = {}) {
   if (isShort() || process.env.CI || process.env.GENCLASS_NO_INSTALL || !(deps.interactive ?? interactive)()) return "skipped";
+  // a prerelease (genclass@alpha) never installs itself or replaces an installed copy: trying the alpha through npx
+  // must not swap someone's stable command for it (pre-release check, 2026-11-14); npm install -g genclass@alpha by hand
+  const version = deps.version ?? BUILD.version;
+  if (lineOf(version)) return "skipped";
+  const quiet = !!(process.env.NO_UPDATE_NOTIFIER || process.env.GENCLASS_NO_UPDATE);
   const p = readPrefs();
   const now = deps.now ?? Date.now();
   const install = deps.install ?? installGlobally;
@@ -142,7 +157,10 @@ export async function installShortName(deps = {}) {
     const have = (deps.installedVersion ?? installedVersion)();
     const npx = (deps.viaNpx ?? viaNpx)();
     let want = null;
-    if (have && npx) want = newer(BUILD.version, have) ? BUILD.version : null;
+    // only within one line: a stable run never replaces an installed prerelease, and the update opt-outs
+    // (NO_UPDATE_NOTIFIER, GENCLASS_NO_UPDATE) stop the daily check and the replacement
+    if (quiet || lineOf(have)) want = null;
+    else if (have && npx) want = newer(version, have) ? version : null;
     else if (have && !(p.updateCheckedAt && now - Date.parse(p.updateCheckedAt) < DAY)) {
       savePrefs({ updateCheckedAt: new Date(now).toISOString() });
       const latest = await (deps.latest ?? latestOnNpm)();
@@ -170,7 +188,7 @@ export async function installShortName(deps = {}) {
   if (p.installFailedAt && now - Date.parse(p.installFailedAt) < DAY) return "skipped";
   out();
   const sp = spinner("Adding the genclass command to your terminal");
-  const r = await install(BUILD.version);
+  const r = await install(version);
   if (!r.ok) {
     savePrefs({ installFailedAt: new Date(now).toISOString() });
     sp.stop("warn", "Could not add the genclass command. npx genclass keeps working.");
@@ -264,7 +282,7 @@ export async function home(o = {}, deps = {}) {
       /* nothing to read */
     }
     // (not after the commands that say where the plan stands themselves: status and setup show Pro's step)
-    if (!stopped && !["upgrade", "profile", "plan", "login", "logout", "remove", "status", "setup"].includes(argv[0])) {
+    if (!stopped && !["upgrade", "profile", "plan", "login", "logout", "remove", "status", "setup", ...LOCAL].includes(argv[0])) {
       try {
         await deps.afterCommand?.();
       } catch {

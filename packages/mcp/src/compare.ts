@@ -282,13 +282,24 @@ export function strongestFirst<T extends Pick<RunDiff, "fields" | "textOnlyBasel
   return diffs.map((d, i) => ({ d, i, s: score(d) })).sort((x, y) => y.s - x.s || x.i - y.i).map((x) => x.d);
 }
 
-/** What a run's difference comes down to, in one phrase (the most telling evidence first; page strings quoted). */
-export function nameDifference(d: Pick<RunDiff, "fields" | "textOnlyBaseline" | "textOnlyRun" | "errors">): string {
+/** "once", "twice", "3 times". */
+const times = (n: number): string => (n === 1 ? "once" : n === 2 ? "twice" : `${n} times`);
+
+/**
+ * What a run's difference comes down to, in one phrase (the most telling evidence first; page strings quoted). A line
+ * both sides show, only not as often (`textCounts`), is named with its counts.
+ */
+export function nameDifference(d: Pick<RunDiff, "fields" | "textOnlyBaseline" | "textOnlyRun" | "errors" | "textCounts">): string {
   const line = (weight: number): string | null => {
     const inRun = d.textOnlyRun.find((l) => lineWeight(l) === weight);
-    if (inRun !== undefined) return `it shows ${q(inRun, 80)}, which the baseline does not`;
+    if (inRun !== undefined) {
+      const c = d.textCounts?.[inRun];
+      return c && c.baseline > 0 && c.run > c.baseline ? `it shows ${q(inRun, 80)} ${times(c.run)}, the baseline ${times(c.baseline)}` : `it shows ${q(inRun, 80)}, which the baseline does not`;
+    }
     const inBase = d.textOnlyBaseline.find((l) => lineWeight(l) === weight);
-    return inBase !== undefined ? `it does not show ${q(inBase, 80)}, which the baseline does` : null;
+    if (inBase === undefined) return null;
+    const c = d.textCounts?.[inBase];
+    return c && c.run > 0 && c.baseline > c.run ? `it shows ${q(inBase, 80)} ${times(c.run)}, the baseline ${times(c.baseline)}` : `it does not show ${q(inBase, 80)}, which the baseline does`;
   };
   const field = d.fields.find((f) => f.where === "field");
   const write = d.fields.find(shownField);

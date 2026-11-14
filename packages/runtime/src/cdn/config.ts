@@ -17,7 +17,9 @@
 // the meta tag since commas separate its keys, data-sink="console-json,webhook:/g" on the tag; src/cdn/sinks.ts, which
 // warns once about the names sentry, posthog and datadog: forwarding to those tools is not in the free runtime),
 // visual (measured visual checks: on, off, local, or fix = on with runtime fixes, which still need guard or heal mode),
-// analytics (interaction analytics: on or off; off by default, and they need telemetry and the app's token).
+// analytics (interaction analytics: on or off; off by default, and they need telemetry and the app's token), consent
+// (the consent gate, which only holds GenClass back: denied, or pending for any other value, bare, "granted" or
+// mistyped included, since the visitor's grant is GenClass.consent(...)).
 //
 // Trust: only `<meta name="genclass">` tags inside <head> are read (first to last), so markup injected into the body
 // (user content, a CMS field) cannot configure GenClass. A meta tag may set the mode, but the model, onnxruntime-web
@@ -149,6 +151,11 @@ export function fromPairs(pairs: Record<string, string>): PageConfig {
       case "analytics":
         // interaction analytics (docs/runtime/ANALYTICS.md): off by default; they need telemetry and the app's token
         c.analytics = !isOff(lv);
+        break;
+      case "consent":
+        // the consent gate (InitOptions.consent): it only holds GenClass back and fails closed: "denied", else
+        // "pending" (a bare key, "true", "granted" or a typo too), since a grant comes from the app's code
+        c.consent = lv === "denied" ? lv : "pending";
         break;
       case "visual":
         // measured visual checks (docs/runtime/VISUAL.md): "local" is the GenClass.init default

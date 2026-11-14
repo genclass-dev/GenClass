@@ -47,7 +47,7 @@ export const visible = (s) => String(s).replace(COLOUR, "").length;
 
 /** The words that follow `genclass` (or npm) in a command: its commands and their subcommands. */
 const SUBCOMMANDS = new Set(
-  "setup status suggest dashboard problems analytics events health report export fix ask scan audit connections agent funnels apps plan upgrade profile team login logout whoami connect init remove help version new add invite link test on off pages sources devices clicks paths stale all install uninstall".split(" "),
+  "setup status suggest flake dashboard problems analytics events health report export fix ask scan audit connections agent funnels apps plan upgrade profile team login logout whoami connect init remove help version new add invite link test on off pages sources devices clicks paths stale all install uninstall".split(" "),
 );
 /** The options of a command that take the word after them. */
 const VALUED = /^--?(cwd|app|range|out|from|to|format|agent|name|mode|token|url|model-url|sink|variant|ort)$/;

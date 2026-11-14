@@ -2,6 +2,80 @@
 
 ## Unreleased
 
+- **Consent mode (`consent: "pending"`):** for sites that ask visitors first (the EU, EEA and UK: ePrivacy Article
+  5(3), EDPB Guidelines 2/2023). Set it where GenClass starts (`GenClass.init({ consent: "pending" })`,
+  `window.GENCLASS_CONFIG.consent`, `<meta name="genclass" content="consent=pending">`, `data-consent="pending"`) and
+  GenClass observes on the page, locally only: no diagnostics request, no analytics, no read or write of its own
+  `localStorage` / `sessionStorage` entries, no model download (no request to cdn.jsdelivr.net, no worker, no Cache
+  Storage). `GenClass.consent({ diagnostics, analytics, storage, model })` (or `runtime.consent(...)`; `true` /
+  `false` for every part) passes the visitor's choice: a grant starts that part from then on (diagnostics through the
+  same opt-out checks as at start, so Global Privacy Control, `telemetry: false`, `?genclass=no-telemetry` and local
+  hosts still win; analytics and learned state only where the app turned them on; the model as `model.preload`
+  says), a denial keeps it off, and a later denial withdraws it (telemetry stops and drops its queue, analytics stop,
+  GenClass's own entries are removed, the model is no longer consulted and its Cache Storage copy is deleted). It
+  resolves with each part's state (`"granted"`, `"denied"`, `"pending"`). Without the option nothing changes; every
+  part starts granted. New reasons: `runtime.telemetry.reason` and `runtime.analytics.reason` `"consent"`, and
+  `runtime.status` `{ state: "disabled", reason: "consent" }` while the built-in model waits. A consent option given to
+  `GenClass.init()` after `/auto` or the script tag started GenClass is ignored with one console warning. The code that
+  applies a choice is a lazy chunk (`src/consent.ts`, `dist/consent-*.js`); the gates add 0.38 KB gzip to `/auto` and
+  0.36 KB to the main entry (docs/runtime/RESULTS.md section 29; `test/bundle.test.ts` limits raised to 109.3 /
+  101.02 KB, pending the owner's OK). Recipes for Google Consent Mode v2 and IAB TCF v2.2: TELEMETRY.md "Consent".
+- Consent mode: `?genclass=no-telemetry` as the page started holds for the page load (`runtime.telemetry.reason`
+  `"url"`); a grant after a route change dropped the query no longer starts telemetry.
+- Consent mode: a storage grant reads the session's act/observe bucket and breaker trip (a stored trip caps the mode
+  again), or stores this page's.
+- Consent mode: withdrawing analytics drops the `interactions` events they had queued, also ones a refused request
+  puts back.
+- Consent mode: withdrawing the model while it downloads stops the download (the worker ends; the inline fallback
+  starts no request and writes no cache entry) before its Cache Storage copy is deleted; a later grant loads it again.
+- Consent mode: a `runtime.ready` awaited while the model downloads resolves when the model is withdrawn, as with no
+  model, instead of rejecting with `ModelDisposedError`; an `ask()` waiting for it rejects with
+  `GenClassUnavailableError` "the model is off", as while the model waits for consent.
+- Consent mode: the same with `model.unloadAfterIdleMs` set, where `runtime.ready` and `ask()` (with or without
+  `timeoutMs`) still failed with `ModelDisposedError` at the withdrawal.
+- Consent mode: analytics withdrawn and granted again before a telemetry request settles keep the new view's
+  `interactions` event; only those queued before the withdrawal are dropped.
+- Consent mode: GenClass's own storage writes at a storage grant are no longer recorded as the app's `storage` events.
+- Consent mode: diagnostics granted after the page started send the summary's `runtime` counts (decisions, latency,
+  holds, denials, errors) from the grant only.
+- Consent mode: a model grant follows `model.loadIf` (a `"lazy"` verdict stays lazy), and `preload: "idle"` waits for
+  the page's load event, as without the gate.
+- Consent mode: storage denied, then granted gives the flow layer a stored layer's thresholds (`minSessions` 3).
+- Consent mode: a denial also removes the analytics visit entry (`genclass.analytics.<token>`) an earlier visit left.
+- Consent mode: the meta tag and `data-consent` fail closed: any value but `denied` (bare, `granted`, a typo) is
+  `pending`.
+
+- `@genclass/runtime/agent` (development builds only): the page tells the bridge when its mode or model state changes
+  after the hello (a `runtime` event, once per change, not per status update), so `genclass_status` no longer says
+  "model off" for a page whose model loaded after it connected. Each batch of steps also carries the runtime's
+  operation numbers the new steps stand for (`ops`: a request's key or a user action's index), so the MCP server's
+  `genclass_explain` writes the model's text in the steps' numbering. Wire messages only (`genclass-agent/1`, which
+  ignores what it does not know): no public type changed, nothing is held or delayed, and nothing of it reaches the
+  model, a situation or the gate.
+- CLI `remove` (shared with the `genclass` command) also takes out the coding-agent link the `genclass` command
+  writes (its setup's Coding agent step and `genclass doctor --fix`) after GenClass's import or after the block of a
+  file init created: a `genclass:init` block with `import { GenClass }`, `import { connectAgent }` and
+  `if (<dev check>) connectAgent(GenClass.init());` (also with braces), or, in a Next.js file where init bound
+  `genclass`, `if (<dev check>) import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));`;
+  and in Astro the marked `<script>` line with the same imports and call. Anything else in such a block is still a
+  problem and nothing is removed. Nothing else in `remove` changed.
+  - Also the link split around the app's imports (its two imports in a block after GenClass's import, its call in a
+    second block after the file's last import or at the end of the file), and the call inside Nuxt's
+    `defineNuxtPlugin` in the plugin init created.
+  - And the link as a file of its own, which the `genclass` command now writes: `genclass.agent.ts` or `.js`, init's
+    created-file header first, is deleted (as `genclass.config` is), and the entry's marked
+    `import "./genclass.agent"; // genclass:init` line taken out; in that file the dynamic agent import calls
+    `connectAgent(GenClass.init())`.
+  - `remove` deletes only a file init created (its first line is init's own header block): an entry file of the
+    app's own that was empty before init is written back empty, not deleted, once the link is in it.
+  - The published 0.3.0-beta.6's `remove` does not know the link: in a linked project
+    `npx @genclass/runtime@beta remove` reports the block as edited and removes nothing. Until the next runtime
+    release, `npx genclass remove` (which carries this code) is the command that takes it out.
+- CLI preview under the `genclass` command only (`globalThis.__GENCLASS_CLI__`): a diff line longer than the window
+  folds at its spaces with a hanging indent; an address is never split (it starts further left, so the "What is sent"
+  link to TELEMETRY.md fits whole at 80 columns); `--brief` lines, the Install line and the static-site note follow
+  that command's width. `genclass-runtime`'s own output is byte for byte what it was.
+
 - CLI (shared with the `genclass` command): a request to genclass.dev that fails on a connection closed while the
   command was busy (a package install) is sent once more on a new one; a token that could not be created for a
   network error says to run the command again, not to sign in again; `connect` names the host it signs in at.

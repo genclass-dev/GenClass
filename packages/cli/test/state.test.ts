@@ -432,7 +432,7 @@ describe("genclass: Pro right after the sign-in, and each app's plan page (src/s
 
   it("every command but signing in, the plan, status, help and remove passes the gate first (src/cli.mjs FREE_COMMANDS)", async () => {
     const { FREE_COMMANDS, run } = await import("../src/cli.mjs");
-    expect(FREE_COMMANDS).toEqual(["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version"]);
+    expect(FREE_COMMANDS).toEqual(["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version", "privacy", "doctor", "flake"]);
     deleteCredentials();
     forgetPro();
     const dir = tempDir();

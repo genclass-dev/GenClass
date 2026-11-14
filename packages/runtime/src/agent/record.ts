@@ -19,6 +19,8 @@ const MAX_STEPS = 600;
 const MAX_WITNESSES = 100;
 const MAX_VALUE = 500;
 const MAX_PATHS_CHECKED = 200;
+/** Operation numbers waiting to be sent (each batch of steps carries the new ones). */
+const MAX_NAMED = 2000;
 const NET = new Set(["fetch", "xhr"]);
 /** A write this long after its request ended is no longer "that response's" write (as the runtime's 10 s windows). */
 const CHAIN_WINDOW_MS = 10_000;
@@ -151,6 +153,11 @@ export class Recorder {
   readonly acts = new Map<number, ActStep>();
   /** Actions changed in place (a typing burst) since the last send. */
   readonly updated = new Set<number>();
+  /**
+   * The runtime's operation numbers (the "#3" of the model's situation text) and what the steps call them: a request's
+   * key or a user action's index, not yet sent to the bridge, so the agent's explanations use one numbering. Bounded.
+   */
+  readonly named: [number, string | number][] = [];
   private nActs = 0;
   private actByOp = new Map<number, number>();
   private actByEvent = new Map<number, ActStep>();
@@ -231,12 +238,19 @@ export class Recorder {
   }
 
   private mapOp(id: number, act: number): void {
+    if (this.actByOp.get(id) !== act) this.name(id, act);
     this.actByOp.set(id, act);
     if (this.actByOp.size > 4000) this.actByOp.delete(this.actByOp.keys().next().value as number);
   }
 
+  private name(id: number, as: string | number): void {
+    this.named.push([id, as]);
+    if (this.named.length > MAX_NAMED) this.named.splice(0, this.named.length - MAX_NAMED);
+  }
+
   sent(op: OpRec): void {
     const s: Step = { k: "send", t: this.rel(op.start), key: this.keyOf(op) };
+    this.name(op.id, s.key);
     if (op.detail) s.detail = op.detail.slice(0, 160);
     const act = this.actOf(op);
     if (act !== undefined) s.act = act;

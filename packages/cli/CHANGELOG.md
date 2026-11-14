@@ -1,5 +1,264 @@
 # Changelog
 
+## 0.4.0-alpha.0 (genclass-alpha)
+
+On npm's `alpha` tag: `npx genclass@alpha` (or `npm install -g genclass@alpha`); `npx genclass` stays on the stable
+line. Everything in 0.3.9 is in it too. Fixed in the pre-release check:
+
+- A prerelease never installs itself or replaces an installed `genclass` (and a stable run never replaces an installed
+  alpha), the installed copy's refresh honours `NO_UPDATE_NOTIFIER` and `GENCLASS_NO_UPDATE`, and `alpha.10` is newer
+  than `alpha.9`.
+- Run through npx, the alpha names itself `npx genclass@alpha` in every hint, `--json` included (plain `npx genclass`
+  is npm's stable line, which has no `privacy`, `doctor` or `flake`), and says `genclass` only when the installed copy
+  is on the alpha line; the help's columns follow the longer name.
+- In the walk, the Coding agent step still asks after the diff when it edits the app's own source (the link's import
+  line); the MCP server and the skill are written on the step's Enter, as 0.3.9 does.
+- A flag where a value should be (`privacy --out --json`) is a missing value, said in one line.
+- The Free prompt's help names the free local commands (privacy, doctor, flake).
+- Piping the command into a reader that stops early (`genclass help | head`) no longer ends with a stack trace.
+- The CLI's tests never reach production genclass.dev (one of them created an app there on every run since 0.2.1).
+
+The alpha line: new commands from a full walk of 0.3.8 against a local genclass.dev, a coding agent fixing a real race
+with `genclass fix`'s prompt, and research on what developers ask for and on compliance.
+
+- **`genclass privacy`** (free, no sign-in, no network): what this project's GenClass setup sends from its visitors'
+  browsers, to whom, why and for how long; what it keeps on their devices (the learned flows in `localStorage`, the
+  model in Cache Storage, the analytics visit id); the opt-outs it honours; what that means for EU, EEA and UK
+  visitors (ePrivacy Article 5(3), EDPB Guidelines 2/2023, the CDN's view of IP addresses) and US ones (GPC, CCPA
+  service-provider terms, regulated sites); the exact options that make it send and keep nothing; and the
+  Content-Security-Policy it needs. Read from the project's files (tests excluded). `--out genclass-privacy.md`
+  writes it as Markdown for a privacy policy or a vendor questionnaire; `--json` as data. Not legal advice, and it
+  says so. It knows the runtime's consent gate (`consent: "pending"` in the config, `consent=pending` in the meta
+  tag, `data-consent` on the script tag): with it, every recipient and stored entry says it waits for the visitor's
+  grant, the EU guidance says what the gate does and whether the project's GenClass files call
+  `GenClass.consent(...)`, and a new `Consent` row says which applies; without it, `consent: "pending"` is the first
+  line under "To send and keep nothing", for sites that need consent.
+- **`genclass doctor`** (free): one line per part GenClass added (this command and the `genclass` on the PATH, Node,
+  the sign-in, the runtime's version and import order, the diagnostics, the MCP server's pin, the skill, the
+  coding-agent link, the bridge, the site's Content-Security-Policy, the test workflow), each with what to run.
+  `--fix` writes GenClass's own lines only, after showing them: the MCP pin, the skill while it has its marker, and
+  the dev-only coding-agent link where the Coding agent step would write it (below). Two requests to npm's
+  registry for dist-tags, `--offline` none.
+- **`genclass flake`** (free, local, nothing sent): "is this Playwright test flaky, or is my app racy?" It runs the
+  project's own suite (or the tests and arguments given: a file, `file:line`, `--grep`, `--project`, `-c`) through the
+  project's own `@genclass/playwright` (`genclass-playwright-run`): once in the natural order, then once per seed
+  (`--runs`, default 5) with the app's API requests held for a seeded time, retries off unless `--retries` is given.
+  A reporter of its own, added on top of the project's (`--add-reporter`; `--reporter` with both on a Playwright
+  without it), writes each attempt to a temporary folder; the race files are read after each run. Per test: passed
+  every time; racy (it failed on some runs and a race file of a failing run shows a race: a witness, or the model's
+  stale, duplicate or conflict), with the request, the seeds and `genclass flake <file:line> --seed N` to replay one;
+  flaky (it failed and GenClass saw no race there, or says it could not watch those runs); broken (it failed every
+  time, in the natural order too). It ends with the one replay command and a prompt for the coding agent (on a
+  terminal Enter starts it, as `genclass fix` does); `--json` is the same as data, `--print` the prompt alone. Without
+  Playwright, `@genclass/playwright` or `@genclass/runtime` it prints the exact install line (npm, pnpm, yarn or bun)
+  and exits 2 without running anything. Measured with `test/e2e/flake.e2e.mjs` (a four-test fixture app in a
+  temporary folder, Chromium, the built runtime and `@genclass/playwright`; one page, one planted bug): the buggy
+  page's test racy on seeds 1, 3 and 4 in each of four runs, the four replays of seed 1 and the four of seed 3
+  failing again with the same race, and no race on any of the 72 runs of the three tests on the fixed page (false
+  reports on the correct variant: 0), RESULTS.md section 30.
+- **The Coding agent step links the dev page too** (`src/agentlink.mjs`): besides `.mcp.json` and the skill, it adds
+  `connectAgent` from `@genclass/runtime/agent` right after GenClass's import, in development builds only, so the
+  agent's MCP server sees the page on localhost (no more "no connected page" and a round of genclass_setup first). All
+  of it is in one preview and asked once (one Enter; `--yes` writes it, and shows it too; without a terminal nothing
+  is written). The link is a file of its own next to the entry, `genclass.agent.ts` (`genclass.agent.js` beside a
+  JavaScript entry; for Next.js's `pages/_app` in the folder above `pages/`, as init's `genclass.config`): one
+  `genclass:init` block with `import { GenClass }`, `import { connectAgent }` and
+  `if (<dev check>) connectAgent(GenClass.init());`, `"use client"` first in Next.js, and where init bound `genclass`
+  there the agent entry imported behind the check as its devtools line does
+  (`import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(GenClass.init()))`). The entry gets
+  one marked line, `import "./genclass.agent"; // genclass:init` (`./genclass.agent.js` for a JavaScript file),
+  right after init's marked `/auto` import or after the block of a file init created: imports stay first, and the
+  link runs right after `/auto`, before the app's code. In Astro a second marked `<script>` line. The dev check is
+  init's own: `import.meta.env.DEV` (Vite with React, Vue, Svelte, Solid or Preact, SvelteKit, Astro, React Router
+  and Remix on Vite), `process.env.NODE_ENV === "development"` (Next.js, Create React App, webpack, rspack, rsbuild,
+  parcel), with `typeof window !== "undefined"` where the entry renders on the server too (Next's genclass-init
+  component and pages/_app, a Remix or React Router root). Angular, Nuxt's plugin, a plain script tag, another
+  bundler, a setup by hand and a `genclass.agent` file of the app's own get the lines to add and where, and nothing
+  written. `genclass remove` deletes the link's file and takes the line out (the runtime's `remove` patterns),
+  round-tripped in tests for each framework back to the files before init; every file the step writes or edits is
+  parsed with esbuild in those tests.
+  - No link while the installed `@genclass/runtime` has no `./agent` export (0.2.x, npm's `latest`; or none is
+    installed): the step and `doctor` say the upgrade to run first (`npm install @genclass/runtime@beta`), since the
+    link would stop the dev server and the build.
+  - Plug'n'Play installs (Yarn's default, pnpm's `node-linker=pnp`; no `node_modules`) get the link again: the
+    lockfile next to `.pnp.cjs` gives the runtime's version (when it cannot tell which one the app gets, the link is
+    planned, as before).
+  - Create React App keeps building: the link's call is no longer above the app's imports (react-app's
+    `import/first` error).
+  - The link no longer reads or changes the app's own code, so it cannot break it: placed after the entry's last
+    import, its call joined a `(`, `[` or template line after a block or JSDoc comment in a file without semicolons
+    (`connectAgent(...) is not a function`, or the app's start inside the dead branch in production), and it landed
+    inside a multi-line import with a comment that names a path, or before import attributes on their own line (the
+    dev server and the build failed). Its own file runs right after `/auto` and before the app's code all the same: an
+    entry that throws while the page loads, or awaits at the top, is still linked first.
+  - Nuxt's lines to add are a marked block for the end of GenClass's plugin, which `genclass remove` takes out with
+    the plugin.
+  - `genclass remove` gives back an entry file of the app's own that was empty before init (it deleted it once the
+    link was in).
+  - Only `genclass remove` takes the link out for now: `npx @genclass/runtime@beta remove` (0.3.0-beta.6) refuses a
+    linked file and removes nothing until the next runtime release.
+- **The step is done** once the MCP server is configured and the link is in, or cannot be added for this framework;
+  an agent configured before the link opens the step again for the link alone ("Link your dev page to your coding
+  agent"), which writes only it. After it, and in the Dashboard step's waiting text (and `status --json`'s `now`),
+  the command says how to see GenClass work before any deploy: start the dev server (the project's own script, as
+  `npm run dev`), open the page, read the `[GenClass]` lines in the browser console, and ask the coding agent "is
+  GenClass connected?" or to explore a flow for races.
+- **The runtime's preview fits the window under the genclass command**: a long diff line folds at its spaces with a
+  hanging indent, an address is never split (it starts further left so it fits whole where it can, as the "What is
+  sent" link to TELEMETRY.md now does at 80 columns), and init's brief lines and its static-site note follow the
+  command's width (`COLUMNS` without a terminal). `genclass-runtime`'s own output is unchanged.
+- **The starter templates have a `.gitignore`** (`templates/*`): dependencies, build output, `.env`, `.env.local`
+  and `.env.*.local`, `test-results`, `playwright-report` and `.genclass.local` (the app token and private dashboard
+  link), so an app copied with `npx degit` never commits them.
+- **`genclass suggest`, two safety checks:** `secrets-in-bundle` reads the scripts the live home page ships (same
+  origin, not the `nomodule` polyfills, at most 20, 1 MB each; on a Next.js page the chunks of its own components
+  first, the framework's runtime last) for secret keys (sk_live_ and sk_test_ keys, named for no one provider since
+  Stripe, Clerk and others use them; Stripe restricted, OpenAI, OpenRouter, Anthropic, Supabase sb_secret_ and
+  service_role, an AWS key ID with its secret, also as NAME=value in a shipped .env or credentials file, GitHub,
+  Slack, SendGrid, private keys) and reports the kind and the script's path, never a value. Placeholders
+  (sk_live_xxxx, AWS's ...EXAMPLE IDs), keys providers document and an AWS key ID in a pre-signed link
+  (X-Amz-Credential=, AWSAccessKeyId=) are not reported. Scripts left unread (past the 20, or whose request failed,
+  timed out or broke off before its end; a key in the part that came is still reported), or longer than 1 MB (one of
+  exactly 1 MB is read whole when its end follows within 250 ms; an error or a stall there keeps the 1 MB and counts
+  it as longer, never waiting for the request's timeout), make it unknown, not a pass; a home page whose body breaks
+  off is a failed request, never an empty page. On 13,473 library files (186 MB of node_modules) it matched
+  one, a test certificate's private key. Stripe's documented sample test key is no leak in either scanner, but
+  `test-keys-live` still fails on a production env file or hosting config that holds it.
+  `framework-cve` reads the installed Next.js and react-server-dom-* versions (node_modules, else the npm, pnpm, yarn
+  or bun lockfile, this app's own entry in a monorepo's) against CVE-2025-55182 (remote code execution in React
+  Server Components; the App Router as Next.js finds it, not a static export) and CVE-2025-29927 (Next.js
+  middleware skipped; self-hosted with a middleware file only: Vercel and Netlify count only from their config, the
+  linked folder or a deploy workflow, never from a library such as @vercel/otel), with the release that fixes each.
+
+  origin, at most 6, 1 MB each) for secret keys (Stripe secret, OpenAI, Anthropic, AWS, GitHub, Slack, SendGrid,
+  private keys, a Supabase service_role JWT) and reports the kind and the script's path, never a value; on 13,448
+  library files (126 MB of node_modules) it matched one, a test certificate's private key (recall not measured;
+  RESULTS.md section 30). `framework-cve` reads
+  the installed Next.js and react-server-dom-* versions (node_modules, else the npm, pnpm, yarn or bun lockfile)
+  against CVE-2025-55182 (remote code execution in React Server Components; App Router only) and CVE-2025-29927
+  (Next.js middleware skipped; self-hosted with a middleware file only), with the release that fixes each.
+- **A newer genclass** is said in one line when the command opens on a terminal, from a check of npm's dist-tags at
+  most once a day (never in CI, piped, `--json`, `--yes`, `NO_UPDATE_NOTIFIER` or `GENCLASS_NO_UPDATE`).
+- **The fix prompts** let an agent that can drive a browser do the page loads itself (Playwright from a script kept
+  outside the repo, then `whenSettled()`), and only otherwise ask the person; the same sentence is on the dashboard
+  page (`telemetry-worker/src/pages.ts`).
+
+Fixed from the walk:
+
+- With `genclass` installed, `help`'s first column was 4 characters short of the rest (the names were shortened
+  after the layout); it is laid out with the name as printed.
+- `genclass dashboard` said "Problems found 16" where `problems`, `report` and the browser dashboard said 59 for the
+  same period: it now counts the measured checks in, like them, with "Of them checks" beside it.
+- A server that sells nothing (self-hosted, a local `wrangler dev`) no longer has an app-plan step, and an offer
+  without a price no longer prints "Pro is ."
+- A mistyped command or option says one line and `npx genclass help`, instead of the whole help.
+- `funnels` lines its counts up in one column.
+
+Fixed in `genclass privacy` (and so in `doctor`'s Diagnostics row):
+
+- Options are read only from GenClass's own places (GENCLASS_CONFIG, `GenClass.init({...})`, the Nuxt and Astro
+  options, the meta and script tags, the `/auto` import), each key in its own object, comments taken out: another
+  library's `endpoint:` or `baseUrl:`, a commented-out `telemetry: false` or a template's "switch to /auto/guard" note
+  no longer change the map.
+- Nuxt (`@genclass/nuxt`) and Astro (`@genclass/astro`) setups count as installed, with their mode and telemetry.
+- Test setup files (`vitest.setup.ts`, `setupTests.ts`, Cypress, Playwright, `spec/`) never count, on Windows too.
+- The consent gate is described as working only when the project's runtime has it: 0.3.0-beta.6 and earlier ignore
+  `consent`, and the map says so (and stops recommending it) instead of promising that nothing is sent.
+- `consent: { model: true }` grants the model at start; only the parts it leaves out wait.
+- `breaker: { persist: false }` no longer hides learned flows, and `telemetry.sample` no longer adds a bucket entry.
+- ONNX Runtime's wasm is listed from jsDelivr when `model.baseUrl` is set without `ortWasmPaths`.
+- A script tag on a CDN names the CDN as a recipient, with its `script-src` line.
+- Webhook sinks from the `webhook()` adapter or a same-origin path (`webhook:/genclass`) are listed.
+- "Stored on the device" lists what the device section lists (the model in Cache Storage included); learned flows
+  name their `sessionStorage` entry; the analytics visit entry is said to have no expiry.
+- The EU section says "no recipient to disclose" only when nothing leaves the browser; the opt-outs say they stop
+  diagnostics and analytics only; IP addresses are said to reach every recipient, never stored by GenClass; with an
+  app key, genclass.dev's row names forwarding and OpenAI (PRIVACY.md).
+- SvelteKit's self-host command uses `static/`; the `--out` line says `npx genclass privacy`; options set by code are
+  named in a "Not read" row.
+- Read as the runtime reads it, so the map never says less is sent: a `telemetry.endpoint` that is not an
+  `http(s)://` URL (a path, `//host`, a host without its scheme, one set by code) is diagnostics to genclass.dev, not
+  "your own collector" (`doctor` no longer says "your own collector (null)"); `createRuntime({...})` is read with its
+  own defaults (no diagnostics, model or visual checks unless set); a regular expression in the options
+  (`protect: [/[(]/]`) no longer cuts them short; `data-consent` and `consent=` fail closed as in the runtime (any
+  value but `denied`, `granted` and a bare attribute included, is pending).
+- Only what certainly applies is read: a whole literal (`window.GENCLASS_CONFIG = {...}`, `GenClass.init({...})`,
+  `createRuntime({...})`) at the top level of its script, the Nuxt and Astro options, the meta and script tags and
+  the `/auto` import. A `||=` or `??=` default, `Object.assign`, a spread, one key set on its own, an identifier,
+  code in a condition or a function, a config set in the module that imports `/auto` (that import runs first) and
+  `GenClass.init` options where `/auto` or the script tag already started GenClass are named in the Not read row,
+  and for what they may set the map takes the reading that sends and keeps more (diagnostics on to genclass.dev, the
+  model from jsDelivr) instead of an opt-out they may not make. `GenClass.init` through a default or namespace import
+  counts, so such a project is no longer read as headless.
+
+Fixed in `genclass doctor` and the update notice:
+
+- A Content-Security-Policy with quoted sources (`'self'`) is read whole, so a correct policy is no longer reported as
+  blocking GenClass; vercel.json, firebase.json and staticwebapp.config.json are read, as are JS policies built from
+  templates, joined arrays and constants, a header's several policies, and only the policies set for the pages.
+- Sources are matched the way browsers match them: `https:`, hosts without a scheme, `*.` wildcards, ports and paths.
+- The model's worker is checked (`worker-src`, else `child-src`, `script-src`, `default-src`): `'self'`, or `blob:`
+  for the script tag, whose tag also needs `script-src`.
+- The self-hosting route names the folder: `fetch-model public/genclass-model, then init --model-url /genclass-model/`.
+- A runtime hoisted to a workspace root counts as installed, and the MCP server is found in the files `status` reads
+  (`.codex/config.toml`, `genclass-mcp`), in the app's folder and at the repository's root.
+- A plain HTML site's script tag is the runtime (its version is compared with npm's), and its agent link is not a warning.
+- The skill `npx @genclass/mcp init` wrote, or one checked out with CRLF line ends, is current; one from a newer
+  `@genclass/mcp` is never replaced by an older copy.
+- `--fix` shows each change (its diff) before writing it, with `--yes` too.
+- `--json --fix` prints one JSON object (with `fixed`, `failed`, `skipped`), the report on stderr, and never asks.
+- Under `npx`, the "genclass on PATH" check runs the installed `genclass`, not npx's own copy.
+- Signed out, the fixes name what needs Pro and the free commands (`npx @genclass/runtime@beta init`,
+  `npx -y @genclass/mcp@<version> init`).
+- After linking the dev page, the agent is asked about the page only when its configuration names GenClass's server.
+- An alpha build is compared with the `alpha` dist-tag as well as `latest`, in `doctor` and in the update notice,
+  which then says `npm install -g genclass@alpha`.
+- A policy set for a section of the site (`/app/*`) is checked again, as GenClass runs on those pages too; only
+  policies for API routes and static files (`/api/*`, `/assets/*`, `*.js`) are left out.
+- An API-only policy is no longer reported as blocking GenClass when its folder is not the pattern's first part
+  (`/(api|trpc)/(.*)`, `/(api|trpc)(.*)`, Next.js's `/:all*(svg|jpg|png)`); a route GenClass cannot tell serves pages
+  (`/:locale/api/:path*`, `/admin/api/(.*)`, a source built at run time such as `` `${base}/api/:path*` ``) is not
+  checked, and the Content policy row names it and what it would need if pages are served there.
+- `_headers` is read as Netlify and Cloudflare Pages read it: header lines need no indent, and a path line may be an
+  absolute URL (`https://example.com/*`).
+- A next.config header's route is the `source` of its own entry (written before or after its `headers`), not the
+  last `source` above it, so a `redirects()` entry no longer hides the policy.
+- The model check asks for the onnxruntime-web version the app's runtime loads (1.30.0, or the installed runtime's
+  pin), so a jsDelivr source limited to that version's folder is no longer reported as blocking it.
+
+Fixed from the review (2026-11-14):
+
+- At a setup step only Enter, `y` or `yes` starts it: `n` and `no` skip it, as `s` does, and any other answer is
+  asked again. Before, `n` started the step (the test workflow was written, the sign-in and GitHub pages opened).
+- The home runs `privacy`, `doctor` and `flake` (it said "There is no command" and named the same word), and lists
+  them in `help`.
+- `flake --seed` and `--no-baseline` runs that fail every time are listed as "Failed on every seed (no
+  natural-order run)", with the command that adds the natural order; they no longer say "in the natural order too".
+- `flake` on a Playwright without `--add-reporter` says before the run that the config's reporters are replaced,
+  and how to keep them (`--reporter`).
+- `flake --json` prints one JSON object on every exit: the run could not start, no such folder, a wrong number.
+- `flake`'s missing-package screen and its `--help` fit the window; an app that lists `@genclass/runtime` in its
+  dependencies is told to install it without `-D`.
+- `--no-browser` no longer stops `init`, `connect`, `scan`, `audit`, `whoami`, `logout`, `remove` or `flake` with
+  "unknown option".
+- A setup that ends with a step still to do (a sign-in that failed, a step skipped) names it and its command;
+  `suggest` is under "Day to day" only with Pro.
+- Offline, with a saved session, the header says the account "(not checked)" instead of "not signed in".
+- Under `genclass`, init's Optional and Payments blocks and its question about the account fit the window (a
+  code line's `//` comment goes above it).
+- Init's folded code pastes as code: it breaks only after `,` `;` `:` `=` `{` `(` `[` or `=>`, never between an arrow
+  function's parameters and its `=>` (the Zustand and Redux Toolkit lines were a SyntaxError at 58 to 61 columns),
+  and a line it cannot read surely is printed whole.
+- `flake`'s results fit the window too (the title, the replay's heading, an interrupted run, a long list of passing
+  tests); the replay command at the end stays whole, further left when it must be.
+- `flake`'s title folds between its phrases: at 80 columns (also in a pipe or a CI log) it no longer leaves a lone
+  "5" under "...then on seeds 1 to".
+- Under `genclass`, init folds an import only around its `from` (`import { genclassEnhancer } from` above
+  `"@genclass/runtime/redux";`), never inside its braces.
+- `flake` keeps each test's command whole ("replay seed 2:", "run it alone:" and the others), under its label when
+  both do not fit on one line; the screens for no test run, missing browsers and `GENCLASS_PLAYWRIGHT=off` fit the
+  window, and an option with its value (`--cwd apps/web`, `--runs 20`) stays on one line.
+
 ## 0.3.9
 
 - **`genclass` opens its prompt straight away**: commands and questions, with one line on where this folder's setup

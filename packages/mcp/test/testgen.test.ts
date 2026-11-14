@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { actionLines, locator, parseTarget, regressionTest } from "../src/testgen.js";
 import { clean, pathShape, q } from "../src/text.js";
+import { nameDifference } from "../src/compare.js";
 import type { Finding, Run } from "../src/types.js";
 import { act } from "./helpers.js";
 
@@ -145,5 +146,164 @@ describe("testgen (AGENT.md §5.3)", () => {
     expect(t).toContain('toContain("Your appointment: 4:00 PM")');
     expect(t).toContain('not.toContain("Arrives today")');
     expect(t).not.toContain("minutes ago");
+  });
+});
+
+describe("testgen: a file an agent can run as it is (AGENT.md §5.3)", () => {
+  const typing = [act(0, "type", 'searchbox "Search"', "react", { count: 5, dur: 400 })];
+  const baseline = (id: string, text: string[]): Run => ({ ...run([]), id, snapshot: { t: 900, state: {}, text, requests: {}, witnesses: 0, errors: 0, forced: 0 } });
+
+  it("opens with what it needs and the command that runs it", () => {
+    const t = regressionTest(finding("stale-write", { subject: "search.results" }), run(typing), { order: "given", given: [] })!;
+    const head = t.split("\n").slice(0, 2);
+    expect(head[0]).toBe("// Needs @playwright/test and the app's dev server running (its dev build calls connectAgent from @genclass/runtime/agent).");
+    expect(head[1]).toBe("// Run: GENCLASS_APP_URL=http://localhost:5173 npx playwright test genclass-f1.spec.ts");
+  });
+
+  it("declares only the records its assertions read, never a void line", () => {
+    const stale = regressionTest(finding("stale-write", { subject: "search.results" }), run(typing), { order: "given", given: [] })!;
+    expect(stale).toContain("const witnesses = await page.evaluate");
+    expect(stale).not.toContain("const errors =");
+    expect(stale).not.toContain("const snap =");
+    expect(stale).not.toContain("void ");
+    const err = regressionTest(finding("error", { name: "TypeError", message: "boom" }), run([]), { order: "given", given: [] })!;
+    expect(err).toContain("const errors = await page.evaluate");
+    expect(err).not.toContain("const witnesses =");
+    expect(err).not.toContain("const snap =");
+  });
+
+  it("a locator used more than once is one constant", () => {
+    const t = regressionTest(finding("stale-write", { subject: "search.results" }), run(typing), { order: "given", given: [] })!;
+    const loc = locator('searchbox "Search"');
+    expect(t).toContain(`  const searchSearchbox = ${loc};`);
+    expect(t).toContain('  await searchSearchbox.fill("");');
+    expect(t).toContain('  await searchSearchbox.pressSequentially("react", { delay: 100 });');
+    expect(t.split(loc).length - 1).toBe(1);
+    // used once: inline, no constant
+    const once = regressionTest(finding("error", { name: "E", message: "m" }), run([act(0, "click", 'button "Pay now"')]), undefined)!;
+    expect(once).toContain(`await ${locator('button "Pay now"')}.click();`);
+    expect(once).not.toMatch(/const \w+Button = /);
+  });
+
+  it("constant names keep letters and digits only, end with the role, and never clash", () => {
+    const acts = [act(0, "click", 'button "Delete"'), act(1, "click", 'button "Delete"'), act(2, "click", 'link "delete"'), act(3, "click", 'link "delete"'), act(4, "click", 'button "2024: report"'), act(5, "click", 'button "2024: report"'), act(6, "click", "switch"), act(7, "click", "switch")];
+    const t = regressionTest(finding("error", { name: "E", message: "m" }), run(acts), undefined)!;
+    expect(t).toContain("const deleteButton = ");
+    expect(t).toContain("const deleteLink = ");
+    expect(t).toContain("const el2024ReportButton = ");
+    expect(t).toContain("const switchEl = ");
+    const evil = '"); process.exit(1); ("';
+    const e = regressionTest(finding("error", { name: "E", message: "m" }), run([act(0, "click", `button "${evil}"`), act(1, "click", `button "${evil}"`)]), undefined)!;
+    expect(e).toMatch(/const processExit1Button = page\.getByRole\("button", \{ name: "\\"\); process\.exit\(1\); \(\\"", exact: true \}\)/);
+  });
+
+  it("a race test holds the page to what the baselines showed: the lines the failing run lacked, then those naming what was typed; no TODO then", () => {
+    const ev = { fields: [], textOnlyBaseline: [], textOnlyRun: ["reac one"], errors: [], witnesses: [], baselines: ["r7", "r8"] };
+    const base = [baseline("r7", ["Search", "Results for react", "react one", "Updated 2 minutes ago react"]), baseline("r8", ["Search", "Results for react", "react one", "Updated 3 minutes ago react"])];
+    const t = regressionTest(finding("race", ev), run(typing), { order: "seeded", seed: 3 }, base)!;
+    expect(t).toContain("// what the page shows with responses in request order (baseline runs r7, r8): the fixed page keeps showing it");
+    expect(t).toContain('expect(snap.text, "the page shows what it shows with responses in request order").toContain("Results for react");');
+    expect(t).toContain('toContain("react one")');
+    expect(t).not.toContain('toContain("Search")'); // names nothing the user typed
+    expect(t).not.toContain("minutes ago"); // an age is never asserted
+    expect(t).toContain('not.toContain("reac one")');
+    expect(t).not.toContain("TODO");
+    // without the baselines (cleared), only the evidence's own lines; nothing positive: the TODO stays
+    const bare = regressionTest(finding("race", ev), run(typing), { order: "seeded", seed: 3 })!;
+    expect(bare).not.toContain('toContain("Results for react")');
+    expect(bare).toContain("// TODO: assert what the user should see");
+  });
+
+  it("other findings keep one marked place for the domain assertion", () => {
+    const t = regressionTest(finding("duplicate-request", { subject: "POST /api/pay" }), run([act(0, "click", 'button "Pay"')]), undefined)!;
+    expect(t.match(/TODO/g)).toHaveLength(1);
+    expect(t).toContain('// TODO: assert what the user should see after these steps, e.g. await expect(page.getByText("...")).toBeVisible();');
+  });
+
+  /**
+   * Run a generated test against a page whose agent link answers `snapshot`, `witnesses` and `errors`: undefined when it
+   * passes, its assertion error when it fails. The page is a stand-in (locators do nothing); the assertions are the
+   * file's own, run with vitest's expect, which takes the same (value, message) form as Playwright's.
+   */
+  async function runOn(src: string, agent: { text?: string[]; witnesses?: unknown[]; errors?: unknown[] }): Promise<Error | undefined> {
+    const { transform } = await import("esbuild");
+    const js = (await transform(src.replace(/^import .*$/m, ""), { loader: "ts" })).code;
+    const chain: any = new Proxy(function () {}, { get: (_t, k) => (k === "then" ? undefined : chain), apply: () => chain });
+    const page: any = new Proxy({}, { get: (_t, k) => (k === "evaluate" ? async (fn: (a?: unknown) => unknown, a?: unknown) => fn(a) : k === "goto" || k === "addInitScript" ? async () => {} : k === "then" ? undefined : () => chain) });
+    const win = { __GENCLASS_AGENT__: { whenSettled: async () => {}, snapshot: () => ({ t: 1, state: {}, requests: {}, text: agent.text ?? [], fields: {} }), witnesses: () => agent.witnesses ?? [], errors: () => agent.errors ?? [] } };
+    let body: ((a: { page: unknown }) => Promise<void>) | undefined;
+    new Function("test", "expect", "window", js)((_title: string, fn: typeof body) => (body = fn), expect, win);
+    try {
+      await body!({ page });
+      return undefined;
+    } catch (e) {
+      return e as Error;
+    }
+  }
+
+  it("a line the failing run showed more often than the baselines is asserted by its count, so the fixed page passes (finding 21)", async () => {
+    // a stale response renders "Milk" a second time; the page shows it once in request order
+    const add = [act(0, "click", 'button "Add"')];
+    const base = [baseline("r7", ["Groceries", "Milk", "Bread"]), baseline("r8", ["Groceries", "Milk", "Bread"])];
+    const ev = { fields: [], textOnlyBaseline: [], textOnlyRun: ["Milk"], textCounts: { Milk: { baseline: 1, run: 2 } }, errors: [], witnesses: [], baselines: ["r7", "r8"] };
+    const t = regressionTest(finding("race", ev), run(add), { order: "seeded", seed: 1 }, base)!;
+    expect(t).not.toContain('not.toContain("Milk")');
+    expect(t).toContain('expect((snap.text ?? []).filter((x: string) => x === "Milk").length, "the page shows this line fewer times than the failing order did (2 times; 1 with responses in request order)").toBeLessThan(2);');
+    expect(await runOn(t, { text: ["Groceries", "Milk", "Bread"] })).toBeUndefined();
+    expect(await runOn(t, { text: ["Groceries", "Milk", "Bread", "Milk"] })).toBeInstanceOf(Error);
+    // the other way round: a line the baselines showed twice and the failing run once
+    const lamp = { fields: [], textOnlyBaseline: ["Reading lamp"], textOnlyRun: [], textCounts: { "Reading lamp": { baseline: 2, run: 1 } }, errors: [], witnesses: [] };
+    const l = regressionTest(finding("race", lamp), run(add), { order: "seeded", seed: 1 })!;
+    expect(l).toContain(".toBeGreaterThanOrEqual(2);");
+    expect(await runOn(l, { text: ["Reading lamp", "Reading lamp"] })).toBeUndefined();
+    expect(await runOn(l, { text: ["Reading lamp"] })).toBeInstanceOf(Error);
+    // a line only one side shows keeps its plain assertion; counts from a file are numbers in the code, nothing else
+    const plain = regressionTest(finding("race", { ...ev, textCounts: { Milk: { baseline: 0, run: 1 } } }), run(add), { order: "seeded", seed: 1 }, base)!;
+    expect(plain).toContain('not.toContain("Milk")');
+    const evil = regressionTest(finding("race", { ...ev, textCounts: { Milk: { baseline: "1); process.exit(1", run: "2" } } }), run(add), { order: "seeded", seed: 1 }, base)!;
+    expect(evil).not.toContain("process.exit");
+    // the report's words say so too
+    expect(nameDifference({ fields: [], textOnlyBaseline: [], textOnlyRun: ["Milk"], errors: [], textCounts: { Milk: { baseline: 1, run: 2 } } })).toBe('it shows "Milk" twice, the baseline once');
+    expect(nameDifference({ fields: [], textOnlyBaseline: ["Reading lamp"], textOnlyRun: [], errors: [], textCounts: { "Reading lamp": { baseline: 2, run: 1 } } })).toBe('it shows "Reading lamp" once, the baseline twice');
+    expect(nameDifference({ fields: [], textOnlyBaseline: [], textOnlyRun: ["Milk"], errors: [] })).toBe('it shows "Milk", which the baseline does not');
+  });
+
+  it("lines naming what was typed are checks, not the assertion: with nothing else to assert the test still fails until one is written (finding 22)", async () => {
+    // the only difference is a field with nothing but a generated name, and lines with an age: nothing to assert
+    const ev = { fields: [{ where: "field", name: "*", baseline: "react", run: "reac" }], textOnlyBaseline: ["Updated just now"], textOnlyRun: ["Updated 5 minutes ago"], errors: [], witnesses: [] };
+    const base = [baseline("r7", ["Search", "Results for react"]), baseline("r8", ["Search", "Results for react"])];
+    const t = regressionTest(finding("race", ev), run(typing), { order: "seeded", seed: 3 }, base)!;
+    expect(t).toContain('toContain("Results for react")');
+    expect(t).toContain('expect(false, "GenClass could not derive a generic assertion');
+    // the failing page shows "Results for react" too: the test must not pass on it
+    expect(await runOn(t, { text: ["Search", "Results for react"] })).toBeInstanceOf(Error);
+    // a witness is the assertion then, as before the naming lines came
+    const w = regressionTest(finding("race", { ...ev, witnesses: ["overwrote-newer search.results by GET /api/search"] }), run(typing), { order: "seeded", seed: 3 }, base)!;
+    expect(w).toContain('w.kind === "overwrote-newer" && SUBJECT.test(w.subject)');
+    expect(w).not.toContain("could not derive");
+    expect(await runOn(w, { text: ["Search", "Results for react"], witnesses: [{ kind: "overwrote-newer", subject: "search.results" }] })).toBeInstanceOf(Error);
+    expect(await runOn(w, { text: ["Search", "Results for react"] })).toBeUndefined();
+  });
+
+  it("a line naming what was typed is kept only without other digits: a clock time or a date beside it is a value of the moment (finding 67)", () => {
+    const acts = [act(0, "type", 'textbox "Message"', "hello there"), act(1, "type", 'textbox "Reference"', "order 42")];
+    const lines = ["10:42 You: hello there", "Buy milk · Nov 14 hello there", "Order 42 placed", "Hello there, Sam"];
+    const t = regressionTest(finding("race", { fields: [], textOnlyBaseline: [], textOnlyRun: ["You: hello ther"], errors: [], witnesses: [] }), run(acts), { order: "seeded", seed: 3 }, [baseline("r7", lines), baseline("r8", lines)])!;
+    expect(t).not.toContain("10:42");
+    expect(t).not.toContain("Nov 14");
+    expect(t).toContain('toContain("Order 42 placed")'); // its digits are the ones the user typed
+    expect(t).toContain('toContain("Hello there, Sam")');
+  });
+
+  it("every variant is valid TypeScript", async () => {
+    const { transform } = await import("esbuild");
+    const ev = { fields: [{ where: "state", name: "todos.entities.*.title", baseline: "Buy milk", run: "Buy mil" }, { where: "field", name: "el-id-*-33", baseline: "a", run: "b" }], textOnlyBaseline: ["Results for react"], textOnlyRun: ["x"], errors: ["TypeError: y"], witnesses: [] };
+    const variants = [
+      regressionTest(finding("race", ev), run(typing), { order: "seeded", seed: 1 }, [baseline("r7", ["Results for react"])]),
+      regressionTest(finding("stale-write", { subject: "a.b" }), run(typing), undefined),
+      regressionTest(finding("duplicate-request", { subject: "POST /x" }), run([act(0, "click", 'button "A"'), act(1, "click", 'button "A"', undefined, { clicks: 2 })]), undefined),
+      regressionTest(finding("error", { name: "E", message: 'it said "no"' }), run([act(0, "change", 'checkbox "Gift"', "checked"), act(1, "change", 'checkbox "Gift"', "unchecked")]), undefined),
+    ];
+    for (const v of variants) await expect(transform(v!, { loader: "ts" })).resolves.toBeTruthy();
   });
 });

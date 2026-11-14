@@ -3,6 +3,9 @@
 import type {
   TelemetryStatus,
   AnalyticsStatus,
+  ConsentChoices,
+  ConsentState,
+  ModelOptions,
   ActionContext,
   ActionDef,
   AdapterHandle,
@@ -316,7 +319,23 @@ export class RuntimeImpl implements Runtime {
   /** InitOptions.scope: "functions" raises decisions only for activity inside protect()ed functions. */
   readonly scope: "app" | "functions";
   /** Transition profiles are stored too (an explicit learn.persist; they feed the model, CONTRACT §4). */
-  private readonly persistProfiles: boolean;
+  private persistProfiles: boolean;
+  /** Where learned state is stored once storage consent is given (InitOptions.consent; src/consent.ts reads it). */
+  private learnWant: "local" | "session" | null = null;
+  /**
+   * InitOptions.consent per part: true granted, false denied, unset pending (CONTRACT section 17). Without the option
+   * every part is granted; with it every part starts pending and the consent chunk (src/consent.ts) applies the option
+   * right after start. Internal.
+   */
+  readonly cs: ConsentChoices;
+  /**
+   * What the consent chunk needs from createRuntime (src/index.ts): start telemetry, whether the gate is on
+   * (InitOptions.consent set), the model options (cacheName), a new built-in model host (lazy, or as the options and
+   * model.loadIf say), the app's token (the analytics visit entry's key). Internal.
+   */
+  cx?: { tel?: () => TelemetryStatus; gate?: boolean; model?: ModelOptions | false; host?: (lazy?: boolean) => DecisionProvider; token?: string };
+  /** The built-in model's status listener: the consent chunk subscribes a host it puts in place (src/consent.ts). Internal. */
+  declare onModel?: (s: ModelStatus) => void;
   /** Sessions the stored learned state counted when it was loaded. */
   private storedSessions = 0;
   /** Signatures with a `response` expectation reported and no answer since (one line per run of hangs). */
@@ -348,6 +367,8 @@ export class RuntimeImpl implements Runtime {
   /** "on", "pending" (an async enabled predicate: pass-through), "off" (an EnabledSource flipped off), "disabled". */
   private enabledState: "on" | "pending" | "off" | "disabled" = "on";
   private sampled = true;
+  /** The `sample` whose bucket is kept in sessionStorage (0 < p < 1): a storage grant reads or stores it (src/consent.ts). */
+  private declare bucketP?: number;
   private routes: RouteRule[] = [];
   private routeScope: { route?: string; rule?: number; mode: ModeOrOff; aggressiveness: number } = { mode: "heal", aggressiveness: 1 };
   private requestsOpt: RequestScope = {};
@@ -441,6 +462,9 @@ export class RuntimeImpl implements Runtime {
   constructor(o: CreateOptions & { decider?: DecisionProvider | null; ownsDecider?: boolean } = {}) {
     this.clock = o.clock ?? browserClock;
     this.global = (o.global ?? globalThis) as Record<string, unknown>;
+    // consent (CONTRACT section 17): before storage consent this.storage() answers nothing, so nothing below reads or
+    // writes GenClass's own entries (the sample bucket, the breaker, learned state)
+    this.cs = o.consent == null ? { diagnostics: true, analytics: true, storage: true, model: true } : {};
     this.events = new EventLog(o.historySize ?? 500);
     this.ctx = new Context(this.clock);
     // built-in secret-name redaction always runs first; a custom function can only redact further (OPTIONS-SPEC §4.10)
@@ -503,6 +527,7 @@ export class RuntimeImpl implements Runtime {
     this.flowsReady = new Promise<void>((r) => (this.flowsReadyResolve = r));
     if (!this.flowsWanted) this.flowsReadyResolve();
     const want = lp === false || o.enabled === false || (lp === undefined && (!this.flowsWanted || testDom(this.global))) ? null : lp === "session" ? "session" : "local";
+    this.learnWant = want;
     this.learnStore = want && this.storageWorks(want) ? want : null;
     if (want && !this.learnStore) this.log("learned state is kept in memory: storage is unavailable");
     this.persistProfiles = this.learnStore !== null && lp !== undefined;
@@ -605,7 +630,7 @@ export class RuntimeImpl implements Runtime {
       // the model host also notifies while it stays ready (latency stats after the first decision, then every 5 s):
       // the "Model ready" line is printed when the model becomes ready, not on each of those updates
       let wasReady = false;
-      const off = this.decider.onStatus((s) => {
+      const off = this.decider.onStatus((this.onModel = (s) => {
         this.fire("status", s);
         const becameReady = s.state === "ready" && !wasReady;
         wasReady = s.state === "ready";
@@ -622,7 +647,7 @@ export class RuntimeImpl implements Runtime {
         if (s.state === "error" && s.blocked) this.warnOnce("model-blocked", blockedMessage(s.blocked));
         else if (s.state === "error") this.emitReport({ kind: "status", message: `[GenClass] Model unavailable (${s.error ?? "error"}); observing only.` });
         else if (s.state === "skipped" && s.reason === "worker-unavailable") this.warnWorkerUnavailable(s);
-      });
+      }));
       this.uninstall.push(off);
     }
     // not loaded before the runtime could subscribe: the device floor (model.loadIf, src/model/device.ts) or, with
@@ -639,8 +664,9 @@ export class RuntimeImpl implements Runtime {
       this.enabledState = "disabled";
       return;
     }
-    // flow expectations (opt-in): imported on the next task after init (a 0 ms timer), never on the first load
-    if (this.flowsWanted)
+    // flow expectations (opt-in): imported on the next task after init (a 0 ms timer), never on the first load; flows
+    // that would be stored wait for the visitor's storage choice (src/consent.ts loads them then)
+    if (this.flowsWanted && (!want || this.cs.storage))
       this.flowsTimer = this.clock.setTimeout(() => {
         this.flowsTimer = null;
         this.loadFlows();
@@ -694,7 +720,9 @@ export class RuntimeImpl implements Runtime {
     con?.warn?.(`[GenClass] ${msg}`);
   }
 
-  private storage(kind: "local" | "session"): Storage | undefined {
+  /** GenClass's own storage of this kind: none before storage consent, except to remove entries (`any`). */
+  private storage(kind: "local" | "session", any?: boolean): Storage | undefined {
+    if (!any && !this.cs.storage) return undefined;
     try {
       return (kind === "local" ? this.global.localStorage : this.global.sessionStorage) as Storage | undefined;
     } catch {
@@ -741,6 +769,7 @@ export class RuntimeImpl implements Runtime {
     }
     if (p >= 1) return true;
     if (p <= 0) return false;
+    this.bucketP = p;
     const ss = this.storage("session");
     const actAt = `act@${p}`;
     const observeAt = `observe@${p}`;
@@ -1121,7 +1150,7 @@ export class RuntimeImpl implements Runtime {
         this.selfStorage = true;
         for (const k of ["local", "session"] as const) {
           try {
-            this.storage(k)?.removeItem(this.learnKey);
+            this.storage(k, true)?.removeItem(this.learnKey);
           } catch {
             /* ignore */
           }
@@ -1129,6 +1158,17 @@ export class RuntimeImpl implements Runtime {
         this.selfStorage = false;
       },
     };
+  }
+
+  /**
+   * The visitor's consent (InitOptions.consent, CONTRACT section 17), applied by a lazy chunk (src/consent.ts) so the
+   * first load carries only the gates. Resolves with each part's state; null when that chunk could not load.
+   */
+  consent(c?: boolean | ConsentChoices | CreateOptions["consent"]): Promise<ConsentState | null> {
+    return import("./consent.js").then(
+      (m) => m.applyConsent(this, c),
+      () => null,
+    );
   }
 
   /** Turn GenClass off for this page (OPTIONS-SPEC §4.1). `undo: true` rolls back actions still in their undo window. */
@@ -1550,7 +1590,7 @@ export class RuntimeImpl implements Runtime {
    * "disabled".
    */
   private consultable(op?: OpRec | null, mode?: ModeOrOff): boolean {
-    if (this.paused || this.destroyed || !this.decider || this.enabledState !== "on") return false;
+    if (this.paused || this.destroyed || !this.decider || this.enabledState !== "on" || this.noModel()) return false;
     const st = this.decider.status.state;
     return st === "ready" || st === "off" || st === "unloaded" || (st === "loading" && this.defers(mode ?? this.effectiveMode(op)));
   }
@@ -3238,8 +3278,13 @@ export class RuntimeImpl implements Runtime {
 
   // ------------------------------------------------------------------------------------------ public API
 
+  /** The built-in model waits for (or lost) the visitor's model consent: it is not loaded or consulted. */
+  private noModel(): boolean {
+    return this.ownsDecider && !this.cs.model;
+  }
+
   get ready(): Promise<void> {
-    if (!this.decider) return Promise.resolve();
+    if (!this.decider || this.noModel()) return Promise.resolve();
     // a model torn down after idle (model.unloadAfterIdleMs) reloads when it is asked for again (OPTIONS-SPEC §4.18)
     if (!this._ready || this.decider.status.state === "unloaded") {
       let p: Promise<void>;
@@ -3273,9 +3318,9 @@ export class RuntimeImpl implements Runtime {
       },
       modelBudget: this.queue.budget(),
     };
-    if (this.enabledState === "disabled" || this.enabledState === "off") {
+    if (this.enabledState === "disabled" || this.enabledState === "off" || this.noModel()) {
       out.state = "disabled";
-      out.reason = this.enabledState === "off" ? "enabled is false" : "disabled";
+      out.reason = this.enabledState === "off" ? "enabled is false" : this.enabledState === "disabled" ? "disabled" : "consent";
     }
     return out;
   }
@@ -3949,21 +3994,20 @@ export class RuntimeImpl implements Runtime {
     } catch {
       /* unreadable: discarded below */
     }
+    // GenClass's own writes from here (a stale entry removed, the session ordinal) are not app activity: a storage
+    // grant (src/consent.ts) runs this after the storage observer is installed. startSession catches its own errors.
+    this.selfStorage = true;
     try {
       if (w && typeof w === "object" && w.format === LEARN_FORMAT && w.lib === RUNTIME_VERSION && w.version === this.learnVersion) {
         if (this.persistProfiles) this.profiles.load(w.profiles);
         this.storedFlows = w.flows;
         if (typeof w.sessions === "number" && Number.isFinite(w.sessions) && w.sessions >= 0) stored = Math.floor(w.sessions);
-      } else if (raw) {
-        this.selfStorage = true;
-        st?.removeItem(this.learnKey);
-      }
+      } else if (raw) st?.removeItem(this.learnKey);
     } catch {
       /* start over */
-    } finally {
-      this.selfStorage = false;
     }
     this.startSession(stored);
+    this.selfStorage = false;
   }
 
   /**

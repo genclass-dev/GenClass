@@ -9,11 +9,14 @@
 // own detections, labelled as such. The bridge adds no judgement of its own. Every page string in a title is quoted.
 //
 // A run belongs to the page that registered it: events must come from the same origin with the token it got at hello.
+// Several apps can run on this machine at once and share routes ("/"): a finding keeps its run's origin, which is part
+// of its dedup key, and an explore session or an armed replay is taken only by page loads of its origin.
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compareRuns, endedDifferently, fieldValue, nameDifference, sameScenario, sameValue, settledAfterActs, shownField, stateValue, strongestFirst, type FieldDiff, type GroupReport, type RunDiff, multiset } from "./compare.js";
+import { originOfUrl, runOrigin } from "./origin.js";
 import { agesIn, clean, pathShape, q, routeShape, sameAges, shape, sigOf, type Elapsed } from "./text.js";
 import type { ExploreSession, Finding, FindingKind, ReplayArm, Run, ScheduleSpec, Step } from "./types.js";
 import * as V from "./validate.js";
@@ -22,6 +25,10 @@ const MAX_RUNS = 300;
 const MAX_FINDINGS = 500;
 const MAX_STEPS = 3000;
 const SAVED_RUNS = 80;
+/** Operation numbers kept per run (the newest): what the model's text calls #N, for one numbering in explanations. */
+const MAX_OPS = 3000;
+/** A load still open counts as in (genclass_explore wait) after this long without an event, once its steps are done. */
+export const QUIET_MS = 1500;
 /** Armed explores and replays expire: a page load hours later is not given a held schedule by surprise. */
 export const ARM_TTL_MS = 30 * 60_000;
 const RANK: Record<FindingKind, number> = { race: 0, "stale-write": 1, error: 2, "duplicate-request": 3, detection: 4, check: 5, expectation: 6, intervention: 7 };
@@ -35,6 +42,25 @@ export interface StoreOptions {
 export interface FindingEvent {
   finding: Finding;
   fresh: boolean;
+}
+
+/** What genclass_explore wait reports: how many of the planned loads are in (nothing more will come from them). */
+export interface ExploreProgress {
+  id: string;
+  state: ExploreSession["state"];
+  planned: number;
+  /** Loads that said hello and took a slot. */
+  started: number;
+  in: number;
+  /** Loads with a snapshot after their last user action (what the report compares). */
+  settled: number;
+  /** Armed for longer than ARM_TTL_MS: later page loads are no longer given a slot. */
+  expired: boolean;
+  loads: { run: string; label: string; settled: boolean; done: boolean; ended: boolean; actions: number }[];
+  route?: string;
+  origin?: string;
+  /** The latest load of the page from another origin, which took no slot. */
+  refused?: { origin: string; run: string };
 }
 
 export interface Hello {
@@ -100,23 +126,33 @@ export class Store {
       token: randomBytes(16).toString("hex"),
     };
     if (origin) run.origin = origin;
+    const from = origin ?? originOfUrl(h.url);
     if (h.ua) run.ua = h.ua;
     if (h.mode || h.model) run.runtime = { ...(h.mode ? { mode: h.mode } : {}), ...(h.model ? { model: h.model } : {}) };
     // a schedule the page set itself (a regression test, a URL, hold: false) wins; otherwise what the agent armed
     if (!h.schedule) {
       // one page to a schedule, even when it has a new path on every load (/session/<id>)
       const here = routeShape(h.route);
-      const arm = this.replays.find((r) => r.remaining > 0 && now - r.created < ARM_TTL_MS && (!r.route || routeShape(r.route) === here));
+      const live = (r: ReplayArm) => r.remaining > 0 && now - r.created < ARM_TTL_MS && (!r.route || routeShape(r.route) === here);
+      const arm = this.replays.find((r) => live(r) && (!r.origin || r.origin === from));
+      const open = (s: ExploreSession) => s.state === "armed" && now - s.created < ARM_TTL_MS && (!s.route || routeShape(s.route) === here);
+      // a load of the same page from another origin takes nothing; its replay or explore keeps it, so the tools can say why
+      if (!arm && from)
+        for (const r of this.replays) if (live(r) && r.origin && r.origin !== from) r.refused = { origin: from, run: id };
+      if (!arm && from)
+        for (const s of this.explores.values()) if (open(s) && s.origin && s.origin !== from) s.refused = { origin: from, run: id };
       if (arm) {
         arm.remaining--;
         arm.runs.push(id);
         run.schedule = { ...arm.spec, id: arm.finding, label: `replay of ${arm.finding}` };
         run.assignment = { kind: "replay", ref: arm.finding, index: arm.runs.length - 1, label: `replay of ${arm.finding}` };
       } else {
-        const x = [...this.explores.values()].find((s) => s.state === "armed" && now - s.created < ARM_TTL_MS && (!s.route || routeShape(s.route) === here));
+        const x = [...this.explores.values()].find((s) => open(s) && (!s.origin || s.origin === from));
         if (x) {
-          // an explore armed without a route belongs to the page of its first load: other pages and tabs keep out
+          // an explore armed without a route belongs to the page of its first load: other pages and tabs keep out, and
+          // so do other apps on this machine (another origin)
           if (!x.route) x.route = h.route;
+          if (!x.origin && from) x.origin = from;
           const spec = x.plan[x.next];
           const label = spec.label ?? `explore ${x.next + 1}`;
           run.schedule = { ...spec, id: x.id, label };
@@ -198,6 +234,21 @@ export class Store {
         }
         if (typeof e.forced === "number") run.forced = Math.max(0, Math.floor(e.forced));
         if (typeof e.lost === "number") run.lost += Math.max(0, Math.floor(e.lost));
+        const named = V.opNames(e.ops);
+        if (named.length) {
+          const ops = (run.ops ??= {});
+          for (const [id, as] of named) ops[String(id)] = as;
+          // integer keys iterate in ascending order: the oldest operations go first
+          const keys = Object.keys(ops);
+          for (const k of keys.slice(0, Math.max(0, keys.length - MAX_OPS))) delete ops[k];
+        }
+        return true;
+      }
+      case "runtime": {
+        // the page's mode or model state changed after hello (the model loads later)
+        const r = V.runtime(e.runtime);
+        if (!r.mode && !r.model) return false;
+        run.runtime = { ...run.runtime, ...r };
         return true;
       }
       case "snapshot":
@@ -325,13 +376,22 @@ export class Store {
     delete run.assignment;
   }
 
-  private upsert(key: string, kind: FindingKind, route: string, run: Run, o: { title: string; evidence: Record<string, unknown>; replay?: ScheduleSpec; replace?: boolean }): Finding {
+  /** A finding's dedup key with its run's origin in front: two apps on this machine never share a finding. */
+  private fkey(run: Run, key: string): string {
+    const o = runOrigin(run);
+    return o ? `${o}|${key}` : key;
+  }
+
+  private upsert(base: string, kind: FindingKind, route: string, run: Run, o: { title: string; evidence: Record<string, unknown>; replay?: ScheduleSpec; replace?: boolean }): Finding {
     const now = this.now();
+    const key = this.fkey(run, base);
     const id = this.byKey.get(key);
     let f = id ? this.findings.get(id) : undefined;
     const fresh = !f;
     if (!f) {
       f = { id: `f${this.nextFinding++}`, key, kind, title: o.title, route, count: 0, runs: [], first: now, last: now, evidence: o.evidence, replays: [] };
+      const origin = runOrigin(run);
+      if (origin) f.origin = origin;
       if (o.replay) f.replay = o.replay;
       f.run = run.id;
       this.findings.set(f.id, f);
@@ -382,12 +442,20 @@ export class Store {
 
   // ------------------------------------------------------------------------------------------- agent side
 
-  ranked(o: { kind?: string; route?: string; sinceMs?: number; limit?: number } = {}): Finding[] {
+  /** Findings, most important first. `origin`: only those of one app (a test of the finding's origin). */
+  ranked(o: { kind?: string; route?: string; sinceMs?: number; limit?: number; origin?: (origin: string | undefined) => boolean } = {}): Finding[] {
     const now = this.now();
     return [...this.findings.values()]
-      .filter((f) => (!o.kind || f.kind === o.kind) && (!o.route || f.route === o.route) && (!o.sinceMs || now - f.last <= o.sinceMs))
+      .filter((f) => (!o.kind || f.kind === o.kind) && (!o.route || f.route === o.route) && (!o.sinceMs || now - f.last <= o.sinceMs) && (!o.origin || o.origin(this.findingOrigin(f))))
       .sort((a, b) => RANK[a.kind] - RANK[b.kind] || b.count - a.count || b.last - a.last)
       .slice(0, Math.max(1, Math.min(o.limit ?? 20, 100)));
+  }
+
+  /** A finding's origin: its own, else its run's (a finding saved before origins were kept). */
+  findingOrigin(f: Finding): string | undefined {
+    if (f.origin) return f.origin;
+    const r = f.run ? this.runs.get(f.run) : undefined;
+    return r ? runOrigin(r) : undefined;
   }
 
   /** Findings changed since a digest cursor (the prompt hook, a shared bridge's followers). Another epoch: from 0. */
@@ -432,7 +500,9 @@ export class Store {
   }
 
   latestExplore(): ExploreSession | undefined {
-    return [...this.explores.values()].sort((a, b) => b.created - a.created)[0];
+    // two sessions armed in the same millisecond: the later one (ids count up)
+    const n = (x: ExploreSession) => Number(x.id.slice(1)) || 0;
+    return [...this.explores.values()].sort((a, b) => b.created - a.created || n(b) - n(a))[0];
   }
 
   /**
@@ -458,7 +528,8 @@ export class Store {
         // keyed by what the page showed or sent (store values that differ along with it are evidence, not identity)
         const shown = d.fields.filter(shownField);
         const kindOfDiff = shown.length ? `fields:${shown.map((f) => f.name).sort().join(",")}` : d.errors.length ? `error:${shape(d.errors[0])}` : "text";
-        const key = `race|${routeShape(g.route)}|${g.scenarioKey.slice(0, 600)}|${tag}${kindOfDiff}`;
+        const base = `race|${routeShape(g.route)}|${g.scenarioKey.slice(0, 600)}|${tag}${kindOfDiff}`;
+        const key = this.fkey(run, base);
         const replay: ScheduleSpec = run.schedule ? { ...run.schedule } : { order: "given", given: run.order.slice() };
         delete replay.id;
         delete replay.label;
@@ -469,7 +540,7 @@ export class Store {
           if (f) findings.push(f);
           return;
         }
-        findings.push(this.upsert(key, "race", g.route, run, { title, evidence, replay, replace: true }));
+        findings.push(this.upsert(base, "race", g.route, run, { title, evidence, replay, replace: true }));
         counted.add(`${run.id}|${key}`);
       };
       if (g.delay) finding(g.delay, "slow|", delayTitle(g.delay, g.delay.oneLoad), { delayOnly: true, plainBaseline: g.plainBaseline, failingRuns: [{ run: g.delay.run, label: g.delay.label, endedDifferently: true }], of: g.delay.of, differing: g.delay.differing });
@@ -480,6 +551,41 @@ export class Store {
     if (x.state === "collecting" && x.runs.length >= x.plan.length) x.state = "stopped";
     this.saveSoon();
     return { session: x, groups, findings };
+  }
+
+  /**
+   * How far an explore session's armed loads are (genclass_explore wait). A load is in once nothing more will come from
+   * it: its page went away, a later load of the session started after it reached a quiet point (or after it fell
+   * silent), or it is still open, quiet for QUIET_MS after a quiet point and has done as many user actions as the
+   * loads that are over (fewer: the steps are still being done, by a script or a person).
+   */
+  exploreProgress(id?: string): ExploreProgress | null {
+    const x = id ? this.explores.get(id) : this.latestExplore();
+    if (!x) return null;
+    const now = this.now();
+    const runs = x.runs.map((r) => this.runs.get(r)).filter((r): r is Run => !!r);
+    const acts = (r: Run) => r.steps.filter((s) => s.k === "act").length;
+    const followed = (i: number) => i < runs.length - 1;
+    const most = Math.max(0, ...runs.filter((r, i) => r.ended || followed(i)).map(acts));
+    const loads = runs.map((r, i) => {
+      const settled = settledAfterActs(r);
+      const quiet = now - r.lastSeen >= QUIET_MS;
+      const done = r.ended || (settled && followed(i)) || (quiet && (followed(i) || (settled && acts(r) >= most)));
+      return { run: r.id, label: r.assignment?.label ?? r.schedule?.label ?? "", settled, done, ended: r.ended, actions: acts(r) };
+    });
+    return {
+      id: x.id,
+      state: x.state,
+      planned: x.plan.length,
+      started: runs.length,
+      in: loads.filter((l) => l.done).length,
+      settled: loads.filter((l) => l.settled).length,
+      expired: x.state === "armed" && now - x.created >= ARM_TTL_MS,
+      loads,
+      ...(x.route ? { route: x.route } : {}),
+      ...(x.origin ? { origin: x.origin } : {}),
+      ...(x.refused ? { refused: x.refused } : {}),
+    };
   }
 
   stopExplore(): ExploreSession | null {
@@ -501,6 +607,8 @@ export class Store {
     if (!spec) return { error: `the run that recorded ${f.id} is gone (cleared or expired), so its order cannot be replayed: record the bug again, or reproduce it with genclass_explore` };
     this.replays = this.replays.filter((r) => r.finding !== findingId || (r.remaining <= 0 && this.now() - r.created < ARM_TTL_MS));
     const arm: ReplayArm = { finding: f.id, spec, route: f.route, remaining: Math.max(1, Math.min(times, 10)), created: this.now(), runs: [] };
+    const origin = this.findingOrigin(f);
+    if (origin) arm.origin = origin;
     this.replays.push(arm);
     if (this.replays.length > 50) this.replays.shift();
     this.saveSoon();
@@ -513,7 +621,7 @@ export class Store {
    * the baseline's = not reproduced. Inconclusive (null) when the run has not settled or done the steps yet, when its
    * steps differ from the original run's, or when the original run is gone.
    */
-  replayResult(findingId: string): { finding: Finding; results: { run: string; reproduced: boolean | null; note: string; scenarioMatches: boolean }[] } | null {
+  replayResult(findingId: string): { finding: Finding; results: { run: string; reproduced: boolean | null; note: string; scenarioMatches: boolean }[]; armed?: { remaining: number; route?: string; origin?: string; refused?: { origin: string; run: string } } } | null {
     const f = this.findings.get(findingId);
     if (!f) return null;
     const orig = f.run ? this.runs.get(f.run) : undefined;
@@ -549,7 +657,10 @@ export class Store {
       return { run: r.id, reproduced, note, scenarioMatches };
     });
     this.saveSoon();
-    return { finding: f, results };
+    // the replay still waiting for a load, and a load of its page from another origin that did not take it
+    const arm = [...this.replays].reverse().find((a) => a.finding === f.id && a.remaining > 0 && this.now() - a.created < ARM_TTL_MS);
+    const armed = arm ? { remaining: arm.remaining, ...(arm.route ? { route: arm.route } : {}), ...(arm.origin ? { origin: arm.origin } : {}), ...(arm.refused ? { refused: arm.refused } : {}) } : undefined;
+    return { finding: f, results, ...(armed ? { armed } : {}) };
   }
 
   clear(what: "all" | "findings" | "runs" = "all"): void {
@@ -640,17 +751,37 @@ export class Store {
       const run = loadRun(r);
       if (run) this.runs.set(run.id, run);
     }
+    const legacy: Finding[] = [];
     for (const x of Array.isArray(d.findings) ? d.findings : []) {
       const f = loadFinding(x);
       if (!f || this.byKey.has(f.key)) continue;
       this.findings.set(f.id, f);
       this.byKey.set(f.key, f.id);
+      if (!keyOrigin(f.key)) legacy.push(f);
+    }
+    // a finding saved before origins were part of its key (@genclass/mcp 0.2.2) takes its run's origin in front, as
+    // upsert() keys it now: the same bug on the same app keeps counting on it instead of becoming a second finding
+    for (const f of legacy) {
+      const o = this.findingOrigin(f);
+      const key = o ? `${o}|${f.key}`.slice(0, 2000) : null;
+      if (!key || this.byKey.has(key)) continue;
+      this.byKey.delete(f.key);
+      f.key = key;
+      if (!f.origin) f.origin = o;
+      this.byKey.set(key, f.id);
     }
     for (const x of Array.isArray(d.explores) ? d.explores : []) {
       const o = x as ExploreSession;
       if (!o || typeof o.id !== "string" || !Array.isArray(o.plan) || !Array.isArray(o.runs)) continue;
       const plan = o.plan.map((p) => V.spec(p)).filter((p): p is ScheduleSpec => !!p);
-      this.explores.set(o.id, { id: o.id, created: Number(o.created) || 0, plan, next: Math.min(Number(o.next) || 0, plan.length), runs: o.runs.filter((r) => typeof r === "string"), state: "stopped", ...(typeof o.route === "string" ? { route: o.route } : {}), counted: Array.isArray(o.counted) ? o.counted.filter((c) => typeof c === "string") : [] });
+      // a pair counted under a key without its origin: the run's origin in front, as reportExplore() looks it up now
+      const counted = (Array.isArray(o.counted) ? o.counted.filter((c): c is string => typeof c === "string") : []).map((c) => {
+        const i = c.indexOf("|");
+        const run = i > 0 ? this.runs.get(c.slice(0, i)) : undefined;
+        const origin = run && !keyOrigin(c.slice(i + 1)) ? runOrigin(run) : undefined;
+        return origin ? `${c.slice(0, i)}|${origin}|${c.slice(i + 1)}` : c;
+      });
+      this.explores.set(o.id, { id: o.id, created: Number(o.created) || 0, plan, next: Math.min(Number(o.next) || 0, plan.length), runs: o.runs.filter((r) => typeof r === "string"), state: "stopped", ...(typeof o.route === "string" ? { route: o.route } : {}), ...(typeof o.origin === "string" ? { origin: o.origin.slice(0, 300) } : {}), counted });
     }
   }
 }
@@ -682,12 +813,23 @@ function loadRun(v: unknown): Run | null {
   const snap = V.snapshot(r.snapshot);
   if (snap) run.snapshot = snap;
   if (typeof r.origin === "string") run.origin = r.origin.slice(0, 300);
+  if (r.ops && typeof r.ops === "object") {
+    const pairs = V.opNames(Object.entries(r.ops).slice(-MAX_OPS).map(([k, v]) => [Number(k), v]), MAX_OPS);
+    if (pairs.length) run.ops = Object.fromEntries(pairs.map(([k, v]) => [String(k), v]));
+  }
   run.token = randomBytes(16).toString("hex"); // a restored run takes no more events: no page knows this token
   if (r.assignment && typeof r.assignment === "object" && (r.assignment.kind === "explore" || r.assignment.kind === "replay")) run.assignment = { kind: r.assignment.kind, ref: String(r.assignment.ref).slice(0, 20), index: Number(r.assignment.index) || 0, label: clean(r.assignment.label, 100) };
   return run;
 }
 
 const KINDS = new Set(Object.keys(RANK));
+
+/** The origin a finding key starts with ("http://localhost:5173|err|/|..."), or undefined for a key saved without one. */
+function keyOrigin(key: string): string | undefined {
+  const i = key.indexOf("|");
+  const head = i > 0 ? key.slice(0, i) : "";
+  return head && originOfUrl(head) === head ? head : undefined;
+}
 
 /** A finding from state.json; its title is cleaned again (printed as one line whatever the file holds). */
 function loadFinding(v: unknown): Finding | null {
@@ -707,6 +849,7 @@ function loadFinding(v: unknown): Finding | null {
     replays: (Array.isArray(f.replays) ? f.replays : []).filter((r) => r && typeof r.run === "string").slice(-20),
   };
   if (typeof f.run === "string") out.run = f.run;
+  if (typeof f.origin === "string" && originOfUrl(f.origin) === f.origin) out.origin = f.origin;
   const rp = V.spec(f.replay);
   if (rp) out.replay = rp;
   return out;

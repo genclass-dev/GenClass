@@ -398,6 +398,23 @@ observing with no download and no worker.
   its diff (it sends `package.json`'s `name`); `login`, `connect`, `whoami`, `logout` and, signed in without a private
   link in the folder, `dashboard` talk to your account
   ([DASHBOARD.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/DASHBOARD.md#what-does-the-cli-send-to-genclassdev)).
+- **Sites that ask visitors first: `consent: "pending"`** (unreleased, on the alpha line). Set it where GenClass
+  starts (`window.GENCLASS_CONFIG = { consent: "pending" }` before the `/auto` import, `data-consent="pending"` on the
+  script tag, `<meta name="genclass" content="consent=pending">`, or `GenClass.init({ consent: "pending" })`), and
+  GenClass observes on the page until your consent banner answers, and sends, stores and downloads nothing of its
+  own: no diagnostics request, no analytics, none of its own `localStorage` / `sessionStorage` entries written (of
+  them it only reads its off switch, `localStorage.genclass`), and no model download (no worker, no Cache Storage, no
+  model request to cdn.jsdelivr.net). The gate does not hold your own `sinks` (hold them yourself), the script tag
+  and the parts it loads that the gate does not hold (the devtools overlay, the visual checks, sink adapters), or the
+  coding-agent link in development builds
+  ([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md#consent), "What
+  still runs before consent"). Then call
+  `GenClass.consent({ diagnostics, analytics, storage, model })` with the visitor's choice (`true` / `false` for all):
+  what is granted starts from that moment, what is denied stays off, and a later denial withdraws it (telemetry stops
+  and drops its queue, GenClass's entries are removed, the cached model is deleted). Every opt-out still wins over a
+  grant, Global Privacy Control included, and a grant never turns on what you did not (`analytics`, `learn.persist`).
+  Without the option nothing changes. Recipes for Google Consent Mode v2 and IAB TCF:
+  [TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md#consent).
 - **Privacy policy** for the diagnostics and for genclass.dev accounts (what is collected, how long it is kept, your
   rights): [PRIVACY.md](https://github.com/genclass-dev/GenClass/blob/main/PRIVACY.md).
 - Apps that ship GenClass may need to disclose this to their users (GDPR/CCPA). `telemetry: { endpoint, ... }` sends
@@ -1110,8 +1127,9 @@ retraining, which has not been measured
 - **Bundle:** the published `0.3.0-beta.0` measured 108.25 KB gzip for `/auto` and 100.13 KB for the main entry
   ([RESULTS.md §10](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md#10-release-030-beta0-first-load-and-telemetry-volume-ci)).
   The interaction-analytics stub measured about 108.5 / 100.4 KB on its branch (§15); `0.3.0-beta.1` to `beta.4` are
-  not re-measured here (`summary().requests` added 34 B in `0.3.0-beta.2`, §23), and `test/bundle.test.ts` keeps them
-  under 109.0 KB and 100.7 KB (the limits follow CI's gzip on Node 22; RESULTS.md §14 lists each raise). The model worker, ONNX
+  not re-measured here (`summary().requests` added 34 B in `0.3.0-beta.2`, §23; the consent gate about 0.34 KB
+  on the alpha line, §29), and `test/bundle.test.ts` keeps them under 109.3 KB and 101.02 KB (the limits follow CI's
+  gzip on Node 22; RESULTS.md §10 lists each raise). The model worker, ONNX
   Runtime, the devtools, the sinks and the visual checks load on demand; ONNX Runtime's `.wasm` (3.1 MB brotli; 5.5 MB
   with WebGPU, per the install tests) is never part of your build. The script-tag file is about 129 KB gzip.
 - **Model:** with onnxruntime-web 1.30 on single-thread WASM, a forward pass takes an estimated 182 / 330 / 599 ms at

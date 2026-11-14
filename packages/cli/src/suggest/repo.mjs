@@ -6,13 +6,15 @@
 // - No secret value is ever returned. A found secret is { file, line, kind }; strings copied out of the project
 //   (scripts, dependency versions, the git remote, the homepage) pass through redactSecrets first.
 // - The result is plain JSON data (no functions, no class instances), so tests and checks can build one by hand.
-// - Bounded work: at most `maxFiles` paths are listed (default 4000), at most 200 KB is read from any file, and at
-//   most 1500 files are opened for their content. Lock files, binary files and minified files are not scanned.
+// - Bounded work: at most `maxFiles` paths are listed (default 4000), at most 200 KB is read from any file (8 MB from
+//   a lockfile, for the installed versions), and at most 1500 files are opened for their content. Lock files, binary
+//   files and minified files are not scanned for secrets.
 // - Read only: nothing is written, and git runs with optional locks off.
 
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
+import { isDocumentedKey, isPlaceholder } from "./keys.mjs";
 
 /**
  * @typedef {Object} RepoFacts
@@ -39,15 +41,24 @@ import { basename, join, resolve } from "node:path";
  *   "stripe-secret-live", "stripe-secret-test", "openai-key", "anthropic-key", "aws-access-key", "github-token",
  *   "private-key", "slack-token", "generic-secret"
  * @property {{ provider: "stripe" | "paddle" | "lemonsqueezy" | "polar" | "paypal" | null, testKeyInProduction: string[], secretInClient: string[] }} payments
- *   testKeyInProduction: production env files or hosting config that hold pk_test_ or sk_test_; secretInClient:
- *   client source files that hold sk_live_ or sk_test_
- * @property {{ provider: "vercel" | "netlify" | "cloudflare" | "fly" | "render" | "railway" | "github-pages" | "firebase" | "docker" | null, previews: boolean | null, staging: boolean | null }} hosting
+ *   testKeyInProduction: production env files or hosting config that hold pk_test_ or sk_test_ (Stripe's documented
+ *   sample key included); secretInClient: client source files that hold sk_live_ or sk_test_ (not the sample key)
+ * @property {{ provider: "vercel" | "netlify" | "cloudflare" | "fly" | "render" | "railway" | "github-pages" | "firebase" | "docker" | null, from: "config" | "link" | "deps" | "workflow" | "docker" | null, previews: boolean | null, staging: boolean | null }} hosting
+ *   from: what the guess rests on: the host's config file (vercel.json), the folder its CLI links with (.vercel), a
+ *   dependency (only a guess: @vercel/otel runs anywhere), a deploy workflow, or a Dockerfile;
  *   previews: true when the host builds a copy per pull request, null when that cannot be told; staging: true when
  *   the project shows a staging setup, false when the host is known and has none, null when it cannot be told
  * @property {{ exists: boolean, chars: number, boilerplate: boolean }} readme
  * @property {{ genclass: boolean, sentry: boolean, other: string[] }} monitoring
  * @property {{ robots: boolean, sitemap: boolean, llms: boolean, ogImage: boolean, manifest: boolean }} seo
  * @property {{ url: string | null, from: string | null }} site  the production address, guessed
+ * @property {{ packages: { name: string, version: string }[], from: string | null, appRouter: boolean, middleware: string | null, staticExport: boolean }} versions
+ *   the installed versions of the packages the `framework-cve` check knows (next and the react-server-dom-* packages):
+ *   from node_modules, else the lockfile, this app's own entry in a monorepo's (`from` names which); appRouter: the
+ *   folder Next.js reads as the App Router (app/, else src/app/ when there is no pages/ at the top) holds a page,
+ *   layout or route file (React Server Components run there); middleware: Next.js's middleware file (middleware.ts,
+ *   .tsx, .js, .jsx or .mjs at the top or in src/, or 12.0-12.1's pages/.../_middleware), when there is one;
+ *   staticExport: next.config sets output: "export" (static files, no server)
  */
 
 const MAX_FILES = 4000;
@@ -96,6 +107,8 @@ const HOSTING_WORKFLOW = [
   ["firebase", /\bfirebase\b/i],
   ["github-pages", /actions\/deploy-pages|actions-gh-pages|github-pages-deploy-action|\bgh-pages\b/i],
 ];
+/** A container setup at the project's top: the app runs on a server of its own (`next start`). */
+const DOCKER_FILE = /^(?:Dockerfile|docker-compose\.ya?ml|compose\.ya?ml)$/;
 const OTHER_CI = [".gitlab-ci.yml", ".circleci/config.yml", "azure-pipelines.yml", "bitbucket-pipelines.yml", "Jenkinsfile", ".travis.yml", ".buildkite/pipeline.yml", ".drone.yml"];
 
 const PAYMENT_DEPS = [
@@ -179,10 +192,9 @@ const PRIVATE_KEY = /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----(?:\\
 const SECRET_HINT = /[sr]k_(?:live|test)_|sk-|AKIA|gh[pousr]_|github_pat_|xox[baprs]-|PRIVATE KEY-----/;
 const STRIPE_SECRET = /(?<![A-Za-z0-9_])sk_(?:live|test)_([A-Za-z0-9]{16,})/g;
 const STRIPE_TEST_KEY = /(?<![A-Za-z0-9_])[ps]k_test_([A-Za-z0-9]{10,})/g;
-// The sample secret key printed in Stripe's public documentation: it opens nothing.
-const DOCUMENTED_KEYS = new Set(["4eC39HqLyjWDarjtT1zdp7dc"]);
+// The placeholder test and the sample keys providers document (Stripe's) are shared with site.mjs: keys.mjs. A
+// documented key is no leak (findSecrets, holdsStripeSecret) but is still a test key (holdsTestKey).
 
-const PLACEHOLDER = /your|example|placeholder|change[_-]?me|replace|dummy|fake|sample|redacted|secret[_-]?here|key[_-]?here|xxxx|\*\*\*|1234567|abcdefg|\.\.\.|[<>]|\$\{|\{\{/i;
 const PLACEHOLDER_VALUE = /^(?:null|undefined|none|true|false|todo|tbd|secret|password|passwd|pass|postgres|root|admin|test|testing|dev|development|local|localhost|token|key|api[_-]?key)$/i;
 const ENV_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s*=\s*(.*)$/;
 const SECRET_NAME = /(?:SECRET|TOKEN|PASSWORD|API_?KEY)$/i;
@@ -234,11 +246,12 @@ export function emptyRepoFacts(dir) {
     env: { files: [], tracked: [], example: false, ignored: null },
     secrets: [],
     payments: { provider: null, testKeyInProduction: [], secretInClient: [] },
-    hosting: { provider: null, previews: null, staging: null },
+    hosting: { provider: null, from: null, previews: null, staging: null },
     readme: { exists: false, chars: 0, boilerplate: false },
     monitoring: { genclass: false, sentry: false, other: [] },
     seo: { robots: false, sitemap: false, llms: false, ogImage: false, manifest: false },
     site: { url: null, from: null },
+    versions: { packages: [], from: null, appRouter: false, middleware: null, staticExport: false },
   };
 }
 
@@ -289,6 +302,7 @@ export function collectRepoFacts(dir, opts) {
   attempt(() => readHosting(facts, ctx));
   attempt(() => readSeo(facts));
   attempt(() => readSite(facts, ctx));
+  attempt(() => readVersions(facts, ctx));
   return facts;
 }
 
@@ -776,13 +790,6 @@ function looksMinified(text) {
   return text.length / lines > 2000;
 }
 
-/** A value nobody could use as a key: empty, a word such as "your_key_here", or a few characters repeated. */
-function isPlaceholder(body) {
-  if (!body) return true;
-  if (PLACEHOLDER.test(body)) return true;
-  return new Set(body.toLowerCase()).size <= 4;
-}
-
 /**
  * The secrets in one file's text, as line numbers and kinds. The values are never kept.
  * @param {string} text
@@ -801,7 +808,7 @@ function findSecrets(text, envFile, testPath) {
       for (const [kind, re] of SECRET_PATTERNS) {
         for (const m of line.matchAll(re)) {
           const body = m[1];
-          if (isPlaceholder(body) || DOCUMENTED_KEYS.has(body)) continue;
+          if (isPlaceholder(body) || isDocumentedKey(body)) continue;
           // "sk-" also starts ordinary hyphenated names; a key has a digit and either a capital or a long run.
           if (kind === "openai-key" && !(/\d/.test(body) && (/[A-Z]/.test(body) || /[A-Za-z0-9]{20,}/.test(body)))) continue;
           if (kind === "slack-token" && !/\d/.test(body)) continue;
@@ -836,15 +843,17 @@ function envValue(raw) {
   return quoted ? quoted[2].trim() : s.replace(/\s+#.*$/, "").trim();
 }
 
+/** Whether client source holds a Stripe secret key; a placeholder or Stripe's documented sample key opens nothing. */
 function holdsStripeSecret(text) {
   if (!text.includes("sk_")) return false;
-  for (const m of text.matchAll(STRIPE_SECRET)) if (!isPlaceholder(m[1])) return true;
+  for (const m of text.matchAll(STRIPE_SECRET)) if (!isPlaceholder(m[1]) && !isDocumentedKey(m[1])) return true;
   return false;
 }
 
 /**
  * Whether a production env file or a hosting config holds a Stripe test key. Sections of a config that belong to
  * another environment ([env.staging] in wrangler.toml, [context.deploy-preview] in netlify.toml) are not counted.
+ * Stripe's documented sample test key counts: a live site on it takes no real payment either.
  */
 function holdsTestKey(base, text) {
   if (!text.includes("k_test_")) return false;
@@ -911,17 +920,19 @@ function readHosting(facts, ctx) {
   const configFile = (base) => facts.files.find((f) => f === base) || facts.files.find((f) => baseOf(f) === base);
 
   let provider = null;
-  for (const [base, name] of HOSTING_CONFIG) {
-    if (configFile(base)) {
-      provider = name;
-      break;
-    }
-  }
-  if (!provider && exists(join(ctx.root, ".vercel"))) provider = "vercel";
-  if (!provider && exists(join(ctx.root, ".netlify"))) provider = "netlify";
-  if (!provider) for (const [name, re] of HOSTING_DEPS) if (!provider && names.some((n) => re.test(n))) provider = name;
-  if (!provider) for (const [name, re] of HOSTING_WORKFLOW) if (!provider && workflows.some((t) => re.test(t))) provider = name;
-  if (!provider && facts.files.some((f) => /^(?:Dockerfile|docker-compose\.ya?ml|compose\.ya?ml)$/.test(f))) provider = "docker";
+  /** @type {"config" | "link" | "deps" | "workflow" | "docker" | null} */
+  let from = null;
+  const found = (name, how) => {
+    if (provider) return;
+    provider = name;
+    from = how;
+  };
+  for (const [base, name] of HOSTING_CONFIG) if (configFile(base)) found(name, "config");
+  if (exists(join(ctx.root, ".vercel"))) found("vercel", "link");
+  if (exists(join(ctx.root, ".netlify"))) found("netlify", "link");
+  for (const [name, re] of HOSTING_DEPS) if (names.some((n) => re.test(n))) found(name, "deps");
+  for (const [name, re] of HOSTING_WORKFLOW) if (workflows.some((t) => re.test(t))) found(name, "workflow");
+  if (facts.files.some((f) => DOCKER_FILE.test(f))) found("docker", "docker");
 
   const configs = (re) => {
     const out = [];
@@ -956,7 +967,7 @@ function readHosting(facts, ctx) {
   // (and when the host is unknown) the setting lives in a dashboard this module cannot see.
   const staging = signs ? true : provider === "github-pages" || provider === "fly" || provider === "render" || provider === "firebase" ? (previews ? null : false) : null;
 
-  facts.hosting = { provider, previews, staging };
+  facts.hosting = { provider, from, previews, staging };
 }
 
 // ---- search files, site address ------------------------------------------------------------------------------------
@@ -995,5 +1006,260 @@ function readSite(facts, ctx) {
       facts.site = { url: `https://${host}`, from: file };
       return;
     }
+  }
+}
+
+// ---- installed versions: the packages with a known critical advisory (checks.mjs framework-cve) ---------------------
+
+/** The packages whose installed version the `framework-cve` check reads. */
+export const VERSIONED = ["next", "react-server-dom-webpack", "react-server-dom-turbopack", "react-server-dom-parcel"];
+const MAX_LOCK = 8 * 1024 * 1024;
+const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+/**
+ * A lockfile's text, or null. At most 8 MB; a larger pnpm-lock.yaml gives its first 8 MB (`partial`), which holds the
+ * `importers:` section the version is read from (it comes before `packages:`).
+ * @returns {{ text: string, partial: boolean } | null}
+ */
+function readLock(path, kind) {
+  try {
+    const st = statSync(path);
+    if (!st.isFile() || (st.size > MAX_LOCK && kind !== "pnpm")) return null;
+    const size = Math.min(st.size, MAX_LOCK);
+    const fd = openSync(path, "r");
+    try {
+      const buf = Buffer.allocUnsafe(size);
+      let n = 0;
+      while (n < size) {
+        const got = readSync(fd, buf, n, size - n, null);
+        if (got <= 0) break;
+        n += got;
+      }
+      return { text: buf.subarray(0, n).toString("utf8"), partial: st.size > size };
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** The release at the start of a lockfile value: "15.1.0(react@19.0.0)", pnpm 5's "12.3.1_peerhash", "'14.2.3'". */
+const versionAt = (value) => {
+  const m = /^['"]?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:$|['"(_])/.exec(String(value ?? "").trim());
+  return m ? m[1] : null;
+};
+const indentOf = (line) => line.length - line.trimStart().length;
+
+/**
+ * pnpm: the version an importer's dependencies section gives `name`. In a workspace (and in every lockfile 9) that is
+ * `importers:` → `  <path from the lockfile's folder, "." for its own>:` → `dependencies:` (or dev, optional) →
+ * `next: 12.3.1_hash` (lockfile 5) or `next:` with `version: 15.1.0(...)` under it (6 and 9); a single project's
+ * lockfile 5 or 6 has those sections at the top. Undefined when there is no such section for the importer.
+ */
+function pnpmImporterVersion(lines, name, importer) {
+  let start = 0;
+  let indent = 0;
+  const top = lines.findIndex((l) => /^importers:\s*$/.test(l));
+  if (top >= 0) {
+    const key = importer || ".";
+    start = -1;
+    for (let i = top + 1; i < lines.length; i++) {
+      if (/^\S/.test(lines[i])) break;
+      const m = /^ {2}(['"]?)(.+?)\1:\s*$/.exec(lines[i]);
+      if (m && m[2] === key) {
+        start = i + 1;
+        indent = 4;
+        break;
+      }
+    }
+    if (start < 0) return undefined;
+  }
+  const entry = new RegExp(`^(['"]?)${escapeRe(name)}\\1:\\s*(.*)$`);
+  let section = false;
+  let sections = 0;
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    const lead = indentOf(line);
+    if (lead < indent) break;
+    if (lead === indent) {
+      section = /^(?:dependencies|devDependencies|optionalDependencies):\s*$/.test(line.trim());
+      if (section) sections++;
+      continue;
+    }
+    if (!section || lead !== indent + 2) continue;
+    const m = entry.exec(line.trim());
+    if (!m) continue;
+    let value = m[2].trim();
+    if (!value) {
+      for (let j = i + 1; j < lines.length && lines[j].trim() !== "" && indentOf(lines[j]) > lead; j++) {
+        const v = /^version:\s*(.*)$/.exec(lines[j].trim());
+        if (v) {
+          value = v[1];
+          break;
+        }
+      }
+    }
+    return versionAt(value);
+  }
+  return sections ? null : undefined;
+}
+
+/** yarn (classic and berry): each entry's descriptors ("next@^15.1.0", "next@npm:^15.1.0") and its version. */
+function yarnEntries(lines, name) {
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s/.test(line) || !line.trimEnd().endsWith(":")) continue;
+    const ranges = line
+      .trimEnd()
+      .slice(0, -1)
+      .split(/,\s*/)
+      .map((d) => d.trim().replace(/^["']|["']$/g, ""))
+      .filter((d) => d.startsWith(`${name}@`))
+      .map((d) => d.slice(name.length + 1).replace(/^npm:/, ""));
+    if (!ranges.length) continue;
+    for (let j = i + 1; j < lines.length && /^\s/.test(lines[j]); j++) {
+      const v = /^\s+version:?\s+(.*)$/.exec(lines[j]);
+      if (v) {
+        const version = versionAt(v[1].replace(/^"/, ""));
+        if (version) out.push({ ranges, version });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The version of `name` a lockfile installs for one app. `where.importer` is the app's folder relative to the
+ * lockfile's (posix, "" for the lockfile's own); `where.range` the range its package.json asks for; `where.workspace`
+ * its package.json name. npm: `<importer>/node_modules/<name>` (a workspace's own copy), else the hoisted
+ * `node_modules/<name>`. pnpm: the importer's own entry, else the only version under `packages:`. yarn: the entry
+ * for the app's range, else the only version. bun: `"<workspace>/<name>"`, else `"<name>"`. Null when it is not
+ * there, or when several versions are and the app's own cannot be told. Windows line endings are read too.
+ * @param {"npm" | "pnpm" | "yarn" | "bun"} kind
+ * @param {string} text
+ * @param {string} name
+ * @param {{ importer?: string, range?: string, workspace?: string, partial?: boolean }} [where]
+ * @returns {string | null}
+ */
+export function lockVersion(kind, text, name, where) {
+  const w = where && typeof where === "object" ? where : {};
+  const importer = typeof w.importer === "string" ? w.importer.replace(/\\/g, "/").replace(/^\.\/|\/+$/g, "").replace(/^\.$/, "") : "";
+  const t = String(text ?? "").replace(/\r\n?/g, "\n");
+  const n = escapeRe(name);
+  if (kind === "npm") {
+    try {
+      const j = JSON.parse(t);
+      const packages = j && typeof j.packages === "object" && j.packages ? j.packages : {};
+      const own = importer ? packages[`${importer}/node_modules/${name}`] : undefined;
+      const v = own?.version ?? packages[`node_modules/${name}`]?.version ?? j?.dependencies?.[name]?.version;
+      return typeof v === "string" && VERSION.test(v) ? v : null;
+    } catch {
+      return null;
+    }
+  }
+  if (kind === "pnpm") {
+    const lines = t.split("\n");
+    const own = pnpmImporterVersion(lines, name, importer);
+    if (own !== undefined || w.partial) return own ?? null;
+    // no importers section for it: the packages' keys (lockfile 9 "next@15.1.0(...)", 6 "/next@15.1.0", 5 "/next/12.3.1_hash")
+    const keys = new RegExp(`^\\s{2,4}['"]?/?${n}[@/](\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)[(_'":]`, "gm");
+    const versions = new Set([...t.matchAll(keys)].map((m) => m[1]));
+    return versions.size === 1 ? [...versions][0] : null;
+  }
+  if (kind === "yarn") {
+    const entries = yarnEntries(t.split("\n"), name);
+    const range = typeof w.range === "string" ? w.range.trim().replace(/^npm:/, "") : "";
+    const mine = range ? entries.find((e) => e.ranges.includes(range)) : undefined;
+    if (mine) return mine.version;
+    const versions = new Set(entries.map((e) => e.version));
+    return versions.size === 1 ? [...versions][0] : null;
+  }
+  if (kind === "bun") {
+    const at = (key) => new RegExp(`"${escapeRe(key)}":\\s*\\["${n}@(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)"`).exec(t);
+    const m = (importer && w.workspace ? at(`${w.workspace}/${name}`) : null) ?? at(name);
+    return m ? m[1] : null;
+  }
+  return null;
+}
+
+/** Next.js's middleware file names: the root or src/, with each default page extension. */
+const MIDDLEWARE_FILES = ["", "src/"].flatMap((dir) => ["ts", "tsx", "js", "jsx", "mjs"].map((ext) => `${dir}middleware.${ext}`));
+/** Next.js 12.0 and 12.1's middleware, inside pages/ (12.2 moved it to the root). */
+const PAGES_MIDDLEWARE = /^(?:src\/)?pages\/(?:.+\/)?_middleware\.[jt]sx?$/;
+const NEXT_CONFIGS = ["next.config.js", "next.config.mjs", "next.config.cjs", "next.config.ts", "next.config.mts"];
+const stripJsComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:\\])\/\/[^\n]*/g, "$1");
+
+function readVersions(facts, ctx) {
+  const deps = facts.pkg ? facts.pkg.deps : {};
+  const wanted = VERSIONED.filter((name) => Object.prototype.hasOwnProperty.call(deps, name));
+  const has = (rel) => ctx.fileSet.has(rel) || exists(join(ctx.root, rel));
+  const isDir = (rel) => {
+    try {
+      return statSync(join(ctx.root, rel)).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+  // Next.js's own rule: app/ at the top; else src/app/, unless pages/ is at the top (then src/ is not read). The
+  // folder is the App Router only with a route in it (a page, layout or route file).
+  const appDir = isDir("app") ? "app" : !isDir("pages") && isDir("src/app") ? "src/app" : null;
+  const route = appDir ? new RegExp(`^${escapeRe(appDir)}/(?:.+/)?(?:page|layout|route)\\.(?:[jt]sx?|mdx?)$`) : null;
+  facts.versions.appRouter = route !== null && (facts.files.some((f) => route.test(f)) || facts.truncated);
+  facts.versions.middleware = MIDDLEWARE_FILES.find(has) ?? facts.files.find((f) => PAGES_MIDDLEWARE.test(f)) ?? null;
+  // output: "export" builds static files: no server runs the app's code
+  facts.versions.staticExport = NEXT_CONFIGS.some((file) => {
+    const text = readSmallText(join(ctx.root, file));
+    return text !== null && /\boutput\s*:\s*["'`]export["'`]/.test(stripJsComments(text));
+  });
+  if (!wanted.length) return;
+  // the installed copy first: what runs is what node_modules holds
+  const installed = [];
+  for (const name of wanted) {
+    const text = readHead(join(ctx.root, "node_modules", name, "package.json"));
+    try {
+      const v = text === null ? null : JSON.parse(text).version;
+      if (typeof v === "string" && VERSION.test(v)) installed.push({ name, version: v });
+    } catch {
+      /* not installed there */
+    }
+  }
+  if (installed.length === wanted.length) {
+    facts.versions.packages = installed;
+    facts.versions.from = "node_modules";
+    return;
+  }
+  const files = { npm: ["package-lock.json", "npm-shrinkwrap.json"], pnpm: ["pnpm-lock.yaml"], yarn: ["yarn.lock"], bun: ["bun.lock"] };
+  const dirs = ctx.gitRoot === ctx.root ? [ctx.root] : [ctx.root, ctx.gitRoot];
+  for (const dir of dirs) {
+    // a lockfile at the top of a monorepo lists every app: read this app's own entry
+    let importer = "";
+    if (dir !== ctx.root) {
+      try {
+        importer = relative(dir, ctx.root).split(sep).join("/");
+      } catch {
+        /* the lockfile's own folder */
+      }
+    }
+    for (const [kind, names] of Object.entries(files)) {
+      for (const file of names) {
+        const lock = readLock(join(dir, file), kind);
+        if (lock === null) continue;
+        const where = (name) => ({ importer, range: deps[name], workspace: facts.pkg && facts.pkg.name ? facts.pkg.name : undefined, partial: lock.partial });
+        const found = wanted.map((name) => ({ name, version: lockVersion(kind, lock.text, name, where(name)) })).filter((x) => x.version);
+        if (!found.length) continue;
+        facts.versions.packages = found;
+        facts.versions.from = file;
+        return;
+      }
+    }
+  }
+  if (installed.length) {
+    facts.versions.packages = installed;
+    facts.versions.from = "node_modules";
   }
 }

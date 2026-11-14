@@ -14,12 +14,12 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { detectCsp, detectProject, detectState, htmlFiles, littleToWatch, isDir, isFile, readText, walkSkipped, walkSources } from "./detect.mjs";
-import { MARK, hasMarker, isEmptyConfig, planRemoval, removeMarked, sinkBase, sinkNoEvidence, switchMetaConfig, switchMode, switchTagConfig, updateConfigText } from "./edit.mjs";
+import { MARK, createdByInit, hasMarker, isEmptyConfig, planRemoval, removeMarked, sinkBase, sinkNoEvidence, switchMetaConfig, switchMode, switchTagConfig, updateConfigText } from "./edit.mjs";
 import { AUTO, configFileChange, configFileFor, planInit, scriptTag } from "./plan.mjs";
 import { createAccountProject, readCredentials } from "./account.mjs";
 import { apiHost, hostConfig, hostUrl } from "./host.mjs";
 import { LOCAL_FILE, PENDING_TOKEN, START_URL, TOKEN_RE, createProject, readLocal, saveLocal, tokenInFiles } from "./token.mjs";
-import { banner, c, confirm, err, interactive, more, out, printChange, row, sym } from "./ui.mjs";
+import { banner, c, columns, confirm, err, foldWidth, interactive, labelled, more, out, outWhole, printChange, row, sym, wrapTo } from "./ui.mjs";
 import { CMD, HOST_CLI, PKG, PKG_DIR, VERSION, compareVersions, distTags, installedVersion, versionInSpec, versionStatus } from "./version.mjs";
 
 const MODES = ["observe", "guard", "heal"];
@@ -334,17 +334,202 @@ export function moneyFlows(project, files) {
 }
 
 /**
+ * Whether the genclass command runs this (every screen of it fits the window), read when printing as ui.mjs reads it.
+ * Under genclass-runtime the lines below stay whole, byte for byte as they always were.
+ */
+const hosted = () => !!globalThis.__GENCLASS_CLI__;
+
+/** A line printed in cyan from its first character on (its indent left unpainted, as it always was). */
+const cyanLine = (l) => {
+  const t = l.trimStart();
+  return `${l.slice(0, l.length - t.length)}${c.cyan(t)}`;
+};
+
+/** "  Label (gray note)": under the genclass command the note wraps under itself, each line gray. */
+function labelNote(label, note) {
+  if (!hosted()) {
+    out(`  ${c.bold(label)} ${c.gray(note)}`);
+    return;
+  }
+  const indent = 3 + label.length;
+  const [first = "", ...rest] = wrapTo(note, columns() - 2 - indent);
+  out(`  ${c.bold(label)} ${c.gray(first)}`);
+  for (const l of rest) out(`${" ".repeat(indent)}${c.gray(l)}`);
+}
+
+/** A bullet: under the genclass command its text wraps under itself, past the bullet. */
+function bullet(text, indent = 4) {
+  if (!hosted()) {
+    out(`${" ".repeat(indent)}${sym.dot} ${text}`);
+    return;
+  }
+  const [first = "", ...rest] = wrapTo(text, columns() - 2 - indent - 2);
+  out(`${" ".repeat(indent)}${sym.dot} ${first}`);
+  for (const l of rest) out(`${" ".repeat(indent + 2)}${l}`);
+}
+
+/**
+ * A line of code to copy, `indent` columns in. Under the genclass command it is folded to the window so that what is
+ * pasted is still the same code: a trailing `// comment` goes on its own line above it, and the code breaks only at
+ * a space that follows `,` `;` `:` `=` `{` `(` `[` or `=>` outside quotes and comments, where JavaScript allows a
+ * line break and reads the code the same (BREAK_AFTER), except in an import, which breaks only right before or after
+ * its `from` (`import { genclassEnhancer } from` above `"@genclass/runtime/redux";`), never inside its braces; the
+ * lines after the first stand 4 columns further in (a piece too long for any line stays whole, starting further
+ * left). A line it cannot read surely (breakable) is printed whole, as wide as it is. Under genclass-runtime it is one
+ * line, as it always was.
+ */
+export function codeLines(line, indent = 8, cols = columns()) {
+  const whole = [`${" ".repeat(indent)}${line}`];
+  if (!hosted()) return whole;
+  const width = cols - 2;
+  if (indent + line.length <= width) return whole;
+  const at = lineCommentAt(line);
+  const code = at < 0 ? line : line.slice(0, at).trimEnd();
+  const pieces = breakable(code);
+  if (!pieces) return whole;
+  const lines = [];
+  if (at >= 0) for (const l of wrapTo(line.slice(at), width - indent)) lines.push(`${" ".repeat(indent)}${l.startsWith("//") ? l : `// ${l}`}`);
+  let row = "";
+  let pad = indent;
+  for (const p of pieces) {
+    if (row && pad + row.length + 1 + p.length > width) {
+      lines.push(`${" ".repeat(pad)}${row}`);
+      row = p;
+      pad = indent + 4;
+    } else row = row ? `${row} ${p}` : p;
+  }
+  if (row) lines.push(`${" ".repeat(pad)}${row}`);
+  // a piece longer than its line: further left, so it fits whole where it can
+  return lines.map((l) => {
+    const text = l.trimStart();
+    const at = l.length - text.length;
+    return at + text.length <= width ? l : `${" ".repeat(Math.max(0, Math.min(at, width - text.length)))}${text}`;
+  });
+}
+
+/**
+ * A space right after one of these may become a line break: JavaScript reads the code the same either way. Nowhere
+ * else, so never before `=>` (an arrow's parameters and its `=>` stay on one line), nor after `return`, `throw`,
+ * `break`, `continue`, `yield` or `async`, nor before `++` or `--`, where a line break changes or breaks the code.
+ */
+const BREAK_AFTER = /(?:[,;:={([]|=>)$/;
+
+/**
+ * `code` (a line without its `//` comment) as the pieces a line may end with: split at the spaces outside quotes and
+ * comments that follow a BREAK_AFTER token (in an import, only at the spaces around its `from`), each piece keeping
+ * its own spaces. Null when the line cannot be read surely, and so is not folded: a `/` that is no comment (a regular
+ * expression or a division), a `<` (JSX, where a line break can change the text), a template with `${`, a quote or a
+ * comment left open.
+ */
+function breakable(code) {
+  const words = [];
+  let cur = "";
+  let open = null; // the quote, or "*/" inside a block comment
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    if (open === "*/") {
+      cur += ch;
+      if (ch === "*" && code[i + 1] === "/") {
+        cur += "/";
+        i++;
+        open = null;
+      }
+    } else if (open) {
+      if (open === "`" && ch === "$" && code[i + 1] === "{") return null;
+      cur += ch;
+      if (ch === "\\" && i + 1 < code.length) cur += code[++i];
+      else if (ch === open) open = null;
+    } else if (ch === "/") {
+      if (code[i + 1] !== "*") return null;
+      cur += "/*";
+      i++;
+      open = "*/";
+    } else if (ch === "<") return null;
+    else if (ch === '"' || ch === "'" || ch === "`") {
+      cur += ch;
+      open = ch;
+    } else if (ch === " ") {
+      if (cur) words.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  if (open) return null;
+  if (cur) words.push(cur);
+  const pieces = [];
+  let piece = "";
+  const cut = () => {
+    if (piece) pieces.push(piece);
+    piece = "";
+  };
+  // an import (or an `export {...} from`, `export * from`) breaks only right before and after its `from`, never
+  // inside its braces nor after its default name's comma: folded there it reads as an `import {` left open
+  let declaration = false;
+  let depth = 0;
+  for (const [i, w] of words.entries()) {
+    if (i === 0 || /;$/.test(words[i - 1])) {
+      declaration = w === "import" || (w === "export" && /^[{*]/.test(words[i + 1] ?? ""));
+      depth = 0;
+    }
+    if (!declaration) {
+      piece = piece ? `${piece} ${w}` : w;
+      if (BREAK_AFTER.test(w)) cut();
+      continue;
+    }
+    // the keyword `from`: outside the braces, right before the module's quoted name (`import { from } from "x"`)
+    const keyword = w === "from" && depth === 0 && /^["']/.test(words[i + 1] ?? "");
+    if (keyword) cut();
+    piece = piece ? `${piece} ${w}` : w;
+    for (const ch of w) depth += ch === "{" ? 1 : ch === "}" ? -1 : 0;
+    if (keyword || /;$/.test(w)) cut();
+  }
+  cut();
+  return pieces;
+}
+
+/** Where `line`'s trailing `//` comment starts (outside quotes and block comments), or -1. */
+function lineCommentAt(line) {
+  let open = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (open === "*/") {
+      if (ch === "*" && line[i + 1] === "/") {
+        i++;
+        open = null;
+      }
+    } else if (open) {
+      if (ch === "\\") i++;
+      else if (ch === open) open = null;
+    } else if (ch === '"' || ch === "'" || ch === "`") open = ch;
+    else if (ch === "/" && line[i + 1] === "/") return i;
+    else if (ch === "/" && line[i + 1] === "*") {
+      i++;
+      open = "*/";
+    }
+  }
+  return -1;
+}
+
+/**
  * Suggest requests.protect for payment and sign-in endpoints (an opt-in preset; nothing is applied): protected
  * requests, their responses and what those responses write are observe-only in every mode (INTERCEPTION.md).
  */
 function printMoneyAdvice(money, cfgFile) {
   if (!money) return;
   const found = [...money.deps, ...money.paths].slice(0, 3).join(", ");
+  const protect = `requests: { protect: ["preset:payments", "preset:auth"] }`;
+  if (hosted()) {
+    labelNote("Payments", `(found ${found}; not applied)`);
+    for (const l of wrapTo(`GenClass recommends keeping checkout and sign-in requests observe-only in every mode: it then never holds, retries, caches, coalesces or drops them, nor what their responses write. Add to GenClass's options (${cfgFile ? `${cfgFile}, ` : ""}window.GENCLASS_CONFIG or GenClass.init({ ... })):`, columns() - 2 - 4)) out(`    ${l}`);
+    for (const l of codeLines(protect, 8)) out(cyanLine(l));
+    more(`Details: ${INTERCEPTION_URL}#money-and-identity-flows`, 4);
+    out();
+    return;
+  }
   out(`  ${c.bold("Payments")} ${c.gray(`(found ${found}; not applied)`)}`);
   out(`    GenClass recommends keeping checkout and sign-in requests observe-only in every mode: it then never holds,`);
   out(`    retries, caches, coalesces or drops them, nor what their responses write. Add to GenClass's options`);
   out(`    (${cfgFile ? `${cfgFile}, ` : ""}window.GENCLASS_CONFIG or GenClass.init({ ... })):`);
-  out(`        ${c.cyan(`requests: { protect: ["preset:payments", "preset:auth"] }`)}`);
+  out(`        ${c.cyan(protect)}`);
   out(`    Details: ${INTERCEPTION_URL}#money-and-identity-flows`);
   out();
 }
@@ -357,16 +542,16 @@ export const SCAN_CMD = HOST_CLI ? `${CMD} scan <url>` : "npx @genclass/runtime@
 function printLittleToWatch(kind) {
   if (!kind) return;
   const why = kind === "none" ? "No fetch, XHR, WebSocket or EventSource call was found in your sources" : "Your page has one script";
-  out(`  ${c.bold("Note")} ${why}, so GenClass will have little to find here. For a mostly static site, try ${c.cyan(SCAN_CMD)}.`);
+  labelled("Note", `${why}, so GenClass will have little to find here. For a mostly static site, try ${c.cyan(SCAN_CMD)}.`);
   out();
 }
 
 function printRecommendations(recs) {
   if (!recs.length) return;
-  out(`  ${c.bold("Optional")} ${c.gray("(not applied: the auto import already finds your app state; these let GenClass hold, drop or roll back writes to it)")}`);
+  labelNote("Optional", "(not applied: the auto import already finds your app state; these let GenClass hold, drop or roll back writes to it)");
   for (const r of recs) {
-    out(`    ${sym.dot} ${r.title}:`);
-    for (const l of r.lines) out(`        ${c.cyan(l)}`);
+    bullet(`${r.title}:`);
+    for (const l of r.lines) for (const piece of codeLines(l, 8)) out(cyanLine(piece));
   }
   out();
 }
@@ -422,10 +607,11 @@ function briefTelemetry(cfg) {
     return;
   }
   briefLines("Anonymous diagnostics are on: counts and decisions go to GenClass's maintainers, with no page text, cookies or IP addresses, and never from localhost.");
-  // the command and the address each stay whole on a line of their own, so they can be copied
+  // the command and the address each stay whole on a line of their own, so they can be copied (under the genclass
+  // command the address starts further left when the window is too narrow for it and its indent, ui.mjs outWhole)
   out(`  ${c.gray(`Off: ${CMD} init --no-telemetry`)}`);
   out(`  ${c.gray("What is sent:")}`);
-  out(`  ${c.gray(TELEMETRY_URL)}`);
+  outWhole(TELEMETRY_URL, 2, c.gray);
 }
 
 /**
@@ -433,7 +619,7 @@ function briefTelemetry(cfg) {
  * words (a narrow terminal would otherwise break a word of it in two, "--n" and "o-audit").
  */
 function commandLine(label, cmd) {
-  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || Number(process.env.COLUMNS) || 100));
+  const cols = foldWidth();
   if (2 + label.length + 2 + cmd.length <= cols) {
     out(`  ${c.bold(label)}  ${c.cyan(cmd)}`);
     return;
@@ -449,9 +635,12 @@ function commandLine(label, cmd) {
   if (line) out(`    ${c.cyan(line)}`);
 }
 
-/** A grey sentence of the compact (--brief) output, folded to the window (40 to 100 columns), every line indented. */
+/**
+ * A grey sentence of the compact (--brief) output, folded to the window (40 to 100 columns; under the genclass
+ * command its own width, ui.mjs foldWidth), every line indented.
+ */
 function briefLines(text, paint = c.gray) {
-  const cols = Math.max(40, Math.min(100, Number(process.stdout.columns) || Number(process.env.COLUMNS) || 100)) - 4;
+  const cols = foldWidth() - 4;
   let line = "";
   for (const word of String(text).split(/\s+/).filter(Boolean)) {
     if (line && line.length + 1 + word.length > cols) {
@@ -854,9 +1043,15 @@ async function offerAccount(o, tk) {
   // --in-account: the caller already has the person's word that the app goes into their account (the `genclass`
   // command asks for the sign-in one step before this one)
   if (tk.wouldCreate || o.yes || o.inAccount || !interactive()) return { ...tk, account: creds };
-  const ok = await confirm(`Signed in as ${accountLabel(creds.account)}: create this app in your GenClass account?`);
+  const question = `Signed in as ${accountLabel(creds.account)}: create this app in your GenClass account?`;
+  // under the genclass command the question fits the window: its first lines are printed, the last one is asked
+  // (with its "(Y/n)", 6 columns more)
+  const lines = hosted() ? wrapTo(question, columns() - 2 - 2 - 6) : [question];
+  for (const l of lines.slice(0, -1)) out(`  ${c.bold(l)}`);
+  const ok = await confirm(lines[lines.length - 1]);
   if (ok === false) {
-    out(`  ${c.gray("Not in your account: init creates the app with a private dashboard link instead, as without an account.")}`);
+    const said = "Not in your account: init creates the app with a private dashboard link instead, as without an account.";
+    for (const l of hosted() ? wrapTo(said, columns() - 2 - 2) : [said]) out(`  ${c.gray(l)}`);
     return tk;
   }
   return { ...tk, account: creds };
@@ -1117,7 +1312,8 @@ async function remove(o) {
     for (const x of p) problems.push(`${posix(relative(cwd, f))}:${x.line}: ${x.reason}`);
     if (next === before) continue;
     const rel = posix(relative(cwd, f));
-    const created = before.includes(`${MARK} start`) && next.trim() === "";
+    // a file init created goes; one the person had (empty too) that only got init's lines is written back as it was
+    const created = createdByInit(before, next);
     changes.push(created ? { file: f, rel, kind: "delete", before, after: "" } : { file: f, rel, kind: "modify", before, after: next });
     after.set(f, created ? "" : next);
   }
