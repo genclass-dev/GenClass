@@ -104,7 +104,9 @@ describe.skipIf(!built)("dist as an app bundles it", () => {
   // meta/data key on /auto); grants and withdrawals are a lazy chunk (src/consent.ts). Measured with
   // test/first-load-size.mjs against genclass-alpha's dist on Node 25: +349 B on /auto (109.09 KB), +335 B on the main
   // entry (100.90 KB). The limits are Node 22's sizes before it (108.89 / 100.61 KB) plus that growth plus 0.05 / 0.07
-  // KB, as before.
+  // KB, as before. On Node 22 (CI) the gate is +389 / +343 B, so the summary's `counts` are now copied key by key from
+  // the client's counters rather than written out (telemetry/client.ts; the same JSON, test/telemetry.test.ts): -79 /
+  // -72 B, and Node 22 measures 109.24 KB on /auto and 100.94 KB on the main entry.
   const LIMIT_KB: Record<string, number> = { "auto.js": 109.3, "index.js": 101.02 };
   it("first-load cost of /auto and the main entry, minified + gzip: under the limits", async () => {
     const { build } = await import("esbuild");

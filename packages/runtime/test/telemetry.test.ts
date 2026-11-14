@@ -361,6 +361,44 @@ describe("telemetry: event shapes and the situation text", () => {
     expect(b.get()).toBe(2);
   });
 
+  it("a summary's counts are every counter in the order TELEMETRY.md lists them, each tally a copy taken at that moment", async () => {
+    const { rt, clock, transport } = tsetup({ triage: "always", script: defaultScript({ mutation: { diagnosis: "stale", action: "discard" } }) });
+    const a = rt.atom("a", 1);
+    void rt.op("w", () => a.set(2));
+    await clock.flush();
+    const tc = rt.telemetry as unknown as { summary(r: string): void; c: Record<string, unknown> };
+    tc.summary("periodic");
+    const own = JSON.parse(JSON.stringify(tc.c)) as Record<string, unknown>;
+    // a later decision changes the client's tallies, not the summary already queued
+    void rt.op("w2", () => a.set(3));
+    await clock.flush();
+    await rt.telemetry!.flush();
+    const s = ofType(transport, "summary").find((e) => e.reason === "periodic") as Record<string, any>;
+    expect(Object.keys(s.counts)).toEqual([
+      "decisions",
+      "acted",
+      "detections",
+      "possibleDetections",
+      "actionsOk",
+      "actionsFailed",
+      "lateReverts",
+      "undos",
+      "vetoes",
+      "breakerTrips",
+      "byTrigger",
+      "byDiagnosis",
+      "byAction",
+      "detectionsByDiagnosis",
+      "limits",
+      "modelErrors",
+      "failOpen",
+    ]);
+    expect(s.counts).toEqual(own);
+    expect(s.counts.decisions).toBeGreaterThan(0);
+    expect(s.counts.byTrigger).toEqual({ mutation: s.counts.decisions });
+    expect((tc.c.byTrigger as Record<string, number>).mutation).toBeGreaterThan(s.counts.byTrigger.mutation);
+  });
+
   it("a model event's workerError carries no URLs (the browser's text names the worker script and the page origin)", async () => {
     const fns = new Set<(s: ModelStatus) => void>();
     const decider = {

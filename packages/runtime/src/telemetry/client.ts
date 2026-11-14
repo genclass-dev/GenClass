@@ -582,29 +582,12 @@ export class TelemetryClient implements TelemetryStatus {
     } catch {
       /* ignore */
     }
-    const c = this.c;
     this.push({
       t: "summary",
       reason,
-      counts: {
-        decisions: c.decisions,
-        acted: c.acted,
-        detections: c.detections,
-        possibleDetections: c.possibleDetections,
-        actionsOk: c.actionsOk,
-        actionsFailed: c.actionsFailed,
-        lateReverts: c.lateReverts,
-        undos: c.undos,
-        vetoes: c.vetoes,
-        breakerTrips: c.breakerTrips,
-        byTrigger: { ...c.byTrigger },
-        byDiagnosis: { ...c.byDiagnosis },
-        byAction: { ...c.byAction },
-        detectionsByDiagnosis: { ...c.detectionsByDiagnosis },
-        limits: { ...c.limits },
-        modelErrors: { ...c.modelErrors },
-        failOpen: { ...c.failOpen },
-      },
+      // every counter of `c`, in the order it declares them, each tally copied (written out key by key this cost the
+      // first load 72 B gzip; test/telemetry.test.ts pins the keys and their order)
+      counts: Object.fromEntries(Object.entries(this.c).map(([k, v]) => [k, typeof v == "number" ? v : { ...v }])),
       runtime: rs
         ? {
             model: compact({ state: rs.model.state, p50Ms: r4(rs.model.p50Ms), p95Ms: r4(rs.model.p95Ms), decisions: rs.model.decisions, dropped: rs.model.dropped, hiddenSkipped: rs.model.hiddenSkipped }),
