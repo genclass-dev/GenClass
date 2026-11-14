@@ -326,6 +326,19 @@ A production build drops all of this (measured with Vite, esbuild and Next.js 15
 neither entry). Load a page of the dev server and ask the agent for `genclass_status`. The agent can also ask `genclass_setup`,
 which reads your `package.json` and shows the lines for your framework.
 
+If the app already starts GenClass with `import "@genclass/runtime/auto"` (what `npx genclass` adds), connect that
+runtime instead: `GenClass.init()` starts nothing new there, it returns the runtime `/auto` already started.
+`genclass_setup` finds the import and prints this form first (or, when the import binds a name such as
+`import genclass from "@genclass/runtime/auto"`, the one-line `import("@genclass/runtime/agent")` form with that name):
+
+```ts
+import { GenClass } from "@genclass/runtime";
+import { connectAgent } from "@genclass/runtime/agent";
+
+// development builds only: a production build drops the agent link
+if (import.meta.env.DEV) connectAgent(GenClass.init());
+```
+
 The skill and the server's instructions tell the agent to show you each of these and wait for your yes: running that
 install or adding those lines; `npx playwright install chromium` and `npm i -D playwright`; `genclass_scan` with `hosted: true`; writing a fix or a
 test when you only asked what broke.
@@ -340,7 +353,7 @@ agent:  genclass_findings → f1 [stale-write] /search: the response to GET /api
         genclass_replay arm f1 → (loads the page, types) → result: REPRODUCED
         (fixes the handler to keep only the latest answer, adds the test)
         genclass_replay arm f1 → result: not reproduced
-        genclass_explore start {slow_ms: 600} → 9 runs → report: no race
+        genclass_explore start {slow_ms: 600} → 9 runs → wait: all 9 loads in → report: no race
 ```
 
 On a real page in headless Chromium (the package's end-to-end check), explore found that race in 5 of 6 reordered runs
@@ -358,10 +371,10 @@ both slow baselines show and it does not is named as what a slow response alone 
 
 | tool | |
 |---|---|
-| `genclass_status` | connected pages, counts of findings, explore and replay state |
-| `genclass_findings` | ranked, deduplicated findings: races, stale writes, errors, duplicate requests, model detections, visual checks |
-| `genclass_explain` | one finding in causal order, the recorded steps, the replay, a Playwright regression test |
-| `genclass_explore` | `start` / `report` / `stop`: find what depends on response order |
+| `genclass_status` | connected pages grouped by app (page origin) with their model state, counts of findings per app, explore and replay state; `origin` keeps one app |
+| `genclass_findings` | ranked, deduplicated findings grouped by app: races, stale writes, errors, duplicate requests, model detections, visual checks; `origin` (`http://localhost:5173` or `5173`) keeps one app |
+| `genclass_explain` | one finding in causal order, the recorded steps (the model's text, when shown, in the same numbering), the replay, a Playwright regression test that says what it needs and how to run it |
+| `genclass_explore` | `start` / `wait` / `report` / `stop`: find what depends on response order; `wait` returns once every armed load is in (`timeout_s`, default 120, at most 300), with MCP progress |
 | `genclass_replay` | `arm` / `result`: reproduce one finding exactly |
 | `genclass_analytics` | per-endpoint latency, error rates and request counts, learned relations and flows; production numbers from your GenClass dashboard |
 | `genclass_setup` | the lines to add for your framework, and the config lines for the client it runs in |

@@ -125,7 +125,13 @@ export interface Run {
   lastSeen: number;
   page: { url: string; route: string; title?: string };
   ua?: string;
+  /** The runtime's mode and model state: at hello, then as the page reports changes (the model loads after hello). */
   runtime?: { mode?: string; model?: string };
+  /**
+   * The runtime's operation numbers this run's steps stand for (the `#3` in the model's text): a request's key, or a user
+   * action's index. genclass_explain writes the model's text with the steps' names (one numbering). Bounded.
+   */
+  ops?: Record<string, string | number>;
   schedule: ScheduleSpec | null;
   assignment?: Assignment;
   steps: Step[];
@@ -156,6 +162,8 @@ export interface Finding {
   /** One line, built by the bridge from recorded fields (page text inside it is quoted). */
   title: string;
   route: string;
+  /** The page origin (scheme://host:port) of the run that recorded it, when known. Part of the dedup key. */
+  origin?: string;
   count: number;
   runs: string[];
   first: number;
@@ -173,6 +181,8 @@ export interface ExploreSession {
   id: string;
   created: number;
   route?: string;
+  /** Only page loads from this origin take a slot: its first load's (another app on this machine keeps out). */
+  origin?: string;
   plan: ScheduleSpec[];
   next: number;
   runs: string[];
@@ -186,6 +196,8 @@ export interface ReplayArm {
   finding: string;
   spec: ScheduleSpec;
   route?: string;
+  /** The finding's origin: a page of another app on the same path does not take the replay. */
+  origin?: string;
   remaining: number;
   created: number;
   runs: string[];

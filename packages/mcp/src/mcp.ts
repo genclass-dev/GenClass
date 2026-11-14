@@ -1,7 +1,8 @@
 // A minimal MCP server over stdio (JSON-RPC 2.0, one message per line), without dependencies: initialize (with
-// instructions and the experimental claude/channel capability), ping, tools/list, tools/call, and empty resources
-// and prompts lists. Notifications from the server (channel events) go out on the same stream. stdout carries
-// protocol messages only; diagnostics go to stderr.
+// instructions and the experimental claude/channel capability), ping, tools/list, tools/call (with progress when the
+// call carries a progressToken, and notifications/cancelled, after which the call gets no answer), and empty resources
+// and prompts lists. Notifications from the server (channel events, progress) go out on the same stream. stdout
+// carries protocol messages only; diagnostics go to stderr.
 
 import type { Readable, Writable } from "node:stream";
 
@@ -22,10 +23,19 @@ export interface McpServerOptions {
   version: string;
   instructions: string;
   tools: McpTool[];
-  call(name: string, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean; json?: unknown }>;
+  /**
+   * Run a tool. `extra.progress` sends notifications/progress when the client gave the call a progressToken;
+   * `extra.signal` aborts when the client cancels the call (notifications/cancelled) or the session ends.
+   */
+  call(name: string, args: Record<string, unknown>, extra?: CallExtra): Promise<{ text: string; isError?: boolean; json?: unknown }>;
   /** Declare the experimental claude/channel capability (Claude Code channels). */
   channel?: boolean;
   log?: (s: string) => void;
+}
+
+export interface CallExtra {
+  progress?: (progress: number, total?: number, message?: string) => void;
+  signal?: AbortSignal;
 }
 
 type Msg = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
@@ -35,6 +45,8 @@ export class McpServer {
   clientName: string | null = null;
   private buf = "";
   private out: Writable | null = null;
+  /** Tool calls still running, by request id: a cancellation aborts one, the end of the session all. */
+  private running = new Map<string, AbortController>();
 
   constructor(private readonly o: McpServerOptions) {}
 
@@ -53,8 +65,12 @@ export class McpServer {
         }
         if (this.buf.length > 8 * 1024 * 1024) this.buf = "";
       });
-      input.on("end", () => resolve());
-      input.on("close", () => resolve());
+      const end = () => {
+        for (const c of this.running.values()) c.abort();
+        resolve();
+      };
+      input.on("end", end);
+      input.on("close", end);
     });
   }
 
@@ -132,13 +148,31 @@ export class McpServer {
           const name = String(m.params?.name ?? "");
           const args = (m.params?.arguments && typeof m.params.arguments === "object" ? m.params.arguments : {}) as Record<string, unknown>;
           if (!this.o.tools.some((t) => t.name === name)) return fail(-32602, `unknown tool ${name.slice(0, 60)}`);
+          const token = (m.params?._meta as Record<string, unknown> | undefined)?.progressToken;
+          const progress =
+            typeof token === "string" || typeof token === "number"
+              ? (p: number, total?: number, message?: string) => void this.notify("notifications/progress", { progressToken: token, progress: p, ...(total !== undefined ? { total } : {}), ...(message ? { message } : {}) })
+              : undefined;
+          const ctl = new AbortController();
+          const key = JSON.stringify(m.id ?? null);
+          if (isRequest) this.running.set(key, ctl);
           try {
-            const r = await this.o.call(name, args);
+            const r = await this.o.call(name, args, { ...(progress ? { progress } : {}), signal: ctl.signal });
+            // a cancelled request gets no answer (MCP cancellation)
+            if (ctl.signal.aborted) return null;
             if (r.json !== undefined) return ok({ content: [{ type: "text", text: r.text }, { type: "text", text: JSON.stringify(r.json) }], structuredContent: r.json, ...(r.isError ? { isError: true } : {}) });
             return ok({ content: [{ type: "text", text: r.text }], ...(r.isError ? { isError: true } : {}) });
           } catch (e) {
+            if (ctl.signal.aborted) return null;
             return ok({ content: [{ type: "text", text: `GenClass: ${e instanceof Error ? e.message : String(e)}` }], isError: true });
+          } finally {
+            if (this.running.get(key) === ctl) this.running.delete(key);
           }
+        }
+        case "notifications/cancelled": {
+          const id = m.params?.requestId;
+          if (typeof id === "string" || typeof id === "number") this.running.get(JSON.stringify(id))?.abort();
+          return null;
         }
         case "resources/list":
           return ok({ resources: [] });

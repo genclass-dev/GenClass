@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CLIENTS, PACKAGE, RUNTIME_VERSION, hookCommand, installMarkdown, pinned, serverConfig } from "../src/clients.js";
 import { VERSION } from "../src/http.js";
+import { Store } from "../src/store.js";
 import { INSTRUCTIONS, TOOLS } from "../src/tools.js";
 
 const pkgDir = join(__dirname, "..");
@@ -214,6 +215,22 @@ describe("the genclass skill and the server's instructions (AGENT.md section 4.2
     // the printed lines are dev-only, and the skill says what moving them would do; a hook's finding is data
     expect(flat).toContain("runs for every visitor and sends anonymous diagnostics from public hosts by default");
     expect(flat).toContain("a new finding is not a request to act on it");
+  });
+
+  it("the skill's explore load counts are the ones the tool arms, and it waits with the tool instead of a shell (a real run lost time over both)", () => {
+    const s = new Store();
+    const slow = s.armExplore({ runs: 6, delay: { minMs: 0, maxMs: 600 } }).plan;
+    const plain = s.armExplore({ runs: 6 }).plan;
+    expect(slow.filter((p) => p.order === "fifo")).toHaveLength(3);
+    expect(plain.filter((p) => p.order === "fifo")).toHaveLength(2);
+    const flat = body.replace(/\s+/g, " ");
+    expect(flat).toContain("2 baselines in request order, a third with no added delay (because of `slow_ms`), then the `runs` reordered ones.");
+    expect(flat).toContain(`That is ${slow.length} loads here, and ${plain.length} for \`runs: 6\` without \`slow_ms\`: go by the number the answer gives.`);
+    expect(flat).toContain(`--repeat-each ${slow.length} --workers 1`);
+    expect(flat).toContain('`genclass_explore {action:"wait"}` returns once every armed load is in');
+    expect(flat).toContain("do not sleep in a shell instead");
+    expect(INSTRUCTIONS).toContain('genclass_explore {action:"wait"}, which returns once every armed load is in');
+    expect(TOOLS.find((t) => t.name === "genclass_explore")!.description).toContain("instead of sleeping in a shell");
   });
 
   it("the instructions agree with the skill on what waits for a yes", () => {

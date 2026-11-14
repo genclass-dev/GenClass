@@ -15,7 +15,8 @@
 //     change, so a race shows up on a fast machine and replays exactly (./schedule.ts);
 //   - at quiet points sends a snapshot of the app's state (store fields, page text, form values), which the bridge
 //     compares across runs;
-//   - streams the runtime's detections, interventions, checks and expectations as they happen.
+//   - streams the runtime's detections, interventions, checks and expectations as they happen, and its mode and model
+//     state when they change (the model usually loads after the hello).
 //
 // Invariants: it runs only on the developer's own machine (localhost, *.localhost, 127.x, ::1) unless asked
 // (`anyHost`), talks only to a loopback URL, adds nothing to the first-load bundle (apps import it from a dev-only
@@ -381,7 +382,9 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
     const freshSteps = fresh > 0 ? rec.steps.slice(rec.steps.length - fresh) : [];
     const changed = [...rec.updated].map((i) => rec.acts.get(i)).filter((a): a is NonNullable<typeof a> => !!a && !freshSteps.includes(a));
     rec.updated.clear();
-    if (freshSteps.length || changed.length) link.send({ t: "steps", steps: [...changed, ...freshSteps], order: rec.order.slice(-400), forced: sched.forced, lost: rec.pushed - sentSteps - fresh });
+    // the operation numbers these steps stand for (the model's text names requests and actions by them)
+    const named = rec.named.length ? rec.named.splice(0) : null;
+    if (freshSteps.length || changed.length || named) link.send({ t: "steps", steps: [...changed, ...freshSteps], order: rec.order.slice(-400), forced: sched.forced, lost: rec.pushed - sentSteps - fresh, ...(named ? { ops: named } : {}) });
     sentSteps = rec.pushed;
   };
   const quiet = (): void => {
@@ -557,6 +560,28 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
   );
   listen(() => runtime.on("check", (c) => link.send({ t: "check", at: at(), check: JSON.parse(JSON.stringify(c)) })));
   listen(() => runtime.on("expectation", (x) => link.send({ t: "expectation", at: at(), expectation: JSON.parse(JSON.stringify(x)) })));
+  // the mode and the model's state as they change: the model usually loads after hello, so the bridge's copy from hello
+  // would say "off" or "loading" for a page whose model is ready (one event per change, not per status update)
+  const rtState = (): { mode: string; model: string } => ({ mode: String(runtime.mode), model: String(runtime.status.state) });
+  let lastRt = "";
+  try {
+    lastRt = JSON.stringify(rtState());
+  } catch {
+    /* read again at the next status */
+  }
+  listen(() =>
+    runtime.on("status", () => {
+      try {
+        const now = rtState();
+        const key = JSON.stringify(now);
+        if (key === lastRt) return;
+        lastRt = key;
+        link.send({ t: "runtime", runtime: now });
+      } catch {
+        /* never into the page */
+      }
+    }),
+  );
   rec.onWitness = (w) => link.send({ t: "witness", witness: w });
   rec.onError = (e) => link.send({ t: "error", error: e });
 
@@ -658,7 +683,7 @@ export function connectAgent(runtime: Runtime | null | undefined, opts: AgentOpt
     .hello(
       {
         page: { url: String(loc?.href ?? "").slice(0, 2000), route: route(), ...(title ? { title: String(title).slice(0, 200) } : {}) },
-        runtime: { mode: runtime.mode, model: runtime.status.state },
+        runtime: rtState(),
         // the schedule in force when the page set its own (or natural, with hold: false): the bridge assigns none then
         ...(initial ? { schedule: initial } : {}),
         ...(nav?.userAgent ? { ua: String(nav.userAgent).slice(0, 300) } : {}),

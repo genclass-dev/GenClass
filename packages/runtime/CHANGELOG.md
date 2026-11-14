@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `@genclass/runtime/agent` (development builds only): the page tells the bridge when its mode or model state changes
+  after the hello (a `runtime` event, once per change, not per status update), so `genclass_status` no longer says
+  "model off" for a page whose model loaded after it connected. Each batch of steps also carries the runtime's
+  operation numbers the new steps stand for (`ops`: a request's key or a user action's index), so the MCP server's
+  `genclass_explain` writes the model's text in the steps' numbering. Wire messages only (`genclass-agent/1`, which
+  ignores what it does not know): no public type changed, nothing is held or delayed, and nothing of it reaches the
+  model, a situation or the gate.
+
 - CLI `remove` (shared with the `genclass` command) also takes out the coding-agent link `genclass doctor --fix`
   writes after the `/auto` import (a `genclass:init` block: `import { GenClass }`, `import { connectAgent }` and
   `if (import.meta.env.DEV) connectAgent(GenClass.init());`). Nothing else in `remove` changed.

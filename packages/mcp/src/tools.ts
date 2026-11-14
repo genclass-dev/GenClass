@@ -3,13 +3,14 @@
 // are cleaned and quoted (text.ts), sections that hold them say so, ids the agent passes back (f12, x3, r40) come
 // first, and every tool says what to do next.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Api } from "./api.js";
 import { CLIENTS, clientFor, pinned, pinnedRuntime } from "./clients.js";
 import { nameDifference, shownField, strongestFirst, type GroupReport, type RunDiff } from "./compare.js";
 import { VERSION } from "./http.js";
 import { dashboardTarget, fetchProduction, type ProdStats } from "./production.js";
+import { byOrigin, originFilter } from "./origin.js";
 import { runScan, type Runner, type ScanReport } from "./scan.js";
 import { ago, clean, cleanBlock, ms, q } from "./text.js";
 import type { ActStep, Finding, ScheduleSpec, Step } from "./types.js";
@@ -26,8 +27,8 @@ export const SERVER_NAME = "genclass";
 export const INSTRUCTIONS = `GenClass finds the web-app bugs that depend on timing and layout. Reach for it when the user says something happens "sometimes", "randomly", "only in production" or "on slow connections", when a value "flips back" after a save, and for stale or old results, lost edits, double submits or a page that scrolls sideways on a phone. It records what happens inside the web pages running on this machine (dev builds with connectAgent): each click, request and response, the order responses were delivered, what each response wrote into the app's state, and uncaught errors with the click and request that led to them. It can run a page again with the network answering in a different order, which is how race conditions show up on a fast machine, and replay one exact order to prove a fix.
 
 What to do first:
-- An intermittent bug report (the words above): genclass_findings, then genclass_explain on the top finding. Nothing recorded: genclass_explore on the page the user named.
-- After you change code that fetches, submits, autosaves, polls, debounces, paginates or listens to a socket: genclass_explore {action:"start"}, run the same scenario once per armed page load (Playwright or a browser tool: load the page, do the steps, then await window.__GENCLASS_AGENT__.whenSettled()), then genclass_explore {action:"report"}. Do not call the change done while the report shows a race.
+- An intermittent bug report (the words above): genclass_findings, then genclass_explain on the top finding. Findings and pages are grouped by app (page origin); with several dev servers running, pass origin (http://localhost:5173 or 5173). Nothing recorded: genclass_explore on the page the user named.
+- After you change code that fetches, submits, autosaves, polls, debounces, paginates or listens to a socket: genclass_explore {action:"start"}, run the same scenario once per armed page load (Playwright or a browser tool: load the page, do the steps, then await window.__GENCLASS_AGENT__.whenSettled()), then genclass_explore {action:"wait"}, which returns once every armed load is in (also while a person does the loads; never sleep in a shell for it), then genclass_explore {action:"report"}. Do not call the change done while the report shows a race.
 - Before fixing a finding, confirm it: genclass_replay {action:"arm"}, do the same steps, genclass_replay {action:"result"}. If the user only asked what broke, report the cause and wait for a yes before you write a fix or a test. After a fix, replay again; "not reproduced" is the evidence. Offer the regression test from genclass_explain; add it to the repo once the user says yes.
 - Production numbers (sessions affected, which pages, which diagnoses): genclass_analytics {source:"production"}.
 - No connected page in genclass_status: genclass_setup prints an install line and the dev-only lines; show them to the user and wait for a yes before you run or add them.
@@ -49,25 +50,28 @@ interface ToolDef {
 }
 
 const KINDS = ["race", "stale-write", "error", "duplicate-request", "detection", "intervention", "check", "expectation"];
+const ORIGIN_ARG = { type: "string", description: "Only this app: its page origin (http://localhost:5173) or its port (5173)." };
+const ORIGIN_HELP = "origin must be a page origin, e.g. http://localhost:5173, or a port, e.g. 5173 (genclass_status lists the apps).";
 
 export const TOOLS: ToolDef[] = [
   {
     name: "genclass_status",
     title: "GenClass status",
-    description: "Which pages on this machine are connected to GenClass (route, schedule, model state), counts of findings by kind, the explore session and armed replays. Call it first in a web project, and before you test a page.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    description: "Which pages on this machine are connected to GenClass, grouped by app (page origin), with route, schedule and model state; counts of findings by kind and app, the explore session and armed replays. Call it first in a web project, and before you test a page. `origin` keeps one app.",
+    inputSchema: { type: "object", properties: { origin: ORIGIN_ARG }, additionalProperties: false },
     annotations: { title: "GenClass status", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "genclass_findings",
     title: "GenClass findings",
     description:
-      "What GenClass recorded in pages on this machine, ranked and deduplicated with counts: races found by explore (final state depends on response order), responses that overwrote newer data, uncaught errors (with the click and request before them), the same request sent twice by two clicks, the on-device model's detections, visual checks. Use when the user reports an intermittent bug, after changing data-fetching or submit code, or before saying a UI change is done.",
+      "What GenClass recorded in pages on this machine, grouped by app (page origin), ranked and deduplicated with counts: races found by explore (final state depends on response order), responses that overwrote newer data, uncaught errors (with the click and request before them), the same request sent twice by two clicks, the on-device model's detections, visual checks. Use when the user reports an intermittent bug, after changing data-fetching or submit code, or before saying a UI change is done.",
     inputSchema: {
       type: "object",
       properties: {
         kind: { type: "string", enum: KINDS, description: "Only this kind." },
         route: { type: "string", description: "Only this page path, e.g. /checkout." },
+        origin: ORIGIN_ARG,
         since_minutes: { type: "number", description: "Only findings seen in the last N minutes." },
         limit: { type: "number", description: "At most this many (default 20)." },
       },
@@ -88,17 +92,18 @@ export const TOOLS: ToolDef[] = [
     name: "genclass_explore",
     title: "Explore response orders",
     description:
-      "Find races before users do. action \"start\" arms the next page loads: 2 baselines with responses in request order (with `slow_ms`, a third with no added delay), then `runs` loads where overlapping responses arrive in a seeded different order (optionally slower, or with `focus` endpoints last). Run the same scenario once per armed load, then action \"report\": each load's final state is compared with the baseline; a difference in what the page shows, its form values, the requests it sent or its errors depends on network timing (a race), and comes with a seed that replays it. Store values that differ while the page is the same are listed apart as internal state. Without `route`, the page of the first armed load is the page under test; set `route` when the scenario loads several pages. Armed loads expire after 30 minutes. \"stop\" disarms.",
+      "Find races before users do. action \"start\" arms the next page loads: 2 baselines with responses in request order (with `slow_ms`, a third with no added delay), then `runs` loads where overlapping responses arrive in a seeded different order (optionally slower, or with `focus` endpoints last). Run the same scenario once per armed load, then action \"report\": each load's final state is compared with the baseline; a difference in what the page shows, its form values, the requests it sent or its errors depends on network timing (a race), and comes with a seed that replays it. Store values that differ while the page is the same are listed apart as internal state. Without `route`, the page (and app) of the first armed load is the page under test; set `route` when the scenario loads several pages. action \"wait\" blocks until every armed load has arrived and settled (or `timeout_s`, default 120, at most 300) and says how many are in: call it after driving the loads with Playwright, or while a person does them, instead of sleeping in a shell. Armed loads expire after 30 minutes. \"stop\" disarms.",
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["start", "report", "stop"] },
+        action: { type: "string", enum: ["start", "wait", "report", "stop"] },
         runs: { type: "number", description: "Seeded loads after the baselines (default 6, max 50)." },
         route: { type: "string", description: "Only arm page loads of this path (default: any page)." },
         focus: { type: "array", items: { type: "string" }, description: "Request signatures to deliver last, e.g. [\"PUT /api/notes/:id\"] (one production flagged)." },
         slow_ms: { type: "number", description: "Also add up to this much latency per response (a slow network), e.g. 800." },
         seed: { type: "number", description: "First seed (default 1)." },
-        id: { type: "string", description: "report: the session id (default the latest)." },
+        id: { type: "string", description: "wait, report: the session id (default the latest)." },
+        timeout_s: { type: "number", description: "wait: return after this many seconds even if loads are missing (default 120, at most 300)." },
       },
       required: ["action"],
       additionalProperties: false,
@@ -174,6 +179,12 @@ export interface ToolContext {
   client?: string | null;
   /** Runs genclass_scan's CLI (default: spawn; tests pass a fake). */
   run?: Runner;
+  /** Waits between genclass_explore wait's checks (default: an unref'd timer; tests pass a fake). */
+  sleep?: (ms: number) => Promise<void>;
+  /** MCP progress for a long call (genclass_explore wait), when the client asked for it with a progressToken. */
+  progress?: (progress: number, total?: number, message?: string) => void;
+  /** Aborted when the client cancels the call or the session ends. */
+  signal?: AbortSignal;
 }
 
 export interface ToolResult {
@@ -211,6 +222,42 @@ function stepLine(s: Step): string {
   }
 }
 
+/** An origin as a group header: the bridge checked it is a page origin on this machine (or one allowed by name). */
+function originLabel(o: string | undefined): string {
+  return o ? clean(o, 100) : "(origin not recorded)";
+}
+
+/** Items under one header per app, in the order the apps first come (a ranked list stays ranked); no headers when no item has an origin (an older bridge). */
+function grouped<T extends { origin?: string }>(items: T[], line: (x: T) => string, header: (o: string | undefined) => string = (o) => `${originLabel(o)}:`): string[] {
+  if (!items.some((x) => x.origin)) return items.map(line);
+  return byOrigin(items, (x) => x.origin).flatMap(([o, xs]) => [header(o), ...xs.map(line)]);
+}
+
+/**
+ * The model's text (a situation, its facts) with the runtime's operation numbers written as the steps' names: "#3"
+ * becomes the request key "GET /api/search#1" or "action 0", so an explanation numbers each request once. `ops` comes
+ * from the page (op id → key or action index); a number it does not name (a timer, an op from before the recording)
+ * stays as it is.
+ */
+export function withStepNames(text: string, ops: Record<string, string | number> | undefined): string {
+  if (!ops) return text;
+  const name = (n: string): string | undefined => {
+    const v = ops[n];
+    return v === undefined ? undefined : typeof v === "number" ? `action ${v}` : v;
+  };
+  return text
+    .replace(/\bactions #(\d+) and #(\d+)/g, (m, a: string, b: string) => (typeof ops[a] === "number" && typeof ops[b] === "number" ? `actions ${ops[a]} and ${ops[b]}` : m))
+    .replace(/#(\d+)–#(\d+)/g, (m, a: string, b: string) => {
+      const x = name(a);
+      const y = name(b);
+      return x && y ? (x === y ? x : `${x}–${y}`) : m;
+    })
+    .replace(/(^|[^\w/#"'&])#(\d+)\b/g, (m, pre: string, n: string) => {
+      const x = name(n);
+      return x ? `${pre}${x}` : m;
+    });
+}
+
 function findingLine(f: { id: string; kind: string; title: string; route: string; count: number; runs: number; last: number; replays?: { reproduced: boolean | null }[] }, now: number): string {
   const rp = f.replays?.length ? ` · last replay: ${f.replays[f.replays.length - 1].reproduced === true ? "reproduced" : f.replays[f.replays.length - 1].reproduced === false ? "not reproduced" : "inconclusive"}` : "";
   return `- ${f.id} [${f.kind}] ${q(f.route, 80)} · ${f.count}× in ${f.runs} run(s) · ${ago(f.last, now)}${rp}\n  ${clean(f.title, 400)}`;
@@ -224,40 +271,63 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
   const now = ctx.now();
   switch (name) {
     case "genclass_status": {
-      const s = (await ctx.api("status")) as {
+      const want = args.origin === undefined || args.origin === "" ? null : originFilter(args.origin);
+      if (args.origin !== undefined && args.origin !== "" && !want) return { text: ORIGIN_HELP, isError: true };
+      const s = (await ctx.api("status", want ? { origin: args.origin } : {})) as {
         bridge: { url: string; port: number };
-        pages: { id: string; route: string; url: string; active: boolean; schedule: ScheduleSpec | null; runtime?: { mode?: string; model?: string }; actions: number; requests: number; witnesses: number; errors: number; lastSeen: number; settled: boolean }[];
+        origin?: string;
+        origins?: { origin: string; runs: number; active: number }[];
+        pages: { id: string; origin?: string; route: string; url: string; active: boolean; schedule: ScheduleSpec | null; runtime?: { mode?: string; model?: string }; actions: number; requests: number; witnesses: number; errors: number; lastSeen: number; settled: boolean }[];
         activePages: number;
         totalRuns: number;
         findings: Record<string, number>;
-        explore: { id: string; state: string; planned: number; assigned: number; runs: string[]; route?: string } | null;
-        replays: { finding: string; remaining: number; route?: string }[];
+        findingsByOrigin?: Record<string, Record<string, number>>;
+        explore: { id: string; state: string; planned: number; assigned: number; runs: string[]; route?: string; origin?: string } | null;
+        replays: { finding: string; remaining: number; route?: string; origin?: string }[];
       };
-      const out: string[] = [`GenClass bridge: ${s.bridge.url} · ${s.activePages} active page(s), ${s.totalRuns} recorded run(s)`];
-      const fk = Object.entries(s.findings);
-      out.push(fk.length ? `Findings: ${fk.map(([k, n]) => `${n} ${k}`).join(", ")} (genclass_findings)` : "Findings: none yet.");
-      if (s.explore) out.push(`Explore ${s.explore.id}: ${s.explore.state}, ${s.explore.assigned} of ${s.explore.planned} loads assigned${s.explore.route ? ` on ${clean(s.explore.route, 60)}` : ""}${s.explore.state !== "stopped" ? ` (then genclass_explore {action:"report"})` : ""}`);
-      for (const r of s.replays) out.push(`Replay armed for ${r.finding} on ${clean(r.route, 60)}: the next ${r.remaining} load(s).`);
+      const out: string[] = [`GenClass bridge: ${s.bridge.url} · ${s.activePages} active page(s), ${s.totalRuns} recorded run(s)${s.origin ? ` on ${clean(s.origin, 100)}` : ""}`];
+      const kinds = (c: Record<string, number>) =>
+        Object.entries(c)
+          .map(([k, n]) => `${n} ${k}`)
+          .join(", ");
+      // one app: as before; several: one count per app, so the agent asks for the one it works on
+      const apps = Object.entries(s.findingsByOrigin ?? {});
+      if (apps.length > 1) out.push(`Findings: ${apps.map(([o, c]) => `${originLabel(o || undefined)} ${kinds(c)}`).join("; ")} (genclass_findings {origin})`);
+      else out.push(Object.keys(s.findings).length ? `Findings: ${kinds(s.findings)} (genclass_findings)` : "Findings: none yet.");
+      if (s.explore) out.push(`Explore ${s.explore.id}: ${s.explore.state}, ${s.explore.assigned} of ${s.explore.planned} loads assigned${s.explore.route ? ` on ${q(s.explore.route, 60)}` : ""}${s.explore.origin ? ` at ${clean(s.explore.origin, 100)}` : ""}${s.explore.state !== "stopped" ? ` (genclass_explore {action:"wait"}, then {action:"report"})` : ""}`);
+      for (const r of s.replays) out.push(`Replay armed for ${r.finding} on ${q(r.route, 60)}${r.origin ? ` at ${clean(r.origin, 100)}` : ""}: the next ${r.remaining} load(s).`);
       if (s.pages.length) {
         out.push("", `Recent page loads ${PAGE_DATA}:`);
-        for (const p of s.pages)
-          out.push(
-            `- ${p.id} ${q(p.route, 80)} ${p.active ? "(active)" : ""} · schedule ${scheduleText(p.schedule)} · ${p.actions} actions, ${p.requests} requests, ${p.witnesses} witnesses, ${p.errors} errors · model ${clean(p.runtime?.model ?? "?", 12)}, mode ${clean(p.runtime?.mode ?? "?", 10)} · ${p.settled ? "settled" : "not settled yet"} · ${ago(p.lastSeen, now)}`,
-          );
-      } else out.push("", "No page has connected yet. The app's dev build needs connectAgent from @genclass/runtime/agent: see genclass_setup.");
+        const count = (o: string | undefined) => s.origins?.find((x) => x.origin === (o ?? ""));
+        out.push(
+          ...grouped(
+            s.pages,
+            (p) =>
+              `- ${p.id} ${q(p.route, 80)}${p.active ? " (active)" : ""} · schedule ${scheduleText(p.schedule)} · ${p.actions} actions, ${p.requests} requests, ${p.witnesses} witnesses, ${p.errors} errors · model ${clean(p.runtime?.model ?? "?", 12)}, mode ${clean(p.runtime?.mode ?? "?", 10)} · ${p.settled ? "settled" : "not settled yet"} · ${ago(p.lastSeen, now)}`,
+            (o) => {
+              const c = count(o);
+              return `${originLabel(o)}${c ? ` · ${c.runs} run(s), ${c.active} active` : ""}:`;
+            },
+          ),
+        );
+      } else out.push("", s.origin ? `No page of ${clean(s.origin, 100)} has connected yet.` : "No page has connected yet. The app's dev build needs connectAgent from @genclass/runtime/agent: see genclass_setup.");
+      const others = want ? (s.origins ?? []).filter((x) => !want.test(x.origin || undefined)) : [];
+      if (others.length) out.push(`Also on this machine: ${others.map((x) => `${originLabel(x.origin || undefined)} (${x.runs} run(s))`).join(", ")}`);
       return { text: out.join("\n") };
     }
 
     case "genclass_findings": {
-      const list = (await ctx.api("findings", { kind: args.kind, route: args.route, sinceMinutes: args.since_minutes, limit: args.limit })) as Parameters<typeof findingLine>[0][];
-      if (!list.length) return { text: "No findings match. Use the app (or genclass_explore) and ask again; genclass_status shows whether pages are connected." };
-      return { text: [`${list.length} finding(s), most important first ${PAGE_DATA}:`, ...list.map((f) => findingLine(f, now)), "", "Next: genclass_explain {id} for the evidence, the replay and a regression test."].join("\n") };
+      const want = args.origin === undefined || args.origin === "" ? null : originFilter(args.origin);
+      if (args.origin !== undefined && args.origin !== "" && !want) return { text: ORIGIN_HELP, isError: true };
+      const list = (await ctx.api("findings", { kind: args.kind, route: args.route, sinceMinutes: args.since_minutes, limit: args.limit, ...(want ? { origin: args.origin } : {}) })) as (Parameters<typeof findingLine>[0] & { origin?: string })[];
+      if (!list.length) return { text: `No findings match${want ? ` on ${want.label}` : ""}. Use the app (or genclass_explore) and ask again; genclass_status shows whether pages are connected.` };
+      return { text: [`${list.length} finding(s)${want ? ` on ${want.label}` : ""}, most important first ${PAGE_DATA}:`, ...grouped(list, (f) => findingLine(f, now)), "", "Next: genclass_explain {id} for the evidence, the replay and a regression test."].join("\n") };
     }
 
     case "genclass_explain": {
       const r = (await ctx.api("finding", { id: args.id })) as {
         finding: Finding;
-        run: null | { id: string; route: string; url: string; schedule: ScheduleSpec | null; steps: Step[]; lost: number; order: string[]; snapshot?: { state: Record<string, string>; text?: string[] }; detections: { decision: Record<string, unknown>; explain?: { message?: string; timeline?: string[]; situation?: string } }[] };
+        run: null | { id: string; route: string; url: string; schedule: ScheduleSpec | null; steps: Step[]; lost: number; order: string[]; snapshot?: { state: Record<string, string>; text?: string[] }; detections: { decision: Record<string, unknown>; explain?: { message?: string; timeline?: string[]; situation?: string } }[]; ops?: Record<string, string | number> };
         scenario: ActStep[];
         replay: ScheduleSpec | null;
         runGone?: boolean;
@@ -267,18 +337,23 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
       const f = r.finding;
       const ev = f.evidence as Record<string, unknown>;
       const out: string[] = [];
-      out.push(`# ${f.id} · ${f.kind} · ${q(f.route, 80)} · ${f.count}× in ${f.runs.length} run(s) · first ${ago(f.first, now)}, last ${ago(f.last, now)}`);
+      out.push(`# ${f.id} · ${f.kind} · ${q(f.route, 80)}${f.origin ? ` on ${clean(f.origin, 100)}` : ""} · ${f.count}× in ${f.runs.length} run(s) · first ${ago(f.first, now)}, last ${ago(f.last, now)}`);
       out.push(`${clean(f.title, 400)} ${PAGE_DATA}`, "");
       out.push(`## Evidence ${PAGE_DATA}`);
-      out.push(...evidenceLines(f, ev));
+      out.push(...evidenceLines(f, ev, r.run?.ops));
       if (r.run) {
         out.push("", `## Steps of run ${r.run.id} (${q(r.run.url, 200)}, schedule ${scheduleText(r.run.schedule)}) ${PAGE_DATA}`);
         if (r.run.lost) out.push(`(the page dropped ${r.run.lost} older steps)`);
         for (const s of r.run.steps.slice(-120)) out.push(stepLine(s));
         out.push("", `Delivery order: ${r.run.order.slice(-40).map((k) => clean(k, 80)).join(" → ") || "(none recorded)"}`);
       }
+      // the model's last situation on that page, in the steps' numbering; not for a race, whose evidence is the comparison
+      // of whole runs (the model's text would only repeat the steps above)
       const det = r.run?.detections.at(-1);
-      if (det?.explain?.situation) out.push("", `## What the on-device model read last on this page ${PAGE_DATA}`, "```", ...cleanBlock(det.explain.situation, 60, 300), "```");
+      if (det?.explain?.situation && f.kind !== "race") {
+        const ops = r.run?.ops;
+        out.push("", `## What the on-device model read last on this page ${PAGE_DATA}`, ops ? "(its operation numbers written as the request keys and action numbers above)" : "(its #N number every operation of the page, clicks and requests together; they are not the numbers in the request keys above)", "```", ...cleanBlock(withStepNames(det.explain.situation, ops), 60, 300), "```");
+      }
       out.push("", "## Reproduce and verify");
       if (!r.replay) {
         out.push(r.runGone ? "The run that recorded this finding is gone (cleared or expired), so its order cannot be replayed. Record the bug again (use the app, or genclass_explore on this page) to get a replayable finding." : "Nothing recorded can replay this finding.");
@@ -288,7 +363,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
       out.push(`2. Open ${q(r.run?.url ?? f.route, 200)} and do the same ${r.scenario.length} action(s) as above; then await window.__GENCLASS_AGENT__.whenSettled().`);
       out.push(`3. genclass_replay {action:"result", id:"${f.id}"}: "reproduced" confirms the bug; after your fix it should say "not reproduced".`);
       if (f.replays.length) out.push(`Replays so far: ${f.replays.map((x) => `${x.run} ${x.reproduced === true ? "reproduced" : x.reproduced === false ? "not reproduced" : "inconclusive"}`).join(", ")}`);
-      if (r.test) out.push("", "## Regression test (Playwright; set GENCLASS_APP_URL to the dev server)", "```ts", r.test.trimEnd(), "```");
+      if (r.test) out.push("", `## Regression test (Playwright): save it as genclass-${clean(f.id, 20).replace(/[^A-Za-z0-9-]/g, "")}.spec.ts with the project's tests; its first lines say what it needs and how to run it`, "```ts", r.test.trimEnd(), "```");
       return { text: out.join("\n") };
     }
 
@@ -304,10 +379,11 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
             ...(x.plan.some((s) => s.delay) ? ["A difference between the slow baselines and the one without added delay is what a slow response alone does: the report names it."] : []),
             `Now run the same scenario ${x.plan.length} times, one page load each (reload or navigate fresh every time): load the page, do the user steps, then wait for \`await page.evaluate(() => window.__GENCLASS_AGENT__.whenSettled(15000))\`.`,
             `With Playwright: \`npx playwright test <spec> --repeat-each ${x.plan.length} --workers 1\`. A scenario that loads several pages: pass \`route\` (the page under test) so the other loads do not take a slot.`,
-            `Then: genclass_explore {action:"report", id:"${x.id}"}.`,
+            `Then: genclass_explore {action:"wait", id:"${x.id}"} returns once all ${x.plan.length} loads are in (use it rather than sleeping in a shell, also while a person does the loads), then genclass_explore {action:"report", id:"${x.id}"}.`,
           ].join("\n"),
         };
       }
+      if (action === "wait") return exploreWait(args, ctx);
       if (action === "stop") {
         const x = (await ctx.api("explore.stop")) as { id: string } | null;
         return { text: x ? `Explore ${x.id} stopped; later page loads are not scheduled.` : "No explore session was armed." };
@@ -409,7 +485,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
         if (r.findings.length) out.push("", `Race finding(s): ${r.findings.map((f) => f.id).join(", ")}. Next: genclass_explain {id} for the replay and a regression test. If the user asked for a fix: fix it, then genclass_replay to verify.`);
         return { text: out.join("\n") };
       }
-      return { text: "action must be start, report or stop", isError: true };
+      return { text: "action must be start, wait, report or stop", isError: true };
     }
 
     case "genclass_replay": {
@@ -474,7 +550,69 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
   return { text: `Unknown tool ${clean(name, 60)}`, isError: true };
 }
 
-function evidenceLines(f: Finding, ev: Record<string, unknown>): string[] {
+/** How often genclass_explore wait looks again (the bridge is in this process, or one local request away). */
+const WAIT_POLL_MS = 500;
+
+interface WaitProgress {
+  id: string;
+  state: string;
+  planned: number;
+  started: number;
+  in: number;
+  settled: number;
+  expired: boolean;
+  loads: { run: string; done: boolean }[];
+}
+
+/**
+ * genclass_explore wait: block until every armed load of the session is in (store.ts exploreProgress says when a load
+ * is), the session is stopped or expired, `timeout_s` passes (default 120, at most 300) or the client cancels; MCP
+ * progress ("6 of 8 loads in") whenever the count changes, when the client asked for it.
+ */
+async function exploreWait(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const asked = Number(args.timeout_s ?? 120);
+  const limit = Math.round(Math.max(1, Math.min(Number.isFinite(asked) ? asked : 120, 300)) * 1000);
+  const id = typeof args.id === "string" && args.id ? args.id : undefined;
+  const sleep = ctx.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.()));
+  const t0 = ctx.now();
+  let sent = -1;
+  for (;;) {
+    let p: WaitProgress | null;
+    try {
+      p = (await ctx.api("explore.progress", id ? { id } : {})) as WaitProgress | null;
+    } catch (e) {
+      // a bridge another session runs from an older release
+      if (/unknown method/.test(String((e as Error)?.message))) return { text: "The GenClass bridge on this port is an older release without wait: read the Explore line of genclass_status instead, or restart the session that owns the bridge.", isError: true };
+      throw e;
+    }
+    if (!p) return { text: `No explore session${id ? ` ${clean(id, 20)}` : ""} yet: genclass_explore {action:"start"} first.`, isError: true };
+    const count = `${p.in} of ${p.planned} loads in`;
+    // MCP progress only ever grows
+    if (p.in > sent) {
+      sent = p.in;
+      try {
+        ctx.progress?.(p.in, p.planned, count);
+      } catch {
+        /* progress is a courtesy */
+      }
+    }
+    const elapsed = ctx.now() - t0;
+    const secs = Math.round(elapsed / 1000);
+    const report = `genclass_explore {action:"report", id:"${p.id}"}`;
+    if (p.in >= p.planned) return { text: `Explore ${p.id}: all ${p.planned} loads in after ${secs} s${p.settled < p.in ? ` (${p.settled} reached a quiet point after their steps: the report compares those)` : ""}. Next: ${report}.` };
+    if (p.state === "stopped") return { text: `Explore ${p.id} was stopped with ${count}: ${report} compares what there is.` };
+    if (p.expired) return { text: `Explore ${p.id}: ${count}, and its armed loads expired (30 minutes after start), so later loads get no schedule: ${report} compares what there is, or start it again.` };
+    if (elapsed >= limit || ctx.signal?.aborted) {
+      const open = p.loads.filter((l) => !l.done).map((l) => clean(l.run, 20));
+      const missing = p.planned - p.started;
+      const why = [missing > 0 ? `${missing} not started` : "", open.length ? `${open.slice(0, 4).join(", ")}${open.length > 4 ? ` and ${open.length - 4} more` : ""} still open (steps or a quiet point to come)` : ""].filter(Boolean).join("; ");
+      return { text: `Explore ${p.id}: ${count} after ${secs} s${why ? ` (${why})` : ""}. Run the remaining loads (each a fresh page load: the steps, then whenSettled()), then wait again, or ${report} with what there is.` };
+    }
+    await sleep(Math.min(WAIT_POLL_MS, limit - elapsed));
+  }
+}
+
+function evidenceLines(f: Finding, ev: Record<string, unknown>, ops?: Record<string, string | number>): string[] {
   const out: string[] = [];
   const s = (k: string, max = 160) => clean(ev[k], max);
   switch (f.kind) {
@@ -504,7 +642,7 @@ function evidenceLines(f: Finding, ev: Record<string, unknown>): string[] {
     case "detection": {
       const d = (ev.decision ?? {}) as Record<string, unknown>;
       out.push(`- The model's diagnosis: ${clean(d.diagnosis, 30)} (${Math.round(Number(d.diagnosisConfidence ?? 0) * 100)}%), action ${clean(d.action, 30)}${d.executed ? " (it ran)" : " (not run)"}${d.reason ? `: ${clean(d.reason, 120)}` : ""}. A model opinion, not a measurement.`);
-      for (const fct of ((d.facts as string[]) ?? []).slice(0, 12)) out.push(`- fact: ${q(fct, 300)}`);
+      for (const fct of ((d.facts as string[]) ?? []).slice(0, 12)) out.push(`- fact: ${q(typeof fct === "string" ? withStepNames(fct, ops) : fct, 300)}`);
       break;
     }
     default:
@@ -577,6 +715,64 @@ export function prodLines(p: ProdStats, route?: string, asked?: string): string[
   return out;
 }
 
+const VITE_CONFIGS = ["vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs", "vite.config.cts", "vite.config.cjs"];
+const VITE_DEPS = ["vite", "@sveltejs/kit", "astro", "@react-router/dev", "@remix-run/dev", "vitepress", "@solidjs/start", "@analogjs/platform"];
+const SKIP_DIRS = new Set(["node_modules", "dist", "build", "out", "coverage", "public", ".git", ".next", ".nuxt", ".output", ".svelte-kit", ".vercel", ".turbo", ".genclass", ".astro"]);
+const SOURCE = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/;
+const AUTO = /^\s*import\s+(?:([A-Za-z_$][\w$]*)\s*(?:,\s*\{[^}]*\}\s*)?from\s*|\{[^}]*\}\s*from\s*)?["'](@genclass\/runtime\/auto(?:\/(?:observe|guard|heal))?)["']/m;
+
+/**
+ * Where the project starts GenClass with @genclass/runtime/auto (a static import, the form `npx genclass` and `init`
+ * write), read from its source: the file, the specifier, the name it binds (`import genclass from ...`), and whether
+ * some file already calls connectAgent. A bounded walk (the root's own files, then src/, app/ and the like, four levels,
+ * 800 files of at most 300 KB, 8 MB read in all); null when there is no such import.
+ */
+export function autoImport(cwd: string): { file: string; spec: string; binding?: string; connected: boolean } | null {
+  const files: string[] = [];
+  const walk = (rel: string, depth: number) => {
+    let names: string[];
+    try {
+      names = readdirSync(join(cwd, rel)).sort();
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (files.length >= 800) return;
+      const r = rel ? `${rel}/${name}` : name;
+      let st: ReturnType<typeof statSync>;
+      try {
+        st = statSync(join(cwd, r));
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (depth > 0 && !SKIP_DIRS.has(name) && !name.startsWith(".")) walk(r, depth - 1);
+      } else if (SOURCE.test(name) && st.size <= 300_000) files.push(r);
+    }
+  };
+  walk("", 0);
+  for (const d of ["src", "app", "pages", "client", "frontend", "web"]) walk(d, 4);
+  let found: { file: string; spec: string; binding?: string } | null = null;
+  let connected = false;
+  // at most 8 MB read in all: a tool call stays quick in a large project
+  let budget = 8_000_000;
+  for (const f of files) {
+    if (budget <= 0) break;
+    let text: string;
+    try {
+      text = readFileSync(join(cwd, f), "utf8");
+    } catch {
+      continue;
+    }
+    budget -= text.length;
+    if (/\bconnectAgent\s*\(/.test(text)) connected = true;
+    const m: RegExpExecArray | null = found ? null : AUTO.exec(text);
+    if (m) found = { file: f, spec: m[2]!, ...(m[1] ? { binding: m[1] } : {}) };
+    if (found && connected) break;
+  }
+  return found ? { ...found, connected } : null;
+}
+
 /** The dev-build lines for the project in `cwd`, then, when `client` names a known MCP client, its config block. */
 export function setupText(cwd: string, client?: string | null): string {
   let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> } = {};
@@ -604,28 +800,82 @@ export function setupText(cwd: string, client?: string | null): string {
     : /^\s*(\*|x|latest)?\s*$/i.test(range);
   const installed = has("@genclass/runtime") && !tooOld;
   const next = has("next");
-  const vite = has("vite") || existsSync(join(cwd, "vite.config.ts")) || existsSync(join(cwd, "vite.config.js"));
+  // Vite and the frameworks built on it (import.meta.env.DEV is Vite's), with any of its config file names
+  const vite = VITE_DEPS.some(has) || VITE_CONFIGS.some((f) => existsSync(join(cwd, f)));
   const guard = next ? `process.env.NODE_ENV === "development"` : vite ? "import.meta.env.DEV" : `process.env.NODE_ENV !== "production"`;
-  const where = next ? "a client component loaded once from the root layout (\"use client\")" : vite ? "the app's entry (src/main.tsx or src/main.ts), before the app renders" : "the app's browser entry, before the app starts";
-  const lines = [
-    installed
-      ? "@genclass/runtime is installed."
-      : `1. Install the newest runtime line (npm tag beta) at the exact version this server was tested with; the agent entry and analytics need 0.3.0-beta.1 or later, and 0.2.x, npm's latest, has neither${has("@genclass/runtime") ? `; this project has ${JSON.stringify(range)}${have !== range ? `, installed ${have}` : ""}` : ""}: npm install ${pinnedRuntime()}`,
-    `${installed ? "1" : "2"}. In ${where}:`,
-    "```ts",
-    `import { GenClass } from "@genclass/runtime";`,
-    `import { connectAgent } from "@genclass/runtime/agent";`,
-    ``,
-    `// development builds only: a production build drops all of this, so no visitor runs GenClass`,
-    `if (${guard}) {`,
-    `  const rt = GenClass.init();`,
-    `  connectAgent(rt);`,
-    `}`,
-    "```",
-    `${installed ? "2" : "3"}. Load a page of the dev server, then genclass_status: it should list the page as active.`,
-    "",
-    "Notes: connectAgent runs only on pages served from this machine (localhost, 127.0.0.1, *.localhost); for a *.test or *.local name or a LAN address use connectAgent(rt, { anyHost: true }) and allow the origin with GENCLASS_AGENT_ORIGINS=http://host:port in the MCP server's environment. It talks only to this machine's bridge (http://127.0.0.1:47357; GENCLASS_AGENT_PORT changes it, and the page then needs connectAgent(rt, { url })). A Content-Security-Policy in development needs connect-src http://127.0.0.1:47357; a mock service worker (MSW) should let 127.0.0.1:47357 through. On a local or private address the runtime sends no diagnostics. Production is a separate choice none of this needs: GenClass.init() outside the check runs for every visitor and sends anonymous diagnostics from public hosts by default (GenClass.init({ telemetry: false }) turns them off), so do not move it there without asking. An app that already starts GenClass keeps that setup: GenClass.init() returns the running runtime.",
-  ];
+  const where = next ? "a client component loaded once from the root layout (\"use client\")" : has("@sveltejs/kit") ? "src/hooks.client.ts (or .js), at the top" : vite ? "the app's entry (src/main.tsx or src/main.ts), before the app renders" : "the app's browser entry, before the app starts";
+  const step1 = installed
+    ? "@genclass/runtime is installed."
+    : `1. Install the newest runtime line (npm tag beta) at the exact version this server was tested with; the agent entry and analytics need 0.3.0-beta.1 or later, and 0.2.x, npm's latest, has neither${has("@genclass/runtime") ? `; this project has ${JSON.stringify(range)}${have !== range ? `, installed ${have}` : ""}` : ""}: npm install ${pinnedRuntime()}`;
+  const n = (k: number) => String(installed ? k : k + 1);
+  const notes = (rest: string) =>
+    `Notes: connectAgent runs only on pages served from this machine (localhost, 127.0.0.1, *.localhost); for a *.test or *.local name or a LAN address use connectAgent(rt, { anyHost: true }) and allow the origin with GENCLASS_AGENT_ORIGINS=http://host:port in the MCP server's environment. It talks only to this machine's bridge (http://127.0.0.1:47357; GENCLASS_AGENT_PORT changes it, and the page then needs connectAgent(rt, { url })). A Content-Security-Policy in development needs connect-src http://127.0.0.1:47357; a mock service worker (MSW) should let 127.0.0.1:47357 through. On a local or private address the runtime sends no diagnostics. ${rest}`;
+  const auto = installed ? autoImport(cwd) : null;
+  let lines: string[];
+  if (auto?.connected) {
+    // set up already: say so, and how to check it
+    lines = [
+      `${step1} ${auto.file} starts it with ${auto.spec} and already calls connectAgent.`,
+      `1. Load a page of the dev server, then genclass_status: it should list the page as active. If it does not, check that the connectAgent call runs in development (its check) and the notes below.`,
+      "",
+      notes("Keep the connectAgent call behind its development check."),
+    ];
+  } else if (auto) {
+    // the runtime /auto started: connect that one (GenClass.init() returns it), in the form that fits the import
+    const bound = auto.binding;
+    const dynamicForm = (name: string) => [
+      "```ts",
+      `// development builds only: a production build drops the agent link`,
+      `if (${guard}) void import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(${name}));`,
+      "```",
+    ];
+    const staticForm = [
+      "```ts",
+      `import { GenClass } from "@genclass/runtime";`,
+      `import { connectAgent } from "@genclass/runtime/agent";`,
+      ``,
+      `// development builds only: a production build drops the agent link`,
+      `if (${guard}) connectAgent(GenClass.init());`,
+      "```",
+    ];
+    const started = `GenClass.init() starts nothing new here: it returns the runtime ${auto.spec} already started, with the options it read.`;
+    lines = bound
+      ? [
+          `${step1} ${auto.file} starts it: import ${bound} from "${auto.spec}" (${bound} is that runtime).`,
+          `${n(1)}. In ${auto.file}, below that import:`,
+          ...dynamicForm(bound),
+          `Or with static imports: import { GenClass } from "@genclass/runtime" and import { connectAgent } from "@genclass/runtime/agent", then if (${guard}) connectAgent(GenClass.init()). ${started}`,
+        ]
+      : [
+          `${step1} ${auto.file} starts it: import "${auto.spec}".`,
+          `${n(1)}. In ${auto.file}, below that import:`,
+          ...staticForm,
+          started,
+          `Or bind the import (import genclass from "${auto.spec}") and load the agent link only in development:`,
+          ...dynamicForm("genclass"),
+        ];
+    lines.push(`${n(2)}. Load a page of the dev server, then genclass_status: it should list the page as active.`, "", notes(`${auto.spec} keeps running in every build, as it does now; only the agent link is for development.`));
+  } else {
+    lines = [
+      step1,
+      `${n(1)}. In ${where}:`,
+      "```ts",
+      `import { GenClass } from "@genclass/runtime";`,
+      `import { connectAgent } from "@genclass/runtime/agent";`,
+      ``,
+      `// development builds only: a production build drops all of this, so no visitor runs GenClass`,
+      `if (${guard}) {`,
+      `  const rt = GenClass.init();`,
+      `  connectAgent(rt);`,
+      `}`,
+      "```",
+      `${n(2)}. Load a page of the dev server, then genclass_status: it should list the page as active.`,
+      "",
+      notes(
+        "Production is a separate choice none of this needs: GenClass.init() outside the check runs for every visitor and sends anonymous diagnostics from public hosts by default (GenClass.init({ telemetry: false }) turns them off), so do not move it there without asking. An app that already starts GenClass keeps that setup: GenClass.init() returns the running runtime.",
+      ),
+    ];
+  }
   const c = clientFor(client);
   if (c) lines.push("", `To keep GenClass configured in ${c.label} (in the project where the client reads a project file):`, "", c.block(VERSION));
   else lines.push("", `To add GenClass to another MCP client: npx -y ${pinned(VERSION)} config <client> (${CLIENTS.map((x) => x.id).join(", ")}).`);
