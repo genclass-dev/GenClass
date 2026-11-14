@@ -190,6 +190,8 @@ export interface ExploreSession {
   focus?: string[];
   /** "runId|findingKey" pairs already counted, so reporting twice does not count a race twice. */
   counted?: string[];
+  /** The latest load of its page from another origin, which took no slot (127.0.0.1 is another origin than localhost). */
+  refused?: { origin: string; run: string };
 }
 
 export interface ReplayArm {
@@ -201,4 +203,6 @@ export interface ReplayArm {
   remaining: number;
   created: number;
   runs: string[];
+  /** The latest load of the finding's page from another origin, which did not take the replay. */
+  refused?: { origin: string; run: string };
 }

@@ -10,7 +10,7 @@ import { CLIENTS, clientFor, pinned, pinnedRuntime } from "./clients.js";
 import { nameDifference, shownField, strongestFirst, type GroupReport, type RunDiff } from "./compare.js";
 import { VERSION } from "./http.js";
 import { dashboardTarget, fetchProduction, type ProdStats } from "./production.js";
-import { byOrigin, originFilter } from "./origin.js";
+import { byOrigin, originFilter, originOfUrl } from "./origin.js";
 import { runScan, type Runner, type ScanReport } from "./scan.js";
 import { ago, clean, cleanBlock, ms, q } from "./text.js";
 import type { ActStep, Finding, ScheduleSpec, Step } from "./types.js";
@@ -114,7 +114,7 @@ export const TOOLS: ToolDef[] = [
     name: "genclass_replay",
     title: "Replay a finding",
     description:
-      "Reproduce one finding exactly. action \"arm\": the next page load of the finding's route gets the delivery order that produced it; do the same steps (genclass_explain lists them). action \"result\": whether that replay reproduced it. Use before a fix to confirm the bug and after it to prove the fix.",
+      "Reproduce one finding exactly. action \"arm\": the next page load of the finding's route in the finding's app (its page origin: http://127.0.0.1:5173 is another origin than http://localhost:5173) gets the delivery order that produced it; do the same steps (genclass_explain lists them). action \"result\": whether that replay reproduced it. Use before a fix to confirm the bug and after it to prove the fix.",
     inputSchema: {
       type: "object",
       properties: { action: { type: "string", enum: ["arm", "result"] }, id: { type: "string", description: "Finding id, e.g. f3." }, times: { type: "number", description: "arm: how many page loads (default 1)." } },
@@ -237,25 +237,33 @@ function grouped<T extends { origin?: string }>(items: T[], line: (x: T) => stri
  * The model's text (a situation, its facts) with the runtime's operation numbers written as the steps' names: "#3"
  * becomes the request key "GET /api/search#1" or "action 0", so an explanation numbers each request once. `ops` comes
  * from the page (op id → key or action index); a number it does not name (a timer, an op from before the recording)
- * stays as it is.
+ * stays as it is, and so does everything inside a quoted value (the page's data, `"Order #3 shipped"`): the renderer
+ * writes values as JSON strings, and its own numbers outside them. Line by line, so a value cut short before its
+ * closing quote never pairs with a quote on another line.
  */
 export function withStepNames(text: string, ops: Record<string, string | number> | undefined): string {
   if (!ops) return text;
   const name = (n: string): string | undefined => {
-    const v = ops[n];
+    const v = Object.prototype.hasOwnProperty.call(ops, n) ? ops[n] : undefined;
     return v === undefined ? undefined : typeof v === "number" ? `action ${v}` : v;
   };
+  const rewrite = (s: string): string =>
+    s
+      .replace(/\bactions #(\d+) and #(\d+)/g, (m, a: string, b: string) => (typeof ops[a] === "number" && typeof ops[b] === "number" ? `actions ${ops[a]} and ${ops[b]}` : m))
+      .replace(/#(\d+)–#(\d+)/g, (m, a: string, b: string) => {
+        const x = name(a);
+        const y = name(b);
+        return x && y ? (x === y ? x : `${x}–${y}`) : m;
+      })
+      .replace(/(^|[^\w/#"'&])#(\d+)\b/g, (m, pre: string, n: string) => {
+        const x = name(n);
+        return x ? `${pre}${x}` : m;
+      });
+  // the odd parts of the split are the quoted values
   return text
-    .replace(/\bactions #(\d+) and #(\d+)/g, (m, a: string, b: string) => (typeof ops[a] === "number" && typeof ops[b] === "number" ? `actions ${ops[a]} and ${ops[b]}` : m))
-    .replace(/#(\d+)–#(\d+)/g, (m, a: string, b: string) => {
-      const x = name(a);
-      const y = name(b);
-      return x && y ? (x === y ? x : `${x}–${y}`) : m;
-    })
-    .replace(/(^|[^\w/#"'&])#(\d+)\b/g, (m, pre: string, n: string) => {
-      const x = name(n);
-      return x ? `${pre}${x}` : m;
-    });
+    .split("\n")
+    .map((line) => line.split(/("(?:[^"\\]|\\.)*")/).map((part, i) => (i % 2 ? part : rewrite(part))).join(""))
+    .join("\n");
 }
 
 function findingLine(f: { id: string; kind: string; title: string; route: string; count: number; runs: number; last: number; replays?: { reproduced: boolean | null }[] }, now: number): string {
@@ -285,7 +293,12 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
         explore: { id: string; state: string; planned: number; assigned: number; runs: string[]; route?: string; origin?: string } | null;
         replays: { finding: string; remaining: number; route?: string; origin?: string }[];
       };
+      // a bridge that filters says which app it kept and lists the others; a shared bridge of an older release did neither:
+      // its pages are kept here by their URL, and its counts stay every app's (said so)
+      const unfiltered = !!want && !Array.isArray(s.origins);
+      if (unfiltered) s.pages = s.pages.filter((p) => want!.test(p.origin ?? originOfUrl(p.url)));
       const out: string[] = [`GenClass bridge: ${s.bridge.url} · ${s.activePages} active page(s), ${s.totalRuns} recorded run(s)${s.origin ? ` on ${clean(s.origin, 100)}` : ""}`];
+      if (unfiltered) out.push(`This bridge is an older release that cannot filter by app: the page loads below are ${want!.label}'s (by their URL), the counts, findings, explore and replays every app's on this machine. Restart the session that owns the bridge to get the filter.`);
       const kinds = (c: Record<string, number>) =>
         Object.entries(c)
           .map(([k, n]) => `${n} ${k}`)
@@ -310,7 +323,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
             },
           ),
         );
-      } else out.push("", s.origin ? `No page of ${clean(s.origin, 100)} has connected yet.` : "No page has connected yet. The app's dev build needs connectAgent from @genclass/runtime/agent: see genclass_setup.");
+      } else out.push("", s.origin ? `No page of ${clean(s.origin, 100)} has connected yet.` : unfiltered ? `No page of ${want!.label} among the latest page loads.` : "No page has connected yet. The app's dev build needs connectAgent from @genclass/runtime/agent: see genclass_setup.");
       const others = want ? (s.origins ?? []).filter((x) => !want.test(x.origin || undefined)) : [];
       if (others.length) out.push(`Also on this machine: ${others.map((x) => `${originLabel(x.origin || undefined)} (${x.runs} run(s))`).join(", ")}`);
       return { text: out.join("\n") };
@@ -319,9 +332,14 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
     case "genclass_findings": {
       const want = args.origin === undefined || args.origin === "" ? null : originFilter(args.origin);
       if (args.origin !== undefined && args.origin !== "" && !want) return { text: ORIGIN_HELP, isError: true };
-      const list = (await ctx.api("findings", { kind: args.kind, route: args.route, sinceMinutes: args.since_minutes, limit: args.limit, ...(want ? { origin: args.origin } : {}) })) as (Parameters<typeof findingLine>[0] & { origin?: string })[];
+      const got = (await ctx.api("findings", { kind: args.kind, route: args.route, sinceMinutes: args.since_minutes, limit: args.limit, ...(want ? { origin: args.origin } : {}) })) as (Parameters<typeof findingLine>[0] & { origin?: string })[];
+      // a bridge that filters returns only findings of that app, each with its origin; one that names no origin on any is
+      // a shared bridge of an older release, which ignored the filter and cannot tell the apps apart
+      const unfiltered = !!want && got.length > 0 && !got.some((f) => f.origin);
+      const list = want && !unfiltered ? got.filter((f) => want.test(f.origin)) : got;
       if (!list.length) return { text: `No findings match${want ? ` on ${want.label}` : ""}. Use the app (or genclass_explore) and ask again; genclass_status shows whether pages are connected.` };
-      return { text: [`${list.length} finding(s)${want ? ` on ${want.label}` : ""}, most important first ${PAGE_DATA}:`, ...grouped(list, (f) => findingLine(f, now)), "", "Next: genclass_explain {id} for the evidence, the replay and a regression test."].join("\n") };
+      const of = unfiltered ? ` of every app on this machine (the GenClass bridge on this port is an older release that cannot filter by app, so these are not only ${want!.label}'s; restart the session that owns the bridge to get the filter)` : want ? ` on ${want.label}` : "";
+      return { text: [`${list.length} finding(s)${of}, most important first ${PAGE_DATA}:`, ...grouped(list, (f) => findingLine(f, now)), "", "Next: genclass_explain {id} for the evidence, the replay and a regression test."].join("\n") };
     }
 
     case "genclass_explain": {
@@ -373,7 +391,7 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
         const x = (await ctx.api("explore.start", { runs: args.runs, route: args.route, focus: args.focus, delayMs: args.slow_ms, seed: args.seed })) as { id: string; plan: ScheduleSpec[]; route?: string };
         return {
           text: [
-            `Explore ${x.id} armed: the next ${x.plan.length} page loads ${x.route ? `of ${q(x.route, 80)}` : "of the page the first one loads (later loads of other pages and tabs are left alone)"} get these delivery schedules, in order:`,
+            `Explore ${x.id} armed: the next ${x.plan.length} page loads ${x.route ? `of ${q(x.route, 80)}` : "of the page the first one loads"} at the origin the first one comes from (later loads of other pages, tabs and origins are left alone: load every one at the same host name, as 127.0.0.1 and localhost are two origins) get these delivery schedules, in order:`,
             ...x.plan.map((s, i) => `  ${i + 1}. ${clean(s.label, 80)}`),
             "",
             ...(x.plan.some((s) => s.delay) ? ["A difference between the slow baselines and the one without added delay is what a slow response alone does: the report names it."] : []),
@@ -491,15 +509,22 @@ export async function callTool(name: string, args: Record<string, unknown>, ctx:
     case "genclass_replay": {
       const id = String(args.id ?? "");
       if (args.action === "arm") {
-        const a = (await ctx.api("replay.arm", { id, times: args.times })) as null | { error: string } | { finding: string; spec: ScheduleSpec; route?: string; remaining: number };
+        const a = (await ctx.api("replay.arm", { id, times: args.times })) as null | { error: string } | { finding: string; spec: ScheduleSpec; route?: string; origin?: string; remaining: number };
         if (!a) return { text: `No finding ${clean(id, 20)}.`, isError: true };
         if ("error" in a) return { text: `Cannot replay ${clean(id, 20)}: ${clean(a.error, 300)}`, isError: true };
-        return { text: `Replay of ${a.finding} armed for the next ${a.remaining} page load(s) of ${q(a.route, 80)} for 30 minutes (schedule: ${scheduleText(a.spec)}). Load the page fresh, do the steps genclass_explain lists, await window.__GENCLASS_AGENT__.whenSettled(), then genclass_replay {action:"result", id:"${a.finding}"}.` };
+        const at = a.origin ? ` at ${clean(a.origin, 100)}` : "";
+        return { text: `Replay of ${a.finding} armed for the next ${a.remaining} page load(s) of ${q(a.route, 80)}${at} for 30 minutes (schedule: ${scheduleText(a.spec)}).${a.origin ? ` Only a load from that origin takes it: open the page at ${clean(a.origin, 100)}, not at another host name for the same server (127.0.0.1 and localhost are two origins).` : ""} Load the page fresh, do the steps genclass_explain lists, await window.__GENCLASS_AGENT__.whenSettled(), then genclass_replay {action:"result", id:"${a.finding}"}.` };
       }
       if (args.action === "result") {
-        const r = (await ctx.api("replay.result", { id })) as null | { finding: Finding; results: { run: string; reproduced: boolean | null; note: string; scenarioMatches: boolean }[] };
+        const r = (await ctx.api("replay.result", { id })) as null | { finding: Finding; results: { run: string; reproduced: boolean | null; note: string; scenarioMatches: boolean }[]; armed?: { remaining: number; route?: string; origin?: string; refused?: { origin: string; run: string } } };
         if (!r) return { text: `No finding ${clean(id, 20)}.`, isError: true };
-        if (!r.results.length) return { text: `No replay run of ${r.finding.id} yet. Arm it (genclass_replay {action:"arm"}), then load the page and do the steps.` };
+        if (!r.results.length) {
+          const w = r.armed;
+          if (!w) return { text: `No replay run of ${r.finding.id} yet. Arm it (genclass_replay {action:"arm"}), then load the page and do the steps.` };
+          const at = w.origin ? ` at ${clean(w.origin, 100)}` : "";
+          const refused = w.refused && w.origin ? ` A load of that page came from ${clean(w.refused.origin, 100)} (run ${clean(w.refused.run, 20)}), another origin, so it did not take the replay: open the page at ${clean(w.origin, 100)}.` : "";
+          return { text: `No replay run of ${r.finding.id} yet: it is armed for the next ${w.remaining} page load(s) of ${q(w.route ?? r.finding.route, 80)}${at}, and none has come.${refused} Load the page fresh, do the steps, await whenSettled(), then ask again.` };
+        }
         const lines = r.results.map((x) => `- ${x.run}: ${x.reproduced === true ? "REPRODUCED" : x.reproduced === false ? "not reproduced" : "inconclusive"} · ${clean(x.note, 300)}`);
         const last = r.results[r.results.length - 1];
         const verdict =
@@ -562,6 +587,8 @@ interface WaitProgress {
   settled: number;
   expired: boolean;
   loads: { run: string; done: boolean }[];
+  origin?: string;
+  refused?: { origin: string; run: string };
 }
 
 /**
@@ -606,7 +633,9 @@ async function exploreWait(args: Record<string, unknown>, ctx: ToolContext): Pro
       const open = p.loads.filter((l) => !l.done).map((l) => clean(l.run, 20));
       const missing = p.planned - p.started;
       const why = [missing > 0 ? `${missing} not started` : "", open.length ? `${open.slice(0, 4).join(", ")}${open.length > 4 ? ` and ${open.length - 4} more` : ""} still open (steps or a quiet point to come)` : ""].filter(Boolean).join("; ");
-      return { text: `Explore ${p.id}: ${count} after ${secs} s${why ? ` (${why})` : ""}. Run the remaining loads (each a fresh page load: the steps, then whenSettled()), then wait again, or ${report} with what there is.` };
+      // the session belongs to its first load's origin: a load of the page at another host name takes no slot
+      const other = missing > 0 && p.origin && p.refused ? ` A load of the page came from ${clean(p.refused.origin, 100)} (run ${clean(p.refused.run, 20)}), and this session takes only loads from ${clean(p.origin, 100)}: open the page there.` : "";
+      return { text: `Explore ${p.id}: ${count} after ${secs} s${why ? ` (${why})` : ""}.${other} Run the remaining loads (each a fresh page load${p.origin ? ` at ${clean(p.origin, 100)}` : ""}: the steps, then whenSettled()), then wait again, or ${report} with what there is.` };
     }
     await sleep(Math.min(WAIT_POLL_MS, limit - elapsed));
   }
@@ -720,14 +749,21 @@ const VITE_DEPS = ["vite", "@sveltejs/kit", "astro", "@react-router/dev", "@remi
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", "out", "coverage", "public", ".git", ".next", ".nuxt", ".output", ".svelte-kit", ".vercel", ".turbo", ".genclass", ".astro"]);
 const SOURCE = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/;
 const AUTO = /^\s*import\s+(?:([A-Za-z_$][\w$]*)\s*(?:,\s*\{[^}]*\}\s*)?from\s*|\{[^}]*\}\s*from\s*)?["'](@genclass\/runtime\/auto(?:\/(?:observe|guard|heal))?)["']/m;
+/** Tests, fixtures and end-to-end specs (as the CLI's agentlink.mjs): a generated regression test names connectAgent without being the link. */
+const TEST_FILE = /(?:^|\/)(?:tests?|__tests__|e2e|fixtures?|__mocks__)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/;
+/** Comment lines and block comments that open a line: a link commented out is no link. */
+const uncommented = (t: string): string => t.replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, "").replace(/^[ \t]*(?:\/\/|\*).*$/gm, "");
+/** The link in a file (as agentlink.mjs): a call of connectAgent in a file that names the agent entry. */
+const LINKED = (t: string): boolean => /@genclass\/runtime\/agent/.test(t) && /\bconnectAgent\s*\(/.test(t);
 
 /**
  * Where the project starts GenClass with @genclass/runtime/auto (a static import, the form `npx genclass` and `init`
- * write), read from its source: the file, the specifier, the name it binds (`import genclass from ...`), and whether
- * some file already calls connectAgent. A bounded walk (the root's own files, then src/, app/ and the like, four levels,
- * 800 files of at most 300 KB, 8 MB read in all); null when there is no such import.
+ * write), read from its source: the file, the specifier, the name it binds (`import genclass from ...`), and the file
+ * that already links the agent (`linked`: it calls connectAgent and names @genclass/runtime/agent, outside comments;
+ * tests, specs and fixtures are not the app's code). A bounded walk (the root's own files, then src/, app/ and the like,
+ * four levels, 800 files of at most 300 KB, 8 MB read in all); null when there is no such import.
  */
-export function autoImport(cwd: string): { file: string; spec: string; binding?: string; connected: boolean } | null {
+export function autoImport(cwd: string): { file: string; spec: string; binding?: string; connected: boolean; linked?: string } | null {
   const files: string[] = [];
   const walk = (rel: string, depth: number) => {
     let names: string[];
@@ -753,11 +789,12 @@ export function autoImport(cwd: string): { file: string; spec: string; binding?:
   walk("", 0);
   for (const d of ["src", "app", "pages", "client", "frontend", "web"]) walk(d, 4);
   let found: { file: string; spec: string; binding?: string } | null = null;
-  let connected = false;
+  let linked: string | undefined;
   // at most 8 MB read in all: a tool call stays quick in a large project
   let budget = 8_000_000;
   for (const f of files) {
     if (budget <= 0) break;
+    if (TEST_FILE.test(f)) continue;
     let text: string;
     try {
       text = readFileSync(join(cwd, f), "utf8");
@@ -765,12 +802,13 @@ export function autoImport(cwd: string): { file: string; spec: string; binding?:
       continue;
     }
     budget -= text.length;
-    if (/\bconnectAgent\s*\(/.test(text)) connected = true;
-    const m: RegExpExecArray | null = found ? null : AUTO.exec(text);
+    const code = text.includes("connectAgent") || text.includes("@genclass/runtime/auto") ? uncommented(text) : "";
+    if (!linked && LINKED(code)) linked = f;
+    const m: RegExpExecArray | null = found ? null : AUTO.exec(code);
     if (m) found = { file: f, spec: m[2]!, ...(m[1] ? { binding: m[1] } : {}) };
-    if (found && connected) break;
+    if (found && linked) break;
   }
-  return found ? { ...found, connected } : null;
+  return found ? { ...found, connected: !!linked, ...(linked ? { linked } : {}) } : null;
 }
 
 /** The dev-build lines for the project in `cwd`, then, when `client` names a known MCP client, its config block. */
@@ -815,7 +853,7 @@ export function setupText(cwd: string, client?: string | null): string {
   if (auto?.connected) {
     // set up already: say so, and how to check it
     lines = [
-      `${step1} ${auto.file} starts it with ${auto.spec} and already calls connectAgent.`,
+      !auto.linked || auto.linked === auto.file ? `${step1} ${auto.file} starts it with ${auto.spec} and already calls connectAgent.` : `${step1} ${auto.file} starts it with ${auto.spec}, and ${auto.linked} already calls connectAgent.`,
       `1. Load a page of the dev server, then genclass_status: it should list the page as active. If it does not, check that the connectAgent call runs in development (its check) and the notes below.`,
       "",
       notes("Keep the connectAgent call behind its development check."),

@@ -10,7 +10,8 @@ fixed and proved a stale-search race with these tools, and lost time on each of 
   with several apps, the findings counted per app. Both take an optional `origin`: an exact origin
   (`http://localhost:5173`; `localhost:5173` reads as http) or a bare port (`5173`); anything else is an error that says
   so. The origin is part of a finding's dedup key, so the same error on `/` of two apps is two findings (a finding saved
-  before this change keeps its old key, and its origin is read from its run). An explore session armed without a
+  before this change takes its run's origin into its key when the state loads, so the same bug keeps counting on it
+  instead of becoming a second finding). An explore session armed without a
   route now belongs to the app of its first load as well as its page, and an armed replay is taken only by a load of
   the finding's app: another dev server's page on the same path no longer takes a slot. `genclass_explain` names the
   finding's app.
@@ -56,6 +57,20 @@ fixed and proved a stale-search race with these tools, and lost time on each of 
   a `runtime` event that updates it; the page sends one each time its mode or model state changes (from the next
   `@genclass/runtime` release; a page on an older runtime still shows its state at hello).
 - `latestExplore` picks the later of two sessions armed in the same millisecond (it picked the earlier one).
+- A race's regression test asserts a line both orders show, only not as often (a stale result shown twice), by its
+  count, so it passes on the fixed page; the report says so too (`it shows "Milk" twice, the baseline once`).
+- The lines naming what the user typed are checks beside a race test's assertion, not the assertion: with nothing else
+  to assert the test fails until one is written again, and a line with a clock time, a date or a count beside the
+  typed value is no longer one of them.
+- `genclass_explain` leaves a `#3` inside a quoted page value (`"Order #3 shipped"`) as it is.
+- `genclass_setup` no longer takes a generated regression test, a fixture or a commented-out call for the agent link,
+  and names the file that has it.
+- `genclass_replay` and `genclass_explore` name the origin they wait for, and say when a load of the page came from
+  another one (`127.0.0.1` for `localhost`), which takes no slot.
+- With a shared bridge of an older release, which ignores `origin`, `genclass_findings` and `genclass_status` say they
+  could not filter by app instead of naming one.
+- The skill says what to do with a server of an older release: without `wait`, `genclass_status` until the loads are
+  in; without `origin`, the page loads' URLs.
 
 - **`genclass_analytics {source: "production"}` says what the app's plan leaves out.** Since 2026-11-11 a dashboard
   on the Free plan shows 7 days and no visitor analytics (they come with Team). The tool now prints one line for
