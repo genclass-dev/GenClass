@@ -189,6 +189,8 @@ export interface AppReport {
   checks: { kind: string; name: string; count: number }[];
   pages: { page: string; count: number }[];
   visitors: Visitors | null;
+  /** A Free app's visitors: the numbers only, its lists (pages, sources, countries, devices) are Pro's. */
+  visitorsLimited: boolean;
   prs: PullRequest[];
 }
 
@@ -231,6 +233,10 @@ export interface Report {
   items: Item[];
   /** The model's summary, for an account with a Pro app; null without one. */
   summary: Summary | null;
+  /** The summary's next steps a Free account does not see (Free sees the headline and the text). */
+  actionsHidden: number;
+  /** Per Free app, the problems its half leaves out, counted by priority (Free sees the first half, most urgent first). */
+  problemsHidden: { appId: string; app: string; counts: Record<Priority, number> }[];
   /** From the account's last `genclass suggest`: the plan's items and the model's ideas, and its website designs. */
   suggestions: { title: string; why: string | null; prompt: string | null }[];
   suggestionsHidden: number;
@@ -262,6 +268,8 @@ const pairs = (list: { key: string; count: number }[] | undefined): { a: string;
   });
 const plural = (k: number, one: string, many: string): string => `${Math.round(k).toLocaleString("en-US")} ${Math.round(k) === 1 ? one : many}`;
 const cleanPage = (p: string): string => line(p, 120) ?? "(no page)";
+/** Free's half of a list: the first half, rounded up (1 of 1, 1 of 2, 2 of 3). */
+export const halfOf = (n: number): number => Math.ceil(n / 2);
 
 /** The pages a kind was seen on, most first (detect_issue, possible_issue and check_issue are "kind TAB page"). */
 function pagesOf(s: Stats, metric: string, kind: string): string[] {
@@ -637,10 +645,13 @@ export function summaryFromAnswer(text: unknown): Summary | null {
   }
 }
 
-/** What the model is given: per app the dashboard digest (Pro apps only) and the report's items. Never an email, a key or an id. */
+/**
+ * What the model is given: per app the digest of what its dashboard shows under its plan (a Free app's totals only)
+ * and the items the report lists (a Free app's visible half). Never an email, a key or an id.
+ */
 export function summaryDigest(apps: { app: AppReport; stats: Stats }[], items: Item[]): Record<string, unknown> {
   return {
-    apps: apps.filter((a) => a.app.pro && !a.app.demo).map((a) => appDigest(a.stats, a.app.analytics)),
+    apps: apps.filter((a) => !a.app.demo).map((a) => appDigest(a.stats, a.app.analytics)),
     items: items.filter((i) => i.section !== "security" || i.appId).slice(0, 30).map((i) => ({ priority: i.p, app: i.app, title: i.title, detail: i.detail, pages: i.pages })),
     account_security: items.filter((i) => i.section === "security" && !i.appId).map((i) => i.title),
   };
@@ -723,6 +734,12 @@ export interface AccountRow {
 }
 export const ACCOUNT_REPORT_COLUMNS = "id, email, email_verified, report_every, report_next, report_alerts, report_model, report_sent";
 
+/** A Free app's half of the visitors: the numbers, when there are any, and none of the lists. */
+function freeVisitors(s: Stats): Visitors | null {
+  const v = visitorsOf(s);
+  return v.visits + v.views > 0 ? { ...v, pages: [], sources: [], countries: [], devices: [] } : null;
+}
+
 function visitorsOf(s: Stats): Visitors {
   const t = s.totals, b = s.breakdowns;
   const views = n(t, "ix_views");
@@ -774,7 +791,8 @@ export function appReport(p: Project, access: Access, s: Stats, origin: string, 
     kinds: (b.detect_diagnosis ?? []).filter((x) => x.count > 0).slice(0, 12).map((x) => ({ kind: x.key, name: kindName(x.key), count: x.count })),
     checks: (b.check_kind ?? []).filter((x) => x.count > 0).slice(0, 12).map((x) => ({ kind: x.key, name: checkName(x.key), count: x.count })),
     pages: (b.page_route ?? []).slice(0, 5).map((x) => ({ page: cleanPage(x.key), count: x.count })),
-    visitors: hasAnalytics(access) && pro && !s.demo ? visitorsOf(s) : null,
+    visitors: s.demo ? null : hasAnalytics(access) && pro ? visitorsOf(s) : freeVisitors(s),
+    visitorsLimited: !s.demo && !(hasAnalytics(access) && pro),
     prs: [],
   };
 }
@@ -799,44 +817,68 @@ export async function buildReport(env: Env, a: AccountRow, o: BuildOptions): Pro
   const every = everyOf(a.report_every);
   const now = o.now;
   const access = (await accountProjectsAccess(db, a.id, env, now)).slice(0, MAX_APPS);
-  if (!access.length) return null;
   const ids = access.map((x) => x.row.id);
-  const projects = await rowsOf<Project>(db, `SELECT ${PROJECT_COLUMNS} FROM projects WHERE id IN (${ids.map(() => "?").join(", ")})`, ...ids);
+  const projects = ids.length ? await rowsOf<Project>(db, `SELECT ${PROJECT_COLUMNS} FROM projects WHERE id IN (${ids.map(() => "?").join(", ")})`, ...ids) : [];
   const byId = new Map(projects.map((p) => [p.id, p]));
 
-  const apps: { app: AppReport; stats: Stats; s24: Stats | null; access: Access }[] = [];
+  const apps: { app: AppReport; stats: Stats; full: Stats; s24: Stats | null; access: Access }[] = [];
   for (const { row, access: acc } of access) {
     const p = byId.get(row.id);
     if (!p) continue;
     const range = pickRange(RANGE_OF[every === "off" ? DEFAULT_EVERY : every], viewRanges(acc.plan));
-    // what the app's own dashboard shows under its plan, never more (src/collector.ts applies the same two cuts)
-    let s = await stats(db, p, range, now);
+    // `s` is what the app's own dashboard shows under its plan (src/collector.ts applies the same two cuts): the
+    // numbers and the model's digest come from it. A Free app's items come from everything measured (`full`) and are
+    // halved below: Free sees half of the report (the owner's call, 2026-11-14)
+    const full = await stats(db, p, range, now);
+    let s = full;
     if (!hasAnalytics(acc)) s = stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${origin}/account/billing` });
     if (!hasProblems(acc)) s = stripProblems(s, problemsLock(`${origin}/account/billing`));
     // the hour rules read 24 hours; a longer report reads them once more, for apps that sent something today
     const s24 = range !== "24h" && p.last_event && now.getTime() - Date.parse(p.last_event) < 86_400_000 ? await stats(db, p, "24h", now) : null;
-    apps.push({ app: appReport(p, acc, s, origin, every), stats: s, s24, access: acc });
+    apps.push({ app: appReport(p, acc, hasProblems(acc) ? s : full, origin, every), stats: s, full, s24, access: acc });
   }
-  if (!apps.length) return null;
 
-  const from = apps.reduce((m, x) => (x.stats.from < m ? x.stats.from : m), apps[0]!.stats.from);
-  const prs = await pullRequests(db, apps.map((x) => x.app.id), from);
+  const from = apps.length ? apps.reduce((m, x) => (x.stats.from < m ? x.stats.from : m), apps[0]!.stats.from) : new Date(now.getTime() - 86_400_000).toISOString();
+  const prs = apps.length ? await pullRequests(db, apps.map((x) => x.app.id), from) : new Map<string, PullRequest[]>();
   for (const x of apps) x.app.prs = prs.get(x.app.id) ?? [];
 
   let items: Item[] = [];
-  for (const x of apps) items.push(...appItems(x.app, x.stats, x.s24, origin, now));
+  for (const x of apps) items.push(...appItems(x.app, x.app.pro ? x.stats : x.full, x.s24, origin, now));
+  // an account with no app yet is told how to add one: everyone with an email gets the report
+  if (!apps.length) {
+    items.push({ p: 1, rule: "setup:first-app", appId: "", app: "Your GenClass account", title: "Add your first app", detail: "Once your web app is added, GenClass watches it for you: what breaks for your visitors, on which pages, and a fix prompt for each. It takes a minute on genclass.dev.", pages: [], prompt: null, link: { label: "Add your first app", href: `${origin}/account` }, section: "setup" });
+  }
   items.push(...(await accountEvents(db, a.id, from, origin)));
   if (!(await rowsOf(db, "SELECT 1 AS x FROM github_installations WHERE owner = ? LIMIT 1", a.id)).length && env.GITHUB_APP_ID) {
     items.push({ p: 2, rule: "setup:github", appId: "", app: "Your GenClass account", title: "Connect GitHub so GenClass reviews your pull requests", detail: "The GitHub App reads your test runs' race files and comments on the pull request that adds a problem, before it ships. Free on public repositories.", pages: [], prompt: null, link: { label: "Add the GitHub App", href: `${origin}/github` }, section: "setup" });
   }
   items = byPriority(items);
 
+  // Free sees half (the owner's call, 2026-11-14): of each Free app's problems the first half, most urgent first; the
+  // rest is counted, with Pro's upgrade, never listed
+  const problemsHidden: Report["problemsHidden"] = [];
+  const left = new Set<Item>();
+  for (const x of apps) {
+    if (x.app.pro) continue;
+    const mine = items.filter((i) => i.section === "problems" && i.appId === x.app.id);
+    const rest = mine.slice(halfOf(mine.length));
+    if (!rest.length) continue;
+    for (const i of rest) left.add(i);
+    problemsHidden.push({ appId: x.app.id, app: x.app.name, counts: { 0: rest.filter((i) => i.p === 0).length, 1: rest.filter((i) => i.p === 1).length, 2: rest.filter((i) => i.p === 2).length } });
+  }
+  items = items.filter((i) => !left.has(i));
+
   const anyPro = apps.some((x) => x.app.pro);
   const sugg = await suggestAnswers(db, a.id);
-  const shownSugg = anyPro ? sugg.items.slice(0, 5) : sugg.items.slice(0, 1);
+  const suggAll = sugg.items.slice(0, 5), designsAll = sugg.designs.slice(0, 3);
+  const shownSugg = anyPro ? suggAll : suggAll.slice(0, halfOf(suggAll.length));
+  const shownDesigns = anyPro ? designsAll : designsAll.slice(0, halfOf(designsAll.length));
   const lock = firstPaidWith("problems");
   const freeApp = apps.find((x) => !x.app.pro);
-  const summary = anyPro && o.model ? await askSummary(env, o.fetch, summaryDigest(apps, items)).catch(() => null) : null;
+  // every account with a measured or connected app gets the summary; on Free its next steps are counted, not shown
+  let summary = o.model && apps.some((x) => !x.app.demo) ? await askSummary(env, o.fetch, summaryDigest(apps, items)).catch(() => null) : null;
+  const actionsHidden = summary && !anyPro ? summary.actions.length : 0;
+  if (summary && !anyPro) summary = { ...summary, actions: [] };
 
   const settingsToken = await accountToken(env, a.id);
   const q = settingsToken ? `a=${encodeURIComponent(a.id)}&t=${encodeURIComponent(settingsToken)}` : null;
@@ -848,10 +890,12 @@ export async function buildReport(env: Env, a: AccountRow, o: BuildOptions): Pro
     apps: apps.map((x) => x.app),
     items,
     summary,
+    actionsHidden,
+    problemsHidden,
     suggestions: shownSugg,
-    suggestionsHidden: Math.max(0, Math.min(sugg.items.length, 5) - shownSugg.length),
-    designs: anyPro ? sugg.designs.slice(0, 3) : [],
-    designsHidden: anyPro ? 0 : Math.min(3, sugg.designs.length),
+    suggestionsHidden: suggAll.length - shownSugg.length,
+    designs: shownDesigns,
+    designsHidden: designsAll.length - shownDesigns.length,
     showcase: showcaseFor(now),
     upgrade: freeApp && lock ? { plan: lock.name, trialDays: lock.trial_days ?? null, price: priceText(lock), url: `${origin}/account/billing?project=${encodeURIComponent(freeApp.app.id)}` } : null,
     links: {
@@ -870,7 +914,7 @@ export async function buildReport(env: Env, a: AccountRow, o: BuildOptions): Pro
     for (const s of report.summary?.actions ?? []) if (s.prompt) prompts.add(s.prompt);
     for (const s of report.suggestions) if (s.prompt) prompts.add(s.prompt);
     for (const d of report.designs) prompts.add(d.prompt);
-    const name = apps[0]!.app.name;
+    const name = apps[0]?.app.name ?? "my app";
     for (const s of report.showcase) prompts.add(showcasePrompt(s, name));
     for (const p of [...prompts].slice(0, 60)) {
       const sig = await promptSignature(env, p);
