@@ -3,7 +3,8 @@
 //   - blocks (files init creates): from a line containing `genclass:init start` to one containing `genclass:init end`
 //   - the coding-agent link the `genclass` command adds (development builds only): a block right after the marked
 //     /auto import or after the block of a file init created (or there its two imports, and its call in a second
-//     block at the end of the file), and in Astro one marked `<script>` line after init's
+//     block right after the file's last import, or at the end of the file), and in Astro one marked `<script>` line
+//     after init's; a block is taken out wherever it stands
 //   - three inline forms, used only when the place to insert shares its line with other code (a one-line <head> or
 //     <body>): `<GenClassInit />{/* genclass:inline */}`, `<script>... // genclass:inline</script>` (Astro) and
 //     `<script ...></script><!-- genclass:inline -->` (HTML)

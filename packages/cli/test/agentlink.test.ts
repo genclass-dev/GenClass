@@ -1,6 +1,7 @@
 // The dev-only coding-agent link (src/agentlink.mjs) on what the runtime CLI's init writes for each framework
 // (packages/runtime/bin/lib/plan.mjs), and `remove` taking it out again (packages/runtime/bin/lib/edit.mjs
 // planRemoval): every form round-trips to the files as they were before init, with no problem reported.
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { PassThrough } from "node:stream";
@@ -85,9 +86,23 @@ function roundTrip(files: Record<string, string>, o: Opts = {}) {
 const pkg = (deps: Record<string, string>, extra: Record<string, unknown> = {}) => JSON.stringify({ name: "app", private: true, dependencies: deps, ...extra }, null, 2) + "\n";
 const html = (src: string) => `<!doctype html>\n<html lang="en">\n  <head>\n    <title>App</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="${src}"></script>\n  </body>\n</html>\n`;
 const STATIC_LINK = (cond: string, q = '"', semi = ";") => [AGENT_START, `import { GenClass } from ${q}@genclass/runtime${q}${semi}`, `import { connectAgent } from ${q}@genclass/runtime/agent${q}${semi}`, `if (${cond}) connectAgent(GenClass.init())${semi}`, AGENT_END];
-/** The link when the app's own code follows init's import: its imports there, its call at the end of the file. */
+/** The link when the app's own imports follow init's import: its imports there, its call right after the file's last import. */
 const LINK_IMPORTS = (q = '"', semi = ";") => [AGENT_IMPORTS_START, `import { GenClass } from ${q}@genclass/runtime${q}${semi}`, `import { connectAgent } from ${q}@genclass/runtime/agent${q}${semi}`, AGENT_END];
 const LINK_CALL = (cond: string, semi = ";") => [AGENT_START, `if (${cond}) connectAgent(GenClass.init())${semi}`, AGENT_END];
+/**
+ * The call's block (`block`, LINK_CALL's or the dynamic form's lines) right after the file's last import and before
+ * its first other statement, so it runs before the app's own code: everything above it is imports, comments and
+ * blank lines, and no import comes after it.
+ */
+const callRightAfterImports = (text: string, block: string[]) => {
+  const lines = text.split(/\r?\n/);
+  const at = lines.indexOf(block[0]!);
+  expect(at, text).toBeGreaterThan(0);
+  expect(lines.slice(at, at + block.length), text).toEqual(block);
+  expect(lines.slice(0, at).filter((l) => l.trim() && !/^\s*\/\//.test(l)).every((l) => /^\s*import\s[^(]/.test(l) || /^\s*["']use \w+["'];?$/.test(l)), text).toBe(true);
+  expect(lines[at - 1], text).toMatch(/^import\s/);
+  expect(lines.slice(at + block.length).some((l) => /^\s*import\s[^(]/.test(l)), text).toBe(false);
+};
 /** Whether every import declaration in `text` comes before its first other statement (ESLint's import/first). */
 const importsFirst = (text: string) => {
   const code = text.split(/\r?\n/).filter((l) => l.trim() && !/^\s*\/\//.test(l));
@@ -96,7 +111,7 @@ const importsFirst = (text: string) => {
 };
 
 describe("the coding-agent link on every setup init writes, and `remove` taking it out (src/agentlink.mjs; runtime edit.mjs planRemoval)", () => {
-  it("Vite (React, Vue, Svelte, Solid, Preact): its imports right after init's import, its call at the end, import.meta.env.DEV, in the file's own style", () => {
+  it("Vite (React, Vue, Svelte, Solid, Preact): its imports right after init's import, its call right after the last import, import.meta.env.DEV, in the file's own style", () => {
     const flavours: [Record<string, string>, string, string][] = [
       [{ react: "^19", "react-dom": "^19", vite: "^8" }, "src/main.tsx", `import { createRoot } from 'react-dom/client'\nimport App from './App'\n\ncreateRoot(document.getElementById('root')!).render(<App />)\n`],
       [{ vue: "^3", vite: "^8" }, "src/main.js", `import { createApp } from "vue";\nimport App from "./App.vue";\n\ncreateApp(App).mount("#app");\n`],
@@ -113,23 +128,27 @@ describe("the coding-agent link on every setup init writes, and `remove` taking 
         const single = text.startsWith("import { createRoot } from 'react-dom/client'");
         const [q, semi] = single ? ["'", ""] : ['"', ";"];
         expect(lines.slice(at + 1, at + 5), `${entry} devtools=${devtools}`).toEqual(LINK_IMPORTS(q, semi));
-        // the call after everything else, init's devtools line included
-        expect(changes[0]!.after.trimEnd().split("\n").slice(-3)).toEqual(LINK_CALL("import.meta.env.DEV", semi));
+        // the call before the app's own code (it runs first, as the link's block did before), init's devtools line last
+        callRightAfterImports(changes[0]!.after, LINK_CALL("import.meta.env.DEV", semi));
+        if (devtools) expect(changes[0]!.after.trimEnd().split("\n").at(-1)).toContain("@genclass/runtime/devtools");
         expect(importsFirst(changes[0]!.after), changes[0]!.after).toBe(true);
       }
     }
   });
 
   it("Vite with the options file (--no-telemetry): after the /auto import, not the options import; CRLF and no final newline kept", () => {
+    // the app's code right after GenClass's import: the whole link there, in one block (imports, then the call)
     const { changes } = roundTrip({ "package.json": pkg({ vite: "^8" }), "index.html": html("/src/main.ts"), "src/main.ts": `console.log("app");\n` }, { config: { telemetry: false } });
-    expect(changes[0]!.after.split("\n").slice(0, 3)).toEqual(['import "./genclass.config"; // genclass:init', 'import "@genclass/runtime/auto"; // genclass:init', AGENT_IMPORTS_START]);
+    expect(changes[0]!.after.split("\n").slice(0, 8)).toEqual(['import "./genclass.config"; // genclass:init', 'import "@genclass/runtime/auto"; // genclass:init', ...STATIC_LINK("import.meta.env.DEV"), 'console.log("app");']);
     const crlf = roundTrip({ "package.json": pkg({ vite: "^8" }), "index.html": html("/src/main.js"), "src/main.js": `import "./style.css";\r\nconsole.log(1);\r\n` });
     expect(crlf.changes[0]!.after).toContain(`${AGENT_IMPORTS_START}\r\n`);
-    expect(crlf.changes[0]!.after.endsWith(`console.log(1);\r\n${LINK_CALL("import.meta.env.DEV").join("\r\n")}\r\n`)).toBe(true);
+    expect(crlf.changes[0]!.after.endsWith(`import "./style.css";\r\n${LINK_CALL("import.meta.env.DEV").join("\r\n")}\r\nconsole.log(1);\r\n`)).toBe(true);
     expect(crlf.changes[0]!.after).not.toMatch(/[^\r]\n/);
-    // no final newline: still none after the call
-    const bare = roundTrip({ "package.json": pkg({ vite: "^8" }), "index.html": html("/src/main.js"), "src/main.js": `console.log(1);` });
-    expect(bare.changes[0]!.after.endsWith(`console.log(1);\n${LINK_CALL("import.meta.env.DEV").join("\n")}`)).toBe(true);
+    // no final newline: still none after the call, or after the app's code
+    const bare = roundTrip({ "package.json": pkg({ vite: "^8" }), "index.html": html("/src/main.js"), "src/main.js": `import "./style.css";` });
+    expect(bare.changes[0]!.after.endsWith(`import "./style.css";\n${LINK_CALL("import.meta.env.DEV").join("\n")}`)).toBe(true);
+    const code = roundTrip({ "package.json": pkg({ vite: "^8" }), "index.html": html("/src/main.js"), "src/main.js": `console.log(1);` });
+    expect(code.changes[0]!.after.endsWith(`${AGENT_END}\nconsole.log(1);`)).toBe(true);
     // the entry holds nothing but init's line: the link in one block right after it
     const only = roundTrip({ "package.json": pkg({ vite: "^8" }), "index.html": html("/src/main.js"), "src/main.js": "" });
     expect(only.changes[0]!.after).toBe(['import "@genclass/runtime/auto"; // genclass:init', ...STATIC_LINK("import.meta.env.DEV"), ""].join("\n"));
@@ -145,7 +164,9 @@ describe("the coding-agent link on every setup init writes, and `remove` taking 
       const lines = after.split("\n");
       expect(lines.slice(1, 5)).toEqual(LINK_IMPORTS("'", ";"));
       expect(lines[5]).toBe("import React from 'react';");
-      expect(after.trimEnd().split("\n").slice(-3)).toEqual(LINK_CALL('process.env.NODE_ENV === "development"'));
+      // the call after the app's last import, before `const root = ...`
+      callRightAfterImports(after, LINK_CALL('process.env.NODE_ENV === "development"'));
+      expect(lines[lines.indexOf(AGENT_START) - 1]).toBe("import reportWebVitals from './reportWebVitals';");
     }
   });
 
@@ -195,15 +216,16 @@ describe("the coding-agent link on every setup init writes, and `remove` taking 
     const bound = roundTrip(next16, { devtools: true });
     expect(bound.changes[0]!.after).toContain('if (process.env.NODE_ENV === "development") import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));');
     expect(bound.changes[0]!.after).not.toContain('from "@genclass/runtime";');
-    // an instrumentation-client of the app's own: the dynamic form is one statement, at the end of the file after
-    // init's devtools line, as that line is (the import section stays imports only)
+    // an instrumentation-client of the app's own: the dynamic form is one statement, right after the file's last
+    // import (the import section stays imports only) and before the app's code; init's devtools line stays last
     const own = roundTrip({ ...next16, "src/instrumentation-client.ts": `import "./mine";\nconsole.log("mine");\n` }, { devtools: true });
     const ownLines = own.changes[0]!.after.trimEnd().split("\n");
-    expect(ownLines.slice(0, 2)).toEqual(['import genclass from "@genclass/runtime/auto"; // genclass:init', 'import "./mine";']);
-    expect(ownLines.slice(-4)).toEqual([expect.stringContaining("@genclass/runtime/devtools"), AGENT_START_BOUND, 'if (process.env.NODE_ENV === "development") import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));', AGENT_END]);
-    // without the binding: the imports after init's line, the call at the end
+    expect(ownLines.slice(0, 6)).toEqual(['import genclass from "@genclass/runtime/auto"; // genclass:init', 'import "./mine";', AGENT_START_BOUND, 'if (process.env.NODE_ENV === "development") import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));', AGENT_END, 'console.log("mine");']);
+    expect(ownLines.at(-1)).toContain("@genclass/runtime/devtools");
+    // without the binding: the imports after init's line, the call after the app's import
     const ownStatic = roundTrip({ ...next16, "src/instrumentation-client.ts": `import "./mine";\nconsole.log("mine");\n` });
     expect(ownStatic.changes[0]!.after.split("\n").slice(1, 5)).toEqual(LINK_IMPORTS());
+    callRightAfterImports(ownStatic.changes[0]!.after, LINK_CALL('process.env.NODE_ENV === "development"'));
     expect(importsFirst(ownStatic.changes[0]!.after)).toBe(true);
     // Next.js 15.1, App Router: the client component init creates, rendered on the server too
     for (const devtools of [false, true]) {
@@ -222,8 +244,7 @@ describe("the coding-agent link on every setup init writes, and `remove` taking 
     const cra = roundTrip({ "package.json": pkg({ "react-scripts": "5.0.1", react: "^18" }), "src/index.js": `import React from 'react';\n` });
     expect(cra.changes[0]!.after).toContain(`if (process.env.NODE_ENV === "development") connectAgent(GenClass.init())`);
     const wp = roundTrip({ "package.json": pkg({ webpack: "^5", "html-webpack-plugin": "^5" }), "src/index.ts": `"use strict";\nconsole.log(1);\n` });
-    expect(wp.changes[0]!.after.split("\n").slice(0, 3)).toEqual(['"use strict";', 'import "@genclass/runtime/auto"; // genclass:init', AGENT_IMPORTS_START]);
-    expect(wp.changes[0]!.after.trimEnd().split("\n").slice(-3)).toEqual(LINK_CALL('process.env.NODE_ENV === "development"'));
+    expect(wp.changes[0]!.after.split("\n")).toEqual(['"use strict";', 'import "@genclass/runtime/auto"; // genclass:init', ...STATIC_LINK('process.env.NODE_ENV === "development"'), "console.log(1);", ""]);
     const es = initThenLink({ "package.json": pkg({ esbuild: "^0.25", "react-dom": "^19" }), "src/index.js": `console.log(1);\n` });
     expect(es.link).toMatchObject({ state: "manual", changes: null });
     expect(es.link.why).toContain("process.env.NODE_ENV");
@@ -296,6 +317,80 @@ describe("the coding-agent link on every setup init writes, and `remove` taking 
     expect(runtimeUpgrade("pnpm")).toBe(`pnpm add ${spec}`);
     expect(runtimeUpgrade("yarn")).toBe(`yarn add ${spec}`);
     expect(runtimeUpgrade("bun")).toBe(`bun add ${spec}`);
+  });
+
+  it("Plug'n'Play (Yarn's default, pnpm's node-linker=pnp; no node_modules): the lockfile next to .pnp.cjs gives the version, so the link is planned again", () => {
+    const spec = channelOf(VERSION) ? `@genclass/runtime@${channelOf(VERSION)}` : "@genclass/runtime";
+    // yarn.lock as Yarn 4 writes it: the runtime's entry, and the app's own workspace entry
+    const berry = (range: string, version: string) =>
+      `# This file is generated by running "yarn install" inside your project.\n\n__metadata:\n  version: 8\n  cacheKey: 10c0\n\n"@genclass/runtime@npm:${range}":\n  version: ${version}\n  resolution: "@genclass/runtime@npm:${version}"\n  checksum: 10c0/0123\n  languageName: node\n  linkType: hard\n\n"app@workspace:.":\n  version: 0.0.0-use.local\n  resolution: "app@workspace:."\n  dependencies:\n    "@genclass/runtime": "npm:${range}"\n  languageName: unknown\n  linkType: soft\n`;
+    const app = (range: string, lock: string) => ({
+      "package.json": pkg({ vue: "^3", vite: "^8", "@genclass/runtime": range }, { packageManager: "yarn@4.5.0" }),
+      ".pnp.cjs": "#!/usr/bin/env node\n/* eslint-disable */\n// @ts-nocheck\n\"use strict\";\n",
+      ".yarnrc.yml": "nodeLinker: pnp\n",
+      "yarn.lock": lock,
+      "index.html": html("/src/main.js"),
+      "src/main.js": `import { createApp } from "vue";\ncreateApp({}).mount("#app");\n`,
+    });
+    // 0.3.0-beta.x resolved through .pnp.cjs: planned, written, linked, and removed again, as with node_modules
+    const ok = roundTrip(app("^0.3.0-beta.6", berry("^0.3.0-beta.6", "0.3.0-beta.6")), { runtime: null });
+    expect(ok.changes.map((ch) => ch.rel)).toEqual(["src/main.js"]);
+    // 0.2.x there: the upgrade with Yarn, which does change what .pnp.cjs resolves
+    const old = initThenLink(app("^0.2.3", berry("^0.2.3", "0.2.3")), { runtime: null });
+    expect(old.link).toMatchObject({ state: "manual", changes: null, upgrade: `yarn add ${spec}` });
+    expect(old.link.why).toContain("the installed @genclass/runtime 0.2.3 has no agent entry");
+    // not in the lockfile at all: not installed, and `yarn add` installs it
+    const none = initThenLink(app("^0.3.0-beta.6", `__metadata:\n  version: 8\n`), { runtime: null });
+    expect(none.link).toMatchObject({ state: "manual", changes: null, upgrade: `yarn add ${spec}` });
+    expect(none.link.why).toContain("@genclass/runtime is not installed: first run");
+    // directly: the PnP root's lockfile wins over an older copy in a node_modules further up; pnpm's pnp linker;
+    // several versions and none this app's range names: planned (cannot be told), as before node_modules was read
+    const root = join(tempDir(), "home", "repo").split("\\").join("/");
+    const files = (map: Record<string, string>) => ({ read: (p: string) => map[p.split("\\").join("/")] ?? null, exists: (p: string) => p.split("\\").join("/") in map });
+    const up = files({ [`${root}/.pnp.cjs`]: "", [`${root}/yarn.lock`]: berry("^0.3.0-beta.6", "0.3.0-beta.6"), [`${dirname(root)}/node_modules/@genclass/runtime/package.json`]: RUNTIME_023 });
+    expect(installedRuntime(root, up.read, up.exists)).toEqual({ version: "0.3.0-beta.6", agent: true });
+    const pnpm = files({ [`${root}/.pnp.cjs`]: "", [`${root}/pnpm-lock.yaml`]: `lockfileVersion: '9.0'\n\nimporters:\n\n  apps/web:\n    dependencies:\n      '@genclass/runtime':\n        specifier: ^0.3.0-beta.6\n        version: 0.3.0-beta.6\n` });
+    expect(installedRuntime(`${root}/apps/web`, pnpm.read, pnpm.exists)).toEqual({ version: "0.3.0-beta.6", agent: true });
+    const two = files({ [`${root}/.pnp.cjs`]: "", [`${root}/yarn.lock`]: `__metadata:\n  version: 8\n\n"@genclass/runtime@npm:^0.2.3":\n  version: 0.2.3\n\n"@genclass/runtime@npm:^0.3.0-beta.6":\n  version: 0.3.0-beta.6\n` });
+    expect(installedRuntime(root, two.read, two.exists)).toEqual({ version: null, agent: null });
+    expect(planAgentLink({ project: { framework: "vite", dir: root, pm: "yarn" }, cwd: root, marked: [`${root}/src/main.js`] }, { read: (p: string) => (p.endsWith("main.js") ? 'import "@genclass/runtime/auto"; // genclass:init\n' : two.read(p)), exists: two.exists }).state).toBe("planned");
+  });
+
+  it("the call runs before the app's own code (Node ESM, a stub runtime): an entry that throws while it loads, or awaits at the top, is linked first", () => {
+    const stub = {
+      "node_modules/@genclass/runtime/index.js": "export const GenClass = { init: () => \"the runtime\" };\n",
+      "node_modules/@genclass/runtime/auto.js": "export default \"the runtime\";\n",
+      "node_modules/@genclass/runtime/agent.js": "export function connectAgent(rt) { console.log(`connectAgent ran: ${rt}`); }\n",
+      "src/app.js": "export const start = (el) => el.append(\"hi\");\n",
+    };
+    const runtime = JSON.stringify({ name: "@genclass/runtime", version: OWN.version, type: "module", exports: { ".": "./index.js", "./auto": "./auto.js", "./agent": "./agent.js" } });
+    const base = { "package.json": pkg({ webpack: "^5", "html-webpack-plugin": "^5" }, { type: "module" }), ...stub };
+    const run = (dir: string) => spawnSync(process.execPath, [join(dir, "src/index.js")], { cwd: dir, encoding: "utf8", timeout: 20000, env: { ...process.env, NODE_ENV: "development" } });
+    // the page's root element is not there (no document in Node): the entry throws on its first line of code
+    const throws = roundTrip({ ...base, "src/index.js": `import { start } from "./app.js";\n\nstart(document.getElementById("root"));\n` }, { runtime });
+    const t = run(throws.dir);
+    expect(t.stderr).toContain("ReferenceError");
+    expect(t.stdout).toContain("connectAgent ran: the runtime");
+    // no semicolons, an IIFE right after the imports and a top-level await: linked before both, and the call is not
+    // joined to the IIFE's parentheses
+    const waits = roundTrip({ ...base, "src/index.js": `import { start } from "./app.js"\n(async () => { console.log("iife") })()\nawait new Promise((r) => setTimeout(r, 10))\nconsole.log("after the await")\nvoid start\n` }, { runtime });
+    const w = run(waits.dir);
+    expect(w.status, w.stderr).toBe(0);
+    expect(w.stdout.split("\n").filter(Boolean)).toEqual(["connectAgent ran: the runtime", "iife", "after the await"]);
+    expect(waits.changes[0]!.after).toContain(`if (process.env.NODE_ENV === "development") connectAgent(GenClass.init());\n${AGENT_END}\n(async () =>`);
+  });
+
+  it("where the end of the imports cannot be read safely (code on an import's line), the call goes at the end of the file", () => {
+    const text = 'import "@genclass/runtime/auto"; // genclass:init\nimport a from "a"; a(\n  1);\n';
+    const after = withAgentLink(text)!;
+    expect(after.split("\n").slice(1, 5)).toEqual(LINK_IMPORTS());
+    expect(after.endsWith(`  1);\n${LINK_CALL("import.meta.env.DEV").join("\n")}\n`)).toBe(true);
+    expect(planRemoval(after)).toEqual({ text: planRemoval(text).text, problems: [] });
+    // a declaration over several lines, import attributes and comments: the call after the whole of the last one
+    const multi = 'import "@genclass/runtime/auto"; // genclass:init\nimport {\n  a,\n  b,\n} from "./x";\nimport data from "./d.json" with {\n  type: "json",\n};\n/* the app */\n// eslint-disable-next-line no-console\nconsole.log(a, b, data);\n';
+    const linked = withAgentLink(multi)!;
+    expect(linked).toContain(`  type: "json",\n};\n${LINK_CALL("import.meta.env.DEV").join("\n")}\n/* the app */\n`);
+    expect(planRemoval(linked)).toEqual({ text: planRemoval(multi).text, problems: [] });
   });
 
   it("an entry file the person had, empty: `remove` gives it back empty instead of deleting it (createdByInit)", () => {

@@ -431,21 +431,22 @@ describe("genclass doctor: what GenClass added, in place and current (src/doctor
     expect(compareVersions("1.2.3", "1.2.3")).toBe(0);
   });
 
-  it("the coding-agent link's imports go right after GenClass's import, its call at the end (imports first), once, and `remove` takes it out again", () => {
+  it("the coding-agent link's imports go right after GenClass's import, its call right after the last import (imports first, the call before the app's code), once, and `remove` takes it out again", () => {
     const after = withAgentLink(INIT_ENTRY)!;
-    expect(after.split("\n").slice(0, 7)).toEqual([
+    expect(after.split("\n")).toEqual([
       'import "./genclass.config"; // genclass:init',
       'import "@genclass/runtime/auto"; // genclass:init',
-      "// genclass:init start: the coding-agent link's imports; its call is at the end of this file (npx genclass remove takes both out)",
+      "// genclass:init start: the coding-agent link's imports; its call is in a second block after this file's imports (npx genclass remove takes both out)",
       'import { GenClass } from "@genclass/runtime";',
       'import { connectAgent } from "@genclass/runtime/agent";',
       "// genclass:init end",
       'import { createRoot } from "react-dom/client";',
-    ]);
-    expect(after.trimEnd().split("\n").slice(-3)).toEqual([
       "// genclass:init start: the coding-agent link, development builds only: GenClass.init() returns the running runtime (npx genclass remove takes it out)",
       "if (import.meta.env.DEV) connectAgent(GenClass.init());",
       "// genclass:init end",
+      "",
+      'createRoot(document.getElementById("root")).render(null);',
+      "",
     ]);
     expect(withAgentLink(after)).toBeNull();
     // nothing of init's to put it after

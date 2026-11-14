@@ -52,8 +52,9 @@
   `genclass`, `if (<dev check>) import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass));`;
   and in Astro the marked `<script>` line with the same imports and call. Anything else in such a block is still a
   problem and nothing is removed. Nothing else in `remove` changed.
-  - Also the link split around the app's code (its two imports in a block after GenClass's import, its call in a
-    second block at the end of the file), and the call inside Nuxt's `defineNuxtPlugin` in the plugin init created.
+  - Also the link split around the app's imports (its two imports in a block after GenClass's import, its call in a
+    second block after the file's last import or at the end of the file), and the call inside Nuxt's
+    `defineNuxtPlugin` in the plugin init created.
   - `remove` deletes only a file init created (its first line is init's own header block): an entry file of the
     app's own that was empty before init is written back empty, not deleted, once the link is in it.
   - The published 0.3.0-beta.6's `remove` does not know the link: in a linked project

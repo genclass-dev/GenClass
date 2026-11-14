@@ -81,7 +81,9 @@ production, where `GenClass.init()` would run for every visitor and send anonymo
 In an app `init` set up, the `genclass` command writes the link itself (its setup's Coding agent step, in the same
 preview and yes as `.mcp.json`, and `genclass doctor --fix`; `packages/cli/src/agentlink.mjs`): a `genclass:init`
 block right after init's `/auto` import (or after the block of a file init created) holding the two imports and
-`if (<dev check>) connectAgent(GenClass.init());`, with the check init uses there for the devtools line
+`if (<dev check>) connectAgent(GenClass.init());` (with more of the app's imports after it, the call goes in a second
+block right after the last of them: imports stay first, and the call still runs before the app's own code), with the
+check init uses there for the devtools line
 (`import.meta.env.DEV` on Vite, `process.env.NODE_ENV === "development"` in Next.js and Create React App, plus
 `typeof window !== "undefined"` in a file that also renders on the server). In a Next.js file where init bound
 `genclass`, the block holds `import("@genclass/runtime/agent").then(({ connectAgent }) => connectAgent(genclass))`
