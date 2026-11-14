@@ -993,6 +993,9 @@ export async function checks(o = {}, deps = {}) {
   }
   r.app = st?.project?.name ?? null;
   r.framework = st?.project?.label || null;
+  // the header says who is signed in, as the Signed in row does (it read "not signed in" above a signed-in row)
+  const who = r.find((x) => x.id === "account");
+  r.account = who?.state === "ok" ? who.detail : null;
   return r;
 }
 
@@ -1069,7 +1072,7 @@ async function report(list, o) {
   const wrong = list.filter((x) => x.state === "bad" || x.state === "warn");
   const fixable = list.filter((x) => x.apply);
   const done = { fixed: [], failed: [], skipped: [] };
-  header({ app: list.app, framework: list.framework });
+  header({ app: list.app, framework: list.framework, account: list.account });
   out();
   const wLabel = Math.max(...list.map((x) => x.label.length));
   for (const x of list) {
