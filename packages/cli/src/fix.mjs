@@ -116,12 +116,14 @@ function listProblems(list, shown) {
 }
 
 /**
- * `genclass fix [number | kind | all]`. Exit code 0; 1 when the app's numbers could not be read or the agent did
+ * `genclass fix [number | kind | all | <address>]` (an address: fix-page.mjs). Exit code 0; 1 when the app's numbers could not be read or the agent did
  * not start; 2 when the word after `fix` names no problem.
  * @param {{ what?: string, print?: boolean, copy?: boolean, agent?: string, all?: boolean, json?: boolean, range?: string, cwd?: string, app?: string }} o
  * @param {{ agents?: Function, start?: Function, copy?: Function }} [deps]
  */
 export function fix(o = {}, deps = {}) {
+  // `genclass fix shop.example.com`: a page's address (no problem's number or kind has a dot): its page check's findings
+  if (typeof o.what === "string" && o.what.includes(".")) return import("./fix-page.mjs").then((m) => m.fixPage(o, deps));
   const promptFor = (target, app, list, pick) => (pick === "all" ? fixAllPrompt(target.name, app.range, list) : fixPrompt(target.name, app.range, pick));
   return appView(o, deps, {
     name: "fix",

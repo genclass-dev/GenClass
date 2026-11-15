@@ -13,7 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // @ts-expect-error plain ESM module without types
-import { formatReport, hostedReport, localReport, mergeFindings, normaliseUrl, privateHost, runtimeDist, visualScore } from "../../bin/lib/scan.mjs";
+import { formatReport, HOSTED, hostedReport, hostedTarget, localReport, mergeFindings, normaliseUrl, privateHost, runtimeDist, SITE, visualScore } from "../../bin/lib/scan.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BIN = resolve(HERE, "..", "..", "bin", "genclass-runtime.mjs");
@@ -121,6 +121,33 @@ describe("scan: report pieces (bin/lib/scan.mjs)", () => {
     expect(text).toContain("Visual score 75/100");
     expect(text).toContain("fix: p.x { color: #767676; }");
     expect(localReport("https://example.com/", [{ ...views[0], ok: false, error: "boom", findings: [] }], "Chromium 1", []).score.value).toBeNull();
+  });
+
+  it("asks genclass.dev with the sign-in when this computer is signed in there, else the check's own address with none", () => {
+    expect(hostedTarget({}, { host: SITE, access_token: "gcs_abc" })).toEqual({ base: SITE, token: "gcs_abc" });
+    expect(hostedTarget({}, null)).toEqual({ base: HOSTED, token: null });
+    expect(hostedTarget({}, { host: "http://localhost:8797", access_token: "gcs_abc" })).toEqual({ base: HOSTED, token: null });
+    expect(hostedTarget({ GENCLASS_SCAN_HOSTED: "https://scan.example/" }, { host: SITE, access_token: "gcs_abc" })).toEqual({ base: "https://scan.example", token: null });
+  });
+
+  it("the free view (no Pro): how many problems, the sample, and where the rest is; never a score of null", () => {
+    const free = {
+      ...HOSTED_REPORT,
+      score: { locked: true, categories: [{ id: "visual", label: "Visual bugs", measured: true, count: 2 }, { id: "speed", label: "Speed", measured: false, count: 0 }] },
+      top: [],
+      findings: [HOSTED_REPORT.findings[0], { n: 9, category: "visual", severity: "serious", locked: true }],
+      gate: { locked: true, shown: 1, total: 5, severities: { critical: 1, serious: 3, minor: 1 } },
+    };
+    const r = hostedReport("https://example.com/", free, SITE);
+    expect(r.locked).toEqual({ total: 5, severities: { critical: 1, serious: 3, minor: 1 } });
+    expect(r.fullReport).toBe("https://genclass.dev/scan?url=https%3A%2F%2Fexample.com%2F");
+    const text = formatReport(r);
+    expect(text).toContain("Score with Pro");
+    expect(text).toContain("5 problems (1 critical, 3 serious, 1 minor)");
+    expect(text).toMatch(/Visual bugs\s+2 found/);
+    expect(text).not.toMatch(/null|undefined/);
+    expect(text.replace(/\s+/g, " ")).toContain("The free view: 1 of 5 findings in full.");
+    expect(text).toContain("npx genclass fix https://example.com/");
   });
 
   it("maps the hosted report: scored findings worst first, categories, top issues, notes for the unscored and unmeasured", () => {

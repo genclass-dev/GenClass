@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `scan --hosted`: on a computer signed in to genclass.dev (`login`), the page check is asked on genclass.dev with
+  that sign-in, so an account with Pro gets the whole report (since 2026-11-15 the page check's score and findings
+  are Pro's). Without Pro the report is the free view: how many problems and how serious, one finding in full, and
+  `npx genclass fix <url>` for the rest; it never prints a score of null.
+
 - CLI (shared with the `genclass` command): a request to genclass.dev that fails on a connection closed while the
   command was busy (a package install) is sent once more on a new one; a token that could not be created for a
   network error says to run the command again, not to sign in again; `connect` names the host it signs in at.

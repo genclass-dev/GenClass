@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **`genclass fix <address>`**: the findings genclass.dev's page check made on one page, handed to your coding agent
+  (Enter starts it, `c` copies the prompt, `p` prints it; `--print` and `--json` for an agent). It is step 1 of "How do
+  you fix this?" under a report's score on genclass.dev/scan. The report is the page check's own (a new check when
+  there is none recent, about a minute), asked with your sign-in so Pro gets all of it; the page's words reach the
+  agent between markers that say they are data. Like every command it comes with Pro.
+
 ## 0.3.9
 
 - **`genclass` opens its prompt straight away**: commands and questions, with one line on where this folder's setup

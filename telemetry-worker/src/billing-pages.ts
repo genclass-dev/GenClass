@@ -74,6 +74,8 @@ export interface BillingView {
   go?: boolean;
   /** Back from a switch's Checkout (?to=<plan>): the plan it bought. */
   switchTo?: string | null;
+  /** Started from a page check (?next=/scan?url=..., billing.ts scanNext): the checkout and this page go back there after. */
+  next?: string | null;
   /** The names of the plans sold through Stripe Managed Payments (src/stripe.ts managedPayments). */
   managedPlans?: string[];
   /** The account's team as its owner sees it (src/team.ts teamOf); left out, the page has no Team section. */
@@ -528,7 +530,7 @@ ${
 ${projectsSection(v)}
 ${teamSection(v)}
 </div>
-<script type="application/json" id="cfg">${embed(v.go === true ? { want, go: true } : { want })}</script>`;
+<script type="application/json" id="cfg">${embed({ want, ...(v.go === true ? { go: true } : {}), ...(v.next ? { next: v.next, done: v.done } : {}) })}</script>`;
 
   const script = `
 (function(){
@@ -538,6 +540,7 @@ ${teamSection(v)}
     b.addEventListener("click", function(){
       var err = document.getElementById("planerr"); err.textContent = "";
       var body = { plan: b.getAttribute("data-plan") }, seats = document.querySelector('[data-seats="' + body.plan + '"]');
+      if (cfg.next) body.next = cfg.next;
       if (seats) {
         var n = Number(seats.value);
         if (!(n >= 1 && n <= ${MAX_SEATS} && Math.floor(n) === n)) { err.textContent = "Seats is a whole number from 1 to ${MAX_SEATS}. For a larger team, email ${esc(CONTACT)}."; return; }
@@ -580,6 +583,8 @@ ${teamSection(v)}
     gcBusy(portal, true, "Opening Stripe...");
     gcPost("/api/billing/portal", {}).then(function(j){ location.href = j.url; }, function(e){ err.textContent = gcWhy(e); gcBusy(portal, false); });
   });
+  // back from a checkout started on a page check, the plan already showing: the report, which now opens with Pro
+  if (cfg.next && cfg.done && !cfg.want) { location.replace(cfg.next); return; }
   if (cfg.want) {
     var tries = 0;
     var timer = setInterval(function(){
@@ -587,7 +592,7 @@ ${teamSection(v)}
       fetch("/api/billing", { headers: { accept: "application/json" }, cache: "no-store", credentials: "same-origin" })
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(j){
-          if (j && j.plan && (cfg.want === "paid" ? j.plan !== "free" : j.plan === cfg.want)) { clearInterval(timer); location.reload(); }
+          if (j && j.plan && (cfg.want === "paid" ? j.plan !== "free" : j.plan === cfg.want)) { clearInterval(timer); if (cfg.next) location.replace(cfg.next); else location.reload(); }
         })
         .catch(function(){});
     }, 3000);

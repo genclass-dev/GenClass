@@ -23,6 +23,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { readCredentials } from "./account.mjs";
 import { c, err, out, sym } from "./ui.mjs";
 import { CMD, HOST_CLI } from "./version.mjs";
 
@@ -40,6 +41,8 @@ const VERSION = (() => {
 export const HOSTED = "https://genclass-scan.mehar-144.workers.dev";
 /** Where a person reads a hosted report: genclass.dev shows the page check's reports under its own name. */
 export const REPORT_PAGE = "https://genclass.dev/scan";
+/** genclass.dev, which serves the page check's /api/scan too: asked there, with the sign-in, when this computer is signed in. */
+export const SITE = "https://genclass.dev";
 /** The virtual same-origin path the runtime's dist/ is served on inside the scanned page. */
 export const RUNTIME_PATH = "/__genclass_scan__/";
 export const INSTALL_LINE = "npx playwright install chromium";
@@ -512,15 +515,34 @@ async function readStream(res, onProgress) {
  * the same page is already running there (someone else's, or one of yours a moment ago), it waits as long as the
  * check says and asks again, within the command's own time limit: that scan's report is then the answer.
  */
+/**
+ * Where the hosted check is asked, and with which sign-in. Signed in to genclass.dev (`genclass login`), it is asked on
+ * genclass.dev with that sign-in, so an account with Pro gets the whole report (the score and the findings are Pro's
+ * since 2026-11-15) and the sign-in goes to genclass.dev only; otherwise the check's own address, with none. A test
+ * copy (GENCLASS_SCAN_HOSTED) is asked as it is, with no sign-in.
+ */
+export function hostedTarget(env = process.env, creds = undefined) {
+  if (env.GENCLASS_SCAN_HOSTED) return { base: env.GENCLASS_SCAN_HOSTED.replace(/\/+$/, ""), token: null };
+  let who = creds;
+  if (who === undefined) {
+    try {
+      who = readCredentials(SITE);
+    } catch {
+      who = null;
+    }
+  }
+  return who && who.host === SITE && who.access_token ? { base: SITE, token: who.access_token } : { base: HOSTED, token: null };
+}
+
 async function fetchHosted(url, o, progress) {
-  const base = (process.env.GENCLASS_SCAN_HOSTED || HOSTED).replace(/\/+$/, "");
+  const { base, token } = hostedTarget();
   const until = Date.now() + (o.timeout ?? 120) * 1000;
   for (;;) {
     let res;
     try {
       res = await fetch(`${base}/api/scan`, {
         method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, application/x-ndjson", "user-agent": `genclass-runtime-cli/${VERSION}` },
+        headers: { "content-type": "application/json", accept: "application/json, application/x-ndjson", "user-agent": `genclass-runtime-cli/${VERSION}`, ...(token ? { authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ url }),
         signal: AbortSignal.timeout(Math.max(1000, until - Date.now())),
       });
@@ -528,14 +550,14 @@ async function fetchHosted(url, o, progress) {
       return { error: `could not reach the hosted page check at ${base}: ${e?.cause?.code || e?.cause?.message || e?.message || e}` };
     }
     const type = res.headers.get("content-type") || "";
-    if (type.includes("ndjson") && res.body) return readStream(res, progress);
+    if (type.includes("ndjson") && res.body) return { base, ...(await readStream(res, progress)) };
     let j = null;
     try {
       j = await res.json();
     } catch {
       j = null;
     }
-    if (j && j.ok && j.report) return { report: j.report };
+    if (j && j.ok && j.report) return { base, report: j.report };
     const retry = res.headers.get("retry-after");
     const wait = Math.min(30, Math.max(1, Number(retry) || 0)) * 1000;
     if (j?.code === "in-progress" && retry && Date.now() + wait < until) {
@@ -550,7 +572,8 @@ async function fetchHosted(url, o, progress) {
 /** The common report shape from the hosted check's report (scan-worker src/report.ts Report). */
 export function hostedReport(url, r, base) {
   const findings = (Array.isArray(r.findings) ? r.findings : [])
-    .filter((f) => !f.unscored)
+    // a finding the free view locks keeps only its number, category and severity (r.gate): counted, not listed
+    .filter((f) => !f.unscored && !f.locked)
     .map((f) => ({
       kind: f.rule || f.kind,
       severity: f.severity,
@@ -583,7 +606,9 @@ export function hostedReport(url, r, base) {
     views: (r.views || []).map((v) => ({ id: v.id, width: v.width, height: v.height, status: v.status ?? null, ok: !!v.ok, ms: v.ms ?? null, error: v.error ?? null })),
     findings,
     blocked: r.blocked ? r.blocked.message : null,
-    fullReport: `${base === HOSTED ? REPORT_PAGE : `${base}/scan`}?url=${encodeURIComponent(url)}`,
+    fullReport: `${base === HOSTED || base === SITE ? REPORT_PAGE : `${base}/scan`}?url=${encodeURIComponent(url)}`,
+    // the free view (the report without Pro): how many problems and how serious; the rest comes with Pro
+    locked: r.gate?.locked ? { total: Number(r.gate.total) || 0, severities: r.gate.severities && typeof r.gate.severities === "object" ? r.gate.severities : {} } : null,
     scannedAt: r.scannedAt || null,
     // a score over part of the page check is said as one: how many parts were measured, and whether time ran out
     partial: partialOf(r),
@@ -642,10 +667,12 @@ export function formatReport(rep) {
   const n = rep.findings.length;
   const counts = SEVERITIES.filter((s) => rep.summary[s]).map((s) => `${rep.summary[s]} ${s}`).join(", ");
   const part = rep.partial ?? null;
-  const score = rep.score.value === null ? "no score" : `${rep.ranAt === "local" ? "Visual score" : "Score"} ${c.bold(`${rep.score.value}/100`)}${part ? c.yellow(` over ${part.measured} of ${part.of} parts`) : ""}`;
+  const locked = rep.locked ?? null;
+  const lockedCounts = locked ? SEVERITIES.filter((s) => locked.severities[s]).map((s) => `${locked.severities[s]} ${s}`).join(", ") : "";
+  const score = locked ? `Score ${c.bold("with Pro")}` : rep.score.value === null ? "no score" : `${rep.ranAt === "local" ? "Visual score" : "Score"} ${c.bold(`${rep.score.value}/100`)}${part ? c.yellow(` over ${part.measured} of ${part.of} parts`) : ""}`;
   // nothing found means something only when everything was looked at
   const nothing = !!part && part.measured === 0;
-  const found = nothing ? "nothing was measured" : n === 0 ? (part ? `no problems in what was measured` : c.green(`${sym.ok} no problems found`)) : `${n} problem${n === 1 ? "" : "s"} (${counts})`;
+  const found = locked ? `${locked.total} problem${locked.total === 1 ? "" : "s"}${lockedCounts ? ` (${lockedCounts})` : ""}` : nothing ? "nothing was measured" : n === 0 ? (part ? `no problems in what was measured` : c.green(`${sym.ok} no problems found`)) : `${n} problem${n === 1 ? "" : "s"} (${counts})`;
   p(`  ${score}  ${c.gray(sym.dot)}  ${found}`);
   if (rep.blocked) p(`  ${c.yellow(sym.warn)} ${rep.blocked}`);
   if (part && !rep.blocked) {
@@ -658,7 +685,7 @@ export function formatReport(rep) {
   // with nothing measured, eight lines of "not measured" and eight notes saying why add nothing to the sentence above
   if (rep.categories?.length && !nothing) {
     p();
-    for (const cat of rep.categories) p(`  ${cat.label.padEnd(20)} ${cat.measured ? String(cat.value).padStart(3) : "  -"}${cat.measured ? "" : c.gray(/nothing to try/i.test(String(cat.why ?? "")) ? "  nothing to try on this page" : "  not measured")}`);
+    for (const cat of rep.categories) p(`  ${cat.label.padEnd(20)} ${cat.measured ? (locked ? `${String(cat.count ?? 0).padStart(3)} found` : String(cat.value).padStart(3)) : "  -"}${cat.measured ? "" : c.gray(/nothing to try/i.test(String(cat.why ?? "")) ? "  nothing to try on this page" : "  not measured")}`);
   }
   if (rep.top?.length) {
     p();
@@ -679,6 +706,11 @@ export function formatReport(rep) {
     const msg = f.message;
     if (msg && msg !== f.target) p(`      ${fold(msg, "        ", 6)}`);
     if (f.fix) p(`      ${c.green("fix:")} ${fold(f.fix, "        ", 11)}${f.fixNote ? c.gray(`  (${f.fixNote})`) : ""}`);
+  }
+  if (locked && locked.total > n) {
+    p();
+    p(`  ${c.yellow(sym.warn)} ${fold(`The free view: ${n} of ${locked.total} findings in full. The score, the other findings and their fixes come with Pro (3 days free). To have your coding agent fix them all:`, "    ", 4)}`);
+    p(`    ${c.cyan(`npx genclass fix ${rep.url}`)}`);
   }
   const notes = (rep.notes ?? []).filter((note) => !(nothing && / not measured: /.test(note)));
   if (notes.length) {
@@ -741,7 +773,7 @@ export async function run(cmd, argv) {
           err(`${NAME} ${cmd}: ${new URL(url).host} is a local address, which the hosted page check cannot reach (and is never sent to it); install Playwright as above.`);
           return 2;
         }
-        say(`  Checking it on the genclass.dev page check instead (the URL is sent to ${HOSTED.replace(/^https:\/\//, "")}; it runs more checks, takes about a minute).`);
+        say(`  Checking it on the genclass.dev page check instead (the URL is sent to ${hostedTarget().base.replace(/^https?:\/\//, "")}; it runs more checks, takes about a minute).`);
         hosted = true;
       }
     }
@@ -760,7 +792,7 @@ export async function run(cmd, argv) {
         err(`${NAME} ${cmd}: ${got.error}`);
         return 2;
       }
-      rep = hostedReport(url, got.report, (process.env.GENCLASS_SCAN_HOSTED || HOSTED).replace(/\/+$/, ""));
+      rep = hostedReport(url, got.report, got.base);
     }
   } catch (e) {
     err(`${NAME} ${cmd}: ${e?.message || e}`);
