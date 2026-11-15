@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.10
 
 - **`genclass fix <address>`**: the findings genclass.dev's page check made on one page, handed to your coding agent
   (Enter starts it, `c` copies the prompt, `p` prints it; `--print` and `--json` for an agent). It is step 1 of "How do
