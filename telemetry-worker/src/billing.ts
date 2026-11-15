@@ -24,7 +24,7 @@
 // server (checkout, portal, Send test, new export keys) take AUTH_LIMIT's budget per account, and the export
 // EXPORT_LIMIT's.
 
-import { accountContext, accountProjects, authenticate, csrfFail, fail, originOk, ownedProject, page, readJson, redirect, webSession, type Auth, type C } from "./auth.js";
+import { accountContext, accountProjects, authenticate, csrfFail, fail, originOk, ownedProject, page, readJson, redirect, safeNext, webSession, type Auth, type C } from "./auth.js";
 import { billingPage, projectPlanPage } from "./billing-pages.js";
 import { liveFixUsage } from "./usage.js";
 import type { Env, HandleOptions, RateLimiterLike } from "./collector.js";
@@ -73,7 +73,7 @@ import {
   stripeWebhook,
   subscriptionState,
 } from "./stripe.js";
-import { membershipsOf, teamOf } from "./team.js";
+import { activeOwners, membershipsOf, teamOf } from "./team.js";
 import { b64url } from "./webauthn.js";
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -83,6 +83,40 @@ const MAX_EXPORT_KEYS = 10;
 const DAY = 86_400_000;
 
 const method = (): Response => fail(405, "method not allowed");
+
+/** A `next` that Pro's checkout may come back to: the page check only (/scan, /scan?url=...), as safeNext allows it. */
+export function scanNext(v: string | null | undefined): string | null {
+  const n = safeNext(v);
+  return n && /^\/scan(\?|$)/.test(n) ? n : null;
+}
+
+/**
+ * How the account has Pro: "plan" (its own plan, its trial, GenClass's grant), "team" (an active place in a team that
+ * has one), "open" (nothing is sold to it here: no paid plan, no Stripe key, a test key and an account not on its
+ * list, PLAN_GATES open), or null (Free). The same answer as the genclass command's (cli.ts cliVia), for both kinds
+ * of sign-in.
+ */
+export async function proVia(c: C, account: Auth["account"]): Promise<"plan" | "team" | "open" | null> {
+  if (!PAID_PLANS.length || !canBuy(c.env, account)) return "open";
+  const own = await accountAccess(c.db, account.id, c.env, c.now);
+  if (own.source === "open") return "open";
+  if (own.source !== null) return "plan";
+  for (const owner of await activeOwners(c.db, c.env, account.id, c.now)) if ((await accountAccess(c.db, owner, c.env, c.now)).source !== null) return "team";
+  return null;
+}
+
+/**
+ * GET /api/billing/pro: whether the signed-in account has Pro (proVia), for a browser session or the genclass
+ * command's token, and the days free its first Pro would start with (null with Pro or with none left). The page check
+ * (genclass-scan, over its ACCOUNTS service binding) asks it for each report it shows, to decide what is locked.
+ */
+async function proAnswer(c: C): Promise<Response> {
+  const a = await authenticate(c);
+  if (!a) return fail(401, "not signed in");
+  const via = await proVia(c, a.account);
+  const plan = PAID_PLANS[0];
+  return json(200, { ok: true, pro: via !== null, via, trial_days: via === null && plan ? (await trialFor(c.db, a.account.id, plan)) || null : null });
+}
 /** The 403 for something the account's plan leaves out, naming the plans that include it. */
 const upgrade = (c: C, what: Entitlement): Response => {
   const plans = PLANS.filter((p) => entitled(p, what)).map((p) => p.name);
@@ -148,6 +182,8 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       return m === "POST" ? checkout(c, f) : method();
     case "/api/billing/portal":
       return m === "POST" ? portal(c, f) : method();
+    case "/api/billing/pro":
+      return get ? proAnswer(c) : method();
     case "/api/billing/trial":
       return m === "POST" ? fail(410, `a trial starts at Checkout, on an app's plan page: ${c.cfg.origin}/account/billing`) : method();
     case "/account/trial":
@@ -220,9 +256,13 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       // ?start=1 with a plan: the person chose it a moment ago (in the genclass command's plan step), so the page
       // opens that plan's checkout itself instead of waiting for one more click
       const go = !!picked && url.searchParams.get("start") === "1";
+      // ?next=/scan?url=...: started from a page check's "Start 3 days free"; Stripe and this page send the person back
+      const next = scanNext(url.searchParams.get("next"));
       const a = await webSession(c);
-      // the plan picked on the pricing page survives the sign-in
-      if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${planParam(picked)}${go ? "&start=1" : ""}` : ""}`)}`);
+      // the plan picked on the pricing page (and where to go after) survives the sign-in
+      if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/billing${picked ? `?plan=${planParam(picked)}${go ? "&start=1" : ""}${next ? `&next=${encodeURIComponent(next)}` : ""}` : ""}`)}`);
+      // already on Pro (its own, a grant, a team's seat): no second checkout, straight back to the report
+      if (next && (await proVia(c, a.account)) !== null) return redirect(next);
       // a plan sold per project, picked on the pricing page or started from an older genclass command: the plan page
       // of the account's first app still on Free, where it is bought for that app
       if (picked?.per_project === true) {
@@ -253,6 +293,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
           done: url.searchParams.get("done") === "1",
           picked: picked?.id ?? null,
           go,
+          next,
           switchTo: pickedPlan(url.searchParams.get("to"))?.id ?? null,
           managedPlans: PAID_PLANS.filter((p) => managedPayments(env, p)).map((p) => p.name),
           now: c.now,
@@ -382,8 +423,9 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
     if (n === null) return fail(400, `seats is a whole number from 1 to ${MAX_SEATS}; for a larger team email ${PLANS_FILE.contact}`);
     seats = n;
   }
-  // started from an app's plan page: Stripe returns there
+  // started from an app's plan page: Stripe returns there; from a page check (next): Stripe and the plan page return to it
   const backTo = typeof body.project_id === "string" && (await ownedProject(c, a.account.id, body.project_id))?.id ? body.project_id : undefined;
+  const next = backTo ? null : scanNext(typeof body.next === "string" ? body.next : null);
   if (await overBudget(c.env.AUTH_LIMIT, "checkout", a.account.id)) return tooMany();
   // as stored: ensureCustomer decides what to do with a customer from the other Stripe mode
   const account = { id: a.account.id, email: a.account.email, ...(await accountBilling(c.db, a.account.id)) };
@@ -427,7 +469,7 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
     }
     // the first subscription starts with the plan's trial (trialFor), once per account
     const trialDays = customer.fresh || first ? await trialFor(c.db, a.account.id, plan, 0) : 0;
-    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, seats, trialDays, backTo });
+    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, seats, trialDays, backTo, ...(next ? { next } : {}) });
     return json(200, { url, trial_days: trialDays || null });
   } catch (e) {
     return stripeFail(e);

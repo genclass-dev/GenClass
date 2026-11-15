@@ -404,7 +404,7 @@ export function managedPayments(env: Env, plan: Plan): boolean {
 export async function checkoutSession(
   env: Env,
   f: Fetch,
-  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string }; trialDays?: number; backTo?: string },
+  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string }; trialDays?: number; backTo?: string; next?: string },
 ): Promise<string> {
   // free days only on a first subscription (the caller decides), never on a switch, and only what Stripe allows (1 to 730)
   const trialDays = !o.switchFrom && Number.isInteger(o.trialDays) && o.trialDays! >= 1 && o.trialDays! <= 730 ? o.trialDays! : 0;
@@ -426,7 +426,8 @@ export async function checkoutSession(
         (x.metadata?.genclass_switch_from ?? undefined) === o.switchFrom &&
         x.metadata?.genclass_trial !== "1" &&
         (x.metadata?.genclass_trial_days ?? "0") === String(trialDays) &&
-        (x.metadata?.genclass_seats ?? "1") === String(seats);
+        (x.metadata?.genclass_seats ?? "1") === String(seats) &&
+        (x.metadata?.genclass_next ?? "") === (o.next ?? "");
       if (same && typeof x.url === "string" && x.url.startsWith("https://")) return x.url;
       await stripe(env, f, "POST", `/v1/checkout/sessions/${encodeURIComponent(x.id)}/expire`, {});
       closed.push(x.id);
@@ -440,6 +441,9 @@ export async function checkoutSession(
   // a project's checkout (version 4), or the account's started from an app's plan page (backTo), returns to that page
   const backId = o.project?.id ?? o.backTo;
   const back = backId ? `${o.origin}/account/billing?project=${encodeURIComponent(backId)}` : `${o.origin}/account/billing`;
+  // started from a page check (billing.ts scanNext): the plan page waits for the payment, then goes back to the report;
+  // a cancel goes straight back to it
+  const next = !backId && o.next ? o.next : null;
   // a double click within the same minute gets the same session; after closing pages, a new key (the old session
   // under the plain key may be one of those just closed); a switch has its own
   const after = closed.length ? `-after-${(await sha256Hex(closed.join(","))).slice(0, 16)}` : "";
@@ -457,9 +461,9 @@ export async function checkoutSession(
         client_reference_id: o.account.id,
         line_items: [perSeat ? { price, quantity: seats, adjustable_quantity: { enabled: true, minimum: 1, maximum: MAX_SEATS } } : { price, quantity: 1 }],
         // back from a switch, the page waits for the new plan
-        success_url: backId ? `${back}&done=1` : `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}`,
-        cancel_url: back,
-        metadata: { ...mark, genclass_plan: o.plan.id, ...(perSeat ? { genclass_seats: String(seats) } : {}), ...(trialDays ? { genclass_trial_days: String(trialDays) } : {}) },
+        success_url: backId ? `${back}&done=1` : `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}${next ? `&next=${encodeURIComponent(next)}` : ""}`,
+        cancel_url: next ? `${o.origin}${next}` : back,
+        metadata: { ...mark, genclass_plan: o.plan.id, ...(next ? { genclass_next: next } : {}), ...(perSeat ? { genclass_seats: String(seats) } : {}), ...(trialDays ? { genclass_trial_days: String(trialDays) } : {}) },
         // a card (or another payment method) up front
         payment_method_collection: "always",
         // the "Add promotion code" field: codes made in the Stripe dashboard (Product catalog, Coupons) for GenClass's prices
