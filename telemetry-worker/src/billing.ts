@@ -1,13 +1,17 @@
 // Routes for the paid plans. Checked before the account routes (src/auth.ts); null for any other path.
 //
-//   POST /api/billing/checkout {plan: "<id>", seats?}   browser session + Origin; {url} of Stripe Checkout (with
+//   POST /api/billing/checkout {plan: "<id>", seats?, next?}  browser session + Origin; {url} of Stripe Checkout (with
 //                                                       switch: true when it replaces the plan already paid); `seats`
-//                                                       (1 to 200, default 1) for a plan sold per seat (Team)
+//                                                       (1 to 200, default 1) for a plan sold per seat (Team); `next`
+//                                                       (/scan?url=..., scanNext): Stripe and the plan page return there
+//   GET  /api/billing/pro                              browser session or the genclass command's token; {pro, via,
+//                                                       trial_days}: what the page check asks before showing a report
 //   POST /api/billing/trial                            410: the trial of 2026-10 is gone; Pro's trial starts at Checkout
 //   POST /api/billing/portal                           browser session + Origin; {url} of the Billing Portal
 //   POST /api/billing/webhook                          Stripe only: signature, no session (src/stripe.ts)
 //   GET  /api/billing                                  browser session; the plan and the subscription
-//   GET  /account/billing                              the plan page (src/billing-pages.ts)
+//   GET  /account/billing                              the plan page (src/billing-pages.ts); ?next=/scan?url=... goes
+//                                                       back to that report after the checkout (straight away with Pro)
 //   GET  /account/trial                                to the account page (genclass.dev's pricing page linked
 //                                                       here until 2026-10-19), through sign-up when signed out
 //   GET|PUT|PATCH|DELETE /api/account/projects/<id>/integrations[/<kind>]   forwarding destinations (plans with
