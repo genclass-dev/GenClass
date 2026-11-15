@@ -41,6 +41,7 @@ const HELP = [
   ]],
   ["Act", [
     ["npx genclass fix", "hand a problem to your coding agent (fix 2 | fix stale | fix all; --print, --copy, --agent claude | codex | cursor-agent | gemini)"],
+    ["npx genclass fix <address>", "the page check's findings for one page, to your coding agent (the command under a report's score on genclass.dev/scan)"],
     ['npx genclass ask "..."', "ask about your app in plain words; the model answers from its numbers"],
     ["npx genclass suggest [url]", "what your app is missing, most important first (--yes, --no-model, --all)"],
     ["npx genclass scan <url>", "23 visual checks on one page"],

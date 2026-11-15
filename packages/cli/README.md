@@ -101,6 +101,18 @@ in the browser (the sign-in, GitHub), Enter stops the wait and the walk goes on.
 exception: nothing after them runs until they are done. A part that does not apply
 is left out and says why: no Playwright tests, not a GitHub repository, not a web app.
 
+## Fix what the page check found
+
+```bash
+npx genclass fix shop.example.com
+```
+
+The command under a report's score on [genclass.dev/scan](https://genclass.dev/scan). Run it in the app's folder: it
+signs you in, starts Pro if the account has none (3 days free), reads that page's report with your sign-in (or checks
+the page, about a minute) and hands every finding to your coding agent: Claude Code, Codex, Cursor or Gemini CLI.
+Enter starts the agent, `c` copies the prompt, `p` prints it; `--print` and `--json` print it for a script or an agent.
+GenClass changes no code: the agent does, and you approve each change.
+
 ## Your app in the terminal
 
 ```bash
