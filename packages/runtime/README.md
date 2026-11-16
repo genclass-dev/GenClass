@@ -644,7 +644,7 @@ The bundler puts the runtime in files of its own, which only those page loads fe
 ```js
 const start = () => {
   const s = document.createElement("script");
-  s.src = "https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.6"; // keep the version pinned
+  s.src = "https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.7"; // keep the version pinned
   s.setAttribute("data-mode", "observe");
   s.setAttribute("data-preload", "lazy");
   document.head.appendChild(s);
