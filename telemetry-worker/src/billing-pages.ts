@@ -148,7 +148,7 @@ function statusLine(v: BillingView, plan: Plan): string {
     return `You are on the ${name} plan until ${day(b.current_period_end)}. It is cancelled and will not renew; you can resume it in Manage billing before then.`;
   }
   if (b.subscription_status === "trialing") {
-    return `You are on the ${name} plan, in a trial until ${day(b.current_period_end)}. When it ends your card is charged for the first month (${esc(priceText(plan))}), unless you cancel before in Manage billing.`;
+    return `You are on the ${name} plan, in a trial until ${day(b.current_period_end)}. When it ends your card is charged for the first month (${esc(priceText(plan))}). Cancel in Manage billing before then and nothing is charged; ${esc(plan.name)} then ends at once.`;
   }
   if (plan.per_seat === true && v.access.seats !== null) {
     const n = v.access.seats;

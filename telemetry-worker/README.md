@@ -543,6 +543,9 @@ subscription bought per project under version 4 still covers its own app (never 
 Pro. Free covers one app (`free_projects` past it). Every new app of an account opens its plan page once, a paying
 account's too: "Continue with Pro" (`POST /api/billing/projects/<id>/continue` writes `plan_chosen`). Pro's
 3-day trial (card up front, once per account) starts on the account's first Checkout (`src/billing.ts` trialFor).
+A cancel during the trial ends the trial and Pro at once (the owner, 2026-11-15): the portal schedules it for the
+trial's end, and the webhook then cancels the subscription in Stripe and writes Free (`src/stripe.ts` trialCancelled).
+A paid plan cancelled in the portal still runs to the end of its paid month.
 **The genclass command is Pro's** (the owner's "let's make the entire CLI paid"): a CLI session of an account with
 no plan (paid, trialing, a grant) and no active place in a paying team gets 402 `needs_pro` from every `/api/cli`
 route but the overview and the account, which carry `cli` (`src/cli.ts` cliPaid). Nothing is locked for a browser
@@ -814,7 +817,9 @@ does about it.
   payment methods, billing address); the Customer Portal can be offered too; `subscription.default_payment_method`
   cannot be changed through the API for these subscriptions, only by the buyer in the portal
   ([how it works](https://docs.stripe.com/payments/managed-payments/how-it-works)). GenClass's portal keeps card,
-  invoices, email, tax id and cancel at period end. Cancelling with `prorate` and `invoice_now` would put the credit
+  invoices, email, tax id and cancel at period end. The portal's cancel mode is one setting for every
+  subscription, so it stays at period end for paid plans; a trial cancelled there is ended at once by the webhook
+  (`src/stripe.ts` trialCancelled). Cancelling with `prorate` and `invoice_now` would put the credit
   for unused time on the customer's balance for future invoices; both default to false
   ([cancel](https://docs.stripe.com/billing/subscriptions/cancel)), and GenClass sends neither: it refunds the unused
   time to the card instead (a refund can be partial and goes to the payment method charged:
