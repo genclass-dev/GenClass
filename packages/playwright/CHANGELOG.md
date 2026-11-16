@@ -3,6 +3,11 @@
 Changes to `@genclass/playwright`, the Playwright reporter for
 [`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime) race files.
 
+## Unreleased
+
+- The package's `homepage` is https://genclass.dev/github (the GitHub App page, which reads this package's race
+  files), so npm links to GenClass's site instead of a folder on GitHub.
+
 ## 0.1.0 (2026-11-10)
 
 The first version on npm: the fixture, the reporter, and the same without editing a suite (the command

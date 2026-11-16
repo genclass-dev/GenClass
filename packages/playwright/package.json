@@ -9,7 +9,7 @@
     "url": "git+https://github.com/genclass-dev/GenClass.git",
     "directory": "packages/playwright"
   },
-  "homepage": "https://github.com/genclass-dev/GenClass/tree/main/packages/playwright#readme",
+  "homepage": "https://genclass.dev/github",
   "bugs": { "url": "https://github.com/genclass-dev/GenClass/issues" },
   "keywords": [
     "playwright",
