@@ -238,7 +238,7 @@ describe("reports: one account's report", () => {
     expect(mail.html).not.toContain("<script>alert(1)</script>");
     expect(mail.html).toContain("Shop &#60;script&#62;");
     expect(mail.html).toContain("/checkout");
-    expect(mail.html).toContain("Upgrade your website design");
+    expect(mail.html).toContain("Website design");
     expect(mail.text).toContain("Prompt for your coding agent:");
     // every prompt has a signed link to the prompt page
     const prompt = r.items.find((i) => i.prompt)!.prompt!;
@@ -275,15 +275,15 @@ describe("reports: one account's report", () => {
     const { subject, html, text } = renderReport(r);
     expect(subject).toBe("GenClass daily report, Glyco site: finish setting up");
     expect(html).toContain("Glyco site isn&#39;t sending data yet");
-    expect(html).toContain("What this report will show");
+    expect(html).toContain("Ideas before the data");
     expect(html).toContain("Once Glyco site sends its first page load");
-    for (const generic of ["Sites to learn from today", "Upgrade your website design", "Suggestions for your app"]) expect(html).not.toContain(generic);
-    expect(text).not.toContain("UPGRADE YOUR WEBSITE DESIGN");
+    for (const generic of ["Sites to learn from", "Website design", "Suggestions for your app"]) expect(html).not.toContain(generic);
+    expect(text).not.toContain("WEBSITE DESIGN");
     // once it has measured data, the ideas and the showcase come back
     await sendBatch(env, (sql.db.prepare("SELECT token FROM projects WHERE name = 'Glyco site'").get() as { token: string }).token, [page("/")]);
     const later = renderReport((await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report);
-    expect(later.html).toContain("Sites to learn from today");
-    expect(later.html).not.toContain("What this report will show");
+    expect(later.html).toContain("Sites to learn from");
+    expect(later.html).not.toContain("Ideas before the data");
   });
 
   it("without signed links a short prompt is printed and a long one is left to the text part", async () => {
@@ -319,7 +319,7 @@ describe("reports: one account's report", () => {
     const mail = renderReport(r);
     expect(mail.html).toContain("/api/pay");
     expect(mail.html).not.toContain("/secret-admin");
-    expect(mail.html).toContain("You're seeing half of this report on Free");
+    expect(mail.html).toContain(esc("You're seeing half of this report on Free"));
     expect(mail.html).toContain("1 more problem on <strong");
     expect(mail.html).toContain("(1 important)");
     expect(mail.html).toContain("Start the 3-day free trial");
@@ -385,7 +385,10 @@ describe("reports: one account's report", () => {
     expect(asked[0]).toContain("/cart");
     for (const secret of ["owner@example.com", "sk-test-secret", account.id, app.token]) expect(asked[0]).not.toContain(secret);
     expect(r.summary?.headline).toBe("Stale responses on /cart need a fix");
-    expect(renderReport(r).html.indexOf("GenClass summary")).toBeLessThan(renderReport(r).html.indexOf("Your apps"));
+    const { html } = renderReport(r);
+    expect(html.indexOf("Stale responses on /cart need a fix")).toBeGreaterThan(-1);
+    expect(html.indexOf("Stale responses on /cart need a fix")).toBeLessThan(html.indexOf("Your apps"));
+    expect(html).toContain("Summary written by a model");
   });
 
   it("keeps only the summary's own fields, cleaned and cut", () => {
@@ -393,6 +396,100 @@ describe("reports: one account's report", () => {
     expect(summaryFromAnswer(JSON.stringify({ headline: "", summary: "x", actions: [] }))).toBeNull();
     const s = summaryFromAnswer(JSON.stringify({ headline: "A\u0000 b", summary: "c", actions: [{ title: "t", why: "w", prompt: "p" }, {}, {}, {}], extra: 1 }));
     expect(s).toEqual({ headline: "A b", text: "c", actions: [{ title: "t", why: "w", prompt: "p" }] });
+  });
+});
+
+describe("reports: the email's layout, summary first (the owner, 2026-11-15)", () => {
+  /** A headline's place in the HTML, and a section title's (an <h2>). */
+  const at = (html: string, t: string) => html.indexOf(t);
+  const h2 = (html: string, t: string) => html.indexOf(`>${esc(t)}</h2>`);
+
+  it("square corners, no pills, dots or emoji, in every kind of email", async () => {
+    const { env, sql } = world({ OPENAI_API_KEY: "sk-test" });
+    const { cookie, account } = await signedIn(env);
+    const shop = await createApp(env, cookie, "Shop");
+    grantPro(sql, shop.id);
+    await createApp(env, cookie, "Blog");
+    await sendBatch(env, shop.token, [page("/checkout"), ...detection("duplicate", "/checkout"), ...detection("slow", "/search")]);
+    const f = (async (url: string) => (url === MODEL_URL ? Response.json({ choices: [{ message: { content: JSON.stringify({ headline: "Fix the checkout", summary: "One double submit.", actions: [{ title: "Disable the button", why: "Two charges.", prompt: "Disable it." }] }) } }] }) : new Response("", { status: 404 }))) as typeof fetch;
+    for (const kind of ["report", "alert", "test"] as const) {
+      const { html } = renderReport((await buildReport(env, accountRow(sql, account.id), { kind, now: now(), model: kind !== "alert", fetch: f }))!.report);
+      expect(html).not.toMatch(/border-radius/);
+      for (const bad of ["●", "🔒", "→", "999px", "text-transform:uppercase"]) expect(html, `${kind}: ${bad}`).not.toContain(bad);
+      // dark mode for the clients that read it, Outlook's fixed column, the main button a table cell
+      expect(html).toContain("@media (prefers-color-scheme:dark)");
+      expect(html).toContain("[data-ogsc] .gc-i1");
+      expect(html).toContain("<!--[if mso]>");
+    }
+  });
+
+  it("a report opens with its summary and the first thing to do, then the details; no zero counts", async () => {
+    const { env, sql } = world();
+    const { cookie, account } = await signedIn(env);
+    const app = await createApp(env, cookie, "Shop");
+    grantPro(sql, app.id);
+    await sendBatch(env, app.token, [page("/checkout"), ...detection("duplicate", "/checkout")]);
+    const r = (await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report;
+    const { html, text } = renderReport(r);
+    const first = "First: Double submits on a payment page (/checkout).";
+    expect(html).toContain("Shop had 1 page load in the last 24 hours.");
+    expect(html).toContain(first);
+    // the lead's button is the first item's prompt, before any section
+    const fix = esc(r.promptLinks[r.items.find((i) => i.rule === "money:duplicate")!.prompt!]!);
+    expect(at(html, fix)).toBeLessThan(h2(html, "Fix these first"));
+    expect(at(html, first)).toBeLessThan(h2(html, "Fix these first"));
+    expect(h2(html, "Fix these first")).toBeLessThan(h2(html, "Your apps"));
+    expect(html).not.toMatch(/\b0 (critical|important|worth a look)\b/);
+    expect(html).toContain("1 critical");
+    // the inbox's preview line is the summary
+    expect(html.indexOf("Shop had 1 page load")).toBeLessThan(html.indexOf("GenClass</a>"));
+    expect(text.indexOf(first)).toBeLessThan(text.indexOf("FIX THESE FIRST"));
+    expect(text).not.toMatch(/\b0 critical\b/);
+  });
+
+  it("before data: says what to do in plain words, one setup button, no counts, no empty table", async () => {
+    const { env, sql } = world();
+    const { cookie, account } = await signedIn(env);
+    await createApp(env, cookie, "Phone");
+    const r = (await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report;
+    const { html, text } = renderReport(r);
+    expect(html).toContain("Phone isn&#39;t sending data yet");
+    expect(html).toContain("GenClass hasn&#39;t had a page load from Phone yet.");
+    expect(html).not.toMatch(/\b0 (critical|important|worth a look)\b/);
+    expect(html).not.toContain("1 worth a look");
+    expect(html).not.toContain(">Your apps</h2>");
+    const setup = esc(r.promptLinks[r.items.find((i) => i.rule === "setup:no-data")!.prompt!]!);
+    expect(at(html, setup)).toBeLessThan(h2(html, "Finish setting up"));
+    expect(html).toContain("Copy the setup prompt</a></td>");
+    // the text part prints the prompt in full below, not its long link at the top
+    expect(text.slice(0, text.indexOf("----"))).not.toContain("/account/report/prompt");
+  });
+
+  it("several apps without data: the button names whose setup prompt it is", async () => {
+    const { env, sql } = world();
+    const { cookie, account } = await signedIn(env);
+    for (const name of ["Shop", "Blog"]) await createApp(env, cookie, name);
+    const { html } = renderReport((await buildReport(env, accountRow(sql, account.id), { kind: "report", now: now(), model: false, fetch: noModel }))!.report);
+    expect(html).toContain("2 apps aren&#39;t sending data yet");
+    expect(html).toContain("Once they send their first page load");
+    expect(html).toContain("Copy the setup prompt for Shop</a></td>");
+  });
+
+  it("a single alert says it once: its text, pages and prompt, no repeated details", async () => {
+    const { env, sql } = world();
+    const { cookie, account } = await signedIn(env);
+    const app = await createApp(env, cookie, "Shop");
+    grantPro(sql, app.id);
+    await sendBatch(env, app.token, [page("/"), ...detection("failing", "/api/items"), ...detection("failing", "/api/items"), ...detection("failing", "/api/items")]);
+    const built = (await buildReport(env, accountRow(sql, account.id), { kind: "alert", now: now(), model: false, fetch: noModel }))!.report;
+    const r = { ...built, items: built.items.filter((i) => i.p === 0 && i.section === "problems") };
+    expect(r.items).toHaveLength(1);
+    const { html } = renderReport(r);
+    // once in the body (the hidden preview line before the header repeats the summary for the inbox)
+    expect(html.slice(html.indexOf("GenClass</a>")).split("An endpoint kept failing")).toHaveLength(2);
+    expect(html).toContain("/api/items");
+    expect(html).toContain("Copy the fix prompt");
+    expect(html).toContain("Open the dashboard");
   });
 });
 
