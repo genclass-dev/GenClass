@@ -1,9 +1,9 @@
 // `genclass-runtime init` and `genclass-runtime remove` (also `npx @genclass/runtime init|remove`).
 //
 // init: detects the project, installs @genclass/runtime, adds the auto import as the first statement of the entry
-// file (plus a dev-only devtools line), shows the diff and asks before writing. Every added line or created file
-// carries the marker `genclass:init`, so `remove` can take out exactly that and nothing else (and refuses when a
-// marked line or block was edited). Running init twice changes nothing; running it again with another --mode
+// file, shows the diff and asks before writing. Nothing it adds draws on a page unless --devtools asks for the
+// dev-only overlay. Every added line or created file carries the marker `genclass:init`, so `remove` can take out
+// exactly that and nothing else (and refuses when a marked line or block was edited). Running init twice changes nothing; running it again with another --mode
 // switches the marked import (or the script tag's data-mode) to that mode in place.
 //
 // Signed in (`login`, account.mjs), init asks before anything is sent whether a new app goes into the account
@@ -46,14 +46,14 @@ export const USAGE = `Usage:
   genclass-runtime init   [--mode observe|guard|heal] [--token <gc_...> | --no-token]
                           [--no-telemetry | --telemetry] [--model-url <url>]
                           [--sink console-json|webhook:<url>]
-                          [--yes] [--dry-run] [--no-install] [--no-devtools] [--no-network] [--cwd <dir>]
+                          [--yes] [--dry-run] [--no-install] [--devtools] [--no-network] [--cwd <dir>]
   genclass-runtime remove [--yes] [--dry-run] [--keep-package] [--cwd <dir>]
 
 init     finds your framework, installs ${PKG} (this version, ${VERSION}; an older one already in the
-         project is upgraded), adds one import to your entry file (and a dev-only devtools line), shows
-         the diff and asks before writing. Running it again changes nothing; with another --mode it
-         switches the import init added to that mode. It prints its own version and asks npm's dist-tags
-         (at most 3 s) whether a newer release exists.
+         project is upgraded), adds one import to your entry file, shows the diff and asks before
+         writing. It draws nothing on your pages unless you pass --devtools. Running it again changes
+         nothing; with another --mode it switches the import init added to that mode. It prints its own
+         version and asks npm's dist-tags (at most 3 s) whether a newer release exists.
 remove   takes out exactly what init added (the lines and blocks marked "${MARK}"; it changes nothing if
          one of them was edited, though attributes added to its script tag, such as defer, are fine) and
          uninstalls the package if nothing else imports it.
@@ -85,7 +85,8 @@ remove   takes out exactly what init added (the lines and blocks marked "${MARK}
   --yes, -y        apply without asking
   --dry-run        show what would change; write nothing
   --no-install     do not run the package manager
-  --no-devtools    do not add the dev-only devtools overlay
+  --devtools       also add the devtools overlay on your dev pages (off by default; --no-devtools
+                   is still accepted and changes nothing)
   --no-network     do not ask npm for newer releases (--dry-run, --no-token and --no-telemetry do not
                    ask either)
   --keep-package   remove: leave ${PKG} installed
@@ -104,6 +105,7 @@ const BOOL = {
   y: "yes",
   "dry-run": "dryRun",
   "no-install": "noInstall",
+  devtools: "devtools",
   "no-devtools": "noDevtools",
   "no-network": "noNetwork",
   "keep-package": "keepPackage",
@@ -266,7 +268,7 @@ function manualHelp(project) {
   out(`  Add GenClass by hand: one import as the ${c.bold("first")} line of your entry file`);
   out(`    ${c.cyan(`import "${AUTO()}";`)}`);
   out(`  or, without a bundler, one tag first in <head>`);
-  out(`    ${c.cyan(scriptTag({ devtools: true }, PKG_DIR, VERSION).replace(/ integrity="[^"]*" crossorigin="anonymous"/, ""))}`);
+  out(`    ${c.cyan(scriptTag({}, PKG_DIR, VERSION).replace(/ integrity="[^"]*" crossorigin="anonymous"/, ""))}`);
   if (project?.pkg) out(`  and install it: ${c.cyan(installArgs(project.pm ?? "npm", installSpec({})).flat().join(" "))}`);
   out();
 }
@@ -830,6 +832,24 @@ function olderRuntime(project, cwd) {
   return have && compareVersions(have, VERSION) === -1 ? have : null;
 }
 
+// the devtools overlay in what init added: an import of the devtools entry, or a script tag's data-devtools
+const OVERLAY_RE = /["']@genclass\/runtime\/devtools["']|\sdata-devtools\b/;
+
+/**
+ * The files init set up that still load the devtools overlay: init of @genclass/runtime 0.3.0-beta.6 and earlier
+ * added it by default (since then only with --devtools), so a re-run says how to take it out.
+ */
+export function overlayFiles(marked) {
+  return marked.filter((f) => OVERLAY_RE.test(readText(f) ?? ""));
+}
+
+/** The one-row hint for overlayFiles(), or null when there is nothing to say. */
+export function overlayHint(project, rels) {
+  if (!rels.length) return null;
+  const how = project.framework === "html" ? `delete data-devtools="local" from its script tag` : `delete the statement that imports @genclass/runtime/devtools`;
+  return `${rels.join(", ")} still ${rels.length === 1 ? "draws" : "draw"} the devtools overlay on dev pages. GenClass no longer adds it. To drop it, ${how}.`;
+}
+
 /** What init finds in the project directory (no writes, no network). */
 export function inspectProject(o) {
   const cwd = projectDir(o);
@@ -948,6 +968,8 @@ export async function init(o, ctx = {}) {
     out();
     telemetryNotice(isEmptyConfig(cfg) ? currentConfig(marked) : { ...currentConfig(marked), ...cfg }, null);
     tokenRow(tk);
+    const overlay = o.devtools && !HOST_CLI ? null : overlayHint(project, overlayFiles(marked).map((f) => posix(relative(cwd, f))));
+    if (overlay) row("Overlay", overlay, c.yellow(sym.warn));
     if (tk.token && !tk.app && !ctx.creds && readCredentials()) more(c.gray(`Signed in: ${CMD} connect adds this app to your account if it is not there yet.`));
     sinksNotice(cfg, null);
     cspAdvice(project, files, cfg);
@@ -978,8 +1000,9 @@ export async function init(o, ctx = {}) {
     return spawn(...installArgs(project.pm, spec), cwd) ? 0 : 1;
   }
 
-  // nothing GenClass sets up through a host CLI (genclass) is drawn on a page: the overlay is left out there
-  const devtools = !o.noDevtools && !HOST_CLI;
+  // nothing init sets up is drawn on a page unless asked for (--devtools; never through a host CLI such as genclass):
+  // findings go to the console and the dashboard. --no-devtools, the opt-out of 0.3.0-beta.6 and earlier, is a no-op
+  const devtools = !!o.devtools && !o.noDevtools && !HOST_CLI;
   const planFor = (config) => planInit(project, { mode: o.mode, devtools, cdn: o.cdn, sri: !o.noSri, sync: !!o.sync, strategy: o.strategy, config }, { pkgDir: PKG_DIR, version: VERSION });
   const plan = planFor(cfg);
   if (plan.manual || !plan.changes.length) {

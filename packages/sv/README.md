@@ -29,12 +29,12 @@ Svelte + Vite project it stops with "Requires SvelteKit".
 | file | change |
 |---|---|
 | `package.json` | adds `@genclass/runtime` `^0.3.0-beta.1` to `dependencies` (the release the GenClass README documents; the range takes later 0.3.0 betas and 0.3.x) |
-| `src/hooks.client.ts` (or `.js`) | `import genclass from "@genclass/runtime/auto";` as the first line, and at the end `if (import.meta.env.DEV) import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));`. Creates the file if the app has none; an existing file keeps all its code |
+| `src/hooks.client.ts` (or `.js`) | `import "@genclass/runtime/auto";` as the first line. Creates the file if the app has none; an existing file keeps all its code |
 | `src/app.html` | with telemetry off (the default): `<meta name="genclass" content="telemetry=off" />` in `<head>` |
 
 SvelteKit runs `src/hooks.client` in the browser before the app starts, so GenClass is installed before your
-components and stores. Server rendering, hydration and your server code are not touched. The overlay import sits
-behind `import.meta.env.DEV`, so it is never in a production build.
+components and stores. Server rendering, hydration and your server code are not touched. Nothing is drawn on your
+pages: the add-on never adds GenClass's devtools overlay.
 
 Every line it adds carries the `genclass:init` marker that `npx @genclass/runtime@beta init` writes, so GenClass's own
 CLI recognises the setup and can take it out again. Running the add-on twice adds nothing twice; running it again
@@ -51,7 +51,7 @@ with other answers switches the mode or the telemetry line in place.
 npx sv add @genclass="mode:guard+telemetry:no"
 ```
 
-Start in observe, watch the console and the overlay on real traffic, then switch to guard. The runtime also has an
+Start in observe, watch the console on real traffic, then switch to guard. The runtime also has an
 experimental `heal` mode, which this add-on does not offer: change the import to `@genclass/runtime/auto/heal`
 yourself.
 
@@ -63,7 +63,7 @@ yourself.
   not load it and observe without it. For a strict Content-Security-Policy or to serve the model yourself, see
   [self-hosting](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/README.md#content-security-policy-and-self-hosting).
 - **The console.** One line when the model is ready (`[GenClass] Model ready (...). Mode: observe.`), then one
-  plain-English line per finding. The overlay (development only) sits bottom right; `Alt+Shift+G` toggles it.
+  plain-English line per finding. Nothing is drawn on the page.
 - **What it sees in Svelte.** Automatic state discovery covers React, Redux and Zustand, not Svelte runes or stores
   yet, so in SvelteKit GenClass works from the network and user input. To compare a late response with newer data in
   your state, register that state (`genclass.atom(...)`, see

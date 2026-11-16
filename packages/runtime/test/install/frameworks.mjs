@@ -70,10 +70,10 @@ const FRAMEWORKS = {
   nuxt: { build: "npm run build", prod: "node .output/server/index.mjs", dev: "npx nuxi dev --port {port} --host 127.0.0.1", env: { PORT: "{port}", HOST: "127.0.0.1", NITRO_PORT: "{port}", NITRO_HOST: "127.0.0.1" } },
   "react-router": { build: "npm run build", prod: "npx react-router-serve ./build/server/index.js", dev: "npx react-router dev --port {port} --host 127.0.0.1", env: { PORT: "{port}", HOST: "127.0.0.1" } },
   angular: { build: "npx ng build", prod: { static: "dist/*/browser" }, dev: "npx ng serve --port {port} --host 127.0.0.1" },
-  "plain-html": { build: null, prod: { static: "." }, dev: null, prodDevtools: true, init: ["--cdn", `${cdn.url}/pkg/dist/genclass.global.min.js`] },
+  "plain-html": { build: null, prod: { static: "." }, dev: null, init: ["--cdn", `${cdn.url}/pkg/dist/genclass.global.min.js`] },
   // app tokens: the token goes into genclass.config.ts (bundlers) or data-token (script tag); remove takes it out
   "vite-react-ts-token": { scaffold: "vite-react-ts", token: true, build: "npm run build", prod: vitePreview, dev: viteDev },
-  "plain-html-token": { scaffold: "plain-html", token: true, build: null, prod: { static: "." }, dev: null, prodDevtools: true, init: ["--cdn", `${cdn.url}/pkg/dist/genclass.global.min.js`] },
+  "plain-html-token": { scaffold: "plain-html", token: true, build: null, prod: { static: "." }, dev: null, init: ["--cdn", `${cdn.url}/pkg/dist/genclass.global.min.js`] },
 };
 
 // -------------------------------------------------------------------------------------------- helpers
@@ -176,7 +176,7 @@ async function startServer(spec, cwd, env = {}) {
 }
 
 let browser;
-async function visit(url, { expectDevtools }) {
+async function visit(url) {
   const ctx = await browser.newContext();
   await ctx.route(/^https:\/\/cdn\.jsdelivr\.net\/npm\//, (r) => {
     const u = new URL(r.request().url());
@@ -203,8 +203,8 @@ async function visit(url, { expectDevtools }) {
     await page.goto(url, { waitUntil: "load", timeout: 120_000 });
     const t0 = Date.now();
     while (Date.now() - t0 < 120_000 && !lines.some((l) => l.includes("[GenClass] Model ready") || l.includes("[GenClass] Model unavailable"))) await page.waitForTimeout(500);
-    if (expectDevtools) await page.waitForSelector("genclass-devtools", { timeout: 30_000, state: "attached" }).catch(() => undefined);
-    else await page.waitForTimeout(1500);
+    // nothing init sets up is drawn on a page: wait long enough that a late overlay mount would be seen
+    await page.waitForTimeout(5000);
     Object.assign(
       r,
       await page.evaluate(() => ({
@@ -274,7 +274,7 @@ async function runOne(name) {
     try {
       const s = await startServer(fw.prod, dir, fw.env);
       try {
-        res.steps.prod = await visit(`${s.url}/`, { expectDevtools: false });
+        res.steps.prod = await visit(`${s.url}/`);
       } finally {
         await s.stop();
       }
@@ -288,8 +288,8 @@ async function runOne(name) {
       try {
         // A dev server's first load may re-optimize newly added dependencies and reload (Vite); judge a warm load
         // and keep the cold one's errors in the results.
-        const cold = await visit(`${s.url}/`, { expectDevtools: true });
-        res.steps.dev = await visit(`${s.url}/`, { expectDevtools: true });
+        const cold = await visit(`${s.url}/`);
+        res.steps.dev = await visit(`${s.url}/`);
         res.steps.dev.coldErrors = cold.errors;
         res.steps.dev.coldWorkers = cold.workers.length;
       } finally {
@@ -316,9 +316,9 @@ async function runOne(name) {
 function verdict(r) {
   if (r.skipped) return "SKIP";
   const s = r.steps;
-  // production builds never mount the overlay; the plain-HTML tag uses data-devtools="local", which does on 127.0.0.1
-  const prodOk = s.prod && !s.prod.error && s.prod.modelReady && s.prod.fetchWrapped && s.prod.devtools === !!FRAMEWORKS[r.name].prodDevtools && s.prod.errors.length === 0;
-  const devOk = !s.dev || (!s.dev.error && s.dev.devtools && s.dev.fetchWrapped && s.dev.errors.length === 0);
+  // init adds no overlay (only with --devtools, which this suite does not pass): none in production or development
+  const prodOk = s.prod && !s.prod.error && s.prod.modelReady && s.prod.fetchWrapped && !s.prod.devtools && s.prod.errors.length === 0;
+  const devOk = !s.dev || (!s.dev.error && !s.dev.devtools && s.dev.fetchWrapped && s.dev.errors.length === 0);
   const tokenOk = s.init?.noProject && (!FRAMEWORKS[r.name].token || s.init?.tokenWritten);
   const ok = s.init?.ok && tokenOk && s.idempotent?.ok && (s.build === undefined || s.build.ok) && prodOk && devOk && s.remove?.ok && s.remove?.restored;
   return ok ? "PASS" : "FAIL";

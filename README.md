@@ -58,9 +58,9 @@ To add only the runtime, with no account:
 npx @genclass/runtime@beta init   # finds your framework and shows the diff before it writes anything
 ```
 
-Once you approve, `init` installs the package, adds one import first in your entry file (plus a line that loads the
-devtools overlay in development only) and creates your app's dashboard token (`--no-token` skips it; every flag:
-[INSTALL.md](docs/runtime/INSTALL.md)).
+Once you approve, `init` installs the package, adds one import first in your entry file and creates your app's
+dashboard token (`--no-token` skips it; every flag: [INSTALL.md](docs/runtime/INSTALL.md)). It draws nothing on
+your pages.
 
 Or by hand: `npm install @genclass/runtime@beta`, then first in your entry file (any bundler; Next.js 15.3 or later:
 `instrumentation-client.ts`, earlier versions: a client component in the root layout or `pages/_app`):
@@ -157,7 +157,7 @@ The full tables, with every false-intervention rate next to its recall, are unde
 - Then possibly nothing for a while. Observe mode reports only salient situations (a response landing over newer
   data, a repeat, a failure streak, a broken relation, an error), and the first response of each kind after a page
   load is never a delivery decision: the runtime first has to see what that request writes.
-- The devtools overlay: `Alt+Shift+G` on localhost (the `init` command loads it in development only).
+- Nothing on the page itself: GenClass draws nothing there.
 - The first-visit cost, measured on one pilot app with runtime 0.1.0-beta.3 and model 0.2.0
   ([RESULTS.md](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/RESULTS.md) §17): about 13 MB
   downloaded from jsDelivr on WASM (12.7 MB measured, with the q8 model at 9.45 MB as recorded, ONNX Runtime's wasm
@@ -327,7 +327,7 @@ very heavy page can cause a long task, which the runtime records as a `perf` eve
   Sentry, PostHog, Datadog, Slack or a signed webhook.
 - **Product analytics.** Analytics count what users do; GenClass reports what the app got wrong while they did it.
 - **Tests and linters.** These bugs depend on response order and user timing. A test on a fast, ordered network can
-  pass while production shows the bug. Use GenClass next to your tests, in development (the devtools overlay) and in
+  pass while production shows the bug. Use GenClass next to your tests, in development (the console) and in
   production.
 - **AbortController, request ids, TanStack Query or SWR deduplication, idempotency keys.** These are the fixes, and
   they work where they are used. GenClass reports places where one is missing; in `guard` it can discard a stale
@@ -511,7 +511,7 @@ a new tag and regenerated data (`training/curriculum/rt.py` mirrors the renderer
 | [`packages/mcp`](packages/mcp) | `@genclass/mcp` (`0.2.0` on npm), the MCP server for coding agents: pages connect through `@genclass/runtime/agent`; the agent gets findings in causal order, replays, explore verdicts, generated regression tests and, with `genclass_scan`, the page audit ([AGENT.md](docs/runtime/AGENT.md)). [README](packages/mcp/README.md) · [CHANGELOG](packages/mcp/CHANGELOG.md) |
 | [`packages/playwright`](packages/playwright) | `@genclass/playwright` (unreleased), GenClass for Playwright: a fixture that puts the runtime on every page under test (observe mode, seeded network chaos with `page.route`, the model skipped by default) and writes one race file per test, and a reporter that turns those files into one markdown report for the pull request, with the evidence line and what reproduced across seeds. [README](packages/playwright/README.md) |
 | [`packages/nuxt`](packages/nuxt), [`packages/astro`](packages/astro) | `@genclass/nuxt` and `@genclass/astro` (unreleased): the runtime as a Nuxt module and as an Astro integration, one line in the framework's config, with options for the mode, the token, telemetry and the devtools overlay; browser only. [Nuxt README](packages/nuxt/README.md) · [Astro README](packages/astro/README.md) |
-| [`packages/sv`](packages/sv) | `@genclass/sv` (unreleased), a community add-on for the Svelte CLI: `npx sv add @genclass` sets up GenClass in a SvelteKit app (the dependency, its import first in `src/hooks.client`, the devtools overlay in development). [README](packages/sv/README.md) |
+| [`packages/sv`](packages/sv) | `@genclass/sv` (unreleased), a community add-on for the Svelte CLI: `npx sv add @genclass` sets up GenClass in a SvelteKit app (the dependency and its import first in `src/hooks.client`). [README](packages/sv/README.md) |
 | [`docs/runtime`](docs/runtime) | [Docs index](docs/runtime/README.md) · [Results](docs/runtime/RESULTS.md) · [Coding agents](docs/runtime/AGENT.md) · [API](docs/runtime/API.md) · [Architecture](docs/runtime/ARCHITECTURE.md) · [Build contract](docs/runtime/CONTRACT.md) · [Threat model](docs/runtime/THREAT-MODEL.md) |
 | [`compat`](compat), [`templates`](templates) | Framework compatibility matrix (7 apps, 15 data layers, every mode; [RESULTS.md](compat/RESULTS.md)) and eight starter templates with the one line (React + Vite, Next.js, Vue + Vite, SvelteKit, Astro, Nuxt, React Router, Angular; [templates/README.md](templates/README.md)) |
 | [`demos`](demos), [`bench`](bench) | Six demo apps (typeahead, autosave, checkout, flaky dashboard, live kanban, real-time decisions) with a Service Worker chaos backend and Playwright trials; [`bench/heal`](bench/heal) runs them per mode, [`bench/visual`](bench/visual) measures the visual checks |

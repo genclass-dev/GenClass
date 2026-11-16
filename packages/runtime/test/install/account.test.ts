@@ -346,7 +346,7 @@ describe("connect: the app in this folder and an app of the account", () => {
     expect(r.code, r.out).toBe(0);
     expect(routes(r.calls)).toEqual(["GET /api/me", "POST /api/account/projects"]);
     expect(configOf(dir)).toContain(`token: "${NEW_TOKEN}"`);
-    expect(readFileSync(join(dir, "src/main.ts"), "utf8").split("\n").slice(0, 2)).toEqual([`import "./genclass.config"; // genclass:init`, `import genclass from "@genclass/runtime/auto"; // genclass:init`]);
+    expect(readFileSync(join(dir, "src/main.ts"), "utf8").split("\n").slice(0, 2)).toEqual([`import "./genclass.config"; // genclass:init`, `import "@genclass/runtime/auto"; // genclass:init`]);
   });
 
   it("a setup made by init --sink keeps its sinks when connect adds the token", () => {

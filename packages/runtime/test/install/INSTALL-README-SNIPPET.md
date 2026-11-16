@@ -9,7 +9,7 @@ npx @genclass/runtime@beta init
 ```
 
 It finds your framework and package manager, installs `@genclass/runtime`, and adds one import as the first line of
-your entry file, plus a line that loads the devtools overlay in development only. It shows the diff and asks before
+your entry file. It draws nothing on your pages (the devtools overlay only with `--devtools`). It shows the diff and asks before
 writing anything. Running it again changes nothing; running it with another `--mode` switches the import it added to
 that mode. It sets up observe mode (reports only, never changes anything) unless you pass `--mode guard` or `--mode heal`.
 
@@ -20,7 +20,7 @@ npx @genclass/runtime@beta init --dry-run        # show the diff, write nothing
 npx @genclass/runtime@beta remove                # undo exactly what init added (refuses if you edited those lines)
 ```
 
-Other flags: `--no-install` (don't run the package manager), `--no-devtools`, `--cwd <dir>`, `--cdn <url>` and
+Other flags: `--no-install` (don't run the package manager), `--devtools`, `--cwd <dir>`, `--cdn <url>` and
 `--no-sri` and `--sync` (plain HTML: the tag is written with `defer` unless `--sync`), `remove --keep-package`.
 
 `init` only edits browser apps: a project whose only build tool is esbuild, rollup, parcel or webpack needs an
@@ -76,7 +76,7 @@ like:
 **3. One script tag** (no build step)
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.1/dist/genclass.global.min.js" data-mode="observe" data-devtools="local"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.1/dist/genclass.global.min.js" data-mode="observe"></script>
 ```
 
 Put it first in `<head>` so it sees the page's first requests. It sets `window.GenClass` (`GenClass.runtime`,

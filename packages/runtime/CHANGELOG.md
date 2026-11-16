@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **`init` no longer adds the devtools overlay** (owner, 2026-11-16: nothing GenClass sets up is drawn on a page;
+  findings go to the console, the dashboard and the terminal). The overlay is opt-in: `init --devtools` adds the
+  dev-only line as before. `--no-devtools` is still accepted and changes nothing. Running `init` again on a setup
+  that still loads the overlay (made by `init` 0.3.0-beta.6 or earlier) names the file and says what to delete: the
+  statement that imports `@genclass/runtime/devtools`, or `data-devtools="local"` on a script tag; `remove` still
+  takes out the rest. The hand-install help shows the script tag without `data-devtools`. The overlay itself, and
+  `mountDevtools`, `devtools` / `data-devtools` in the page configuration, are unchanged (`bin/lib/init.mjs`).
+
 - `scan --hosted`: on a computer signed in to genclass.dev (`login`), the page check is asked on genclass.dev with
   that sign-in, so an account with Pro gets the whole report (since 2026-11-15 the page check's score and findings
   are Pro's). Without Pro the report is the free view: how many problems and how serious, one finding in full, and

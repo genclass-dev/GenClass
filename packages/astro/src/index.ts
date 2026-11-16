@@ -4,15 +4,16 @@
 // that sets `window.GENCLASS_CONFIG` (token, telemetry). Invariants: browser only (a page script never runs on the
 // server, and the integration itself runs at config time only); GenClass behaves exactly as with the one-line install
 // (observe by default, automatic state discovery for React islands, the `?genclass=off` kill switch, a
-// `<meta name="genclass">` tag still read); the devtools overlay line is injected in `astro dev` only unless
-// `devtools: "always"` asks for it. The generated code is pure (pageScript, configSource), so the tests check it exactly.
+// `<meta name="genclass">` tag still read); nothing is drawn on the page by default (`devtools: "never"`): the
+// overlay line is injected only when `devtools` asks for it ("dev" under `astro dev`, "always"). The generated code is
+// pure (pageScript, configSource), so the tests check it exactly.
 
 import type { AstroIntegration } from "astro";
 
 /** Options of `genclass(options)` in astro.config. */
 export interface GenClassOptions {
   /**
-   * "observe" (default): GenClass reports what it finds (one console line per finding, the devtools overlay) and
+   * "observe" (default): GenClass reports what it finds (one console line per finding) and
    * never holds, delays or changes anything. "guard": it may also take small, reversible actions (drop a stale
    * response, reuse a duplicate's result) when its model is confident.
    */
@@ -29,8 +30,9 @@ export interface GenClassOptions {
    */
   telemetry?: boolean;
   /**
-   * The devtools overlay: "dev" (default) loads it in `astro dev` only, "always" also in production builds, "never"
-   * not at all. The overlay is a lazy chunk that is never part of the first load.
+   * The devtools overlay: "never" (default) adds nothing that draws on the page; findings go to the browser console
+   * (and the dashboard with a token). "dev" loads the overlay in `astro dev` only, "always" also in production builds.
+   * The overlay is a lazy chunk that is never part of the first load.
    */
   devtools?: "dev" | "always" | "never";
 }
@@ -71,9 +73,9 @@ export function entryFor(mode: GenClassOptions["mode"]): string {
   return mode === "guard" ? "@genclass/runtime/auto/guard" : "@genclass/runtime/auto";
 }
 
-/** Whether the overlay loads: "always", or "dev" under `astro dev`. */
+/** Whether the overlay loads: "always", or "dev" under `astro dev`; never by default (unset or "never"). */
 export function overlayFor(devtools: GenClassOptions["devtools"], dev: boolean): boolean {
-  return devtools === "always" || ((devtools ?? "dev") === "dev" && dev);
+  return devtools === "always" || (devtools === "dev" && dev);
 }
 
 /** The virtual config module: sets window.GENCLASS_CONFIG. Keys already set on the page (a head script) win. */

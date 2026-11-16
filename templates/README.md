@@ -1,9 +1,8 @@
 # Starter templates
 
-Copy-paste starters with [`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime) already installed
-the recommended way (the one line, the dev-only devtools overlay). Each is a fresh app from the framework's own
-generator, trimmed to one page with a search box and a mock API that answers out of order, so you can see GenClass
-work within a minute.
+Copy-paste starters with [`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime) already installed the
+recommended way: the one line. Each is a fresh app from the framework's own generator, trimmed to one page with a
+search box and a mock API that answers out of order, so you can see GenClass work within a minute.
 
 | template | the one line goes in | run |
 |---|---|---|
@@ -25,10 +24,10 @@ cd my-app && npm install && npm run dev
 
 Every template:
 
-- **starts in observe mode**: GenClass reports what it finds (devtools overlay, one console line per finding) and
-  changes nothing. Switch the import to `@genclass/runtime/auto/guard` (in astro and nuxt: `mode: "guard"` in the
+- **starts in observe mode**: GenClass reports what it finds (one browser console line per finding) and changes
+  nothing. Switch the import to `@genclass/runtime/auto/guard` (in astro and nuxt: `mode: "guard"` in the
   integration's or module's options) to let it act when its model is confident;
-- **loads the devtools overlay in development only**;
+- **draws nothing on the page**: the devtools overlay is opt-in (each README shows how to turn it on);
 - **can be turned off per page load** with `?genclass=off` in the URL;
 - sends anonymous, redacted diagnostics by default; each README shows the one-line opt-out.
 

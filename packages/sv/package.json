@@ -1,7 +1,7 @@
 {
   "name": "@genclass/sv",
   "version": "0.1.0",
-  "description": "A community add-on for the Svelte CLI: npx sv add @genclass sets up GenClass in a SvelteKit app (the @genclass/runtime dependency, its import first in src/hooks.client, the devtools overlay in development). GenClass reports race conditions in the browser: stale responses, duplicate requests, failure storms.",
+  "description": "A community add-on for the Svelte CLI: npx sv add @genclass sets up GenClass in a SvelteKit app (the @genclass/runtime dependency and its import first in src/hooks.client; nothing drawn on the page). GenClass reports race conditions in the browser: stale responses, duplicate requests, failure storms.",
   "type": "module",
   "license": "Apache-2.0",
   "repository": {

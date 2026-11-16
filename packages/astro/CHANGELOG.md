@@ -6,9 +6,9 @@
   [`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime) the recommended way, in the browser only.
   In `astro:config:setup` it injects, as a `page` script on every page, the runtime's own zero-code entry
   (`@genclass/runtime/auto`, or `/auto/guard` for `mode: "guard"`); `token` and `telemetry` are written to
-  `window.GENCLASS_CONFIG` by a virtual module imported before the runtime. The devtools overlay loads under
-  `astro dev` only (`devtools: "dev"`, the default), also in builds with `"always"`, never with `"never"`. Nothing runs
-  on the server. `astro` (4 or later; tested with 7.4) and `@genclass/runtime` (`>=0.3.0-beta.1`, the newest
+  `window.GENCLASS_CONFIG` by a virtual module imported before the runtime. Nothing is drawn on the page by
+  default (`devtools: "never"`, owner, 2026-11-16); the devtools overlay is opt-in: `"dev"` loads it under `astro dev`
+  only, `"always"` also in builds. Nothing runs on the server. `astro` (4 or later; tested with 7.4) and `@genclass/runtime` (`>=0.3.0-beta.1`, the newest
   line: `npm install @genclass/runtime@beta`; npm's `latest`, 0.2.x, does not satisfy it) are peer dependencies. Keywords `astro-integration` and `withastro` for the integrations library and `astro add`.
 - The runtime modules the script imports are added to Vite's `optimizeDeps.include`: the injected script is a virtual
   module Vite's dependency scan does not see, and without this `astro dev` discovered them on the first page request

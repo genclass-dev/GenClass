@@ -6,13 +6,13 @@ way for Nuxt: the [`@genclass/nuxt`](https://www.npmjs.com/package/@genclass/nux
 
 ```bash
 npm install
-npm run dev                                     # http://localhost:3000, with the GenClass devtools overlay
-npm run build && node .output/server/index.mjs  # production build (no overlay)
+npm run dev                                     # http://localhost:3000
+npm run build && node .output/server/index.mjs  # production build
 ```
 
-Type a city quickly in the search box. The API route (`server/api/search.get.ts`) answers in a random 50-900 ms, so
-an older answer can overwrite a newer one: the classic stale typeahead. Open the overlay (bottom right) to see what
-GenClass noticed; the browser console has one plain-English line per finding.
+Type a city quickly in the search box. The API route (`server/api/search.get.ts`) answers in a random 50-900 ms, so an
+older answer can overwrite a newer one: the classic stale typeahead. Open the browser console to see what GenClass
+noticed: one plain-English `[GenClass]` line per finding.
 
 ## The one line
 
@@ -41,15 +41,19 @@ stalls. Decisions that compare a late response with newer data already in your s
 | observe (default) | `genclass: {}` | reports what it finds; never holds, drops or changes anything |
 | guard | `genclass: { mode: "guard" }` | also prevents failures with small, reversible actions (reuse a duplicate's result, back off) when its model is confident |
 
-Start in observe, watch the overlay and the console for a while on real traffic, then switch to `guard`. Every action
-is logged with its evidence, and the overlay can undo it.
+Start in observe, watch the console for a while on real traffic, then switch to `guard`. Every action is logged with
+its evidence.
 
-## Devtools overlay
+## Devtools overlay (opt-in)
 
-The module loads the overlay in `nuxt dev` only (`devtools: "dev"`, the default); a production build carries no
-reference to it. `genclass: { devtools: "always" }` loads it in production too, `"never"` not at all. Nuxt's own
-devtools are turned off in this starter's `nuxt.config.ts` so the page shows one overlay; turn them back on if you
-like.
+The module draws nothing on the page. To see the devtools overlay under `nuxt dev` only, set the option in
+`nuxt.config.ts`:
+
+```ts
+genclass: { devtools: "dev" },
+```
+
+Nuxt's own devtools are off in this starter so the page shows only the app; turn them back on if you like.
 
 ## Turning it off
 

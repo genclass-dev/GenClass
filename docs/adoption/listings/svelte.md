@@ -28,8 +28,8 @@ on the form itself; check them when submitting.
 
 Longer description, if the form has one:
 
-> A community add-on for the Svelte CLI. `npx sv add @genclass` adds `@genclass/runtime`, imports it first in
-> `src/hooks.client`, and loads the GenClass overlay in development only. GenClass watches fetch, XHR, WebSocket,
+> A community add-on for the Svelte CLI. `npx sv add @genclass` adds `@genclass/runtime` and imports it first in
+> `src/hooks.client`; nothing is drawn on the page. GenClass watches fetch, XHR, WebSocket,
 > EventSource and user input in the browser and reports stale responses, duplicate requests, retries and failure
 > storms; it starts in observe mode, which never changes a request. Its model (about 13 MB, cached) is downloaded from
 > jsDelivr on a browser's first visit. The add-on writes GenClass's telemetry opt-out unless you choose to send

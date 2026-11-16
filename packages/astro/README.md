@@ -7,7 +7,7 @@ state, and reports them while they happen.
 GenClass is a browser library with a small local model (ONNX, in a Web Worker). It observes what your pages do at the
 network boundary (fetch, XHR, WebSocket, EventSource), user actions, timers and errors, and asks the model about the
 situations that matter: a response that arrives after newer data, two identical requests in flight, a request storm.
-In the default `observe` mode it reports (one console line per finding, the devtools overlay) and changes nothing;
+In the default `observe` mode it reports (one console line per finding; nothing is drawn on the page) and changes nothing;
 `guard` mode, opt-in, lets it drop a stale response or reuse a duplicate's result when the model is confident. It is
 Apache-2.0, runs on-device, and never sends page content unless you opt in. What it finds and how often, with the
 false-intervention rate next to every recall number, is in the runtime's
@@ -51,7 +51,7 @@ export default defineConfig({
     genclass({
       mode: "observe",     // or "guard"
       telemetry: false,    // no anonymous diagnostics
-      devtools: "dev",     // "always" | "never"
+      devtools: "never",   // the default: nothing drawn on the page; "dev" | "always" add the overlay
       token: "gc_...",     // your app's dashboard token (optional)
     }),
   ],
@@ -65,7 +65,7 @@ export default defineConfig({
 | `mode` | `"observe"`, `"guard"` | `"observe"` | `observe` reports what GenClass finds and never holds, delays or changes anything. `guard` also prevents failures with small, reversible actions (drop a stale response, reuse a duplicate's result) when the model is confident. The script imports `@genclass/runtime/auto` or `@genclass/runtime/auto/guard` accordingly. |
 | `token` | `"gc_..."` | none | Your app's token from [genclass.dev](https://genclass.dev) or `npx @genclass/runtime@beta login`; with telemetry on, findings also reach your dashboard. Needs `@genclass/runtime` 0.3.0 or later (0.2.x ignores it). |
 | `telemetry` | `true`, `false` | the runtime's default | Anonymous, redacted diagnostics to the GenClass maintainers ([TELEMETRY.md](https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md)). Unset: on from public hosts, off on localhost and private networks. `false`: off. `true`: an explicit opt-in that also sends from local hosts. |
-| `devtools` | `"dev"`, `"always"`, `"never"` | `"dev"` | The devtools overlay (detections, actions, the evidence behind each decision, a mode switch). `"dev"` loads it under `astro dev` only; a production build carries no reference to it. `"always"` loads it in production too. The overlay is a lazy chunk, never part of the first load. |
+| `devtools` | `"never"`, `"dev"`, `"always"` | `"never"` | The devtools overlay, opt-in. `"never"`: nothing is drawn on the page; findings go to the browser console (and to your dashboard with a `token`). `"dev"` loads the overlay under `astro dev` only, and a production build carries no reference to it; `"always"` loads it in production too. The overlay is a lazy chunk, never part of the first load. |
 
 `token` and `telemetry` are passed to the runtime as `window.GENCLASS_CONFIG`, the page configuration it documents, by
 a virtual module the script imports before the runtime. Everything else GenClass offers (`policy`, `sinks`, `routes`,

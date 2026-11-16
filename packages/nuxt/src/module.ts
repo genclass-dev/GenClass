@@ -3,8 +3,8 @@
 // imports before the runtime. Invariants: nothing runs on the server (the plugin is client-only, so the server build
 // never imports @genclass/runtime); the module only chooses the runtime's documented entry (`/auto` or `/auto/guard`)
 // and its documented page configuration (`window.GENCLASS_CONFIG`), so GenClass behaves exactly as with the one-line
-// install; the devtools overlay loads in `nuxt dev` only unless `devtools: "always"` asks for it. The generated code
-// is in source.ts, where the tests check it.
+// install; nothing is drawn on the page unless `devtools` asks for the overlay ("dev": `nuxt dev` only, "always").
+// The generated code is in source.ts, where the tests check it.
 
 import { addPluginTemplate, addTemplate, defineNuxtModule } from "@nuxt/kit";
 import { configSource, pageConfig, pluginSource, validate, type ModuleOptions } from "./source";
@@ -17,7 +17,7 @@ export default defineNuxtModule<ModuleOptions>({
     configKey: "genclass",
     compatibility: { nuxt: ">=3.17.0" },
   },
-  defaults: { mode: "observe", devtools: "dev" },
+  defaults: { mode: "observe", devtools: "never" },
   setup(options, nuxt) {
     validate(options);
     const cfg = pageConfig(options);

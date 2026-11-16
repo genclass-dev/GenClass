@@ -109,7 +109,7 @@ describe("init --sink: findings on the developer's own side", () => {
     expect(r.out).toMatch(/Findings\s+webhook:\/genclass \(--sink, written to src\/genclass\.config\.js\)/);
     expect(r.out).toContain("batched POSTs of the records to your endpoint");
     const after = roundTrip(dir, "--sink", "webhook:/genclass");
-    expect(after["src/main.js"].split("\n").slice(0, 2)).toEqual([`import "./genclass.config"; // genclass:init`, `import genclass from "@genclass/runtime/auto"; // genclass:init`]);
+    expect(after["src/main.js"].split("\n").slice(0, 2)).toEqual([`import "./genclass.config"; // genclass:init`, `import "@genclass/runtime/auto"; // genclass:init`]);
     expect(after["src/genclass.config.js"]).toContain(`globalThis.GENCLASS_CONFIG = { sinks: ["webhook:/genclass"] };`);
     expect(after["src/genclass.config.js"]).toContain("genclass:init start");
     expect(after["src/genclass.config.js"].split("\n").filter((l) => l.startsWith("import "))).toEqual([]);
@@ -200,7 +200,7 @@ describe("init --sink: findings on the developer's own side", () => {
     expect(r.out).toContain("sinks webhook:/genclass");
     const cfg = join(dir, "src/genclass.config.js");
     expect(readFileSync(cfg, "utf8")).toContain(`GENCLASS_CONFIG = { sinks: ["webhook:/genclass"] };`);
-    expect(readFileSync(join(dir, "src/main.js"), "utf8").split("\n").slice(0, 2)).toEqual([`import "./genclass.config"; // genclass:init`, `import genclass from "@genclass/runtime/auto"; // genclass:init`]);
+    expect(readFileSync(join(dir, "src/main.js"), "utf8").split("\n").slice(0, 2)).toEqual([`import "./genclass.config"; // genclass:init`, `import "@genclass/runtime/auto"; // genclass:init`]);
     expect(cli(dir, "init", "--yes", "--no-install", "--no-telemetry").code).toBe(0);
     expect(readFileSync(cfg, "utf8")).toContain(`GENCLASS_CONFIG = { telemetry: false, sinks: ["webhook:/genclass"] };`);
     expect(cli(dir, "init", "--yes", "--no-install", "--sink", "console-json,webhook:/collect").code).toBe(0);
@@ -212,7 +212,7 @@ describe("init --sink: findings on the developer's own side", () => {
 
   it("plain HTML: data-sink on the script tag (what the tag parses back); Astro: sink=a+b in the meta line (what the meta parser reads back)", () => {
     const html = roundTrip(project({ "index.html": PAGE }), "--sink", "console-json,webhook:/genclass", "--no-sri");
-    expect(html["index.html"]).toContain(` data-devtools="local" data-sink="console-json,webhook:/genclass"></script> <!-- genclass:init -->`);
+    expect(html["index.html"]).toContain(` defer data-sink="console-json,webhook:/genclass"></script> <!-- genclass:init -->`);
     expect(fromDataset({ sink: "console-json,webhook:/genclass" })).toEqual({ sinks: ["console-json", "webhook:/genclass"] });
     const dir = project({ "index.html": PAGE });
     cli(dir, "init", "--yes", "--no-install", "--sink", "console-json", "--no-sri");
@@ -220,7 +220,7 @@ describe("init --sink: findings on the developer's own side", () => {
     expect(readFileSync(join(dir, "index.html"), "utf8")).toContain(`data-sink="webhook:/genclass"`);
     expect(readFileSync(join(dir, "index.html"), "utf8")).not.toContain(`data-sink="console-json"`);
     const layout = roundTrip(astro(), "--sink", "console-json,webhook:/genclass")["src/layouts/Layout.astro"];
-    expect(layout).toMatch(/\t\t<meta name="genclass" content="sink=console-json\+webhook:\/genclass" \/> <!-- genclass:init -->\n\t\t<script>import genclass/);
+    expect(layout).toMatch(/\t\t<meta name="genclass" content="sink=console-json\+webhook:\/genclass" \/> <!-- genclass:init -->\n\t\t<script>import "@genclass\/runtime\/auto";/);
     const content = /content="([^"]*)"/.exec(layout)![1];
     expect(readMetaConfig({ querySelectorAll: () => [{ getAttribute: () => content }] })).toEqual({ sinks: ["console-json", "webhook:/genclass"] });
     const withTelemetry = roundTrip(astro(), "--no-telemetry", "--sink", "console-json")["src/layouts/Layout.astro"];

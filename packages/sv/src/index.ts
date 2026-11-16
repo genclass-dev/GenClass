@@ -1,9 +1,9 @@
 // @genclass/sv: a community add-on for the Svelte CLI. `npx sv add @genclass` (or `npx sv create --add @genclass`)
 // sets GenClass up in a SvelteKit app the way the GenClass docs and `npx @genclass/runtime init` do:
 //   - `@genclass/runtime` as a dependency, at the release the GenClass README documents;
-//   - `import genclass from "@genclass/runtime/auto"` first in src/hooks.client.(ts|js) (SvelteKit runs client hooks
-//     in the browser before the app starts; created when missing, existing code kept), `/auto/guard` for mode guard;
-//   - the devtools overlay behind `import.meta.env.DEV`, so it is never in a production bundle;
+//   - `import "@genclass/runtime/auto"` first in src/hooks.client.(ts|js) (SvelteKit runs client hooks in the
+//     browser before the app starts; created when missing, existing code kept), `/auto/guard` for mode guard;
+//   - nothing drawn on the page: findings go to the browser console (and the dashboard), never an overlay;
 //   - unless the developer opts in, the telemetry opt-out in src/app.html (`<meta name="genclass" content="telemetry=off" />`).
 // Running it again changes nothing, or only what a different answer changes. All edits are in edit.ts; everything
 // is marked so `npx @genclass/runtime remove` undoes it. The add-on never runs code in the app and sends nothing.
@@ -81,7 +81,7 @@ export default defineAddon({
   nextSteps: ({ options, packageManager, directory }) => {
     const dev = packageManager === "deno" ? "deno task dev" : `${packageManager ?? "npm"} run dev`;
     return [
-      `Run ${color.command(dev)}: GenClass reports in the browser console, and in development its overlay sits bottom right (${color.command("Alt+Shift+G")}).`,
+      `Run ${color.command(dev)}: GenClass reports in the browser console, one [GenClass] line per finding. It draws nothing on your pages.`,
       options.mode === "guard"
         ? `Mode guard: GenClass may act (reuse a duplicate's result, back off) when its model is confident; every action is logged with its evidence.`
         : `Mode observe: GenClass reports only and never holds, drops or changes a request.`,
