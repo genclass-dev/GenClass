@@ -20,15 +20,16 @@ function readAll(dir: string, re: RegExp): string {
 }
 
 describe("source: the plugin and config modules the module generates", () => {
-  it("defaults: /auto, no config import, the overlay in development only", () => {
-    const dev = pluginSource({}, true);
-    expect(dev).toContain('import genclass from "@genclass/runtime/auto";');
-    expect(dev).not.toContain("#build/genclass.config.mjs");
-    expect(dev).toContain('import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));');
-    const prod = pluginSource({}, false);
-    expect(prod).toContain('import "@genclass/runtime/auto";');
-    expect(prod).not.toContain("devtools");
-    expect(prod).toContain("export default defineNuxtPlugin(() => {});");
+  it("defaults: /auto, no config import, and nothing drawn on the page (no overlay, not even in nuxt dev)", () => {
+    for (const dev of [true, false]) {
+      const plugin = pluginSource({}, dev);
+      expect(plugin).toContain('import "@genclass/runtime/auto";');
+      expect(plugin).not.toContain("#build/genclass.config.mjs");
+      expect(plugin).not.toContain("devtools");
+      expect(plugin).toContain("export default defineNuxtPlugin(() => {});");
+    }
+    // the module's own default says the same (owner, 2026-11-16: nothing GenClass sets up is drawn on a page)
+    expect(readFileSync(fileURLToPath(new URL("../src/module.ts", import.meta.url)), "utf8")).toContain('defaults: { mode: "observe", devtools: "never" }');
   });
 
   it("mode guard imports /auto/guard", () => {
@@ -38,12 +39,17 @@ describe("source: the plugin and config modules the module generates", () => {
     expect(pluginSource({ mode: "guard" }, false)).toContain('import "@genclass/runtime/auto/guard";');
   });
 
-  it("devtools: always loads the overlay in production too, never not even in development", () => {
+  it("devtools (opt-in): dev loads the overlay in development only, always in production too; unset or never not at all", () => {
     expect(overlayFor("always", false)).toBe(true);
     expect(overlayFor("never", true)).toBe(false);
     expect(overlayFor("dev", true)).toBe(true);
     expect(overlayFor("dev", false)).toBe(false);
-    expect(overlayFor(undefined, true)).toBe(true);
+    expect(overlayFor(undefined, true)).toBe(false);
+    expect(overlayFor(undefined, false)).toBe(false);
+    const dev = pluginSource({ devtools: "dev" }, true);
+    expect(dev).toContain('import genclass from "@genclass/runtime/auto";');
+    expect(dev).toContain('import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));');
+    expect(pluginSource({ devtools: "dev" }, false)).not.toContain("devtools");
     expect(pluginSource({ devtools: "always" }, false)).toContain("mountDevtools");
     expect(pluginSource({ devtools: "never" }, true)).not.toContain("devtools");
   });

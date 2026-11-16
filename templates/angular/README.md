@@ -6,21 +6,20 @@ first in `src/main.ts`.
 
 ```bash
 npm install
-npm run dev                          # http://localhost:4200, with the GenClass devtools overlay
-npm run build && npm run serve:ssr   # production build (no overlay), http://localhost:4000
+npm run dev                          # http://localhost:4200
+npm run build && npm run serve:ssr   # production build, http://localhost:4000
 ```
 
 Type a city quickly in the search box. The API (`/api/search` in `src/server.ts`, the Express server Angular
 generates) answers in a random 50-900 ms, so an older answer can overwrite a newer one: the classic stale typeahead.
-Open the overlay (bottom right) to see what GenClass noticed; the browser console has one plain-English line per
-finding.
+Open the browser console to see what GenClass noticed: one plain-English `[GenClass]` line per finding.
 
 ## The one line
 
 `src/main.ts` starts with:
 
 ```ts
-import genclass from "@genclass/runtime/auto";
+import "@genclass/runtime/auto";
 ```
 
 It goes first so GenClass is installed before Angular bootstraps and before your app's first requests. GenClass runs
@@ -46,18 +45,20 @@ Decisions that compare a late response with newer data already in your state nee
 | guard | `@genclass/runtime/auto/guard` | also prevents failures with small, reversible actions (reuse a duplicate's result, back off) when its model is confident |
 | heal (experimental) | `@genclass/runtime/auto/heal` | also retries, serves cached data, blocks a runaway request |
 
-Start in observe, watch the overlay and the console for a while on real traffic, then switch the import to
-`/auto/guard`. Every action is logged with its evidence, and the overlay can undo it.
+Start in observe, watch the console for a while on real traffic, then switch the import to `/auto/guard`. Every action
+is logged with its evidence.
 
-## Devtools overlay
+## Devtools overlay (opt-in)
 
-The last line of `src/main.ts` loads the overlay in development only:
+The template draws nothing on the page. To see the devtools overlay while you develop, name the import and add the
+overlay line at the end of `src/main.ts`:
 
 ```ts
+import genclass from "@genclass/runtime/auto";
+import { isDevMode } from "@angular/core";
+// ...
 if (isDevMode()) import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));
 ```
-
-`isDevMode()` is false in a production build, so the line is dropped from it.
 
 ## Turning it off
 

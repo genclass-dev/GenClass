@@ -33,17 +33,17 @@ const apply = (content: string, edit: (c: string) => string | false) => {
 };
 
 describe("new client hooks file", () => {
-  it("is one marked block with the /auto import and the dev-only overlay", () => {
+  it("is one marked block with the /auto import and nothing that draws on the page (no devtools overlay)", () => {
     expect(newHooksFile("observe")).toBe(
       [
         "// genclass:init start: GenClass Runtime, added by `npx sv add @genclass` (`npx @genclass/runtime remove` takes it out)",
-        'import genclass from "@genclass/runtime/auto";',
-        'if (import.meta.env.DEV) import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));',
+        'import "@genclass/runtime/auto";',
         "// genclass:init end",
         "",
       ].join("\n"),
     );
-    expect(newHooksFile("guard")).toContain('import genclass from "@genclass/runtime/auto/guard";');
+    expect(newHooksFile("guard")).toContain('import "@genclass/runtime/auto/guard";');
+    expect(newHooksFile("guard")).not.toMatch(/devtools/);
   });
 
   it("is deleted whole by `npx @genclass/runtime remove`", () => {
@@ -60,28 +60,24 @@ describe("new client hooks file", () => {
   it("switches mode in place, keeping the block valid for remove", () => {
     const guard = editHooks(newHooksFile("observe"), "guard");
     expect(guard).not.toBe(false);
-    expect(guard).toContain('"@genclass/runtime/auto/guard"');
-    expect(guard).not.toContain('"@genclass/runtime/auto";');
+    // (with no other string in the block, the printer picks its own quotes; remove compares without them)
+    expect(guard).toMatch(/import ["']@genclass\/runtime\/auto\/guard["'];/);
+    expect(guard).not.toMatch(/@genclass\/runtime\/auto["']/);
     expect(guard).toContain("// genclass:init start");
     expect(guard).toContain("// genclass:init end");
     expect(planRemoval(guard as string)).toEqual({ text: "", problems: [] });
     // and back
     const observe = editHooks(guard as string, "observe");
-    expect(observe).toContain('"@genclass/runtime/auto"');
+    expect(observe).toMatch(/import ["']@genclass\/runtime\/auto["'];/);
     expect(planRemoval(observe as string)).toEqual({ text: "", problems: [] });
   });
 });
 
 describe("existing client hooks file", () => {
-  it("gets the /auto import first and the overlay line last, each marked, and keeps the code", () => {
+  it("gets the /auto import first, marked, keeps the code and adds nothing else (no overlay line)", () => {
     const out = editHooks(SENTRY_HOOKS, "observe") as string;
-    const lines = out.split("\n");
-    expect(lines[0]).toBe("import genclass from '@genclass/runtime/auto'; // genclass:init");
-    expect(out).toContain(SENTRY_HOOKS.trimEnd().split("\n").slice(0, 2).join("\n"));
-    expect(out).toContain("export const handleError = handleErrorWithSentry();");
-    expect(out.trimEnd().split("\n").at(-1)).toBe(
-      "if (import.meta.env.DEV) import('@genclass/runtime/devtools').then((d) => d.mountDevtools(genclass)); // genclass:init",
-    );
+    expect(out).toBe(`import '@genclass/runtime/auto'; // genclass:init\n${SENTRY_HOOKS}`);
+    expect(out).not.toMatch(/devtools/);
   });
 
   it("is idempotent: a second run with the same mode writes nothing and never duplicates an import", () => {
@@ -89,7 +85,7 @@ describe("existing client hooks file", () => {
     expect(editHooks(once, "observe")).toBe(false);
     const guard = editHooks(once, "guard") as string;
     expect(guard.match(/@genclass\/runtime\/auto/g)).toHaveLength(1);
-    expect(guard.match(/@genclass\/runtime\/devtools/g)).toHaveLength(1);
+    expect(guard).not.toMatch(/devtools/);
     expect(guard).toContain("'@genclass/runtime/auto/guard'");
     expect(editHooks(guard, "guard")).toBe(false);
   });
@@ -106,43 +102,34 @@ describe("existing client hooks file", () => {
     }
   });
 
-  it("binds the runtime on the README's one-line import instead of adding a second import", () => {
+  it("leaves the README's one-line import as it is (no second import, no binding added)", () => {
     const src = 'import "@genclass/runtime/auto";\nimport { dev } from "$app/environment";\n';
-    const out = editHooks(src, "observe") as string;
-    expect(out.match(/@genclass\/runtime\/auto/g)).toHaveLength(1);
-    expect(out.split("\n")[0]).toBe('import genclass from "@genclass/runtime/auto";');
-    expect(out).toContain('import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass))');
-    expect(editHooks(out, "observe")).toBe(false);
+    expect(editHooks(src, "observe")).toBe(false);
+    const guard = editHooks(src, "guard") as string;
+    expect(guard).toBe('import "@genclass/runtime/auto/guard";\nimport { dev } from "$app/environment";\n');
   });
 
-  it("quotes both added lines the way the file quotes its strings", () => {
+  it("quotes the added import the way the file quotes its strings", () => {
     const single = "/** @type {import('@sveltejs/kit/hooks').HandleClientError} */\nexport const handleError = () => ({ message: 'Oops' });\n";
-    const out = editHooks(single, "observe") as string;
-    expect(out).toContain("import genclass from '@genclass/runtime/auto'; // genclass:init");
-    expect(out).toContain("import('@genclass/runtime/devtools')");
+    expect(editHooks(single, "observe") as string).toContain("import '@genclass/runtime/auto'; // genclass:init");
     const double = editHooks('export const handleError = () => ({ message: "Oops" });\n', "observe") as string;
-    expect(double).toContain('import genclass from "@genclass/runtime/auto"; // genclass:init');
-    expect(double).toContain('import("@genclass/runtime/devtools")');
+    expect(double).toContain('import "@genclass/runtime/auto"; // genclass:init');
   });
 
-  it("uses the name an existing default import already has", () => {
+  it("keeps the name an existing default import already has", () => {
     const src = "import rt from '@genclass/runtime/auto/observe';\n\nexport const init = () => {};\n";
-    const out = editHooks(src, "observe") as string;
-    expect(out).toContain("import rt from '@genclass/runtime/auto/observe';");
-    expect(out).toContain("d.mountDevtools(rt)");
+    expect(editHooks(src, "observe")).toBe(false);
+    expect(editHooks(src, "guard")).toBe("import rt from '@genclass/runtime/auto/guard';\n\nexport const init = () => {};\n");
   });
 
-  it("leaves the GenClass SvelteKit template's hooks file alone (it already has the import and the overlay)", () => {
-    const template = `// GenClass, in the browser only.
-import genclass from '@genclass/runtime/auto';
-
-// The devtools overlay, in development only (not in your production bundle).
-if (import.meta.env.DEV) import('@genclass/runtime/devtools').then((d) => d.mountDevtools(genclass));
-`;
+  it("leaves the GenClass SvelteKit template's hooks file alone, and a devtools line the developer wrote stays as it is", () => {
+    const template = readFileSync(new URL("../../../templates/sveltekit/src/hooks.client.ts", import.meta.url), "utf8");
+    expect(template).not.toMatch(/devtools/);
     expect(editHooks(template, "observe")).toBe(false);
-    const guard = editHooks(template, "guard") as string;
-    expect(guard).toContain("import genclass from '@genclass/runtime/auto/guard';");
-    expect(guard.match(/devtools/g)).toHaveLength(2); // the comment and the one import
+    expect(editHooks(template, "guard") as string).toContain("import '@genclass/runtime/auto/guard';");
+    const own = `import genclass from '@genclass/runtime/auto';\n\nif (import.meta.env.DEV) import('@genclass/runtime/devtools').then((d) => d.mountDevtools(genclass));\n`;
+    expect(editHooks(own, "observe")).toBe(false);
+    expect(editHooks(own, "guard")).toBe(own.replace("/auto'", "/auto/guard'"));
   });
 
   it("is recognised by init's mode switch", () => {

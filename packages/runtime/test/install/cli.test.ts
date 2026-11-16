@@ -104,7 +104,7 @@ const pkg = (deps: Record<string, string>, extra: Record<string, unknown> = {}) 
 const VITE_HTML = `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <title>Vite</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.tsx"></script>\n  </body>\n</html>\n`;
 
 describe("init / remove on fixture projects", () => {
-  it("Vite + React (TS, single quotes, no semicolons): one import on top, dev overlay at the end", () => {
+  it("Vite + React (TS, single quotes, no semicolons): one import on top; with --devtools, the dev overlay at the end", () => {
     const dir = project({
       "package.json": pkg({ react: "^19.0.0", vite: "^7.0.0", "@vitejs/plugin-react": "^5" }),
       "tsconfig.json": "{}\n",
@@ -117,13 +117,13 @@ describe("init / remove on fixture projects", () => {
     expect(r.out).toContain("Vite + React");
     expect(r.out).toContain("Dry run");
     expect(r.out).toContain("useGenClassState");
-    const after = roundTrip(dir);
+    const after = roundTrip(dir, "--devtools");
     const main = after["src/main.tsx"];
     expect(main.split("\n")[0]).toBe(`import genclass from '@genclass/runtime/auto' // genclass:init`);
     expect(main.trimEnd().split("\n").pop()).toBe(`if (import.meta.env.DEV) import('@genclass/runtime/devtools').then((d) => d.mountDevtools(genclass)) // genclass:init`);
   });
 
-  it("--mode observe uses /auto/observe; --no-devtools adds a bare import only", () => {
+  it("--mode observe uses /auto/observe; --no-devtools (a no-op since the overlay is opt-in) adds a bare import only", () => {
     const dir = project({ "package.json": pkg({ vue: "^3", vite: "^7" }), "index.html": VITE_HTML.replace("main.tsx", "main.js"), "src/main.js": `import { createApp } from "vue";\nimport App from "./App.vue";\n\ncreateApp(App).mount("#app");\n` });
     const after = roundTrip(dir, "--mode", "observe", "--no-devtools");
     expect(after["src/main.js"]).toBe(`import "@genclass/runtime/auto/observe"; // genclass:init\nimport { createApp } from "vue";\nimport App from "./App.vue";\n\ncreateApp(App).mount("#app");\n`);
@@ -145,7 +145,7 @@ describe("init / remove on fixture projects", () => {
       "src/app/layout.tsx": `export default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang="en">\n      <body>{children}</body>\n    </html>\n  );\n}\n`,
       "src/app/page.tsx": `export default function Page() { return <main>hi</main>; }\n`,
     });
-    const after = roundTrip(dir);
+    const after = roundTrip(dir, "--devtools");
     const f = after["src/instrumentation-client.ts"];
     expect(f).toContain(`import genclass from "@genclass/runtime/auto";`);
     expect(f).toContain(`if (process.env.NODE_ENV === "development") {`);
@@ -172,7 +172,7 @@ describe("init / remove on fixture projects", () => {
       "pages/_app.js": `import "../styles/globals.css";\n\nexport default function App({ Component, pageProps }) {\n  return <Component {...pageProps} />;\n}\n`,
       "pages/index.js": `export default function Home() { return null; }\n`,
     });
-    const a = roundTrip(withApp);
+    const a = roundTrip(withApp, "--devtools");
     expect(a["pages/_app.js"]).toContain(`typeof window !== "undefined"`);
     const noApp = project({ "package.json": pkg({ next: "14.2.0" }), "pages/index.js": `export default function Home() { return null; }\n` });
     const b = roundTrip(noApp);
@@ -181,9 +181,9 @@ describe("init / remove on fixture projects", () => {
 
   it("SvelteKit: creates src/hooks.client.ts, or edits an existing one", () => {
     const dir = project({ "package.json": pkg({ "@sveltejs/kit": "^2" }), "tsconfig.json": "{}\n", "src/routes/+page.svelte": "<h1>hi</h1>\n" });
-    expect(roundTrip(dir)["src/hooks.client.ts"]).toContain("import.meta.env.DEV");
+    expect(roundTrip(dir, "--devtools")["src/hooks.client.ts"]).toContain("import.meta.env.DEV");
     const dir2 = project({ "package.json": pkg({ "@sveltejs/kit": "^2" }), "src/hooks.client.js": `export const handleError = ({ error }) => console.error(error);` });
-    const after = roundTrip(dir2); // no final newline: restored exactly
+    const after = roundTrip(dir2, "--devtools"); // no final newline: restored exactly
     expect(after["src/hooks.client.js"].split("\n")[0]).toBe(`import genclass from "@genclass/runtime/auto"; // genclass:init`);
   });
 
@@ -191,7 +191,7 @@ describe("init / remove on fixture projects", () => {
     const n3 = project({ "package.json": pkg({ nuxt: "^3.13.0" }), "tsconfig.json": "{}\n", "app.vue": "<template><div/></template>\n" });
     expect(roundTrip(n3)["plugins/genclass.client.ts"]).toContain("defineNuxtPlugin");
     const n4 = project({ "package.json": pkg({ nuxt: "^4.0.0" }), "tsconfig.json": "{}\n", "app/app.vue": "<template><div/></template>\n" });
-    expect(roundTrip(n4)["app/plugins/genclass.client.ts"]).toContain("import.meta.dev");
+    expect(roundTrip(n4, "--devtools")["app/plugins/genclass.client.ts"]).toContain("import.meta.dev");
     // the plugins/ directory init created is gone again
     expect(() => statSync(join(n4, "app/plugins"))).toThrow();
   });
@@ -202,18 +202,18 @@ describe("init / remove on fixture projects", () => {
       "src/layouts/Layout.astro": `---\nconst { title } = Astro.props;\n---\n<html>\n\t<head>\n\t\t<title>{title}</title>\n\t</head>\n\t<body><slot /></body>\n</html>\n`,
       "src/pages/index.astro": `---\nimport Layout from "../layouts/Layout.astro";\n---\n<Layout title="x"><h1>hi</h1></Layout>\n`,
     });
-    const after = roundTrip(dir);
+    const after = roundTrip(dir, "--devtools");
     expect(after["src/layouts/Layout.astro"]).toContain(`\t\t<script>import genclass from "@genclass/runtime/auto"; if (import.meta.env.DEV)`);
     const one = project({ "package.json": pkg({ astro: "^5" }), "src/pages/index.astro": `<html><head><title>x</title></head><body>hi</body></html>\n` });
     expect(roundTrip(one)["src/pages/index.astro"]).toContain("// genclass:inline</script></head>");
   });
 
   it("Angular, CRA, Remix root, React Router entry.client, webpack", () => {
-    const ng = roundTrip(project({ "package.json": pkg({ "@angular/core": "^20" }), "src/main.ts": `import { bootstrapApplication } from '@angular/platform-browser';\nimport { App } from './app/app';\n\nbootstrapApplication(App).catch((err) => console.error(err));\n` }));
+    const ng = roundTrip(project({ "package.json": pkg({ "@angular/core": "^20" }), "src/main.ts": `import { bootstrapApplication } from '@angular/platform-browser';\nimport { App } from './app/app';\n\nbootstrapApplication(App).catch((err) => console.error(err));\n` }), "--devtools");
     expect(ng["src/main.ts"]).toContain(`import { isDevMode as genclassDevMode } from '@angular/core'; // genclass:init`);
-    const cra = roundTrip(project({ "package.json": pkg({ "react-scripts": "5.0.1", react: "^18" }), "src/index.js": `import React from 'react';\n` }));
+    const cra = roundTrip(project({ "package.json": pkg({ "react-scripts": "5.0.1", react: "^18" }), "src/index.js": `import React from 'react';\n` }), "--devtools");
     expect(cra["src/index.js"]).toContain(`process.env.NODE_ENV === "development"`);
-    const remix = roundTrip(project({ "package.json": pkg({ "@remix-run/react": "^2", vite: "^5" }), "app/root.tsx": `export default function App() { return null; }\n` }));
+    const remix = roundTrip(project({ "package.json": pkg({ "@remix-run/react": "^2", vite: "^5" }), "app/root.tsx": `export default function App() { return null; }\n` }), "--devtools");
     expect(remix["app/root.tsx"]).toContain(`import.meta.env.DEV && typeof window !== "undefined"`);
     const rr = roundTrip(project({ "package.json": pkg({ "@react-router/dev": "^7" }), "app/entry.client.tsx": `import { HydratedRouter } from "react-router/dom";\n`, "app/root.tsx": "x\n" }));
     expect(rr["app/entry.client.tsx"].split("\n")[0]).toContain("@genclass/runtime/auto");
@@ -228,16 +228,17 @@ describe("init / remove on fixture projects", () => {
       "about.html": `<html><head><title>About</title></head><body></body></html>`,
       "app.js": "fetch('/api');\n",
     });
-    const after = roundTrip(dir, "--mode", "observe", "--cdn", "https://example.test/genclass.global.min.js", "--no-sri");
+    const after = roundTrip(dir, "--mode", "observe", "--cdn", "https://example.test/genclass.global.min.js", "--no-sri", "--devtools");
     expect(after["index.html"]).toContain(`<head>\r\n  <script src="https://example.test/genclass.global.min.js" defer data-mode="observe" data-devtools="local"></script> <!-- genclass:init -->\r\n  <meta charset="utf-8">`);
     expect(after["about.html"]).toContain(`<head><script src="https://example.test/genclass.global.min.js" defer data-mode="observe" data-devtools="local"></script><!-- genclass:inline --><title>`);
   });
 
   it("plain HTML: --sync writes the blocking tag of earlier versions; the tag with SRI keeps defer after crossorigin (issue 94)", () => {
     const sync = roundTrip(project({ "index.html": PAGE }), "--sync", "--no-sri", "--cdn", "https://example.test/g.js");
-    expect(sync["index.html"]).toContain(`  <script src="https://example.test/g.js" data-devtools="local"></script> <!-- genclass:init -->`);
+    expect(sync["index.html"]).toContain(`  <script src="https://example.test/g.js"></script> <!-- genclass:init -->`);
     const r = cli(project({ "index.html": PAGE }), "init", "--dry-run");
-    expect(r.out).toMatch(/crossorigin="anonymous" defer data-devtools="local"><\/script>/);
+    expect(r.out).toMatch(/crossorigin="anonymous" defer><\/script>/);
+    expect(cli(project({ "index.html": PAGE }), "init", "--dry-run", "--devtools").out).toMatch(/crossorigin="anonymous" defer data-devtools="local"><\/script>/);
   });
 
   it("remove tolerates attributes added by hand to the tag init wrote (defer, async, nonce, type), on a line or inline (issue 94)", () => {
@@ -409,9 +410,12 @@ describe("modes: observe is the default; --mode guard / heal install those modes
   it("--mode guard / heal write /auto/guard, /auto/heal and data-mode on the script tag", () => {
     for (const mode of ["guard", "heal"]) {
       const after = roundTrip(viteVue(), "--mode", mode);
-      expect(after["src/main.js"].split("\n")[0]).toBe(`import genclass from "@genclass/runtime/auto/${mode}"; // genclass:init`);
+      expect(after["src/main.js"].split("\n")[0]).toBe(`import "@genclass/runtime/auto/${mode}"; // genclass:init`);
       const html = roundTrip(project({ "index.html": PAGE }), "--mode", mode, "--no-sri");
-      expect(html["index.html"]).toContain(` data-mode="${mode}" data-devtools="local"></script> <!-- genclass:init -->`);
+      expect(html["index.html"]).toContain(` data-mode="${mode}"></script> <!-- genclass:init -->`);
+      // the mode goes before an opted-in data-devtools, as init has always written it
+      const dev = roundTrip(project({ "index.html": PAGE }), "--mode", mode, "--no-sri", "--devtools");
+      expect(dev["index.html"]).toContain(` data-mode="${mode}" data-devtools="local"></script> <!-- genclass:init -->`);
     }
     const plain = roundTrip(project({ "index.html": PAGE }), "--no-sri");
     expect(plain["index.html"]).not.toContain("data-mode");
@@ -449,7 +453,7 @@ describe("modes: observe is the default; --mode guard / heal install those modes
     const g = cli(dir, "init", "--yes", "--no-install", "--mode", "guard");
     expect(g.code, g.out).toBe(0);
     expect(g.out).not.toContain("Nothing to do");
-    expect(main().split("\n")[0]).toBe(`import genclass from "@genclass/runtime/auto/guard"; // genclass:init`);
+    expect(main().split("\n")[0]).toBe(`import "@genclass/runtime/auto/guard"; // genclass:init`);
     expect(main().replace("/auto/guard", "/auto")).toBe(plainObserve);
     expect(cli(dir, "init", "--yes", "--no-install", "--mode", "guard").out).toContain("Nothing to do");
     // a dry run shows the switch and writes nothing
@@ -461,7 +465,7 @@ describe("modes: observe is the default; --mode guard / heal install those modes
     expect(snapshot(dir)).toEqual(before);
 
     const site = project({ "index.html": PAGE });
-    expect(cli(site, "init", "--yes", "--no-sri").code).toBe(0);
+    expect(cli(site, "init", "--yes", "--no-sri", "--devtools").code).toBe(0);
     expect(cli(site, "init", "--yes", "--mode", "heal").code).toBe(0);
     expect(readFileSync(join(site, "index.html"), "utf8")).toContain(`data-mode="heal" data-devtools="local"></script> <!-- genclass:init -->`);
     expect(cli(site, "remove", "--yes").code).toBe(0);
@@ -493,11 +497,93 @@ describe("modes: observe is the default; --mode guard / heal install those modes
   });
 });
 
+describe("the devtools overlay is opt-in (owner, 2026-11-16: nothing init sets up is drawn on a page)", () => {
+  const apps: Record<string, Record<string, string>> = {
+    vite: { "package.json": pkg({ react: "^19", vite: "^7" }), "index.html": VITE_HTML, "src/main.tsx": `console.log(1);\n` },
+    next16: { "package.json": pkg({ next: "16.0.0", react: "^19" }), "node_modules/next/package.json": JSON.stringify({ name: "next", version: "16.0.1" }), "app/page.tsx": `export default function P() { return null; }\n` },
+    next15layout: { "package.json": pkg({ next: "15.1.0" }), "app/layout.tsx": `export default function L({ children }) {\n  return (\n    <html>\n      <body>{children}</body>\n    </html>\n  );\n}\n` },
+    next14pages: { "package.json": pkg({ next: "14.2.0" }), "pages/index.js": `export default function Home() { return null; }\n` },
+    sveltekit: { "package.json": pkg({ "@sveltejs/kit": "^2" }), "src/routes/+page.svelte": "<h1>hi</h1>\n" },
+    nuxt: { "package.json": pkg({ nuxt: "^4.0.0" }), "app/app.vue": "<template><div/></template>\n" },
+    astro: { "package.json": pkg({ astro: "^5" }), "src/layouts/Layout.astro": `<html>\n\t<head>\n\t\t<title>x</title>\n\t</head>\n\t<body><slot /></body>\n</html>\n` },
+    angular: { "package.json": pkg({ "@angular/core": "^20" }), "src/main.ts": `bootstrapApplication(App);\n` },
+    cra: { "package.json": pkg({ "react-scripts": "5.0.1", react: "^18" }), "src/index.js": `import React from 'react';\n` },
+    remix: { "package.json": pkg({ "@remix-run/react": "^2", vite: "^5" }), "app/root.tsx": `export default function App() { return null; }\n` },
+    webpack: { "package.json": pkg({ webpack: "^5", "html-webpack-plugin": "^5" }), "src/index.ts": `console.log(1);\n` },
+    html: { "index.html": PAGE },
+  };
+
+  it("init without --devtools writes nothing that loads the overlay, in every kind of project; --no-devtools changes nothing", () => {
+    for (const [name, files] of Object.entries(apps)) {
+      const dir = project(files);
+      const r = cli(dir, "init", "--yes", "--no-install", "--no-sri");
+      expect(r.code, `${name}: ${r.out}`).toBe(0);
+      const after = snapshot(dir);
+      expect(after, name).not.toEqual(snapshot(project(files)));
+      for (const [file, text] of Object.entries(after)) expect(text, `${name}: ${file}`).not.toMatch(/devtools|mountDevtools/);
+      expect(r.out, name).not.toContain("An overlay at the bottom right");
+      // the opt-out of 0.3.0-beta.6 and earlier is still accepted (the genclass command passes it) and writes the same
+      const old = project(files);
+      expect(cli(old, "init", "--yes", "--no-install", "--no-sri", "--no-devtools").code, name).toBe(0);
+      expect(snapshot(old), name).toEqual(after);
+    }
+  });
+
+  it("--devtools adds the dev-only overlay and says where it shows", () => {
+    const dir = project(apps.vite);
+    const r = cli(dir, "init", "--yes", "--no-install", "--devtools");
+    expect(r.code, r.out).toBe(0);
+    expect(readFileSync(join(dir, "src/main.tsx"), "utf8")).toContain(`if (import.meta.env.DEV) import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass)); // genclass:init`);
+    expect(r.out).toContain("An overlay at the bottom right of dev pages");
+  });
+
+  it("init again on a setup that still loads the overlay says how to take it out and changes nothing; that advice leaves a setup remove takes out", () => {
+    for (const name of ["vite", "nuxt"]) {
+      const dir = project(apps[name]);
+      const before = snapshot(dir);
+      expect(cli(dir, "init", "--yes", "--no-install", "--devtools").code, name).toBe(0);
+      const withOverlay = snapshot(dir);
+      const file = name === "vite" ? "src/main.tsx" : "app/plugins/genclass.client.js";
+      const r = cli(dir, "init", "--yes", "--no-install");
+      expect(r.code, r.out).toBe(0);
+      expect(r.out).toMatch(new RegExp(`Overlay\\s+${file.replace(/[./]/g, "\\$&")} still draws the devtools overlay on dev pages`));
+      expect(r.out).toContain("delete the statement that imports @genclass/runtime/devtools");
+      expect(snapshot(dir)).toEqual(withOverlay);
+      expect(cli(dir, "init", "--yes", "--no-install", "--devtools").out).not.toContain("still draws");
+      // the advice: delete that one statement. What is left is init's own, so remove still gives the files back
+      const f = join(dir, file);
+      writeFileSync(f, readFileSync(f, "utf8").split("\n").filter((l) => !l.includes("@genclass/runtime/devtools")).join("\n"));
+      expect(cli(dir, "init", "--yes", "--no-install").out).not.toContain("still draws");
+      const rm = cli(dir, "remove", "--yes");
+      expect(rm.code, rm.out).toBe(0);
+      expect(snapshot(dir)).toEqual(before);
+    }
+    const site = project({ "index.html": PAGE });
+    expect(cli(site, "init", "--yes", "--no-sri", "--devtools").code).toBe(0);
+    const h = cli(site, "init", "--yes");
+    expect(h.out).toContain("index.html still draws the devtools overlay on dev pages");
+    expect(h.out).toContain(`delete data-devtools="local" from its script tag`);
+    writeFileSync(join(site, "index.html"), readFileSync(join(site, "index.html"), "utf8").replace(` data-devtools="local"`, ""));
+    expect(cli(site, "init", "--yes").out).not.toContain("still draws");
+    expect(cli(site, "remove", "--yes").code).toBe(0);
+    expect(readFileSync(join(site, "index.html"), "utf8")).toBe(PAGE);
+  });
+
+  it("help names --devtools, and the hand-install help shows a tag without data-devtools", () => {
+    const help = cli(project({}), "init", "--help").out;
+    expect(help).toContain("--devtools");
+    expect(help).toContain("It draws nothing on your pages unless you pass --devtools.");
+    const manual = cli(project({ "package.json": pkg({}) }), "init", "--yes", "--no-install");
+    expect(manual.out).toContain("one tag first in <head>");
+    expect(manual.out).not.toContain("data-devtools");
+  });
+});
+
 describe("remove after a formatter rewrapped init's lines", () => {
   it("takes out a Prettier-wrapped devtools statement whole (byte for byte)", () => {
     const dir = viteVue();
     const before = snapshot(dir);
-    expect(cli(dir, "init", "--yes", "--no-install").code).toBe(0);
+    expect(cli(dir, "init", "--yes", "--no-install", "--devtools").code).toBe(0);
     const f = join(dir, "src/main.js");
     const added = readFileSync(f, "utf8");
     const wrapped = added.replace(
@@ -543,7 +629,8 @@ describe("remove never deletes code init did not write", () => {
     const dir = project({ "package.json": pkg({ "@sveltejs/kit": "^2" }), "src/routes/+page.svelte": "x\n" });
     expect(cli(dir, "init", "--yes", "--no-install").code).toBe(0);
     const f = join(dir, "src/hooks.client.js");
-    const edited = readFileSync(f, "utf8").replace(`import genclass from "@genclass/runtime/auto";\n`, `import genclass from "@genclass/runtime/auto";\nexport const handleError = () => {};\n`);
+    const edited = readFileSync(f, "utf8").replace(`import "@genclass/runtime/auto";\n`, `import "@genclass/runtime/auto";\nexport const handleError = () => {};\n`);
+    expect(edited).not.toBe(readFileSync(f, "utf8"));
     writeFileSync(f, edited);
     const snap = snapshot(dir);
     const r = cli(dir, "remove", "--yes");
@@ -742,14 +829,14 @@ describe("init options: --no-telemetry / --telemetry / --model-url (Troy trial, 
     const after = roundTrip(viteVue(), "--no-telemetry");
     const lines = after["src/main.js"].split("\n");
     expect(lines[0]).toBe(`import "./genclass.config"; // genclass:init`);
-    expect(lines[1]).toBe(`import genclass from "@genclass/runtime/auto"; // genclass:init`);
+    expect(lines[1]).toBe(`import "@genclass/runtime/auto"; // genclass:init`);
     expect(after["src/genclass.config.js"]).toContain(`globalThis.GENCLASS_CONFIG = { telemetry: false };`);
     expect(after["src/genclass.config.js"]).toContain("genclass:init start");
   });
 
   it("Next.js 16: the options import goes into instrumentation-client.ts, the file is TypeScript", () => {
     const after = roundTrip(next16(), "--no-telemetry", "--model-url", "/genclass-model");
-    expect(after["instrumentation-client.ts"]).toMatch(/import "\.\/genclass\.config";\nimport genclass from "@genclass\/runtime\/auto";/);
+    expect(after["instrumentation-client.ts"]).toMatch(/import "\.\/genclass\.config";\nimport "@genclass\/runtime\/auto";/);
     expect(after["genclass.config.ts"]).toContain(
       `(globalThis as { GENCLASS_CONFIG?: object }).GENCLASS_CONFIG = { telemetry: false, model: { baseUrl: "/genclass-model/", ortWasmPaths: "/genclass-model/ort/" } };`,
     );
@@ -772,7 +859,7 @@ describe("init options: --no-telemetry / --telemetry / --model-url (Troy trial, 
     const r = cli(dir, "init", "--yes", "--no-install", "--no-telemetry");
     expect(r.code, r.out).toBe(0);
     expect(r.out).toContain("telemetry off");
-    expect(readFileSync(join(dir, "src/main.js"), "utf8").split("\n").slice(0, 2)).toEqual([`import "./genclass.config"; // genclass:init`, `import genclass from "@genclass/runtime/auto"; // genclass:init`]);
+    expect(readFileSync(join(dir, "src/main.js"), "utf8").split("\n").slice(0, 2)).toEqual([`import "./genclass.config"; // genclass:init`, `import "@genclass/runtime/auto"; // genclass:init`]);
     // --telemetry takes the opt-out out (back to the default) and never writes `telemetry: true`, which would be an
     // explicit opt-in that also sends from local hosts
     expect(cli(dir, "init", "--yes", "--no-install", "--telemetry").code).toBe(0);
@@ -798,7 +885,7 @@ describe("init options: --no-telemetry / --telemetry / --model-url (Troy trial, 
 
   it("plain HTML: data-telemetry=\"off\" on the script tag; --telemetry takes it off again", () => {
     const after = roundTrip(project({ "index.html": PAGE }), "--no-telemetry", "--no-sri");
-    expect(after["index.html"]).toContain(` data-devtools="local" data-telemetry="off"></script> <!-- genclass:init -->`);
+    expect(after["index.html"]).toContain(` defer data-telemetry="off"></script> <!-- genclass:init -->`);
     const dir = project({ "index.html": PAGE });
     cli(dir, "init", "--yes", "--no-install", "--no-telemetry", "--no-sri");
     cli(dir, "init", "--yes", "--no-install", "--telemetry");
@@ -811,7 +898,7 @@ describe("init options: --no-telemetry / --telemetry / --model-url (Troy trial, 
       "src/layouts/Layout.astro": `---\n---\n<html>\n\t<head>\n\t\t<title>x</title>\n\t</head>\n\t<body><slot /></body>\n</html>\n`,
     });
     const after = roundTrip(dir, "--no-telemetry");
-    expect(after["src/layouts/Layout.astro"]).toMatch(/\t\t<meta name="genclass" content="telemetry=off" \/> <!-- genclass:init -->\n\t\t<script>import genclass/);
+    expect(after["src/layouts/Layout.astro"]).toMatch(/\t\t<meta name="genclass" content="telemetry=off" \/> <!-- genclass:init -->\n\t\t<script>import "@genclass\/runtime\/auto";/);
   });
 
   it("Next pages router and Nuxt: the options file stays out of routed / auto-loaded folders", () => {
@@ -1075,7 +1162,7 @@ describe("init: app token and private dashboard link (fetch mocked; never the re
     expect(again.out).toContain("https://genclass.dev/start");
     const g = cliEnv(env, dir, "init", "--yes", "--no-install", "--mode", "guard");
     expect(g.code, g.out).toBe(0);
-    expect(readFileSync(join(dir, "src/main.ts"), "utf8").split("\n")[0]).toBe(`import genclass from "@genclass/runtime/auto/guard"; // genclass:init`);
+    expect(readFileSync(join(dir, "src/main.ts"), "utf8").split("\n")[0]).toBe(`import "@genclass/runtime/auto/guard"; // genclass:init`);
     expect(calls(log)).toHaveLength(0);
     expect(snapshot(dir)["src/genclass.config.ts"]).toBeUndefined();
   });
@@ -1121,7 +1208,7 @@ describe("init: app token and private dashboard link (fetch mocked; never the re
       expect(r.out).toContain("could not create one");
       expect(r.out).toContain("https://genclass.dev/start");
       const files = snapshot(dir);
-      expect(files["src/main.ts"].split("\n")[0]).toBe(`import genclass from "@genclass/runtime/auto"; // genclass:init`);
+      expect(files["src/main.ts"].split("\n")[0]).toBe(`import "@genclass/runtime/auto"; // genclass:init`);
       expect(files["src/genclass.config.ts"]).toBeUndefined();
       expect(files[".genclass.local"]).toBeUndefined();
       expect(files[".gitignore"]).toBe("dist\n");
@@ -1144,7 +1231,7 @@ describe("init: app token and private dashboard link (fetch mocked; never the re
   it("plain HTML gets data-token on the script tag (and remove gives the page back byte for byte)", () => {
     const html = project({ "index.html": `<html>\n<head>\n  <title>x</title>\n</head>\n<body></body>\n</html>\n` });
     expect(cliEnv({ GENCLASS_TEST_FETCH: "ok" }, html, "init", "--yes", "--no-install", "--cdn", "https://example.test/g.js", "--no-sri").code).toBe(0);
-    expect(snapshot(html)["index.html"]).toContain(`<script src="https://example.test/g.js" defer data-devtools="local" data-token="${TOKEN}"></script> <!-- genclass:init -->`);
+    expect(snapshot(html)["index.html"]).toContain(`<script src="https://example.test/g.js" defer data-token="${TOKEN}"></script> <!-- genclass:init -->`);
     expect(cli(html, "remove", "--yes").code).toBe(0);
     expect(snapshot(html)["index.html"]).toBe(`<html>\n<head>\n  <title>x</title>\n</head>\n<body></body>\n</html>\n`);
   });

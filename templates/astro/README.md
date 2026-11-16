@@ -6,13 +6,13 @@ line in `astro.config.mjs`.
 
 ```bash
 npm install
-npm run dev                  # http://localhost:4321, with the GenClass devtools overlay
-npm run build && npm start   # production build (no overlay), served by the Node adapter
+npm run dev                  # http://localhost:4321
+npm run build && npm start   # production build, served by the Node adapter
 ```
 
-Type a city quickly in the search box. The API route (`src/pages/api/search.ts`) answers in a random 50-900 ms, so
-an older answer can overwrite a newer one: the classic stale typeahead. Open the overlay (bottom right) to see what
-GenClass noticed; the browser console has one plain-English line per finding.
+Type a city quickly in the search box. The API route (`src/pages/api/search.ts`) answers in a random 50-900 ms, so an
+older answer can overwrite a newer one: the classic stale typeahead. Open the browser console to see what GenClass
+noticed: one plain-English `[GenClass]` line per finding.
 
 ## The one line
 
@@ -45,13 +45,17 @@ or a React island, whose state is discovered.
 | observe (default) | `genclass()` | reports what it finds; never holds, drops or changes anything |
 | guard | `genclass({ mode: "guard" })` | also prevents failures with small, reversible actions (drop a stale response, reuse a duplicate's result) when its model is confident |
 
-Start in observe, watch the overlay and the console for a while on real traffic, then switch to `guard`. Every action
-is logged with its evidence, and the overlay can undo it.
+Start in observe, watch the console for a while on real traffic, then switch to `guard`. Every action is logged with
+its evidence.
 
-## Devtools overlay
+## Devtools overlay (opt-in)
 
-The integration loads the overlay under `astro dev` only (`devtools: "dev"`, the default); a production build carries
-no reference to it. `genclass({ devtools: "always" })` loads it in production too, `"never"` not at all.
+The integration draws nothing on the page. To see the devtools overlay under `astro dev` only, pass the option in
+`astro.config.mjs`:
+
+```js
+integrations: [genclass({ devtools: "dev" })],
+```
 
 ## Turning it off
 

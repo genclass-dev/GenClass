@@ -5,20 +5,20 @@ recommended way: one import in `src/hooks.client.ts`.
 
 ```bash
 npm install
-npm run dev                          # http://localhost:5173, with the GenClass devtools overlay
-npm run build && npm run preview     # production build (no overlay)
+npm run dev                          # http://localhost:5173
+npm run build && npm run preview     # production build
 ```
 
 Type a city quickly in the search box. The API route (`src/routes/api/search/+server.ts`) answers in a random
-50-900 ms, so an older answer can overwrite a newer one: the classic stale typeahead. Open the overlay (bottom right)
-to see what GenClass noticed; the browser console has one plain-English line per finding.
+50-900 ms, so an older answer can overwrite a newer one: the classic stale typeahead. Open the browser console to see
+what GenClass noticed: one plain-English `[GenClass]` line per finding.
 
 ## The one line
 
 `src/hooks.client.ts` (SvelteKit loads it in the browser before the app starts):
 
 ```ts
-import genclass from '@genclass/runtime/auto';
+import '@genclass/runtime/auto';
 ```
 
 That is all the setup. GenClass runs in the browser only: server rendering, hydration and your server code are
@@ -39,14 +39,17 @@ stalls. Decisions that compare a late response with newer data already in your s
 | guard | `@genclass/runtime/auto/guard` | also prevents failures with small, reversible actions (reuse a duplicate's result, back off) when its model is confident |
 | heal (experimental) | `@genclass/runtime/auto/heal` | also retries, serves cached data, blocks a runaway request |
 
-Start in observe, watch the overlay and the console for a while on real traffic, then switch the import to
-`/auto/guard`. Every action is logged with its evidence, and the overlay can undo it.
+Start in observe, watch the console for a while on real traffic, then switch the import to `/auto/guard`. Every action
+is logged with its evidence.
 
-## Devtools overlay
+## Devtools overlay (opt-in)
 
-`src/hooks.client.ts` also loads the overlay in development only:
+The template draws nothing on the page. To see the devtools overlay while you develop, name the import and add the
+overlay line at the end of `src/hooks.client.ts`:
 
 ```ts
+import genclass from '@genclass/runtime/auto';
+
 if (import.meta.env.DEV) import('@genclass/runtime/devtools').then((d) => d.mountDevtools(genclass));
 ```
 

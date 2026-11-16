@@ -6,7 +6,7 @@
 //   - runs the app's type check (`pnpm check`: svelte-check, in TypeScript or JSDoc);
 //   - builds the app, serves the production build and loads it once in Chromium: the runtime must be installed in
 //     the page (GenClass marks the fetch it wraps) and its model must load in a worker (downloaded from jsDelivr, as
-//     in a real app), the telemetry choice must be in <head>, the overlay must not be in the production build, and
+//     in a real app), the telemetry choice must be in <head>, no devtools overlay may be on the page, and
 //     the console must show no errors and no uncaught exceptions;
 //   - runs `genclass-runtime remove` from the installed runtime and checks that it takes out what the add-on wrote.
 // Two kinds: `observe` (defaults: observe, telemetry off, no hooks file before) and `guard` (guard, telemetry on,
@@ -88,11 +88,10 @@ test.concurrent.for(testCases)("@genclass/sv $kind.type $variant", async (testCa
   const hooks = read(cwd, hooksFile);
   if (guard) {
     const lines = hooks.split("\n");
-    expect(lines[0]).toBe("import genclass from '@genclass/runtime/auto/guard'; // genclass:init");
+    expect(lines[0]).toBe("import '@genclass/runtime/auto/guard'; // genclass:init");
     expect(hooks).toContain(EXISTING_HOOKS[e].trimEnd());
-    expect(hooks.trimEnd().split("\n").at(-1)).toBe(
-      "if (import.meta.env.DEV) import('@genclass/runtime/devtools').then((d) => d.mountDevtools(genclass)); // genclass:init",
-    );
+    // nothing drawn on the page: the add-on never adds the devtools overlay
+    expect(hooks).not.toMatch(/devtools/);
   } else {
     expect(hooks).toBe(newHooksFile("observe"));
   }
@@ -128,7 +127,7 @@ test.concurrent.for(testCases)("@genclass/sv $kind.type $variant", async (testCa
   expect((await modelReady).text()).toContain(`Mode: ${testCase.kind.options[addon.id].mode}.`);
   const meta = await page.evaluate(() => document.head.querySelector('meta[name="genclass"]')?.getAttribute("content") ?? null);
   expect(meta).toBe(guard ? null : "telemetry=off");
-  // the overlay is development only
+  // nothing GenClass set up is drawn on the page
   expect(await page.evaluate(() => document.querySelectorAll("[data-genclass-devtools]").length)).toBe(0);
   expect(problems).toEqual([]);
 

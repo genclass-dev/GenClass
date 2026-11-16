@@ -5,7 +5,8 @@
 // own build, type check included), then in headless Chromium:
 //   prod  the production server: the model loads, the search box works, no console errors, no overlay;
 //         with ?genclass=off nothing is installed
-//   dev   the dev server: the devtools overlay mounts, no console errors
+//   dev   the dev server: the same without the ?genclass=off visit, and a 5 s wait for a late overlay mount (a
+//         template draws nothing on the page; the devtools overlay is opt-in)
 // Linux only (the VM). Telemetry is opted out through localStorage["genclass.telemetry"] = "off" (the template code
 // is not changed); every request to another host is blocked, the model is served from COMPAT_MODEL_DIR.
 //
@@ -94,7 +95,7 @@ async function serve(cmd, cwd) {
   throw new Error(`server did not start: ${cmd}\n${out.slice(-1500)}`);
 }
 
-async function visit(browser, url, { type = false, wantOverlay = null }) {
+async function visit(browser, url, { type = false, overlayWaitMs = 0 }) {
   const ctx = await browser.newContext();
   const blocked = [];
   await ctx.route((u) => u.hostname !== "127.0.0.1" && u.hostname !== "localhost", (r) => {
@@ -133,7 +134,8 @@ async function visit(browser, url, { type = false, wantOverlay = null }) {
       await sleep(2500);
       r.results = await page.$$eval("li", (els) => els.map((e) => e.textContent));
     } else await sleep(3000);
-    if (wantOverlay !== null) r.overlay = !!(await page.waitForSelector("genclass-devtools", { state: "attached", timeout: wantOverlay ? 30_000 : 1_500 }).catch(() => null));
+    // the overlay must stay absent: waits this long for a late mount before calling it absent
+    if (overlayWaitMs) r.overlay = !!(await page.waitForSelector("genclass-devtools", { state: "attached", timeout: overlayWaitMs }).catch(() => null));
     r.disabled = consoleLines.some((l) => /\[GenClass\] Disabled by \?genclass=off/.test(l));
   } catch (e) {
     r.error = String(e?.message ?? e).slice(0, 800);
@@ -191,11 +193,11 @@ async function checkTemplate(name, browser) {
     let s;
     try {
       s = await serve(t[kind], dir);
-      const main = await visit(browser, `${s.url}/`, { type: true, wantOverlay: kind === "dev" });
+      const main = await visit(browser, `${s.url}/`, { type: true, overlayWaitMs: kind === "dev" ? 5_000 : 1_500 });
       const off = kind === "prod" ? await visit(browser, `${s.url}/?genclass=off`, { type: false }) : null;
       rec[kind] = { main, off };
       rec[kind].pass =
-        !main.error && main.modelReady && (main.results ?? []).length > 0 && main.errors.length === 0 && main.blocked.length === 0 && main.overlay === (kind === "dev") && (!off || (off.disabled && off.errors.length === 0));
+        !main.error && main.modelReady && (main.results ?? []).length > 0 && main.errors.length === 0 && main.blocked.length === 0 && main.overlay === false && (!off || (off.disabled && off.errors.length === 0));
     } catch (e) {
       rec[kind] = { pass: false, error: String(e?.message ?? e).slice(0, 1500) };
     } finally {

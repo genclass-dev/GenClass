@@ -28,8 +28,8 @@ default ([CHANGELOG](../../packages/runtime/CHANGELOG.md)).
 ## How do I install it with one command?
 
 `init` finds your framework and package manager, installs the package, adds one import as the first line of your
-entry file (plus a line that loads the devtools overlay in development only), and shows you the diff before writing
-anything. Running it again changes nothing; running it with another `--mode` switches the import it added. All of
+entry file, and shows you the diff before writing anything. It draws nothing on your pages (the devtools overlay
+only with `--devtools`). Running it again changes nothing; running it with another `--mode` switches the import it added. All of
 the ways below start the same runtime, in observe mode unless you choose otherwise.
 
 ```bash
@@ -59,7 +59,7 @@ Content-Security-Policy (`next.config` headers, a proxy or middleware, a `<meta 
 | `--yes`, `-y` | both | apply without asking |
 | `--dry-run` | both | show what would change; write nothing, send nothing |
 | `--no-install` | init | do not run the package manager |
-| `--no-devtools` | init | do not add the dev-only devtools overlay |
+| `--devtools` | init | also add the devtools overlay, in development builds only (off by default; `init` of 0.3.0-beta.6 and earlier added it unless `--no-devtools`, which is still accepted and changes nothing) |
 | `--cwd <dir>` | both | the project directory (default: the current directory) |
 | `--from <spec>` | init | install `@genclass/runtime` from this spec (a version, tag or tarball path) |
 | `--cdn <url>` | init | plain HTML: the script URL (default: jsDelivr, this version, with an SRI hash; this version's unpkg URL gets one too; other URLs get no hash) |
@@ -162,11 +162,12 @@ During SSR or in Node, `/auto` installs nothing and returns an inert runtime.
 **One script tag** (no build step), first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.0" data-mode="observe" data-devtools="local"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.0" data-mode="observe"></script>
 ```
 
 It exposes `window.GenClass` (since `0.3.0` also `window.GenClass.protect`), discovers the app's state like the
-import does, and loads the model worker, ONNX Runtime Web and the overlay on demand from the same version on the CDN.
+import does, and loads the model worker and ONNX Runtime Web on demand from the same version on the CDN (and the
+devtools overlay, only with `data-devtools`).
 Its `data-*` attributes configure it ([every attribute](#which-attributes-does-the-script-tag-take)). Keep the
 version pinned in production; the plain-HTML path of `init` writes a pinned jsDelivr URL with SRI.
 

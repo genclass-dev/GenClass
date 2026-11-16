@@ -5,20 +5,20 @@ recommended way: one import, first in the entry file.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173, with the GenClass devtools overlay
-npm run build && npm run preview   # production build (no overlay)
+npm run dev        # http://localhost:5173
+npm run build && npm run preview   # production build
 ```
 
-Type a city quickly in the search box. The mock API (`mock-api.ts`, served by Vite) answers in a random
-50-900 ms, so an older answer can overwrite a newer one: the classic stale typeahead. Open the overlay (bottom right)
-to see what GenClass noticed; the browser console has one plain-English line per finding.
+Type a city quickly in the search box. The mock API (`mock-api.ts`, served by Vite) answers in a random 50-900 ms, so
+an older answer can overwrite a newer one: the classic stale typeahead. Open the browser console to see what GenClass
+noticed: one plain-English `[GenClass]` line per finding.
 
 ## The one line
 
 `src/main.tsx` starts with:
 
 ```ts
-import genclass from "@genclass/runtime/auto";
+import "@genclass/runtime/auto";
 ```
 
 It goes first so GenClass is installed before React and your state exist. That is all the setup: GenClass watches
@@ -33,18 +33,19 @@ discovery). `npx @genclass/runtime@beta init` writes the same line into an exist
 | guard | `@genclass/runtime/auto/guard` | also prevents failures with small, reversible actions (drop a stale response, reuse a duplicate's result) when its model is confident |
 | heal (experimental) | `@genclass/runtime/auto/heal` | also retries, serves cached data, rolls back |
 
-Start in observe, watch the overlay and the console for a while on real traffic, then switch the import to
-`/auto/guard`. Every action is logged with its evidence, and the overlay can undo it.
+Start in observe, watch the console for a while on real traffic, then switch the import to `/auto/guard`. Every action
+is logged with its evidence.
 
-## Devtools overlay
+## Devtools overlay (opt-in)
 
-The last line of `src/main.tsx` loads the overlay in development only:
+The template draws nothing on the page. To see the devtools overlay while you develop, name the import and add the
+overlay line at the end of `src/main.tsx`:
 
 ```ts
+import genclass from "@genclass/runtime/auto";
+// ...
 if (import.meta.env.DEV) import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));
 ```
-
-It lists detections and actions, explains each decision and lets you switch modes while you develop.
 
 ## Turning it off
 

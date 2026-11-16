@@ -30,9 +30,8 @@ function runHook(options: Parameters<typeof genclass>[0], command: "dev" | "buil
 }
 
 describe("pageScript: the script injected into every page", () => {
-  it("defaults: /auto, no config import, the overlay under astro dev only", () => {
-    const dev = pageScript({}, true);
-    expect(dev).toBe('import genclass from "@genclass/runtime/auto";\nimport("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));\n');
+  it("defaults: /auto, no config import, and nothing drawn on the page (no overlay, not even under astro dev)", () => {
+    expect(pageScript({}, true)).toBe('import "@genclass/runtime/auto";\n');
     expect(pageScript({}, false)).toBe('import "@genclass/runtime/auto";\n');
   });
 
@@ -42,10 +41,14 @@ describe("pageScript: the script injected into every page", () => {
     expect(pageScript({ mode: "guard" }, false)).toBe('import "@genclass/runtime/auto/guard";\n');
   });
 
-  it("devtools: always loads the overlay in builds too, never not even in dev", () => {
+  it("devtools (opt-in): dev loads the overlay under astro dev only, always in builds too; unset or never not at all", () => {
     expect(overlayFor("always", false)).toBe(true);
     expect(overlayFor("never", true)).toBe(false);
+    expect(overlayFor("dev", true)).toBe(true);
+    expect(overlayFor("dev", false)).toBe(false);
+    expect(overlayFor(undefined, true)).toBe(false);
     expect(overlayFor(undefined, false)).toBe(false);
+    expect(pageScript({ devtools: "dev" }, true)).toBe('import genclass from "@genclass/runtime/auto";\nimport("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));\n');
     expect(pageScript({ devtools: "always" }, false)).toContain("mountDevtools");
     expect(pageScript({ devtools: "never" }, true)).not.toContain("devtools");
   });
@@ -77,18 +80,20 @@ describe("the astro:config:setup hook", () => {
     expect(optimize).toEqual(["@genclass/runtime/auto"]);
   });
 
-  it("under astro dev the script also mounts the overlay; under build it does not", () => {
-    expect(runHook({}, "dev").scripts[0].content).toContain("mountDevtools");
-    expect(runHook({}, "build").scripts[0].content).not.toContain("devtools");
-    expect(runHook({}, "preview").scripts[0].content).not.toContain("devtools");
+  it("by default the script mounts no overlay under dev, build or preview; devtools: dev mounts it under astro dev only", () => {
+    for (const command of ["dev", "build", "preview"] as const) expect(runHook({}, command).scripts[0].content).not.toContain("devtools");
+    expect(runHook({ devtools: "dev" }, "dev").scripts[0].content).toContain("mountDevtools");
+    expect(runHook({ devtools: "dev" }, "build").scripts[0].content).not.toContain("devtools");
     expect(runHook({ devtools: "always" }, "build").scripts[0].content).toContain("mountDevtools");
   });
 
   it("pre-declares the runtime modules the script imports for Vite's dependency optimizer", () => {
     expect(runtimeImports({}, false)).toEqual(["@genclass/runtime/auto"]);
-    expect(runtimeImports({}, true)).toEqual(["@genclass/runtime/auto", "@genclass/runtime/devtools"]);
+    expect(runtimeImports({}, true)).toEqual(["@genclass/runtime/auto"]);
+    expect(runtimeImports({ devtools: "dev" }, true)).toEqual(["@genclass/runtime/auto", "@genclass/runtime/devtools"]);
     expect(runtimeImports({ mode: "guard", devtools: "never" }, true)).toEqual(["@genclass/runtime/auto/guard"]);
-    expect(runHook({}, "dev").optimize).toEqual(["@genclass/runtime/auto", "@genclass/runtime/devtools"]);
+    expect(runHook({}, "dev").optimize).toEqual(["@genclass/runtime/auto"]);
+    expect(runHook({ devtools: "dev" }, "dev").optimize).toEqual(["@genclass/runtime/auto", "@genclass/runtime/devtools"]);
     expect(runHook({ mode: "guard" }, "build").optimize).toEqual(["@genclass/runtime/auto/guard"]);
   });
 

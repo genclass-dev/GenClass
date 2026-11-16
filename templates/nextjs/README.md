@@ -5,20 +5,20 @@ recommended way: one import in `instrumentation-client.ts`.
 
 ```bash
 npm install
-npm run dev                  # http://localhost:3000, with the GenClass devtools overlay
-npm run build && npm start   # production build (no overlay)
+npm run dev                  # http://localhost:3000
+npm run build && npm start   # production build
 ```
 
-Type a city quickly in the search box. The API route (`app/api/search/route.ts`) answers in a random 50-900 ms, so
-an older answer can overwrite a newer one: the classic stale typeahead. Open the overlay (bottom right) to see what
-GenClass noticed; the browser console has one plain-English line per finding.
+Type a city quickly in the search box. The API route (`app/api/search/route.ts`) answers in a random 50-900 ms, so an
+older answer can overwrite a newer one: the classic stale typeahead. Open the browser console to see what GenClass
+noticed: one plain-English `[GenClass]` line per finding.
 
 ## The one line
 
 `instrumentation-client.ts` (Next.js 15.3 and later runs it in the browser before your app's code):
 
 ```ts
-import genclass from "@genclass/runtime/auto";
+import "@genclass/runtime/auto";
 ```
 
 That is all the setup. GenClass runs in the browser only: on the server (SSR, route handlers) the import is inert,
@@ -35,14 +35,17 @@ small client component in the root layout instead).
 | guard | `@genclass/runtime/auto/guard` | also prevents failures with small, reversible actions (drop a stale response, reuse a duplicate's result) when its model is confident |
 | heal (experimental) | `@genclass/runtime/auto/heal` | also retries, serves cached data, rolls back |
 
-Start in observe, watch the overlay and the console for a while on real traffic, then switch the import to
-`/auto/guard`. Every action is logged with its evidence, and the overlay can undo it.
+Start in observe, watch the console for a while on real traffic, then switch the import to `/auto/guard`. Every action
+is logged with its evidence.
 
-## Devtools overlay
+## Devtools overlay (opt-in)
 
-`instrumentation-client.ts` also loads the overlay when `NODE_ENV` is `development`:
+The template draws nothing on the page. To see the devtools overlay while you develop, name the import and add the
+overlay line at the end of `instrumentation-client.ts`:
 
 ```ts
+import genclass from "@genclass/runtime/auto";
+
 if (process.env.NODE_ENV === "development") {
   import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));
 }

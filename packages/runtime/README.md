@@ -467,7 +467,8 @@ For a site whose performance budget has no room in the page load, there is the
 [lite install](#lite-install-after-the-page-has-loaded): GenClass after the page has loaded, on a share of page loads.
 
 **1. One command.** `init` finds your framework and package manager, installs the package, adds one import as the
-first line of your entry file (plus a dev-only devtools line), and shows you the diff before writing anything.
+first line of your entry file, and shows you the diff before writing anything. It draws nothing on your pages: the
+devtools overlay is added only with `--devtools` (development builds only).
 
 ```bash
 npx @genclass/runtime@beta init               # observe; shows the diff, asks, then writes
@@ -478,7 +479,10 @@ npx @genclass/runtime@beta remove             # undo exactly what init added
 
 Other flags: `--yes`, `--no-telemetry` (`--telemetry` undoes it on a later run and writes no telemetry option, so
 the default applies: on, but off on local hosts), `--no-token`, `--token gc_...`, `--sink`, `--model-url`, `--no-install`,
-`--no-devtools`, and from `0.3.0-beta.2` `--no-network` and `--sync` (plain HTML).
+`--devtools`, and from `0.3.0-beta.2` `--no-network` and `--sync` (plain HTML). `init` of 0.3.0-beta.6 and earlier
+added the overlay by default (`--no-devtools` left it out; it is still accepted and changes nothing); running `init`
+again on such a setup names the file, and deleting the one statement that imports `@genclass/runtime/devtools`
+(`data-devtools="local"` on a script tag) takes it out.
 
 **Which version** (from `0.3.0-beta.2`). `init` (and `login`, `connect`) first prints its own version and the npm
 dist-tag it came from, asks npm's dist-tags once (`npm view @genclass/runtime dist-tags`, at most 3 s; never with
@@ -519,7 +523,7 @@ Options go in `window.GENCLASS_CONFIG = { ... }` (any `InitOptions`, set before 
 **3. One script tag** (no build step), first in `<head>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5" data-mode="observe" data-devtools="local"></script>
+<script src="https://cdn.jsdelivr.net/npm/@genclass/runtime@0.3.0-beta.5" data-mode="observe"></script>
 ```
 
 It exposes `window.GenClass` and loads the model worker and the overlay on demand from the same version; `data-mode`,
@@ -527,8 +531,9 @@ It exposes `window.GenClass` and loads the model worker and the overlay on deman
 ([every attribute](https://github.com/genclass-dev/GenClass/blob/main/docs/runtime/INSTALL.md#which-attributes-does-the-script-tag-take)).
 Keep the version pinned: the unversioned URL serves npm's `latest` (the older `0.2.x` until `0.3.0` is stable); on a
 plain HTML page `init` writes a pinned jsDelivr URL with SRI and, from `0.3.0-beta.2`, `defer`.
-`data-devtools="local"` shows the overlay on local hosts (loopback with or without a port, `*.localhost`, `*.local`,
-`*.test` and `file:`), so also in a Capacitor, Tauri or Electron build that ships it: set it per environment.
+Nothing is drawn on the page unless you ask: `data-devtools="local"` adds the overlay on local hosts (loopback with
+or without a port, `*.localhost`, `*.local`, `*.test` and `file:`), so also in a Capacitor, Tauri or Electron build
+that ships it: set it per environment.
 
 **4. By hand:** `npm install @genclass/runtime@beta`, then first in your entry file:
 
@@ -580,12 +585,7 @@ export {};
 ```ts
 // genclass.ts, next to instrumentation-client.ts
 import "./genclass.config"; // optional: sets window.GENCLASS_CONFIG, so it comes before the runtime
-import genclass from "@genclass/runtime/auto";
-
-// the devtools overlay, in development only (optional)
-if (process.env.NODE_ENV === "development") {
-  import("@genclass/runtime/devtools").then((d) => d.mountDevtools(genclass));
-}
+import "@genclass/runtime/auto";
 ```
 
 Build with `NEXT_PUBLIC_GENCLASS=on next build` (the same for `next dev`), or set it in `.env.production`; any other

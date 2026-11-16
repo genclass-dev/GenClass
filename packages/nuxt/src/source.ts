@@ -5,13 +5,13 @@
 // discovery, the `?genclass=off` kill switch, a `<meta name="genclass">` tag still read); the options that are not the
 // import path (token, telemetry) travel as `window.GENCLASS_CONFIG`, the page configuration the runtime documents, in a
 // module imported before the runtime (an ES module's imports evaluate before its own body, so the config is set when
-// the runtime starts); the devtools overlay line is only generated when the overlay should load, so a production
-// build carries no reference to it unless `devtools: "always"` asks for one.
+// the runtime starts); nothing is drawn on the page by default (`devtools: "never"`): the overlay line is only
+// generated when `devtools` asks for it ("dev" in `nuxt dev`, "always"), so a build carries no reference to it.
 
 /** Options of the `genclass` key in nuxt.config. */
 export interface ModuleOptions {
   /**
-   * "observe" (default): GenClass reports what it finds (one console line per finding, the devtools overlay) and
+   * "observe" (default): GenClass reports what it finds (one console line per finding) and
    * never holds, delays or changes anything. "guard": it may also take small, reversible actions (drop a stale
    * response, reuse a duplicate's result) when its model is confident.
    */
@@ -28,8 +28,9 @@ export interface ModuleOptions {
    */
   telemetry?: boolean;
   /**
-   * The devtools overlay: "dev" (default) loads it in `nuxt dev` only, "always" also in production builds, "never"
-   * not at all. The overlay is a lazy chunk that is never part of the first load.
+   * The devtools overlay: "never" (default) adds nothing that draws on the page; findings go to the browser console
+   * (and the dashboard with a token). "dev" loads the overlay in `nuxt dev` only, "always" also in production builds.
+   * The overlay is a lazy chunk that is never part of the first load.
    */
   devtools?: "dev" | "always" | "never";
 }
@@ -66,9 +67,9 @@ export function entryFor(mode: ModuleOptions["mode"]): string {
   return mode === "guard" ? "@genclass/runtime/auto/guard" : "@genclass/runtime/auto";
 }
 
-/** Whether the overlay loads: "always", or "dev" on a development server. */
+/** Whether the overlay loads: "always", or "dev" on a development server; never by default (unset or "never"). */
 export function overlayFor(devtools: ModuleOptions["devtools"], dev: boolean): boolean {
-  return devtools === "always" || ((devtools ?? "dev") === "dev" && dev);
+  return devtools === "always" || (devtools === "dev" && dev);
 }
 
 /** `#build/genclass.config.mjs`: sets window.GENCLASS_CONFIG. Keys already set on the page (a head script) win. */

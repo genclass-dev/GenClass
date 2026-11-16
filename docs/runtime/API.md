@@ -1019,6 +1019,10 @@ look"; there is no Sentry, PostHog or Datadog adapter in the free runtime), `@ge
 From 0.3.0-beta.1 (npm dist-tag `beta`) the devtools overlay is in genclass.dev's black design whatever the page's theme
 (`theme: "dark"`, the new default; `"light"` is the same design on white, `"auto"` follows `prefers-color-scheme`).
 0.3.0-beta.0 and 0.2.x use their earlier design and default to `"auto"`.
+Nothing GenClass sets up mounts the overlay: you add it yourself (`mountDevtools`, `devtools` in the page
+configuration, `data-devtools` on the script tag). `init` adds it only with `--devtools`, `@genclass/nuxt` and
+`@genclass/astro` only with `devtools: "dev"` or `"always"` (default `"never"`), and the Svelte CLI add-on, the
+`genclass` command and the starter templates never; `init` of 0.3.0-beta.6 and earlier added it by default.
 
 To integrate another state library use:
 
