@@ -152,6 +152,7 @@ header.top nav .so button,button.lnk{background:none;border:0;padding:0;font:inh
 @media (max-width:620px){header.top .wrap{gap:12px}header.top nav{gap:14px}header.top nav .hm{display:none}}
 @media (max-width:420px){header.top nav .dc{display:none}}
 @media (max-width:360px){header.top .wrap{gap:10px}}
+@media (max-width:340px){header.top nav{gap:10px}header.top nav .btn{padding:0 10px}}
 h1,h2,h3{font-family:var(--display);text-wrap:balance}
 h1{font-size:clamp(26px,4vw,40px);line-height:1.15;letter-spacing:-.04em;font-weight:500}
 h2{font-size:17px;letter-spacing:-.015em;font-weight:500;margin-bottom:10px}
@@ -324,6 +325,14 @@ export function setupCommand(token: string): string {
   return `npx ${RUNTIME_PKG} init --token ${token} --mode heal`;
 }
 
+/** The setup command as HTML: each flag (--token, --mode) kept on one line, so a wrapped command still reads right. */
+function cmdHtml(cmd: string): string {
+  return cmd
+    .split(" ")
+    .map((a) => (a.startsWith("-") ? `<span class="nw">${esc(a)}</span>` : esc(a)))
+    .join(" ");
+}
+
 /** The shortest prompt that gets a coding agent to do the same; --yes because an agent has no Y/n to answer. */
 export function agentPrompt(token: string): string {
   return `Add GenClass to this web app: run \`${setupCommand(token)} --yes\` in the app's folder (ask me which folder if this one has no web app). Then start the app, check that it still works, and tell me what changed. \`npx ${RUNTIME_PKG} remove\` undoes it.`;
@@ -375,6 +384,7 @@ export const START_CSS = `
 .setup h1{font-size:clamp(28px,4vw,36px)}
 .setup-agents{align-items:center}
 #appst:empty{display:none}
+.cmdbox code .nw{white-space:nowrap}
 .setup-steps{margin:0;padding-left:20px;display:grid;gap:8px}
 .setup-status{display:inline-flex;align-items:center;gap:8px}
 .setup-status i{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
@@ -449,7 +459,7 @@ export function setupPage(nonce: string, v: SetupView): string {
   const connect = v.endpoint
     ? ""
     : `<section class="stack mt-l">
-  <div class="cmdbox"><code id="cmd">${esc(cmd)}</code><span id="cmdc"></span></div>
+  <div class="cmdbox"><code id="cmd">${cmdHtml(cmd)}</code><span id="cmdc"></span></div>
   <div class="row setup-agents"><span class="small muted">Or let your agent do it:</span>${agents}<span id="promptc"></span></div>
   <p class="small muted" id="appst" aria-live="polite"></p>
 </section>`;
@@ -832,6 +842,7 @@ body.sampling::after{content:"Sample data";position:fixed;top:60px;left:50%;tran
 .cmdbox{display:flex;align-items:center;gap:10px;background:var(--code);padding:10px 12px;min-width:0;margin:8px 0}
 .cmdbox code{flex:1;min-width:0;font:13.5px/1.5 var(--mono);overflow-wrap:anywhere}
 .cmdbox .btn{flex:none}
+.cmdbox code .nw{white-space:nowrap}
 /* the measured checks' key: hatched in the muted ink, never a problem type's hue */
 :root{--chk:repeating-linear-gradient(135deg,var(--ink2) 0 2px,transparent 2px 4px)}
 .find h3 .bdg,.adv h3 .bdg{margin-left:2px}
@@ -881,6 +892,7 @@ table.dt td .bdg{margin-left:8px;vertical-align:middle}
 .uh{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:48px 0 16px}
 .prolock{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;border:1px solid var(--accent-b,var(--rule));background:var(--accent-t,transparent);border-radius:12px;padding:16px 18px;margin:0 0 24px}.prolock p{margin:4px 0 0;color:var(--ink2);max-width:640px}
 .uh h2{font-size:18px;color:var(--ink2)}
+.uh .acts{display:flex;flex-wrap:wrap;gap:8px}
 .uh h2 b{color:var(--ink);font-weight:400}
 .getc{border:1px dashed var(--rule2);border-radius:6px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--s75)}
 .getc>*{display:flex;gap:12px;align-items:flex-start;padding:18px 20px;text-align:left;background:none;border:0;color:inherit;font:inherit;cursor:pointer;text-decoration:none;min-width:0}
@@ -894,6 +906,7 @@ table.dt td .bdg{margin-left:8px;vertical-align:middle}
 .adv article .top{display:flex;justify-content:space-between;gap:12px;align-items:center}
 .adv article h3{display:flex;align-items:center;gap:8px;font-size:14px}
 .adv article p{font-size:13px;color:var(--ink3);line-height:1.5}
+.adv article p.mono{overflow-wrap:anywhere}
 .adv article .acts{display:flex;gap:8px;margin-top:auto;padding-top:4px}
 .adv .none{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:48px 16px;border:1px solid var(--rule);border-radius:6px;color:var(--ink3);font-size:13px}
 @media (max-width:1100px){.usage{grid-template-columns:repeat(2,minmax(0,1fr))}.adv{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -930,15 +943,16 @@ figcaption{font-size:12px;color:var(--ink3);margin-top:12px;line-height:1.5}
 .tip .r b{font-variant-numeric:tabular-nums;font-weight:400}
 /* Problems: one card per kind, as Studio's advisor cards */
 .finds{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:16px}
-.find{background:var(--s75);border:1px solid var(--rule);border-radius:6px;padding:16px 18px;display:grid;gap:10px;align-content:start;min-width:0}
+.find{background:var(--s75);border:1px solid var(--rule);border-radius:6px;padding:16px 18px;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-content:start;min-width:0}
 .find .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
-.find h3{font-size:14px;display:flex;align-items:center;gap:8px}
+.find h3{font-size:14px;display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere}
+.find .top>*{min-width:0}
 .find .nw{text-align:right;white-space:nowrap}
 .find .n{font:400 22px/1 var(--display);font-variant-numeric:tabular-nums}
-.find p{font-size:13px;color:var(--ink2);line-height:1.55}
+.find p{font-size:13px;color:var(--ink2);line-height:1.55;overflow-wrap:anywhere}
 .find p.fix b{color:var(--ink);font-weight:500}
 .find .acts{display:flex;gap:8px;flex-wrap:wrap}
-.where{list-style:none;display:grid;gap:2px}
+.where{list-style:none;display:grid;grid-template-columns:minmax(0,1fr);gap:2px}
 .where li{display:flex;justify-content:space-between;gap:12px;font:12px var(--mono);padding:3px 0;border-bottom:1px dashed var(--rule)}
 .where li code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font:inherit;color:var(--ink2)}
 .where li span{color:var(--ink3);font-variant-numeric:tabular-nums;flex:none}
@@ -955,6 +969,8 @@ table.dt td.wide{width:40%}
 .blk .tablewrap table.dt{width:100%;margin:0}
 .blk table.dt th:first-child,.blk table.dt td:first-child{padding-left:20px}
 .blk table.dt th:last-child,.blk table.dt td:last-child{padding-right:20px}
+/* the Devices tables sit in the .kv grid's columns: no bleed to the panel's edges */
+.kv .tablewrap{margin:0;width:auto}
 .mix{display:flex;gap:2px;height:6px}
 .mix i{display:block;height:6px;border-radius:2px;min-width:3px}
 .chip{display:inline-flex;align-items:center;gap:7px}
@@ -992,7 +1008,7 @@ details.more summary:hover{color:var(--ink)}
 .steps .no{width:24px;height:24px;border-radius:50%;border:1px solid var(--rule2);display:flex;align-items:center;justify-content:center;font:12px var(--mono);color:var(--ink2)}
 .steps b{font-weight:400;color:var(--ink);font-size:14px}
 .steps li>div>span{display:block;font-size:13px;color:var(--ink3);margin-top:2px}
-@media (max-width:620px){.steps li{grid-template-columns:28px minmax(0,1fr)}.steps li .btn{grid-column:2;justify-self:start}}
+@media (max-width:620px){.steps li{grid-template-columns:28px minmax(0,1fr)}.steps li>.btn,.steps li>.bdg{grid-column:2;justify-self:start}.steps .cmdbox{flex-wrap:wrap}.steps .cmdbox code{flex:1 1 100%}}
 /* the Connect dialog: its status line, tabs, the key, the ways in, the copy-prompt blocks */
 .cstat{display:flex;align-items:center;gap:9px;padding:10px 12px;margin-bottom:4px;font-size:13px;color:var(--ink2);border:1px solid var(--rule);border-radius:6px;background:var(--s75)}
 .cstat i{width:8px;height:8px;border-radius:50%;background:var(--amber);flex:none;animation:gcpulse 1.6s ease-in-out infinite}
@@ -1087,6 +1103,24 @@ table.dt.tools-t td{white-space:normal}
 .blk-h.sub{margin-top:44px;border-bottom-color:var(--rule)}
 .blk-h.sub h3{font-size:17px;font-weight:500;margin:0}
 .dash-only{display:contents}
+/* a phone: the dashboard's tables tighter, their headings and routes wrapping (an ellipsis's full text is only a
+   tooltip, which a touch screen cannot show), so most fit and the rest scroll less in their box; the loop diagrams
+   drawn at their written size in their scroller, its right edge faded; small labels at 12px, the tools from the left,
+   taller touch rows */
+@media (max-width:560px){
+  .phead~* table.dt th{white-space:normal}
+  .phead~* table.dt th,.phead~* table.dt td{padding-left:8px;padding-right:8px}
+  .phead~* table.dt td.route{white-space:normal;overflow-wrap:break-word;max-width:150px}
+  .flowwrap{padding-right:56px;-webkit-mask-image:linear-gradient(90deg,var(--ink) calc(100% - 64px),transparent);mask-image:linear-gradient(90deg,var(--ink) calc(100% - 64px),transparent)}
+  .flow{min-width:1000px}
+  .flow .col,.flow .el{font-size:12px}
+  .plot text{font-size:12px}
+  .ok-t,.bad-t{font-size:12px;height:22px}
+  .ucard .ax{font-size:12px}
+  .tools{justify-content:flex-start}
+  details.more summary{padding:6px 0}
+  .mcpc .opts label{min-height:32px}
+}
 `;
 
 const DASH_JS = `
@@ -1205,6 +1239,14 @@ const DASH_JS = `
     host.appendChild(stat("Model loaded", share(ready, ready + failed), ready ? "average " + (T0.modelLoadAvgMs >= 1000 ? (T0.modelLoadAvgMs / 1000).toFixed(1) + " s" : fmt(T0.modelLoadAvgMs) + " ms") : ""));
   }
   // ---------- problems over time
+  // a phone draws the charts at their box's own width, so their labels keep their written size; a wider window keeps
+  // the 720-unit drawing scaled to fit
+  function chartW(host){
+    var de = document.documentElement, vw = de.clientWidth || window.innerWidth || 1000;
+    if (vw > 560) return 720;
+    var w = (host && host.clientWidth) || vw - 74;
+    return Math.max(240, Math.min(720, Math.round(w)));
+  }
   function trend(S){
     var host = document.getElementById("trendplot"), leg = document.getElementById("legend"), tbl = document.getElementById("trendtable");
     host.textContent = ""; leg.textContent = ""; tbl.textContent = "";
@@ -1225,7 +1267,7 @@ const DASH_JS = `
     if (total || ptotal) trendTable(tbl, rows, order, hourly, poss, ptotal);
     if (!total) { host.appendChild(el("p", "quiet", "No problems found in this period.")); return; }
     if (order.length > 1 || order[0] === "checks") order.forEach(function(s){ var x = el("span"); x.appendChild(key(colorOf(s))); x.appendChild(document.createTextNode(slotName(s))); leg.appendChild(x); });
-    var W = 720, H = 210, PL = 30, PB = 24, PT = 6, n = rows.length, plotW = W - PL, plotH = H - PB - PT;
+    var W = chartW(host), H = W < 560 ? 180 : 210, PL = 30, PB = 24, PT = 6, n = rows.length, plotW = W - PL, plotH = H - PB - PT;
     var max = niceMax(Math.max.apply(null, rows.map(function(r){ return r.total; })));
     var g = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Problems found per " + (hourly ? "hour" : "day") + " by type" });
     // the measured checks' hatch (the legend's --chk, as an SVG pattern)
@@ -1242,7 +1284,7 @@ const DASH_JS = `
       var x = PL + i * step + (step - bw) / 2, y = PT + plotH, drawn = order.filter(function(s){ return r.parts[s]; });
       drawn.forEach(function(s, j){
         var h = plotH * r.parts[s] / max; y -= h;
-        g.appendChild(svg("rect", { x: x, y: y, width: bw, height: Math.max(1, h), rx: j === drawn.length - 1 ? 3 : 0, fill: s === "checks" ? "url(#chkp)" : colorOf(s), stroke: "var(--paper)", "stroke-width": drawn.length > 1 ? 2 : 0, "data-slot": s }));
+        g.appendChild(svg("rect", { x: x, y: y, width: bw, height: Math.max(1, h), rx: j === drawn.length - 1 ? 3 : 0, fill: s === "checks" ? "url(#chkp)" : colorOf(s), stroke: "var(--paper)", "stroke-width": drawn.length > 1 ? (W < 560 ? 1 : 2) : 0, "data-slot": s }));
       });
       if (i === 0 || i === n - 1 || i === Math.floor(n / 2)) {
         var lt = svg("text", { x: PL + i * step + step / 2, y: H - 6, "text-anchor": i === 0 ? "start" : i === n - 1 ? "end" : "middle" }); lt.textContent = label(r.bucket, hourly); g.appendChild(lt);
@@ -1276,7 +1318,7 @@ const DASH_JS = `
     document.getElementById("possn").textContent = plural(total, "possible issue", "possible issues");
     fig.classList.toggle("hidden", !total);
     if (!total) return;
-    var W = 720, H = 120, PL = 30, PB = 24, PT = 6, n = rows.length, plotW = W - PL, plotH = H - PB - PT;
+    var W = chartW(host), H = W < 560 ? 100 : 120, PL = 30, PB = 24, PT = 6, n = rows.length, plotW = W - PL, plotH = H - PB - PT;
     var max = niceMax(Math.max.apply(null, rows.map(function(r){ return r.n; })));
     var g = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Possible issues (lower confidence) per " + (hourly ? "hour" : "day") });
     [0, max].forEach(function(v){
@@ -1569,7 +1611,7 @@ const DASH_JS = `
       if (anyPoss) tr.appendChild(el("td", "num poss-n", r.poss ? fmt(r.poss) : "-"));
       body.appendChild(tr);
     });
-    tb.appendChild(body); host.appendChild(tb);
+    tb.appendChild(body); var tw_tb = el("div", "tablewrap"); tw_tb.appendChild(tb); host.appendChild(tw_tb);
     var notes = [], withPage = T0.detectionsWithPage;
     if (typeof withPage === "number" && T0.detections > withPage) notes.push(plural(T0.detections - withPage, "problem", "problems") + " arrived without a page.");
     var possWithPage = T0.possibleWithPage;
@@ -1594,7 +1636,7 @@ const DASH_JS = `
       var td = el("td", "wide"), mix = el("div", "mix"), i = el("i"); i.style.width = (100 * x.count / max) + "%"; i.style.background = "var(--accent-f)"; mix.appendChild(i); td.appendChild(mix); tr.appendChild(td);
       body.appendChild(tr);
     });
-    tb.appendChild(body); host.appendChild(tb);
+    tb.appendChild(body); var tw_tb = el("div", "tablewrap"); tw_tb.appendChild(tb); host.appendChild(tw_tb);
     var o = map(B.action_outcome), applied = o.applied || T0.interventions || 0, notes = [];
     if (applied || !cf.applied) notes.push(plural(o.undone || 0, "change", "changes") + " undone" + (applied ? " (" + Math.round(100 * (o.undone || 0) / applied) + "%)" : "") + (o.failed ? ", " + plural(o.failed, "action", "actions") + " failed" : "") + ".");
     if (cf.applied) notes.push(plural(cf.undone || 0, "check fix", "check fixes") + " undone.");
@@ -1687,7 +1729,7 @@ const DASH_JS = `
       var td = el("td", "wide"), mix = el("div", "mix"), i = el("i"); i.style.width = (100 * x.count / max) + "%"; i.style.background = "var(--accent-f)"; mix.appendChild(i); td.appendChild(mix); tr.appendChild(td);
       body.appendChild(tr);
     });
-    tb.appendChild(body); host.appendChild(tb);
+    tb.appendChild(body); var tw_tb = el("div", "tablewrap"); tw_tb.appendChild(tb); host.appendChild(tw_tb);
   }
   // a.b.c(-pre.n) older than b.c.d(-pre.n); unreadable versions are not older
   function vOlder(a, b){
@@ -1725,13 +1767,13 @@ const DASH_JS = `
       var td = el("td", "wide"), mix = el("div", "mix"), i = el("i"); i.style.width = (100 * x.count / max) + "%"; i.style.background = "var(--t1)"; mix.appendChild(i); td.appendChild(mix); tr.appendChild(td);
       body.appendChild(tr);
     });
-    tb.appendChild(body); host.appendChild(tb);
+    tb.appendChild(body); var tw_tb = el("div", "tablewrap"); tw_tb.appendChild(tb); host.appendChild(tw_tb);
   }
   /** Visits per hour or day: one bar each. */
   function visitChart(host, S){
     var hourly = S.range === "24h", rows = (S.series || []).map(function(b){ return { bucket: b.bucket, n: b.ix_sessions || 0 }; });
     if (!rows.some(function(r){ return r.n; })) return;
-    var W = 720, H = 130, PL = 34, PB = 24, PT = 6, n = rows.length, plotW = W - PL, plotH = H - PB - PT;
+    var W = chartW(host), H = W < 560 ? 110 : 130, PL = 34, PB = 24, PT = 6, n = rows.length, plotW = W - PL, plotH = H - PB - PT;
     var max = niceMax(Math.max.apply(null, rows.map(function(r){ return r.n; })));
     var g = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Visits per " + (hourly ? "hour" : "day") });
     [0, max].forEach(function(v){
@@ -1811,7 +1853,7 @@ const DASH_JS = `
         tr.appendChild(el("td", "num", share(Math.min(r["100"] || 0, x.count), x.count)));
         body.appendChild(tr);
       });
-      tb.appendChild(body); host.appendChild(tb);
+      tb.appendChild(body); var tw_tb = el("div", "tablewrap"); tw_tb.appendChild(tb); host.appendChild(tw_tb);
     }
     ixTable(document.getElementById("ixclicks"), pairs(B.ix_click), "Clicks", "No clicks recorded in this period.");
     var flags = pairs(B.ix_rage).map(function(x){ return { route: x.route, key: x.key + "  (rage)", count: x.count }; })
@@ -1877,7 +1919,7 @@ const DASH_JS = `
         var td = el("td", "wide"), mix = el("div", "mix"), i = el("i"); i.style.width = (100 * x.count / max) + "%"; i.style.background = "var(--accent-f)"; mix.appendChild(i); td.appendChild(mix); tr.appendChild(td);
         body.appendChild(tr);
       });
-      tb.appendChild(body); ph.appendChild(tb);
+      tb.appendChild(body); var tw_tb = el("div", "tablewrap"); tw_tb.appendChild(tb); ph.appendChild(tw_tb);
     }
     var sh = document.getElementById("ixsteps"); sh.textContent = "";
     var gaps = map(B.ix_nav_ms), steps = pairs(B.ix_nav).sort(function(a, b){ return b.count - a.count; });
@@ -1891,7 +1933,7 @@ const DASH_JS = `
         tr.appendChild(el("td", "num", x.count ? dur((gaps[x.route + "\\t" + x.key] || 0) / x.count) : "-"));
         body2.appendChild(tr);
       });
-      tb2.appendChild(body2); sh.appendChild(tb2);
+      tb2.appendChild(body2); var tw_tb2 = el("div", "tablewrap"); tw_tb2.appendChild(tb2); sh.appendChild(tw_tb2);
     }
     var xh = document.getElementById("ixexits"); xh.textContent = "";
     var vm = map(B.ix_views), em = map(B.ix_entry), xm = map(B.ix_exit), fn = map(B.ix_first_n), fms = map(B.ix_first_ms), back = {}, firsts = {};
@@ -1912,7 +1954,7 @@ const DASH_JS = `
       tr.appendChild(el("td", "num", fn[x.key] ? dur((fms[x.key] || 0) / fn[x.key]) : "-"));
       body3.appendChild(tr);
     });
-    tb3.appendChild(body3); xh.appendChild(tb3);
+    tb3.appendChild(body3); var tw_tb3 = el("div", "tablewrap"); tw_tb3.appendChild(tb3); xh.appendChild(tw_tb3);
   }
   // ---------- funnels: the app's funnels, the visits that reached each step in order, and their editor
   var funnelsUrl = P.funnelsUrl || ("/api/projects/" + encodeURIComponent(secret) + "/funnels"), editing = false, lastS = null;
@@ -2407,7 +2449,8 @@ const DASH_JS = `
       current = v;
       parts.forEach(function(s){ s.classList.toggle("vh", !has(s, v)); });
       var rv = PARENT[v] || v;
-      var r = links.filter(function(a){ return inRail(a) && hrefOf(a) === id; })[0] || links.filter(function(a){ return inRail(a) && VIEW[hrefOf(a)] === rv; })[0];
+      // (a rail link the window does not show, such as Export from 901px, gives way to its parent's)
+      var r = links.filter(function(a){ return inRail(a) && hrefOf(a) === id && a.getClientRects().length; })[0] || links.filter(function(a){ return inRail(a) && VIEW[hrefOf(a)] === rv; })[0];
       var m = links.filter(function(a){ return !inRail(a) && hrefOf(a) === id; })[0] || links.filter(function(a){ return !inRail(a) && VIEW[hrefOf(a)] === v; })[0];
       links.forEach(function(a){ a.setAttribute("aria-current", String(a === r || a === m)); });
       var t = TITLE[v], vt = document.getElementById("vtitle"), vd = document.getElementById("vdesc");
@@ -2433,6 +2476,18 @@ const DASH_JS = `
     gcShow = function(id){ return show(id, true); };
   })();
   mcpAll(); alinkShow();
+  (function(){
+    var lw = document.documentElement.clientWidth, rt = 0;
+    window.addEventListener("resize", function(){
+      clearTimeout(rt);
+      rt = setTimeout(function(){
+        var w = document.documentElement.clientWidth; if (w === lw) return;
+        var was = lw; lw = w;
+        if (!shownS || (was > 560 && w > 560)) return;
+        try { trend(shownS); possibleTrend(shownS); var se = document.getElementById("ixsess"), f = se && se.querySelector("figure"); if (f) { f.remove(); visitChart(se, shownS); } } catch (e) {}
+      }, 200);
+    });
+  })();
   var mdb = document.getElementById("mdcopy");
   if (mdb) mdb.addEventListener("click", function(){ if (shownS) gcCopy(mdb, markdown(shownS), null); });
   var btn = document.getElementById("refresh");
@@ -2884,7 +2939,7 @@ export function dashboardPage(
   // what a new app's dashboard says first: the same one command as /start/<secret> (a self-hosted collector has no CLI)
   const firstStep = opts.endpoint
     ? `<div><b>Add the key</b></div><button class="btn sm" type="button" data-open="m-connect" data-tab="fw">Connect</button>`
-    : `<div class="minw0"><b>Install</b><div class="cmdbox"><code id="ncmd">${esc(setupCommand(project.token))}</code><button class="btn sm" type="button" data-copy="${esc(setupCommand(project.token))}" data-target="ncmd" aria-label="Copy the command">Copy</button></div></div><button class="btn sm ghost" type="button" data-open="m-connect" data-tab="fw">Other ways</button>`;
+    : `<div class="minw0"><b>Install</b><div class="cmdbox"><code id="ncmd">${cmdHtml(setupCommand(project.token))}</code><button class="btn sm" type="button" data-copy="${esc(setupCommand(project.token))}" data-target="ncmd" aria-label="Copy the command">Copy</button></div></div><button class="btn sm ghost" type="button" data-open="m-connect" data-tab="fw">Other ways</button>`;
   const connect = connectDialog({
     token: project.token,
     account: !!acct,
@@ -2937,7 +2992,7 @@ ${
     [
       { href: "#mcp", label: "MCP", icon: "bot" },
       { href: "#loop", label: "Closed loop", icon: "loop" },
-      ...(opts.extra ? [{ href: "#forwarding", label: "Integrations", icon: "blocks" } as RailItem] : []),
+      ...(opts.extra ? [{ href: "#forwarding", label: "Integrations", icon: "blocks" } as RailItem, { href: "#export", label: "Export", icon: "download", phoneOnly: true } as RailItem] : []),
     ],
   ];
   const menus: ProductMenu[] = [

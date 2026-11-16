@@ -475,7 +475,7 @@ describe("Pro (id team) is the one plan sold on the site, for the account; Enter
       expect(page).toContain(live ? "You are on the <b>Free</b> plan.</p>" : "You are on the <b>Free</b> plan. Paid plans are not on sale yet.</p>");
       expect(page).toContain("grid-template-columns:repeat(3,minmax(0,1fr))");
       expect(page).toContain('<p class="price">$15 / developer / month</p>');
-      expect(page).toContain("<li>Your team on it, $15 a developer</li>");
+      expect(page).toMatch(/<li(?: class="folded")?>Your team on it, \$15 a developer<\/li>/); // folded behind "N more" on a phone only
       expect(page).toContain("<li>More than 3 apps</li>");
       expect(page.match(/<li>Your own classifier/g)).toHaveLength(1);
       // bought for the account here, with how many developers (no project to choose first)
