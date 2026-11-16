@@ -669,7 +669,8 @@ export function formatReport(rep) {
   const part = rep.partial ?? null;
   const locked = rep.locked ?? null;
   const lockedCounts = locked ? SEVERITIES.filter((s) => locked.severities[s]).map((s) => `${locked.severities[s]} ${s}`).join(", ") : "";
-  const score = locked ? `Score ${c.bold("with Pro")}` : rep.score.value === null ? "no score" : `${rep.ranAt === "local" ? "Visual score" : "Score"} ${c.bold(`${rep.score.value}/100`)}${part ? c.yellow(` over ${part.measured} of ${part.of} parts`) : ""}`;
+  // the free view has the score and its breakdown since 2026-11-15 (only the details are Pro's); an older one did not
+  const score = locked && rep.score.value === null ? `Score ${c.bold("with Pro")}` : rep.score.value === null ? "no score" : `${rep.ranAt === "local" ? "Visual score" : "Score"} ${c.bold(`${rep.score.value}/100`)}${part ? c.yellow(` over ${part.measured} of ${part.of} parts`) : ""}`;
   // nothing found means something only when everything was looked at
   const nothing = !!part && part.measured === 0;
   const found = locked ? `${locked.total} problem${locked.total === 1 ? "" : "s"}${lockedCounts ? ` (${lockedCounts})` : ""}` : nothing ? "nothing was measured" : n === 0 ? (part ? `no problems in what was measured` : c.green(`${sym.ok} no problems found`)) : `${n} problem${n === 1 ? "" : "s"} (${counts})`;
@@ -685,7 +686,7 @@ export function formatReport(rep) {
   // with nothing measured, eight lines of "not measured" and eight notes saying why add nothing to the sentence above
   if (rep.categories?.length && !nothing) {
     p();
-    for (const cat of rep.categories) p(`  ${cat.label.padEnd(20)} ${cat.measured ? (locked ? `${String(cat.count ?? 0).padStart(3)} found` : String(cat.value).padStart(3)) : "  -"}${cat.measured ? "" : c.gray(/nothing to try/i.test(String(cat.why ?? "")) ? "  nothing to try on this page" : "  not measured")}`);
+    for (const cat of rep.categories) p(`  ${cat.label.padEnd(20)} ${cat.measured ? (locked && (cat.value === null || cat.value === undefined) ? `${String(cat.count ?? 0).padStart(3)} found` : String(cat.value).padStart(3)) : "  -"}${cat.measured ? "" : c.gray(/nothing to try/i.test(String(cat.why ?? "")) ? "  nothing to try on this page" : "  not measured")}`);
   }
   if (rep.top?.length) {
     p();
@@ -709,7 +710,7 @@ export function formatReport(rep) {
   }
   if (locked && locked.total > n) {
     p();
-    p(`  ${c.yellow(sym.warn)} ${fold(`The free view: ${n} of ${locked.total} findings in full. The score, the other findings and their fixes come with Pro (3 days free). To have your coding agent fix them all:`, "    ", 4)}`);
+    p(`  ${c.yellow(sym.warn)} ${fold(`The free view: ${n} of ${locked.total} findings in full. What the others are and how to fix them come with Pro (3 days free). To have your coding agent fix them all:`, "    ", 4)}`);
     p(`    ${c.cyan(`npx genclass fix ${rep.url}`)}`);
   }
   const notes = (rep.notes ?? []).filter((note) => !(nothing && / not measured: /.test(note)));

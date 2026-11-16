@@ -130,7 +130,20 @@ describe("scan: report pieces (bin/lib/scan.mjs)", () => {
     expect(hostedTarget({ GENCLASS_SCAN_HOSTED: "https://scan.example/" }, { host: SITE, access_token: "gcs_abc" })).toEqual({ base: "https://scan.example", token: null });
   });
 
-  it("the free view (no Pro): how many problems, the sample, and where the rest is; never a score of null", () => {
+  it("the free view as it is now: the score and its breakdown, the sample, and where the rest is", () => {
+    const free = {
+      ...HOSTED_REPORT,
+      findings: [HOSTED_REPORT.findings[0], { n: 9, category: "visual", severity: "serious", locked: true }],
+      gate: { locked: true, shown: 1, total: 5, severities: { critical: 1, serious: 3, minor: 1 } },
+    };
+    const text = formatReport(hostedReport("https://example.com/", free, SITE));
+    expect(text).toContain("Score 41/100");
+    expect(text).toContain("5 problems (1 critical, 3 serious, 1 minor)");
+    expect(text).not.toMatch(/null|undefined|with Pro  /);
+    expect(text.replace(/\s+/g, " ")).toContain("What the others are and how to fix them come with Pro");
+  });
+
+  it("an older free view (no score): how many problems, the sample, and where the rest is; never a score of null", () => {
     const free = {
       ...HOSTED_REPORT,
       score: { locked: true, categories: [{ id: "visual", label: "Visual bugs", measured: true, count: 2 }, { id: "speed", label: "Speed", measured: false, count: 0 }] },
