@@ -555,7 +555,7 @@ describe("pages: the sign-in pages sit on genclass.dev's self-healing sphere, as
     // the column on the left, the sphere on the right; one column over a dimmed sphere on a phone
     const login = loginPage("n", { google: true, github: true, next: null });
     expect(login).toContain("body.mesh main.wrap{max-width:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,40%) 1fr;");
-    expect(login).toContain("@media (max-width:900px){body.mesh main.wrap{grid-template-columns:1fr}");
+    expect(login).toContain("@media (max-width:900px){body.mesh main.wrap{grid-template-columns:minmax(0,1fr)}");
   });
 
   it("the CSP allows the site's fonts and nothing more for scripts: the mesh loads by nonce", () => {

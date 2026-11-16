@@ -67,17 +67,26 @@ const PAGE_CSS = `
 .rp-ch legend{font-size:14px;font-weight:500;margin-bottom:6px;padding:0}
 .rp-ch label{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:start;padding:12px 14px;border:1px solid var(--rule2,var(--rule));border-radius:8px;cursor:pointer}
 .rp-ch label:has(input:checked){border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
-.rp-ch input{margin:3px 0 0}
+.rp-ch input{margin:3px 0 0;accent-color:var(--accent)}
 .rp-ch b{font-weight:500}
 .rp-ch small{grid-column:2;color:var(--ink3);font-size:13px}
 .rp-al{display:flex;gap:10px;align-items:flex-start;font-size:14px}
-.rp-al input{margin-top:3px}
+.rp-al input{margin-top:3px;accent-color:var(--accent)}
 .rp-acts{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .rp-note{color:var(--ink3);font-size:13px;margin:0}
 .rp-ok{color:var(--accent-f,var(--accent));font-size:14px;margin:0}
 .rp-err{color:var(--warn-f,#e5484d);font-size:14px;margin:0}
 .rp-err:empty,.rp-ok:empty{display:none}
-.rp-pr{white-space:pre-wrap;word-break:break-word;font-family:"Source Code Pro",ui-monospace,monospace;font-size:13px;line-height:1.55;padding:14px 16px;border:1px solid var(--rule);border-radius:8px;background:var(--panel,transparent);max-height:55vh;overflow:auto}
+.rp-pr{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:13px;line-height:1.55;padding:14px 16px;border:1px solid var(--rule);border-radius:0;background:var(--panel,transparent);max-height:55vh;overflow:auto;margin-top:20px}
+.rp-pr+.rp-acts,.rp-acts+.rp-note{margin-top:16px}
+.who{overflow-wrap:anywhere}
+.rp{margin-top:20px}
+/* the bare pages load ACCOUNT_CSS first: its .auth label / .auth input (the sign-in fields) must not reach the choices */
+.auth .rp-ch label,.auth .rp-al{margin:0;font:400 14px/1.5 var(--sans);color:var(--ink)}
+.auth .rp-al{display:flex;color:var(--ink2)}
+.auth .rp-ch input,.auth .rp-al input{min-height:0;width:auto;padding:0;border:0;flex:none;accent-color:var(--accent)}
+.auth .rp-ch label{border-radius:0}
+.rp+.rp-note{margin-top:16px}
 `;
 
 function choices(every: Every, alerts: boolean): string {

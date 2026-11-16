@@ -329,7 +329,7 @@ function appsSection(r: Report): string {
   const fixed = r.apps.some((x) => !x.demo && x.totals.fixed > 0);
   const border = `border-bottom:1px solid ${C.rule}`;
   const th = (t: string, right = true) => `<th class="gc-i3 gc-rule" style="padding:0 0 8px 8px;font-size:12px;line-height:16px;font-weight:600;color:${C.ink3};text-align:${right ? "right" : "left"};${border};white-space:nowrap">${esc(t)}</th>`;
-  const td = (h: string, right = true) => `<td class="gc-i1 gc-rule" style="padding:10px 0 10px 8px;font-size:14px;line-height:20px;color:${C.ink};text-align:${right ? "right" : "left"};${border};vertical-align:top">${h}</td>`;
+  const td = (h: string, right = true) => `<td class="gc-i1 gc-rule" style="padding:10px 0 10px 8px;font-size:14px;line-height:20px;color:${C.ink};text-align:${right ? "right" : "left"};${border};vertical-align:top${right ? ";white-space:nowrap" : ""}">${h}</td>`;
   const sub = (t: string) => (t ? `<br><span class="gc-i3" style="font-size:12px;line-height:16px;color:${C.ink3}">${esc(t)}</span>` : "");
   const name = (x: AppReport, status: string) => `<td class="gc-rule" style="padding:10px 0;font-size:14px;line-height:20px;text-align:left;${border};vertical-align:top">${a(x.dashboard, x.name)}${sub(`${x.pro ? "Pro" : "Free"} · ${status}`)}</td>`;
   const demo = r.apps.filter((x) => x.demo);
@@ -554,7 +554,7 @@ export function htmlOf(r: Report): string {
 <body class="gc-bg" style="margin:0;padding:0;background:${C.bg};font-family:${FONT}">${preview}
 <table ${TABLE} class="gc-bg" bgcolor="${C.bg}" style="background:${C.bg}"><tr><td align="center" style="padding:28px 20px 40px">
 <!--[if mso]><table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
-<table ${TABLE} style="max-width:600px"><tr><td style="font-family:${FONT};text-align:left">
+<table ${TABLE} style="max-width:600px"><tr><td style="font-family:${FONT};text-align:left;word-break:break-word;overflow-wrap:anywhere">
 ${head}<table ${TABLE}><tr><td style="padding:32px 0 0">${leadHtml(r, l)}</td></tr></table>${details}${footer(r)}
 </td></tr></table>
 <!--[if mso]></td></tr></table><![endif]-->

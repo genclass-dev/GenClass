@@ -8,7 +8,7 @@
 // Talk to us, a mailto link, whatever the key. Which plans include something is said from billing/plans.json
 // (plansWith), never by name.
 
-import { CLIENT_JS, ORG_CSS, orgRail, pitchList, time } from "./account-pages.js";
+import { CLIENT_JS, ORG_CSS, orgRail, PITCH_SHOWN, pitchList, time } from "./account-pages.js";
 import type { Env } from "./collector.js";
 import type { D1Like, Project, Range } from "./dashboard.js";
 import { integrationRows, integrationsKey, KIND_NAMES, KINDS, maskConfig, openConfig, DATADOG_SITES, POSTHOG_HOSTS, type Kind } from "./forward.js";
@@ -112,6 +112,20 @@ const BILLING_CSS = `
 .team td.act{text-align:right;white-space:nowrap}
 .team .acct-form{margin-top:14px}
 @media (max-width:860px){.plans{grid-template-columns:1fr}}
+/* stacked on a phone, a plan shows PITCH_SHOWN lines and folds the rest behind "N more" (the desktop columns show all) */
+.pfold{display:none}
+@supports selector(:has(a)){@media (max-width:860px){.plan .pfold{display:block;font-size:13px}.plan:has(>.pfold:not([open])) li.folded{display:none}}}
+/* the Apps table: rows stack on a phone, as the Team tables do (ORG_CSS table.dt.rows); its tag gets the warn colour from here, not a style attribute the CSP blocks */
+#projects td .tag{color:var(--warn);border-color:var(--warn)}
+@media (max-width:600px){
+  #projects table thead{display:none}
+  #projects table tr{display:block;padding:12px 0;border-bottom:1px solid var(--rule)}
+  #projects table td{display:block;border:0;padding:3px 20px;white-space:normal;overflow-wrap:anywhere}
+  #projects table td:first-child{font-weight:500}
+  #projects table td.act{text-align:left;padding-top:8px}
+  #projects table td.act a:not(.btn){display:inline-flex;align-items:center;min-height:32px}
+}
+@media (max-width:767px){.plan .tag{font-size:12px}}
 `;
 
 function statusLine(v: BillingView, plan: Plan): string {
@@ -185,9 +199,14 @@ function planColumn(v: BillingView, p: Plan, current: Plan): string {
   else if (byAgreement(p)) act = talk;
   else if (v.live && !waiting) act = buy;
   const features = p.features
-    .map((f) => `<li${f.available ? "" : ' class="soon"'}>${esc(f.text)}${f.available || /coming next/i.test(f.text) ? "" : " (coming next)"}</li>`)
+    .map((f, i) => {
+      const cls = [f.available ? "" : "soon", i >= PITCH_SHOWN ? "folded" : ""].filter(Boolean).join(" ");
+      return `<li${cls ? ` class="${cls}"` : ""}>${esc(f.text)}${f.available || /coming next/i.test(f.text) ? "" : " (coming next)"}</li>`;
+    })
     .join("");
-  return `<div class="plan${cur ? " cur" : pick ? " pick" : ""}"><h3>${esc(p.name)}</h3><p class="price">${esc(priceText(p))}</p><p class="sum">${esc(p.summary)}</p><ul>${features}</ul><div class="act">${act}</div></div>`;
+  const more = p.features.length - PITCH_SHOWN;
+  const fold = more > 0 ? `<details class="pmore pfold"><summary>${more} more</summary></details>` : "";
+  return `<div class="plan${cur ? " cur" : pick ? " pick" : ""}"><h3>${esc(p.name)}</h3><p class="price">${esc(priceText(p))}</p><p class="sum">${esc(p.summary)}</p><ul>${features}</ul>${fold}<div class="act">${act}</div></div>`;
 }
 
 /** The account's projects, each with its plan and the way to change it (its own page). */
@@ -208,7 +227,7 @@ function projectsSection(v: BillingView): string {
   return `<section class="blk team" id="projects">
   <div class="blk-h"><h2>Apps</h2><span class="aside">What your plan covers</span></div>
   <p class="intro">Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}${PAID_PLANS[0] ? `; ${esc(PAID_PLANS[0].name)} covers ${PAID_PLANS[0].limits.apps ? `up to ${PAID_PLANS[0].limits.apps} apps` : "every app"}, ${esc(priceText(PAID_PLANS[0]))}` : ""}. More apps come with Enterprise.</p>
-  <table><thead><tr><th>Project</th><th>Plan</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="tablewrap"><table><thead><tr><th>Project</th><th>Plan</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
 </section>`;
 }
 
@@ -403,7 +422,7 @@ ${notice}${test}
     user: { label, sub: orgName(label) },
     ...orgRail("billing"),
     railLabel: "Organization",
-    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".planpage .sb-ph{text-align:center}.planpage .sb-ph>div{margin:0 auto}.planpage #plan{background:none;border:0;box-shadow:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:0}.planpage #plan .intro{margin:20px auto 0;text-align:center}.planpage #plan .err:empty{display:none}.planpage .notice{max-width:440px;margin-left:auto;margin-right:auto}.planpage .acct-form{justify-content:center}.plan.big{width:100%;max-width:440px;padding:24px 24px 22px;gap:8px}.plan.big h3{font-size:24px;letter-spacing:-.01em}.plan.big .price{font-size:15px;font-weight:600;margin-top:2px}.plan.big ul{margin-top:6px;gap:6px}.plan.big li{font-size:13.5px}.plan.big .pmore{font-size:12.5px}.plan.big .pmore ul{margin-top:6px}.plan.big .act{padding-top:12px}.plan.big .act .btn{width:100%;justify-content:center;padding:11px 16px;font-size:14.5px}.free{margin-top:12px;font-size:11px;width:100%;max-width:440px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}.trialnote{margin:10px 0 0;font-size:13px;color:var(--ink3);text-align:center;width:100%}dialog.why{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:460px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}dialog.why::backdrop{background:rgba(0,0,0,.62)}dialog.why h2{font-size:21px;margin:0 0 4px}dialog.why fieldset{border:0;padding:0;margin:14px 0 6px}dialog.why label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;cursor:pointer}dialog.why textarea{margin-top:6px}.why-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}",
+    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".planpage .sb-ph{text-align:center}.planpage .sb-ph>div{margin:0 auto}.planpage #plan{background:none;border:0;box-shadow:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:0}.planpage #plan .intro{margin:20px auto 0;text-align:center}.planpage #plan .err:empty{display:none}.planpage .notice{max-width:440px;margin-left:auto;margin-right:auto}.planpage .acct-form{justify-content:center}.plan.big{width:100%;max-width:440px;padding:24px 24px 22px;gap:8px}.plan.big h3{font-size:24px;letter-spacing:-.01em}.plan.big .price{font-size:15px;font-weight:600;margin-top:2px}.plan.big ul{margin-top:6px;gap:6px}.plan.big li{font-size:13.5px}.plan.big .pmore{font-size:12.5px}.plan.big .pmore ul{margin-top:6px}.plan.big .act{padding-top:12px}.plan.big .act .btn{width:100%;justify-content:center;padding:11px 16px;font-size:14.5px}.free{margin-top:12px;font-size:11px;width:100%;max-width:440px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}.planpage .linkish{display:inline-block;padding:6px 12px;margin:-6px -12px}.trialnote{margin:10px 0 0;font-size:13px;color:var(--ink3);text-align:center;width:100%}dialog.why{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:460px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}dialog.why::backdrop{background:rgba(0,0,0,.62)}dialog.why h2{font-size:21px;margin:0 0 4px}dialog.why fieldset{border:0;padding:0;margin:14px 0 6px}dialog.why label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;cursor:pointer}dialog.why textarea{margin-top:6px}.why-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}",
     body,
     script: CLIENT_JS + script,
   });

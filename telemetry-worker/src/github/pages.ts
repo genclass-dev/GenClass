@@ -58,6 +58,7 @@ ul.facts b{color:var(--ink);font-weight:500}
 @media (max-width:620px){.gh-wf{grid-template-columns:minmax(0,1fr)}}
 details.gh-more{max-width:76ch;border-top:1px solid var(--rule);padding-top:14px}
 details.gh-more>summary{cursor:pointer;font-size:14px;font-weight:500;color:var(--ink2)}
+@media (max-width:620px){details.gh-more>summary{padding:11px 0}}
 details.gh-more>summary:hover{color:var(--ink)}
 details.gh-more[open]>summary{margin-bottom:6px}
 .gh-st{font-size:13px;color:var(--ink2)}
@@ -412,7 +413,7 @@ export function accountGithubPage(nonce: string, v: GithubAccountView): string {
     ? `<p class="intro">This server cannot ask GitHub who you are, so repositories cannot be linked here. Reviews work without it.</p>`
     : v.connected
       ? `<p class="intro">Connected as <b>${esc(v.connected.login)}</b>. GitHub's answer about your repositories is used for 30 minutes, then this page asks again.${v.connected.more ? " Only the first 300 repositories are listed." : ""} <a href="/github/connect">Refresh from GitHub</a></p>`
-      : `<p class="intro">To link a repository, this page asks GitHub which installations of ${esc(v.slug)}[bot] and which repositories you can reach. Your GitHub token is used for that question and not kept.</p><div class="row"><a class="btn" href="/github/connect"><span>Connect GitHub</span></a></div>`;
+      : `<p class="intro">To link a repository, this page asks GitHub which installations of ${esc(v.slug)}[bot] and which repositories you can reach. Your GitHub token is used for that question and not kept.</p><div class="row mt-s"><a class="btn" href="/github/connect"><span>Connect GitHub</span></a></div>`;
   const table = v.repos.length
     ? `<div class="tablewrap"><table class="dt rows"><thead><tr><th>Repository</th><th>What the app is doing</th><th>GenClass app</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${
         adds

@@ -260,7 +260,7 @@ code,pre,.mono{font-family:var(--mono)}
 .btn.xl{min-height:40px;padding:0 18px;font-size:14px}
 .btn .ic{width:14px;height:14px}
 .btn.ico{padding:0;width:26px;min-height:26px}
-@media (pointer:coarse){.btn,.btn.sm,.btn.tiny{min-height:40px}.btn.ico{width:40px}}
+@media (pointer:coarse){.btn,.btn.sm,.btn.tiny{min-height:40px}.btn.ico{width:40px}.js .sb-x{min-width:40px;min-height:40px;align-items:center;justify-content:center;margin:-10px -10px -10px 0}}
 button.lnk{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
 /* inputs: Studio's control fill and 6px corners; the border at 3:1 for contrast */
 input[type=text],input[type=email],input[type=password],input[type=url],input[type=date],input[type=search],select,textarea{min-height:34px;width:100%;padding:0 12px;border-radius:6px;border:1px solid var(--line);background:var(--ctl);color:var(--ink);font:14px var(--sans)}
@@ -426,17 +426,38 @@ main.wrap{flex:1;min-width:0}
 }
 @media (max-width:767px){
   .sb-ib.sb-burger{display:inline-flex;margin-left:8px}
+  .sb-ib,.sb-av{flex:none}
   .sb-home{width:40px}
-  .sb-rail{position:fixed;left:0;top:48px;height:calc(100vh - 48px);width:0;z-index:60}
-  .sb-rail nav{width:0;padding:8px 0;border-right:0}
-  body.sb-open .sb-rail nav{width:240px;padding:8px;border-right:1px solid var(--rule);box-shadow:var(--shadow-r)}
+  .sb-rail{position:fixed;left:0;top:48px;height:calc(100vh - 48px);height:calc(100dvh - 48px);width:0;z-index:60}
+  .sb-rail nav{width:0;padding:8px 0;border-right:0;visibility:hidden;transition:width .15s ease,visibility 0s .15s}
+  body.sb-open .sb-rail nav{width:240px;padding:8px;border-right:1px solid var(--rule);box-shadow:var(--shadow-r);visibility:visible;transition:width .15s ease}
   .sb-cr .nm{max-width:120px}
   .sb-crumbs .bdg,.sb-fb{display:none}
   .sb-page{padding:20px 16px 48px}
   .sb-acts .btn span{display:none}
   .sb-acts .btn{padding:0 8px}
 }
-@media (max-width:420px){.sb-crumbs .sb-org{display:none}.sb-crumbs .sb-org+.sb-div{display:none}}
+/* the org switcher gives way on a phone; the divider before it goes too, the one before the project stays */
+@media (max-width:420px){.sb-crumbs .sb-org{display:none}.sb-crumbs>.sb-div:first-child{display:none}}
+/* a phone: the header's groups closer together, so they fit from 360px without pushing the page sideways */
+@media (max-width:480px){.sb-top{gap:2px;padding-right:8px}.sb-acts{margin-left:4px;gap:4px}.sb-right{gap:2px}.sb-mid{padding:0 2px}}
+/* the narrowest phones: the theme follows the phone's own setting, so its button gives its room to Sign in and the menus */
+@media (max-width:400px){.sb-right>span:first-child{display:none}}
+/* a phone: the project's name gets the header's spare room (the live status stays on the overview), fields at 16px
+   so iOS does not zoom the page on focus, small labels at 12px, the rail's counts too */
+@media (max-width:560px){
+  .sb-home{width:36px}.sb-ib.sb-burger{margin-left:6px}
+  .sb-acts .bdg{display:none}
+  .sb-cr .nm{max-width:none}
+  input[type=text],input[type=email],input[type=password],input[type=url],input[type=date],input[type=search],select,textarea{font-size:16px}
+  .bdg{font-size:12px;height:22px}
+  .sb-rail a .cnt{font-size:12px}
+}
+/* Sign in: its word, and on the narrowest phones its icon instead, so the project's name keeps some room */
+.sb-in .ic{display:none}
+@media (max-width:360px){.sb-in .ic{display:block}.sb-in span{display:none}.btn.sb-in{padding:0 7px}}
+/* the phone-only rail links (what the product menu holds there): the menu shows them from 901px */
+@media (min-width:901px){.sb-rail a.ph-only{display:none}}
 `;
 
 // --------------------------------------------------------------------------------------------- copy
@@ -631,13 +652,16 @@ document.addEventListener("keydown", function(e){
   }
   function place(){
     if (!pop || !list[at]) return;
-    var s = list[at], vw = window.innerWidth, vh = window.innerHeight, pw = pop.offsetWidth, ph = pop.offsetHeight, x, y;
+    // the layout viewport's own size (window.innerWidth grows with a page wider than a phone's screen)
+    var s = list[at], de = document.documentElement, vw = de.clientWidth || window.innerWidth, vh = de.clientHeight || window.innerHeight, pw = pop.offsetWidth, ph = pop.offsetHeight, x, y;
     if (!s.n) { spot.className = "tour-spot mid"; spot.style.top = spot.style.left = "50%"; spot.style.width = spot.style.height = "0px"; pop.style.left = Math.max(16, (vw - pw) / 2) + "px"; pop.style.top = Math.max(16, (vh - ph) / 2) + "px"; return; }
     var r = s.n.getBoundingClientRect(), pad = 6;
     // the part of it on screen (a tall section is cut at the viewport)
-    var top = Math.max(r.top, 52), bottom = Math.min(r.bottom, vh - 8), left = Math.max(r.left, 0), right = Math.min(r.right, vw);
+    // (under the sticky header, unless the part is in the header)
+    var hd = document.querySelector(".sb-top"), hb = hd && !hd.contains(s.n) ? hd.getBoundingClientRect().bottom + 4 : 0;
+    var top = Math.max(r.top, hb), bottom = Math.min(r.bottom, vh - 8), left = Math.max(r.left, 0), right = Math.min(r.right, vw);
     spot.className = "tour-spot";
-    spot.style.top = (top - pad) + "px"; spot.style.left = (left - pad) + "px"; spot.style.width = (right - left + pad * 2) + "px"; spot.style.height = Math.max(0, bottom - top + pad * 2) + "px";
+    var st = Math.max(top - pad, 0); spot.style.top = st + "px"; spot.style.left = (left - pad) + "px"; spot.style.width = (right - left + pad * 2) + "px"; spot.style.height = Math.max(0, bottom + pad - st) + "px";
     if (bottom - top > vh * 0.5) {
       // tall: beside it when there is room, else in its lower right corner
       if (vw - right > pw + 32) { x = right + 16; y = Math.min(Math.max(16, top + 24), vh - ph - 16); }
@@ -663,7 +687,7 @@ document.addEventListener("keydown", function(e){
     next.textContent = i === 0 ? "Show me" : last ? (s.connect ? "Connect my app" : "Done") : "Next";
     if (s.n && s.n.scrollIntoView) {
       var r = s.n.getBoundingClientRect();
-      try { s.n.scrollIntoView({ block: r.height > window.innerHeight * 0.5 ? "start" : "center" }); } catch (e) { try { s.n.scrollIntoView(); } catch (x) {} }
+      try { s.n.scrollIntoView({ block: r.height > (document.documentElement.clientHeight || window.innerHeight) * 0.5 ? "start" : "center" }); } catch (e) { try { s.n.scrollIntoView(); } catch (x) {} }
     }
     place(); setTimeout(place, 200);
     try { next.focus({ preventScroll: true }); } catch (e) {}
@@ -722,6 +746,8 @@ export interface RailItem {
   current?: boolean;
   /** an element id for the link */
   id?: string;
+  /** only in the rail below 901px, where the product menu that holds it is hidden; never in the command menu */
+  phoneOnly?: boolean;
 }
 
 /** A product menu: a title and groups of links; `view` shows it only with that view (data-v). */
@@ -773,7 +799,7 @@ export interface StudioOptions {
 }
 
 const railLink = (r: RailItem): string =>
-  `<a href="${esc(r.href)}"${r.id ? ` id="${esc(r.id)}"` : ""}${r.current ? ' aria-current="true"' : ""} title="${esc(r.label)}">${icon(r.icon, 20)}<span class="lbl">${esc(r.label)}</span>${
+  `<a href="${esc(r.href)}"${r.id ? ` id="${esc(r.id)}"` : ""}${r.phoneOnly ? ' class="ph-only"' : ""}${r.current ? ' aria-current="true"' : ""} title="${esc(r.label)}">${icon(r.icon, 20)}<span class="lbl">${esc(r.label)}</span>${
     r.count ? `<span class="cnt" id="${esc(r.count)}"></span>` : ""
   }</a>`;
 
@@ -836,7 +862,7 @@ function header(o: StudioOptions): string {
         "receipt",
         14,
       )}Billing</a><hr><form method="post" action="/logout"><button type="submit">${icon("logout", 14)}Sign out</button></form></div></div>`
-    : '<a class="btn sm ghost" href="/login">Sign in</a>';
+    : `<a class="btn sm ghost sb-in" href="/login" aria-label="Sign in">${icon("user", 14)}<span>Sign in</span></a>`;
   return `<header class="sb-top">
 <button class="sb-ib sb-burger" type="button" data-burger aria-label="Menu" aria-expanded="false">${icon("menu", 15)}</button>
 <a class="sb-home" href="${o.user ? "/account" : "https://genclass.dev/"}" aria-label="${o.user ? "All projects" : "GenClass"}">${MARK}</a>
@@ -867,7 +893,7 @@ function protectDialog(): string {
 function commandMenu(o: StudioOptions): string {
   const groups: Record<string, string[]> = {};
   const add = (g: string, label: string, href: string, ic: IconName) => (groups[g] ??= []).push(`<li><a href="${esc(href)}">${icon(ic, 16)}${esc(label)}</a></li>`);
-  for (const r of [...o.rail.flat(), ...(o.railEnd ?? [])]) add(o.project ? "Project" : "Organization", r.label, r.href, r.icon);
+  for (const r of [...o.rail.flat(), ...(o.railEnd ?? [])]) if (!r.phoneOnly) add(o.project ? "Project" : "Organization", r.label, r.href, r.icon);
   for (const m of o.menus ?? []) for (const g of m.groups) for (const i of g.items) add(m.title, i.label, i.href, i.icon ?? "file");
   for (const c of o.commands ?? []) add(c.group, c.label, c.href, c.icon ?? "file");
   for (const p of o.projects ?? []) add("Projects", p.name, `/account/apps/${p.id}`, "box");
