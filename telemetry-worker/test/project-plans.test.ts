@@ -12,7 +12,7 @@ import { ownerOf, resetOwnerCache } from "../src/paid.js";
 import { accessIn, accountAccess, accountProjectsAccess, byQuantity, coverage, FREE, pitchLines, priceText, PLANS } from "../src/plans.js";
 import { FREE_REASONS, trialFor } from "../src/billing.js";
 import { FREE_REASONS_SHOWN } from "../src/billing-pages.js";
-import { resetStripeCache } from "../src/stripe.js";
+import { resetStripeCache, trialCancelled } from "../src/stripe.js";
 import { monthOf, OBSERVE_HEADER, resetUsageCache } from "../src/usage.js";
 import { call, cliToken, createApp, deliver, fakeStripe, GENCLASS_PORTAL, now, price, resetClock, sendBatch, setPlan, setup, signedIn, stripeEvent, subscription, WEBHOOK_SECRET } from "./account-helpers.js";
 
@@ -388,6 +388,182 @@ describe("Pro's trial: 3 days free at Checkout, once per account (src/billing.ts
     // another account's subscription is not this one's
     const b = await signedIn(t.env, "bob@example.com");
     expect(await trialFor(t.sql.api, b.account.id, pro)).toBe(3);
+  });
+});
+
+describe("Pro's trial: a cancel during the 3 free days ends the trial and Pro at once (src/stripe.ts trialCancelled, the owner's call of 2026-11-15)", () => {
+  /** The trial's end, which is also its first period's end: 29 h 46 min after T0. */
+  const END = 1_792_000_000;
+  const DAY_S = 86_400;
+  /** Stripe as it cancels a subscription: status canceled, ended now. */
+  const ending = (s: ReturnType<typeof fakeStripe>): typeof s.fetch => async (u, init = {}) => {
+    const r = await s.fetch(u, init);
+    const id = /\/v1\/subscriptions\/([^/?]+)$/.exec(new URL(u).pathname)?.[1];
+    if (init.method === "DELETE" && id && s.subs.has(id)) s.subs.get(id)!.ended_at = Math.floor(now().getTime() / 1000);
+    return r;
+  };
+  /** An account whose Pro subscription is in its trial (with the card Checkout took), as the webhook wrote it. */
+  async function inTrial() {
+    const b = await buyer();
+    const fetch = ending(b.s);
+    const sub: Record<string, any> = { ...accountSub("sub_ada0000001", b.account.id, "cus_ada0000001", "trialing"), default_payment_method: "pm_card00000001", trial_start: END - 3 * DAY_S, trial_end: END };
+    b.s.subs.set(sub.id, sub);
+    expect((await json(deliver(b.env, stripeEvent("customer.subscription.created", sub), fetch))).result).toBe("applied");
+    const row = () => b.sql.rows("SELECT plan, subscription_id, subscription_status, cancel_at_period_end FROM accounts")[0];
+    const cancels = () => b.s.calls.filter((c) => c.method === "DELETE").map((c) => c.url.pathname);
+    const pro = async () => json(call(b.env, "GET", "/api/billing/pro", { cookie: b.cookie, origin: null }));
+    const send = async (type: string, f = fetch) => {
+      const r = await deliver(b.env, stripeEvent(type, b.s.subs.get("sub_ada0000001")!), f);
+      return { status: r.status, body: await r.json() as any };
+    };
+    expect(row()).toEqual({ plan: "team", subscription_id: "sub_ada0000001", subscription_status: "trialing", cancel_at_period_end: 0 });
+    return { ...b, fetch, sub, row, cancels, pro, send };
+  }
+
+  it("trialCancelled: a trialing subscription set to cancel by its trial's end; never one set to cancel later, or past its trial", () => {
+    const trial = { status: "trialing", trial_end: END, cancel_at_period_end: false, cancel_at: null };
+    expect(trialCancelled(trial)).toBe(false);
+    // the portal with flexible billing: cancel_at at the period end, the trial's end
+    expect(trialCancelled({ ...trial, cancel_at: END })).toBe(true);
+    expect(trialCancelled({ ...trial, cancel_at: END - DAY_S })).toBe(true);
+    // classic billing (or the API): cancel_at_period_end
+    expect(trialCancelled({ ...trial, cancel_at_period_end: true })).toBe(true);
+    // a cancel set after a paid month (by hand in the Stripe dashboard): left to Stripe
+    expect(trialCancelled({ ...trial, cancel_at: END + 30 * DAY_S })).toBe(false);
+    // no trial end to compare with
+    expect(trialCancelled({ ...trial, trial_end: null, cancel_at: END })).toBe(false);
+    // past the trial, a paid plan cancelled in the portal runs to the end of its paid month: never this
+    for (const status of ["active", "past_due", "canceled", "incomplete", "unpaid"]) {
+      expect(trialCancelled({ ...trial, status, cancel_at: END }), status).toBe(false);
+      expect(trialCancelled({ ...trial, status, cancel_at_period_end: true }), status).toBe(false);
+    }
+  });
+
+  it("the trial's plan page says that a cancel ends Pro at once and charges nothing", async () => {
+    const t = await inTrial();
+    const page = await text(call(t.env, "GET", "/account/billing", { cookie: t.cookie }));
+    expect(page).toContain("in a trial until");
+    expect(page).toContain("Cancel in Manage billing before then and nothing is charged; Pro then ends at once.");
+  });
+
+  it("cancelled in Stripe's portal (flexible billing: cancel_at at the trial's end): Stripe cancels it now, the account is on Free, and no second trial", async () => {
+    const t = await inTrial();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(await t.pro()).toMatchObject({ pro: true, via: "plan" });
+    t.sub.cancel_at = END;
+    expect(await t.send("customer.subscription.updated")).toEqual({ status: 200, body: { received: true, result: "applied" } });
+    // cancelled at once (no proration, no final invoice: nothing was paid, so nothing is refunded), then read back
+    expect(t.cancels()).toEqual(["/v1/subscriptions/sub_ada0000001"]);
+    expect(new URLSearchParams(t.s.calls.find((c) => c.method === "DELETE")!.url.search).toString()).toBe("");
+    expect(t.s.calls.slice(-2).map((c) => `${c.method} ${c.url.pathname}`)).toEqual(["DELETE /v1/subscriptions/sub_ada0000001", "GET /v1/subscriptions/sub_ada0000001"]);
+    expect(t.s.calls.some((c) => c.url.pathname.startsWith("/v1/refunds"))).toBe(false);
+    // Pro is gone now, not at the trial's end
+    expect(t.row()).toEqual({ plan: "free", subscription_id: "sub_ada0000001", subscription_status: "canceled", cancel_at_period_end: 0 });
+    expect(t.sql.rows("SELECT current_period_end FROM accounts")[0]).toEqual({ current_period_end: new Date(Math.floor(now().getTime() / 1000) * 1000).toISOString() });
+    expect(await t.pro()).toEqual({ ok: true, pro: false, via: null, trial_days: null });
+    expect(log.mock.calls.flat().join("\n")).toContain("subscription sub_ada0000001 was cancelled in its trial; ended it now");
+    // the customer.subscription.deleted that follows writes the same, and cancels nothing again
+    expect(await t.send("customer.subscription.deleted")).toEqual({ status: 200, body: { received: true, result: "applied" } });
+    expect(t.cancels()).toHaveLength(1);
+    expect(t.row()).toMatchObject({ plan: "free", subscription_status: "canceled" });
+    // the plan page offers Pro without a trial: one trial per account
+    const page = await text(call(t.env, "GET", "/account/billing", { cookie: t.cookie }));
+    expect(page).toContain("You are on the <b>Free</b> plan.");
+    expect(page).not.toContain("free trial");
+    const again = await call(t.env, "POST", "/api/billing/checkout", { body: { plan: "team" }, cookie: t.cookie, fetch: t.s.fetch });
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as any).trial_days).toBeNull();
+    log.mockRestore();
+  });
+
+  it("cancelled with cancel_at_period_end (classic billing, or the API): the same, ended now", async () => {
+    const t = await inTrial();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    t.sub.cancel_at_period_end = true;
+    expect((await t.send("customer.subscription.updated")).body.result).toBe("applied");
+    expect(t.cancels()).toEqual(["/v1/subscriptions/sub_ada0000001"]);
+    expect(t.row()).toMatchObject({ plan: "free", subscription_status: "canceled", cancel_at_period_end: 0 });
+    log.mockRestore();
+  });
+
+  it("whichever event brings it: an invoice.paid or a redelivery after the cancel finds it cancelled, and cancels nothing again", async () => {
+    const t = await inTrial();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    t.sub.cancel_at = END;
+    // the trial's $0 invoice paid, delivered after the cancel: the subscription as Stripe has it now is what counts
+    const inv = { id: "in_trial000001", object: "invoice", customer: "cus_ada0000001", status: "paid", amount_due: 0, amount_paid: 0, parent: { subscription_details: { subscription: "sub_ada0000001", metadata: { genclass: "1" } } }, lines: { data: [] } };
+    expect((await json(deliver(t.env, stripeEvent("invoice.paid", inv), t.fetch))).result).toBe("applied");
+    expect(t.cancels()).toEqual(["/v1/subscriptions/sub_ada0000001"]);
+    expect(t.row()).toMatchObject({ plan: "free", subscription_status: "canceled" });
+    expect((await t.send("customer.subscription.updated")).body.result).toBe("applied");
+    expect(t.cancels()).toHaveLength(1);
+    log.mockRestore();
+  });
+
+  it("a cancel Stripe fails answers 500 and changes nothing; Stripe's retry ends the trial", async () => {
+    const t = await inTrial();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    let fail = 1;
+    const flaky: typeof t.fetch = async (u, init = {}) =>
+      init.method === "DELETE" && fail-- > 0 ? new Response(JSON.stringify({ error: { message: "Stripe is having trouble" } }), { status: 500 }) : t.fetch(u, init);
+    t.sub.cancel_at = END;
+    const ev = stripeEvent("customer.subscription.updated", t.sub);
+    expect((await deliver(t.env, ev, flaky)).status).toBe(500);
+    expect(t.row()).toMatchObject({ plan: "team", subscription_status: "trialing", cancel_at_period_end: 0 });
+    expect(t.s.subs.get("sub_ada0000001")!.status).toBe("trialing");
+    // the same event again, as Stripe delivers it
+    expect(await json(deliver(t.env, ev, flaky))).toEqual({ received: true, result: "applied" });
+    expect(t.row()).toMatchObject({ plan: "free", subscription_status: "canceled" });
+    log.mockRestore();
+    err.mockRestore();
+  });
+
+  it("a trial set to cancel after a paid month (by hand in the Stripe dashboard) is left to Stripe", async () => {
+    const t = await inTrial();
+    t.sub.cancel_at = END + 30 * DAY_S;
+    expect((await t.send("customer.subscription.updated")).body.result).toBe("applied");
+    expect(t.cancels()).toEqual([]);
+    expect(t.row()).toEqual({ plan: "team", subscription_id: "sub_ada0000001", subscription_status: "trialing", cancel_at_period_end: 1 });
+  });
+
+  it("unchanged for a paid plan: cancelled in the portal, Pro runs to the end of the paid month and nothing is cancelled now", async () => {
+    const b = await buyer();
+    // past its trial: active, its first month paid
+    const sub: Record<string, any> = { ...accountSub("sub_ada0000001", b.account.id, "cus_ada0000001", "active"), trial_start: END - 33 * DAY_S, trial_end: END - 30 * DAY_S };
+    b.s.subs.set(sub.id, sub);
+    expect((await json(deliver(b.env, stripeEvent("customer.subscription.created", sub), b.s.fetch))).result).toBe("applied");
+    const row = () => b.sql.rows("SELECT plan, subscription_status, current_period_end, cancel_at_period_end FROM accounts")[0];
+    // the portal with flexible billing (cancel_at), then classic (cancel_at_period_end)
+    for (const cancel of [{ cancel_at: END, cancel_at_period_end: false }, { cancel_at: null, cancel_at_period_end: true }]) {
+      Object.assign(sub, cancel);
+      expect((await json(deliver(b.env, stripeEvent("customer.subscription.updated", sub), b.s.fetch))).result).toBe("applied");
+      expect(row()).toEqual({ plan: "team", subscription_status: "active", current_period_end: new Date(END * 1000).toISOString(), cancel_at_period_end: 1 });
+    }
+    expect(b.s.calls.filter((c) => c.method === "DELETE")).toEqual([]);
+    expect(await json(call(b.env, "GET", "/api/billing/pro", { cookie: b.cookie, origin: null }))).toMatchObject({ pro: true, via: "plan" });
+    expect(await text(call(b.env, "GET", "/account/billing", { cookie: b.cookie }))).toContain("It is cancelled and will not renew; you can resume it in Manage billing before then.");
+    // Stripe ends it at the period end: Free then
+    sub.status = "canceled";
+    expect((await json(deliver(b.env, stripeEvent("customer.subscription.deleted", sub), b.s.fetch))).result).toBe("applied");
+    expect(row()).toMatchObject({ plan: "free", subscription_status: "canceled", cancel_at_period_end: 0 });
+    expect(b.s.calls.filter((c) => c.method === "DELETE")).toEqual([]);
+  });
+
+  it("a version-4 project's subscription cancelled in its trial ends now too; the account row is not touched", async () => {
+    const b = await buyer();
+    const fetch = ending(b.s);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const sub: Record<string, any> = { ...projectSub("sub_shop000001", b.account.id, "cus_ada0000001", b.shop.id!, "trialing"), default_payment_method: "pm_card00000001", trial_end: END };
+    b.s.subs.set(sub.id, sub);
+    expect((await json(deliver(b.env, stripeEvent("customer.subscription.created", sub), fetch))).result).toBe("applied");
+    expect(b.sql.rows("SELECT plan, subscription_status FROM projects WHERE name = 'Shop'")[0]).toEqual({ plan: "team", subscription_status: "trialing" });
+    sub.cancel_at = END;
+    expect((await json(deliver(b.env, stripeEvent("customer.subscription.updated", sub), fetch))).result).toBe("applied");
+    expect(b.s.calls.filter((c) => c.method === "DELETE").map((c) => c.url.pathname)).toEqual(["/v1/subscriptions/sub_shop000001"]);
+    expect(b.sql.rows("SELECT plan, subscription_status, cancel_at_period_end FROM projects WHERE name = 'Shop'")[0]).toEqual({ plan: null, subscription_status: "canceled", cancel_at_period_end: 0 });
+    expect(b.sql.rows("SELECT plan, subscription_id FROM accounts")[0]).toEqual({ plan: "free", subscription_id: null });
+    log.mockRestore();
   });
 });
 

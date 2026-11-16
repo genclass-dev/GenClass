@@ -40,7 +40,9 @@
 //   has never had a subscription (billing.ts checkoutProject), never on a switch or a later one. Every Checkout still
 //   collects a payment method up front (payment_method_collection "always"), and a subscription in Stripe's trialing
 //   status that the account has not been granted yet counts only with a saved payment method (cardOnFile); Stripe
-//   charges the first month when the trial ends unless it is cancelled before.
+//   charges the first month when the trial ends unless it is cancelled before. A cancel during the trial ends it at
+//   once: Stripe's portal schedules it for the trial's end, and the webhook then cancels the subscription now
+//   (trialCancelled). A paid subscription cancelled in the portal still runs to the end of its paid month.
 // - One subscription per account. Checkout asks Stripe (not the database, which a late webhook leaves behind) whether
 //   the customer already has one: the same plan is refused, the other plan is a switch (a Checkout whose subscription
 //   carries metadata genclass_switch_from naming the one it replaces); an account's older unpaid Checkout pages are
@@ -800,6 +802,20 @@ export function cardOnFile(sub: Obj): boolean {
   return !!(idOf(sub?.default_payment_method) ?? idOf(sub?.default_source) ?? idOf(c?.invoice_settings?.default_payment_method) ?? idOf(c?.default_source));
 }
 
+/**
+ * A subscription in its free trial that is set to cancel by the end of that trial: Stripe's portal (flexible billing
+ * mode) sets cancel_at to the period end, which in a trial is the trial's end, and an older integration sets
+ * cancel_at_period_end. GenClass ends such a trial at once instead of letting it run out (the owner, 2026-11-15). A
+ * cancel set for a later date (after a paid month, by hand in the Stripe dashboard) is left to Stripe, and so is any
+ * subscription past its trial: a paid plan cancelled in the portal still runs to the end of its paid month. Exported
+ * for tests.
+ */
+export function trialCancelled(sub: Obj): boolean {
+  if (sub?.status !== "trialing") return false;
+  if (sub?.cancel_at_period_end === true) return true;
+  return typeof sub?.cancel_at === "number" && typeof sub?.trial_end === "number" && sub.cancel_at <= sub.trial_end;
+}
+
 /** The project a per-project subscription is for (its metadata genclass_project, billing/plans.json version 4), or null. */
 export const projectOf = (s: Obj): string | null => {
   const v = s?.metadata?.genclass_project;
@@ -856,6 +872,14 @@ export async function handleEvent(x: EventContext, event: Obj): Promise<EventRes
   if (!accountsSubscription(account, sub)) return ignored("the subscription is not the account's", event, true);
   // a trial from before GenClass dropped trials whose card failed the $1 check stays out of the account for good
   if (sub?.metadata?.genclass_card_check === "failed") return ignored("its card failed the $1 check", event, true);
+  // cancelled in its free trial: it ends now, not when the trial would have (trialCancelled). Nothing was paid, so
+  // nothing is refunded; the subscription as Stripe has it after the cancel (canceled) is what is written below, and
+  // the customer.subscription.deleted that follows writes the same. A failure answers 500 and Stripe's retry finishes it
+  if (trialCancelled(sub) && isGenClassSubscription(sub)) {
+    await cancelNow(x.env, x.fetch, subId);
+    console.log(`stripe webhook: account ${account.id}: subscription ${subId} was cancelled in its trial; ended it now`);
+    sub = await fetchSubscription(x, subId);
+  }
   // a plan per project (billing/plans.json version 4): written to the project its metadata names, never to the account
   if (projectOf(sub)) return applyProjectSubscription(x, account, sub, event);
   // the subscription already recorded for the account stays readable whatever its price now says (it then counts as

@@ -30,8 +30,9 @@
 //    the live secret. An existing endpoint keeps its secret, since Stripe shows a secret only once (--new-webhook
 //    deletes GenClass's endpoint, the one with that exact URL and description, and makes a new one);
 // 4. its own Billing Portal configuration (metadata genclass=1, a headline naming GenClass): cancel at the end of the
-//    period, update the card, invoices, and change the email or tax id on the GenClass customer (no address: GenClass
-//    has no use for one). It offers no plan switch: a subscription sold through Managed Payments cannot take another
+//    period (the worker's webhook ends a trial cancelled there at once: telemetry-worker/src/stripe.ts
+//    trialCancelled), update the card, invoices, and change the email or tax id on the GenClass customer (no address:
+//    GenClass has no use for one). It offers no plan switch: a subscription sold through Managed Payments cannot take another
 //    plan's price, so the billing page switches plans with a new Checkout (telemetry-worker/src/billing.ts). To find
 //    it the script lists the non-default configurations (is_default=false), reading their settings and changing none
 //    but its own: the account's default configuration is never read or changed, and GenClass's is never made the
@@ -336,6 +337,8 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
         customer_update: { enabled: true, allowed_updates: ["email", "tax_id"] },
         invoice_history: { enabled: true },
         payment_method_update: { enabled: true },
+        // one mode for every subscription: "immediately" would end paid plans at once too, so a paid plan runs to the end
+        // of its paid month, and the worker's webhook ends a trial cancelled here at once (src/stripe.ts trialCancelled)
         subscription_cancel: {
           enabled: true,
           mode: "at_period_end",
