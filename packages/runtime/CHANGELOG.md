@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0-beta.7 (2026-11-16)
 
 - **`init` no longer adds the devtools overlay** (owner, 2026-11-16: nothing GenClass sets up is drawn on a page;
   findings go to the console, the dashboard and the terminal). The overlay is opt-in: `init --devtools` adds the
