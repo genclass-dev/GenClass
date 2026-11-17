@@ -6,7 +6,7 @@
 //   price, a limit or an entitlement there, not here. Every check below reads the plan's entitlements and limits, so
 //   nothing here names a plan but Free and the grant's (plans.json grant_plan).
 // - Since plans.json version 3 (2026-11-11) there are three plans. Free is what finds, shows and fixes the problems: the
-//   dashboard's problems for one person, 3 apps and the last 7 days shown. Team (US$15 a month per seat then, sold on Stripe
+//   dashboard's problems for one person, 3 apps and the last 7 days shown. Team (US$15 a month per seat, sold on Stripe
 //   Checkout) adds visitor analytics, forwarding, export, 90 days shown, private repositories for the GitHub App and
 //   members (src/team.ts). Enterprise (by agreement) adds the classifier a person trains (custom_model) and a year.
 //   Individual, US$29 a month, ended on 2026-10-22: a stored "individual" reads as Free, while its Stripe prices stay
@@ -21,10 +21,10 @@
 // - A plan comes from accounts.plan, which src/stripe.ts derives from the Stripe subscription. Entitlements follow the
 //   plan whatever the server's configuration, except that a plan bought in Stripe's test mode counts only while the
 //   key is a test key (inMode): a test purchase never carries over to live. A live plan always counts.
-// - Prices by country (2026-11-16): a plan's price_usd_cents and stripe_lookup_keys are what it costs everywhere but
-//   the countries its country_prices list (Pro: US$50 a developer a month, US$15 in Canada). Checkout sells the price
-//   of the country Cloudflare reports for the request (countryOf, priceFor); the screens show it (priceText). Every
-//   lookup key of a plan, its own or a country's, gives the plan (planByLookupKey), and a subscription keeps its price.
+// - Private prices: the Worker secret PLANS_PRIVATE (usePrivatePlans; never in this repository) may give a plan other
+//   prices for some countries. Checkout sells the price of the country Cloudflare reports for the request (countryOf,
+//   priceFor) and the screens show it (priceText); without the secret every buyer gets plans.json's price. Every lookup
+//   key of a plan, plans.json's or the secret's, gives the plan (planByLookupKey), and a subscription keeps its price.
 // - A plan with a null monthly price (Enterprise) is not sold on the site: it is agreed by email, and an account gets
 //   it from GenClass's own grant (accounts.comp_until, set by hand to the end of the agreement), which gives the plan
 //   accounts.comp_plan names (plans.json grant_plan when it is empty or unknown). When an account has both a paid plan
@@ -70,13 +70,6 @@ export interface Plan {
   /** US cents; monthly null: not sold on the site, agreed by email (byAgreement). */
   price_usd_cents: { monthly: number | null; yearly: number | null };
   stripe_lookup_keys: { monthly: string | null; yearly: string | null };
-  /**
-   * Prices in some countries instead of the plan's own (2026-11-16: Pro is US$15 in Canada, US$50 elsewhere): Checkout
-   * sells the price of the country the request comes from (priceFor); every lookup key here gives the plan.
-   */
-  country_prices?: CountryPrice[];
-  /** The Stripe product the plan's own price is on (scripts/stripe-setup.mjs); left out: genclass_<id>. */
-  stripe_product?: string;
   /** The Stripe product tax code scripts/stripe-setup.mjs sets on the plan's product (null for Free). */
   stripe_tax_code: string | null;
   /** Sold through Stripe Managed Payments (src/stripe.ts managedPayments): none today. */
@@ -104,19 +97,16 @@ export interface Plan {
   features: { text: string; available: boolean }[];
 }
 
-/** A plan's price in some countries (plans.json country_prices): ISO 3166-1 alpha-2 codes, as Cloudflare reports them. */
-export interface CountryPrice {
-  countries: string[];
-  /** The countries in words, for "($15 in Canada)". */
-  name: string;
+/** A price: a plan's own (plans.json), or one the private secret gives it for some countries. */
+export interface PlanPrice {
   price_usd_cents: { monthly: number | null; yearly: number | null };
   stripe_lookup_keys: { monthly: string | null; yearly: string | null };
-  /** The Stripe product this price is on (scripts/stripe-setup.mjs); left out: the plan's genclass_<id>. */
-  stripe_product?: string;
 }
 
-/** A price as plans.json writes one: a plan's own, or one of its country prices. */
-export type PlanPrice = Pick<CountryPrice, "price_usd_cents" | "stripe_lookup_keys">;
+/** A plan's price for some countries (PLANS_PRIVATE): ISO 3166-1 alpha-2 codes, as Cloudflare reports them. */
+export interface CountryPrice extends PlanPrice {
+  countries: string[];
+}
 
 export interface PlansFile {
   version: number;
@@ -150,10 +140,49 @@ export const RETIRED_PLAN_IDS: readonly string[] = Array.isArray(PLANS_FILE.reti
 /** Every GenClass lookup key starts with this: plans.json's, and those of prices scripts/stripe-setup.mjs retired. */
 export const LOOKUP_PREFIX = "genclass_";
 
-/** Every price a plan has: its own, then its country prices (plans.json country_prices). */
-export const planPrices = (plan: Plan): PlanPrice[] => [plan, ...(plan.country_prices ?? [])];
+// ------------------------------------------------------------------------------------- private prices (PLANS_PRIVATE)
 
-/** The plan a lookup_key from billing/plans.json sells (monthly or yearly, its own price or a country's), or null for any other key. */
+let privateRaw: string | undefined;
+let privatePrices = new Map<string, CountryPrice[]>();
+
+const cents = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) && v > 0 ? v : null);
+const key = (v: unknown): string | null => (typeof v === "string" && v.startsWith("genclass_") && v.length <= 200 ? v : null);
+
+/**
+ * Reads the Worker secret PLANS_PRIVATE (JSON: { "plans": { "<plan id>": { "country_prices": [{ "countries": ["XX"],
+ * "price_usd_cents": { "monthly": 1234 }, "stripe_lookup_keys": { "monthly": "genclass_..." } }] } } }), once per value.
+ * A price with no country, no positive monthly cents or no genclass_ lookup key is left out, and anything that does not
+ * parse gives no private prices: every buyer then gets plans.json's price. Other keys in the secret (stripe_product,
+ * names) are for scripts/stripe-setup.mjs and are ignored here. Called by handle() for every request.
+ */
+export function usePrivatePlans(raw: string | undefined): void {
+  if (raw === privateRaw) return;
+  privateRaw = raw;
+  const next = new Map<string, CountryPrice[]>();
+  try {
+    const plans = raw ? (JSON.parse(raw) as { plans?: Record<string, { country_prices?: unknown }> }).plans : undefined;
+    for (const [id, p] of Object.entries(plans && typeof plans === "object" ? plans : {})) {
+      if (!PLANS.some((x) => x.id === id) || !Array.isArray(p?.country_prices)) continue;
+      const list: CountryPrice[] = [];
+      for (const x of p.country_prices as Record<string, any>[]) {
+        const countries = Array.isArray(x?.countries) ? x.countries.filter((c: unknown): c is string => typeof c === "string" && /^[A-Z][A-Z0-9]$/.test(c)) : [];
+        const monthly = cents(x?.price_usd_cents?.monthly);
+        const lookup = key(x?.stripe_lookup_keys?.monthly);
+        if (!countries.length || monthly === null || !lookup) continue;
+        list.push({ countries, price_usd_cents: { monthly, yearly: null }, stripe_lookup_keys: { monthly: lookup, yearly: null } });
+      }
+      if (list.length) next.set(id, list);
+    }
+  } catch {
+    next.clear();
+  }
+  privatePrices = next;
+}
+
+/** Every price a plan has: its own (plans.json), then those PLANS_PRIVATE gives it. */
+export const planPrices = (plan: Plan): PlanPrice[] => [plan, ...(privatePrices.get(plan.id) ?? [])];
+
+/** The plan a lookup_key sells (monthly or yearly, plans.json's or PLANS_PRIVATE's), or null for any other key. */
 export function planByLookupKey(key: unknown): Plan | null {
   if (typeof key !== "string" || !key) return null;
   return PLANS.find((p) => planPrices(p).some((x) => x.stripe_lookup_keys.monthly === key || x.stripe_lookup_keys.yearly === key)) ?? null;
@@ -170,12 +199,12 @@ export function countryOf(req: Request | null | undefined): string | null {
 }
 
 /**
- * What a plan costs in this country: the country price that lists it (plans.json country_prices), else the plan's own
- * (also when the country is not known). Checkout sells its lookup key; the screens show its price.
+ * What a plan costs in this country: the private price that lists it (PLANS_PRIVATE), else the plan's own (also when
+ * the country is not known). Checkout sells its lookup key; the screens show its price.
  */
 export function priceFor(plan: Plan, country: string | null | undefined): PlanPrice {
   const c = (country ?? "").toUpperCase();
-  return (c && plan.country_prices?.find((x) => x.countries.includes(c))) || plan;
+  return (c && privatePrices.get(plan.id)?.find((x) => x.countries.includes(c))) || plan;
 }
 
 /** The paid plan named by a Stripe product's (or price's) metadata.genclass_plan (scripts/stripe-setup.mjs sets it). */
@@ -247,19 +276,14 @@ export function canBuy(env: Env, account: { id: string; email: string | null }):
 export const dollars = (cents: number): string => `$${cents % 100 ? (cents / 100).toFixed(2) : String(cents / 100)}`;
 
 /**
- * "$29 / month", "$50 / developer / month" (a per_seat plan), "$0", or "By agreement" for a plan agreed by email, in
- * the visitor's country (priceFor). `country` left out: the reader's country is not known (an email, a message read
- * later), so a plan with country prices names them too: "$50 / developer / month ($15 in Canada)". null: the request
- * had no country, so the plan's own price.
+ * "$29 / month", "$50 / developer / month" (a per_seat plan), "$0", or "By agreement" for a plan agreed by email, for
+ * the visitor's country (priceFor); with no country (an email, a message read later), the plan's own price.
  */
 export function priceText(plan: Plan, country?: string | null): string {
-  const unit = (c: number): string => `${dollars(c)}${plan.per_project === true ? " / project" : plan.per_seat === true ? " / developer" : ""} / month`;
   const c = priceFor(plan, country).price_usd_cents.monthly;
   if (c === null) return "By agreement";
   if (!c) return "$0";
-  if (country !== undefined) return unit(c);
-  const others = (plan.country_prices ?? []).filter((x) => (x.price_usd_cents.monthly ?? 0) > 0).map((x) => `${dollars(x.price_usd_cents.monthly!)} in ${x.name}`);
-  return others.length ? `${unit(c)} (${others.join(", ")})` : unit(c);
+  return `${dollars(c)}${plan.per_project === true ? " / project" : plan.per_seat === true ? " / developer" : ""} / month`;
 }
 
 /**

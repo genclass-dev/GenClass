@@ -1,18 +1,29 @@
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { planForPrice } from "../src/plans.js";
+import { planForPrice, usePrivatePlans } from "../src/plans.js";
 
-// scripts/stripe-setup.mjs on the real billing/plans.json, whose Pro has a price by country (2026-11-16: US$50 a
-// developer a month, US$15 in Canada). Each price is on its own product, both named GenClass Pro with metadata
-// genclass_plan team (the Billing Portal's seat changes allow one monthly price a product): Canada's on the plan's
-// main product genclass_team under the key it was sold under before, everyone else's on genclass_team_world, which
-// plans.json names (stripe_product). A run against an account that already has them changes nothing.
+// scripts/stripe-setup.mjs on the real billing/plans.json plus private prices (GENCLASS_PLANS_PRIVATE, the JSON of the
+// Worker secret PLANS_PRIVATE; made-up values here). Each price is on its own product, all named after the plan with
+// metadata genclass_plan (the Billing Portal's seat changes allow one monthly price a product): the plan's own price on
+// the product the secret names for it, the country price on the plan's main product genclass_<id>. A run against an
+// account that already has them changes nothing.
+const PRIVATE = {
+  plans: {
+    team: {
+      stripe_product: "genclass_team_alt",
+      country_prices: [{ countries: ["ZZ"], name: "Zedland", price_usd_cents: { monthly: 2000, yearly: null }, stripe_lookup_keys: { monthly: "genclass_team_zz_monthly", yearly: null } }],
+    },
+  },
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let setup: any;
 beforeAll(async () => {
   process.env.GENCLASS_PLANS_FILE = fileURLToPath(new URL("../../billing/plans.json", import.meta.url));
+  process.env.GENCLASS_PLANS_PRIVATE = JSON.stringify(PRIVATE);
   setup = await import("../../scripts/stripe-setup.mjs");
+  delete process.env.GENCLASS_PLANS_PRIVATE;
+  usePrivatePlans(JSON.stringify(PRIVATE));
 });
 
 type Obj = Record<string, any>;
@@ -97,26 +108,23 @@ async function run(a: ReturnType<typeof account>) {
   return a.calls.slice(from).filter((c) => c.method !== "GET");
 }
 
-describe("scripts/stripe-setup.mjs: prices by country (billing/plans.json country_prices)", () => {
-  it("Pro: Canada's US$15 on genclass_team, everyone else's US$50 on genclass_team_world, both seat-changeable in the portal", async () => {
+describe("scripts/stripe-setup.mjs: private prices (GENCLASS_PLANS_PRIVATE)", () => {
+  it("the plan's own price on the product the secret names, the country price on the main product, both seat-changeable", async () => {
     const a = account();
     await run(a);
     expect([...a.products.values()].map((x) => [x.id, x.name, x.metadata.genclass_plan, x.tax_code])).toEqual([
-      ["genclass_team_world", "GenClass Pro", "team", "txcd_10103001"],
+      ["genclass_team_alt", "GenClass Pro", "team", "txcd_10103001"],
       ["genclass_team", "GenClass Pro", "team", "txcd_10103001"],
     ]);
-    const made = [...a.prices.values()].map((x) => [x.lookup_key, x.product, x.unit_amount, x.currency, x.recurring.interval, x.nickname]);
-    expect(made).toEqual([
-      ["genclass_team_world_monthly", "genclass_team_world", 5000, "usd", "month", "Pro monthly"],
-      ["genclass_team_monthly", "genclass_team", 1500, "usd", "month", "Pro monthly (Canada)"],
+    expect([...a.prices.values()].map((x) => [x.lookup_key, x.product, x.unit_amount, x.currency, x.recurring.interval, x.nickname])).toEqual([
+      ["genclass_team_monthly", "genclass_team_alt", 5000, "usd", "month", "Pro monthly"],
+      ["genclass_team_zz_monthly", "genclass_team", 2000, "usd", "month", "Pro monthly (Zedland)"],
     ]);
-    // the worker reads both as Pro
     for (const x of a.prices.values()) expect(planForPrice({ ...x, product: a.products.get(x.product) })?.id).toBe("team");
-    // the portal: one product per price, each its own price only
     const ours = [...a.portal.values()].find((c) => c.metadata.genclass === "1")!;
     const form = new URLSearchParams(Object.entries(ours.form as Obj).flatMap(([k, v]) => (Array.isArray(v) ? v.map((x) => [k, x]) : [[k, v]])) as [string, string][]);
     const products = [...form.entries()].filter(([k]) => /^features\[subscription_update\]\[products\]\[\d+\]\[product\]$/.test(k)).map(([, v]) => v);
-    expect(products).toEqual(["genclass_team_world", "genclass_team"]);
+    expect(products).toEqual(["genclass_team_alt", "genclass_team"]);
   });
 
   it("a second run changes no product or price", async () => {
@@ -126,17 +134,16 @@ describe("scripts/stripe-setup.mjs: prices by country (billing/plans.json countr
     expect(again.filter((c) => c.url.pathname.startsWith("/v1/products") || c.url.pathname.startsWith("/v1/prices"))).toEqual([]);
   });
 
-  it("a product the plans name is found by its id only: an earlier product of the plan is never taken for it", async () => {
+  it("a product the secret names is found by its id only: an earlier product of the plan is never taken for it", async () => {
     const a = account();
-    // an earlier run's product of Pro with an id Stripe chose (found by the metadata search) holds Canada's price
     a.products.set("prod_earlier00001", { id: "prod_earlier00001", object: "product", active: true, name: "GenClass Pro", description: "Everything for up to 3 apps, per developer.", statement_descriptor: "GENCLASS", tax_code: "txcd_10103001", metadata: { genclass: "1", genclass_plan: "team" } });
-    a.prices.set("price_earlier0001", { id: "price_earlier0001", object: "price", product: "prod_earlier00001", unit_amount: 1500, currency: "usd", recurring: { interval: "month" }, lookup_key: "genclass_team_monthly", active: true, metadata: { genclass: "1", genclass_plan: "team" } });
+    a.prices.set("price_earlier0001", { id: "price_earlier0001", object: "price", product: "prod_earlier00001", unit_amount: 2000, currency: "usd", recurring: { interval: "month" }, lookup_key: "genclass_team_zz_monthly", active: true, metadata: { genclass: "1", genclass_plan: "team" } });
     await run(a);
     expect(a.products.has("genclass_team")).toBe(false);
-    expect(a.products.get("genclass_team_world")?.metadata.genclass_plan).toBe("team");
+    expect(a.products.get("genclass_team_alt")?.metadata.genclass_plan).toBe("team");
     expect([...a.prices.values()].filter((x) => x.active).map((x) => [x.lookup_key, x.product])).toEqual([
-      ["genclass_team_monthly", "prod_earlier00001"],
-      ["genclass_team_world_monthly", "genclass_team_world"],
+      ["genclass_team_zz_monthly", "prod_earlier00001"],
+      ["genclass_team_monthly", "genclass_team_alt"],
     ]);
   });
 });

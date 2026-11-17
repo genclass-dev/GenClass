@@ -1,9 +1,13 @@
 # Changelog
 
+## 0.3.12
+
+- Before sign-in the command says Pro is 3 days free, then US$50 a developer a month, the price on genclass.dev.
+
 ## 0.3.11
 
-- **Pro's price by country**: before sign-in the command says Pro is 3 days free, then US$50 a developer a month
-  (US$15 in Canada). After sign-in it prints the price genclass.dev gives for where you are, as before.
+- **Pro's price**: before sign-in the command says Pro is 3 days free, then US$50 a developer a month. After sign-in it
+  prints the price genclass.dev gives, as before.
 - **It installs `@genclass/runtime` 0.3.0-beta.7.** Setup still draws nothing on your pages. In an app set up by an
   older `init`, which added the dev-only overlay, the runtime step now names the file that still loads it and the
   line to delete.

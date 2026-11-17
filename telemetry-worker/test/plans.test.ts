@@ -54,14 +54,14 @@ describe("billing/plans.json: the one source of plans", () => {
     expect(PLANS.map((p) => p.name)).toEqual(["Free", "Pro", "Enterprise"]);
     const [free, team, enterprise] = PLANS;
     expect(free!.price_usd_cents).toEqual({ monthly: 0, yearly: null });
-    // US$50 a developer a month (US$15 in Canada, 2026-11-16; US$15 everywhere from 2026-11-13), for up to 3 apps
+    // US$50 a developer a month (2026-11-16; US$15 from 2026-11-11), for up to 3 apps
     expect(team!.price_usd_cents).toEqual({ monthly: 5000, yearly: null });
-    expect(team!.country_prices).toEqual([{ countries: ["CA"], name: "Canada", price_usd_cents: { monthly: 1500, yearly: null }, stripe_lookup_keys: { monthly: "genclass_team_monthly", yearly: null } }]);
-    expect(team!.stripe_product).toBe("genclass_team_world");
+    // nothing in the file but the plan's own price
+    expect(Object.keys(team!)).not.toContain("country_prices");
     expect(enterprise!.price_usd_cents).toEqual({ monthly: null, yearly: null });
     expect(PLANS.map((p) => p.stripe_lookup_keys)).toEqual([
       { monthly: null, yearly: null },
-      { monthly: "genclass_team_world_monthly", yearly: null },
+      { monthly: "genclass_team_monthly", yearly: null },
       { monthly: null, yearly: null },
     ]);
     // Free: finds and fixes the problems and shows their totals, for one person and one app (version 5); the problem
@@ -108,10 +108,9 @@ describe("billing/plans.json: the one source of plans", () => {
     expect(GRANT_PLAN.id).toBe("enterprise");
     expect(FREE.id).toBe("free");
     expect(priceText(free!)).toBe("$0");
-    expect(priceText(team!)).toBe("$50 / developer / month ($15 in Canada)");
+    expect(priceText(team!)).toBe("$50 / developer / month");
     expect(priceText(enterprise!)).toBe("By agreement");
     expect(planByLookupKey("genclass_team_monthly")?.id).toBe("team");
-    expect(planByLookupKey("genclass_team_world_monthly")?.id).toBe("team");
     // Individual (until 2026-10-22) and the plans before it name no plan any more
     for (const k of ["genclass_individual_monthly", "genclass_pro_monthly"]) expect(planByLookupKey(k), k).toBeNull();
     expect(viewRanges(free!)).toEqual(["24h", "7d"]);
@@ -137,7 +136,7 @@ describe("billing/plans.json: the one source of plans", () => {
     // the plan an upgrade names: the first one on sale with it
     expect(firstPaidWith("problems")?.id).toBe("team");
     expect(firstPaidWith("ask")?.id).toBe("team");
-    expect(problemsLock("https://genclass.dev/account/billing?project=p1")).toEqual({ plan: "Pro", upgrade_url: "https://genclass.dev/account/billing?project=p1", trial_days: 3, price: "$50 / developer / month ($15 in Canada)" });
+    expect(problemsLock("https://genclass.dev/account/billing?project=p1")).toEqual({ plan: "Pro", upgrade_url: "https://genclass.dev/account/billing?project=p1", trial_days: 3, price: "$50 / developer / month" });
     // the per-seat plans of version 3 (test/fixtures/plans-v3-seats.json) say nothing of them: every plan gives them
     const v3 = (SEATS_JSON as any).plans as Plan[];
     expect(v3.every((p) => !("problems" in p.entitlements) && !("ask" in p.entitlements))).toBe(true);

@@ -66,11 +66,9 @@ async function withApps(names: string[], over: Record<string, unknown> = {}) {
 }
 
 describe("plans.json version 5: Pro for the account, per developer, up to 3 apps", () => {
-  it("Pro is $50 a developer a month ($15 in Canada), sold by seats, for up to 3 apps; Free covers one app and 100 live fixes a month", () => {
+  it("Pro is $50 a developer a month, sold by seats, for up to 3 apps; Free covers one app and 100 live fixes a month", () => {
     const [free, team, enterprise] = PLANS;
-    expect(priceText(team!)).toBe("$50 / developer / month ($15 in Canada)");
-    expect(priceText(team!, null)).toBe("$50 / developer / month");
-    expect(priceText(team!, "CA")).toBe("$15 / developer / month");
+    expect(priceText(team!)).toBe("$50 / developer / month");
     expect(team!.per_project).toBeUndefined();
     expect(team!.per_seat).toBe(true);
     expect(team!.apps_per_unit).toBeUndefined();
@@ -223,7 +221,7 @@ describe("checkout for the account (POST /api/billing/checkout { plan, seats?, p
       mode: "subscription",
       customer: "cus_ada0000001",
       client_reference_id: b.account.id,
-      "line_items[0][price]": "price_teamworld1",
+      "line_items[0][price]": "price_team000001",
       "line_items[0][quantity]": "1",
       "line_items[0][adjustable_quantity][enabled]": "true",
       "line_items[0][adjustable_quantity][minimum]": "1",

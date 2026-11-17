@@ -60,7 +60,7 @@ import { afterBatch } from "./paid.js";
 import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, setupCommand, setupPage, startPage } from "./pages.js";
 import { lockedLink } from "./locked.js";
 import { applyLock, linkSession, linkUnlocked, lockKind, lockedJson, readBody, readLock, routeLink, startPasskeyOptions, unlockPage } from "./link-lock.js";
-import { countryOf, firstPlanWith, hasAnalytics, hasDashboard, hasProblems, pickRange, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { countryOf, firstPlanWith, hasAnalytics, hasDashboard, hasProblems, pickRange, problemsLock, projectAccess, usePrivatePlans, viewRanges } from "./plans.js";
 import { SAMPLE_PROJECT, SAMPLE_SECRET, sampleStats } from "./sample.js";
 
 export const SCHEMA = "genclass-telemetry/1";
@@ -117,6 +117,8 @@ export interface Env extends GithubEnv {
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_WEBHOOK_SECRET_TEST?: string;
   STRIPE_TEST_ACCOUNTS?: string;
+  /** Private prices for some plans (src/plans.ts usePrivatePlans); a secret, never in wrangler.toml. */
+  PLANS_PRIVATE?: string;
   /** GenClass's own Billing Portal configuration (bpc_...), for a live key and for a test key; scripts/stripe-setup.mjs
    * stores the one for its key's mode. Without it the portal answers 503. */
   STRIPE_PORTAL_CONFIGURATION?: string;
@@ -229,6 +231,7 @@ export interface HandleOptions {
 }
 
 export async function handle(request: Request, env: Env, opts: HandleOptions = {}): Promise<Response> {
+  usePrivatePlans(env.PLANS_PRIVATE);
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "");
 

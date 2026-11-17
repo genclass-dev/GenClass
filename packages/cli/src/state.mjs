@@ -70,7 +70,7 @@ export function hasPlaywright(cwd, project) {
 }
 
 /** What the command costs, said before the sign-in (the server says it in its own words once signed in). */
-export const PRO_TERMS = "The genclass command comes with Pro: 3 days free, then $50 / developer / month ($15 in Canada).";
+export const PRO_TERMS = "The genclass command comes with Pro: 3 days free, then $50 / developer / month, card on Stripe.";
 
 /** Free's limits as a few words ("3 apps, 7 days of history, your top 3 suggestions"), from the numbers the server sent. */
 export function freeLimits(free) {
@@ -199,7 +199,7 @@ export async function readState(o = {}, deps = {}) {
     // Pro: the price is said only to someone new (the 0.3.9 user stories: it was quoted to a payer after logout)
     why: creds || st.token
       ? `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"} to sign you in again.`
-      : `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"}. Then Pro: 3 days free, then $50 / developer / month ($15 in Canada).`,
+      : `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"}. Then Pro: 3 days free, then $50 / developer / month, with a card on Stripe.`,
     more: `Your account is where your apps, their dashboards and your plan live. New here? It is made on that page. Nothing is typed in the terminal. ${PRO_TERMS} Free stays on the website: one app and its totals.`,
     run: "npx genclass login",
     human: "approve the sign-in in your browser",
@@ -218,7 +218,7 @@ export async function readState(o = {}, deps = {}) {
     detail: !me
       ? creds || st.token
         ? ""
-        : "3 days free, then $50 / developer / month ($15 in Canada)"
+        : "3 days free, then $50 / developer / month"
       : cli && !cli.paid
         ? `${cli.price ?? cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free` : ""}`
         : cli?.paid && cli.via === "team"
