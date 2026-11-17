@@ -1,9 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.3.11
 
 - **Pro's price by country**: before sign-in the command says Pro is 3 days free, then US$50 a developer a month
   (US$15 in Canada). After sign-in it prints the price genclass.dev gives for where you are, as before.
+- **It installs `@genclass/runtime` 0.3.0-beta.7.** Setup still draws nothing on your pages. In an app set up by an
+  older `init`, which added the dev-only overlay, the runtime step now names the file that still loads it and the
+  line to delete.
+- `genclass scan --hosted` (and a scan on a machine without Playwright, which uses the genclass.dev page check)
+  prints the score for a free account too, as the page check's free view has since 2026-11-15; only the details
+  stay Pro's.
 
 ## 0.3.10
 
