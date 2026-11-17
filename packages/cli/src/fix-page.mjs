@@ -103,7 +103,7 @@ export function pagePrompt(report, list, address) {
 }
 
 /** The page check's address on the account's host (GENCLASS_SCAN_HOST points tests at a stand-in). */
-const scanBase = (host) => (process.env.GENCLASS_SCAN_HOST || host).replace(/\/+$/, "");
+export const scanBase = (host) => (process.env.GENCLASS_SCAN_HOST || host).replace(/\/+$/, "");
 
 async function readStream(res, progress) {
   const reader = res.body.getReader();
@@ -247,9 +247,18 @@ export async function fixPage(o, deps = {}) {
   });
   if (list.length > shown) out(`    ${c.gray(`and ${list.length - shown} more: add --all`)}`);
   out();
+  return handOff(prompt, list.length, o, deps, { check: "the page check", again: "check the page again", command: `npx genclass scan ${clean(address, 80)}` });
+}
+
+/**
+ * The prompt, to the person's coding agent (fix-page.mjs, site.mjs): --copy copies it; otherwise Enter starts the
+ * agent in this folder with it, c copies, p prints, q stops. Nothing starts without a key press. `words.check` names
+ * what measured the findings, `words.command` how to check again after a deploy. Returns the exit code.
+ */
+export async function handOff(prompt, count, o, deps, words) {
   if (o.copy) {
     if (await (deps.copy ?? copyText)(prompt)) {
-      good(`Copied the prompt for all ${list.length}.`);
+      good(`Copied the prompt for all ${count}.`);
       note("Paste it to your coding agent, in the app's folder.");
     } else {
       warn("Could not reach the clipboard, so here it is:");
@@ -261,8 +270,8 @@ export async function fixPage(o, deps = {}) {
   }
   const agents = (deps.agents ?? findAgents)(o.agent ?? null);
   if (!agents.length) note(o.agent ? `No ${clean(o.agent, 20)} command on this machine.` : "No coding agent's command found on this machine (claude, codex, cursor-agent, gemini).");
-  out(`  ${c.bold(`A prompt for ${list.length === 1 ? "it" : `all ${list.length}`} is ready.`)}`);
-  note("It gives the agent what the page check measured, where, and the suggested fix. GenClass changes no code: the agent does, with you watching. Run this in the app's folder.");
+  out(`  ${c.bold(`A prompt for ${count === 1 ? "it" : `all ${count}`} is ready.`)}`);
+  note(`It gives the agent what ${words.check} measured, where, and the suggested fix. GenClass changes no code: the agent does, with you watching. Run this in the app's folder.`);
   const agentLine = agents.length ? `${c.bold("Enter")} ${c.gray(`start ${agents[0].name} ·`)} ` : "";
   const a = await typed(`  ${PROMPT()} ${agentLine}${c.bold("c")} ${c.gray("copy ·")} ${c.bold("p")} ${c.gray("print ·")} ${c.bold("q")} ${c.gray("stop")} `);
   if (a === null || /^q/i.test(a)) return 0;
@@ -299,8 +308,8 @@ export async function fixPage(o, deps = {}) {
     return 1;
   }
   good(`Back from ${agents[0].name}.`);
-  note("Deploy the changes, then check the page again:");
-  out(`  ${c.cyan(`npx genclass scan ${clean(address, 80)}`)}`);
+  note(`Deploy the changes, then ${words.again}:`);
+  out(`  ${c.cyan(words.command)}`);
   out();
   return 0;
 }

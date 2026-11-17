@@ -113,6 +113,22 @@ the page, about a minute) and hands every finding to your coding agent: Claude C
 Enter starts the agent, `c` copies the prompt, `p` prints it; `--print` and `--json` print it for a script or an agent.
 GenClass changes no code: the agent does, and you approve each change.
 
+## Check your whole site
+
+```bash
+npx genclass site shop.example.com
+```
+
+The site check, deeper than the page check: genclass.dev opens your site's pages from that address, checks their
+links, clicks buttons, tabs and menus on each (never ones that sign out, delete, pay, send, save or submit), runs
+axe-core and reads each first screen. It takes up to about five minutes, then hands the findings to your coding agent
+the way `genclass fix` does. It checks only a site you have shown is yours: the first time, it prints a meta tag for
+your home page and a file for `/.well-known/genclass-verification.txt`, and checks again when you press Enter (a site
+with GenClass set up from your account counts already). To check the pages behind a sign-in, answer yes and give a
+test account, never a real one: the password is typed unseen, sent to genclass.dev for that check only, and never
+kept. For a script or an agent: `--user <name>` with the password in `GENCLASS_TEST_PASSWORD` (never on the command
+line), `--login-page <url>`, `--json`, `--print`, `--out <file>`. Like every command it comes with Pro.
+
 ## Your app in the terminal
 
 ```bash
@@ -277,6 +293,7 @@ first step and the agent prompt, with the model's own ideas and website designs.
 | `npx genclass ask "..."` | a question about your app, answered from its numbers |
 | `npx genclass suggest [url]` | what your app is missing, then one number hands the list to your coding agent (`--yes`, `--no-model`, `--all`) |
 | `npx genclass scan <url>` | 23 visual checks on one page (free, with no account: `npx @genclass/runtime@beta scan <url>`) |
+| `npx genclass site <address>` | the site check: your site's pages, links, buttons and accessibility, signed in with a test account if you like (`--user`, `--login-page`, `--out`) |
 | `npx genclass connections` | alerts, GitHub App, coding agent (`add`, `test`, `on`, `off`, `remove` a destination) |
 | `npx genclass agent` | your coding agent and what it did (`agent link`) |
 | `npx genclass funnels` | funnels (`add "Name" /a /b`, `remove "Name"`) |
@@ -298,6 +315,7 @@ npx genclass suggest --json    # the checks that failed, with evidence, in order
 npx genclass dashboard --json  # what GenClass found on the live site
 npx genclass problems --json   # the same by kind and page; also analytics, events, health, agent
 npx genclass fix --print       # the prompt to fix what was found (fix stale --print: one kind)
+npx genclass site shop.example.com --json   # the site check (the site shown to be yours first)
 npx genclass report            # the period as Markdown
 ```
 

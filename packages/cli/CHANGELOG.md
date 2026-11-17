@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.13
+
+- **`genclass site <address>`**: the site check, which used to be on genclass.dev, now runs from the command only.
+  genclass.dev opens your site's pages from that address, checks their links, clicks buttons, tabs and menus on each
+  (never ones that sign out, delete, pay, send, save or submit), runs axe-core and reads each first screen, then the
+  findings go to your coding agent as with `genclass fix`. It checks only a site you have shown is yours: the first
+  time, it prints a meta tag and a file to add, and checks again on Enter. It can sign in with a test account: the
+  password is typed unseen (or read from `GENCLASS_TEST_PASSWORD`), sent to genclass.dev for that check only, and
+  never kept or printed. `--json`, `--print` and `--out <file>` are for a script or an agent. It comes with Pro.
+
 ## 0.3.12
 
 - Before sign-in the command says Pro is 3 days free, then US$50 a developer a month, the price on genclass.dev.

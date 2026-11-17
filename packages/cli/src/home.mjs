@@ -36,6 +36,7 @@ export const COMMANDS = [
   ["agent", "your coding agent and what it did", false],
   ["funnels", "funnels through your pages", false],
   ["scan <url>", "check one page", false],
+  ["site <url>", "check your whole site, signed in too", false],
   ["apps", "the apps in your account", false],
   ["plan", "your plan and what it includes", false],
   ["upgrade", "start Pro, or see what your plan has", false],
