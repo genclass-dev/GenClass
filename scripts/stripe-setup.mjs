@@ -19,7 +19,10 @@
 // 2. each plan's monthly price under its lookup key from billing/plans.json (all start with genclass_). Prices are
 //    read only by those lookup keys; a key on another product's price stops the script. A changed amount gets a new
 //    price: the old one is archived and keeps a genclass_..._retired_<price id> lookup key, so its subscribers stay
-//    on it and on their plan (the worker reads a plan from a genclass_ lookup key and the product's metadata);
+//    on it and on their plan (the worker reads a plan from a genclass_ lookup key and the product's metadata). A
+//    plan's country prices (country_prices: Pro is US$15 in Canada and US$50 elsewhere, 2026-11-16) are made the
+//    same way; a price that names a product (stripe_product: Pro's own, genclass_team_world) is on that product,
+//    with the plan's name and metadata, because the Billing Portal's seat changes allow one monthly price a product;
 // 3. its webhook endpoint https://genclass.dev/api/billing/webhook with the description "GenClass billing", for the
 //    events the worker handles and no others (the customer.subscription events, invoice.paid, charge.refunded and
 //    charge.dispute.created; the worker reads only ids and amounts from the last three, which carry the buyer's
@@ -96,9 +99,13 @@ function form(params) {
  * feature stays off, as before per-seat plans.
  */
 export function seatUpdate(plans, made = {}) {
+  // a plan with country prices has a product for each price (the portal allows one monthly price a product): made[id]
+  // is then a list
   const products = plans
-    .filter((p) => (p.per_seat === true || p.per_app === true) && made[p.id] && !made[p.id].planned && made[p.id].prices.length)
-    .map((p) => ({ product: made[p.id].product, prices: made[p.id].prices }));
+    .filter((p) => p.per_seat === true || p.per_app === true)
+    .flatMap((p) => [].concat(made[p.id] ?? []))
+    .filter((m) => !m.planned && m.prices.length)
+    .map((m) => ({ product: m.product, prices: m.prices }));
   return products.length ? { enabled: true, default_allowed_updates: ["quantity"], proration_behavior: "always_invoice", products } : { enabled: false };
 }
 
@@ -172,8 +179,12 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
 
   // ------------------------------------------------------------------------------------------- read and check
 
-  /** GenClass's product for a plan: by its id, else (an earlier run) by a search on its metadata. Null: none yet. */
-  async function findProduct(plan, id) {
+  /**
+   * GenClass's product for a plan: by its id, else (an earlier run, the plan's main product only: `others` is null for
+   * a product a price names, billing/plans.json stripe_product) by a search on its metadata, leaving out the products
+   * the plan's prices name (`others`). Null: none yet.
+   */
+  async function findProduct(plan, id, others = []) {
     const byId = await stripe("GET", `/v1/products/${id}`, undefined, { missingOk: true });
     if (byId) {
       if (byId.metadata?.genclass_plan !== plan.id) {
@@ -181,9 +192,10 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
       }
       return byId;
     }
+    if (others === null) return null;
     // the search returns only products with this metadata: nothing else in the account is read
     const found = ((await stripe("GET", "/v1/products/search", { query: `metadata['genclass_plan']:'${plan.id}'`, limit: 10 })).data ?? []).filter(
-      (p) => p.metadata?.genclass_plan === plan.id,
+      (p) => p.metadata?.genclass_plan === plan.id && !others.includes(p.id),
     );
     if (found.length > 1) fail(`${found.length} products have metadata genclass_plan=${plan.id} (${found.map((p) => p.id).join(", ")}); archive all but one in the Stripe dashboard, then run this again. Nothing was changed.`);
     return found[0] ?? null;
@@ -192,22 +204,37 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
   async function readPlans() {
     const out = [];
     for (const plan of PLANS.plans.filter((p) => p.price_usd_cents.monthly > 0)) {
-      const id = `genclass_${plan.id}`;
-      const product = await findProduct(plan, id);
-      const prices = [];
-      for (const [interval, field] of [["month", "monthly"], ["year", "yearly"]]) {
-        const lookup = plan.stripe_lookup_keys[field];
-        const cents = plan.price_usd_cents[field];
-        if (!lookup || cents === null || cents === undefined) continue;
-        if (!lookup.startsWith(LOOKUP_PREFIX)) fail(`billing/plans.json: the lookup key ${lookup} must start with ${LOOKUP_PREFIX}`);
-        if (!TAX_CODE_RE.test(plan.stripe_tax_code ?? "")) fail(`billing/plans.json: the ${plan.name} plan needs a Stripe product tax code (stripe_tax_code, txcd_ and 8 digits)`);
-        const [price] = (await stripe("GET", "/v1/prices", { lookup_keys: [lookup], limit: 1 })).data ?? [];
-        if (price && price.product !== product?.id) {
-          fail(`the lookup key ${lookup} is on price ${price.id} of product ${price.product}, not on GenClass's product ${product?.id ?? id}; this script does not touch it. Nothing was changed.`);
-        }
-        prices.push({ interval, field, lookup, cents, price: price ?? null });
+      const main = `genclass_${plan.id}`;
+      // the plan's own price, then its country prices (billing/plans.json country_prices: Pro is US$15 in Canada); a
+      // price that names a product (stripe_product) is on that one, the others on the plan's main product, because
+      // the Billing Portal's seat changes allow one monthly price a product
+      const groups = new Map();
+      for (const entry of [plan, ...(plan.country_prices ?? [])]) {
+        const id = entry.stripe_product ?? main;
+        if (!id.startsWith(LOOKUP_PREFIX)) fail(`billing/plans.json: the product id ${id} must start with ${LOOKUP_PREFIX}`);
+        if (!groups.has(id)) groups.set(id, []);
+        groups.get(id).push(entry);
       }
-      out.push({ plan, id, product, prices });
+      const named = [...groups.keys()].filter((id) => id !== main);
+      for (const [id, entries] of groups) {
+        const product = await findProduct(plan, id, id === main ? named : null);
+        const prices = [];
+        for (const entry of entries) {
+          for (const [interval, field] of [["month", "monthly"], ["year", "yearly"]]) {
+            const lookup = entry.stripe_lookup_keys?.[field];
+            const cents = entry.price_usd_cents?.[field];
+            if (!lookup || cents === null || cents === undefined) continue;
+            if (!lookup.startsWith(LOOKUP_PREFIX)) fail(`billing/plans.json: the lookup key ${lookup} must start with ${LOOKUP_PREFIX}`);
+            if (!TAX_CODE_RE.test(plan.stripe_tax_code ?? "")) fail(`billing/plans.json: the ${plan.name} plan needs a Stripe product tax code (stripe_tax_code, txcd_ and 8 digits)`);
+            const [price] = (await stripe("GET", "/v1/prices", { lookup_keys: [lookup], limit: 1 })).data ?? [];
+            if (price && price.product !== (product?.id ?? id)) {
+              fail(`the lookup key ${lookup} is on price ${price.id} of product ${price.product}, not on GenClass's product ${product?.id ?? id}; this script does not touch it. Nothing was changed.`);
+            }
+            prices.push({ interval, field, lookup, cents, price: price ?? null, label: entry === plan ? "" : ` (${entry.name})` });
+          }
+        }
+        out.push({ plan, id, product, prices });
+      }
     }
     return out;
   }
@@ -258,12 +285,14 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
         would(`update product ${name} (${product.id}, tax code ${plan.stripe_tax_code})`);
         if (!DRY) product = await stripe("POST", `/v1/products/${product.id}`, { ...want, active: true, metadata: { genclass: MARK } });
       } else say(`product ${name}: ${product.id}, unchanged`);
-      result[plan.id] = { product: product.id, planned: !!product.planned, prices: [] };
-      for (const { interval, field, lookup, cents, price } of prices) {
+      // a plan with country prices on their own products has one entry for each product (seatUpdate)
+      const made = { product: product.id, planned: !!product.planned, prices: [] };
+      result[plan.id] = result[plan.id] ? [].concat(result[plan.id], made) : made;
+      for (const { interval, field, lookup, cents, price, label } of prices) {
         const same = price && price.active && price.unit_amount === cents && price.currency === PLANS.currency && price.recurring?.interval === interval;
         if (same) {
           say(`price ${lookup}: ${price.id}, US$${cents / 100} per ${interval}, unchanged`);
-          result[plan.id].prices.push(price.id);
+          made.prices.push(price.id);
           continue;
         }
         if (price) {
@@ -280,10 +309,10 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
           currency: PLANS.currency,
           recurring: { interval },
           lookup_key: lookup,
-          nickname: `${plan.name} ${field}`,
+          nickname: `${plan.name} ${field}${label}`,
           metadata: { genclass: MARK, genclass_plan: plan.id },
         });
-        result[plan.id].prices.push(created.id);
+        made.prices.push(created.id);
       }
     }
     return result;

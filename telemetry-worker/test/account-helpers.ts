@@ -54,6 +54,8 @@ export interface CallOpts {
   fetch?: Fetch;
   /** The pause the handler asks for before a second try (default: no wait at all). */
   wait?: (ms: number) => Promise<void>;
+  /** The visitor's country, as Cloudflare puts it on the request (request.cf.country); left out: none. */
+  country?: string;
 }
 
 export async function call(env: Env, method: string, path: string, o: CallOpts = {}): Promise<Response> {
@@ -64,7 +66,9 @@ export async function call(env: Env, method: string, path: string, o: CallOpts =
   if (o.cookie) headers.cookie = o.cookie;
   if (o.bearer) headers.authorization = `Bearer ${o.bearer}`;
   const body = o.body === undefined ? undefined : typeof o.body === "string" ? o.body : JSON.stringify(o.body);
-  return handle(new Request(`${ORIGIN}${path}`, { method, headers, body }), env, { now: () => clock, fetch: o.fetch, wait: o.wait ?? (async () => undefined) });
+  const req = new Request(`${ORIGIN}${path}`, { method, headers, body });
+  if (o.country) Object.defineProperty(req, "cf", { value: { country: o.country } });
+  return handle(req, env, { now: () => clock, fetch: o.fetch, wait: o.wait ?? (async () => undefined) });
 }
 
 /** The password the helper accounts sign up with. */
@@ -360,12 +364,13 @@ export function fakeStripe(o: { answer?: (url: URL, init: RequestInit) => Respon
   return { fetch, calls, other, customers, subs, sessions, invoices, refunds, charges, paymentIntents, portal, genclassCustomer };
 }
 
-/** The GenClass prices the fake Stripe knows by lookup key: the fixture's (Pro, Custom), the retired Individual and the real plans' Team. */
+/** The GenClass prices the fake Stripe knows by lookup key: the fixture's (Pro, Custom), the retired Individual and the real plans' Pro (Canada's price and everyone else's). */
 const KNOWN_PRICES: Record<string, { plan: string; id: string }> = {
   genclass_pro_monthly: { plan: "pro", id: "price_pro000001" },
   genclass_custom_monthly: { plan: "custom", id: "price_custom0001" },
   genclass_individual_monthly: { plan: "individual", id: "price_indiv00001" },
   genclass_team_monthly: { plan: "team", id: "price_team000001" },
+  genclass_team_world_monthly: { plan: "team", id: "price_teamworld1" },
 };
 
 /** A price as a subscription fetched with its products expanded shows it: GenClass's carry product metadata genclass_plan. */

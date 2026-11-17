@@ -76,7 +76,7 @@
 import type { Env } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like } from "./dashboard.js";
 import { json } from "./http.js";
-import { byQuantity, cleanSeats, entitled, LIVE_STATUSES, LOOKUP_PREFIX, MAX_SEATS, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
+import { byQuantity, cleanSeats, entitled, LIVE_STATUSES, LOOKUP_PREFIX, MAX_SEATS, ownedPrice, pastDueLapsed, planById, PLANS, PLANS_FILE, planForPrice, priceFor, stripeMode, type Billing, type Plan, type PlanId } from "./plans.js";
 import { equalStrings } from "./webauthn.js";
 
 export const STRIPE_API = "https://api.stripe.com";
@@ -406,11 +406,12 @@ export function managedPayments(env: Env, plan: Plan): boolean {
 export async function checkoutSession(
   env: Env,
   f: Fetch,
-  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string }; trialDays?: number; backTo?: string; next?: string },
+  o: { account: BillingAccount; customer: string; plan: Plan; origin: string; now: Date; fresh?: boolean; switchFrom?: string; seats?: number; project?: { id: string }; trialDays?: number; backTo?: string; next?: string; country?: string | null },
 ): Promise<string> {
   // free days only on a first subscription (the caller decides), never on a switch, and only what Stripe allows (1 to 730)
   const trialDays = !o.switchFrom && Number.isInteger(o.trialDays) && o.trialDays! >= 1 && o.trialDays! <= 730 ? o.trialDays! : 0;
-  const lookup = o.plan.stripe_lookup_keys.monthly;
+  // the price of the buyer's country (plans.json country_prices: Pro is US$15 in Canada), else the plan's own
+  const lookup = priceFor(o.plan, o.country).stripe_lookup_keys.monthly;
   if (!lookup) throw new StripeError(`the ${o.plan.name} plan has no monthly price`, 400);
   // a plan sold per seat: the quantity is the seats asked for, and the buyer can still change it on Stripe's page
   const perSeat = byQuantity(o.plan);
@@ -425,6 +426,8 @@ export async function checkoutSession(
       if ((x.metadata?.genclass_project ?? undefined) !== o.project?.id) continue;
       const same =
         x.metadata?.genclass_plan === o.plan.id &&
+        // a page for another country's price is closed, and so is one made before prices by country (no genclass_price)
+        x.metadata?.genclass_price === lookup &&
         (x.metadata?.genclass_switch_from ?? undefined) === o.switchFrom &&
         x.metadata?.genclass_trial !== "1" &&
         (x.metadata?.genclass_trial_days ?? "0") === String(trialDays) &&
@@ -465,7 +468,7 @@ export async function checkoutSession(
         // back from a switch, the page waits for the new plan
         success_url: backId ? `${back}&done=1` : `${o.origin}/account/billing?done=1${o.switchFrom ? `&to=${o.plan.id}` : ""}${next ? `&next=${encodeURIComponent(next)}` : ""}`,
         cancel_url: next ? `${o.origin}${next}` : back,
-        metadata: { ...mark, genclass_plan: o.plan.id, ...(next ? { genclass_next: next } : {}), ...(perSeat ? { genclass_seats: String(seats) } : {}), ...(trialDays ? { genclass_trial_days: String(trialDays) } : {}) },
+        metadata: { ...mark, genclass_plan: o.plan.id, genclass_price: lookup, ...(next ? { genclass_next: next } : {}), ...(perSeat ? { genclass_seats: String(seats) } : {}), ...(trialDays ? { genclass_trial_days: String(trialDays) } : {}) },
         // a card (or another payment method) up front
         payment_method_collection: "always",
         // the "Add promotion code" field: codes made in the Stripe dashboard (Product catalog, Coupons) for GenClass's prices
@@ -473,7 +476,7 @@ export async function checkoutSession(
         subscription_data: { metadata: mark, billing_mode: { type: "flexible" }, ...(trialDays ? { trial_period_days: trialDays } : {}) },
         managed_payments: managedPayments(env, o.plan) ? { enabled: true } : undefined,
       },
-      `genclass-checkout-${o.account.id}${o.project ? `-p-${o.project.id}` : ""}-${o.plan.id}${perSeat ? `-x${seats}` : ""}-${Math.floor(o.now.getTime() / 60_000)}${from}${after}${trialDays ? `-t${trialDays}` : ""}`,
+      `genclass-checkout-${o.account.id}${o.project ? `-p-${o.project.id}` : ""}-${o.plan.id}${lookup !== o.plan.stripe_lookup_keys.monthly ? `-k-${lookup}` : ""}${perSeat ? `-x${seats}` : ""}-${Math.floor(o.now.getTime() / 60_000)}${from}${after}${trialDays ? `-t${trialDays}` : ""}`,
     );
   } catch (e) {
     priceCache.delete(lookup); // the cached price may have been replaced since

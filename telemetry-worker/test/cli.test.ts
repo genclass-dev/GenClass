@@ -69,7 +69,7 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     expect(offered.offer).toEqual({
       // the plan id stays team; its name is Pro since 2026-11-12
       plan: { id: "team", name: "Pro" },
-      price: "$15 / developer / month",
+      price: "$50 / developer / month",
       summary: teamPlan.summary,
       features: teamPlan.features.filter((f) => f.available && !/^Everything in /.test(f.text)).map((f) => f.text).slice(0, 12),
       // Pro is the account's (plans.json version 5), bought on the plan page of its first app on Free
@@ -247,7 +247,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       cached_at: null,
       // the plan page that starts Pro from the command, and what Pro is
       upgrade_url: "https://genclass.dev/account/billing?plan=pro&from=cli",
-      upgrade_plan: { name: "Pro", price: "$15 / developer / month", trial_days: 3 },
+      upgrade_plan: { name: "Pro", price: "$50 / developer / month", trial_days: 3 },
       remaining_today: 3,
       limited: false,
     });
@@ -399,7 +399,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       designs_locked: 2,
       cached_at: null,
       upgrade_url: "https://genclass.dev/account/billing?plan=pro&from=cli",
-      upgrade_plan: { name: "Pro", price: "$15 / developer / month", trial_days: 3 },
+      upgrade_plan: { name: "Pro", price: "$50 / developer / month", trial_days: 3 },
       remaining_today: 2,
       limited: false,
     });
@@ -543,7 +543,7 @@ describe("genclass command: GET /api/cli/app (src/cli.ts)", () => {
     expect(j.recent).toEqual([]);
     expect(j.typeSeries.every((b: any) => Object.keys(b.counts).join() === "problems")).toBe(true);
     expect(j.typeSeries.reduce((n: number, b: any) => n + b.counts.problems, 0)).toBe(1);
-    expect(j.locked.problems).toEqual({ plan: "Pro", upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`, trial_days: 3, price: "$15 / developer / month" });
+    expect(j.locked.problems).toEqual({ plan: "Pro", upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`, trial_days: 3, price: "$50 / developer / month" });
     expect(JSON.stringify(j)).not.toContain("/checkout");
     // nothing a page typed, and no session of the account
     expect(JSON.stringify(j)).not.toContain("SECRET PAGE TEXT");

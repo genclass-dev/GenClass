@@ -55,7 +55,7 @@ import { isKind, KINDS } from "./forward.js";
 import { githubApp } from "./github/config.js";
 import { repoStatusForAccount } from "./github/http.js";
 import { json } from "./http.js";
-import { accountAccess, accountBilling, accountProjectsAccess, appsCovered, better, planParam, canBuy, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
+import { accountAccess, accountBilling, accountProjectsAccess, appsCovered, better, planParam, canBuy, countryOf, entitled, firstPaidWith, firstPlanWith, FREE, hasAnalytics, hasAsk, hasDashboard, hasProblems, PAID_PLANS, pickRange, priceText, problemsLock, projectAccess, viewRanges, type Access } from "./plans.js";
 import { liveFixUsage } from "./usage.js";
 import { appKey, askModel, byWeight, claimRun, hasModel, keepAnswer, lastAnswer, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem, type SuggestAnswer } from "./suggest.js";
 import { activeOwners, createInvite, isTeamError, membershipsOf, teamOf } from "./team.js";
@@ -132,7 +132,7 @@ async function cliJson(c: C, a: Auth): Promise<{ paid: true; via: "plan" | "team
   const via = await cliVia(c, a);
   if (via !== null) return { paid: true, via };
   const plan = PAID_PLANS[0]!;
-  return { paid: false, plan: plan.name, price: priceText(plan), trial_days: (await trialFor(c.db, a.account.id, plan)) || null, checkout_url: `${c.cfg.origin}/account/billing?plan=${planParam(plan)}&start=1` };
+  return { paid: false, plan: plan.name, price: priceText(plan, countryOf(c.req)), trial_days: (await trialFor(c.db, a.account.id, plan)) || null, checkout_url: `${c.cfg.origin}/account/billing?plan=${planParam(plan)}&start=1` };
 }
 
 /** The routes that are Pro's for a CLI session: all but the overview and the account. */
@@ -191,7 +191,7 @@ async function offerFor(c: C, account: { id: string; email: string | null }, acc
   const trialDays = (await trialFor(c.db, account.id, plan)) || null;
   return {
     plan: { id: plan.id, name: plan.name },
-    price: priceText(plan),
+    price: priceText(plan, countryOf(c.req)),
     summary: plan.summary,
     // the plan's own "N days free" line only while the account still has the trial
     features: plan.features.filter((f) => f.available && !/^Everything in /i.test(f.text) && (trialDays || !/days free/i.test(f.text))).map((f) => f.text).slice(0, 12),
@@ -236,7 +236,7 @@ async function app(c: C): Promise<Response> {
   const planUrl = `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}`;
   const seen = hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` });
   // Free sees the totals only: the problems, pages, activity and fix prompts come with Pro (the browser's rule too)
-  const view = hasProblems(access) ? seen : stripProblems(seen, problemsLock(planUrl));
+  const view = hasProblems(access) ? seen : stripProblems(seen, problemsLock(planUrl, countryOf(c.req)));
   const usage = await liveFixUsage(c.db, p.token, access.plan, c.now).catch(() => null);
   return json(200, { ...view, recent: view.recent.slice(0, APP_RECENT), dashboard_url: projectJson(c, p).dashboard_url, usage, plan: { id: access.plan.id, name: access.plan.name, source: access.source }, plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
 }
@@ -298,7 +298,7 @@ async function suggest(c: C): Promise<Response> {
     // the answer was kept from an earlier run (Free sees it again; a plan out of runs for the day sees its last)
     cached_at: created,
     upgrade_url: locked.length || hidden || limited ? `${c.cfg.origin}/account/billing?plan=${planParam(pro ?? PAID_PLANS[0]!)}&from=cli` : null,
-    upgrade_plan: pro ? { name: pro.name, price: priceText(pro), trial_days: pro.trial_days ?? null } : null,
+    upgrade_plan: pro ? { name: pro.name, price: priceText(pro, countryOf(c.req)), trial_days: pro.trial_days ?? null } : null,
     remaining_today: used === null ? Math.max(0, lim.per_day - (await usedToday(c.db, a.account.id, c.now))) : Math.max(0, lim.per_day - used),
     limited,
   });
@@ -340,7 +340,7 @@ async function account(c: C): Promise<Response> {
   const apps = await accountProjects(c, a.account.id);
   return json(200, {
     account: accountJson(a.account),
-    plan: { id: access.plan.id, name: access.plan.name, price: access.plan.id === FREE.id ? null : priceText(access.plan), summary: access.plan.summary },
+    plan: { id: access.plan.id, name: access.plan.name, price: access.plan.id === FREE.id ? null : priceText(access.plan, countryOf(c.req)), summary: access.plan.summary },
     // why the account has its plan now: "paid", "comp" (GenClass's own grant), "open" (this server's PLAN_GATES), or null on Free
     access: access.source,
     // the plan the account works under through a team when it is better than its own (workingAccess), else null:
@@ -428,7 +428,7 @@ async function ask(c: C, f: Fetch): Promise<Response> {
   if (!hasDashboard(access)) return lockedJson(c, access, p.id);
   // asking about the app comes with Pro (plans.json entitlement `ask`): Free is told which plan, and where
   if (!hasAsk(access)) {
-    const lock = problemsLock(`${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}`);
+    const lock = problemsLock(`${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}`, countryOf(c.req));
     return json(403, { ok: false, error: `asking about your app comes with ${lock.plan ?? "a paid plan"}`, locked: true, needs_plan: true, plan: lock.plan, upgrade_url: lock.upgrade_url, trial_days: lock.trial_days, price: lock.price });
   }
   // the runs a day are the asker's, under the plan it works under (its team's for a member: workingAccess)

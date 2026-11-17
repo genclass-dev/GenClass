@@ -74,7 +74,7 @@ export function usage(cols = width()) {
   };
   text("genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.");
   lines.push("");
-  text("The genclass command comes with Pro: 3 days free, then $15 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, remove, help. Free is on the website: https://genclass.dev", "  ");
+  text("The genclass command comes with Pro: 3 days free, then $50 / developer / month ($15 in Canada), with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, remove, help. Free is on the website: https://genclass.dev", "  ");
   const side = w >= 78;
   const col = 30;
   for (const [head, rows] of HELP) {

@@ -118,7 +118,7 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     // nothing of how the account signs in or pays
     expect(JSON.stringify(j)).not.toMatch(/stripe|customer|password|passkey/i);
     // the genclass command is Pro's where Pro is sold: the account says so, and every other route answers 402
-    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" });
+    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$50 / developer / month", trial_days: 3, checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" });
     const no = await send(env, "POST", "/api/cli/team/invite", me.bearer, {});
     expect(no.status).toBe(402);
     expect(await no.json()).toMatchObject(NEEDS_PRO);
@@ -135,7 +135,7 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     const me = await cliUser(env);
     team(sql, me.account.id, 3);
     const j = await json(get(env, "/api/cli/account", me.bearer));
-    expect(j.plan).toMatchObject({ id: "team", name: "Pro", price: "$15 / developer / month" });
+    expect(j.plan).toMatchObject({ id: "team", name: "Pro", price: "$50 / developer / month" });
     // Pro is per developer since plans.json version 5: the seats paid for, and up to 3 apps for the account
     expect([j.access, j.limits.seats, j.limits.apps, j.limits.history_days]).toEqual(["paid", 3, 3, 90]);
     expect(j.includes).toEqual({ analytics: true, forwarding: true, export: true, private_repositories: true });
@@ -312,7 +312,7 @@ describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
       plan: "Pro",
       upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`,
       trial_days: 3,
-      price: "$15 / developer / month",
+      price: "$50 / developer / month",
     });
     expect(model.calls).toEqual([]);
     expect(sql.rows("SELECT * FROM suggest_usage")).toEqual([]);
@@ -461,7 +461,7 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
     needs_pro: true,
     paid: false,
     plan: "Pro",
-    price: "$15 / developer / month",
+    price: "$50 / developer / month",
     trial_days: 3,
     checkout_url: CHECKOUT,
   };
@@ -520,7 +520,7 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
     const { env, sql: db, me } = await freeUser();
     setPlan(db, me.account.id, "free", { subscription_id: "sub_old0000001", subscription_status: "canceled" });
     const r = await get(env, "/api/cli/overview", me.bearer);
-    expect((await r.json() as any).cli).toEqual({ paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: null, checkout_url: CHECKOUT });
+    expect((await r.json() as any).cli).toEqual({ paid: false, plan: "Pro", price: "$50 / developer / month", trial_days: null, checkout_url: CHECKOUT });
     const no = await send(env, "POST", "/api/cli/suggest", me.bearer, {});
     expect(await no.json()).toMatchObject({ error: `the genclass command comes with Pro: ${CHECKOUT}`, trial_days: null });
   });

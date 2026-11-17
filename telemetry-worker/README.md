@@ -5,7 +5,7 @@ Cloudflare Worker that receives the default-on diagnostics batches from `@gencla
 a token and a private dashboard on genclass.dev, and that holds the optional accounts (Google, an email and a
 password, or GitHub, with passkeys as extra security) which keep several apps in one place and let `npx @genclass/runtime@beta login` connect an app
 ([Accounts](#accounts)). There are three plans (`billing/plans.json` version 5, since 2026-11-13): Free, one app with
-its totals, on the website; Pro (plan id `team`), US$15 per developer a month for up to 3 apps, with the genclass
+its totals, on the website; Pro (plan id `team`), US$50 per developer a month (US$15 in Canada) for up to 3 apps, with the genclass
 command, every problem, visitor analytics, forwarding, export, 90 days of history, private repositories for the
 GitHub App and members ([Teams](#teams)), 3 days free at the first Checkout; and Enterprise, by agreement, with more
 apps and your own classifier, which GenClass trains ([Paid plans](#paid-plans)). What was bought before 13 November
@@ -534,9 +534,26 @@ npx --yes wrangler@4 d1 execute genclass-dashboard --remote --command "
 
 ## Paid plans
 
+**Prices by country (2026-11-16, the owner's call).** Pro is US$50 a developer a month everywhere but Canada, where
+it stays US$15. `billing/plans.json` gives Pro its own price (US$50, lookup key `genclass_team_world_monthly`, on the
+Stripe product `genclass_team_world`, named by `stripe_product`) and `country_prices` (Canada: US$15 under
+`genclass_team_monthly`, the key Pro was sold under before, on the product `genclass_team`). Checkout sells the price
+of the country Cloudflare reports for the request (`request.cf.country`; `src/plans.ts` countryOf, priceFor) and
+records it on the session (metadata `genclass_price`); an open Checkout page for another price, or one made before this
+change, is closed and a new one made. A request with no country gets the plan's own price. The billing pages, the
+plan pages and the genclass command's answers show the visitor's price; a message read later (the report email, the
+seats message) says both ("$50 / developer / month ($15 in Canada)"). Every subscription keeps the price it was bought
+at: the live subscription on `genclass_team_monthly` stays at US$15 wherever its buyer is. Both products are named
+GenClass Pro with metadata `genclass_plan` team, because Stripe's Billing Portal allows one monthly price per product
+for seat changes; the portal configuration lists each product with its own price. The country is the visitor's IP
+address as Cloudflare sees it, so a VPN in Canada gets the Canadian price; nothing checks the card's country.
+Promotion codes are typed on Stripe's Checkout page (`allow_promotion_codes`): `EFLAUNCH` (coupon "EF launch", 20% off
+for as long as the subscription lasts, both Pro products, new customers only) was made in the live account on
+2026-11-16.
+
 **Version 5 (2026-11-13, the owner's calls; what follows below is the history it replaces where they differ).**
 Pro (id `team`) is bought for the account again, not per app, and per developer: `per_seat` true, the
-subscription's quantity is how many developers (US$15 each a month), and it covers up to 3 apps (`limits.apps`)
+subscription's quantity is how many developers (US$15 each a month then; see Prices by country below), and it covers up to 3 apps (`limits.apps`)
 whatever the number of developers, oldest first (`src/plans.ts` coverage, accessIn). An app past them is locked
 `pro_apps`: its plan page says more apps come with Enterprise, by email (a mailto button, no purchase). A
 subscription bought per project under version 4 still covers its own app (never locked) and gives the account

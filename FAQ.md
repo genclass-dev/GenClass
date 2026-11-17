@@ -166,7 +166,7 @@ The runtime and model are free, open source (Apache-2.0) and need no API key or 
 genclass.dev service are defined in `billing/plans.json`, which the collector and the pricing page read, and it
 defines three (since 2026-11-11). Free is what finds, shows and fixes the problems: the dashboard's problems for one
 person, 3 apps and the last 7 days, the coding-agent loop on your machine, and the GitHub App on public repositories.
-Team, US$15 a developer a month, adds the GitHub App on private repositories, visitor analytics, forwarding, data
+Team, US$50 a developer a month (US$15 in Canada), adds the GitHub App on private repositories, visitor analytics, forwarding, data
 export, 90 days of history and members. Enterprise, agreed by email, adds your own classifier, which GenClass trains,
 GenClass's models in its cloud, a year of history and contract terms. Your data is kept 90 days on every plan, so an
 upgrade shows what was counted before it. A collector you host yourself locks nothing. The pricing page shows the
