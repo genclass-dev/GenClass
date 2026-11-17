@@ -45,6 +45,7 @@ const HELP = [
     ['npx genclass ask "..."', "ask about your app in plain words; the model answers from its numbers"],
     ["npx genclass suggest [url]", "what your app is missing, most important first (--yes, --no-model, --all)"],
     ["npx genclass scan <url>", "23 visual checks on one page"],
+    ["npx genclass site <address>", "the site check: your site's pages from that address, their links, buttons and accessibility, signed in with a test account if you like (--user, --login-page, --out)"],
   ]],
   ["Connect", [
     ["npx genclass connections", "where alerts go (Slack, Sentry, PostHog, Datadog, a webhook), GitHub, agent (connections add | test | on | off | remove <kind>)"],
@@ -102,7 +103,7 @@ export function usage(cols = width()) {
 export const USAGE = usage(80);
 
 const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open", print: "print", copy: "copy" };
-const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range", from: "from", to: "to", format: "format", out: "out", agent: "agent" };
+const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range", from: "from", to: "to", format: "format", out: "out", agent: "agent", user: "user", "login-page": "loginPage" };
 
 /** The flags this file knows, and what is left ({ o, rest }); an unknown flag stays in `rest` for the command it is for. */
 export function parseArgs(argv) {
@@ -259,7 +260,7 @@ export async function run(argv, ctx = {}) {
   // the commands that take words after their name: sections, picks, subcommands, a question
   const words = rest.filter((a) => !a.startsWith("-"));
   const flags = rest.filter((a) => a.startsWith("-"));
-  const WORDY = ["analytics", "fix", "ask", "connections", "agent", "funnels", "apps", "team"];
+  const WORDY = ["analytics", "fix", "ask", "connections", "agent", "funnels", "apps", "team", "site"];
   if (flags.length || (words.length && !WORDY.includes(cmd))) {
     const bad = flags[0] ?? words[0];
     err(`genclass: unknown ${bad.startsWith("-") ? "option" : "command"} ${c.bold(bad)}\n\n${usage()}`);
@@ -273,6 +274,10 @@ export async function run(argv, ctx = {}) {
   }
   if (cmd === "agent" && words[0] && words[0] !== "link") {
     err(`genclass agent: there is no ${c.bold(words[0])}. Try ${c.cyan("npx genclass agent")} or ${c.cyan("npx genclass agent link")}`);
+    return 2;
+  }
+  if (cmd === "site" && (words.length !== 1 || !(await import("./fix-page.mjs")).isAddress(words[0]))) {
+    err(`genclass site: give your site's address, once. Try ${c.cyan("npx genclass site shop.example.com")}`);
     return 2;
   }
   // signed out, the runtime CLI's own command still knows an app's private dashboard link (.genclass.local): it is
@@ -292,6 +297,7 @@ export async function run(argv, ctx = {}) {
   }
   if (cmd === "fix") return upsold((await import("./fix.mjs")).fix({ ...o, what: words.join(" ") || null }));
   if (cmd === "ask") return upsold((await import("./ask.mjs")).ask({ ...o, question: words.join(" ") }));
+  if (cmd === "site") return upsold((await import("./site.mjs")).site({ ...o, what: words[0] }));
   if (["apps", "plan", "team", "connections", "funnels", "profile", "upgrade"].includes(cmd)) return upsold((await import("./manage.mjs"))[cmd]({ ...o, args: words }), ["apps", "connections", "funnels"].includes(cmd));
   if (cmd === "export") return (await import("./manage.mjs")).exportEvents(o);
   const { setup, status } = await import("./setup.mjs");
@@ -440,7 +446,7 @@ export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "p
 
 /** Every command, for the "did you mean" of a mistyped one. */
 export const COMMANDS = [
-  "setup", "status", "suggest", "dashboard", "problems", "analytics", "events", "health", "report", "export", "fix", "ask", "scan", "connections", "agent", "funnels",
+  "setup", "status", "suggest", "dashboard", "problems", "analytics", "events", "health", "report", "export", "fix", "ask", "scan", "site", "connections", "agent", "funnels",
   "apps", "plan", "upgrade", "profile", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version",
 ];
 
