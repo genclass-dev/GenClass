@@ -13,7 +13,7 @@ Each web app gets a **project key** (token: `gc_` + 22 letters and digits) that 
 dashboard at genclass.dev. The key is public: it ships in your page and can only add telemetry to its app. Keep the
 dashboards in a GenClass account, or use one private link per app without an account. The dashboard is free for every
 app: what GenClass found, on which pages and what it did, for the last 7 days and up to 3 apps in an account. The Team
-plan (US$50 a developer a month (US$15 in Canada)) adds visitor analytics, forwarding, export, 90 days of history, unlimited apps and
+plan (US$50 a developer a month) adds visitor analytics, forwarding, export, 90 days of history, unlimited apps and
 members, who open your apps' dashboards with their own sign-in (Plan and billing, Team: make an invite link and send
 it; it works once, for 7 days). Enterprise adds a year of history and your own classifier, which a person from
 GenClass trains on your app's traffic, bug reports or labelled examples ([pricing](https://genclass.dev/pricing)).

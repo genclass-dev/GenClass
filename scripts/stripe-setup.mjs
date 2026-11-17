@@ -19,10 +19,11 @@
 // 2. each plan's monthly price under its lookup key from billing/plans.json (all start with genclass_). Prices are
 //    read only by those lookup keys; a key on another product's price stops the script. A changed amount gets a new
 //    price: the old one is archived and keeps a genclass_..._retired_<price id> lookup key, so its subscribers stay
-//    on it and on their plan (the worker reads a plan from a genclass_ lookup key and the product's metadata). A
-//    plan's country prices (country_prices: Pro is US$15 in Canada and US$50 elsewhere, 2026-11-16) are made the
-//    same way; a price that names a product (stripe_product: Pro's own, genclass_team_world) is on that product,
-//    with the plan's name and metadata, because the Billing Portal's seat changes allow one monthly price a product;
+//    on it and on their plan (the worker reads a plan from a genclass_ lookup key and the product's metadata). The
+//    private prices (GENCLASS_PLANS_PRIVATE, the JSON of the Worker secret PLANS_PRIVATE, or GENCLASS_PLANS_PRIVATE_FILE
+//    naming a file that holds it; never committed) are made the same way; a price that names a product (stripe_product,
+//    on a plan for its own price or on one of its country_prices) is on that product, with the plan's name and
+//    metadata, because the Billing Portal's seat changes allow one monthly price a product;
 // 3. its webhook endpoint https://genclass.dev/api/billing/webhook with the description "GenClass billing", for the
 //    events the worker handles and no others (the customer.subscription events, invoice.paid, charge.refunded and
 //    charge.dispute.created; the worker reads only ids and amounts from the last three, which carry the buyer's
@@ -71,6 +72,17 @@ const stripeTs = readFileSync(join(WORKER, "src/stripe.ts"), "utf8");
 export const API_VERSION = /export const STRIPE_VERSION = "([^"]+)"/.exec(stripeTs)?.[1];
 export const EVENTS = [...(/export const WEBHOOK_EVENTS = \[([^\]]+)\]/.exec(stripeTs)?.[1] ?? "").matchAll(/"([a-z_.]+)"/g)].map((m) => m[1]);
 const PLANS = JSON.parse(readFileSync(process.env.GENCLASS_PLANS_FILE ? resolve(process.env.GENCLASS_PLANS_FILE) : join(ROOT, "billing/plans.json"), "utf8"));
+// the private prices, as the Worker secret PLANS_PRIVATE holds them: { plans: { <id>: { stripe_product?, country_prices? } } }
+{
+  const raw = process.env.GENCLASS_PLANS_PRIVATE ?? (process.env.GENCLASS_PLANS_PRIVATE_FILE ? readFileSync(resolve(process.env.GENCLASS_PLANS_PRIVATE_FILE), "utf8") : "");
+  const extra = raw ? JSON.parse(raw).plans ?? {} : {};
+  for (const plan of PLANS.plans) {
+    const x = extra[plan.id];
+    if (!x) continue;
+    if (typeof x.stripe_product === "string") plan.stripe_product = x.stripe_product;
+    if (Array.isArray(x.country_prices)) plan.country_prices = x.country_prices;
+  }
+}
 /** The names of the plans sold on the site (a monthly price above 0), for the printed steps. */
 const SOLD = PLANS.plans.filter((p) => p.price_usd_cents.monthly > 0).map((p) => p.name);
 
@@ -205,9 +217,9 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
     const out = [];
     for (const plan of PLANS.plans.filter((p) => p.price_usd_cents.monthly > 0)) {
       const main = `genclass_${plan.id}`;
-      // the plan's own price, then its country prices (billing/plans.json country_prices: Pro is US$15 in Canada); a
-      // price that names a product (stripe_product) is on that one, the others on the plan's main product, because
-      // the Billing Portal's seat changes allow one monthly price a product
+      // the plan's own price, then the private ones (GENCLASS_PLANS_PRIVATE); a price that names a product
+      // (stripe_product) is on that one, the others on the plan's main product, because the Billing Portal's seat
+      // changes allow one monthly price a product
       const groups = new Map();
       for (const entry of [plan, ...(plan.country_prices ?? [])]) {
         const id = entry.stripe_product ?? main;
@@ -230,7 +242,7 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
             if (price && price.product !== (product?.id ?? id)) {
               fail(`the lookup key ${lookup} is on price ${price.id} of product ${price.product}, not on GenClass's product ${product?.id ?? id}; this script does not touch it. Nothing was changed.`);
             }
-            prices.push({ interval, field, lookup, cents, price: price ?? null, label: entry === plan ? "" : ` (${entry.name})` });
+            prices.push({ interval, field, lookup, cents, price: price ?? null, label: entry === plan ? "" : ` (${entry.name ?? entry.countries?.join(", ") ?? "other"})` });
           }
         }
         out.push({ plan, id, product, prices });

@@ -410,7 +410,7 @@ export async function checkoutSession(
 ): Promise<string> {
   // free days only on a first subscription (the caller decides), never on a switch, and only what Stripe allows (1 to 730)
   const trialDays = !o.switchFrom && Number.isInteger(o.trialDays) && o.trialDays! >= 1 && o.trialDays! <= 730 ? o.trialDays! : 0;
-  // the price of the buyer's country (plans.json country_prices: Pro is US$15 in Canada), else the plan's own
+  // the price for the buyer's country (src/plans.ts priceFor), else the plan's own
   const lookup = priceFor(o.plan, o.country).stripe_lookup_keys.monthly;
   if (!lookup) throw new StripeError(`the ${o.plan.name} plan has no monthly price`, 400);
   // a plan sold per seat: the quantity is the seats asked for, and the buyer can still change it on Stripe's page
@@ -426,7 +426,7 @@ export async function checkoutSession(
       if ((x.metadata?.genclass_project ?? undefined) !== o.project?.id) continue;
       const same =
         x.metadata?.genclass_plan === o.plan.id &&
-        // a page for another country's price is closed, and so is one made before prices by country (no genclass_price)
+        // a page for another price is closed, and so is one made before the session named its price (genclass_price)
         x.metadata?.genclass_price === lookup &&
         (x.metadata?.genclass_switch_from ?? undefined) === o.switchFrom &&
         x.metadata?.genclass_trial !== "1" &&
