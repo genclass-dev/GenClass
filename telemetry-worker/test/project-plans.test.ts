@@ -1,4 +1,4 @@
-// Pro for the account again (billing/plans.json version 5, the owner's decision of 2026-11-13): Pro is US$15 a
+// Pro for the account again (billing/plans.json version 5, the owner's decision of 2026-11-13): Pro was US$15 a
 // developer a month for up to 3 of the account's apps (oldest first), everyone on its team included; more apps are
 // Enterprise's, by email. Free covers one app and 100 problems fixed live a month, after which the runtime is told to
 // observe only. A subscription bought per project under version 4 still gives the account Pro (and its 3 apps), and
@@ -66,9 +66,11 @@ async function withApps(names: string[], over: Record<string, unknown> = {}) {
 }
 
 describe("plans.json version 5: Pro for the account, per developer, up to 3 apps", () => {
-  it("Pro is $15 a developer a month, sold by seats, for up to 3 apps; Free covers one app and 100 live fixes a month", () => {
+  it("Pro is $50 a developer a month ($15 in Canada), sold by seats, for up to 3 apps; Free covers one app and 100 live fixes a month", () => {
     const [free, team, enterprise] = PLANS;
-    expect(priceText(team!)).toBe("$15 / developer / month");
+    expect(priceText(team!)).toBe("$50 / developer / month ($15 in Canada)");
+    expect(priceText(team!, null)).toBe("$50 / developer / month");
+    expect(priceText(team!, "CA")).toBe("$15 / developer / month");
     expect(team!.per_project).toBeUndefined();
     expect(team!.per_seat).toBe(true);
     expect(team!.apps_per_unit).toBeUndefined();
@@ -221,7 +223,7 @@ describe("checkout for the account (POST /api/billing/checkout { plan, seats?, p
       mode: "subscription",
       customer: "cus_ada0000001",
       client_reference_id: b.account.id,
-      "line_items[0][price]": "price_team000001",
+      "line_items[0][price]": "price_teamworld1",
       "line_items[0][quantity]": "1",
       "line_items[0][adjustable_quantity][enabled]": "true",
       "line_items[0][adjustable_quantity][minimum]": "1",
@@ -660,7 +662,7 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
   it("the billing page lists each app with its plan and sells Pro for the account", async () => {
     const t = await withApps(["Shop", "Blog"]);
     const page = await text(call(t.env, "GET", "/account/billing", { cookie: t.cookie }));
-    expect(page).toContain('<p class="price">$15 / developer / month</p>');
+    expect(page).toContain('<p class="price">$50 / developer / month</p>');
     expect(page).toContain('data-plan="team"><span>Upgrade to Pro</span>');
     expect(page).not.toContain("Choose a project");
     expect(page).toContain('id="projects"');
@@ -680,7 +682,7 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     expect(one).not.toContain("Choose its plan to go on");
     expect(one).not.toContain("Problems fixed live this month");
     // the card: the name, the price, the first 5 lines, the rest folded under "N more"; no summary repeating the price
-    expect(one).toContain('<div class="plan pick big"><h3>Pro</h3><p class="price">$15 / developer / month</p><ul><li>Up to 3 apps</li><li>The genclass command in your terminal</li>');
+    expect(one).toContain('<div class="plan pick big"><h3>Pro</h3><p class="price">$50 / developer / month</p><ul><li>Up to 3 apps</li><li>The genclass command in your terminal</li>');
     const lines = pitchLines(PLANS[1]!);
     expect(one).toContain(`<details class="pmore"><summary>${lines.length - 5} more</summary><ul>${lines.slice(5).map((l) => `<li>${l.replace(/'/g, "&#39;")}</li>`).join("")}</ul></details>`);
     expect(one).not.toContain("<li>Everything in Free</li>");
@@ -688,7 +690,7 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     expect(one).not.toContain('<p class="sum">');
     // an account that has never had a subscription starts with Pro's 3 days free (billing.ts trialFor)
     expect(one).toContain('<button class="btn" type="button" data-plan="team" data-pick><span>Start your 3-day free trial</span></button>');
-    expect(one).toContain('<p class="trialnote">3 days free, then $15 / developer / month. Cancel before the trial ends and you pay nothing.</p>');
+    expect(one).toContain('<p class="trialnote">3 days free, then $50 / developer / month. Cancel before the trial ends and you pay nothing.</p>');
     expect(one).not.toContain('type="button" data-continue>');
     expect(one).not.toContain('<span class="tag">Your plan</span>');
     // Free is the small way on: a very small link under the big card, and a popup that asks why before it goes on
@@ -878,9 +880,9 @@ describe("the website: a new account's first screen is Pro's trial, with a tiny 
     expect(home.status).toBe(200);
     const page = await home.text();
     expect(page).toContain('<div class="empty-p trial" id="trial"><h2>Start your 3-day free trial</h2>');
-    expect(page).toContain('<p class="tp">Pro, $15 / developer / month</p>');
+    expect(page).toContain('<p class="tp">Pro, $50 / developer / month</p>');
     expect(page).toContain('<a class="btn" href="/account/billing?plan=pro&#38;start=1" id="starttrial"><span>Start your 3-day free trial</span></a>');
-    expect(page).toContain("<p>3 days free, then $15 / developer / month. Cancel before the trial ends and you pay nothing.</p>");
+    expect(page).toContain("<p>3 days free, then $50 / developer / month. Cancel before the trial ends and you pay nothing.</p>");
     // 5 lines shown, the rest folded, and no summary repeating the price (the owner, 2026-11-13: less written)
     expect(page).toContain(`<details class="pmore"><summary>${pitchLines(PLANS[1]!).length - 5} more</summary>`);
     expect(page).not.toContain("Everything for up to 3 apps, per developer.");

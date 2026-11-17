@@ -60,7 +60,7 @@ import { afterBatch } from "./paid.js";
 import { dashboardPage, notFoundPage, openSourcePage, ownEndpoint, securityHeaders, setupCommand, setupPage, startPage } from "./pages.js";
 import { lockedLink } from "./locked.js";
 import { applyLock, linkSession, linkUnlocked, lockKind, lockedJson, readBody, readLock, routeLink, startPasskeyOptions, unlockPage } from "./link-lock.js";
-import { firstPlanWith, hasAnalytics, hasDashboard, hasProblems, pickRange, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { countryOf, firstPlanWith, hasAnalytics, hasDashboard, hasProblems, pickRange, problemsLock, projectAccess, viewRanges } from "./plans.js";
 import { SAMPLE_PROJECT, SAMPLE_SECRET, sampleStats } from "./sample.js";
 
 export const SCHEMA = "genclass-telemetry/1";
@@ -533,7 +533,7 @@ async function routeSite(request: Request, url: URL, path: string, env: Env, opt
     const s = await stats(env.DB, p, range, now);
     const seen = hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: upgradeUrl(env) });
     // a private link's app has no account, so Free's rule: the totals only, and the way to an account with Pro
-    return json(200, hasProblems(access) ? seen : stripProblems(seen, problemsLock(upgradeUrl(env))));
+    return json(200, hasProblems(access) ? seen : stripProblems(seen, problemsLock(upgradeUrl(env), countryOf(request))));
   }
 
   if (path === "/start") {

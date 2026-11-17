@@ -34,8 +34,8 @@ npx genclass   # signs you in, starts Pro, adds GenClass to your app and walks y
 ```
 
 Run it in your web app's folder and press Enter for each step: account, Pro, runtime, app plan, dashboard, test
-workflow, GitHub App, coding agent, suggestions. The command comes with Pro: 3 days free, then US$15 a developer a
-month. The card is asked for on Stripe when the trial starts, and nothing is charged if you cancel before the 3 days
+workflow, GitHub App, coding agent, suggestions. The command comes with Pro: 3 days free, then US$50 a developer a
+month (US$15 in Canada). The card is asked for on Stripe when the trial starts, and nothing is charged if you cancel before the 3 days
 end. Free stays on the website ([pricing](https://genclass.dev/pricing)). A step that does not fit your project is
 skipped, Enter also stops any wait, and running it again continues from where things are. It draws nothing on your
 pages. Then:
@@ -204,7 +204,7 @@ GenClass's GitHub App puts what the runtime saw on the pull request it was seen 
 the GenClass fixture, your workflow uploads the race files it writes, and the app posts one check and one comment:
 each finding with its test, the seeds it was flagged in and the evidence line. It reads those files and never your
 source code, it comments only where it is installed, and it is free on public repositories. Private repositories
-come with Pro (US$15 a developer a month; [pricing](https://genclass.dev/pricing)).
+come with Pro (US$50 a developer a month (US$15 in Canada); [pricing](https://genclass.dev/pricing)).
 
 > **Install** at <https://genclass.dev/github> (the app is GenClass.dev, <https://github.com/apps/genclass-dev>). With
 > no change to your tests, one workflow file is the whole setup: the check on your first pull request links to it,
@@ -249,7 +249,7 @@ export const submitOrder = protect("checkout submit", (cart) => fetch("/api/orde
 
 - **Token and dashboard.** A token (`gc_` plus 22 letters and digits, public) groups your app's diagnostics under a
   private dashboard link (`https://genclass.dev/dashboard/...`). On Free the dashboard shows an app's totals for the
-  last 7 days, for one app in an account. Pro (US$15 a developer a month, up to 3 apps in an account) adds every
+  last 7 days, for one app in an account. Pro (US$50 a developer a month (US$15 in Canada), up to 3 apps in an account) adds every
   problem with its pages and a fix prompt, visitor analytics, forwarding, export, 90 days of history and team members;
   more apps come with Enterprise ([pricing](https://genclass.dev/pricing)). Plans bought before 13 November 2026 keep
   every app they cover (an app paid for on its own does not count toward Pro's 3); Free covers an account's oldest app

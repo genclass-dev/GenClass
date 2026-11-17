@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Pro's price by country**: before sign-in the command says Pro is 3 days free, then US$50 a developer a month
+  (US$15 in Canada). After sign-in it prints the price genclass.dev gives for where you are, as before.
+
 ## 0.3.10
 
 - **`genclass fix <address>`**: the findings genclass.dev's page check made on one page, handed to your coding agent

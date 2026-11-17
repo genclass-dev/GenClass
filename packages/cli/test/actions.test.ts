@@ -266,7 +266,7 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
       expect(lines.filter((l) => l.length > max), String(cols)).toEqual([]);
       expect(lines.join("\n")).toContain("npx genclass dashboard");
     }
-    expect(usage(60)).toContain("$15 / developer / month");
+    expect(usage(60).replace(/\s+/g, " ")).toContain("$50 / developer / month ($15 in Canada)");
     // the browser opens only for someone at a terminal (none here: a coding agent, CI, a pipe), never with --no-browser
     expect(openBrowser("https://genclass.dev/account", {})).toBe(false);
     expect(openBrowser("https://genclass.dev/account", { noBrowser: true })).toBe(false);

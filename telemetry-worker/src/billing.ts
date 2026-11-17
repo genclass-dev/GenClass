@@ -43,6 +43,7 @@ import {
   accountPlan,
   canBuy,
   cleanSeats,
+  countryOf,
   entitled,
   MAX_SEATS,
   FREE,
@@ -247,6 +248,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
             trialDays,
             live: canBuy(env, a.account),
             testMode: stripeMode(env) === "test",
+            country: countryOf(c.req),
             done: url.searchParams.get("done") === "1",
             go: start,
             fromCli,
@@ -294,6 +296,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
           access,
           live: canBuy(env, a.account),
           testMode: stripeMode(env) === "test",
+            country: countryOf(c.req),
           done: url.searchParams.get("done") === "1",
           picked: picked?.id ?? null,
           go,
@@ -467,13 +470,13 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
         if (await foreignInvoice(c.env, f, customer.id, subs)) return refuseShared(c, f, account.id, customer.id, SHARED_INVOICE);
         // once the new subscription's first payment clears, the webhook refunds `held`'s unused time to its card and
         // cancels it; until then it stays
-        const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, switchFrom: held.id, seats });
+        const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, switchFrom: held.id, seats, country: countryOf(c.req) });
         return json(200, { url, switch: true });
       }
     }
     // the first subscription starts with the plan's trial (trialFor), once per account
     const trialDays = customer.fresh || first ? await trialFor(c.db, a.account.id, plan, 0) : 0;
-    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, seats, trialDays, backTo, ...(next ? { next } : {}) });
+    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, seats, trialDays, backTo, country: countryOf(c.req), ...(next ? { next } : {}) });
     return json(200, { url, trial_days: trialDays || null });
   } catch (e) {
     return stripeFail(e);
@@ -572,7 +575,7 @@ async function checkoutProject(c: C, f: Fetch, a: Auth, plan: Plan, projectId: s
     // account has had one (trialFor), or another project's open Checkout already holds it
     const elsewhere = customer.fresh ? false : await openTrialElsewhere(c.env, f, customer.id, a.account.id, p.id).catch(() => true);
     const trialDays = elsewhere ? 0 : await trialFor(c.db, a.account.id, plan, first ? 0 : 1);
-    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, project: { id: p.id }, trialDays });
+    const url = await checkoutSession(c.env, f, { account, customer: customer.id, plan, origin: c.cfg.origin, now: c.now, fresh: customer.fresh, project: { id: p.id }, trialDays, country: countryOf(c.req) });
     return json(200, { url, trial_days: trialDays || null });
   } catch (e) {
     return stripeFail(e);

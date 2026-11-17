@@ -82,7 +82,7 @@ import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/st
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
-import { accountAccess, accountBilling, canBuy, firstPlanWith, planParam, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, pitchLines, PLANS_FILE, priceText, problemsLock, projectAccess, viewRanges } from "./plans.js";
+import { accountAccess, accountBilling, canBuy, countryOf, firstPlanWith, planParam, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, pitchLines, PLANS_FILE, priceText, problemsLock, projectAccess, viewRanges } from "./plans.js";
 import { trialFor } from "./billing.js";
 import { activeOwners, appHome, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
@@ -1987,7 +1987,7 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       if (!view.projects.length && sold && canBuy(env, a.account) && (await accountAccess(c.db, a.account.id, env, c.now)).source === null) {
         view.trial = {
           plan: sold.name,
-          price: priceText(sold),
+          price: priceText(sold, countryOf(c.req)),
           days: (await trialFor(c.db, a.account.id, sold)) || null,
           features: pitchLines(sold),
           start: `/account/billing?plan=${encodeURIComponent(planParam(sold))}&start=1`,
@@ -2111,7 +2111,7 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     // visitor analytics are left out for a plan without them, and counted all the same (src/dashboard.ts stripAnalytics)
     const planUrl = `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}`;
     const shown = hasAnalytics(access) ? s : stripAnalytics(s, { plan: firstPlanWith("analytics")?.name ?? null, upgrade_url: `${c.cfg.origin}/account/billing` });
-    return json(200, { ...(hasProblems(access) ? shown : stripProblems(shown, problemsLock(planUrl))), usage, plan: { id: access.plan.id, name: access.plan.name, source: access.source }, plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
+    return json(200, { ...(hasProblems(access) ? shown : stripProblems(shown, problemsLock(planUrl, countryOf(c.req)))), usage, plan: { id: access.plan.id, name: access.plan.name, source: access.source }, plan_url: `${c.cfg.origin}/account/billing?project=${encodeURIComponent(p.id ?? "")}` });
   }
   const fun = /^\/api\/account\/projects\/([^/]+)\/funnels$/.exec(path);
   if (fun) {

@@ -9,7 +9,7 @@ npx genclass
 
 Run it in your web app's folder. It shows where the project stands and walks you through the next step: one Enter
 per step. Stop at any point and run it again: it continues from what is true now. It comes with Pro: 3 days free,
-then US$15 a developer a month.
+then US$50 a developer a month (US$15 in Canada).
 
 ```text
   ╭─ GenClass ────────────────────────────────────────────── v0.3.7 ─╮
@@ -71,7 +71,7 @@ also a command of its own (`npx genclass problems`), so scripts and coding agent
 
 **The command comes with Pro.** Right after the sign-in, an account without Pro sees Pro's card, and Enter opens its
 checkout in the browser: 3 days free (one trial per account; the card is asked for on Stripe, and nothing is charged
-if you cancel before they end), then US$15 a developer a month, for up to 3 apps in the account. More apps come with
+if you cancel before they end), then US$50 a developer a month (US$15 in Canada), for up to 3 apps in the account. More apps come with
 Enterprise, by email. Every command but `login`, `logout`, `whoami`, `plan`, `upgrade`, `profile`, `status`,
 `remove`, `help` and `version` asks first. Without a terminal (`--yes`, `--json`, a coding agent) nothing is opened:
 one line with the checkout address, and exit code 1. Free stays on the website: one app's totals for the last 7 days.

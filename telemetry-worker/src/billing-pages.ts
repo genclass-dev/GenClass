@@ -30,6 +30,8 @@ import {
   PLANS_FILE,
   pitchLines,
   planById,
+  dollars,
+  priceFor,
   priceText,
   viewRanges,
   type Access,
@@ -66,6 +68,8 @@ export interface BillingView {
   live: boolean;
   /** The key is a Stripe test key: no real money moves. */
   testMode: boolean;
+  /** The visitor's country (src/plans.ts countryOf): the prices shown are its (priceFor); null or left out: the plan's own. */
+  country?: string | null;
   /** Back from Stripe Checkout (?done=1). */
   done: boolean;
   /** The plan chosen on the pricing page (?plan=<id>). */
@@ -162,14 +166,14 @@ function statusLine(v: BillingView, plan: Plan): string {
     return `You are on the ${name} plan until ${day(b.current_period_end)}. It is cancelled and will not renew; you can resume it in Manage billing before then.`;
   }
   if (b.subscription_status === "trialing") {
-    return `You are on the ${name} plan, in a trial until ${day(b.current_period_end)}. When it ends your card is charged for the first month (${esc(priceText(plan))}). Cancel in Manage billing before then and nothing is charged; ${esc(plan.name)} then ends at once.`;
+    return `You are on the ${name} plan, in a trial until ${day(b.current_period_end)}. When it ends your card is charged for the first month (${esc(priceText(plan, v.country ?? null))}). Cancel in Manage billing before then and nothing is charged; ${esc(plan.name)} then ends at once.`;
   }
   if (plan.per_seat === true && v.access.seats !== null) {
     const n = v.access.seats;
-    const total = (plan.price_usd_cents.monthly ?? 0) * n;
-    return `You are on the ${name} plan with <b>${n} seat${n === 1 ? "" : "s"}</b>, ${esc(priceText(plan))} ($${total % 100 ? (total / 100).toFixed(2) : String(total / 100)} a month). It renews on ${day(b.current_period_end)}. Add or remove seats in Manage billing.`;
+    const total = (priceFor(plan, v.country ?? null).price_usd_cents.monthly ?? 0) * n;
+    return `You are on the ${name} plan with <b>${n} seat${n === 1 ? "" : "s"}</b>, ${esc(priceText(plan, v.country ?? null))} (${dollars(total)} a month). It renews on ${day(b.current_period_end)}. Add or remove seats in Manage billing.`;
   }
-  return `You are on the ${name} plan, ${esc(priceText(plan))}. It renews on ${day(b.current_period_end)}.`;
+  return `You are on the ${name} plan, ${esc(priceText(plan, v.country ?? null))}. It renews on ${day(b.current_period_end)}.`;
 }
 
 function planColumn(v: BillingView, p: Plan, current: Plan): string {
@@ -206,7 +210,7 @@ function planColumn(v: BillingView, p: Plan, current: Plan): string {
     .join("");
   const more = p.features.length - PITCH_SHOWN;
   const fold = more > 0 ? `<details class="pmore pfold"><summary>${more} more</summary></details>` : "";
-  return `<div class="plan${cur ? " cur" : pick ? " pick" : ""}"><h3>${esc(p.name)}</h3><p class="price">${esc(priceText(p))}</p><p class="sum">${esc(p.summary)}</p><ul>${features}</ul>${fold}<div class="act">${act}</div></div>`;
+  return `<div class="plan${cur ? " cur" : pick ? " pick" : ""}"><h3>${esc(p.name)}</h3><p class="price">${esc(priceText(p, v.country ?? null))}</p><p class="sum">${esc(p.summary)}</p><ul>${features}</ul>${fold}<div class="act">${act}</div></div>`;
 }
 
 /** The account's projects, each with its plan and the way to change it (its own page). */
@@ -226,7 +230,7 @@ function projectsSection(v: BillingView): string {
     .join("");
   return `<section class="blk team" id="projects">
   <div class="blk-h"><h2>Apps</h2><span class="aside">What your plan covers</span></div>
-  <p class="intro">Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}${PAID_PLANS[0] ? `; ${esc(PAID_PLANS[0].name)} covers ${PAID_PLANS[0].limits.apps ? `up to ${PAID_PLANS[0].limits.apps} apps` : "every app"}, ${esc(priceText(PAID_PLANS[0]))}` : ""}. More apps come with Enterprise.</p>
+  <p class="intro">Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}${PAID_PLANS[0] ? `; ${esc(PAID_PLANS[0].name)} covers ${PAID_PLANS[0].limits.apps ? `up to ${PAID_PLANS[0].limits.apps} apps` : "every app"}, ${esc(priceText(PAID_PLANS[0], v.country ?? null))}` : ""}. More apps come with Enterprise.</p>
   <div class="tablewrap"><table><thead><tr><th>Project</th><th>Plan</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
 </section>`;
 }
@@ -256,6 +260,8 @@ export interface ProjectPlanView {
   trialDays?: number;
   live: boolean;
   testMode: boolean;
+  /** The visitor's country (src/plans.ts countryOf): the prices shown are its (priceFor); null or left out: the plan's own. */
+  country?: string | null;
   /** Back from Stripe Checkout (?done=1). */
   done: boolean;
   /** Open the checkout at once (?start=1, from the genclass command). */
@@ -317,10 +323,10 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
     : proFull
         ? `<a class="btn" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass Enterprise: more than ${a.apps ?? 3} apps`)}"><span>Email us about Enterprise</span></a><p class="trialnote">Or remove an app you no longer use, and this one takes its place.</p>`
       : v.live
-        ? `<button class="btn" type="button" data-plan="${esc(offer!.id)}" data-pick><span>${v.trialDays ? `Start your ${v.trialDays}-day free trial` : `Start ${esc(offer!.name)}`}</span></button>${v.trialDays ? `<p class="trialnote">${v.trialDays} days free, then ${esc(priceText(offer!))}. Cancel before the trial ends and you pay nothing.</p>` : ""}`
+        ? `<button class="btn" type="button" data-plan="${esc(offer!.id)}" data-pick><span>${v.trialDays ? `Start your ${v.trialDays}-day free trial` : `Start ${esc(offer!.name)}`}</span></button>${v.trialDays ? `<p class="trialnote">${v.trialDays} days free, then ${esc(priceText(offer!, v.country ?? null))}. Cancel before the trial ends and you pay nothing.</p>` : ""}`
         : '<span class="muted">Paid plans are not on sale yet.</span>';
   const card = offer && a.source !== "open"
-    ? `<div class="plan pick big"><h3>${esc(offer.name)}${covered ? ' <span class="tag">Your plan</span>' : ""}</h3><p class="price">${esc(priceText(offer))}</p>${features}
+    ? `<div class="plan pick big"><h3>${esc(offer.name)}${covered ? ' <span class="tag">Your plan</span>' : ""}</h3><p class="price">${esc(priceText(offer, v.country ?? null))}</p>${features}
   <div class="act">${action}</div></div>
   ${a.locked || a.source !== null ? "" : `<p class="free"><a href="#why" class="linkish" id="free">Skip</a></p>
   <dialog id="why" class="why" aria-labelledby="whyh">
