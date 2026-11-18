@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTokenCache } from "../src/dashboard.js";
 import { resetOwnerCache } from "../src/paid.js";
 import { resetStripeCache, RETENTION_COUPON, RETENTION_MAX } from "../src/stripe.js";
-import { call, cliToken, createApp, fakeStripe, GENCLASS_PORTAL, resetClock, setPlan, setup, signedIn, subscription, WEBHOOK_SECRET } from "./account-helpers.js";
+import { call, cliToken, createApp, fakeStripe, GENCLASS_PORTAL, invoice, paymentIntentFor, resetClock, setPlan, setup, signedIn, subscription, T0, WEBHOOK_SECRET } from "./account-helpers.js";
 
 // Cancelling on GenClass's own pages (src/billing.ts cancel routes, src/stripe.ts retentionOffer; the owner, 2026-11-18):
 // what the popups are told, the one offer to stay (15% off for 6 months at most, once per customer, never on top of
-// another discount), the cancel itself (the plan ends that day, trial or paid, with no refund), the resume, and who may
+// another discount), the cancel itself (the plan ends that day, trial or paid; refunded within 3 days of a renewal), the resume, and who may
 // do any of it. Stripe is the fake of test/account-helpers.ts. On the two-paid fixture, like test/billing.test.ts.
 vi.mock("../../billing/plans.json", async () => ({ default: (await import("./fixtures/plans-two-paid.json")).default }));
 
@@ -44,7 +44,7 @@ describe("GET /api/billing/cancel: what the popups say, before anything changes"
     const t = await paying();
     const r = await t.get();
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ ok: true, plan: "Pro", trial: false, ends: new Date(END * 1000).toISOString(), discount: false, offer: { percent_off: 15, months: 6 } });
+    expect(await r.json()).toEqual({ ok: true, plan: "Pro", trial: false, ends: new Date(END * 1000).toISOString(), refund: null, discount: false, offer: { percent_off: 15, months: 6 } });
     expect(t.writes()).toEqual([]);
     expect(t.row()).toEqual({ plan: "pro", subscription_status: "active", cancel_at_period_end: 0 });
   });
@@ -118,12 +118,12 @@ describe("POST /api/billing/cancel and /api/billing/resume", () => {
   it("a paid plan ends the day it is cancelled: the subscription is cancelled now, nothing is refunded, the account is on Free, the owner is told", async () => {
     const t = await paying();
     const r = await t.post("/api/billing/cancel");
-    expect(await r.json()).toEqual({ ok: true, ended: true, ends: null });
-    // one write: the cancel itself. No refund, no credit note, no end set for later
+    expect(await r.json()).toEqual({ ok: true, ended: true, ends: null, refunded: null });
+    // one write: the cancel itself. No refund (no renewal in the last 3 days), no credit note, no end set for later
     expect(t.writes()).toEqual([`DELETE /v1/subscriptions/${SUB}`]);
     expect(t.sub.status).toBe("canceled");
     expect(t.row()).toEqual({ plan: "free", subscription_status: "canceled", cancel_at_period_end: 0 });
-    expect(t.notices()).toEqual([expect.objectContaining({ event: "plan_cancelled", text: expect.stringMatching(/Pro cancelled \(ended at once; it was paid up to 2026-\d\d-\d\d, nothing refunded\): ada@example\.com/) })]);
+    expect(t.notices()).toEqual([expect.objectContaining({ event: "plan_cancelled", text: expect.stringMatching(/Pro cancelled \(ended at once; it was paid up to 2026-\d\d-\d\d; not refunded: it has no paid invoice\): ada@example\.com/) })]);
     // the page has nothing left to cancel or resume
     const page = await (await call(t.env, "GET", "/account/billing", { cookie: t.cookie })).text();
     expect(page).not.toContain('id="resumeplan"');
@@ -136,15 +136,70 @@ describe("POST /api/billing/cancel and /api/billing/resume", () => {
 
   it("free months from a promotion code end with the plan, the same day", async () => {
     const t = await paying("active", { discounts: ["di_6monthsfree01"] });
-    expect(await (await t.post("/api/billing/cancel")).json()).toEqual({ ok: true, ended: true, ends: null });
+    expect(await (await t.post("/api/billing/cancel")).json()).toEqual({ ok: true, ended: true, ends: null, refunded: null });
     expect(t.writes()).toEqual([`DELETE /v1/subscriptions/${SUB}`]);
     expect(t.row()).toEqual({ plan: "free", subscription_status: "canceled", cancel_at_period_end: 0 });
-    expect(t.notices()[0]!.text).toContain("nothing refunded, its discount ended too");
+    expect(t.notices()[0]!.text).toContain("; its discount ended too");
+  });
+
+  /** The subscription's latest paid invoice: `cents` charged for a period that began `daysAgo` days before T0. */
+  const renewed = (t: Awaited<ReturnType<typeof paying>>, daysAgo: number, cents = 5000, over: Record<string, unknown> = {}) => {
+    const start = Math.floor(T0.getTime() / 1000) - Math.round(daysAgo * 86_400);
+    const inv: Record<string, any> = { ...invoice("in_renewal0001", CUS, SUB, [["price_pro", cents]]), billing_reason: "subscription_cycle", ...over };
+    for (const l of inv.lines.data) l.period = { start, end: start + 30 * 86_400 };
+    t.s.invoices.set(inv.id, inv);
+    t.sub.items.data[0].current_period_start = start;
+  };
+
+  it("cancelled within 3 days of a renewal: the popups say the payment comes back, and it is refunded in full to the card before the plan ends", async () => {
+    const t = await paying();
+    renewed(t, 2);
+    expect(await (await t.get()).json()).toMatchObject({ ok: true, refund: "50.00 USD" });
+    expect(t.writes()).toEqual([]);
+    expect(await (await t.post("/api/billing/cancel")).json()).toEqual({ ok: true, ended: true, ends: null, refunded: "50.00 USD" });
+    expect(t.writes()).toEqual(["POST /v1/refunds", `DELETE /v1/subscriptions/${SUB}`]);
+    const refund = [...t.s.refunds.values()][0]!;
+    expect(refund).toMatchObject({ amount: 5000, payment_intent: paymentIntentFor("in_renewal0001"), reason: "requested_by_customer", metadata: { genclass_refund: `cancel:${SUB}`, genclass_invoice: "in_renewal0001" } });
+    expect(t.row()).toEqual({ plan: "free", subscription_status: "canceled", cancel_at_period_end: 0 });
+    expect(t.notices()[0]!.text).toContain(`refunded 50.00 USD to the card, ${refund.id}`);
+  });
+
+  it("no refund after the third day, for the charge that starts a subscription, or when nothing was charged", async () => {
+    const late = await paying();
+    renewed(late, 3.01);
+    expect(await (await late.get()).json()).toMatchObject({ refund: null });
+    expect(await (await late.post("/api/billing/cancel")).json()).toMatchObject({ ended: true, refunded: null });
+    expect(late.writes()).toEqual([`DELETE /v1/subscriptions/${SUB}`]);
+    expect(late.notices()[0]!.text).toContain("not refunded: its last payment is not a renewal of the last 3 days");
+    // subscribing again right after a cancel is charged at once (no second trial): cancelling that is not a free plan
+    const first = await paying();
+    renewed(first, 1, 5000, { billing_reason: "subscription_create" });
+    expect(await (await first.get()).json()).toMatchObject({ refund: null });
+    expect(await (await first.post("/api/billing/cancel")).json()).toMatchObject({ refunded: null });
+    expect(first.writes()).toEqual([`DELETE /v1/subscriptions/${SUB}`]);
+    // free months: the renewal charged nothing
+    const free = await paying("active", { discounts: ["di_6monthsfree01"] });
+    renewed(free, 1, 0);
+    expect(await (await free.get()).json()).toMatchObject({ refund: null });
+    expect(await (await free.post("/api/billing/cancel")).json()).toMatchObject({ refunded: null });
+    expect(free.writes()).toEqual([`DELETE /v1/subscriptions/${SUB}`]);
+  });
+
+  it("a refund Stripe refuses never stops the cancel: the plan ends and the owner is told why nothing went back", async () => {
+    const t = await paying();
+    renewed(t, 1);
+    const real = t.s.fetch;
+    const f: typeof real = (input, init) =>
+      String(input).endsWith("/v1/refunds") && init?.method === "POST" ? Promise.resolve(new Response(JSON.stringify({ error: { message: "This charge has already been refunded." } }), { status: 400 })) : real(input, init);
+    const r = await call(t.env, "POST", "/api/billing/cancel", { body: {}, cookie: t.cookie, fetch: f });
+    expect(await r.json()).toEqual({ ok: true, ended: true, ends: null, refunded: null });
+    expect(t.sub.status).toBe("canceled");
+    expect(t.notices()[0]!.text).toContain("not refunded: Stripe refused the refund (");
   });
 
   it("a trial ends at once: the subscription is cancelled now and the account is on Free", async () => {
     const t = await paying("trialing", { trial_end: END });
-    expect(await (await t.post("/api/billing/cancel")).json()).toEqual({ ok: true, ended: true, ends: null });
+    expect(await (await t.post("/api/billing/cancel")).json()).toEqual({ ok: true, ended: true, ends: null, refunded: null });
     expect(t.writes()).toEqual([`DELETE /v1/subscriptions/${SUB}`]);
     expect(t.row()).toEqual({ plan: "free", subscription_status: "canceled", cancel_at_period_end: 0 });
     expect(t.notices()[0]!.text).toContain("in its trial (ended at once, nothing charged)");
@@ -226,7 +281,9 @@ describe("the billing page: Cancel plan opens the popups", () => {
     expect(page).toContain('<button class="btn ghost" type="button" id="cancelplan"><span>Cancel plan</span></button>');
     expect(page).toContain("If you continue, your subscription will end today");
     expect(page).toContain("If you cancel, it ends that day.");
-    expect(page).toContain("Nothing is refunded for the days left.");
+    expect(page).toContain(" ends as soon as you cancel.");
+    expect(page).not.toContain("Nothing is refunded");
+    expect(page).not.toContain(", not on ");
     for (const id of ["cx1", "cx2", "cx3"]) expect(page).toContain(`<dialog id="${id}" class="cx"`);
     expect(page).toContain('To go back to Free, <a href="#manage">cancel your plan</a>.');
     expect(page).not.toContain("cancel in Manage billing");

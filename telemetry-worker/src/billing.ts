@@ -14,7 +14,7 @@
 //   POST /api/billing/cancel/offer {project_id?}       browser session + Origin; takes the offer to stay (15% off for
 //                                                       6 months, once per customer; src/stripe.ts retentionOffer)
 //   POST /api/billing/cancel {project_id?}             browser session + Origin; the plan ends that day, trial or
-//                                                       paid; nothing is refunded
+//                                                       paid; refunded within 3 days of a renewal
 //   POST /api/billing/resume {project_id?}             browser session + Origin; a plan set to end goes on
 //   GET  /api/billing                                  browser session; the plan and the subscription
 //   GET  /account/billing                              the plan page (src/billing-pages.ts); ?next=/scan?url=... goes
@@ -69,6 +69,7 @@ import {
 import {
   applyRetention,
   cancelNow,
+  cancelRefundDue,
   checkCustomer,
   checkoutSession,
   ensureCustomer,
@@ -83,6 +84,8 @@ import {
   openTrialElsewhere,
   portalSession,
   refreshSubscription,
+  money,
+  refundOnCancel,
   resumeSubscription,
   retentionOffer,
   sharedCustomer,
@@ -604,7 +607,8 @@ const cancelWho = (t: CancelTarget): string =>
 /**
  * GET /api/billing/cancel: what the cancel popups say before anything changes. The plan ends the day it is cancelled.
  * `trial`: it is in its free trial, so nothing was charged; else `ends` is the day the paid month would have run to
- * (the days up to it are lost, not refunded). `discount`: the subscription has a discount (a promotion code's free
+ * (the days up to it are lost). `refund`: the last payment, as text, when the cancel is within 3 days of a renewal and
+ * gives it back (src/stripe.ts refundableOnCancel), else null. `discount`: the subscription has a discount (a promotion code's free
  * months, the offer to stay), which ends with it. `offer`: the discount for staying, when this subscription can have
  * it (a failure to read the coupon only hides the offer: cancelling never waits on it).
  */
@@ -618,7 +622,8 @@ async function cancelInfo(c: C, f: Fetch, projectId: string | null): Promise<Res
     if (!HOLDING_STATUSES.has(st.status)) return fail(409, `your ${t.name} plan has already ended`);
     if (st.cancelAtPeriodEnd) return fail(409, `your ${t.name} plan is already cancelled and will not renew`);
     const offer = await retentionOffer(c.env, f, t.sub, t.subs).catch(() => null);
-    return json(200, { ok: true, plan: t.name, trial: st.status === "trialing", ends: st.periodEnd, discount: discounted(t.sub), offer: offer ? { percent_off: offer.percent, months: offer.months } : null });
+    const due = await cancelRefundDue({ env: c.env, db: c.db, fetch: f, now: c.now }, t.sub).catch(() => null);
+    return json(200, { ok: true, plan: t.name, trial: st.status === "trialing", ends: st.periodEnd, refund: due ? money(due.amount, due.currency) : null, discount: discounted(t.sub), offer: offer ? { percent_off: offer.percent, months: offer.months } : null });
   } catch (e) {
     return stripeFail(e);
   }
@@ -651,8 +656,9 @@ async function cancelOffer(c: C, f: Fetch): Promise<Response> {
 
 /**
  * POST /api/billing/cancel: the last popup's button. The plan ends now, the day it is cancelled (the owner,
- * 2026-11-18), a trial and a paid plan alike: nothing more is charged, nothing is refunded for the days left of a paid
- * month, and a discount or free months on it end too. The database is written from the subscription as Stripe has it after (the webhook's own
+ * 2026-11-18), a trial and a paid plan alike: nothing more is charged, and a discount or free months on it end too. A
+ * cancel within 3 days of a renewal first gives that payment back to the card (refundOnCancel); a refund that fails
+ * never stops the cancel, and the owner's notice says to make it by hand. The database is written from the subscription as Stripe has it after (the webhook's own
  * write; if that read fails, Stripe's event does it a moment later). The owner is told.
  */
 async function cancelPlan(c: C, f: Fetch): Promise<Response> {
@@ -666,18 +672,22 @@ async function cancelPlan(c: C, f: Fetch): Promise<Response> {
     const st = subscriptionState(t.sub);
     if (!HOLDING_STATUSES.has(st.status)) return fail(409, `your ${t.name} plan has already ended`);
     const trial = st.status === "trialing";
+    const x = { env: c.env, db: c.db, fetch: f, now: c.now };
+    // the refund first (a second try finds it made); its failure is the owner's to settle, never a reason to keep billing
+    const back = trial ? null : await refundOnCancel(x, a.account, t.sub).catch((e) => ({ refund: null, amount: 0, currency: null, note: `the refund failed (${e instanceof Error ? e.message : String(e)}); refund by hand if one is due` }));
+    const refunded = back?.refund ? money(back.amount, back.currency ?? "usd") : null;
     await cancelNow(c.env, f, t.sub.id as string);
-    await refreshSubscription({ env: c.env, db: c.db, fetch: f, now: c.now }, t.sub.id as string).catch(() => null);
+    await refreshSubscription(x, t.sub.id as string).catch(() => null);
     await notifyOwner(
       { env: c.env, fetch: f, now: c.now },
       {
         event: "plan_cancelled",
-        text: `${modeNote(c.env)}${t.name} cancelled ${trial ? "in its trial (ended at once, nothing charged)" : `(ended at once${st.periodEnd ? `; it was paid up to ${st.periodEnd.slice(0, 10)}` : ""}, nothing refunded${discounted(t.sub) ? ", its discount ended too" : ""})`}: ${cancelWho(t)}.`,
+        text: `${modeNote(c.env)}${t.name} cancelled ${trial ? "in its trial (ended at once, nothing charged)" : `(ended at once${st.periodEnd ? `; it was paid up to ${st.periodEnd.slice(0, 10)}` : ""}; ${refunded ? `refunded ${refunded} to the card, ${back!.refund}` : `not refunded: ${back?.note ?? "nothing was due"}`}${discounted(t.sub) ? "; its discount ended too" : ""})`}: ${cancelWho(t)}.`,
         account_id: a.account.id,
         subscription_id: t.sub.id,
       },
     ).catch(() => false);
-    return json(200, { ok: true, ended: true, ends: null });
+    return json(200, { ok: true, ended: true, ends: null, refunded });
   } catch (e) {
     return stripeFail(e);
   }
