@@ -47,8 +47,9 @@
 //   whose configuration has cancelling switched off (scripts/stripe-setup.mjs): a warning, then one offer to stay
 //   (RETENTION_COUPON: at most RETENTION_MAX, 15% off for 6 months, once per customer, never on top of another
 //   discount), then a last confirmation. A cancel ends the plan that day (the owner, 2026-11-18: "it should end on
-//   the same day as they cancel it"), a trial and a paid plan alike (cancelNow): nothing is refunded for the days
-//   left, and a discount or a promotion code's free months end with it. A plan set to end later some other way (by
+//   the same day as they cancel it"), a trial and a paid plan alike (cancelNow), and a discount or a promotion code's
+//   free months end with it. A cancel within CANCEL_REFUND_DAYS (3) days of a renewal gives that payment back to the
+//   card in full (the owner, 2026-11-18; refundableOnCancel); any later, nothing is refunded for the days left. A plan set to end later some other way (by
 //   hand in the Stripe dashboard, the portal before it lost cancelling) can be resumed until then. Each write is
 //   followed by the same database write the webhook makes (refreshSubscription).
 // - One subscription per account. Checkout asks Stripe (not the database, which a late webhook leaves behind) whether
@@ -1028,9 +1029,32 @@ async function chargeNotice(x: EventContext, event: Obj, obj: Obj): Promise<Even
   return { status: "applied", ours: true, account: account.id };
 }
 
-const money = (cents: number, currency: string): string => `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
+export const money = (cents: number, currency: string): string => `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
 
-type SettleKind = "switch" | "duplicate";
+type SettleKind = "switch" | "duplicate" | "cancel";
+
+/** A cancel within this many days of a renewal gives that renewal's payment back (the owner, 2026-11-18). */
+export const CANCEL_REFUND_DAYS = 3;
+
+/** The period a paid invoice's charge was for: its first charged line's. */
+const paidPeriod = (inv: Obj): { start: number; end: number } | null => {
+  const lines: Obj[] = Array.isArray(inv?.lines?.data) ? inv.lines.data : [];
+  const p = lines.find((l) => Number(l?.amount) > 0 && typeof l?.period?.start === "number" && typeof l?.period?.end === "number")?.period;
+  return p ? { start: p.start, end: p.end } : null;
+};
+
+/**
+ * Whether a cancel at `now` gives back what `inv`, the subscription's latest paid invoice, charged: it charged
+ * something, for a renewal (billing_reason subscription_cycle: the charge at the end of the trial and each month's
+ * after it; never the charge that starts a subscription, so subscribing, cancelling and subscribing again is not a
+ * free plan), and that renewal was at most CANCEL_REFUND_DAYS ago. Exported for tests.
+ */
+export function refundableOnCancel(inv: Obj, now: Date): boolean {
+  if (!(Number(inv?.amount_paid) > 0) || inv?.billing_reason !== "subscription_cycle") return false;
+  const start = paidPeriod(inv)?.start;
+  const at = now.getTime() / 1000;
+  return typeof start === "number" && start <= at && at - start <= CANCEL_REFUND_DAYS * 86_400;
+}
 
 interface OneSubscription {
   /** The subscription the account keeps (fetched like fetchSubscription). */
@@ -1093,22 +1117,23 @@ interface Refunded {
 /**
  * Refund a subscription GenClass is about to cancel, to the payment method that paid it: for a switch, the unused part
  * of its latest paid invoice (its total times the share of the paid period left, counted from the current hour); for
- * a duplicate, that invoice in full. Never a balance credit: a Managed Payments plan's invoices are issued through Link
+ * a duplicate, that invoice in full; for a cancel on GenClass's own page, that invoice in full when it was a renewal
+ * of the last CANCEL_REFUND_DAYS days (refundableOnCancel), else nothing. Never a balance credit: a Managed Payments plan's invoices are issued through Link
  * and the others' by GenClass, so a credit could be stranded or pay the other issuer's invoice. Idempotent: a refund
  * GenClass already made for it (metadata genclass_refund) is found and not made again, and the request carries an
  * idempotency key. A refusal (already refunded by Stripe or Link support, say) is reported, not retried.
  */
-async function refundFor(x: EventContext, account: BillingAccount, sub: Obj, kind: SettleKind): Promise<Refunded> {
+async function refundFor(x: EventContext, account: { id: string }, sub: Obj, kind: SettleKind): Promise<Refunded> {
   const out: Refunded = { subscription: String(sub.id), kind, refund: null, amount: 0, currency: null };
   const list = await stripe(x.env, x.fetch, "GET", "/v1/invoices", { subscription: sub.id, status: "paid", limit: 1 });
   const inv: Obj | undefined = Array.isArray(list?.data) ? list.data[0] : undefined;
   if (!inv || typeof inv.id !== "string") return { ...out, note: "it has no paid invoice" };
   const currency = typeof inv.currency === "string" ? inv.currency : "usd";
   const paid = Number(inv.amount_paid) || 0;
+  if (kind === "cancel" && !refundableOnCancel(inv, x.now)) return { ...out, currency, note: `its last payment is not a renewal of the last ${CANCEL_REFUND_DAYS} days` };
   let amount = paid;
   if (kind === "switch") {
-    const lines: Obj[] = Array.isArray(inv.lines?.data) ? inv.lines.data : [];
-    const period = lines.find((l) => Number(l?.amount) > 0 && typeof l?.period?.start === "number" && typeof l?.period?.end === "number")?.period;
+    const period = paidPeriod(inv);
     const at = Math.floor(x.now.getTime() / 3_600_000) * 3600; // the same amount for every retry within the hour
     amount = period && period.end > period.start ? Math.floor((paid * Math.min(Math.max(period.end - at, 0), period.end - period.start)) / (period.end - period.start)) : 0;
   }
@@ -1135,6 +1160,28 @@ async function refundFor(x: EventContext, account: BillingAccount, sub: Obj, kin
     if (e instanceof StripeError && e.status === 400) return { ...out, currency, note: `Stripe refused the refund (${e.message})` };
     throw e;
   }
+}
+
+/**
+ * A cancel on GenClass's own page, before the subscription is cancelled: its last payment back to the card when the
+ * cancel is within CANCEL_REFUND_DAYS days of a renewal (refundFor); `refund` null and a `note` when nothing is due or
+ * Stripe refused. Refund first, as in settleOthers: a second try finds the refund made.
+ */
+export const refundOnCancel = (x: EventContext, account: { id: string }, sub: Obj): Promise<Refunded> => refundFor(x, account, sub, "cancel");
+
+/**
+ * What a cancel now would give back, for the popups: the amount of the subscription's last payment when
+ * refundOnCancel would refund it, else null. A subscription that is not active (a trial, an overdue one) or whose
+ * period began more than CANCEL_REFUND_DAYS days ago is answered without asking Stripe.
+ */
+export async function cancelRefundDue(x: EventContext, sub: Obj): Promise<{ amount: number; currency: string } | null> {
+  if (sub?.status !== "active") return null;
+  const start = sub?.items?.data?.[0]?.current_period_start ?? sub?.current_period_start;
+  if (typeof start === "number" && x.now.getTime() / 1000 - start > CANCEL_REFUND_DAYS * 86_400) return null;
+  const list = await stripe(x.env, x.fetch, "GET", "/v1/invoices", { subscription: sub.id, status: "paid", limit: 1 });
+  const inv: Obj | undefined = Array.isArray(list?.data) ? list.data[0] : undefined;
+  if (!inv || !refundableOnCancel(inv, x.now)) return null;
+  return { amount: Number(inv.amount_paid), currency: typeof inv.currency === "string" ? inv.currency : "usd" };
 }
 
 /**

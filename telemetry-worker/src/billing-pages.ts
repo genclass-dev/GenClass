@@ -190,7 +190,6 @@ function gcCancel(project){
   var body = project ? { project_id: project } : {};
   function show(d){ if (d.showModal) d.showModal(); else d.setAttribute("open", ""); }
   function hide(d){ if (!d.open) return; if (d.close) d.close(); else d.removeAttribute("open"); }
-  function day(iso){ var d = new Date(iso); return !iso || isNaN(d) ? "the end of your paid month" : d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }); }
   function text(id, t){ document.getElementById(id).textContent = t; }
   if (resume) resume.addEventListener("click", function(e){
     e.preventDefault(); err.textContent = ""; gcBusy(resume, true, "Resuming...");
@@ -203,16 +202,17 @@ function gcCancel(project){
     e.preventDefault(); err.textContent = ""; gcBusy(open, true, "One moment...");
     gcPost("/api/billing/cancel" + (project ? "?project=" + encodeURIComponent(project) : ""), undefined, "GET").then(function(j){
       gcBusy(open, false); info = j;
-      var plan = j.plan || "paid", when = day(j.ends);
-      var lost = j.discount ? " Your discount or free months end today too and do not come back." : "";
-      text("cx1p", j.trial ? "Your " + plan + " trial ends today, as soon as you cancel. Nothing is charged." + lost : plan + " ends today, as soon as you cancel, not on " + when + ". Nothing is refunded for the days left." + lost);
+      var plan = j.plan || "paid";
+      var lost = j.discount ? " Your discount or free months end too and do not come back." : "";
+      var back = j.refund ? " Your last payment (" + j.refund + ") is refunded." : "";
+      text("cx1p", (j.trial ? "Your " + plan + " trial ends as soon as you cancel. Nothing is charged." : plan + " ends as soon as you cancel.") + back + lost);
       if (j.offer) {
         text("cx2h", "Stay and pay " + j.offer.percent_off + "% less");
         text("cx2p", "Keep " + plan + " and get " + j.offer.percent_off + "% off your next " + j.offer.months + " months. Nothing else changes.");
         document.getElementById("cx2take").lastChild.textContent = "Take " + j.offer.percent_off + "% off";
       }
       text("cx3h", "Cancel " + plan + " today?");
-      text("cx3p", j.trial ? "This is the last step. Your trial ends now." + lost : "This is the last step. " + plan + " ends now, with no refund." + lost);
+      text("cx3p", j.trial ? "This is the last step. Your trial ends now." : "This is the last step. " + plan + " ends now.");
       show(d1);
     }, function(x){ err.textContent = gcWhy(x); gcBusy(open, false); });
   });
