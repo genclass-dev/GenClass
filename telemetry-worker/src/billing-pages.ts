@@ -132,6 +132,110 @@ const BILLING_CSS = `
 @media (max-width:767px){.plan .tag{font-size:12px}}
 `;
 
+/** The statuses of a subscription that exists and can still bill (src/stripe.ts HOLDING_STATUSES): one that can be cancelled. */
+const CANCELLABLE = new Set(["active", "trialing", "past_due", "unpaid", "paused"]);
+
+const CANCEL_CSS = `
+dialog.cx{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:440px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}
+dialog.cx::backdrop{background:rgba(0,0,0,.62)}
+dialog.cx h2{font-size:21px;line-height:1.25;margin:0 0 8px}
+dialog.cx p{font-size:14.5px;line-height:1.55;color:var(--ink2);margin:0 0 8px}
+dialog.cx .err:empty{display:none}
+.cx-warn{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--warn-t);color:var(--warn);margin-bottom:14px}
+.cx-warn svg{width:24px;height:24px}
+.cx-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.cx-act .btn{flex:1 1 auto;justify-content:center}
+.cx-act[hidden]{display:none}
+#manage .acct-form{display:flex;gap:10px;flex-wrap:wrap}
+`;
+
+const WARN_ICON =
+  '<div class="cx-warn" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4.5"/><path d="M12 17.5v.01"/></svg></div>';
+
+/**
+ * The popups a cancellation goes through (the owner, 2026-11-18): a warning that the subscription will end, one offer
+ * to stay for less (only when /api/billing/cancel says this subscription can have it), then a last confirmation.
+ * Their words are filled in by gcCancel from what the server says about the plan; nothing changes before the last
+ * button, or the offer's.
+ */
+function cancelDialogs(): string {
+  return `<dialog id="cx1" class="cx" aria-labelledby="cx1h">
+  ${WARN_ICON}
+  <h2 id="cx1h">If you continue, your subscription will end</h2>
+  <p id="cx1p"></p>
+  <p>Your account goes back to ${esc(PLANS[0]?.name ?? "Free")}: ${esc((PLANS[0]?.summary ?? "").replace(/\.$/, "").replace(/^./, (ch) => ch.toLowerCase()))}.</p>
+  <div class="cx-act"><button class="btn" type="button" data-cx-keep><span>Keep my plan</span></button><button class="btn ghost" type="button" id="cx1go"><span>Continue</span></button></div>
+</dialog>
+<dialog id="cx2" class="cx" aria-labelledby="cx2h">
+  <h2 id="cx2h"></h2>
+  <p id="cx2p"></p>
+  <p class="err" id="cx2err" role="alert"></p>
+  <div class="cx-act" id="cx2act"><button class="btn" type="button" id="cx2take"><span>Take the discount</span></button><button class="btn ghost" type="button" id="cx2no"><span>No thanks, continue</span></button></div>
+  <div class="cx-act" id="cx2done" hidden><button class="btn" type="button" id="cx2close"><span>Done</span></button></div>
+</dialog>
+<dialog id="cx3" class="cx" aria-labelledby="cx3h">
+  ${WARN_ICON}
+  <h2 id="cx3h"></h2>
+  <p id="cx3p"></p>
+  <p class="err" id="cx3err" role="alert"></p>
+  <div class="cx-act"><button class="btn" type="button" data-cx-keep><span>Keep my plan</span></button><button class="btn danger" type="button" id="cx3go"><span>Cancel my plan</span></button></div>
+</dialog>`;
+}
+
+/** gcCancel(projectId or null): wires #cancelplan to the popups and #resumeplan to its route; errors go to #cancelerr. */
+const CANCEL_JS = `
+function gcCancel(project){
+  var open = document.getElementById("cancelplan"), resume = document.getElementById("resumeplan"), err = document.getElementById("cancelerr");
+  var body = project ? { project_id: project } : {};
+  function show(d){ if (d.showModal) d.showModal(); else d.setAttribute("open", ""); }
+  function hide(d){ if (!d.open) return; if (d.close) d.close(); else d.removeAttribute("open"); }
+  function day(iso){ var d = new Date(iso); return !iso || isNaN(d) ? "the end of your paid month" : d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }); }
+  function text(id, t){ document.getElementById(id).textContent = t; }
+  if (resume) resume.addEventListener("click", function(e){
+    e.preventDefault(); err.textContent = ""; gcBusy(resume, true, "Resuming...");
+    gcPost("/api/billing/resume", body).then(function(){ location.reload(); }, function(x){ err.textContent = gcWhy(x); gcBusy(resume, false); });
+  });
+  var d1 = document.getElementById("cx1"), d2 = document.getElementById("cx2"), d3 = document.getElementById("cx3");
+  if (!open || !d1 || !d2 || !d3) return;
+  var info = null, kept = false;
+  open.addEventListener("click", function(e){
+    e.preventDefault(); err.textContent = ""; gcBusy(open, true, "One moment...");
+    gcPost("/api/billing/cancel" + (project ? "?project=" + encodeURIComponent(project) : ""), undefined, "GET").then(function(j){
+      gcBusy(open, false); info = j;
+      var plan = j.plan || "paid", when = day(j.ends);
+      text("cx1p", j.trial ? "Your " + plan + " trial ends at once. Nothing is charged." : plan + " stays until " + when + ", then ends. You are not charged again.");
+      if (j.offer) {
+        text("cx2h", "Stay and pay " + j.offer.percent_off + "% less");
+        text("cx2p", "Keep " + plan + " and get " + j.offer.percent_off + "% off your next " + j.offer.months + " months. Nothing else changes.");
+        document.getElementById("cx2take").lastChild.textContent = "Take " + j.offer.percent_off + "% off";
+      }
+      text("cx3h", "Cancel " + plan + "?");
+      text("cx3p", j.trial ? "This is the last step. Your trial ends now." : "This is the last step. " + plan + " ends on " + when + ".");
+      show(d1);
+    }, function(x){ err.textContent = gcWhy(x); gcBusy(open, false); });
+  });
+  document.querySelectorAll("[data-cx-keep]").forEach(function(b){ b.addEventListener("click", function(){ hide(d1); hide(d2); hide(d3); }); });
+  document.getElementById("cx1go").addEventListener("click", function(){ hide(d1); show(info && info.offer ? d2 : d3); });
+  document.getElementById("cx2no").addEventListener("click", function(){ hide(d2); show(d3); });
+  var take = document.getElementById("cx2take");
+  take.addEventListener("click", function(){
+    text("cx2err", ""); gcBusy(take, true, "One moment...");
+    gcPost("/api/billing/cancel/offer", body).then(function(j){
+      kept = true;
+      text("cx2h", "You're staying, for " + j.percent_off + "% less");
+      text("cx2p", "The discount comes off your next " + j.months + " months, starting with your next payment.");
+      document.getElementById("cx2act").hidden = true; document.getElementById("cx2done").hidden = false;
+    }, function(x){ text("cx2err", gcWhy(x)); gcBusy(take, false); });
+  });
+  document.getElementById("cx2close").addEventListener("click", function(){ hide(d2); });
+  d2.addEventListener("close", function(){ if (kept) location.reload(); });
+  var go = document.getElementById("cx3go");
+  go.addEventListener("click", function(){
+    text("cx3err", ""); gcBusy(go, true, "Cancelling...");
+    gcPost("/api/billing/cancel", body).then(function(){ location.reload(); }, function(x){ text("cx3err", gcWhy(x)); gcBusy(go, false); });
+  });
+}`;
+
 function statusLine(v: BillingView, plan: Plan): string {
   const b = v.billing;
   const name = `<b>${esc(plan.name)}</b>`;
@@ -150,7 +254,7 @@ function statusLine(v: BillingView, plan: Plan): string {
     const ended = retired
       ? b.cancel_at_period_end
         ? ` Your subscription to a plan GenClass no longer sells is cancelled and ends on ${day(b.current_period_end)}, without another charge.`
-        : ` Your subscription to a plan GenClass no longer sells is still open in Stripe and can bill again: cancel it in Manage billing, or email <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.`
+        : ` Your subscription to a plan GenClass no longer sells is still open in Stripe and can bill again: cancel it below, or email <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.`
       : overdue
       ? ` The last payment for your paid plan did not go through, so it has ended. Update your card in Manage billing to pay it and get the plan back, or email <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.`
       : b.subscription_id && b.current_period_end && b.subscription_status === "canceled" && Date.parse(b.current_period_end) > v.now.getTime() - GRACE_DAYS * 86_400_000
@@ -163,10 +267,10 @@ function statusLine(v: BillingView, plan: Plan): string {
     return `You are on the ${name} plan. The last payment did not go through; Stripe tries the card again over the next days. Update it in Manage billing to keep ${esc(plan.name)}: if it is still unpaid ${PAST_DUE_GRACE_DAYS} days after the failed payment, the account moves to the Free plan.`;
   }
   if (b.cancel_at_period_end) {
-    return `You are on the ${name} plan until ${day(b.current_period_end)}. It is cancelled and will not renew; you can resume it in Manage billing before then.`;
+    return `You are on the ${name} plan until ${day(b.current_period_end)}. It is cancelled and will not renew; you can resume it below before then.`;
   }
   if (b.subscription_status === "trialing") {
-    return `You are on the ${name} plan, in a trial until ${day(b.current_period_end)}. When it ends your card is charged for the first month (${esc(priceText(plan, v.country ?? null))}). Cancel in Manage billing before then and nothing is charged; ${esc(plan.name)} then ends at once.`;
+    return `You are on the ${name} plan, in a trial until ${day(b.current_period_end)}. When it ends your card is charged for the first month (${esc(priceText(plan, v.country ?? null))}). Cancel before then and nothing is charged; ${esc(plan.name)} then ends at once.`;
   }
   if (plan.per_seat === true && v.access.seats !== null) {
     const n = v.access.seats;
@@ -199,7 +303,7 @@ function planColumn(v: BillingView, p: Plan, current: Plan): string {
   const talk = `<a class="btn ghost" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass ${p.name}`)}"><span>Talk to us</span></a>`;
   let act = "";
   if (cur) act = `<span class="tag">${v.access.source === "comp" ? "Set up by GenClass" : v.access.source === "open" ? "This server" : "Your plan"}</span>`;
-  else if (p.id === "free") act = subscribed && v.live ? '<span class="muted">To go back to Free, cancel in Manage billing.</span>' : "";
+  else if (p.id === "free") act = subscribed && v.live ? '<span class="muted">To go back to Free, <a href="#manage">cancel your plan</a>.</span>' : "";
   else if (byAgreement(p)) act = talk;
   else if (v.live && !waiting) act = buy;
   const features = p.features
@@ -283,6 +387,9 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const offer = PAID_PLANS[0] ?? null;
   const a = v.access;
   const paid = a.source === "paid";
+  // the app has a subscription of its own (bought per app, billing/plans.json version 4): cancelled and resumed here;
+  // an app the account's plan covers is cancelled with that plan, on the billing page
+  const ownSub = paid && v.live && CANCELLABLE.has(v.sub.status ?? "");
   const name = esc(v.project.name);
   // version 5 (2026-11-13): Pro is the account's, per developer, for up to 3 apps; every new app sees this page, a
   // paying account included (Continue with Pro), and an app past what the plan covers waits here: more apps are
@@ -295,7 +402,7 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
       ? `Your <b>${esc(offer?.name ?? "paid")}</b> plan covers up to ${a.apps ?? 0} apps, and <b>${name}</b> is one more. More apps come with <b>Enterprise</b>, agreed by email.`
       : paid
         ? v.sub.cancels
-          ? `<b>${name}</b> is on <b>${esc(a.plan.name)}</b> until ${day(v.sub.periodEnd)}. It is cancelled and will not renew; you can resume it in Manage billing.`
+          ? `<b>${name}</b> is on <b>${esc(a.plan.name)}</b> until ${day(v.sub.periodEnd)}. It is cancelled and will not renew${ownSub ? "; you can resume it below" : ""}.`
           : v.sub.status === "past_due"
             ? `<b>${name}</b> is on <b>${esc(a.plan.name)}</b>. The last payment did not go through: update your card in Manage billing.`
             : `Your <b>${esc(a.plan.name)}</b> plan covers <b>${name}</b>${a.apps ? ` (up to ${a.apps} apps on your account)` : ""}.`
@@ -319,7 +426,7 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   // the card's lines: the first few, the rest folded (the owner, 2026-11-13: "too much written in the plan details")
   const features = offer ? pitchList(pitchLines(offer)) : "";
   const action = covered
-    ? `<button class="btn" type="button" data-continue><span>Continue with ${esc(a.plan.name)}</span></button><p class="trialnote">Your current plan.${paid ? ` <a href="#" id="portal">Manage billing</a>` : ""}</p>`
+    ? `<button class="btn" type="button" data-continue><span>Continue with ${esc(a.plan.name)}</span></button><p class="trialnote">Your current plan.${paid ? ` <a href="#" id="portal">Manage billing</a>` : ""}${ownSub ? (v.sub.cancels ? ` <a href="#" id="resumeplan">Resume plan</a>` : ` <a href="#" id="cancelplan">Cancel plan</a>`) : paid ? ` <a href="/account/billing#manage">Cancel plan</a>` : ""}</p>`
     : proFull
         ? `<a class="btn" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass Enterprise: more than ${a.apps ?? 3} apps`)}"><span>Email us about Enterprise</span></a><p class="trialnote">Or remove an app you no longer use, and this one takes its place.</p>`
       : v.live
@@ -352,8 +459,9 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
 ${notice}${test}
 <section class="blk" id="plan">
   ${card}
-  <p class="err" id="planerr" role="alert"></p><p class="err" id="portalerr" role="alert"></p>
+  <p class="err" id="planerr" role="alert"></p><p class="err" id="portalerr" role="alert"></p><p class="err" id="cancelerr" role="alert"></p>
   <p class="intro"><a href="/account/billing#projects">All your projects and their plans</a></p>
+  ${ownSub && !v.sub.cancels ? cancelDialogs() : ""}
 </section>
 </div>
 <script type="application/json" id="cfg">${embed({ project: v.project.id, go: v.go && !covered && !proFull && v.live, wait: v.done && !paid, cli: v.fromCli, isNew: !!v.isNew })}</script>`;
@@ -390,6 +498,7 @@ ${notice}${test}
       }, function(e2){ err.textContent = gcWhy(e2); gcBusy(go, false); });
     });
   }
+  gcCancel(cfg.project);
   var portal = document.getElementById("portal");
   if (portal) portal.addEventListener("click", function(e){
     e.preventDefault();
@@ -428,9 +537,9 @@ ${notice}${test}
     user: { label, sub: orgName(label) },
     ...orgRail("billing"),
     railLabel: "Organization",
-    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".planpage .sb-ph{text-align:center}.planpage .sb-ph>div{margin:0 auto}.planpage #plan{background:none;border:0;box-shadow:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:0}.planpage #plan .intro{margin:20px auto 0;text-align:center}.planpage #plan .err:empty{display:none}.planpage .notice{max-width:440px;margin-left:auto;margin-right:auto}.planpage .acct-form{justify-content:center}.plan.big{width:100%;max-width:440px;padding:24px 24px 22px;gap:8px}.plan.big h3{font-size:24px;letter-spacing:-.01em}.plan.big .price{font-size:15px;font-weight:600;margin-top:2px}.plan.big ul{margin-top:6px;gap:6px}.plan.big li{font-size:13.5px}.plan.big .pmore{font-size:12.5px}.plan.big .pmore ul{margin-top:6px}.plan.big .act{padding-top:12px}.plan.big .act .btn{width:100%;justify-content:center;padding:11px 16px;font-size:14.5px}.free{margin-top:12px;font-size:11px;width:100%;max-width:440px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}.planpage .linkish{display:inline-block;padding:6px 12px;margin:-6px -12px}.trialnote{margin:10px 0 0;font-size:13px;color:var(--ink3);text-align:center;width:100%}dialog.why{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:460px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}dialog.why::backdrop{background:rgba(0,0,0,.62)}dialog.why h2{font-size:21px;margin:0 0 4px}dialog.why fieldset{border:0;padding:0;margin:14px 0 6px}dialog.why label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;cursor:pointer}dialog.why textarea{margin-top:6px}.why-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}",
+    css: DASH_CSS + ORG_CSS + BILLING_CSS + ".planpage .sb-ph{text-align:center}.planpage .sb-ph>div{margin:0 auto}.planpage #plan{background:none;border:0;box-shadow:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:0}.planpage #plan .intro{margin:20px auto 0;text-align:center}.planpage #plan .err:empty{display:none}.planpage .notice{max-width:440px;margin-left:auto;margin-right:auto}.planpage .acct-form{justify-content:center}.plan.big{width:100%;max-width:440px;padding:24px 24px 22px;gap:8px}.plan.big h3{font-size:24px;letter-spacing:-.01em}.plan.big .price{font-size:15px;font-weight:600;margin-top:2px}.plan.big ul{margin-top:6px;gap:6px}.plan.big li{font-size:13.5px}.plan.big .pmore{font-size:12.5px}.plan.big .pmore ul{margin-top:6px}.plan.big .act{padding-top:12px}.plan.big .act .btn{width:100%;justify-content:center;padding:11px 16px;font-size:14.5px}.free{margin-top:12px;font-size:11px;width:100%;max-width:440px;text-align:center}.linkish{background:none;border:0;padding:0;font:inherit;font-size:11px;color:var(--ink3);text-decoration:underline;cursor:pointer}.linkish:disabled{opacity:.6;cursor:default}.planpage .linkish{display:inline-block;padding:6px 12px;margin:-6px -12px}.trialnote{margin:10px 0 0;font-size:13px;color:var(--ink3);text-align:center;width:100%}dialog.why{margin:auto;max-height:calc(100vh - 32px);overflow:auto;max-width:460px;width:calc(100% - 32px);border:1px solid var(--rule);border-radius:14px;background:var(--paper);color:var(--ink);padding:24px 24px 20px}dialog.why::backdrop{background:rgba(0,0,0,.62)}dialog.why h2{font-size:21px;margin:0 0 4px}dialog.why fieldset{border:0;padding:0;margin:14px 0 6px}dialog.why label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;cursor:pointer}dialog.why textarea{margin-top:6px}.why-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.planpage #plan .cx .err:empty{display:none}" + CANCEL_CSS,
     body,
-    script: CLIENT_JS + script,
+    script: CLIENT_JS + CANCEL_JS + script,
   });
 }
 
@@ -500,6 +609,13 @@ export function billingPage(nonce: string, v: BillingView): string {
   const want = awaited(v, plan);
   const a = v.account;
   const manage = v.live && v.billing.stripe_customer_id;
+  // cancelling and resuming are GenClass's own (the popups below), for a subscription that still exists
+  const holds = !!manage && !!v.billing.subscription_id && CANCELLABLE.has(v.billing.subscription_status ?? "");
+  const cancelBtn = !holds
+    ? ""
+    : v.billing.cancel_at_period_end
+      ? '<button class="btn" type="button" id="resumeplan"><span>Resume plan</span></button>'
+      : '<button class="btn ghost" type="button" id="cancelplan"><span>Cancel plan</span></button>';
   let notice = "";
   if (v.done) {
     const to = want && want !== "paid" ? planById(want) : null;
@@ -546,9 +662,10 @@ ${
   manage
     ? `<section class="blk" id="manage">
   <div class="blk-h"><h2>Manage billing</h2><span class="aside">On Stripe</span></div>
-  <p class="intro">Card, invoices${PAID_PLANS.some((p) => p.per_seat === true) ? ", seats" : ""} and cancellation.</p>
-  <div class="acct-form"><button class="btn ghost" type="button" id="portal"><span>Manage billing</span></button></div>
-  <p class="err" id="portalerr" role="alert"></p>
+  <p class="intro">Card${PAID_PLANS.some((p) => p.per_seat === true) ? ", invoices and seats" : " and invoices"}.${holds ? (v.billing.cancel_at_period_end ? " Your plan is set to end: resume it here." : " Cancel your plan here.") : ""}</p>
+  <div class="acct-form"><button class="btn ghost" type="button" id="portal"><span>Manage billing</span></button>${cancelBtn}</div>
+  <p class="err" id="portalerr" role="alert"></p><p class="err" id="cancelerr" role="alert"></p>
+  ${holds && !v.billing.cancel_at_period_end ? cancelDialogs() : ""}
 </section>`
     : ""
 }
@@ -608,6 +725,7 @@ ${teamSection(v)}
     gcBusy(portal, true, "Opening Stripe...");
     gcPost("/api/billing/portal", {}).then(function(j){ location.href = j.url; }, function(e){ err.textContent = gcWhy(e); gcBusy(portal, false); });
   });
+  gcCancel(null);
   // back from a checkout started on a page check, the plan already showing: the report, which now opens with Pro
   if (cfg.next && cfg.done && !cfg.want) { location.replace(cfg.next); return; }
   if (cfg.want) {
@@ -633,9 +751,9 @@ ${teamSection(v)}
     user: { label, sub: orgName(label) },
     ...orgRail("billing"),
     railLabel: "Organization",
-    css: DASH_CSS + ORG_CSS + BILLING_CSS,
+    css: DASH_CSS + ORG_CSS + BILLING_CSS + CANCEL_CSS,
     body,
-    script: CLIENT_JS + script,
+    script: CLIENT_JS + CANCEL_JS + script,
   });
 }
 

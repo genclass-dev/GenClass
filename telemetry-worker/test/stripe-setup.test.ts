@@ -46,6 +46,7 @@ function account() {
     // the other business's own API-made configuration (one per storefront, say): not the default, and not GenClass's
     ["bpc_otherstore01", { id: "bpc_otherstore01", object: "billing_portal.configuration", is_default: false, active: true, metadata: { storefront: "winter" }, business_profile: { headline: "the other business winter store" } }],
   ]);
+  const coupons = new Map<string, Obj>();
   const customers = new Map<string, Obj>([["cus_other0000001", { id: "cus_other0000001", email: "ada@example.com", metadata: {} }]]);
   const calls: { method: string; url: URL; body: Obj }[] = [];
   let n = 0;
@@ -120,6 +121,12 @@ function account() {
       if (body.disabled === "false") x.status = "enabled";
       return ok(x);
     }
+    if ((m = /^\/v1\/coupons(?:\/([^/]+))?$/.exec(p))) {
+      if (method === "GET") return coupons.has(m[1]!) ? ok(coupons.get(m[1]!)) : missing("coupon");
+      const x = { id: body.id, object: "coupon", name: body.name, percent_off: Number(body.percent_off), duration: body.duration, duration_in_months: Number(body.duration_in_months), valid: true, metadata: meta(body) };
+      coupons.set(x.id, x);
+      return ok(x);
+    }
     if (method === "GET" && p === "/v1/billing_portal/configurations") {
       const d = q.get("is_default");
       return ok({ data: [...portal.values()].filter((c) => d === null || String(c.is_default) === d), has_more: false });
@@ -139,7 +146,7 @@ function account() {
     }
     return ok({ error: { message: `fake Stripe has no ${method} ${p}` } }, 404);
   };
-  return { products, prices, endpoints, portal, customers, calls, fetch, snapshot };
+  return { products, prices, endpoints, portal, coupons, customers, calls, fetch, snapshot };
 }
 
 async function run(a: ReturnType<typeof account>, o: { key?: string; argv?: string[] } = {}) {
@@ -241,6 +248,11 @@ describe("scripts/stripe-setup.mjs on the shared Stripe account (shared with ano
     expect(f["features[subscription_update][enabled]"]).toBe("false");
     expect(Object.keys(f).some((k) => /^features\[subscription_update\]\[(products|default_allowed_updates|proration_behavior)/.test(k))).toBe(false);
     expect(Object.keys(f).some((k) => /is_default/.test(k))).toBe(false);
+    // no cancelling in the portal: GenClass's billing page does it, behind its warning and its offer to stay
+    expect(f["features[subscription_cancel][enabled]"]).toBe("false");
+    expect(Object.keys(f).filter((k) => k.startsWith("features[subscription_cancel]"))).toEqual(["features[subscription_cancel][enabled]"]);
+    // that offer's coupon: 15% off for 6 months, GenClass's own
+    expect([...a.coupons.values()]).toEqual([{ id: "genclass_stay_15", object: "coupon", name: "Thanks for staying: 15% off", percent_off: 15, duration: "repeating", duration_in_months: 6, valid: true, metadata: { genclass: "1" } }]);
     // a buyer may change the email and tax id of their GenClass customer, never an address (GenClass needs none)
     const updates = Object.entries(f).filter(([k]) => /^features\[customer_update\]\[allowed_updates\]\[\d+\]$/.test(k)).map(([, v]) => v);
     expect(updates).toEqual(["email", "tax_id"]);

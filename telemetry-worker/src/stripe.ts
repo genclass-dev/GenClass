@@ -43,6 +43,12 @@
 //   charges the first month when the trial ends unless it is cancelled before. A cancel during the trial ends it at
 //   once: Stripe's portal schedules it for the trial's end, and the webhook then cancels the subscription now
 //   (trialCancelled). A paid subscription cancelled in the portal still runs to the end of its paid month.
+// - Cancelling is on GenClass's own pages (the owner, 2026-11-18; src/billing.ts cancel routes), not in Stripe's portal,
+//   whose configuration has cancelling switched off (scripts/stripe-setup.mjs): a warning, then one offer to stay
+//   (RETENTION_COUPON: at most RETENTION_MAX, 15% off for 6 months, once per customer, never on top of another
+//   discount), then a last confirmation. A trial ends at once (cancelNow), a paid plan at the end of its paid month
+//   (cancel_at_period_end), and a plan set to end can be resumed until then. Each write is followed by the same
+//   database write the webhook makes (refreshSubscription).
 // - One subscription per account. Checkout asks Stripe (not the database, which a late webhook leaves behind) whether
 //   the customer already has one: the same plan is refused, the other plan is a switch (a Checkout whose subscription
 //   carries metadata genclass_switch_from naming the one it replaces); an account's older unpaid Checkout pages are
@@ -488,7 +494,7 @@ export async function checkoutSession(
 
 /**
  * A Billing Portal session on GenClass's own portal configuration (never the account's default): card, invoices,
- * email and tax id, cancel at period end. It offers no plan switch (scripts/stripe-setup.mjs): a Managed Payments
+ * email and tax id, seats. It offers no cancelling (GenClass's own pages do that: scheduleCancel) and no plan switch (scripts/stripe-setup.mjs): a Managed Payments
  * subscription cannot take another plan's price, so a switch is a new Checkout (src/billing.ts checkout). The portal shows
  * and acts on everything on the customer, so the caller first checks that it all is GenClass's (src/billing.ts portal).
  */
@@ -517,6 +523,88 @@ export async function cancelNow(env: Env, f: Fetch, subscriptionId: string): Pro
     }
     throw e;
   }
+}
+
+// --------------------------------------------------------------------------------------------- cancel, offer, resume
+
+/** The coupon offered once to someone about to cancel, by its id in each Stripe mode (scripts/stripe-setup.mjs makes it). */
+export const RETENTION_COUPON = "genclass_stay_15";
+/** The most an offer to stay may take off and for how long (the owner, 2026-11-18): a coupon beyond it is never offered. */
+export const RETENTION_MAX = { percent: 15, months: 6 };
+/** The subscription metadata key that says the offer was taken (its value: when). One offer per customer. */
+export const RETENTION_MARK = "genclass_retention";
+
+export interface RetentionOffer {
+  percent: number;
+  months: number;
+}
+
+/**
+ * The offer to stay for this subscription, as Stripe's coupon has it now, or null: only for a subscription that bills
+ * or is in its trial and is not set to end, that carries no discount (a promotion code's months free are not topped
+ * up), on a customer none of whose subscriptions (`subs`, any status) took the offer before, and only while the coupon
+ * is GenClass's (metadata genclass=1), valid, a percentage within RETENTION_MAX and for a set number of months.
+ */
+export async function retentionOffer(env: Env, f: Fetch, sub: Obj, subs: Obj[]): Promise<RetentionOffer | null> {
+  if (sub?.status !== "active" && sub?.status !== "trialing") return null;
+  if (subscriptionState(sub).cancelAtPeriodEnd) return null;
+  if ((Array.isArray(sub?.discounts) && sub.discounts.length > 0) || sub?.discount) return null;
+  if (subs.some((s) => typeof s?.metadata?.[RETENTION_MARK] === "string" && s.metadata[RETENTION_MARK] !== "")) return null;
+  let c: Obj;
+  try {
+    c = await stripe(env, f, "GET", `/v1/coupons/${encodeURIComponent(RETENTION_COUPON)}`);
+  } catch (e) {
+    if (e instanceof StripeError && e.status === 404) return null;
+    throw e;
+  }
+  const percent = c?.percent_off;
+  const months = c?.duration_in_months;
+  if (c?.valid !== true || c?.metadata?.genclass !== GENCLASS_MARK || c?.duration !== "repeating") return null;
+  if (typeof percent !== "number" || !(percent > 0) || percent > RETENTION_MAX.percent) return null;
+  if (!Number.isInteger(months) || months < 1 || months > RETENTION_MAX.months) return null;
+  return { percent, months };
+}
+
+/** Put the offer's coupon on the subscription and mark it taken (RETENTION_MARK). The same call twice changes nothing more. */
+export async function applyRetention(env: Env, f: Fetch, subscriptionId: string, now: Date): Promise<void> {
+  await stripe(
+    env,
+    f,
+    "POST",
+    `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    { discounts: [{ coupon: RETENTION_COUPON }], metadata: { [RETENTION_MARK]: now.toISOString() } },
+    `genclass-retention-${subscriptionId}`,
+  );
+}
+
+/** Set a paid subscription to end with its paid month: no further charge, the plan stays until then. */
+export async function scheduleCancel(env: Env, f: Fetch, subscriptionId: string): Promise<void> {
+  await stripe(env, f, "POST", `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`, { cancel_at_period_end: true });
+}
+
+/**
+ * Undo a cancellation that has not happened yet, however it was set: cancel_at_period_end (scheduleCancel, an older
+ * integration) or a cancel_at date (Stripe's portal in flexible billing mode, while it still offered cancelling).
+ */
+export async function resumeSubscription(env: Env, f: Fetch, sub: Obj): Promise<void> {
+  const id = idOf(sub?.id);
+  if (!id) throw new StripeError("not a subscription id", 400);
+  await stripe(env, f, "POST", `/v1/subscriptions/${encodeURIComponent(id)}`, sub?.cancel_at_period_end === true ? { cancel_at_period_end: false } : { cancel_at: "" });
+}
+
+/**
+ * After GenClass itself changed a subscription (a cancel, a resume): the subscription as Stripe has it now, written
+ * as the webhook writes it (the account's row, or its project's), so the page is right before Stripe's event arrives;
+ * that event then writes the same again. The same ownership checks as an event's.
+ */
+export async function refreshSubscription(x: EventContext, subscriptionId: string): Promise<EventResult> {
+  const event = { type: "genclass.refresh", id: subscriptionId };
+  const sub = await fetchSubscription(x, subscriptionId);
+  const account = await accountByCustomer(x.db, idOf(sub?.customer));
+  if (!account || !accountsSubscription(account, sub)) return ignored("the subscription is not the account's", event);
+  if (projectOf(sub)) return applyProjectSubscription(x, account, sub, event);
+  if (!isGenClassSubscription(sub) && idOf(sub?.id) !== account.subscription_id) return ignored("not a GenClass subscription", event, true);
+  return applySubscription(x, account, sub, event);
 }
 
 /**

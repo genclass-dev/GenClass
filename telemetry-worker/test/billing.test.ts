@@ -251,7 +251,7 @@ describe("POST /api/billing/checkout and /api/billing/portal", () => {
     // a cancelled-at-period-end plan says how to keep it
     s.subs.get("sub_late000001")!.cancel_at_period_end = true;
     expect(((await (await call(env, "POST", "/api/billing/checkout", { body: { plan: "pro" }, cookie, fetch: s.fetch })).json()) as any).error).toBe(
-      "you are already on the Pro plan; to keep it after this period, resume it in Manage billing",
+      "you are already on the Pro plan; to keep it after this period, resume it on this page",
     );
   });
 
@@ -1139,7 +1139,7 @@ describe("Managed Payments for Pro, flexible billing mode, switching between Pro
     expect(page).toContain("Switching between Pro and Custom opens Stripe's checkout for the new plan.");
     expect(page).toContain("its unused days are refunded to the card or account that paid for it");
     expect(page).not.toContain("switch between Pro and Custom, or cancel");
-    expect(page).toContain("<p class=\"intro\">Card, invoices and cancellation.</p>");
+    expect(page).toContain("<p class=\"intro\">Card and invoices. Cancel your plan here.</p>");
     const r = await call(t.env, "POST", "/api/billing/checkout", { body: { plan: "custom" }, cookie: t.cookie, fetch: t.s.fetch });
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000001", switch: true });

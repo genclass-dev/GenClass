@@ -83,6 +83,8 @@ function account() {
       endpoints.set(x.id, x);
       return ok({ ...x, secret: "whsec_fresh" });
     }
+    // the offer to stay's coupon (scripts/stripe-setup.mjs retention): missing, then made
+    if (method === "POST" && p === "/v1/coupons") return ok({ id: body.id, object: "coupon", valid: true, metadata: meta(body) });
     if (method === "GET" && p === "/v1/billing_portal/configurations") {
       const d = q.get("is_default");
       return ok({ data: [...portal.values()].filter((c) => d === null || String(c.is_default) === d), has_more: false });

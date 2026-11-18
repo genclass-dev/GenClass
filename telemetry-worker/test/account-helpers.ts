@@ -184,6 +184,10 @@ export function fakeStripe(o: { answer?: (url: URL, init: RequestInit) => Respon
   const paymentIntents = new Map<string, Record<string, any>>();
   const piKeys = new Map<string, Response>();
   const portal: Record<string, any>[] = PORTAL_CONFIGS.map((c) => ({ ...c, metadata: { ...c.metadata } }));
+  /** Coupons by id; the offer to stay (src/stripe.ts RETENTION_COUPON) is there as scripts/stripe-setup.mjs makes it. */
+  const coupons = new Map<string, Record<string, any>>([
+    ["genclass_stay_15", { id: "genclass_stay_15", object: "coupon", percent_off: 15, duration: "repeating", duration_in_months: 6, valid: true, metadata: { genclass: "1" } }],
+  ]);
   /** A subscription's latest invoice as an expansion returns it. */
   const latest = (sub: Record<string, any>) =>
     typeof sub.latest_invoice === "string"
@@ -334,12 +338,27 @@ export function fakeStripe(o: { answer?: (url: URL, init: RequestInit) => Respon
       }
       return ok(pi);
     }
+    const cpn = /^\/v1\/coupons\/([^/]+)$/.exec(p);
+    if (method === "GET" && cpn) {
+      const c = coupons.get(decodeURIComponent(cpn[1]!));
+      return c ? ok(c) : ok({ error: { code: "resource_missing", message: "No such coupon" } }, 404);
+    }
     const sub = /^\/v1\/subscriptions\/([^/]+)$/.exec(p);
     if (sub) {
       const s = subs.get(decodeURIComponent(sub[1]!));
       if (!s) return ok({ error: { message: "No such subscription" } }, 404);
       if (method === "DELETE") s.status = "canceled";
-      if (method === "POST") s.metadata = { ...(s.metadata ?? {}), ...formObject(form!, "metadata") };
+      if (method === "POST") {
+        s.metadata = { ...(s.metadata ?? {}), ...formObject(form!, "metadata") };
+        // a cancel at the period end and its undo, as Stripe shows them; a coupon put on the subscription
+        if (form!.get("cancel_at_period_end") === "true") Object.assign(s, { cancel_at_period_end: true, cancel_at: s.items?.data?.[0]?.current_period_end ?? null });
+        if (form!.get("cancel_at_period_end") === "false" || form!.get("cancel_at") === "") Object.assign(s, { cancel_at_period_end: false, cancel_at: null });
+        const coupon = form!.get("discounts[0][coupon]");
+        if (coupon) {
+          if (!coupons.has(coupon)) return ok({ error: { code: "resource_missing", param: "discounts[0][coupon]", message: `No such coupon: '${coupon}'` } }, 400);
+          s.discounts = [`di_${coupon}`];
+        }
+      }
       if (method === "GET") {
         const out: Record<string, any> = { ...s };
         if (expands(url).includes("customer")) {
@@ -361,7 +380,7 @@ export function fakeStripe(o: { answer?: (url: URL, init: RequestInit) => Respon
   const genclassCustomer = (id: string, accountId: string, email = "ada@example.com") => {
     customers.set(id, { id, object: "customer", email, description: "GenClass account", metadata: { genclass: "1", genclass_account: accountId } });
   };
-  return { fetch, calls, other, customers, subs, sessions, invoices, refunds, charges, paymentIntents, portal, genclassCustomer };
+  return { fetch, calls, other, customers, subs, sessions, invoices, refunds, charges, paymentIntents, portal, coupons, genclassCustomer };
 }
 
 /** The GenClass prices the fake Stripe knows by lookup key: the fixture's (Pro, Custom), the retired Individual, the real plans' Pro and a private price the tests give it. */
