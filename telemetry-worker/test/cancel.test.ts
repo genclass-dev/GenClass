@@ -6,7 +6,7 @@ import { call, cliToken, createApp, fakeStripe, GENCLASS_PORTAL, resetClock, set
 
 // Cancelling on GenClass's own pages (src/billing.ts cancel routes, src/stripe.ts retentionOffer; the owner, 2026-11-18):
 // what the popups are told, the one offer to stay (15% off for 6 months at most, once per customer, never on top of
-// another discount), the cancel itself (a trial ends at once, a paid plan with its paid month), the resume, and who may
+// another discount), the cancel itself (the plan ends that day, trial or paid, with no refund), the resume, and who may
 // do any of it. Stripe is the fake of test/account-helpers.ts. On the two-paid fixture, like test/billing.test.ts.
 vi.mock("../../billing/plans.json", async () => ({ default: (await import("./fixtures/plans-two-paid.json")).default }));
 
@@ -40,11 +40,11 @@ async function paying(status = "active", over: Record<string, unknown> = {}) {
 }
 
 describe("GET /api/billing/cancel: what the popups say, before anything changes", () => {
-  it("a paid plan: its name, when it would end, and the offer to stay; nothing is written", async () => {
+  it("a paid plan: its name, the day its paid month would have run to, and the offer to stay; nothing is written", async () => {
     const t = await paying();
     const r = await t.get();
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ ok: true, plan: "Pro", trial: false, ends: new Date(END * 1000).toISOString(), offer: { percent_off: 15, months: 6 } });
+    expect(await r.json()).toEqual({ ok: true, plan: "Pro", trial: false, ends: new Date(END * 1000).toISOString(), discount: false, offer: { percent_off: 15, months: 6 } });
     expect(t.writes()).toEqual([]);
     expect(t.row()).toEqual({ plan: "pro", subscription_status: "active", cancel_at_period_end: 0 });
   });
@@ -56,7 +56,8 @@ describe("GET /api/billing/cancel: what the popups say, before anything changes"
 
   it("no offer on top of another discount, a second time for the same customer, or for a plan whose payment is overdue", async () => {
     const promo = await paying("active", { discounts: ["di_6monthsfree01"] });
-    expect(await (await promo.get()).json()).toMatchObject({ ok: true, offer: null });
+    // the popups are told about the discount (a promotion code's free months): it ends with the plan
+    expect(await (await promo.get()).json()).toMatchObject({ ok: true, discount: true, offer: null });
     const again = await paying();
     again.s.subs.set("sub_ada0000000", subscription("sub_ada0000000", again.account.id, CUS, "genclass_pro_monthly", "canceled", { metadata: { genclass: "1", genclass_account: again.account.id, genclass_retention: "2026-10-01T00:00:00.000Z" } }));
     expect(await (await again.get()).json()).toMatchObject({ ok: true, offer: null });
@@ -114,23 +115,31 @@ describe("POST /api/billing/cancel/offer: staying, for 15% less over 6 months", 
 });
 
 describe("POST /api/billing/cancel and /api/billing/resume", () => {
-  it("a paid plan is set to end with its paid month: it stays until then, the account's row says so at once, the owner is told", async () => {
+  it("a paid plan ends the day it is cancelled: the subscription is cancelled now, nothing is refunded, the account is on Free, the owner is told", async () => {
     const t = await paying();
     const r = await t.post("/api/billing/cancel");
-    expect(await r.json()).toEqual({ ok: true, ended: false, ends: new Date(END * 1000).toISOString() });
-    expect(t.writes()).toEqual([`POST /v1/subscriptions/${SUB}`]);
-    expect(Object.fromEntries(t.s.calls.find((c) => c.method === "POST")!.form!)).toEqual({ cancel_at_period_end: "true" });
-    expect(t.row()).toEqual({ plan: "pro", subscription_status: "active", cancel_at_period_end: 1 });
-    expect(t.notices()).toEqual([expect.objectContaining({ event: "plan_cancelled", text: expect.stringContaining("Pro cancelled (it ends on 2026-") })]);
-    // the page now offers to resume it, and no second cancel
+    expect(await r.json()).toEqual({ ok: true, ended: true, ends: null });
+    // one write: the cancel itself. No refund, no credit note, no end set for later
+    expect(t.writes()).toEqual([`DELETE /v1/subscriptions/${SUB}`]);
+    expect(t.sub.status).toBe("canceled");
+    expect(t.row()).toEqual({ plan: "free", subscription_status: "canceled", cancel_at_period_end: 0 });
+    expect(t.notices()).toEqual([expect.objectContaining({ event: "plan_cancelled", text: expect.stringMatching(/Pro cancelled \(ended at once; it was paid up to 2026-\d\d-\d\d, nothing refunded\): ada@example\.com/) })]);
+    // the page has nothing left to cancel or resume
     const page = await (await call(t.env, "GET", "/account/billing", { cookie: t.cookie })).text();
-    expect(page).toContain('id="resumeplan"');
+    expect(page).not.toContain('id="resumeplan"');
     expect(page).not.toContain('id="cancelplan"');
-    expect(page).toContain("It is cancelled and will not renew; you can resume it below before then.");
-    // a second click changes nothing and sends no second notice
-    expect((await t.post("/api/billing/cancel")).status).toBe(200);
+    // a second click finds the plan ended: no write, no second notice
+    expect((await t.post("/api/billing/cancel")).status).toBe(409);
     expect(t.writes()).toHaveLength(1);
     expect(t.notices()).toHaveLength(1);
+  });
+
+  it("free months from a promotion code end with the plan, the same day", async () => {
+    const t = await paying("active", { discounts: ["di_6monthsfree01"] });
+    expect(await (await t.post("/api/billing/cancel")).json()).toEqual({ ok: true, ended: true, ends: null });
+    expect(t.writes()).toEqual([`DELETE /v1/subscriptions/${SUB}`]);
+    expect(t.row()).toEqual({ plan: "free", subscription_status: "canceled", cancel_at_period_end: 0 });
+    expect(t.notices()[0]!.text).toContain("nothing refunded, its discount ended too");
   });
 
   it("a trial ends at once: the subscription is cancelled now and the account is on Free", async () => {
@@ -141,11 +150,10 @@ describe("POST /api/billing/cancel and /api/billing/resume", () => {
     expect(t.notices()[0]!.text).toContain("in its trial (ended at once, nothing charged)");
   });
 
-  it("resume undoes a cancel however it was set (cancel_at_period_end, or the portal's cancel_at)", async () => {
-    const t = await paying();
-    await t.post("/api/billing/cancel");
+  it("resume undoes an end set for later, however it was set (cancel_at_period_end, or the portal's cancel_at)", async () => {
+    const t = await paying("active", { cancel_at_period_end: true });
     expect((await t.post("/api/billing/resume")).status).toBe(200);
-    expect(Object.fromEntries(t.s.calls.filter((c) => c.method === "POST")[1]!.form!)).toEqual({ cancel_at_period_end: "false" });
+    expect(Object.fromEntries(t.s.calls.find((c) => c.method === "POST")!.form!)).toEqual({ cancel_at_period_end: "false" });
     expect(t.row()).toEqual({ plan: "pro", subscription_status: "active", cancel_at_period_end: 0 });
     const old = await paying("active", { cancel_at: END });
     expect((await old.post("/api/billing/resume")).status).toBe(200);
@@ -165,8 +173,8 @@ describe("POST /api/billing/cancel and /api/billing/resume", () => {
     t.sql.db.prepare("UPDATE projects SET plan = 'pro', subscription_id = ?, subscription_status = 'active' WHERE id = ?").run(own.id, app.id);
     expect(await (await t.get(`/api/billing/cancel?project=${app.id}`)).json()).toMatchObject({ ok: true, plan: "Pro", trial: false });
     expect((await t.post("/api/billing/cancel", { project_id: app.id })).status).toBe(200);
-    expect(t.writes()).toEqual(["POST /v1/subscriptions/sub_app0000001"]);
-    expect(t.sql.rows("SELECT cancel_at_period_end FROM projects WHERE id = ?", app.id)[0]).toEqual({ cancel_at_period_end: 1 });
+    expect(t.writes()).toEqual(["DELETE /v1/subscriptions/sub_app0000001"]);
+    expect(t.sql.rows("SELECT plan, subscription_status, cancel_at_period_end FROM projects WHERE id = ?", app.id)[0]).toEqual({ plan: null, subscription_status: "canceled", cancel_at_period_end: 0 });
     expect(t.row()).toEqual({ plan: "pro", subscription_status: "active", cancel_at_period_end: 0 });
     // the account's subscription is not an app's, and an app's is not the account's
     t.sql.db.prepare("UPDATE projects SET subscription_id = ? WHERE id = ?").run(SUB, app.id);
@@ -216,7 +224,9 @@ describe("the billing page: Cancel plan opens the popups", () => {
     const t = await paying();
     const page = await (await call(t.env, "GET", "/account/billing", { cookie: t.cookie })).text();
     expect(page).toContain('<button class="btn ghost" type="button" id="cancelplan"><span>Cancel plan</span></button>');
-    expect(page).toContain("If you continue, your subscription will end");
+    expect(page).toContain("If you continue, your subscription will end today");
+    expect(page).toContain("If you cancel, it ends that day.");
+    expect(page).toContain("Nothing is refunded for the days left.");
     for (const id of ["cx1", "cx2", "cx3"]) expect(page).toContain(`<dialog id="${id}" class="cx"`);
     expect(page).toContain('To go back to Free, <a href="#manage">cancel your plan</a>.');
     expect(page).not.toContain("cancel in Manage billing");
