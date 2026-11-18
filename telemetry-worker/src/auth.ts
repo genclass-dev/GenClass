@@ -1712,7 +1712,7 @@ async function deleteProject(c: C, id: string): Promise<Response> {
   // a project that is paid for is not deleted while its subscription still bills: nobody pays for an app that is gone
   const paid = await c.db.prepare("SELECT subscription_status FROM projects WHERE id = ?").bind(id).first<{ subscription_status: string | null }>();
   if (paid?.subscription_status && ["active", "trialing", "past_due", "unpaid"].includes(paid.subscription_status)) {
-    return fail(409, `${p.name} has a paid plan: cancel it in Manage billing (${c.cfg.origin}/account/billing) first, then delete the project`);
+    return fail(409, `${p.name} has a paid plan: cancel it on its plan page (${c.cfg.origin}/account/billing?project=${p.id}) first, then delete the project`);
   }
   await c.db.batch([
     c.db.prepare("DELETE FROM integrations WHERE project_id = ?").bind(id),

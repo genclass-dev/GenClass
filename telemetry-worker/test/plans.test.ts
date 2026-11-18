@@ -569,7 +569,7 @@ describe("a retired plan's subscription (Individual until 2026-10-22): GenClass'
       const page = await text(call(t.env, "GET", "/account/billing", { cookie: t.cookie }));
       expect(page).toContain('id="portal"');
       expect(page).not.toContain("within 1 business day");
-      if (status === "active") expect(page).toContain("Your subscription to a plan GenClass no longer sells is still open in Stripe and can bill again: cancel it in Manage billing");
+      if (status === "active") expect(page).toContain("Your subscription to a plan GenClass no longer sells is still open in Stripe and can bill again: cancel it below");
       else expect(page).not.toContain("no longer sells");
     }
   });
@@ -579,7 +579,7 @@ describe("a retired plan's subscription (Individual until 2026-10-22): GenClass'
     for (const status of ["past_due", "unpaid", "trialing"]) {
       const t = await subscriber(status);
       const page = await text(call(t.env, "GET", "/account/billing", { cookie: t.cookie }));
-      expect(page, status).toContain("Your subscription to a plan GenClass no longer sells is still open in Stripe and can bill again: cancel it in Manage billing");
+      expect(page, status).toContain("Your subscription to a plan GenClass no longer sells is still open in Stripe and can bill again: cancel it below");
       expect(page, status).not.toMatch(/get the plan back|Update your card/);
     }
     // as the webhook stores it now (plan free): a live subscription that gives no plan can only be a retired plan's.
@@ -588,7 +588,7 @@ describe("a retired plan's subscription (Individual until 2026-10-22): GenClass'
       const t = await subscriber(status);
       setPlan(t.sql, t.account.id, "free", { subscription_status: status });
       const page = await text(call(t.env, "GET", "/account/billing", { cookie: t.cookie }));
-      expect(page, status).toContain("Your subscription to a plan GenClass no longer sells is still open in Stripe and can bill again: cancel it in Manage billing");
+      expect(page, status).toContain("Your subscription to a plan GenClass no longer sells is still open in Stripe and can bill again: cancel it below");
       expect(page, status).not.toMatch(/get the plan back|Update your card/);
     }
     const t = await subscriber();

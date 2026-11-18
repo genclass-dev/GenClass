@@ -9,6 +9,13 @@
 //   POST /api/billing/trial                            410: the trial of 2026-10 is gone; Pro's trial starts at Checkout
 //   POST /api/billing/portal                           browser session + Origin; {url} of the Billing Portal
 //   POST /api/billing/webhook                          Stripe only: signature, no session (src/stripe.ts)
+//   GET  /api/billing/cancel[?project=<id>]            browser session; what cancelling means for the plan (the
+//                                                       account's, or one app's own): {plan, trial, ends, offer}
+//   POST /api/billing/cancel/offer {project_id?}       browser session + Origin; takes the offer to stay (15% off for
+//                                                       6 months, once per customer; src/stripe.ts retentionOffer)
+//   POST /api/billing/cancel {project_id?}             browser session + Origin; a trial ends at once, a paid plan with
+//                                                       its paid month
+//   POST /api/billing/resume {project_id?}             browser session + Origin; a plan set to end goes on
 //   GET  /api/billing                                  browser session; the plan and the subscription
 //   GET  /account/billing                              the plan page (src/billing-pages.ts); ?next=/scan?url=... goes
 //                                                       back to that report after the checkout (straight away with Pro)
@@ -60,6 +67,8 @@ import {
   type Plan,
 } from "./plans.js";
 import {
+  applyRetention,
+  cancelNow,
   checkCustomer,
   checkoutSession,
   ensureCustomer,
@@ -73,6 +82,10 @@ import {
   notifyOwner,
   openTrialElsewhere,
   portalSession,
+  refreshSubscription,
+  resumeSubscription,
+  retentionOffer,
+  scheduleCancel,
   sharedCustomer,
   StripeError,
   stripeWebhook,
@@ -187,6 +200,12 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       return m === "POST" ? checkout(c, f) : method();
     case "/api/billing/portal":
       return m === "POST" ? portal(c, f) : method();
+    case "/api/billing/cancel":
+      return get ? cancelInfo(c, f, url.searchParams.get("project")) : m === "POST" ? cancelPlan(c, f) : method();
+    case "/api/billing/cancel/offer":
+      return m === "POST" ? cancelOffer(c, f) : method();
+    case "/api/billing/resume":
+      return m === "POST" ? resumePlan(c, f) : method();
     case "/api/billing/pro":
       return get ? proAnswer(c) : method();
     case "/api/billing/trial":
@@ -460,7 +479,7 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
           return fail(409, `the last payment for your ${planById(st.priced).name} plan did not go through; update your card in Manage billing to pay it, or email ${PLANS_FILE.contact}`);
         }
         if (st.priced === plan.id) {
-          return fail(409, `you are already on the ${plan.name} plan${st.cancelAtPeriodEnd ? "; to keep it after this period, resume it in Manage billing" : ""}`);
+          return fail(409, `you are already on the ${plan.name} plan${st.cancelAtPeriodEnd ? "; to keep it after this period, resume it on this page" : ""}`);
         }
         // a switch is paid on Checkout, never in the portal: a subscription sold through Managed Payments cannot take
         // another plan's price, and must not move onto another subscription outside it (src/stripe.ts header)
@@ -523,6 +542,166 @@ async function portal(c: C, f: Fetch): Promise<Response> {
     return stripeFail(e);
   }
 }
+
+// --------------------------------------------------------------------------------------------- cancel, offer, resume
+
+// a Stripe subscription, read field by field
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Sub = Record<string, any>;
+
+interface CancelTarget {
+  auth: Auth;
+  sub: Sub;
+  /** Every subscription of the account's customer, any status. */
+  subs: Sub[];
+  /** The plan's name as the pages say it ("Pro"; a plan GenClass no longer sells: "paid"). */
+  name: string;
+  /** The app whose own subscription this is, or null for the account's. */
+  project: { id: string; name: string } | null;
+}
+
+/**
+ * The subscription a cancel, its offer or a resume is about: the account's, or with `projectId` that app's own (a
+ * plan bought per app under billing/plans.json version 4). Only the account that pays reaches it, and only a
+ * subscription Stripe lists now on the account's own GenClass customer, provably GenClass's, naming this account (and
+ * this app, or no app). Anything else is a 4xx and nothing is changed.
+ */
+async function cancelTarget(c: C, f: Fetch, a: Auth, projectId: string | null): Promise<CancelTarget | Response> {
+  if (!canBuy(c.env, a.account)) return fail(503, "paid plans are not on sale yet");
+  const b = await accountBilling(c.db, a.account.id, c.env);
+  let project: CancelTarget["project"] = null;
+  let subId = b.subscription_id;
+  if (projectId !== null) {
+    const p = await ownedProject(c, a.account.id, projectId);
+    if (!p || !p.id) return fail(404, "not found");
+    const row = await c.db.prepare("SELECT subscription_id FROM projects WHERE id = ? AND account_id = ?").bind(p.id, a.account.id).first<{ subscription_id: string | null }>();
+    project = { id: p.id, name: p.name };
+    subId = row?.subscription_id ?? null;
+  }
+  if (!b.stripe_customer_id || !subId) return fail(409, project ? `${project.name} has no paid plan of its own` : "this account has no paid plan");
+  if (await overBudget(c.env.AUTH_LIMIT, "cancel", a.account.id)) return tooMany();
+  const own = await checkCustomer(c.env, f, a.account.id, b.stripe_customer_id);
+  if (own.state === "missing") return fail(409, `Stripe has no billing records for this account; email ${PLANS_FILE.contact}`);
+  if (own.state === "not_genclass") return refuseShared(c, f, a.account.id, b.stripe_customer_id, NOT_GENCLASS);
+  const sub = (own.subs as Sub[]).find((s) => s?.id === subId);
+  const named = sub?.metadata?.genclass_account;
+  if (!sub || !isGenClassSubscription(sub) || (named !== undefined && named !== null && named !== a.account.id) || projectOf(sub) !== (project?.id ?? null)) {
+    return fail(409, `this plan cannot be changed here; email ${PLANS_FILE.contact} and we will do it for you`);
+  }
+  const priced = subscriptionState(sub).priced;
+  return { auth: a, sub, subs: own.subs as Sub[], name: priced ? planById(priced).name : "paid", project };
+}
+
+/** The `project_id` of a cancel, offer or resume request's body: an app's id, or null for the account's plan. */
+const projectIn = (body: Record<string, unknown>): string | null => (typeof body.project_id === "string" && body.project_id ? body.project_id : null);
+
+/** Who and what, for the owner's notice: the account's email or login, and the app when the plan is one app's. */
+const cancelWho = (t: CancelTarget): string =>
+  `${t.auth.account.email ?? t.auth.account.github_login ?? t.auth.account.id}${t.project ? `, app "${t.project.name}"` : ""}`;
+
+/**
+ * GET /api/billing/cancel: what the cancel popups say before anything changes. `trial`: the plan is in its free trial
+ * and ends at once; else it stays until `ends`. `offer`: the discount for staying, when this subscription can have it
+ * (a failure to read the coupon only hides the offer: cancelling never waits on it).
+ */
+async function cancelInfo(c: C, f: Fetch, projectId: string | null): Promise<Response> {
+  const a = await browserRead(c);
+  if (a instanceof Response) return a;
+  try {
+    const t = await cancelTarget(c, f, a, projectId || null);
+    if (t instanceof Response) return t;
+    const st = subscriptionState(t.sub);
+    if (!HOLDING_STATUSES.has(st.status)) return fail(409, `your ${t.name} plan has already ended`);
+    if (st.cancelAtPeriodEnd) return fail(409, `your ${t.name} plan is already cancelled and will not renew`);
+    const offer = await retentionOffer(c.env, f, t.sub, t.subs).catch(() => null);
+    return json(200, { ok: true, plan: t.name, trial: st.status === "trialing", ends: st.periodEnd, offer: offer ? { percent_off: offer.percent, months: offer.months } : null });
+  } catch (e) {
+    return stripeFail(e);
+  }
+}
+
+/**
+ * POST /api/billing/cancel/offer: the person stays, with the offer's coupon on the subscription from its next invoice.
+ * 409 when this subscription cannot have it (retentionOffer). The owner is told.
+ */
+async function cancelOffer(c: C, f: Fetch): Promise<Response> {
+  const a = await browserWrite(c, "a plan is changed");
+  if (a instanceof Response) return a;
+  const body = await readJson(c, 1024);
+  if (body instanceof Response) return body;
+  try {
+    const t = await cancelTarget(c, f, a, projectIn(body));
+    if (t instanceof Response) return t;
+    const offer = await retentionOffer(c.env, f, t.sub, t.subs);
+    if (!offer) return fail(409, "this offer is not available for your plan");
+    await applyRetention(c.env, f, t.sub.id as string, c.now);
+    await notifyOwner(
+      { env: c.env, fetch: f, now: c.now },
+      { event: "retention_offer_taken", text: `${modeNote(c.env)}Stayed instead of cancelling ${t.name}, with ${offer.percent}% off for ${offer.months} months: ${cancelWho(t)}.`, account_id: a.account.id, subscription_id: t.sub.id },
+    ).catch(() => false);
+    return json(200, { ok: true, percent_off: offer.percent, months: offer.months });
+  } catch (e) {
+    return stripeFail(e);
+  }
+}
+
+/**
+ * POST /api/billing/cancel: the last popup's button. A trial ends at once and nothing is charged; a paid plan is set
+ * to end with its paid month. The database is written from the subscription as Stripe has it after (the webhook's own
+ * write; if that read fails, Stripe's event does it a moment later). The owner is told.
+ */
+async function cancelPlan(c: C, f: Fetch): Promise<Response> {
+  const a = await browserWrite(c, "a plan is cancelled");
+  if (a instanceof Response) return a;
+  const body = await readJson(c, 1024);
+  if (body instanceof Response) return body;
+  try {
+    const t = await cancelTarget(c, f, a, projectIn(body));
+    if (t instanceof Response) return t;
+    const st = subscriptionState(t.sub);
+    if (!HOLDING_STATUSES.has(st.status)) return fail(409, `your ${t.name} plan has already ended`);
+    const trial = st.status === "trialing";
+    if (trial) await cancelNow(c.env, f, t.sub.id as string);
+    else if (!st.cancelAtPeriodEnd) await scheduleCancel(c.env, f, t.sub.id as string);
+    await refreshSubscription({ env: c.env, db: c.db, fetch: f, now: c.now }, t.sub.id as string).catch(() => null);
+    if (trial || !st.cancelAtPeriodEnd) {
+      await notifyOwner(
+        { env: c.env, fetch: f, now: c.now },
+        {
+          event: "plan_cancelled",
+          text: `${modeNote(c.env)}${t.name} cancelled ${trial ? "in its trial (ended at once, nothing charged)" : `(it ends ${st.periodEnd ? `on ${st.periodEnd.slice(0, 10)}` : "with its paid month"})`}: ${cancelWho(t)}.`,
+          account_id: a.account.id,
+          subscription_id: t.sub.id,
+        },
+      ).catch(() => false);
+    }
+    return json(200, { ok: true, ended: trial, ends: trial ? null : st.periodEnd });
+  } catch (e) {
+    return stripeFail(e);
+  }
+}
+
+/** POST /api/billing/resume: a plan set to end goes on as before (the same price; nothing is charged now). */
+async function resumePlan(c: C, f: Fetch): Promise<Response> {
+  const a = await browserWrite(c, "a plan is resumed");
+  if (a instanceof Response) return a;
+  const body = await readJson(c, 1024);
+  if (body instanceof Response) return body;
+  try {
+    const t = await cancelTarget(c, f, a, projectIn(body));
+    if (t instanceof Response) return t;
+    const st = subscriptionState(t.sub);
+    if (!LIVE_RESUME.has(st.status)) return fail(409, `your ${t.name} plan has ended; start it again on this page`);
+    if (!st.cancelAtPeriodEnd) return json(200, { ok: true });
+    await resumeSubscription(c.env, f, t.sub);
+    await refreshSubscription({ env: c.env, db: c.db, fetch: f, now: c.now }, t.sub.id as string).catch(() => null);
+    return json(200, { ok: true });
+  } catch (e) {
+    return stripeFail(e);
+  }
+}
+/** The statuses a plan set to end can be resumed in. */
+const LIVE_RESUME = new Set(["active", "trialing", "past_due"]);
 
 /**
  * The days free a purchase of `plan` starts with: the plan's trial_days (Pro: 3) for an account that has never had a

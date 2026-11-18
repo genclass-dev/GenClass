@@ -443,7 +443,7 @@ describe("Pro's trial: a cancel during the 3 free days ends the trial and Pro at
     const t = await inTrial();
     const page = await text(call(t.env, "GET", "/account/billing", { cookie: t.cookie }));
     expect(page).toContain("in a trial until");
-    expect(page).toContain("Cancel in Manage billing before then and nothing is charged; Pro then ends at once.");
+    expect(page).toContain("Cancel before then and nothing is charged; Pro then ends at once.");
   });
 
   it("cancelled in Stripe's portal (flexible billing: cancel_at at the trial's end): Stripe cancels it now, the account is on Free, and no second trial", async () => {
@@ -542,7 +542,7 @@ describe("Pro's trial: a cancel during the 3 free days ends the trial and Pro at
     }
     expect(b.s.calls.filter((c) => c.method === "DELETE")).toEqual([]);
     expect(await json(call(b.env, "GET", "/api/billing/pro", { cookie: b.cookie, origin: null }))).toMatchObject({ pro: true, via: "plan" });
-    expect(await text(call(b.env, "GET", "/account/billing", { cookie: b.cookie }))).toContain("It is cancelled and will not renew; you can resume it in Manage billing before then.");
+    expect(await text(call(b.env, "GET", "/account/billing", { cookie: b.cookie }))).toContain("It is cancelled and will not renew; you can resume it below before then.");
     // Stripe ends it at the period end: Free then
     sub.status = "canceled";
     expect((await json(deliver(b.env, stripeEvent("customer.subscription.deleted", sub), b.s.fetch))).result).toBe("applied");
@@ -810,7 +810,7 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     t.sql.db.prepare("UPDATE projects SET plan = 'team', stripe_mode = 'live', subscription_id = 'sub_s', subscription_status = 'active' WHERE id = ?").run(app.id);
     const r = await call(t.env, "DELETE", `/api/account/projects/${app.id}`, { body: { confirm: "delete" }, cookie: t.cookie });
     expect(r.status).toBe(409);
-    expect((await r.json() as any).error).toContain("cancel it in Manage billing");
+    expect((await r.json() as any).error).toContain("cancel it on its plan page");
     t.sql.db.prepare("UPDATE projects SET subscription_status = 'canceled', plan = NULL WHERE id = ?").run(app.id);
     expect((await call(t.env, "DELETE", `/api/account/projects/${app.id}`, { body: { confirm: "delete" }, cookie: t.cookie })).status).toBe(204);
   });

@@ -33,15 +33,19 @@
 //    STRIPE_WEBHOOK_SECRET in live mode, STRIPE_WEBHOOK_SECRET_TEST in test mode, so a test run can never replace
 //    the live secret. An existing endpoint keeps its secret, since Stripe shows a secret only once (--new-webhook
 //    deletes GenClass's endpoint, the one with that exact URL and description, and makes a new one);
-// 4. its own Billing Portal configuration (metadata genclass=1, a headline naming GenClass): cancel at the end of the
-//    period (the worker's webhook ends a trial cancelled there at once: telemetry-worker/src/stripe.ts
-//    trialCancelled), update the card, invoices, and change the email or tax id on the GenClass customer (no address:
-//    GenClass has no use for one). It offers no plan switch: a subscription sold through Managed Payments cannot take another
+// 4. its own Billing Portal configuration (metadata genclass=1, a headline naming GenClass): update the card,
+//    invoices, and change the email or tax id on the GenClass customer (no address: GenClass has no use for one).
+//    It offers no cancelling: a plan is cancelled on GenClass's own billing page, behind a warning and one offer to
+//    stay (the owner, 2026-11-18; telemetry-worker/src/billing.ts cancel routes). It offers no plan switch: a subscription sold through Managed Payments cannot take another
 //    plan's price, so the billing page switches plans with a new Checkout (telemetry-worker/src/billing.ts). To find
 //    it the script lists the non-default configurations (is_default=false), reading their settings and changing none
 //    but its own: the account's default configuration is never read or changed, and GenClass's is never made the
 //    default. Its id goes to the worker with `npx wrangler secret put` (STRIPE_PORTAL_CONFIGURATION in live mode,
 //    STRIPE_PORTAL_CONFIGURATION_TEST in test mode): the worker fetches that one configuration by id, and lists none.
+// 5. the coupon of that offer to stay (telemetry-worker/src/stripe.ts RETENTION_COUPON and RETENTION_MAX: 15% off for
+//    6 months, metadata genclass=1), read by its id and created when missing. Stripe coupons cannot be edited: one
+//    with other terms is reported and left alone (the worker offers it only within RETENTION_MAX), and one with that
+//    id that is not GenClass's stops the script.
 // Everything is read and checked first; changes start only when every check passed. Then it prints the remaining
 // steps. Running it again changes only what differs (its portal configuration is written again with the same
 // settings, and its id stored again). Account-wide settings (Managed Payments, business details, branding, customer
@@ -71,6 +75,10 @@ const LOOKUP_PREFIX = "genclass_";
 const stripeTs = readFileSync(join(WORKER, "src/stripe.ts"), "utf8");
 export const API_VERSION = /export const STRIPE_VERSION = "([^"]+)"/.exec(stripeTs)?.[1];
 export const EVENTS = [...(/export const WEBHOOK_EVENTS = \[([^\]]+)\]/.exec(stripeTs)?.[1] ?? "").matchAll(/"([a-z_.]+)"/g)].map((m) => m[1]);
+/** The offer to stay's coupon id and terms, as the worker has them (src/stripe.ts RETENTION_COUPON, RETENTION_MAX). */
+export const RETENTION_COUPON = /export const RETENTION_COUPON = "([a-z0-9_]+)"/.exec(stripeTs)?.[1];
+const retentionMax = /export const RETENTION_MAX = \{ percent: (\d+), months: (\d+) \}/.exec(stripeTs);
+export const RETENTION = retentionMax ? { percent: Number(retentionMax[1]), months: Number(retentionMax[2]) } : null;
 const PLANS = JSON.parse(readFileSync(process.env.GENCLASS_PLANS_FILE ? resolve(process.env.GENCLASS_PLANS_FILE) : join(ROOT, "billing/plans.json"), "utf8"));
 // the private prices, as the Worker secret PLANS_PRIVATE holds them: { plans: { <id>: { stripe_product?, country_prices? } } }
 {
@@ -141,6 +149,7 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
   const DRY = args.has("--dry-run");
   const NEW_WEBHOOK = args.has("--new-webhook");
   if (!API_VERSION || EVENTS.length === 0) fail("could not read STRIPE_VERSION and WEBHOOK_EVENTS from telemetry-worker/src/stripe.ts");
+  if (!RETENTION_COUPON || !RETENTION) fail("could not read RETENTION_COUPON and RETENTION_MAX from telemetry-worker/src/stripe.ts");
   const KEY = (env.STRIPE_SECRET_KEY ?? "").trim();
   const mode = /^(sk|rk)_test_/.test(KEY) ? "test" : /^(sk|rk)_live_/.test(KEY) ? "live" : null;
   if (!mode) fail("set STRIPE_SECRET_KEY to a Stripe secret key (sk_test_... or sk_live_...) in your environment");
@@ -378,13 +387,9 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
         customer_update: { enabled: true, allowed_updates: ["email", "tax_id"] },
         invoice_history: { enabled: true },
         payment_method_update: { enabled: true },
-        // one mode for every subscription: "immediately" would end paid plans at once too, so a paid plan runs to the end
-        // of its paid month, and the worker's webhook ends a trial cancelled here at once (src/stripe.ts trialCancelled)
-        subscription_cancel: {
-          enabled: true,
-          mode: "at_period_end",
-          cancellation_reason: { enabled: true, options: ["too_expensive", "missing_features", "switched_service", "unused", "other"] },
-        },
+        // no cancelling here: GenClass's billing page cancels (a warning, one offer to stay, a last confirmation;
+        // telemetry-worker/src/billing.ts), so nobody ends a plan without having seen them
+        subscription_cancel: { enabled: false },
         // no plan switch here: a Managed Payments subscription cannot take another plan's price, and must not move
         // onto a subscription outside Managed Payments; the billing page switches with a new Checkout. The one update
         // allowed is the quantity of a per-seat or per-app plan's own price
@@ -421,15 +426,35 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
     say(`${PORTAL_NAME} (${id}) stored on the worker.`);
   }
 
+  /** The offer to stay's coupon by its id: null when missing; one that is not GenClass's stops the script. */
+  async function readRetention() {
+    const c = await stripe("GET", `/v1/coupons/${RETENTION_COUPON}`, undefined, { missingOk: true });
+    if (c && c.metadata?.genclass !== MARK) fail(`coupon ${RETENTION_COUPON} exists but is not GenClass's (no metadata genclass=${MARK}); nothing was changed`);
+    return c;
+  }
+
+  async function retention(existing) {
+    const terms = `${RETENTION.percent}% off for ${RETENTION.months} months`;
+    if (existing) {
+      const same = existing.percent_off === RETENTION.percent && existing.duration === "repeating" && existing.duration_in_months === RETENTION.months && existing.valid === true;
+      say(`coupon ${RETENTION_COUPON} (the offer to stay): ${same ? "unchanged" : `it is not ${terms} and valid; Stripe coupons cannot be edited, so delete it in the dashboard and run this again (the worker offers it only within ${terms})`}`);
+      return;
+    }
+    would(`create coupon ${RETENTION_COUPON} (the offer to stay: ${terms})`);
+    if (!DRY) await stripe("POST", "/v1/coupons", { id: RETENTION_COUPON, name: `Thanks for staying: ${RETENTION.percent}% off`, percent_off: RETENTION.percent, duration: "repeating", duration_in_months: RETENTION.months, metadata: { genclass: MARK } });
+  }
+
   // ------------------------------------------------------------------------------------------- run
 
   say(`Stripe ${mode} mode${DRY ? ", dry run (nothing is changed)" : ""}. API version ${API_VERSION}. Only GenClass's own objects are read or changed.`);
   const state = await readPlans();
   const endpoints = (await readWebhooks()).filter((w) => w.description === WEBHOOK_DESCRIPTION);
   const existingPortal = await readPortal();
+  const existingCoupon = await readRetention();
   const made = await products(state);
   await webhook(endpoints);
   await portal(existingPortal, made);
+  await retention(existingCoupon);
   const dashboard = `
 Dashboard steps for GenClass's Stripe account, in this mode, before the worker gets its key (the reasons are in
 telemetry-worker/README.md, "Paid plans"):
