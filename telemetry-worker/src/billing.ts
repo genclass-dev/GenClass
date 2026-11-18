@@ -13,8 +13,8 @@
 //                                                       account's, or one app's own): {plan, trial, ends, offer}
 //   POST /api/billing/cancel/offer {project_id?}       browser session + Origin; takes the offer to stay (15% off for
 //                                                       6 months, once per customer; src/stripe.ts retentionOffer)
-//   POST /api/billing/cancel {project_id?}             browser session + Origin; a trial ends at once, a paid plan with
-//                                                       its paid month
+//   POST /api/billing/cancel {project_id?}             browser session + Origin; the plan ends that day, trial or
+//                                                       paid; nothing is refunded
 //   POST /api/billing/resume {project_id?}             browser session + Origin; a plan set to end goes on
 //   GET  /api/billing                                  browser session; the plan and the subscription
 //   GET  /account/billing                              the plan page (src/billing-pages.ts); ?next=/scan?url=... goes
@@ -85,7 +85,6 @@ import {
   refreshSubscription,
   resumeSubscription,
   retentionOffer,
-  scheduleCancel,
   sharedCustomer,
   StripeError,
   stripeWebhook,
@@ -595,14 +594,19 @@ async function cancelTarget(c: C, f: Fetch, a: Auth, projectId: string | null): 
 /** The `project_id` of a cancel, offer or resume request's body: an app's id, or null for the account's plan. */
 const projectIn = (body: Record<string, unknown>): string | null => (typeof body.project_id === "string" && body.project_id ? body.project_id : null);
 
+/** A subscription with a discount on it (a promotion code's free months, the offer to stay): it ends with the plan. */
+const discounted = (sub: Sub): boolean => (Array.isArray(sub?.discounts) && sub.discounts.length > 0) || !!sub?.discount;
+
 /** Who and what, for the owner's notice: the account's email or login, and the app when the plan is one app's. */
 const cancelWho = (t: CancelTarget): string =>
   `${t.auth.account.email ?? t.auth.account.github_login ?? t.auth.account.id}${t.project ? `, app "${t.project.name}"` : ""}`;
 
 /**
- * GET /api/billing/cancel: what the cancel popups say before anything changes. `trial`: the plan is in its free trial
- * and ends at once; else it stays until `ends`. `offer`: the discount for staying, when this subscription can have it
- * (a failure to read the coupon only hides the offer: cancelling never waits on it).
+ * GET /api/billing/cancel: what the cancel popups say before anything changes. The plan ends the day it is cancelled.
+ * `trial`: it is in its free trial, so nothing was charged; else `ends` is the day the paid month would have run to
+ * (the days up to it are lost, not refunded). `discount`: the subscription has a discount (a promotion code's free
+ * months, the offer to stay), which ends with it. `offer`: the discount for staying, when this subscription can have
+ * it (a failure to read the coupon only hides the offer: cancelling never waits on it).
  */
 async function cancelInfo(c: C, f: Fetch, projectId: string | null): Promise<Response> {
   const a = await browserRead(c);
@@ -614,7 +618,7 @@ async function cancelInfo(c: C, f: Fetch, projectId: string | null): Promise<Res
     if (!HOLDING_STATUSES.has(st.status)) return fail(409, `your ${t.name} plan has already ended`);
     if (st.cancelAtPeriodEnd) return fail(409, `your ${t.name} plan is already cancelled and will not renew`);
     const offer = await retentionOffer(c.env, f, t.sub, t.subs).catch(() => null);
-    return json(200, { ok: true, plan: t.name, trial: st.status === "trialing", ends: st.periodEnd, offer: offer ? { percent_off: offer.percent, months: offer.months } : null });
+    return json(200, { ok: true, plan: t.name, trial: st.status === "trialing", ends: st.periodEnd, discount: discounted(t.sub), offer: offer ? { percent_off: offer.percent, months: offer.months } : null });
   } catch (e) {
     return stripeFail(e);
   }
@@ -646,8 +650,9 @@ async function cancelOffer(c: C, f: Fetch): Promise<Response> {
 }
 
 /**
- * POST /api/billing/cancel: the last popup's button. A trial ends at once and nothing is charged; a paid plan is set
- * to end with its paid month. The database is written from the subscription as Stripe has it after (the webhook's own
+ * POST /api/billing/cancel: the last popup's button. The plan ends now, the day it is cancelled (the owner,
+ * 2026-11-18), a trial and a paid plan alike: nothing more is charged, nothing is refunded for the days left of a paid
+ * month, and a discount or free months on it end too. The database is written from the subscription as Stripe has it after (the webhook's own
  * write; if that read fails, Stripe's event does it a moment later). The owner is told.
  */
 async function cancelPlan(c: C, f: Fetch): Promise<Response> {
@@ -661,21 +666,18 @@ async function cancelPlan(c: C, f: Fetch): Promise<Response> {
     const st = subscriptionState(t.sub);
     if (!HOLDING_STATUSES.has(st.status)) return fail(409, `your ${t.name} plan has already ended`);
     const trial = st.status === "trialing";
-    if (trial) await cancelNow(c.env, f, t.sub.id as string);
-    else if (!st.cancelAtPeriodEnd) await scheduleCancel(c.env, f, t.sub.id as string);
+    await cancelNow(c.env, f, t.sub.id as string);
     await refreshSubscription({ env: c.env, db: c.db, fetch: f, now: c.now }, t.sub.id as string).catch(() => null);
-    if (trial || !st.cancelAtPeriodEnd) {
-      await notifyOwner(
-        { env: c.env, fetch: f, now: c.now },
-        {
-          event: "plan_cancelled",
-          text: `${modeNote(c.env)}${t.name} cancelled ${trial ? "in its trial (ended at once, nothing charged)" : `(it ends ${st.periodEnd ? `on ${st.periodEnd.slice(0, 10)}` : "with its paid month"})`}: ${cancelWho(t)}.`,
-          account_id: a.account.id,
-          subscription_id: t.sub.id,
-        },
-      ).catch(() => false);
-    }
-    return json(200, { ok: true, ended: trial, ends: trial ? null : st.periodEnd });
+    await notifyOwner(
+      { env: c.env, fetch: f, now: c.now },
+      {
+        event: "plan_cancelled",
+        text: `${modeNote(c.env)}${t.name} cancelled ${trial ? "in its trial (ended at once, nothing charged)" : `(ended at once${st.periodEnd ? `; it was paid up to ${st.periodEnd.slice(0, 10)}` : ""}, nothing refunded${discounted(t.sub) ? ", its discount ended too" : ""})`}: ${cancelWho(t)}.`,
+        account_id: a.account.id,
+        subscription_id: t.sub.id,
+      },
+    ).catch(() => false);
+    return json(200, { ok: true, ended: true, ends: null });
   } catch (e) {
     return stripeFail(e);
   }

@@ -42,13 +42,15 @@
 //   status that the account has not been granted yet counts only with a saved payment method (cardOnFile); Stripe
 //   charges the first month when the trial ends unless it is cancelled before. A cancel during the trial ends it at
 //   once: Stripe's portal schedules it for the trial's end, and the webhook then cancels the subscription now
-//   (trialCancelled). A paid subscription cancelled in the portal still runs to the end of its paid month.
+//   (trialCancelled). A paid subscription set to end later in Stripe itself (the dashboard) still runs to that day.
 // - Cancelling is on GenClass's own pages (the owner, 2026-11-18; src/billing.ts cancel routes), not in Stripe's portal,
 //   whose configuration has cancelling switched off (scripts/stripe-setup.mjs): a warning, then one offer to stay
 //   (RETENTION_COUPON: at most RETENTION_MAX, 15% off for 6 months, once per customer, never on top of another
-//   discount), then a last confirmation. A trial ends at once (cancelNow), a paid plan at the end of its paid month
-//   (cancel_at_period_end), and a plan set to end can be resumed until then. Each write is followed by the same
-//   database write the webhook makes (refreshSubscription).
+//   discount), then a last confirmation. A cancel ends the plan that day (the owner, 2026-11-18: "it should end on
+//   the same day as they cancel it"), a trial and a paid plan alike (cancelNow): nothing is refunded for the days
+//   left, and a discount or a promotion code's free months end with it. A plan set to end later some other way (by
+//   hand in the Stripe dashboard, the portal before it lost cancelling) can be resumed until then. Each write is
+//   followed by the same database write the webhook makes (refreshSubscription).
 // - One subscription per account. Checkout asks Stripe (not the database, which a late webhook leaves behind) whether
 //   the customer already has one: the same plan is refused, the other plan is a switch (a Checkout whose subscription
 //   carries metadata genclass_switch_from naming the one it replaces); an account's older unpaid Checkout pages are
@@ -494,7 +496,7 @@ export async function checkoutSession(
 
 /**
  * A Billing Portal session on GenClass's own portal configuration (never the account's default): card, invoices,
- * email and tax id, seats. It offers no cancelling (GenClass's own pages do that: scheduleCancel) and no plan switch (scripts/stripe-setup.mjs): a Managed Payments
+ * email and tax id, seats. It offers no cancelling (GenClass's own pages do that: cancelNow) and no plan switch (scripts/stripe-setup.mjs): a Managed Payments
  * subscription cannot take another plan's price, so a switch is a new Checkout (src/billing.ts checkout). The portal shows
  * and acts on everything on the customer, so the caller first checks that it all is GenClass's (src/billing.ts portal).
  */
@@ -577,14 +579,9 @@ export async function applyRetention(env: Env, f: Fetch, subscriptionId: string,
   );
 }
 
-/** Set a paid subscription to end with its paid month: no further charge, the plan stays until then. */
-export async function scheduleCancel(env: Env, f: Fetch, subscriptionId: string): Promise<void> {
-  await stripe(env, f, "POST", `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`, { cancel_at_period_end: true });
-}
-
 /**
- * Undo a cancellation that has not happened yet, however it was set: cancel_at_period_end (scheduleCancel, an older
- * integration) or a cancel_at date (Stripe's portal in flexible billing mode, while it still offered cancelling).
+ * Undo a cancellation that has not happened yet, however it was set: cancel_at_period_end (the Stripe dashboard, an
+ * older integration) or a cancel_at date (Stripe's portal in flexible billing mode, while it still offered cancelling).
  */
 export async function resumeSubscription(env: Env, f: Fetch, sub: Obj): Promise<void> {
   const id = idOf(sub?.id);
@@ -898,8 +895,9 @@ export function cardOnFile(sub: Obj): boolean {
  * mode) sets cancel_at to the period end, which in a trial is the trial's end, and an older integration sets
  * cancel_at_period_end. GenClass ends such a trial at once instead of letting it run out (the owner, 2026-11-15). A
  * cancel set for a later date (after a paid month, by hand in the Stripe dashboard) is left to Stripe, and so is any
- * subscription past its trial: a paid plan cancelled in the portal still runs to the end of its paid month. Exported
- * for tests.
+ * subscription past its trial: a paid plan set to end later in Stripe itself (the dashboard; the portal no longer
+ * offers cancelling) still runs to that day. A cancel on GenClass's own page never comes through here: it ends the
+ * plan that day (billing.ts cancelPlan). Exported for tests.
  */
 export function trialCancelled(sub: Obj): boolean {
   if (sub?.status !== "trialing") return false;

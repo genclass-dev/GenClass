@@ -154,14 +154,15 @@ const WARN_ICON =
 
 /**
  * The popups a cancellation goes through (the owner, 2026-11-18): a warning that the subscription will end, one offer
- * to stay for less (only when /api/billing/cancel says this subscription can have it), then a last confirmation.
+ * to stay for less (only when /api/billing/cancel says this subscription can have it), then a last confirmation. The
+ * plan ends the day it is cancelled, trial or paid, and the popups say so before the last button.
  * Their words are filled in by gcCancel from what the server says about the plan; nothing changes before the last
  * button, or the offer's.
  */
 function cancelDialogs(): string {
   return `<dialog id="cx1" class="cx" aria-labelledby="cx1h">
   ${WARN_ICON}
-  <h2 id="cx1h">If you continue, your subscription will end</h2>
+  <h2 id="cx1h">If you continue, your subscription will end today</h2>
   <p id="cx1p"></p>
   <p>Your account goes back to ${esc(PLANS[0]?.name ?? "Free")}: ${esc((PLANS[0]?.summary ?? "").replace(/\.$/, "").replace(/^./, (ch) => ch.toLowerCase()))}.</p>
   <div class="cx-act"><button class="btn" type="button" data-cx-keep><span>Keep my plan</span></button><button class="btn ghost" type="button" id="cx1go"><span>Continue</span></button></div>
@@ -203,14 +204,15 @@ function gcCancel(project){
     gcPost("/api/billing/cancel" + (project ? "?project=" + encodeURIComponent(project) : ""), undefined, "GET").then(function(j){
       gcBusy(open, false); info = j;
       var plan = j.plan || "paid", when = day(j.ends);
-      text("cx1p", j.trial ? "Your " + plan + " trial ends at once. Nothing is charged." : plan + " stays until " + when + ", then ends. You are not charged again.");
+      var lost = j.discount ? " Your discount or free months end today too and do not come back." : "";
+      text("cx1p", j.trial ? "Your " + plan + " trial ends today, as soon as you cancel. Nothing is charged." + lost : plan + " ends today, as soon as you cancel, not on " + when + ". Nothing is refunded for the days left." + lost);
       if (j.offer) {
         text("cx2h", "Stay and pay " + j.offer.percent_off + "% less");
         text("cx2p", "Keep " + plan + " and get " + j.offer.percent_off + "% off your next " + j.offer.months + " months. Nothing else changes.");
         document.getElementById("cx2take").lastChild.textContent = "Take " + j.offer.percent_off + "% off";
       }
-      text("cx3h", "Cancel " + plan + "?");
-      text("cx3p", j.trial ? "This is the last step. Your trial ends now." : "This is the last step. " + plan + " ends on " + when + ".");
+      text("cx3h", "Cancel " + plan + " today?");
+      text("cx3p", j.trial ? "This is the last step. Your trial ends now." + lost : "This is the last step. " + plan + " ends now, with no refund." + lost);
       show(d1);
     }, function(x){ err.textContent = gcWhy(x); gcBusy(open, false); });
   });
@@ -277,7 +279,7 @@ function statusLine(v: BillingView, plan: Plan): string {
     const total = (priceFor(plan, v.country ?? null).price_usd_cents.monthly ?? 0) * n;
     return `You are on the ${name} plan with <b>${n} seat${n === 1 ? "" : "s"}</b>, ${esc(priceText(plan, v.country ?? null))} (${dollars(total)} a month). It renews on ${day(b.current_period_end)}. Add or remove seats in Manage billing.`;
   }
-  return `You are on the ${name} plan, ${esc(priceText(plan, v.country ?? null))}. It renews on ${day(b.current_period_end)}.`;
+  return `You are on the ${name} plan, ${esc(priceText(plan, v.country ?? null))}. It renews on ${day(b.current_period_end)}. If you cancel, it ends that day.`;
 }
 
 function planColumn(v: BillingView, p: Plan, current: Plan): string {
