@@ -51,6 +51,7 @@ import {
 import { routeBilling } from "./billing.js";
 import { routeTeam } from "./team-routes.js";
 import { routeReport } from "./report-routes.js";
+import { routeUnsubscribe } from "./unsubscribe.js";
 import type { EmailBinding } from "./report.js";
 import type { GithubEnv } from "./github/config.js";
 import { routeGithub } from "./github/http.js";
@@ -141,6 +142,8 @@ export interface Env extends GithubEnv {
   /** Cloudflare Email Sending (`[[send_email]]` in wrangler.toml): GenClass reports and alerts (src/report.ts). Without
    * it nothing is emailed and the report settings page says so. */
   EMAIL?: EmailBinding;
+  /** Where a short notice goes when someone unsubscribes on /unsubscribe (src/unsubscribe.ts); none when unset. */
+  UNSUBSCRIBE_NOTIFY?: string;
   /** Optional https URL that gets short JSON notices: a Custom purchase, a duplicate subscription, a plan switch
    * that needs a refund by hand, a billing record holding something that is not GenClass's. */
   NOTIFY_WEBHOOK?: string;
@@ -259,6 +262,9 @@ export async function handle(request: Request, env: Env, opts: HandleOptions = {
   // email reports (src/report-routes.ts): /account/report*, /api/account/report*, /api/report/*, before the account routes
   const report = await routeReport(request, url, path, env, opts);
   if (report) return report;
+  // the unsubscribe page for email written by hand (src/unsubscribe.ts): /unsubscribe
+  const unsubscribe = await routeUnsubscribe(request, path, env, opts);
+  if (unsubscribe) return unsubscribe;
   const account = await routeAuth(request, url, path, env, opts);
   if (account) return account;
   const site = await routeSite(request, url, path, env, opts);
