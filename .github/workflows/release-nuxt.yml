@@ -1,0 +1,154 @@
+name: Release Nuxt module
+
+# Publishes @genclass/nuxt to npm from a tag `nuxt-v<version>` whose version equals packages/nuxt/package.json (e.g.
+# nuxt-v0.1.0), with npm provenance, the same way release-playwright.yml publishes @genclass/playwright.
+# Authentication: npm trusted publishing (OIDC, `id-token: write`); no npm token is stored in the repository.
+#
+# Owner setup:
+# - First version only: npm configures trusted publishing from a package's own settings page, so the package must exist
+#   before this workflow can publish it. Push the tag once: the run builds, tests (the generated code, then one
+#   `nuxt build` of the fixture app), packs, installs the tarball next to the runtime npm serves and uploads it as the
+#   `nuxt-tarball` artifact, and its publish step fails without a trusted publisher. Publish that exact tarball once
+#   from your own npm login (`npm publish genclass-nuxt-<version>.tgz --access public`), then on npmjs.com:
+#   @genclass/nuxt → Settings → Trusted publishing → GitHub Actions: organization genclass-dev, repository GenClass,
+#   workflow filename release-nuxt.yml, environment npm-publish. Later versions publish from here.
+# - The npm-publish GitHub environment (shared with the other release workflows) asks its reviewers to approve each
+#   run, and has to allow the tag rule `nuxt-v*`.
+#
+# The module only generates the import of the runtime (`@genclass/runtime/auto`), a peer dependency: the run checks
+# that the runtime this repository builds, which the fixture app is built with, is on npm, and that it and the one
+# `npm install @genclass/runtime@beta` gets are inside the module's peer range.
+# After the first version is on npm: the nuxt.com/modules entry can be synced (docs/adoption/listings/nuxt-modules.yml;
+# a pull request to nuxt/modules by the owner, nothing is submitted from here).
+
+on:
+  push:
+    tags: ["nuxt-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-nuxt-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: "@genclass/nuxt: verify, build, test, publish with provenance"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing and the provenance attestation
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      NUXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      # Nuxt 4.6 declares Node 22.23 / 24.15 or later (integrations.yml runs the same line)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # trusted publishing needs npm >= 11.5.1
+      - name: npm 11
+        run: npm install -g npm@11 && npm --version
+
+      - name: The tag names the package version, and npm serves a runtime inside the peer range
+        run: |
+          TAG="${GITHUB_REF_NAME#nuxt-v}"
+          PKG=$(node -p "require('./packages/nuxt/package.json').version")
+          echo "tag $TAG, package.json $PKG"
+          test "$TAG" = "$PKG"
+          grep -qF "## $PKG" packages/nuxt/CHANGELOG.md
+          # (`! grep` would not stop a `bash -e` step, so the refusals here are spelled out)
+          if grep -qF "## $PKG (unreleased)" packages/nuxt/CHANGELOG.md; then echo "::error::the CHANGELOG still calls $PKG unreleased"; exit 1; fi
+          # the runtime this repository builds is the one the fixture app below is built with: npm must serve that
+          # version, and the peer range must take it and the version `npm install @genclass/runtime@beta` gets
+          RT=$(node -p "require('./packages/runtime/package.json').version")
+          PEER=$(node -p "require('./packages/nuxt/package.json').peerDependencies['@genclass/runtime']")
+          IN_RANGE=$(npm view "@genclass/runtime@$PEER" version --json)
+          BETA=$(npm view @genclass/runtime dist-tags.beta)
+          echo "runtime here $RT, npm's beta $BETA, peer range $PEER"
+          grep -qF "\"$RT\"" <<< "$IN_RANGE" || { echo "::error::@genclass/runtime $RT is not on npm inside the peer range"; exit 1; }
+          grep -qF "\"$BETA\"" <<< "$IN_RANGE" || { echo "::error::npm's beta, @genclass/runtime $BETA, is outside the peer range"; exit 1; }
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the runtime (the fixture imports it)
+        run: npm run build -w @genclass/runtime
+
+      - name: Typecheck, build
+        run: |
+          npm run typecheck -w @genclass/nuxt
+          npm run build -w @genclass/nuxt
+
+      - name: Tests (generated code, one nuxt build of the fixture)
+        working-directory: packages/nuxt
+        run: npx vitest run
+
+      - name: Pack
+        id: pack
+        working-directory: packages/nuxt
+        run: |
+          FILE=$(npm pack --silent | tail -1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          sha512sum "$FILE"
+          tar -tzf "$FILE" | sort > "$FILE.files.txt"
+          cat "$FILE.files.txt"
+          # the tarball holds the built module, its types and the module's own record; no tests, sources or playground
+          grep -qx "package/dist/module.mjs" "$FILE.files.txt"
+          grep -qx "package/dist/types.d.mts" "$FILE.files.txt"
+          grep -qx "package/dist/module.json" "$FILE.files.txt"
+          grep -qx "package/README.md" "$FILE.files.txt"
+          grep -qx "package/CHANGELOG.md" "$FILE.files.txt"
+          grep -qx "package/LICENSE" "$FILE.files.txt"
+          if grep -qE "^package/(test|src|playground)/" "$FILE.files.txt"; then echo "::error::tests, sources or the playground are in the tarball"; exit 1; fi
+          test "$(node -p "require('./dist/module.json').version")" = "$(node -p "require('./package.json').version")"
+
+      # The README's install line, with the tarball in place of the name. npm only warns about a peer range that is
+      # not met, so `npm ls` (which fails on one) is the check.
+      - name: The tarball installs next to the runtime npm serves, and loads
+        run: |
+          mkdir -p "$RUNNER_TEMP/try" && cd "$RUNNER_TEMP/try"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund --ignore-scripts "$GITHUB_WORKSPACE/packages/nuxt/${{ steps.pack.outputs.file }}" @genclass/runtime@beta
+          npm ls @genclass/nuxt @genclass/runtime
+          node --input-type=module -e 'const m = (await import("@genclass/nuxt")).default; const meta = await m.getMeta(); console.log("module:", meta.name, meta.configKey)' | grep -qx "module: @genclass/nuxt genclass"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuxt-tarball
+          path: |
+            packages/nuxt/${{ steps.pack.outputs.file }}
+            packages/nuxt/${{ steps.pack.outputs.file }}.files.txt
+          if-no-files-found: error
+
+      - name: Publish with provenance
+        working-directory: packages/nuxt
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          case "$VERSION" in
+            *-*) DIST_TAG=$(echo "${VERSION#*-}" | cut -d. -f1) ;;
+            *) DIST_TAG=latest ;;
+          esac
+          npm publish "${{ steps.pack.outputs.file }}" --provenance --access public --tag "$DIST_TAG"
+
+      - name: Verify the registry signature and provenance
+        run: |
+          VERSION=$(node -p "require('./packages/nuxt/package.json').version")
+          mkdir -p "$RUNNER_TEMP/verify" && cd "$RUNNER_TEMP/verify"
+          npm init -y > /dev/null
+          for i in $(seq 1 40); do npm view "@genclass/nuxt@$VERSION" version --prefer-online && break; sleep 20; done
+          for i in $(seq 1 10); do npm install --no-audit --no-fund --ignore-scripts "@genclass/nuxt@$VERSION" @genclass/runtime@beta && break; sleep 30; done
+          for i in $(seq 1 20); do npm audit signatures && break; echo "attestations not served yet, retry $i"; sleep 30; done
+          # the published module is importable by name next to the runtime, and says who it is
+          npm ls @genclass/nuxt @genclass/runtime
+          node --input-type=module -e 'const m = (await import("@genclass/nuxt")).default; const meta = await m.getMeta(); console.log("module:", meta.name, meta.configKey)' | grep -qx "module: @genclass/nuxt genclass"

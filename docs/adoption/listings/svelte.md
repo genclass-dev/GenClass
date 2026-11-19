@@ -1,8 +1,10 @@
 # Svelte listings for @genclass/sv
 
 Where the SvelteKit add-on (`packages/sv`, npm `@genclass/sv`) can be listed, with the text to paste. Submit only
-after `@genclass/sv@0.1.0` and `@genclass/runtime@0.3.0-beta.1` are both on npm: the add-on writes
-`^0.3.0-beta.1`, which npm cannot install before that runtime release exists.
+after `@genclass/sv@0.1.0` is on npm (`.github/workflows/release-sv.yml` on a `sv-v0.1.0` tag; the first version is
+the owner's one publish from the run's `sv-tarball` artifact). The add-on writes `@genclass/runtime` `^0.3.0-beta.1`,
+which npm resolves to the newest 0.3.0 beta (checked 2026-11-19: `0.3.0-beta.7`, the `beta` tag); the release run
+stops if that stops being true.
 
 ## npm keyword search (no submission)
 

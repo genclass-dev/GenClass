@@ -50,8 +50,9 @@ it to `astro.config`).
 
 ## Steps
 
-1. Publish `@genclass/astro` 0.1.0 to npm through a release workflow (AGENTS.md rule 9; a tag convention and
-   workflow like `release-mcp.yml` would be needed for this package).
+1. Publish `@genclass/astro` 0.1.0 to npm through its release workflow (AGENTS.md rule 9):
+   `.github/workflows/release-astro.yml`, on an `astro-v0.1.0` tag. The first version is the owner's one publish from
+   the run's `astro-tarball` artifact; the workflow's header has the steps.
 2. Wait for the weekly update. The entry appears at https://astro.build/integrations/ under Utilities, and in the
    "Recently Added" filter, with the npm description as its text. No action is needed.
 3. Optional, after the package is on npm: open an issue at

@@ -1,0 +1,176 @@
+name: Release Svelte CLI add-on
+
+# Publishes @genclass/sv to npm from a tag `sv-v<version>` whose version equals packages/sv/package.json (e.g.
+# sv-v0.1.0), with npm provenance, the same way release-playwright.yml publishes @genclass/playwright.
+# Authentication: npm trusted publishing (OIDC, `id-token: write`); no npm token is stored in the repository.
+#
+# Owner setup:
+# - First version only: npm configures trusted publishing from a package's own settings page, so the package must exist
+#   before this workflow can publish it. Push the tag once: the run builds, tests (the edits, then end to end on the
+#   Svelte CLI's add-on harness in Chromium), packs, applies the packed add-on to a new SvelteKit app through the
+#   Svelte CLI npm serves and uploads the tarball as the `sv-tarball` artifact, and its publish step fails without a
+#   trusted publisher. Publish that exact tarball once from your own npm login
+#   (`npm publish genclass-sv-<version>.tgz --access public`), then on npmjs.com: @genclass/sv → Settings → Trusted
+#   publishing → GitHub Actions: organization genclass-dev, repository GenClass, workflow filename release-sv.yml,
+#   environment npm-publish. Later versions publish from here.
+# - The npm-publish GitHub environment (shared with the other release workflows) asks its reviewers to approve each
+#   run, and has to allow the tag rule `sv-v*`.
+#
+# The add-on writes a range of @genclass/runtime into the app's package.json (RUNTIME_RANGE in packages/sv/src/edit.ts):
+# the run checks that the runtime this repository builds, which the end-to-end apps run, is on npm, and that it and
+# the one `npm install @genclass/runtime@beta` gets are inside that range.
+# Being on npm is the listing: the Svelte CLI's docs send people to packages with the `sv-add` keyword, which the run
+# holds in package.json, and `npx sv add @genclass` reads the package from npm (docs/adoption/listings/svelte.md).
+# Nothing is submitted from here.
+
+on:
+  push:
+    tags: ["sv-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-sv-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: "@genclass/sv: verify, build, test, publish with provenance"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing and the provenance attestation
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # trusted publishing needs npm >= 11.5.1 (Node 22 ships npm 10)
+      - name: npm 11
+        run: npm install -g npm@11 && npm --version
+
+      - name: The tag names the package version, and npm serves a runtime inside the range the add-on writes
+        run: |
+          TAG="${GITHUB_REF_NAME#sv-v}"
+          PKG=$(node -p "require('./packages/sv/package.json').version")
+          echo "tag $TAG, package.json $PKG"
+          test "$TAG" = "$PKG"
+          grep -qF "## $PKG" packages/sv/CHANGELOG.md
+          # (`! grep` would not stop a `bash -e` step, so the refusals here are spelled out)
+          if grep -qF "## $PKG (unreleased)" packages/sv/CHANGELOG.md; then echo "::error::the CHANGELOG still calls $PKG unreleased"; exit 1; fi
+          # what the Svelte CLI needs of a community add-on: the keyword its docs search by, and `sv` as a peer
+          node -e 'const p = require("./packages/sv/package.json"); if (!p.keywords.includes("sv-add")) { console.error("keyword missing: sv-add"); process.exit(1); } if (!p.peerDependencies.sv) { console.error("sv is not a peer dependency"); process.exit(1); }'
+          # the runtime this repository builds is the one the end-to-end apps below run: npm must serve that version,
+          # and the range the add-on writes must take it and the version `npm install @genclass/runtime@beta` gets
+          RT=$(node -p "require('./packages/runtime/package.json').version")
+          RANGE=$(grep -oE 'RUNTIME_RANGE = "[^"]+"' packages/sv/src/edit.ts | cut -d'"' -f2)
+          test -n "$RANGE"
+          IN_RANGE=$(npm view "@genclass/runtime@$RANGE" version --json)
+          BETA=$(npm view @genclass/runtime dist-tags.beta)
+          echo "runtime here $RT, npm's beta $BETA, written range $RANGE"
+          grep -qF "\"$RT\"" <<< "$IN_RANGE" || { echo "::error::@genclass/runtime $RT is not on npm inside the range the add-on writes"; exit 1; }
+          grep -qF "\"$BETA\"" <<< "$IN_RANGE" || { echo "::error::npm's beta, @genclass/runtime $BETA, is outside the range the add-on writes"; exit 1; }
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # sv/testing installs the scaffolded apps with pnpm
+      - name: pnpm
+        run: npm install -g pnpm@10
+
+      - name: Typecheck
+        run: npm run typecheck -w @genclass/sv
+
+      - name: Build
+        run: |
+          npm run build -w @genclass/runtime
+          npm run build -w @genclass/sv
+
+      - name: Unit tests
+        working-directory: packages/sv
+        run: npx vitest run --project unit
+
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End to end (scaffold, apply, check, build, Chromium, remove)
+        working-directory: packages/sv
+        run: npx vitest run --project e2e
+
+      - name: Pack
+        id: pack
+        working-directory: packages/sv
+        run: |
+          FILE=$(npm pack --silent | tail -1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          sha512sum "$FILE"
+          tar -tzf "$FILE" | sort > "$FILE.files.txt"
+          cat "$FILE.files.txt"
+          # the tarball holds the one built file (sv-utils bundled in), and every file package.json's exports name;
+          # no tests or sources
+          grep -qx "package/dist/index.js" "$FILE.files.txt"
+          grep -qx "package/README.md" "$FILE.files.txt"
+          grep -qx "package/CHANGELOG.md" "$FILE.files.txt"
+          grep -qx "package/LICENSE" "$FILE.files.txt"
+          if grep -qE "^package/(test|src)/" "$FILE.files.txt"; then echo "::error::tests or sources are in the tarball"; exit 1; fi
+          node -e 'const e = require("./package.json").exports["."]; for (const f of Object.values(e)) console.log("package/" + f.replace(/^\.\//, ""))' | while read -r f; do grep -qxF "$f" "$FILE.files.txt" || { echo "::error::exports names $f, which is not in the tarball"; exit 1; }; done
+
+      # The end-to-end test above applies the add-on from its sources with the Svelte CLI this repository pins. This
+      # applies the packed file through the Svelte CLI that `npx sv` gets today: the add-on sits in a node_modules
+      # folder next to `sv`, as the CLI places one it downloads, so its `import "sv"` resolves the same way. Nothing
+      # is installed into the app and no browser runs.
+      - name: The packed add-on applies through the Svelte CLI npm serves
+        run: |
+          mkdir -p "$RUNNER_TEMP/try" && cd "$RUNNER_TEMP/try"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund --ignore-scripts "$GITHUB_WORKSPACE/packages/sv/${{ steps.pack.outputs.file }}" sv@latest
+          npm ls @genclass/sv sv
+          node --input-type=module -e 'const a = (await import("@genclass/sv")).default; console.log("add-on:", a.id, typeof a.run)' | grep -qx "add-on: @genclass/sv function"
+          RANGE=$(grep -oE 'RUNTIME_RANGE = "[^"]+"' "$GITHUB_WORKSPACE/packages/sv/src/edit.ts" | cut -d'"' -f2)
+          npx --no-install sv create app --template minimal --types ts --no-add-ons --no-install
+          cd app
+          npx --no-install sv add "file:../node_modules/@genclass/sv=mode:observe+telemetry:no" --no-git-check --no-download-check --no-install
+          test "$(node -p "require('./package.json').dependencies['@genclass/runtime']")" = "$RANGE"
+          grep -qxF 'import "@genclass/runtime/auto";' src/hooks.client.ts
+          grep -qF '<meta name="genclass" content="telemetry=off" />' src/app.html
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sv-tarball
+          path: |
+            packages/sv/${{ steps.pack.outputs.file }}
+            packages/sv/${{ steps.pack.outputs.file }}.files.txt
+          if-no-files-found: error
+
+      - name: Publish with provenance
+        working-directory: packages/sv
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          case "$VERSION" in
+            *-*) DIST_TAG=$(echo "${VERSION#*-}" | cut -d. -f1) ;;
+            *) DIST_TAG=latest ;;
+          esac
+          npm publish "${{ steps.pack.outputs.file }}" --provenance --access public --tag "$DIST_TAG"
+
+      - name: Verify the registry signature and provenance
+        run: |
+          VERSION=$(node -p "require('./packages/sv/package.json').version")
+          mkdir -p "$RUNNER_TEMP/verify" && cd "$RUNNER_TEMP/verify"
+          npm init -y > /dev/null
+          for i in $(seq 1 40); do npm view "@genclass/sv@$VERSION" version --prefer-online && break; sleep 20; done
+          for i in $(seq 1 10); do npm install --no-audit --no-fund --ignore-scripts "@genclass/sv@$VERSION" && break; sleep 30; done
+          for i in $(seq 1 20); do npm audit signatures && break; echo "attestations not served yet, retry $i"; sleep 30; done
+          # the published add-on loads next to the `sv` peer npm adds, and says who it is
+          npm ls @genclass/sv sv
+          node --input-type=module -e 'const a = (await import("@genclass/sv")).default; console.log("add-on:", a.id, typeof a.run)' | grep -qx "add-on: @genclass/sv function"
