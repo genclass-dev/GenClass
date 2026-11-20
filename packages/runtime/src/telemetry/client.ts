@@ -122,6 +122,9 @@ function compact(o: Ev): Ev {
   return o;
 }
 
+/** localStorage: "<token> <until ms>" while this app's plan has the runtime observe only (planReply). */
+export const OBSERVE_KEY = "genclass:observe";
+
 export class TelemetryClient implements TelemetryStatus {
   readonly enabled = true;
   private queue: Ev[] = [];
@@ -183,6 +186,8 @@ export class TelemetryClient implements TelemetryStatus {
     info: TelemetrySessionInfo,
   ) {
     this.t0 = rt.clock.now();
+    // this app's plan said observe only on an earlier page, this month: from the first request on, not after a reply
+    if (this.rememberedObserve()) rt.capToObserve(true);
     this.lastSummaryAt = this.t0;
     this.session(info);
     // skipped before the runtime could report a change (the device floor): say why right after the session
@@ -194,6 +199,38 @@ export class TelemetryClient implements TelemetryStatus {
   get endpoint(): string {
     return this.cfg.endpoint;
   }
+
+  /**
+   * The collector's reply to a batch (the transport's answer): its OBSERVE_HEADER caps the runtime at observe and is
+   * remembered for this app's key until the UTC month ends; a reply without it lifts a cap that came from it. A reply
+   * the page could not read (a beacon on page exit, a custom transport) changes nothing. It only ever lowers the mode.
+   */
+  private planReply(res: unknown): void {
+    // undefined: a reply the page could not read (a beacon, a custom transport); null: no cap
+    const o = (res as { observe?: unknown } | undefined)?.observe;
+    if (o === undefined || !this.cfg.token) return;
+    const on = !!o;
+    try {
+      const ls = this.g.localStorage as Storage;
+      const d = new Date(this.rt.clock.now());
+      if (on) ls.setItem(OBSERVE_KEY, `${this.cfg.token} ${Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)}`);
+      else ls.removeItem(OBSERVE_KEY);
+    } catch {
+      /* the cap holds for this page */
+    }
+    this.rt.capToObserve(on);
+  }
+
+  /** This app's key was told to observe only this month, on an earlier page (localStorage, OBSERVE_KEY: "<token> <until ms>"). */
+  private rememberedObserve(): boolean {
+    try {
+      const [t, until] = String((this.g.localStorage as Storage).getItem(OBSERVE_KEY)).split(" ");
+      return !!this.cfg.token && t === this.cfg.token && Number(until) > this.rt.clock.now();
+    } catch {
+      return false;
+    }
+  }
+
   get sessionId(): string {
     return this.cfg.sessionId;
   }
@@ -703,10 +740,11 @@ export class TelemetryClient implements TelemetryStatus {
     let p: Promise<void>;
     try {
       p = Promise.resolve(this.cfg.transport.send(this.cfg.endpoint, body, { beacon })).then(
-        () => {
+        (res: unknown) => {
           this.sentEvents += batch.length;
           this.failStreak = 0;
           this.backoffs = 0;
+          this.planReply(res);
         },
         (e: unknown) => this.refused(e, batch),
       );

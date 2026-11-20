@@ -18,6 +18,12 @@ const NATIVE_BEACON: ((url: string, data?: BodyInit | null) => boolean) | undefi
   }
 })();
 
+/**
+ * The header of the collector's reply that says this app's plan has used its live fixes for the month: the runtime
+ * then observes only (it finds and reports, and changes nothing) until the month ends or the reply stops saying so.
+ */
+export const OBSERVE_HEADER = "x-genclass-observe";
+
 /** Whether this environment can send at all (fetch or sendBeacon captured at module load). */
 export function nativeTransportAvailable(): boolean {
   return !!NATIVE_FETCH || !!NATIVE_BEACON;
@@ -56,6 +62,8 @@ export const nativeTransport: TelemetryTransport = {
       }).then((r) => {
         // the status, and a Retry-After the collector exposes, decide back-off (429) vs failure (client.ts backoffOf)
         if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, retryAfterMs: retryAfterMs(r.headers?.get?.("retry-after")) });
+        // the collector's word on this app's plan: observe only (client.ts planReply)
+        return { observe: r.headers?.get?.(OBSERVE_HEADER) ?? null };
       });
     } catch (e) {
       return Promise.reject(e);

@@ -606,3 +606,22 @@ anything" (section 13), on these terms:
   maps no fact to a diagnosis or an action. Model-visible text is unchanged (`situation-v2.3`).
 - **Nothing leaves the machine.** It talks only to a loopback URL; telemetry is unchanged.
 - **Determinism (section 0 rule 3).** Timing uses the injected `Clock`; schedules are hashes of a seed and a request key.
+
+## 17. The plan's observe cap (added 2026-11-12; owner request)
+
+Plans are per project on genclass.dev (billing/plans.json version 4): Free fixes at most 100 problems a month on
+visitors' screens for one app (`limits.live_fixes_per_month`), then GenClass observes only until the month ends.
+
+- **Where the word comes from.** Only the collector's reply to a telemetry batch: the header `x-genclass-observe`
+  (CORS-exposed; `telemetry-worker/src/usage.ts`). The transport hands it to the client (`{ observe }`); a reply the
+  page cannot read (a beacon on page exit, a custom transport) changes nothing.
+- **What it does.** `rt.capToObserve(true)` adds one more cap to the session mode: effectiveMode = min(mode, sample
+  cap, breaker cap, plan cap, route rule). It only ever lowers the mode: observe finds and reports everything and
+  changes nothing (section 0.5), so a correct app is never made worse by it. One console warning, once.
+- **How long.** The client remembers it in `localStorage["genclass:observe"]` as `"<app token> <end of the UTC month
+  in ms>"`, so the next page starts capped before its first reply; a reply without the header lifts the cap (the plan
+  was paid for) and clears the key. Another app's key is never read.
+- **What does not change.** What is collected and sent, every telemetry opt-out (with telemetry off there is no reply
+  and no cap), situations, facts, model-visible text (`situation-v2.3`), the gate's order. Determinism: the month's
+  end is computed from the injected `Clock`.
+

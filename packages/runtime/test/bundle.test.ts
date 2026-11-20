@@ -99,7 +99,12 @@ describe.skipIf(!built)("dist as an app bundles it", () => {
   // The main entry likewise: CI measures 100.55 KB (Node 25: 100.46 KB); its growth from the same fixes is 0.15 KB.
   // 0.3.0-beta.5 (owner OK 2026-11-02): the session event's two visual-checks fields (`visual`, `fix`; VISUAL.md
   // section 10) grow both by 0.06 KB (Node 22: /auto 108.89 KB, the main entry 100.61 KB); the limits follow.
-  const LIMIT_KB: Record<string, number> = { "auto.js": 109.0, "index.js": 100.7 };
+  // The plan's observe cap (owner OK 2026-11-12, "raise it" by 0.3 KB): the telemetry client reads the collector's
+  // x-genclass-observe reply header and remembers it for the month, and the runtime caps its mode at observe (src/
+  // telemetry/client.ts planReply, runtime.ts capToObserve). Growth over main at e4f2eaa7 (Node 22.23,
+  // test/first-load-size.mjs): /auto 108.939 -> 109.239 KB (0.300 KB), the main entry 100.672 -> 100.964 KB
+  // (0.292 KB). Both limits are raised by 0.3 KB.
+  const LIMIT_KB: Record<string, number> = { "auto.js": 109.3, "index.js": 101.0 };
   it("first-load cost of /auto and the main entry, minified + gzip: under the limits", async () => {
     const { build } = await import("esbuild");
     const uses: Record<string, string> = { "auto.js": "", "index.js": "GenClass.init({});" };

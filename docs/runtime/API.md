@@ -211,7 +211,9 @@ prints one console line either way.
 Gate order (each request/decision): protected → cross-origin → op scope (created under off/observe) →
 mode/allow/deny/requireDiagnosis (at the effective mode) → thresholds → `policy.actionLimits`
 (`limit:perMinute|perSubject|perSession`; defaults 60/min global, 10/min per subject, 200 per session) → `onBeforeAction` (`vetoed`, `would-veto`, or
-`limit:hold` past the budget) → execute. effectiveMode = min(mode, sample cap, breaker cap, route rule); URL overrides
+`limit:hold` past the budget) → execute. effectiveMode = min(mode, sample cap, breaker cap, plan cap, route rule)
+(the plan cap: the collector's reply said this app's plan used its live fixes for the month, so the page observes only
+until the UTC month ends; CONTRACT.md §17, TELEMETRY.md "Where it goes"); URL overrides
 (`?genclass`, `?genclass-mode`, `?genclass-aggr`, `?genclass-sample`, `localStorage.genclass`) only demote, from the
 app's mode or from `observe` when it sets none; `?genclass=` / `localStorage.genclass` may also raise on a development
 host (http(s) on a loopback name with an explicit port, or `*.test`; `src/devhost.ts`), and since 0.2.3 and 0.3.0-beta.2
