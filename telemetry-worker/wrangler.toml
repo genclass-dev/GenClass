@@ -23,6 +23,8 @@ routes = [
   # The GitHub App (src/github/*): its public page, the page GitHub sends people to after installing, and "Connect
   # GitHub". Its webhook (/api/github/webhook) and the account page (/account/github) are under the routes above.
   { pattern = "genclass.dev/github*", zone_name = "genclass.dev" },
+  # The unsubscribe page for email a person at GenClass writes by hand (src/unsubscribe.ts).
+  { pattern = "genclass.dev/unsubscribe*", zone_name = "genclass.dev" },
 ]
 
 # Account settings. Production uses the defaults in src/auth.ts (AUTH_ORIGIN https://genclass.dev, AUTH_RP_ID
@@ -37,6 +39,9 @@ routes = [
 # (with RUNTIME_PKG).
 [vars]
 RUNTIME_ON_NPM = "0.3.0-beta.7"
+# Where a one-line notice goes when someone unsubscribes on genclass.dev/unsubscribe (src/unsubscribe.ts): the inbox
+# of whoever writes that email, so they see it before they write again. Unset: the row is saved and no notice is sent.
+UNSUBSCRIBE_NOTIFY = "sarah@genclass.dev"
 # "on" sells the plans marked managed_payments in billing/plans.json through Stripe Managed Payments (Stripe, through
 # Link, is the merchant of record, for 3.5% of each payment on top of Stripe's fees). No plan is marked today
 # (Team is sold on standard Checkout), so it stays "off"; README "Paid plans".
