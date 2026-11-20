@@ -478,7 +478,9 @@ npx @genclass/runtime@beta remove             # undo exactly what init added
 ```
 
 Other flags: `--yes`, `--no-telemetry` (`--telemetry` undoes it on a later run and writes no telemetry option, so
-the default applies: on, but off on local hosts), `--no-token`, `--token gc_...`, `--sink`, `--model-url`, `--no-install`,
+the default applies: on, but off on local hosts), `--analytics` (from the release after `0.3.0-beta.7`: turns on
+[interaction analytics](TELEMETRY.md#interaction-analytics) for the app's dashboard, which are off by default and need
+the app's token; `--no-analytics` takes the option out again), `--no-token`, `--token gc_...`, `--sink`, `--model-url`, `--no-install`,
 `--devtools`, and from `0.3.0-beta.2` `--no-network` and `--sync` (plain HTML). `init` of 0.3.0-beta.6 and earlier
 added the overlay by default (`--no-devtools` left it out; it is still accepted and changes nothing); running `init`
 again on such a setup names the file, and deleting the one statement that imports `@genclass/runtime/devtools`

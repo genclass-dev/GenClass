@@ -113,7 +113,9 @@ Azure, `git push`, `npm publish`.
    `package-lock.json` in sync. TypeScript strict, ESM only, `src/` uses no Node APIs (`types: []`).
 8. **Telemetry** stays disclosed (console notice, `TELEMETRY.md`, both READMEs, CHANGELOG), sends no page text
    unless the app opts in, keeps every opt-out (`telemetry: false`, `?genclass=no-telemetry`, localStorage, GPC) and
-   never feeds a decision. Widening what is sent needs the owner's OK.
+   never feeds a decision. Widening what is sent needs the owner's OK. Owner, 2026-11-20: the `genclass` command's
+   setup turns interaction analytics on (`init --analytics`, said before it writes; `setup --no-analytics` and
+   `genclass analytics off` are the opt-outs and need no Pro); the runtime's own default stays off.
 9. **Publish only through the release workflows**: `.github/workflows/release.yml` on a `v*` tag whose version
    equals `packages/runtime/package.json`; `.github/workflows/release-mcp.yml` on a `mcp-v*` tag for
    `@genclass/mcp` (its first version is published once by the owner from the workflow's tarball, because npm sets up

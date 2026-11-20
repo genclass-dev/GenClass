@@ -74,6 +74,12 @@ describe("genclass analytics (src/views.mjs renderAnalytics)", () => {
     const none = await at(58, async () => renderAnalytics(await appOf({ totals: {}, breakdowns: {}, visits: { sessions: 0, pages: 0, bounces: 0, entry: [], exit: [] } }), { now: NOW }));
     expect(none).toContain("No visits counted in this period.");
     expect(plainLines(none).join(" ").replace(/\s+/g, " ")).toContain("GenClass counts nothing from localhost.");
+    // for this folder's app it says whether its code counts visitors, and the command that turns that on
+    const empty = { totals: {}, breakdowns: {}, visits: { sessions: 0, pages: 0, bounces: 0, entry: [], exit: [] } };
+    const flat = (t: string) => plainLines(t).join(" ").replace(/\s+/g, " ");
+    expect(flat(await at(58, async () => renderAnalytics(await appOf(empty), { now: NOW, here: { analytics: false } })))).toContain("Visitor analytics are off in this app. Turn them on: npx genclass analytics on.");
+    expect(flat(await at(58, async () => renderAnalytics(await appOf(empty), { now: NOW, here: { analytics: true } })))).toContain("Visitor analytics are on in this app: visits show once the deployed site has visitors.");
+    expect(flat(none)).toContain("in its folder: npx genclass analytics on.");
   });
 
   it("bars() and time(): a share of the whole, a label cut to the window, minutes and seconds", async () => {

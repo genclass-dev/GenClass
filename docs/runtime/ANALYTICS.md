@@ -22,6 +22,15 @@ whatever its plan, and leaves them out of the stats it serves to a plan without 
 (`telemetry-worker/src/dashboard.ts` stripAnalytics), so an upgrade shows what was counted before it. Nothing in the
 runtime changes with the plan, and a collector you host yourself shows them to everyone.
 
+**The `genclass` command's setup turns them on (owner, 2026-11-20).** "Turn on analytics in genclass setup by
+default so they can see visitors": from genclass 0.3.14 the setup's runtime step hands the runtime CLI's `init` the
+new `--analytics` flag, which writes `analytics: true` next to the app's token (`data-analytics="on"` on a script
+tag, `analytics=on` in the Astro meta line). The step's sentence and init's lines say what is counted, the consent
+advice of section 5 and the switch before anything is written; `genclass setup --no-analytics` leaves them out and
+`genclass analytics on` / `off` changes it later (`off` without Pro, like every opt-out). The runtime's own default
+stays off (`init` without the flag, the script tag, `GenClass.init()`), and an app set up before that release is not
+changed. Section 5 still holds: an app with visitors in the EU, the EEA or the UK starts analytics after consent.
+
 **Where the genclass.dev paths are now.** Since 2026-10-18 the website and its admin (`site/`) live in the private
 repository `genclass-dev/genclass-site`, which includes this repository as its `lib/` submodule. The paths `site/...`
 in sections 6, 7 and 10 (`site/src/admin.js`, `site/src/worker.js`, `site/src/pages/privacy.html`) are in that
@@ -228,7 +237,8 @@ GenClass.init({ token: "gc_…", analytics: true });
 ```
 
 - **Default: off.** It records nothing unless the app sets `analytics: true` (also `data-analytics="on"` on the
-  script tag, `<meta name="genclass" content="analytics=on">`, `window.GENCLASS_CONFIG.analytics`).
+  script tag, `<meta name="genclass" content="analytics=on">`, `window.GENCLASS_CONFIG.analytics`). `init
+  --analytics` writes it; the `genclass` command's setup passes that flag unless `--no-analytics` (2026-11-20).
 - **Needs telemetry and a token.** Analytics only feed a dashboard, so they are sent only on batches that carry the
   app's token, or to a custom `telemetry.endpoint`. Without either, `analytics: true` warns once and stays off.
 - **After consent.** `rt.analytics.start()` turns it on later, `rt.analytics.stop()` turns it off and drops the

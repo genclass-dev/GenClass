@@ -87,7 +87,10 @@ export function bars(title, rows, o = {}) {
 
 export const ANALYTICS_SECTIONS = ["pages", "sources", "devices", "clicks", "paths", "funnels"];
 
-/** The lines of `genclass analytics`. `section`: one of ANALYTICS_SECTIONS, or null for every section, short. */
+/**
+ * The lines of `genclass analytics`. `section`: one of ANALYTICS_SECTIONS, or null for every section, short. `here`:
+ * { analytics } when the app shown is this folder's (whether visitor analytics are on in its code), else null.
+ */
 export function renderAnalytics(app, o = {}) {
   const m = app.more;
   const b = m.breakdowns;
@@ -117,8 +120,8 @@ export function renderAnalytics(app, o = {}) {
     out(`  ${c.bold(`Visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Pro", 20)} plan.`)}`);
     // "already counted" only when the app sends visitor events (page views in the totals); else it is the app's switch
     const counted = (t?.ix_views ?? 0) > 0 || (app.totals?.pageViews ?? 0) > 0;
-    note(counted ? "What your visitors do is already being counted, so it shows from the day you switch: visits, pages, time on a page, where people come from, what they click, funnels." : "Visits, pages, time on a page, where people come from, what they click, funnels. Your app turns it on with one line, no cookies:");
-    if (!counted) out(`    ${c.cyan("https://genclass.dev/docs/analytics")}`);
+    note(counted ? "What your visitors do is already being counted, so it shows from the day you switch: visits, pages, time on a page, where people come from, what they click, funnels." : `Visits, pages, time on a page, where people come from, what they click, funnels. ${o.here?.analytics ? "This app counts them already, with no cookies." : "Your app turns it on with one line, no cookies:"}`);
+    if (!counted && !o.here?.analytics) out(`    ${c.cyan("npx genclass analytics on")}`);
     out(`    ${c.cyan("npx genclass plan")}`);
     out();
     return;
@@ -127,7 +130,7 @@ export function renderAnalytics(app, o = {}) {
   const views = t.ix_views ?? v.pages;
   if (!v.visits && !views && only !== "funnels") {
     out();
-    note("No visits counted in this period. Visitor analytics is something your app turns on (one line, no cookies): https://genclass.dev/docs/analytics. GenClass counts nothing from localhost.");
+    note(`No visits counted in this period. ${noVisits(o.here)} GenClass counts nothing from localhost.`);
     out();
     return;
   }
@@ -241,12 +244,20 @@ export function renderAnalytics(app, o = {}) {
 
 const ix = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => k.startsWith("ix_")));
 
-/** `genclass analytics [pages|sources|devices|clicks|paths|funnels]`. */
+/** Why no visit is counted: analytics off in this folder's app (and the command that turns them on), on and waiting for visitors, or another app. */
+const noVisits = (here) =>
+  !here
+    ? "Visitor analytics are something the app turns on, in its folder: npx genclass analytics on."
+    : here.analytics
+      ? "Visitor analytics are on in this app: visits show once the deployed site has visitors."
+      : "Visitor analytics are off in this app. Turn them on: npx genclass analytics on.";
+
+/** `genclass analytics [pages|sources|devices|clicks|paths|funnels]`, and `analytics on | off` (actions.mjs switchAnalytics). */
 export function analytics(o = {}, deps = {}) {
   return appView(o, deps, {
     name: "analytics",
     json: (app, _s, target) => ({ ok: true, app: target.name, range: app.range, demo: app.demo, locked: app.visitorsPlan, visitors: app.visitors, exit: app.more.exit, totals: ix(app.more.totals), breakdowns: ix(app.more.breakdowns), series: app.more.series.map((x) => ({ bucket: x.bucket, visits: x.visits, views: x.views })), funnels: app.more.funnels }),
-    show: (app) => renderAnalytics(app, { all: o.all, section: o.section, now: deps.now }),
+    show: (app, state, target) => renderAnalytics(app, { all: o.all, section: o.section, now: deps.now, here: state.app.token && state.app.token === target.token ? { analytics: !!state.app.analytics } : null }),
   });
 }
 

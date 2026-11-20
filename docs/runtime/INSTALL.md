@@ -54,6 +54,8 @@ Content-Security-Policy (`next.config` headers, a proxy or middleware, a `<meta 
 | `--no-token` | init | no token and no dashboard; genclass.dev is not contacted (the package manager still runs unless `--no-install`; add a token later at [genclass.dev/start](https://genclass.dev/start)) |
 | `--no-telemetry` | init | turn off GenClass's anonymous diagnostics; implies `--no-token` (a dashboard only gets data while telemetry is on) |
 | `--telemetry` | init | undo `--no-telemetry`: back to the default (on, but never from local hosts); init takes the opt-out out and writes no telemetry option of its own |
+| `--analytics` | init | turn on [interaction analytics](../../packages/runtime/TELEMETRY.md#interaction-analytics) for the app's dashboard (off by default; they need the app's token and telemetry on; from the release after 0.3.0-beta.7). Where the law asks for a visitor's consent to analytics (the EU, EEA and UK), leave them off and call `runtime.analytics.start()` once the visitor agrees |
+| `--no-analytics` | init | undo `--analytics`: init takes the option out again |
 | `--model-url <url>` | init | use a self-hosted model directory (made with `fetch-model`), with ONNX Runtime from `<url>ort/` |
 | `--sink <name>` | init | also send findings to your own side: `console-json`, `console-json:noevidence` or `webhook:<url>`; repeat the flag or comma-separate ([SINKS.md](SINKS.md)) |
 | `--yes`, `-y` | both | apply without asking |

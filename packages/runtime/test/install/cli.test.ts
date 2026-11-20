@@ -970,6 +970,126 @@ describe("init options: --no-telemetry / --telemetry / --model-url (Troy trial, 
   });
 });
 
+describe("init options: --analytics / --no-analytics (visitor analytics; TELEMETRY.md \"Interaction analytics\", AGENTS.md rule 8)", () => {
+  const MINE = "gc_Mine0123456789abcdefgh";
+  const astro = () =>
+    project({
+      "package.json": pkg({ astro: "^5" }),
+      "src/layouts/Layout.astro": `---\n---\n<html>\n\t<head>\n\t\t<title>x</title>\n\t</head>\n\t<body><slot /></body>\n</html>\n`,
+    });
+
+  it("Vite: --analytics writes analytics: true next to the token; remove restores the files", () => {
+    const after = roundTrip(viteVue(), "--token", MINE, "--analytics");
+    expect(after["src/genclass.config.js"]).toContain(`globalThis.GENCLASS_CONFIG = { token: "${MINE}", analytics: true };`);
+    expect(after["src/main.js"].split("\n").slice(0, 2)).toEqual([`import "./genclass.config"; // genclass:init`, `import "@genclass/runtime/auto"; // genclass:init`]);
+  });
+
+  it("the written statement is what /auto reads, and the script tag's and the meta line's forms are the page config's", () => {
+    const dir = viteVue();
+    cli(dir, "init", "--yes", "--no-install", "--token", MINE, "--analytics");
+    const stmt = readFileSync(join(dir, "src/genclass.config.js"), "utf8").split("\n").find((l) => l.startsWith("globalThis."))!;
+    const win: Record<string, unknown> = {};
+    new Function("globalThis", stmt)(win);
+    expect(mergeConfig({ mode: "observe" }, win.GENCLASS_CONFIG as object)).toEqual({ mode: "observe", token: MINE, analytics: true });
+    const html = roundTrip(project({ "index.html": PAGE }), "--token", MINE, "--analytics", "--no-sri");
+    expect(html["index.html"]).toContain(` defer data-token="${MINE}" data-analytics="on"></script> <!-- genclass:init -->`);
+    expect(fromDataset({ token: MINE, analytics: "on" })).toMatchObject({ token: MINE, analytics: true });
+    const page = roundTrip(astro(), "--token", MINE, "--analytics");
+    expect(page["src/layouts/Layout.astro"]).toContain(`<meta name="genclass" content="token=${MINE}, analytics=on" /> <!-- genclass:init -->`);
+    expect(fromPairs(parsePairs(`token=${MINE}, analytics=on`))).toMatchObject({ token: MINE, analytics: true });
+  });
+
+  it("without the flag nothing about analytics is written or said: off stays the default", () => {
+    const after = roundTrip(viteVue(), "--token", MINE);
+    expect(after["src/genclass.config.js"]).toContain(`GENCLASS_CONFIG = { token: "${MINE}" };`);
+    expect(cli(viteVue(), "init", "--dry-run", "--token", MINE).out).not.toMatch(/Analytics|analytics: true/);
+    // --no-analytics on a new setup is the default: no key, no file of its own
+    const off = roundTrip(viteVue(), "--no-token", "--no-analytics");
+    expect(Object.keys(off).some((f) => /genclass\.config/.test(f))).toBe(false);
+  });
+
+  it("on an existing setup: --analytics adds the key, --no-analytics takes it out, the same flag again changes nothing, remove takes everything out", () => {
+    for (const make of [viteVue, () => project({ "index.html": PAGE }), astro]) {
+      const dir = make();
+      const before = snapshot(dir);
+      expect(cli(dir, "init", "--yes", "--no-install", "--no-sri", "--token", MINE).code).toBe(0);
+      const plain = snapshot(dir);
+      const on = cli(dir, "init", "--yes", "--no-install", "--analytics");
+      expect(on.code, on.out).toBe(0);
+      expect(on.out).toContain("visitor analytics on");
+      expect(Object.values(snapshot(dir)).join("\n")).toMatch(/analytics: true|data-analytics="on"|analytics=on/);
+      expect(cli(dir, "init", "--yes", "--no-install", "--analytics").out).toContain("Nothing to do");
+      const off = cli(dir, "init", "--yes", "--no-install", "--no-analytics");
+      expect(off.code, off.out).toBe(0);
+      expect(off.out).toContain("visitor analytics off");
+      // exactly the setup without the option again
+      expect(snapshot(dir)).toEqual(plain);
+      expect(cli(dir, "init", "--yes", "--no-install", "--no-analytics").out).toContain("Nothing to do");
+      cli(dir, "init", "--yes", "--no-install", "--analytics");
+      expect(cli(dir, "remove", "--yes").code).toBe(0);
+      expect(snapshot(dir)).toEqual(before);
+    }
+  });
+
+  it("a user's own key in the options file survives both switches", () => {
+    const dir = viteVue();
+    cli(dir, "init", "--yes", "--no-install", "--token", MINE);
+    const f = join(dir, "src/genclass.config.js");
+    writeFileSync(f, readFileSync(f, "utf8").replace(`{ token: "${MINE}" }`, `{ token: "${MINE}", debug: true }`));
+    cli(dir, "init", "--yes", "--no-install", "--analytics");
+    expect(readFileSync(f, "utf8")).toContain(`GENCLASS_CONFIG = { token: "${MINE}", debug: true, analytics: true };`);
+    cli(dir, "init", "--yes", "--no-install", "--no-analytics");
+    expect(readFileSync(f, "utf8")).toContain(`GENCLASS_CONFIG = { token: "${MINE}", debug: true };`);
+  });
+
+  it("no token, no analytics: a setup without one is told so and gets no option; a token that cannot be made leaves it out", () => {
+    // an existing setup made without a token
+    const dir = viteVue();
+    cli(dir, "init", "--yes", "--no-install", "--no-token");
+    const plain = snapshot(dir);
+    const r = cli(dir, "init", "--yes", "--no-install", "--analytics");
+    expect(r.out.replace(/\s+/g, " ")).toMatch(/Analytics not turned on: visitor analytics need this app's token and telemetry on/);
+    expect(snapshot(dir)).toEqual(plain);
+    // a new setup while genclass.dev does not answer (the mock fetch fails): GenClass is added, without the option
+    const fresh = viteVue();
+    const made = cli(fresh, "init", "--yes", "--no-install", "--analytics");
+    expect(made.code, made.out).toBe(0);
+    expect(made.out.replace(/\s+/g, " ")).toContain("Visitor analytics were left off: they need the app's token.");
+    expect(Object.values(snapshot(fresh)).join("\n")).not.toMatch(/analytics\s*:\s*true/);
+    expect(readFileSync(join(fresh, "src/main.js"), "utf8")).toContain(`import "@genclass/runtime/auto"; // genclass:init`);
+  });
+
+  it("flag errors: --analytics with --no-analytics, --no-telemetry or --no-token", () => {
+    for (const [args, why] of [
+      [["--analytics", "--no-analytics"], "contradict"],
+      [["--analytics", "--no-telemetry"], "needs telemetry on"],
+      [["--analytics", "--no-token"], "needs the app's token"],
+    ] as const) {
+      const r = cli(viteVue(), "init", ...args);
+      expect(r.code, args.join(" ")).toBe(2);
+      expect(r.out, args.join(" ")).toContain(why);
+    }
+  });
+
+  it("discloses what is counted and kept, the consent advice, the switch and the link, before anything is written", () => {
+    const dir = viteVue();
+    const before = snapshot(dir);
+    const out = cli(dir, "init", "--dry-run", "--token", MINE, "--analytics").out.replace(/\s+/g, " ");
+    expect(snapshot(dir)).toEqual(before);
+    expect(out).toMatch(/Analytics on \(--analytics, written to src\/genclass\.config\.js\)/);
+    expect(out).toContain("page views, time on a page, scroll depth, clicks per element (never its text), where visits come from and the device class");
+    expect(out).toContain("No cookies; one localStorage entry holds the visit. Never from localhost.");
+    expect(out).toContain("Where the law asks for a visitor's consent to analytics (the EU, EEA and UK), turn them off and call runtime.analytics.start() once the visitor agrees.");
+    expect(out).toContain(`${CMD} init --no-analytics`);
+    expect(out).toContain("packages/runtime/TELEMETRY.md#interaction-analytics");
+    const usage = cli(project({}), "init", "--help").out;
+    expect(usage).toContain("--analytics");
+    expect(usage).toContain("--no-analytics");
+    // the heading the link points at is in TELEMETRY.md
+    expect(readFileSync(resolve(HERE, "..", "..", "TELEMETRY.md"), "utf8")).toMatch(/^### Interaction analytics$/m);
+  });
+});
+
 describe("init finds a Content-Security-Policy and prints the self-host steps", () => {
   const CSP_CONFIG = `const csp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'";\nexport default { async headers() { return [{ source: "/(.*)", headers: [{ key: "Content-Security-Policy", value: csp }] }]; } };\n`;
   const next = (files: Record<string, string>) =>

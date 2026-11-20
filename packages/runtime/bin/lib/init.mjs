@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { detectCsp, detectProject, detectState, htmlFiles, littleToWatch, isDir, isFile, readText, walkSkipped, walkSources } from "./detect.mjs";
-import { MARK, hasMarker, isEmptyConfig, planRemoval, removeMarked, sinkBase, sinkNoEvidence, switchMetaConfig, switchMode, switchTagConfig, updateConfigText } from "./edit.mjs";
+import { MARK, hasMarker, isEmptyConfig, planRemoval, removeMarked, sinkBase, sinkNoEvidence, switchMetaConfig, switchMode, switchTagConfig, updateConfigText, writtenConfig } from "./edit.mjs";
 import { AUTO, configFileChange, configFileFor, planInit, scriptTag } from "./plan.mjs";
 import { createAccountProject, readCredentials } from "./account.mjs";
 import { apiHost, hostConfig, hostUrl } from "./host.mjs";
@@ -44,7 +44,8 @@ export const FREE_LINES = HOST_CLI
 
 export const USAGE = `Usage:
   genclass-runtime init   [--mode observe|guard|heal] [--token <gc_...> | --no-token]
-                          [--no-telemetry | --telemetry] [--model-url <url>]
+                          [--no-telemetry | --telemetry] [--analytics | --no-analytics]
+                          [--model-url <url>]
                           [--sink console-json|webhook:<url>]
                           [--yes] [--dry-run] [--no-install] [--devtools] [--no-network] [--cwd <dir>]
   genclass-runtime remove [--yes] [--dry-run] [--keep-package] [--cwd <dir>]
@@ -72,6 +73,15 @@ remove   takes out exactly what init added (the lines and blocks marked "${MARK}
                    --no-token (a dashboard only gets data while telemetry is on)
   --telemetry      undo --no-telemetry: back to the default (on, but never from local hosts); init
                    takes the opt-out out and writes no telemetry option of its own
+  --analytics      turn on visitor analytics for this app's dashboard (off by default): page views, time
+                   on a page, scroll depth, clicks per element (named from markup, never its text), where
+                   visits come from and the device class. No cookies; one localStorage entry holds the
+                   visit. They need the app's token and telemetry on, never run on localhost, and every
+                   telemetry opt-out and Global Privacy Control turn them off. Written as analytics: true
+                   in the option file, data-analytics="on" on a script tag, analytics=on in the Astro
+                   meta line. Where the law asks for consent to analytics (the EU, EEA and UK), leave
+                   them off and call runtime.analytics.start() once the visitor agrees (TELEMETRY.md)
+  --no-analytics   undo --analytics: init takes the option out again (back to the default, off)
   --model-url <u>  use a self-hosted model directory (made with \`fetch-model\`), e.g. /genclass-model/,
                    with ONNX Runtime from <u>ort/ (for a Content-Security-Policy without cdn.jsdelivr.net)
   --sink <name>    also send every detection and intervention to your own side, with no new dependency:
@@ -113,6 +123,8 @@ const BOOL = {
   sync: "sync",
   "no-telemetry": "noTelemetry",
   telemetry: "telemetry",
+  analytics: "analytics",
+  "no-analytics": "noAnalytics",
   "no-token": "noToken",
   "in-account": "inAccount",
   brief: "brief",
@@ -158,6 +170,9 @@ export function parse(argv, spec = { bool: BOOL, value: VALUE }) {
   }
   if (o.mode && !MODES.includes(o.mode)) throw new UsageError(`--mode must be observe, guard or heal`);
   if (o.noTelemetry && o.telemetry) throw new UsageError(`--telemetry and --no-telemetry contradict each other`);
+  if (o.analytics && o.noAnalytics) throw new UsageError(`--analytics and --no-analytics contradict each other`);
+  if (o.analytics && o.noTelemetry) throw new UsageError(`--analytics needs telemetry on (visitor analytics are sent with it): drop --no-telemetry`);
+  if (o.analytics && o.noToken) throw new UsageError(`--analytics needs the app's token (visitor analytics only feed its dashboard): drop --no-token`);
   if (o.token !== undefined && o.noToken) throw new UsageError(`--token and --no-token contradict each other`);
   if (o.token !== undefined && o.noTelemetry) throw new UsageError(`--no-telemetry means no token (a dashboard only gets data while telemetry is on): drop --token`);
   if (o.token !== undefined && !TOKEN_RE.test(o.token)) throw new UsageError(`--token must be "gc_" followed by 22 letters or digits (get one: ${START_URL})`);
@@ -375,12 +390,14 @@ function printRecommendations(recs) {
 
 // ----------------------------------------------------------------------------------------- options
 
-/** The options init writes: { token?, telemetry?, model?, sinks? } (empty: none). */
+/** The options init writes: { token?, telemetry?, analytics?, model?, sinks? } (empty: none). */
 export function configOf(o, token) {
   const c = {};
   if (token) c.token = token;
   if (o.noTelemetry) c.telemetry = false;
   else if (o.telemetry) c.telemetry = true;
+  if (o.analytics) c.analytics = true;
+  else if (o.noAnalytics) c.analytics = false;
   if (o.modelUrl) {
     const u = o.modelUrl.endsWith("/") ? o.modelUrl : `${o.modelUrl}/`;
     c.model = { baseUrl: u, ortWasmPaths: `${u}ort/` };
@@ -428,6 +445,37 @@ function briefTelemetry(cfg) {
   out(`  ${c.gray(`Off: ${CMD} init --no-telemetry`)}`);
   out(`  ${c.gray("What is sent:")}`);
   out(`  ${c.gray(TELEMETRY_URL)}`);
+}
+
+/** What visitor analytics count and keep, in one sentence (TELEMETRY.md "Interaction analytics" is the full list). */
+const ANALYTICS_WHAT = "page views, time on a page, scroll depth, clicks per element (never its text), where visits come from and the device class go to this app's dashboard. No cookies; one localStorage entry holds the visit. Never from localhost.";
+/** The consent advice of TELEMETRY.md, said wherever init turns analytics on. */
+const ANALYTICS_CONSENT = "Where the law asks for a visitor's consent to analytics (the EU, EEA and UK), turn them off and call runtime.analytics.start() once the visitor agrees.";
+export const ANALYTICS_URL = `${TELEMETRY_URL}#interaction-analytics`;
+/** The command that turns them off again: the `genclass` command has a short name for init's own flag. */
+const ANALYTICS_OFF = HOST_CLI ? `${CMD} analytics off` : `${CMD} init --no-analytics`;
+
+/** Visitor analytics disclosure (--analytics): that they are on, what is counted and kept, consent, how to turn them off. */
+function analyticsNotice(cfg, where) {
+  if (cfg.analytics === undefined) return;
+  if (cfg.analytics === false) {
+    row("Analytics", `off ${c.gray("(--no-analytics)")}`);
+    return;
+  }
+  row("Analytics", `${c.bold("on")} ${c.gray(`(--analytics${where ? `, written to ${where}` : ""})`)}`);
+  more(`Visitor analytics: ${ANALYTICS_WHAT}`);
+  more(ANALYTICS_CONSENT);
+  // on a line of its own, so a narrow terminal never breaks the command in two
+  more(`Off: ${c.cyan(ANALYTICS_OFF)}`);
+  more(`What is sent: ${ANALYTICS_URL}`);
+}
+
+/** The same disclosure for --brief (the `genclass` command's walk). Nothing is left out that analyticsNotice says. */
+function briefAnalytics(cfg) {
+  if (cfg.analytics !== true) return;
+  briefLines(`Visitor analytics are on: ${ANALYTICS_WHAT}`);
+  briefLines(ANALYTICS_CONSENT);
+  out(`  ${c.gray(`Off: ${ANALYTICS_OFF}`)}`);
 }
 
 /**
@@ -516,7 +564,7 @@ function planConfigSwitch(project, cwd, marked, cfg, readText) {
     let after = before;
     if (/\.html?$/.test(f)) after = switchTagConfig(before, cfg);
     else if (/\.astro$/.test(f)) after = switchMetaConfig(before, cfg);
-    else if (!isEmptyConfig({ ...cfg, telemetry: cfg.telemetry === true && !cfg.model ? undefined : cfg.telemetry })) {
+    else if (!isEmptyConfig(writtenConfig(cfg))) {
       // the JS line init wrote: put the options import right before it
       const lines = before.split("\n");
       // (a marked line, or a line inside a block init created)
@@ -604,20 +652,33 @@ const describeConfig = (cfg) =>
   [
     cfg.token ? (cfg.token === PENDING_TOKEN ? "the new app's token" : `token ${cfg.token}`) : null,
     cfg.telemetry === false ? "telemetry off" : cfg.telemetry ? "telemetry on" : null,
+    cfg.analytics === true ? "visitor analytics on" : cfg.analytics === false ? "visitor analytics off" : null,
     cfg.model ? `model ${cfg.model.baseUrl}` : null,
     cfg.sinks?.length ? `sinks ${cfg.sinks.join(", ")}` : null,
   ]
     .filter(Boolean)
     .join(", ");
 
-/** Telemetry as the marked files set it (an existing setup): false when init wrote the opt-out. */
+/**
+ * Telemetry and visitor analytics as the marked files set them (an existing setup): `telemetry: false` when init
+ * wrote the opt-out, `analytics: true` when it wrote the opt-in.
+ */
 function currentConfig(files) {
+  const cur = {};
   for (const f of files) {
     const t = readText(f) ?? "";
-    if (/GENCLASS_CONFIG\s*=\s*\{[^;]*\btelemetry\s*:\s*false/.test(t) || /data-telemetry=["']?off/.test(t) || /<meta[^>]*name=["']genclass["'][^>]*telemetry=off/.test(t)) return { telemetry: false };
+    if (/GENCLASS_CONFIG\s*=\s*\{[^;]*\btelemetry\s*:\s*false/.test(t) || /data-telemetry=["']?off/.test(t) || /<meta[^>]*name=["']genclass["'][^>]*telemetry=off/.test(t)) cur.telemetry = false;
+    if (analyticsIn(t)) cur.analytics = true;
   }
-  return {};
+  return cur;
 }
+
+/** Whether a file's text turns visitor analytics on: the options init writes, or `analytics: true` in a hand-written GenClass.init(). */
+const analyticsIn = (t) =>
+  /GENCLASS_CONFIG\s*=\s*\{[^;]*\banalytics\s*:\s*true\b/.test(t) ||
+  /GenClass\.init\(\s*\{[^)]*\banalytics\s*:\s*true\b/.test(t) ||
+  /data-analytics=["']?on\b/.test(t) ||
+  /<meta[^>]*name=["']genclass["'][^>]*\banalytics=on\b/.test(t);
 
 /**
  * --model-url pointing into the app's public folder that `fetch-model --ort wasm` filled: no WebGPU ONNX Runtime
@@ -660,9 +721,12 @@ function planToken(o, project, cwd, marked, fresh) {
   return { pending: true, name: project.pkg?.name || project.name };
 }
 
-/** cfg without its token (what init writes when no token could be created). */
+/**
+ * cfg without its token (what init writes when no token could be created), and without the analytics opt-in: visitor
+ * analytics only feed the app's dashboard, so without a token the runtime would warn on every page and record nothing.
+ */
 const withoutToken = (cfg) => {
-  const { token: _t, ...rest } = cfg;
+  const { token: _t, analytics: _a, ...rest } = cfg;
   return rest;
 };
 
@@ -860,7 +924,9 @@ export function inspectProject(o) {
   const local = readLocal(cwd);
   // the key: in init's markers, else in a hand-written setup's files (GenClass.init({ token }), a meta tag, the
   // integrations' options), else in .genclass.local
-  return { cwd, project, files, marked, handWritten: !marked.length && manual.length > 0, fresh: !marked.length && !manual.length, token: tokenInFiles(marked) ?? tokenInFiles(manual) ?? local?.token ?? null, local };
+  // visitor analytics: on when init's options, or a hand-written setup's own, turn them on
+  const analytics = (marked.length ? marked : manual).some((f) => analyticsIn(readText(f) ?? ""));
+  return { cwd, project, files, marked, handWritten: !marked.length && manual.length > 0, fresh: !marked.length && !manual.length, token: tokenInFiles(marked) ?? tokenInFiles(manual) ?? local?.token ?? null, local, analytics };
 }
 
 /**
@@ -933,6 +999,14 @@ export async function init(o, ctx = {}) {
   }
   if (tk.write) cfg = { token: tk.token, ...cfg };
   else if (tk.pending) cfg = { token: PENDING_TOKEN, ...cfg };
+  // --analytics on a setup that has no token and gets none here (telemetry off, set up by hand, made without one):
+  // the option is not written, since the runtime would record nothing and warn on every page
+  const noAnalytics = cfg.analytics === true && !tk.token && !tk.pending && !tk.wouldCreate;
+  if (noAnalytics) {
+    const { analytics: _a, ...rest } = cfg;
+    cfg = rest;
+    row("Analytics", `not turned on: visitor analytics need this app's token and telemetry on (${tk.why ?? "no token"}). ${HOST_CLI ? `${CMD} setup` : `${CMD} connect`} gives the app one.`, c.yellow(sym.warn));
+  }
   // an older @genclass/runtime in the project (0.2.x from `npx @genclass/runtime init` without @beta) is upgraded:
   // without that, this init would write options and imports the installed runtime does not have
   const older = project.framework !== "html" ? olderRuntime(project, cwd) : null;
@@ -967,6 +1041,7 @@ export async function init(o, ctx = {}) {
     const optionsChanged = switches.some((ch) => !o.mode || ch.kind === "create" || switchMode(ch.before, o.mode) !== ch.after);
     out();
     telemetryNotice(isEmptyConfig(cfg) ? currentConfig(marked) : { ...currentConfig(marked), ...cfg }, null);
+    analyticsNotice({ ...currentConfig(marked), ...cfg }, null);
     tokenRow(tk);
     const overlay = o.devtools && !HOST_CLI ? null : overlayHint(project, overlayFiles(marked).map((f) => posix(relative(cwd, f))));
     if (overlay) row("Overlay", overlay, c.yellow(sym.warn));
@@ -1015,14 +1090,18 @@ export async function init(o, ctx = {}) {
     row("Entry", posix(relative(cwd, plan.entry)));
     row("Mode", `${o.mode ?? "observe"}${o.mode ? "" : c.gray(" (default: reports only, never changes anything; --mode guard lets it act)")}`);
   }
-  const cfgAtOf = (changes, config) => changes.find((ch) => /genclass\.config\.[cm]?[jt]s$/.test(ch.file))?.rel ?? (config.telemetry === false || config.sinks?.length ? changes[0]?.rel : null);
+  const cfgAtOf = (changes, config) => changes.find((ch) => /genclass\.config\.[cm]?[jt]s$/.test(ch.file))?.rel ?? (config.telemetry === false || config.analytics === true || config.sinks?.length ? changes[0]?.rel : null);
   let cfgAt = cfgAtOf(plan.changes, cfg);
   if (brief) {
     out();
     out(`  ${c.bold(project.name)} ${c.gray(`${sym.dot} ${project.label}${project.pm ? ` ${sym.dot} ${project.pm}` : ""} ${sym.dot} ${posix(relative(cwd, plan.entry))}`)}`);
     briefLines(`Adds ${PKG} ${VERSION} in ${o.mode ?? "observe"} mode${o.mode ? "" : ": it reports and never changes anything"}.`, (l) => l);
     briefTelemetry(cfg);
-  } else telemetryNotice(cfg, cfgAt);
+    briefAnalytics(cfg);
+  } else {
+    telemetryNotice(cfg, cfgAt);
+    analyticsNotice(cfg, cfgAt);
+  }
   if (!ctx.creds) tk = await offerAccount(o, tk);
   if (brief && tk.pending && tk.account) briefLines(`The app goes into ${accountWhere(tk.account.account)} as "${String(tk.name ?? "").slice(0, 80) || "unnamed"}".`);
   else tokenRow(tk);
@@ -1079,6 +1158,9 @@ export async function init(o, ctx = {}) {
     return 1;
   }
   if (changes !== plan.changes) cfgAt = cfgAtOf(changes, tk.token ? cfg : withoutToken(cfg));
+  // no token could be made: the analytics opt-in was left out with it (withoutToken)
+  const analyticsOn = cfg.analytics === true && !!tk.token;
+  if (cfg.analytics === true && !tk.token) out(`  ${c.yellow(sym.warn)} Visitor analytics were left off: they need the app's token. Once the app has one: ${c.cyan(`${CMD} init --analytics`)}`);
   // a project created just now: keep its private link before writing anything else (it is shown only once)
   const saved = tk.created ? persistCreated(tk, cwd) : null;
   for (const ch of changes) {
@@ -1097,6 +1179,7 @@ export async function init(o, ctx = {}) {
   if (brief && (tk.created?.account || tk.app)) {
     out(`  ${c.green(sym.ok)} ${c.bold("GenClass is in your app.")} ${c.gray(`(${changes.map((ch) => ch.rel).join(", ")})`)}`);
     briefLines("What it finds shows in the browser console as [GenClass] lines, and on your dashboard once the site is deployed.");
+    if (analyticsOn && HOST_CLI) briefLines(`Visitors are counted from then on too: ${CMD} analytics`);
     printMoneyAdvice(money, cfgAt);
     // the address part and the command each stay whole on a line of their own
     out(`  ${c.gray("Off for one page: ?genclass=off")}`);
@@ -1114,6 +1197,7 @@ export async function init(o, ctx = {}) {
   if (devtools && changes.some((ch) => /devtools/.test(ch.after))) out(`    ${sym.dot} An overlay at the bottom right of dev pages shows what GenClass sees (${c.bold("Alt+Shift+G")}).`);
   out(`    ${sym.dot} Findings also appear in the browser console as ${c.cyan("[GenClass] ...")} lines.`);
   if (cfg.sinks?.length) out(`    ${sym.dot} They also reach ${c.cyan(cfg.sinks.join(", "))}: ${cfg.sinks.map((s) => SINK_WHAT[sinkBase(s)] ?? s).join("; ")}.`);
+  if (analyticsOn) out(`    ${sym.dot} Visitors are counted on your dashboard once the site is deployed (never from localhost).`);
   out();
   printMoneyAdvice(money, cfgAt);
   printLittleToWatch(quiet);

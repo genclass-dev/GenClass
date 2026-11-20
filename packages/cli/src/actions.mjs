@@ -287,7 +287,10 @@ async function waitForPlan(offer, o = {}, deps = {}) {
  * The arguments the runtime step hands to the runtime CLI's `init` (a fresh project) or `connect` (added, not in
  * the account yet). `init` gets --no-devtools: GenClass set up by this command draws nothing on a page, not on the
  * deployed site (it never did) and not on localhost either (the developer overlay is left out). What it finds goes
- * to the browser console, the dashboard and `genclass dashboard`.
+ * to the browser console, the dashboard and `genclass dashboard`. It also gets --analytics (the owner's call,
+ * 2026-11-20): an app set up by this command counts its visitors from the first deploy, so `genclass analytics` and
+ * the dashboard's Visitors have something to show; the step's sentence and init's own lines say so before anything
+ * is written, and `setup --no-analytics` (o.noAnalytics) leaves it out.
  */
 export function runtimeArgs(state, o = {}) {
   const connect = state.steps.find((s) => s.id === "runtime")?.run === "npx genclass connect";
@@ -296,7 +299,7 @@ export function runtimeArgs(state, o = {}) {
   // account this is, and the account is the one signed in. init gets --in-account (signed in one step earlier, so
   // the app goes into that account without asking again), --no-devtools and --brief (the walk has its own header,
   // so init says the same things in a few lines)
-  return connect ? { cmd: "connect", args } : { cmd: "init", args: [...args, ...(state.signedIn ? ["--in-account"] : []), "--no-devtools", "--brief"] };
+  return connect ? { cmd: "connect", args } : { cmd: "init", args: [...args, ...(state.signedIn ? ["--in-account"] : []), "--no-devtools", ...(o.noAnalytics ? [] : ["--analytics"]), "--brief"] };
 }
 
 /**
@@ -355,6 +358,40 @@ export async function sameApp(state, o = {}) {
     const { init, parse } = await import("../../runtime/bin/lib/init.mjs");
     return init({ ...parse(args), token: app.token, ...(o.noInstall ? { noInstall: true } : {}) }, { cmd: "init", creds, app });
   };
+}
+
+/**
+ * `genclass analytics on` and `off`: turns visitor analytics on or off in what the setup added to this folder's app,
+ * with the runtime CLI's own init (it shows the one-line change and asks; --yes: no question). Nothing is sent. An
+ * app without GenClass is pointed at the setup, one set up by hand at its own GenClass.init(). Returns the exit code.
+ */
+export async function switchAnalytics(on, o = {}) {
+  let st = null;
+  try {
+    st = inspectProject({ cwd: o.cwd });
+  } catch {
+    st = null;
+  }
+  if (!st || st.fresh) {
+    out();
+    note(`GenClass is not in this app yet. ${c.cyan("npx genclass setup")} adds it${on ? ", with visitor analytics on" : ""}.`);
+    out();
+    return 1;
+  }
+  if (st.analytics === on) {
+    out();
+    good(`Visitor analytics are already ${on ? "on" : "off"} in this app.`);
+    if (on) note("Visits are counted on the deployed site, never from localhost.");
+    out();
+    return 0;
+  }
+  if (st.handWritten) {
+    out();
+    note(`GenClass is set up by hand here, so this command leaves the code alone: ${on ? "add analytics: true to" : "take analytics: true out of"} your GenClass.init({ ... }) options.`);
+    out();
+    return 1;
+  }
+  return runInit("init", ["--cwd", st.cwd, ...(o.yes ? ["--yes"] : []), on ? "--analytics" : "--no-analytics"]);
 }
 
 /** Shows the two Vite settings and writes them on a yes (--yes, or one question on a terminal). */

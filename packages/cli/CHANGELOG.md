@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.14
+
+- **Setup turns visitor analytics on.** The runtime step now writes `analytics: true` next to the app's token, so an
+  app set up with `genclass` counts its visitors from the first deploy and `genclass analytics` and the dashboard's
+  Visitors have something to show: page views, time on a page, scroll depth, clicks per element (named from markup,
+  never its text), where visits come from and the device class. No cookies; one `localStorage` entry holds the visit;
+  nothing is counted on localhost, and a visitor's Global Privacy Control turns it off. The step's sentence says so,
+  the change is shown before it is written, and the lines under it say what is counted, how to turn it off, and that
+  where the law asks for a visitor's consent to analytics (the EU, EEA and UK) the app starts them with
+  `runtime.analytics.start()` once the visitor agrees. `genclass setup --no-analytics` adds GenClass without them.
+  An app set up before this release is not changed.
+- **`genclass analytics on`** and **`genclass analytics off`**: the switch for this folder's app, any time. It changes
+  that one option in what the setup added, shows the change first, and sends nothing. `off` (and
+  `genclass init --no-analytics`) works without Pro and signed out, like every opt-out.
+- `genclass analytics` and the dashboard's Visitors line say why no visit is counted: analytics are off in this app
+  (with the command that turns them on), or on and waiting for the deployed site's first visitors.
+- `genclass status` names `npx genclass init --analytics` for an app without GenClass: the command that does what the
+  step says.
+
 ## 0.3.13
 
 - **`genclass site <address>`**: the site check, which used to be on genclass.dev, now runs from the command only.

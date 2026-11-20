@@ -384,7 +384,11 @@ GenClass.init({ token: "gc_…", analytics: true });
 ```
 
 (also `data-analytics="on"` on the script tag, `<meta name="genclass" content="analytics=on">`,
-`window.GENCLASS_CONFIG.analytics`). They need telemetry on and the app's token, or a custom `telemetry.endpoint`;
+`window.GENCLASS_CONFIG.analytics`). `npx @genclass/runtime@beta init --analytics` (from the release after
+`0.3.0-beta.7`) writes the option for you, and `init --no-analytics` takes it out again. **The `genclass` command's
+setup turns them on** (`npx genclass`, from genclass 0.3.14): it writes `analytics: true` next to the app's token
+unless it is run with `--no-analytics`, says so before writing, and `npx genclass analytics off` turns them off later.
+The runtime's own default is unchanged. They need telemetry on and the app's token, or a custom `telemetry.endpoint`;
 without either, `analytics: true` warns once in the console and records nothing. Every telemetry opt-out below, Global
 Privacy Control and the local-host default turn them off too. When they start, the console says so once:
 

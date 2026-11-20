@@ -88,7 +88,7 @@ it off). After that you type `genclass`, and every screen says `genclass` instea
 |---|---|---|
 | Account | Opens genclass.dev in your browser; you approve a short code there. | A session file in your user config folder. Nothing is typed in the terminal. |
 | Pro | Right after the sign-in: Pro's 3-day free trial opens in your browser, and the command waits for it. Every step after it needs Pro. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
-| Runtime | Adds GenClass to the app: one import (or script tag) and the package. It watches the page in your users' browsers for lost edits, double submits and old data shown over new, and only reports, to the console and your dashboard. Nothing is drawn on your pages. | Your entry file and `package.json`; you see the change first. `genclass remove` undoes it. |
+| Runtime | Adds GenClass to the app: one import (or script tag) and the package. It watches the page in your users' browsers for lost edits, double submits and old data shown over new, and only reports, to the console and your dashboard. Nothing is drawn on your pages. Visitor analytics are on too (`analytics: true` next to the app's token): page views, time on a page, scroll depth, clicks per element (never its text), where visits come from and the device class, with no cookies and nothing from localhost. `npx genclass setup --no-analytics` leaves them off, `npx genclass analytics off` turns them off later. Where the law asks for a visitor's consent to analytics (the EU, EEA and UK), set up without them and call `runtime.analytics.start()` once the visitor agrees. | Your entry file and `package.json`; you see the change first. `genclass remove` undoes it. |
 | App plan | Once the app is in your account, its plan page opens in your browser once: Continue with Pro. Pro covers up to 3 apps; more apps come with Enterprise, by email. | Nothing in your project. |
 | Dashboard | Waits for your live site to be opened once. GenClass sends nothing from localhost. | Nothing. |
 | Test workflow | Runs your Playwright tests once more per pull request with slow and reordered responses. | One new file, `.github/workflows/genclass.yml`, which you commit. |
@@ -172,7 +172,7 @@ Each part of the browser dashboard has its own view, short first, `--all` for ev
 | | |
 |---|---|
 | `npx genclass problems` | what was found, by kind and by page, the measured visual checks, what GenClass stopped on the visitor's screen, how it compares with the period before |
-| `npx genclass analytics` | visitors: visits, page views, time on a page, where people come from, devices and countries, what gets clicked again and again. One part in full: `analytics pages`, `sources`, `devices`, `clicks`, `paths`, `funnels` |
+| `npx genclass analytics` | visitors: visits, page views, time on a page, where people come from, devices and countries, what gets clicked again and again. One part in full: `analytics pages`, `sources`, `devices`, `clicks`, `paths`, `funnels`. `analytics on` and `analytics off` turn the counting on or off in this folder's app (the setup turns it on) |
 | `npx genclass events` | the latest events one per line: when, kind, how sure the model was, the page, and what GenClass did |
 | `npx genclass health` | how GenClass itself runs on your pages: model loads, where it ran, decision time, what was not checked, runtime versions |
 | `npx genclass report` | the period as Markdown, to paste or pipe (`--out report.md` writes a file) |
@@ -280,11 +280,12 @@ first step and the agent prompt, with the model's own ideas and website designs.
 | | |
 |---|---|
 | `npx genclass` | where the project stands; on a terminal, the next step, then the home |
-| `npx genclass setup` | the guided setup (`--yes`: no questions) |
+| `npx genclass setup` | the guided setup (`--yes`: no questions; `--no-analytics`: without visitor analytics) |
 | `npx genclass status` | what is done and what is next (`--all`: every part; `--json`) |
 | `npx genclass dashboard` | your app in the terminal (`--open` the browser dashboard) |
 | `npx genclass problems` | every problem found, by kind and page, and what GenClass did |
 | `npx genclass analytics [part]` | visitors; parts: `pages`, `sources`, `devices`, `clicks`, `paths`, `funnels` |
+| `npx genclass analytics on` \| `off` | count this app's visitors, or stop (changes one option in your code; `off` needs no Pro) |
 | `npx genclass events` | the latest events, one per line |
 | `npx genclass health` | how GenClass itself runs on your pages |
 | `npx genclass report` | the period as Markdown (`--out <file>`) |

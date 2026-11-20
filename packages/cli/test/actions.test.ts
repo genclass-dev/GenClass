@@ -116,8 +116,10 @@ describe("genclass: nothing is drawn on a page (src/actions.mjs runtimeArgs)", (
     const dir = tempDir();
     viteApp(dir);
     const fresh = { cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "npx genclass init" }] } as never;
-    expect(runtimeArgs(fresh, { yes: true })).toEqual({ cmd: "init", args: ["--cwd", dir, "--yes", "--in-account", "--no-devtools", "--brief"] });
-    expect(runtimeArgs({ cwd: dir, signedIn: false, steps: [{ id: "runtime", run: "npx genclass init" }] } as never, {})).toEqual({ cmd: "init", args: ["--cwd", dir, "--no-devtools", "--brief"] });
+    expect(runtimeArgs(fresh, { yes: true })).toEqual({ cmd: "init", args: ["--cwd", dir, "--yes", "--in-account", "--no-devtools", "--analytics", "--brief"] });
+    expect(runtimeArgs({ cwd: dir, signedIn: false, steps: [{ id: "runtime", run: "npx genclass init" }] } as never, {})).toEqual({ cmd: "init", args: ["--cwd", dir, "--no-devtools", "--analytics", "--brief"] });
+    // setup --no-analytics: the app is added without visitor analytics
+    expect(runtimeArgs(fresh, { yes: true, noAnalytics: true })).toEqual({ cmd: "init", args: ["--cwd", dir, "--yes", "--in-account", "--no-devtools", "--brief"] });
     // an app that already has the runtime is only put in the account: nothing in its code is touched
     // connect takes only its own options: it asks which app of the signed-in account this is
     expect(runtimeArgs({ cwd: dir, signedIn: true, steps: [{ id: "runtime", run: "npx genclass connect" }] } as never, {})).toEqual({ cmd: "connect", args: ["--cwd", dir] });
@@ -305,6 +307,55 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
     // the art is for a terminal only: nothing piped holds it
     expect(bare).not.toContain("█");
     expect(existsSync(join(dir, ".mcp.json"))).toBe(false);
+  });
+});
+
+describe("genclass: the setup turns visitor analytics on, says so first, and one command turns them off (src/actions.mjs runtimeArgs, switchAnalytics)", () => {
+  const TOKEN = "gc_Mine0123456789abcdefgh";
+  it("init with the step's arguments writes analytics: true next to the token and says what is counted, the consent advice and the switch", async () => {
+    const dir = tempDir();
+    viteApp(dir);
+    const { args } = runtimeArgs({ cwd: dir, signedIn: false, steps: [{ id: "runtime", run: "npx genclass init --analytics" }] } as never, { yes: true });
+    const { run: runInit, inspectProject } = await import("../../runtime/bin/lib/init.mjs");
+    const said = await printed(async () => expect(await runInit("init", [...args, "--no-install", "--no-network", "--token", TOKEN])).toBe(0));
+    const flat = said.replace(/\s+/g, " ");
+    expect(flat).toContain("Visitor analytics are on: page views, time on a page, scroll depth, clicks per element (never its text)");
+    expect(flat).toContain("No cookies; one localStorage entry holds the visit. Never from localhost.");
+    expect(flat).toMatch(/consent to analytics \(the EU, EEA and UK\), turn them off and call runtime\.analytics\.start\(\)/);
+    // the switch, as this command names it (run by the runtime CLI itself it is init's own flag)
+    expect(said).toMatch(/Off: \S.* (?:analytics off|init --no-analytics)/);
+    expect(readFileSync(join(dir, "src/genclass.config.js"), "utf8")).toContain(`globalThis.GENCLASS_CONFIG = { token: "${TOKEN}", analytics: true };`);
+    expect(inspectProject({ cwd: dir }).analytics).toBe(true);
+    // without the flag (setup --no-analytics) nothing of it is said or written
+    const plain = tempDir();
+    viteApp(plain);
+    const quiet = await printed(async () => expect(await runInit("init", [...runtimeArgs({ cwd: plain, signedIn: false, steps: [{ id: "runtime", run: "npx genclass init" }] } as never, { yes: true, noAnalytics: true }).args, "--no-install", "--no-network", "--token", TOKEN])).toBe(0));
+    expect(quiet).not.toMatch(/analytics/i);
+    expect(readFileSync(join(plain, "src/genclass.config.js"), "utf8")).not.toContain("analytics");
+    expect(inspectProject({ cwd: plain }).analytics).toBe(false);
+  });
+
+  it("analytics off and on change that one option in what the setup added; an app without GenClass is pointed at the setup", async () => {
+    const { switchAnalytics } = await import("../src/actions.mjs");
+    const { run: runInit } = await import("../../runtime/bin/lib/init.mjs");
+    const dir = tempDir();
+    viteApp(dir);
+    await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--token", TOKEN, "--analytics"])).toBe(0));
+    const config = () => readFileSync(join(dir, "src/genclass.config.js"), "utf8");
+    const entry = readFileSync(join(dir, "src/main.jsx"), "utf8");
+    const already = await printed(async () => expect(await switchAnalytics(true, { cwd: dir, yes: true })).toBe(0));
+    expect(already).toContain("Visitor analytics are already on in this app.");
+    await printed(async () => expect(await switchAnalytics(false, { cwd: dir, yes: true })).toBe(0));
+    expect(config()).toContain(`GENCLASS_CONFIG = { token: "${TOKEN}" };`);
+    await printed(async () => expect(await switchAnalytics(true, { cwd: dir, yes: true })).toBe(0));
+    expect(config()).toContain(`GENCLASS_CONFIG = { token: "${TOKEN}", analytics: true };`);
+    // only the options file changed
+    expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toBe(entry);
+    const fresh = tempDir();
+    viteApp(fresh);
+    const none = await printed(async () => expect(await switchAnalytics(true, { cwd: fresh, yes: true })).toBe(1));
+    expect(none.replace(/\s+/g, " ")).toContain("GenClass is not in this app yet. npx genclass setup adds it, with visitor analytics on.");
+    expect(existsSync(join(fresh, "src/genclass.config.js"))).toBe(false);
   });
 });
 

@@ -22,6 +22,7 @@ import {
   isEmptyConfig,
   lineIndexAt,
   linesOf,
+  metaContent,
   switchMetaConfig,
   tagWithConfig,
   writtenConfig,
@@ -367,7 +368,7 @@ export function configFileFor(p, entry) {
 /** The options file: one marked block setting window.GENCLASS_CONFIG. */
 export const configFileChange = (file, cfg) => createFile(file, [CONFIG_COMMENT, configStatement(cfg, /\.[cm]?tsx?$/.test(file))]);
 
-/** { entry?, changes, notes?, manual? } for the detected project. opts.config: { telemetry?, model? } to write. */
+/** { entry?, changes, notes?, manual? } for the detected project. opts.config: { token?, telemetry?, analytics?, model?, sinks? } to write. */
 export function planInit(project, opts, ctx) {
   const planner = PLANNERS[project.framework];
   if (!planner) return { changes: [], manual: "the project type was not recognised" };
@@ -378,7 +379,8 @@ export function planInit(project, opts, ctx) {
     if (project.framework === "astro") {
       for (const ch of r.changes) {
         const next = switchMetaConfig(ch.after, cfg);
-        if (next === ch.after) (r.notes ??= []).push(`${posix(relative(project.dir, ch.file))}: GenClass is inline in <head>, so its options were not written there: add <meta name="genclass" content="telemetry=off"> yourself.`);
+        // the line to add names the options asked for (the token is not known yet: it is made after the approval)
+        if (next === ch.after) (r.notes ??= []).push(`${posix(relative(project.dir, ch.file))}: GenClass is inline in <head>, so its options were not written there: add <meta name="genclass" content="${metaContent({ ...cfg, token: undefined }) || "telemetry=off"}"> yourself.`);
         ch.after = next;
       }
       // a meta tag only takes a same-origin webhook URL (src/cdn/config.ts readMetaConfig); say so instead of writing a dead sink
