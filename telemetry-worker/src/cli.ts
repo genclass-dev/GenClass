@@ -50,7 +50,7 @@ import { answer, appDigest, MAX_ASK_BYTES, readQuestion } from "./ask.js";
 import { accountContext, accountJson, accountProjects, authenticate, fail, lockedJson, makeLinkFor, ownedProject, projectJson, readableProject, readJson, upgradeJson, type Auth, type C } from "./auth.js";
 import { exportFor, integrationsFor, overBudget, tooMany, trialFor } from "./billing.js";
 import type { Env, HandleOptions } from "./collector.js";
-import { putFunnels, stats, stripAnalytics, stripProblems } from "./dashboard.js";
+import { putFunnels, stats, stripAnalytics, stripProblems, type Project } from "./dashboard.js";
 import { isKind, KINDS } from "./forward.js";
 import { githubApp } from "./github/config.js";
 import { repoStatusForAccount } from "./github/http.js";
@@ -228,6 +228,14 @@ async function app(c: C): Promise<Response> {
   }
   const p = await readableProject(c, a.account.id, c.url.searchParams.get("id") ?? "");
   if (!p) return fail(404, "not found");
+  return appView(c, p);
+}
+
+/**
+ * An app's dashboard as data (?range=), cut by its plan: what the browser dashboard reads. Shared by /api/cli/app and
+ * the partner API (src/partner.ts); the caller has checked that the account may read the app.
+ */
+export async function appView(c: C, p: Project): Promise<Response> {
   // the same plan rules as the dashboard page's own request (src/auth.ts, /api/account/projects/<id>/stats)
   const access = await projectAccess(c.db, p, c.env, c.now);
   if (!hasDashboard(access)) return lockedJson(c, access, p.id);

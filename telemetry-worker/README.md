@@ -1293,6 +1293,49 @@ CLOUDFLARE_ACCOUNT_ID=144bd5f5270b51dbe7faf46227a154f0 npx --yes wrangler@4 d1 e
 A worker keeps a key's answer in memory for up to 5 minutes (30 seconds for an unknown key), so a new extra key counts
 within 30 seconds.
 
+## Partner API
+
+For a product that builds GenClass in for its own users (a coding-agent tool, a hosting or app-builder platform): its
+server makes a GenClass app for each of its users, hands that user's code the app's key, and reads what the app finds.
+The partner's account carries the apps and their plan, so its users need no GenClass account and no `genclass`
+command (`src/partner.ts`, migration 0023).
+
+**Making an account a partner** is done by hand with the agreement, as a grant is: GenClass's Enterprise grant so
+every app is covered, and `partner_apps`, how many apps the account may hold (NULL: not a partner). The account then
+sees a Partner API section in its settings on /account, where it makes, names and revokes up to 10 partner keys
+(`gcp_` + 32 random bytes, shown once; only the SHA-256 is stored).
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=144bd5f5270b51dbe7faf46227a154f0 npx --yes wrangler@4 d1 execute genclass-dashboard --remote \
+  --command "UPDATE accounts SET comp_plan = 'enterprise', comp_until = '<end of the agreement, ISO>', partner_apps = <n> WHERE lower(email) = lower('<email>')"
+```
+
+Ending it: `partner_apps = NULL` (every key stops at once; the apps stay in the account) and the grant's end date.
+
+| route (key: `Authorization: Bearer gcp_...`) | behaviour |
+|---|---|
+| `POST /api/partner/v1/apps` | `{ ref, name? }`: `ref` is the partner's own id for its user, not an email (1 to 64 of `A-Z a-z 0-9 . _ : @ -`, starting with a letter or digit), unique in the account; `name` defaults to it. 201 `{ created: true, app }` the first time, 200 `{ created: false, app }` for a ref it has made before. `app`: `id, ref, name, key` (the app's public `gc_` key), `created, first_event, last_event, install` (`npx @genclass/runtime@beta init --token <key>`, which needs no sign-in) and `dashboard_url` (the partner's own view). 409 at the account's `partner_apps` (every app of the account counts); 429 under the creation limits every account has |
+| `GET /api/partner/v1/apps?ref=&cursor=` | the apps the API made, oldest first, 100 a page: `{ apps, next_cursor, limit: { apps, used } }` |
+| `GET /api/partner/v1/apps/<id>?range=24h\|7d\|30d` | the app's dashboard as data, cut by the account's plan: what `/api/cli/app` answers (`src/cli.ts` appView) |
+| `GET /api/partner/v1/apps/<id>/events?from&to&format&limit&cursor` | its stored events: the export (`exportFor`, same rules and limits) |
+| `POST /api/partner/v1/apps/<id>/link` | 201 `{ dashboard_url }`: a private dashboard link (`/dashboard/<secret>`) to hand that user; the previous link stops working |
+| `GET`, `POST /api/account/partner-keys`; `DELETE .../<id>` | browser session on genclass.dev only: list, create (a partner only) and revoke partner keys |
+
+Rules: a key reaches its own account's apps only (any other id is 404); a cookie, a terminal session or an export key
+is never a partner key; the routes send no CORS headers, so a key is used from the partner's server, never a page.
+Nothing here deletes an app or changes its key (that stays on the website). Every route counts against the account's
+per-minute budget (`EXPORT_LIMIT`, bucket `partner`). An app made here is an ordinary app of the account: its plan,
+history, analytics, email reports and dashboard are the account's.
+
+How a coding agent uses it, per user: `POST /apps` with the user's id, run the `install` line in the user's project
+(or set `token` in `GenClass.init` / `data-token` on the script tag), then read `GET /apps/<id>` for what it found, or
+give the user the link from `POST /apps/<id>/link`.
+
+```bash
+curl -X POST https://genclass.dev/api/partner/v1/apps -H "Authorization: Bearer $GENCLASS_PARTNER_KEY" \
+  -H "content-type: application/json" -d '{"ref":"user_42","name":"Ada'"'"'s shop"}'
+```
+
 ## Reports by email
 
 A GenClass report about an account's apps goes to the account's email on the schedule it chooses, and an alert goes

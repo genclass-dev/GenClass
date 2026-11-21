@@ -129,13 +129,15 @@ export const PROJECT_COLUMNS = "id, token, name, created, last_event, first_even
 /**
  * Create a project. Without an account it is reachable through its private dashboard link (the secret, returned once).
  * With an account the secret is generated and hashed the same way (the column is required) but the caller does not
- * show it and `private_link` is 0: the app is opened from the account only.
+ * show it and `private_link` is 0: the app is opened from the account only. `partnerRef`: the partner API's id for
+ * the user the app is for (src/partner.ts), unique in the account, so a second insert for it fails.
  */
 export async function createProject(
   db: D1Like,
   name: string,
   now: Date,
   accountId: string | null = null,
+  partnerRef: string | null = null,
 ): Promise<{ id: string; token: string; secret: string; name: string; created: string }> {
   for (let attempt = 0; ; attempt++) {
     const id = newProjectId();
@@ -144,13 +146,18 @@ export async function createProject(
     const created = now.toISOString();
     try {
       await db
-        .prepare("INSERT INTO projects (id, token, secret_hash, name, created, account_id, private_link) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .bind(id, token, await sha256Hex(secret), name, created, accountId, accountId ? 0 : 1)
+        .prepare(
+          partnerRef === null
+            ? "INSERT INTO projects (id, token, secret_hash, name, created, account_id, private_link) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            : "INSERT INTO projects (id, token, secret_hash, name, created, account_id, private_link, partner_ref, plan_chosen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(id, token, await sha256Hex(secret), name, created, accountId, accountId ? 0 : 1, ...(partnerRef === null ? [] : [partnerRef, created]))
         .run();
       tokenCache.set(token, { token, exp: now.getTime() + CACHE_OK_MS });
       return { id, token, secret, name, created };
     } catch (e) {
-      if (attempt >= 2) throw e; // a collision is astronomically unlikely; anything else is a real error
+      // a collision is astronomically unlikely; anything else is a real error (for a partner app: most often its ref is taken)
+      if (attempt >= 2 || partnerRef !== null) throw e;
     }
   }
 }
