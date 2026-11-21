@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0
 
 - First version: a community add-on for the Svelte CLI, `npx sv add @genclass` and `npx sv create --add @genclass`.
   SvelteKit only (`unsupported("Requires SvelteKit")` elsewhere).
@@ -16,3 +16,8 @@
   Running the add-on again with the same answers changes nothing.
 - Next steps say what the model download costs, whether diagnostics are sent, and how to undo the setup.
 - Bundled with `@sveltejs/sv-utils` 1.0.2 (one file, `sv` external); no dependencies of its own.
+- `package.json`: `exports` no longer names `./dist/index.d.ts`. The build writes no type file (the Svelte CLI loads
+  the add-on, nothing imports it), so the entry pointed at a file that was never in the package.
+- Released by `.github/workflows/release-sv.yml` on a `sv-v<version>` tag, with npm provenance. Before it publishes,
+  the run applies the packed add-on to a new SvelteKit app through the Svelte CLI that `npx sv` gets that day, and
+  stops if the runtime `npm install @genclass/runtime@beta` gets is outside the range the add-on writes.

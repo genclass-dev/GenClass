@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0
 
 - First version: an Astro integration that installs
   [`@genclass/runtime`](https://www.npmjs.com/package/@genclass/runtime) the recommended way, in the browser only.
@@ -13,3 +13,7 @@
 - The runtime modules the script imports are added to Vite's `optimizeDeps.include`: the injected script is a virtual
   module Vite's dependency scan does not see, and without this `astro dev` discovered them on the first page request
   and re-optimized with a reload (a "504 Outdated Optimize Dep" console error on a cold start).
+- Released by `.github/workflows/release-astro.yml` on an `astro-v<version>` tag, with npm provenance. Before it
+  publishes, the run builds the fixture site, installs the packed tarball next to the runtime
+  `npm install @genclass/runtime@beta` gets, and stops if that runtime is outside the peer range or a keyword the
+  integrations library reads is missing.
