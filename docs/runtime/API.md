@@ -94,7 +94,9 @@ Every telemetry opt-out and Global Privacy Control turn them off; without a toke
 `analytics: true` warns once and records nothing. They run in a lazy chunk (`dist/analytics/index.js`), outside the
 event log: nothing reaches a situation, a decision or the model. `rt.analytics.start()` / `stop()` turn them on and
 off later (consent; `stop()` drops the counts not sent yet and removes the visit entry). Also `data-analytics="on"`, `analytics=on` in the meta
-tag, `window.GENCLASS_CONFIG.analytics`. Schema: [TELEMETRY.md](../../packages/runtime/TELEMETRY.md#interaction-analytics).
+tag, `window.GENCLASS_CONFIG.analytics`; `init --analytics` writes the option and `init --no-analytics` takes it out
+(from the release after 0.3.0-beta.7), and the `genclass` command's setup turns it on unless it is run with
+`--no-analytics` (genclass 0.3.14). Schema: [TELEMETRY.md](../../packages/runtime/TELEMETRY.md#interaction-analytics).
 With the script tag, a chunk that does not load warns once per load (`[GenClass] analytics: <url> (@genclass/runtime
 <version>) did not load; nothing is recorded. ...`, `reason: "error"`), and a chunk of another release than the tag
 warns once with both versions. `0.2.x` (npm's `latest` until 0.3.0)

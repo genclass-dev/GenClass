@@ -54,12 +54,39 @@ describe("genclass without Pro: every opt-out and the app's own link keep workin
     expect(telemetryOnly(["--telemetry", "--cwd", "web", "--yes", "--dry-run", "--no-install", "--no-network"])).toBe(true);
     expect(telemetryOnly(["--no-telemetry", "--mode", "guard"])).toBe(false);
     expect(telemetryOnly(["--yes"])).toBe(false);
+    // visitor analytics: turning them off is an opt-out, turning them on is the command's
+    expect(telemetryOnly(["--no-analytics", "--yes"])).toBe(true);
+    expect(telemetryOnly(["--analytics"])).toBe(false);
     // on an app without GenClass, init --no-telemetry would add it: that is the command's, behind the gate
     const fresh = tempDir();
     viteApp(fresh);
     const gated = await printed(async () => expect(await run(["init", "--no-telemetry", "--yes", "--cwd", fresh])).toBe(1));
     expect(flat(gated)).toContain("Sign in first: npx genclass login");
     expect(existsSync(join(fresh, "src/genclass.config.js"))).toBe(false);
+  });
+
+  it("visitor analytics are turned off signed out, with no gate: analytics off, and init --no-analytics; turning them on is behind it", async () => {
+    const dir = tempDir();
+    viteApp(dir);
+    await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--token", TOKEN, "--analytics"])).toBe(0));
+    const config = () => readFileSync(join(dir, "src/genclass.config.js"), "utf8");
+    expect(config()).toContain("analytics: true");
+    forgetPro();
+    const off = await printed(async () => expect(await run(["analytics", "off", "--yes", "--cwd", dir])).toBe(0));
+    expect(off).not.toContain("Sign in first");
+    expect(config()).not.toContain("analytics");
+    const on = await printed(async () => expect(await run(["analytics", "on", "--yes", "--cwd", dir])).toBe(1));
+    expect(flat(on)).toContain("Sign in first: npx genclass login");
+    expect(config()).not.toContain("analytics");
+    // the same switch by init's own flag
+    await printed(async () => expect(await runInit("init", ["--cwd", dir, "--yes", "--no-install", "--no-network", "--analytics"])).toBe(0));
+    expect(config()).toContain("analytics: true");
+    const flag = await printed(async () => expect(await run(["init", "--no-analytics", "--yes", "--no-install", "--cwd", dir])).toBe(0));
+    expect(flag).not.toContain("Sign in first");
+    expect(config()).not.toContain("analytics");
+    // a word that is neither a part nor the switch is a usage error
+    const r = await quietErr(() => printed(async () => expect(await run(["analytics", "maybe", "--cwd", dir])).toBe(2)));
+    expect(r.err).toMatch(/there is no part .*maybe.*analytics on.* or .*analytics off/s);
   });
 
   it("a command's own usage error comes before the gate: nothing is asked of genclass.dev for words that are wrong", async () => {

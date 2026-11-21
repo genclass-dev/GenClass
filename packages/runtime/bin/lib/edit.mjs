@@ -433,7 +433,7 @@ export function bodyTagEnd(text) {
 
 // ------------------------------------------------------------------------------------------- options
 //
-// init --no-telemetry / --telemetry / --model-url write options without hand-editing. An ES module's imports run
+// init --no-telemetry / --telemetry / --analytics / --model-url write options without hand-editing. An ES module's imports run
 // before its own code, so options cannot be set in the entry file above the /auto import: init writes them to a
 // file of their own, genclass.config.(ts|js), which sets window.GENCLASS_CONFIG (read by /auto), and imports it
 // right before the /auto import. A plain HTML page gets data attributes on the script tag instead, an Astro layout
@@ -441,14 +441,18 @@ export function bodyTagEnd(text) {
 
 export const CONFIG_COMMENT = "// Read by @genclass/runtime/auto, imported right after this file: any GenClass.init() option works here (see the README).";
 
-const isEmptyConfig = (cfg) => !cfg || (cfg.telemetry === undefined && !cfg.model && !cfg.token && !(cfg.sinks && cfg.sinks.length));
+const isEmptyConfig = (cfg) => !cfg || (cfg.telemetry === undefined && cfg.analytics === undefined && !cfg.model && !cfg.token && !(cfg.sinks && cfg.sinks.length));
 export { isEmptyConfig };
 
 /**
  * What init writes for cfg on a new setup: `telemetry: true` (--telemetry) is the default, so it is left out. Written
  * explicitly it would be an opt-in that also sends from local hosts (TELEMETRY.md), which --telemetry does not mean.
+ * `analytics: false` (--no-analytics) is the runtime's default too, so it is left out the same way.
  */
-export const writtenConfig = (cfg) => (cfg && cfg.telemetry === true ? { ...cfg, telemetry: undefined } : cfg);
+export const writtenConfig = (cfg) => {
+  if (!cfg || (cfg.telemetry !== true && cfg.analytics !== false)) return cfg;
+  return { ...cfg, ...(cfg.telemetry === true ? { telemetry: undefined } : {}), ...(cfg.analytics === false ? { analytics: undefined } : {}) };
+};
 
 const modelLiteral = (m) => `model: { baseUrl: ${JSON.stringify(m.baseUrl)}, ortWasmPaths: ${JSON.stringify(m.ortWasmPaths)}${m.device ? `, device: ${JSON.stringify(m.device)}` : ""} }`;
 
@@ -462,15 +466,18 @@ export const sinkNoEvidence = (s) => /^[^:=]+[:=]\s*no[-_\s]?evidence\s*$/i.test
 /** `sinks: ["console-json", "webhook:/genclass"]`. */
 const sinksLiteral = (cfg) => `sinks: [${cfg.sinks.map((s) => JSON.stringify(s)).join(", ")}]`;
 const SINKS_RE = /\bsinks\s*:\s*\[[^\]]*\]/;
+const ANALYTICS_RE = /\banalytics\s*:\s*(?:true|false)/;
 
 /**
- * The object init writes: `{ token: "gc_...", telemetry: false, model: { baseUrl: "/genclass-model/", ortWasmPaths: "..." }, sinks: ["webhook:/genclass"] }`.
- * Only the telemetry opt-out is ever written: `telemetry: true` would also send from local hosts.
+ * The object init writes: `{ token: "gc_...", telemetry: false, analytics: true, model: { baseUrl: "/genclass-model/", ortWasmPaths: "..." }, sinks: ["webhook:/genclass"] }`.
+ * Only the telemetry opt-out is ever written: `telemetry: true` would also send from local hosts. Only the analytics
+ * opt-in is ever written (--analytics): off is the runtime's default.
  */
 export function configLiteral(cfg) {
   const parts = [];
   if (cfg.token) parts.push(`token: ${JSON.stringify(cfg.token)}`);
   if (cfg.telemetry === false) parts.push("telemetry: false");
+  if (cfg.analytics === true) parts.push("analytics: true");
   if (cfg.model) parts.push(modelLiteral(cfg.model));
   if (cfg.sinks?.length) parts.push(sinksLiteral(cfg));
   return parts.length ? `{ ${parts.join(", ")} }` : "{}";
@@ -480,9 +487,10 @@ export function configLiteral(cfg) {
 export const configStatement = (cfg, ts) => `${ts ? "(globalThis as { GENCLASS_CONFIG?: object })" : "globalThis"}.GENCLASS_CONFIG = ${configLiteral(cfg)};`;
 
 /**
- * Sets token / telemetry / model / sinks in an existing GENCLASS_CONFIG statement (other keys a user added stay).
- * `telemetry: false` writes the opt-out; `telemetry: true` (--telemetry) takes the telemetry key out, back to the
- * default (an explicit `true` would also send from local hosts).
+ * Sets token / telemetry / analytics / model / sinks in an existing GENCLASS_CONFIG statement (other keys a user
+ * added stay). `telemetry: false` writes the opt-out; `telemetry: true` (--telemetry) takes the telemetry key out,
+ * back to the default (an explicit `true` would also send from local hosts). `analytics: true` (--analytics) writes
+ * the opt-in; `analytics: false` (--no-analytics) takes the key out, back to the default (off).
  */
 export function updateConfigText(text, cfg) {
   return text.replace(/(GENCLASS_CONFIG\s*=\s*\{)([^;]*)(\}\s*;?)/, (_m, open, body, close) => {
@@ -497,6 +505,12 @@ export function updateConfigText(text, cfg) {
     } else if (cfg.telemetry === true) {
       b = b.replace(/\btelemetry\s*:\s*(?:true|false)\s*,?/, "").replace(/,\s*,/, ",");
     }
+    if (cfg.analytics === true) {
+      const v = "analytics: true";
+      b = ANALYTICS_RE.test(b) ? b.replace(ANALYTICS_RE, v) : `${b.trim().replace(/,\s*$/, "")}${b.trim() ? ", " : ""}${v}`;
+    } else if (cfg.analytics === false) {
+      b = b.replace(/\banalytics\s*:\s*(?:true|false)\s*,?/, "").replace(/,\s*,/, ",");
+    }
     if (cfg.model) b = /\bmodel\s*:\s*\{[^}]*\}/.test(b) ? b.replace(/\bmodel\s*:\s*\{[^}]*\}/, modelLiteral(cfg.model)) : `${b.trim().replace(/,\s*$/, "")}, ${modelLiteral(cfg.model)}`;
     if (cfg.sinks?.length) b = SINKS_RE.test(b) ? b.replace(SINKS_RE, sinksLiteral(cfg)) : `${b.trim().replace(/,\s*$/, "")}, ${sinksLiteral(cfg)}`;
     b = b.trim().replace(/^,\s*/, "").replace(/,\s*$/, "");
@@ -504,20 +518,21 @@ export function updateConfigText(text, cfg) {
   });
 }
 
-/** `telemetry=off, model=/genclass-model/, ort=/genclass-model/ort/, sink=console-json+webhook:/g` (meta content; `+` joins sink names since commas separate keys), "" when nothing to say. */
+/** `telemetry=off, analytics=on, model=/genclass-model/, ort=/genclass-model/ort/, sink=console-json+webhook:/g` (meta content; `+` joins sink names since commas separate keys), "" when nothing to say. */
 export function metaContent(cfg) {
   const parts = [];
   if (cfg.token) parts.push(`token=${cfg.token}`);
   if (cfg.telemetry === false) parts.push("telemetry=off");
+  if (cfg.analytics === true) parts.push("analytics=on");
   if (cfg.model) parts.push(`model=${cfg.model.baseUrl}`, `ort=${cfg.model.ortWasmPaths}`, ...(cfg.model.device ? [`device=${cfg.model.device}`] : []));
   if (cfg.sinks?.length) parts.push(`sink=${cfg.sinks.join("+")}`);
   return parts.join(", ");
 }
 
-const TAG_ATTRS = { token: "data-token", telemetry: "data-telemetry", model: "data-model", ort: "data-ort", device: "data-device", sink: "data-sink" };
+const TAG_ATTRS = { token: "data-token", telemetry: "data-telemetry", analytics: "data-analytics", model: "data-model", ort: "data-ort", device: "data-device", sink: "data-sink" };
 const attrRe = (name) => new RegExp(String.raw`\s+${name}\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)`, "i");
 
-/** A script tag with data-token / data-telemetry / data-model / data-ort / data-sink set for cfg (telemetry true removes the opt-out). */
+/** A script tag with data-token / data-telemetry / data-analytics / data-model / data-ort / data-sink set for cfg (telemetry true removes the opt-out, analytics false the opt-in). */
 export function tagWithConfig(tag, cfg) {
   const set = (t, name, value) => {
     const re = attrRe(name);
@@ -530,6 +545,7 @@ export function tagWithConfig(tag, cfg) {
   let t = tag;
   if (cfg.token) t = set(t, TAG_ATTRS.token, cfg.token);
   if (cfg.telemetry !== undefined) t = set(t, TAG_ATTRS.telemetry, cfg.telemetry ? null : "off");
+  if (cfg.analytics !== undefined) t = set(t, TAG_ATTRS.analytics, cfg.analytics ? "on" : null);
   if (cfg.model) {
     t = set(t, TAG_ATTRS.model, cfg.model.baseUrl);
     t = set(t, TAG_ATTRS.ort, cfg.model.ortWasmPaths);
@@ -567,6 +583,8 @@ export function switchMetaConfig(text, cfg) {
     if (cfg.token) pairs.token = cfg.token;
     if (cfg.telemetry === false) pairs.telemetry = "off";
     if (cfg.telemetry === true) delete pairs.telemetry;
+    if (cfg.analytics === true) pairs.analytics = "on";
+    if (cfg.analytics === false) delete pairs.analytics;
     if (cfg.model) Object.assign(pairs, { model: cfg.model.baseUrl, ort: cfg.model.ortWasmPaths, ...(cfg.model.device ? { device: cfg.model.device } : {}) });
     if (cfg.sinks?.length) pairs.sink = cfg.sinks.join("+");
     const content = Object.entries(pairs).map(([k, v]) => `${k}=${v}`).join(", ");

@@ -263,12 +263,15 @@ export async function readState(o = {}, deps = {}) {
               ? `added · Vite ${vite.major} needs two build settings`
               : `${st.handWritten ? "added by hand" : "added"}${app ? ` · app "${app.name}"` : ""}`,
     why: st.fresh
-      ? "One import and the package. You see the change first. Nothing is drawn on your pages."
+      ? o.noAnalytics
+        ? "One import and the package. You see the change first. Nothing is drawn on your pages."
+        : "One import and the package. It counts visitors too. You see it first. Nothing is drawn on pages."
       : vite
         ? `Without them "vite build" fails on Vite ${vite.major}. You see the change first.`
         : "Gives the app its place in your account, so what it finds shows on your dashboard.",
-    more: "The runtime watches the page in your users' browsers for lost edits, double submits and old data shown over new. It only reports, to the browser console and your dashboard: it never holds, delays or changes anything your app does, and it puts nothing on the page.",
-    run: st.fresh ? "npx genclass init" : vite ? "npx genclass setup" : "npx genclass connect",
+    more: `The runtime watches the page in your users' browsers for lost edits, double submits and old data shown over new. It only reports, to the browser console and your dashboard: it never holds, delays or changes anything your app does, and it puts nothing on the page.${st.fresh && !o.noAnalytics ? " Visitor analytics are on too: page views, time on a page, clicks per element (never its text) and where visits come from, with no cookies. Without them: npx genclass setup --no-analytics. Where the law asks for a visitor's consent to analytics (the EU, EEA and UK), set up without them and start them once the visitor agrees." : ""}`,
+    // the command that does what the sentence above says: init turns visitor analytics on only when asked to
+    run: st.fresh ? (o.noAnalytics ? "npx genclass init" : "npx genclass init --analytics") : vite ? "npx genclass setup" : "npx genclass connect",
     human: null,
   });
 
@@ -406,7 +409,7 @@ export async function readState(o = {}, deps = {}) {
   return {
     cwd,
     host: host.overridden && !host.error ? host.host : null,
-    app: { name: app?.name ?? project.name ?? null, framework: project.label || null, isApp, token: st.token ?? null, dashboardUrl: app?.dashboard_url ?? st.local?.dashboardUrl ?? null, site: notes.site ?? null, ...(isApp ? {} : { below: appsBelow(cwd) }) },
+    app: { name: app?.name ?? project.name ?? null, framework: project.label || null, isApp, token: st.token ?? null, analytics: !!st.analytics, dashboardUrl: app?.dashboard_url ?? st.local?.dashboardUrl ?? null, site: notes.site ?? null, ...(isApp ? {} : { below: appsBelow(cwd) }) },
     account: me ? { label: accountLabel(me.account), plan: me.plan, suggestions: me.suggestions, billingUrl: me.billingUrl, github: me.github, offer: me.offer ?? null, cli: me.cli ?? null, teamPlan: me.account?.teamPlan ?? null } : null,
     signedIn: !!me,
     /** the account's apps as genclass.dev lists them ([] signed out) */
@@ -449,7 +452,7 @@ export const planName = (state, token = state?.app?.token) => (state?.projects ?
 /** The command for a step as a coding agent runs it: without a terminal the walk does a step only with --yes. */
 // init and connect too: without --yes they write nothing, so an agent told "npx genclass init" would read the same
 // state and be told it again, for ever (the 0.3.9 user stories); setup --yes does the step the way the walk does it
-const forAgent = (run) => (["npx genclass setup", "npx genclass init", "npx genclass connect"].includes(run) ? "npx genclass setup --yes" : run);
+const forAgent = (run) => (["npx genclass setup", "npx genclass init", "npx genclass init --analytics", "npx genclass connect"].includes(run) ? "npx genclass setup --yes" : run);
 
 export function stateJson(s) {
   // a step that waits on nothing (an app the plan already covers: its page's Continue is offered, not required) is

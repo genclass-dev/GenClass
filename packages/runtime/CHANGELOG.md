@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **`init --analytics`** turns on interaction analytics for the app's dashboard, and **`init --no-analytics`** takes
+  the option out again. The runtime's default is unchanged: off. `--analytics` writes `analytics: true` in the option
+  file (`genclass.config.ts/js`), `data-analytics="on"` on a plain HTML script tag, `analytics=on` in the Astro meta
+  line, all inside init's markers, so `remove` takes them out; on a setup init already made it changes that one
+  option in place. init says what is counted and kept (page views, time on a page, scroll depth, clicks per element,
+  where visits come from, the device class; no cookies, one `localStorage` entry), the consent advice for the EU, EEA
+  and UK, and how to turn it off, before anything is written. Analytics need the app's token and telemetry on: with
+  `--no-telemetry` or `--no-token` the flag is a usage error, a setup without a token is told so and gets no option,
+  and when a token cannot be made the option is left out with it. The `genclass` command's setup passes `--analytics`
+  from genclass 0.3.14 (owner, 2026-11-20), with `--no-analytics` to leave it out (`bin/lib/init.mjs`, `edit.mjs`).
+
 ## 0.3.0-beta.7 (2026-11-16)
 
 - **`init` no longer adds the devtools overlay** (owner, 2026-11-16: nothing GenClass sets up is drawn on a page;

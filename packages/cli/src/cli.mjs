@@ -12,8 +12,9 @@
 // - The command is Pro's (the owner's call, 2026-11-13): every command but FREE_COMMANDS passes paywall.mjs
 //   requirePro first (signed out: the sign-in, then Pro with its free trial), the home's commands (ctx.nested)
 //   included. The walk (`genclass`, `setup`) has Pro as its own step right after the sign-in (state.mjs).
-// - Every opt-out keeps working without Pro (AGENTS.md rule 8): `init --no-telemetry` and `init --telemetry` on an
-//   app that has GenClass change only that option, and pass without the gate.
+// - Every opt-out keeps working without Pro (AGENTS.md rule 8): `init --no-telemetry`, `init --telemetry` and
+//   `init --no-analytics` on an app that has GenClass change only that option, and pass without the gate; so does
+//   `analytics off`, the same switch by its short name.
 // - A command's own usage errors come before the gate: nothing is asked of genclass.dev for words that are wrong.
 // - Nothing here reads the network but that gate, and nothing reads a file but the two checks before it (whether
 //   the app has GenClass, for the opt-out; its private dashboard link, signed out): it parses and dispatches.
@@ -27,13 +28,13 @@ import { width, wrap } from "./tui.mjs";
 const HELP = [
   [null, [
     ["npx genclass", "the command's prompt, for commands and questions (the first time in a folder, the setup first)"],
-    ["npx genclass setup", "the guided setup, any time, to add or change a part (--yes: no questions, for a coding agent)"],
+    ["npx genclass setup", "the guided setup, any time, to add or change a part (--yes: no questions, for a coding agent; --no-analytics: add GenClass without visitor analytics, which are on otherwise)"],
     ["npx genclass status", "what is done, what is next (--all: every part; --json)"],
   ]],
   ["See", [
     ["npx genclass dashboard", "your app, whole: problems found, checks, visitors, agent, GitHub App"],
     ["npx genclass problems", "every problem found, by kind and page, and what GenClass did about it"],
-    ["npx genclass analytics", "visitors: visits, pages, time, where they come from, what they click (one part in full: analytics pages | sources | devices | clicks | paths | funnels)"],
+    ["npx genclass analytics", "visitors: visits, pages, time, where they come from, what they click (one part in full: analytics pages | sources | devices | clicks | paths | funnels; analytics on | off: count this app's visitors, or stop)"],
     ["npx genclass events", "the latest events, one per line (--all: each one's mode and trigger)"],
     ["npx genclass health", "how GenClass itself runs on your pages (--all: every breakdown)"],
     ["npx genclass report", "the period as Markdown (--out report.md)"],
@@ -102,7 +103,7 @@ export function usage(cols = width()) {
 /** The help at the default width (80 columns), for tests and anything that wants it as one string. */
 export const USAGE = usage(80);
 
-const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open", print: "print", copy: "copy" };
+const BOOL = { yes: "yes", y: "yes", json: "json", "no-browser": "noBrowser", "no-model": "noModel", "no-analytics": "noAnalytics", all: "all", help: "help", h: "help", version: "version", v: "version", open: "open", print: "print", copy: "copy" };
 const VALUE = { cwd: "cwd", url: "url", app: "app", range: "range", from: "from", to: "to", format: "format", out: "out", agent: "agent", user: "user", "login-page": "loginPage" };
 
 /** The flags this file knows, and what is left ({ o, rest }); an unknown flag stays in `rest` for the command it is for. */
@@ -268,10 +269,14 @@ export async function run(argv, ctx = {}) {
   }
   // the words of the commands that take them, before anything is asked of genclass.dev
   const { ANALYTICS_SECTIONS } = cmd === "analytics" ? await import("./views.mjs") : { ANALYTICS_SECTIONS: [] };
-  if (cmd === "analytics" && words[0] && !ANALYTICS_SECTIONS.includes(words[0])) {
-    err(`genclass analytics: there is no part ${c.bold(words[0])}. The parts: ${ANALYTICS_SECTIONS.join(", ")}`);
+  // `analytics on` and `analytics off`: the switch for this folder's app (actions.mjs switchAnalytics)
+  const toggle = cmd === "analytics" && (words[0] === "on" || words[0] === "off") ? words[0] : null;
+  if (cmd === "analytics" && words[0] && !toggle && !ANALYTICS_SECTIONS.includes(words[0])) {
+    err(`genclass analytics: there is no part ${c.bold(words[0])}. The parts: ${ANALYTICS_SECTIONS.join(", ")}; and ${c.cyan("analytics on")} or ${c.cyan("analytics off")}`);
     return 2;
   }
+  // off is an opt-out: like init --no-telemetry it works for everyone, with no sign-in and no Pro (AGENTS.md rule 8)
+  if (toggle === "off") return (await import("./actions.mjs")).switchAnalytics(false, o);
   if (cmd === "agent" && words[0] && words[0] !== "link") {
     err(`genclass agent: there is no ${c.bold(words[0])}. Try ${c.cyan("npx genclass agent")} or ${c.cyan("npx genclass agent link")}`);
     return 2;
@@ -290,6 +295,7 @@ export async function run(argv, ctx = {}) {
   }
   if (cmd === "dashboard") return upsold((await import("./app.mjs")).dashboard(o, { fallback }));
   if (["problems", "events", "health", "report"].includes(cmd)) return upsold((await import("./views.mjs"))[cmd](o), cmd !== "report");
+  if (toggle === "on") return (await import("./actions.mjs")).switchAnalytics(true, o);
   if (cmd === "analytics") return upsold((await import("./views.mjs")).analytics({ ...o, section: words[0] ?? null }));
   if (cmd === "agent") {
     if (words[0] === "link") return (await import("./manage.mjs")).agentLink(o);
@@ -386,14 +392,17 @@ async function ownLogin(po) {
 /** init's options that leave what it does at the telemetry switch: where, whether to ask, and what not to run. */
 const TOGGLE_WITH = new Set(["--yes", "-y", "--dry-run", "--no-install", "--no-network"]);
 
-/** Whether `init`'s arguments only turn the anonymous diagnostics off (--no-telemetry) or back on (--telemetry). */
+/**
+ * Whether `init`'s arguments only turn the anonymous diagnostics off (--no-telemetry) or back on (--telemetry), or
+ * visitor analytics off (--no-analytics): the opt-outs, which pass without Pro.
+ */
 export function telemetryOnly(args) {
   let toggle = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--cwd") i++;
     else if (a.startsWith("--cwd=")) continue;
-    else if (a === "--no-telemetry" || a === "--telemetry") toggle = true;
+    else if (a === "--no-telemetry" || a === "--telemetry" || a === "--no-analytics") toggle = true;
     else if (!TOGGLE_WITH.has(a)) return false;
   }
   return toggle;

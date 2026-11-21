@@ -153,7 +153,7 @@ export function render(app, state, o = {}) {
   if (app.visitors) {
     const v = app.visitors;
     const bounce = v.visits ? ` · ${Math.round((v.bounces / v.visits) * 100)}% left after one page` : "";
-    part("Visitors", v.visits ? `${plural(v.visits, "visit")} · ${plural(v.pages, "page view")}${bounce}` : c.gray("none counted in this period (analytics is opt-in: genclass.dev/docs)"));
+    part("Visitors", v.visits ? `${plural(v.visits, "visit")} · ${plural(v.pages, "page view")}${bounce}` : c.gray(!state.app ? "none counted in this period" : state.app.analytics ? "none counted in this period (the deployed site only)" : "off in this app: npx genclass analytics on"));
     if (v.visits && v.entry.length) for (const l of wrap(`came in on ${v.entry.slice(0, all ? 10 : 3).map((e) => `${clean(e.key, 30)} (${n(e.count)})`).join(", ")}`, width() - 4 - 15)) out(`  ${" ".repeat(15)}${c.gray(l)}`);
   } else if (app.visitorsPlan) part("Visitors", c.gray(`visitor analytics come with the ${clean(app.visitorsPlan.plan ?? "Pro", 20)} plan${app.visitorsPlan.upgradeUrl ? `: ${app.visitorsPlan.upgradeUrl}` : ""}`));
   if (u && u.limit !== null) part("Live fixes", u.observeOnly ? c.yellow(`${n(u.used)} of ${n(u.limit)} this month · observing only`) : `${n(u.used)} of ${n(u.limit)} this month`);

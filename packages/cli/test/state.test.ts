@@ -46,9 +46,18 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     const s = await readState({ cwd: dir }, { runGit: noGit, fetchFn: server.fetchFn });
     expect(server.calls).toEqual([]);
     expect(states(s)).toEqual({ account: "next", plan: "todo", runtime: "todo", "app-plan": "optional", dashboard: "todo", workflow: "optional", "github-app": "optional", agent: "todo", suggestions: "todo" });
-    expect(s.steps.find((x) => x.id === "runtime")!).toMatchObject({ run: "npx genclass init", detail: "Vite + React" });
+    // the step says that visitors are counted too, and names the command that does that (init alone leaves them off)
+    const rt = s.steps.find((x) => x.id === "runtime")!;
+    expect(rt).toMatchObject({ run: "npx genclass init --analytics", detail: "Vite + React" });
+    expect(rt.why).toContain("It counts visitors too.");
+    expect(rt.more).toContain("npx genclass setup --no-analytics");
+    expect(rt.more).toMatch(/consent to analytics \(the EU, EEA and UK\)/);
+    // setup --no-analytics: the sentence and the command say nothing of visitors
+    const plain = (await readState({ cwd: dir, noAnalytics: true }, { runGit: noGit, fetchFn: server.fetchFn })).steps.find((x) => x.id === "runtime")!;
+    expect(plain.run).toBe("npx genclass init");
+    expect(`${plain.why} ${plain.more}`).not.toMatch(/visitor|analytics/i);
     expect(s.steps.find((x) => x.id === "workflow")!.detail).toBe("not a git repository yet");
-    expect(s.app).toMatchObject({ name: "shop", framework: "Vite + React", isApp: true, token: null });
+    expect(s.app).toMatchObject({ name: "shop", framework: "Vite + React", isApp: true, token: null, analytics: false });
   });
 
   it("signed in: the account and its plan are read once, and adding the runtime is next", async () => {

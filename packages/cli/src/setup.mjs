@@ -140,7 +140,8 @@ export async function status(o = {}) {
 /**
  * `genclass setup` (and `genclass` on a terminal): walks the steps. `runSuggest` runs the suggestions step (passed in
  * by cli.mjs, so this module does not load the checks until they are needed). Exit code 0, or 1 when a step failed.
- * @param {{ cwd?: string, yes?: boolean, noBrowser?: boolean, json?: boolean, all?: boolean }} o
+ * @param {{ cwd?: string, yes?: boolean, noBrowser?: boolean, json?: boolean, all?: boolean, noAnalytics?: boolean }} o
+ *   noAnalytics: the runtime step adds GenClass without visitor analytics (they are on by default)
  * @param {{ runSuggest?: (o: object) => Promise<number> }} [deps]
  */
 export async function setup(o = {}, deps = {}) {
@@ -169,7 +170,7 @@ async function walk(o, deps, auto) {
   let welcomed = false;
   let signInTries = 0;
   for (let turn = 0; turn < 14; turn++) {
-    const state = await readState({ cwd: o.cwd, skip });
+    const state = await readState({ cwd: o.cwd, skip, noAnalytics: o.noAnalytics });
     const step = state.next;
     let go = auto;
     // the view, and (on a terminal) the keys: Enter starts the step, d unfolds or folds every part, s skips, q stops

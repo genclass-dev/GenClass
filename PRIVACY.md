@@ -47,7 +47,9 @@ object; version 0.2.1 sent from those hosts by default, by mistake, fixed in 0.2
   function wrapped with `protect()`, on the decisions about what that function caused. A name that looks like data
   (an e-mail address, a URL, 4 or more digits in a row, a long hex id) is sent as `[redacted]`.
 - **How visitors use the site, only if the website's developer turned on interaction analytics** (`analytics: true`
-  with a token; from runtime 0.3.0-beta.1, off by default): for each page view, the page's path (as above), how long
+  with a token; from runtime 0.3.0-beta.1, off by default in the runtime; the `genclass` command's setup, from
+  genclass 0.3.14, turns them on for an app it sets up unless the developer passes `--no-analytics`, and says so
+  before it writes anything): for each page view, the page's path (as above), how long
   the page was visible and in use (at most 30 seconds after the last mouse, key, scroll or touch input), how far down
   the page the visitor scrolled (25, 50, 75 or 100 %), and how many times each element was clicked, clicked 3 or more
   times within a second, or clicked without anything changing on the page. An element is named from the page's code
