@@ -88,8 +88,9 @@ const MARK = '<img src="https://genclass.dev/brand/mark.svg?v=9" alt="" width="2
 
 /** The site's own icons (site/public/brand, apple-touch-icon.png), so every genclass.dev page shows the same one. */
 export const ICON_LINKS =
-  '<link rel="icon" href="https://genclass.dev/brand/mark-32.png?v=2" sizes="32x32" type="image/png">' +
-  '<link rel="icon" href="https://genclass.dev/brand/mark-64.png?v=2" sizes="64x64" type="image/png">' +
+  '<link rel="icon" href="https://genclass.dev/brand/mark.svg?v=9" type="image/svg+xml">' +
+  '<link rel="icon" href="https://genclass.dev/brand/mark-32.png?v=9" sizes="32x32" type="image/png">' +
+  '<link rel="icon" href="https://genclass.dev/brand/mark-64.png?v=9" sizes="64x64" type="image/png">' +
   '<link rel="apple-touch-icon" href="https://genclass.dev/apple-touch-icon.png">';
 
 // --------------------------------------------------------------------------------------------- theme
