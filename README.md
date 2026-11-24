@@ -204,7 +204,7 @@ GenClass's GitHub App puts what the runtime saw on the pull request it was seen 
 the GenClass fixture, your workflow uploads the race files it writes, and the app posts one check and one comment:
 each finding with its test, the seeds it was flagged in and the evidence line. It reads those files and never your
 source code, it comments only where it is installed, and it is free on public repositories. Private repositories
-come with Pro (US$50 a developer a month; [pricing](https://genclass.dev/pricing)).
+come with Pro (US$25 a month; [pricing](https://genclass.dev/pricing)).
 
 > **Install** at <https://genclass.dev/github> (the app is GenClass.dev, <https://github.com/apps/genclass-dev>). With
 > no change to your tests, one workflow file is the whole setup: the check on your first pull request links to it,
@@ -249,9 +249,9 @@ export const submitOrder = protect("checkout submit", (cart) => fetch("/api/orde
 
 - **Token and dashboard.** A token (`gc_` plus 22 letters and digits, public) groups your app's diagnostics under a
   private dashboard link (`https://genclass.dev/dashboard/...`). On Free the dashboard shows an app's totals for the
-  last 7 days, for one app in an account. Pro (US$50 a developer a month, up to 3 apps in an account) adds every
-  problem with its pages and a fix prompt, visitor analytics, forwarding, export, 90 days of history and team members;
-  more apps come with Enterprise ([pricing](https://genclass.dev/pricing)). Plans bought before 13 November 2026 keep
+  last 7 days, for one app in an account. Pro (US$25 a month, one developer, up to 3 apps in an account) adds every
+  problem with its pages and a fix prompt, visitor analytics, forwarding, export and 90 days of history; Business
+  (US$79 a month) adds your whole team, up to 10 apps and 180 days; more apps come with Enterprise ([pricing](https://genclass.dev/pricing)). Plans bought before 13 November 2026 keep
   every app they cover (an app paid for on its own does not count toward Pro's 3); Free covers an account's oldest app
   and locks the others. The runtime itself is never limited by a plan. Get a token at [genclass.dev/start](https://genclass.dev/start), or let `init` create it after you
   approve its diff. To keep dashboards in an optional genclass.dev account, `npx @genclass/runtime@beta login` signs in

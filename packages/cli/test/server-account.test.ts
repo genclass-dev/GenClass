@@ -105,8 +105,8 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     // the paid plan's card, in the server's words, and (nobody at a terminal) where it starts: the genclass command is
     // Pro's, so the account's own checkout, its trial first
     expect(f).toContain("P R O");
-    expect(f).toContain("$50 / developer / month");
-    expect(f).toContain(`The genclass command comes with Pro ($50 / developer / month): start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
+    expect(f).toContain("$25 / month");
+    expect(f).toContain(`The genclass command comes with Pro ($25 / month): start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
     expect(f).toContain("Apps and their plans Shop no plan chosen");
     expect(JSON.parse((await said(() => plan({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: true, plan: { id: "free" }, limits: { apps: 1 }, offer: { plan: { id: "team" } }, cli: { paid: false, checkout_url: `${HOST}/account/billing?plan=pro&start=1`, trial_days: 3 } });
   });
@@ -127,7 +127,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     expect(f).toContain("Signed in as ada@example.com");
     expect(f).toContain("Plan Free (website only: the genclass command comes with Pro)");
     expect(f).toContain("Apps and their plans Shop no plan chosen");
-    expect(f).toContain("Start the 3-day free trial $50 / developer / month npx genclass upgrade");
+    expect(f).toContain("Start the 3-day free trial $25 / month npx genclass upgrade");
     expect(f).toContain("Sign out npx genclass logout");
     expect(JSON.parse((await said(() => profile({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: true, plan: { id: "free" }, apps: [{ name: "Shop", plan: { id: "free" } }], upgrade_url: `${HOST}/account/billing?plan=pro&start=1`, cli: { paid: false } });
     // upgrade: Pro's card and its checkout, for the account (the genclass command is Pro's)
@@ -151,7 +151,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     const me = await account(env);
     team3(sql, me.account.id);
     const f = flat((await said(() => plan(me.o, me.deps))).text);
-    expect(f).toContain("Plan Pro $50 / developer / month");
+    expect(f).toContain("Plan Pro $25 / month");
     expect(f).toContain("Renews 2026-12-13");
     // Pro is per developer (3 seats paid here) and covers up to 3 apps
     expect(f).toContain("People 1 of 3");
@@ -181,7 +181,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     const no = await said(() => team({ ...me.o, args: ["invite"] }, me.deps));
     expect(no.code).toBe(1);
     // the genclass command is Pro's: the invite, like every command, says where Pro starts
-    expect(flat(no.text)).toContain(`The genclass command comes with Pro ($50 / developer / month): start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
+    expect(flat(no.text)).toContain(`The genclass command comes with Pro ($25 / month): start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
     expect(flat(no.text)).toContain("npx genclass upgrade");
     team3(sql, me.account.id);
     const made = await said(() => team({ ...me.o, args: ["invite"] }, me.deps));
@@ -227,7 +227,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     sql.db.prepare("UPDATE accounts SET subscription_status = 'trialing' WHERE id = ?").run(me.account.id);
     resetOwnerCache();
     const p = flat((await said(() => plan(me.o, me.deps))).text);
-    expect(p).toContain("Trial until 2026-12-13. Then the first charge, $50 / developer / month, unless you cancel before.");
+    expect(p).toContain("Trial until 2026-12-13. Then the first charge, $25 / month, unless you cancel before.");
     expect(p).not.toContain("Renews");
   });
 
@@ -259,7 +259,7 @@ describe("genclass is Pro's: a view the server refuses with 402 says where Pro s
     const v = await said(() => analytics(me.o, me.deps));
     expect(v.code).toBe(1);
     expect(tooWide(v.text)).toEqual([]);
-    expect(flat(v.text)).toContain(`The genclass command comes with Pro ($50 / developer / month): start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
+    expect(flat(v.text)).toContain(`The genclass command comes with Pro ($25 / month): start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
     expect(flat(v.text)).toContain("npx genclass upgrade");
     expect(v.text).not.toContain("Could not read the dashboard");
     // the same needs_pro shape as the gate's (src/paywall.mjs needsProJson)
@@ -342,7 +342,7 @@ describe("genclass connections (src/manage.mjs connections)", () => {
     expect(code).toBe(1);
     expect(tooWide(text)).toEqual([]);
     const f = flat(text);
-    expect(f).toContain(`The genclass command comes with Pro ($50 / developer / month): start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
+    expect(f).toContain(`The genclass command comes with Pro ($25 / month): start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
     expect(f).toContain("npx genclass upgrade");
     expect(f).not.toContain("not set up");
     // setting one up on Free: the same, said before anything is asked for
@@ -557,11 +557,11 @@ describe("genclass ask (src/ask.mjs)", () => {
     const free = await account(env);
     const deps = { ...free.deps, readPrefs: () => ({ askTold: true }) };
     // on Free, asking is Pro's: the answer says which plan, its trial and price, and the command that starts it
-    expect(await askModel(free.creds, { id: free.app.id, question: "How is it?" }, free.deps)).toMatchObject({ ok: false, status: 403, lock: { plan: "Pro", trialDays: 3, price: "$50 / developer / month" } });
+    expect(await askModel(free.creds, { id: free.app.id, question: "How is it?" }, free.deps)).toMatchObject({ ok: false, status: 403, lock: { plan: "Pro", trialDays: 3, price: "$25 / month" } });
     const locked = await said(() => ask({ ...free.o, question: "How is it?" }, deps));
     expect(locked.code).toBe(1);
     expect(tooWide(locked.text)).toEqual([]);
-    expect(flat(locked.text)).toContain("A question to the model comes with Pro. 3 days free, then $50 / developer / month. Cancel any time. Start: npx genclass upgrade");
+    expect(flat(locked.text)).toContain("A question to the model comes with Pro. 3 days free, then $25 / month. Cancel any time. Start: npx genclass upgrade");
     const me = await pro(sql, free);
     expect(await askModel(me.creds, { id: me.app.id, question: "How is it?" }, me.deps)).toMatchObject({ ok: true, answer: null, why: "no-model" });
     const none = await said(() => ask({ ...me.o, question: "How is it?" }, deps));

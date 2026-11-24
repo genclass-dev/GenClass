@@ -145,9 +145,9 @@ and invite links.
 
 ## Paid plans, payments and Stripe
 
-Free costs nothing, Pro (named Team until 12 November 2026) is sold on genclass.dev for an account, per developer
-(per project on 12 November 2026 only), and Enterprise is agreed by
-email. A plan decides what your dashboard shows, never what is collected: an app that turned visitor analytics on has
+Free costs nothing, Pro (named Team until 12 November 2026) and Business are sold on genclass.dev for an account at a
+flat monthly price (since 24 November 2026; per developer from 13 November, per project on 12 November 2026 only), and
+Enterprise is agreed in writing. A plan decides what your dashboard shows, never what is collected: an app that turned visitor analytics on has
 them counted on Free too, and they show once its plan includes them. A paid plan (Pro; the Individual plan was one
 until 22 October 2026) is paid through Stripe, which processes payments
 for us. We keep the number of developers a subscription pays for (for one bought per project on 12 November 2026,
