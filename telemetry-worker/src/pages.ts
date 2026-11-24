@@ -92,11 +92,13 @@ export interface InstallChoices {
 }
 
 /**
- * What the Connect dialog and /start/open-source tick when they load: guard with heal, the mode genclass.dev
- * recommends. The prompt functions add nothing themselves (no choices is observe): the server renders a page's prompt
- * with these and the page script reads the boxes, so the prompt always says what the boxes say.
+ * What the Connect dialog and /start/open-source tick when they load: nothing, which is observe (the owner,
+ * 2026-11-24: lead with detection; a team turns fixing on when it trusts what GenClass reports, and people held back
+ * from trying it while the prompts turned fixing on at once). The prompt functions add nothing themselves (no choices
+ * is observe): the server renders a page's prompt with these and the page script reads the boxes, so the prompt
+ * always says what the boxes say.
  */
-export const DEFAULT_CHOICES = { guard: true, heal: true } as const;
+export const DEFAULT_CHOICES = { guard: false, heal: false } as const;
 
 // The palette, type, buttons, header and focus ring of genclass.dev (the 2026-11-24 redesign, site/src/css/base.css
 // and dark.css): near-black "dev mode" by default here and warm paper on <html data-theme="light">, ink buttons, sage
@@ -726,7 +728,7 @@ export function openSourcePage(nonce: string): string {
 </section>
 <section class="card stack">
   <fieldset class="copts" id="choices">
-    <legend class="cp-sub">What the prompt sets up (Guard and Heal are on: the heal mode; both off is observe, which only reports)</legend>
+    <legend class="cp-sub">What the prompt sets up (both off is observe: it only reports; tick Guard, and Heal, when you trust it)</legend>
     ${choiceOpt("guard", "Guard", "GenClass fixes what it is sure of, reversibly: it drops a stale response, fixes a CSS bug on the page.", { on: d.guard })}
     ${choiceOpt("heal", "Heal", "With Guard: the heal mode, which also blocks a repeat, retries a failed request or serves its cached answer, hedges a slow call, and rolls back a bad write or asks your store to resync. Wrong interventions: 0.59% on held-out simulated apps at the default setting, 0.00% on held-out real apps (model 0.2.0).", { sub: true, on: d.heal })}
     ${choiceOpt("logs", "Findings in our own logs", "Each finding also goes to the console as one JSON line, for the log shipper you already run.")}
@@ -752,12 +754,12 @@ export function openSourcePage(nonce: string): string {
 </section>
 <section class="stack cmds">
   <h2 class="h2l">Or run the commands yourself</h2>
-  ${cmd("Add the runtime to your app", `npx ${RUNTIME_PKG} init --mode heal`)}
+  ${cmd("Add the runtime to your app", `npx ${RUNTIME_PKG} init`)}
   ${cmd("Connect the dev pages to the MCP server: Vite", `${AGENT_LINK_HEAD}\nif (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime);`)}
   ${cmd("The same for Next.js and webpack", `${AGENT_LINK_HEAD.replace("the app's entry", "the app's entry (Next.js: instrumentation-client.ts)")}\nif (process.env.NODE_ENV === "development" && GenClass.runtime) connectAgent(GenClass.runtime);`)}
   ${cmd("Add the MCP server for Claude Code", `npx -y ${MCP_PKG} init`)}
   ${cmd("Check a page for visual bugs", `npx ${RUNTIME_PKG} scan http://localhost:5173/ --local`)}
-  <p class="muted small">init shows the diff and asks before it writes; with <code>--no-telemetry</code> nothing is sent to genclass.dev, and without <code>--mode heal</code> the mode is observe. Other agents: <code>npx -y ${MCP_PKG} config &lt;client&gt;</code> prints the block for Cursor, VS Code, Codex, Gemini CLI and others; with <code>--no-telemetry</code> keep <code>GENCLASS_DASHBOARD</code> and <code>GENCLASS_REPORT</code> out of it; otherwise <code>GENCLASS_DASHBOARD</code> may name the link from <code>.genclass.local</code>, so <code>genclass_analytics</code> reads the app's production numbers. The scan needs Playwright (<code>npm i -D playwright &amp;&amp; npx playwright install chromium</code>).</p>
+  <p class="muted small">init shows the diff and asks before it writes; with <code>--no-telemetry</code> nothing is sent to genclass.dev; the mode is observe (it only reports) until you add <code>--mode guard</code> or <code>--mode heal</code>. Other agents: <code>npx -y ${MCP_PKG} config &lt;client&gt;</code> prints the block for Cursor, VS Code, Codex, Gemini CLI and others; with <code>--no-telemetry</code> keep <code>GENCLASS_DASHBOARD</code> and <code>GENCLASS_REPORT</code> out of it; otherwise <code>GENCLASS_DASHBOARD</code> may name the link from <code>.genclass.local</code>, so <code>genclass_analytics</code> reads the app's production numbers. The scan needs Playwright (<code>npm i -D playwright &amp;&amp; npx playwright install chromium</code>).</p>
 </section>
 <footer>The link init makes is the free dashboard, with no account; <a href="/signup">create a free account</a> to keep several apps in one place.
 Want a dashboard without sending data to us? The collector is open source too:
@@ -778,8 +780,8 @@ Want a dashboard without sending data to us? The collector is open source too:
     b.addEventListener("click", function(){ gcCopy(b, b.getAttribute("data-copy"), b === cp ? ta : b.parentNode.parentNode.querySelector("pre")); });
   });
   // a browser can bring boxes back with the page (back, reload), ticked or unticked; Chromium does it after load, before
-  // pageshow and without a change event, and skips disabled boxes: so heal (ticked in the markup) is disabled only on
-  // pageshow, when a restored unticked guard also unticks it, and the prompt follows then
+  // pageshow and without a change event, and skips disabled boxes: so heal is never disabled in the markup, only on
+  // pageshow (and on a change), when an unticked guard also unticks it, and the prompt follows then
   function sync(){ healFollows(); now(); }
   now(); window.addEventListener("pageshow", sync);
 })();`;
@@ -2381,8 +2383,8 @@ const DASH_JS = `
     promptNow();
   });
   // a browser can bring boxes back with the page (back, reload), ticked or unticked; Chromium does it after load, before
-  // pageshow and without a change event, and skips disabled boxes: so heal (ticked in the markup) is disabled only on
-  // pageshow, when a restored unticked guard also unticks it, and the prompt follows then
+  // pageshow and without a change event, and skips disabled boxes: so heal is never disabled in the markup, only on
+  // pageshow (and on a change), when an unticked guard also unticks it, and the prompt follows then
   function choicesSync(){ var g0 = choiceBox.querySelector('[data-choice="guard"]'), h0 = choiceBox.querySelector('[data-choice="heal"]'); if (g0 && h0) { h0.disabled = !g0.checked; if (!g0.checked) h0.checked = false; } var a0 = choiceBox.querySelector('[data-choice="agent"]'); if (a0 && a0.checked && !agentLink) a0.checked = false; promptNow(); }
   if (choiceBox) { promptNow(); window.addEventListener("pageshow", choicesSync); }
 
@@ -2746,7 +2748,7 @@ interface ConnectOptions {
   /** The MCP tab (the page script renders it; the locked page has no script for it). Default true. */
   mcp?: boolean;
   /**
-   * The choices above the prompt (guard with heal, both ticked when the page loads, the badge on every host, the agent
+   * The choices above the prompt (guard with heal, both off when the page loads: observe; the badge on every host, the agent
    * link, deploy), which the dashboard's page script turns into the prompt; none on the locked page, whose prompt
    * keeps the ticked defaults. `agent`: the agent link choice, and whether choosing it replaces a link the app already
    * has (account mode), or names this private link (private mode).
@@ -2767,11 +2769,12 @@ function connectSection(c: ConnectOptions): string {
   // same-origin URLs, src/cdn/config.ts)
   const ep = endpoint ? `, telemetry: { endpoint: "${endpoint}" }` : "";
   const cfg = (o: string) => `<script>window.GENCLASS_CONFIG = { ${o}telemetry: { endpoint: "${endpoint}" } };</script>`;
-  const init = `import { GenClass } from "@genclass/runtime";\n\nGenClass.init({ token: "${token}", mode: "heal"${ep} });`;
-  const tag = `${endpoint ? `${cfg("")}\n` : ""}<script src="${CDN_SCRIPT}" data-token="${token}" data-mode="heal"></script>`;
+  // observe, as the prompts start (DEFAULT_CHOICES): it reports and changes nothing; guard or heal is one word later
+  const init = `import { GenClass } from "@genclass/runtime";\n\nGenClass.init({ token: "${token}"${ep} });`;
+  const tag = `${endpoint ? `${cfg("")}\n` : ""}<script src="${CDN_SCRIPT}" data-token="${token}"></script>`;
   const meta = endpoint
-    ? `<!-- in your HTML <head> -->\n${cfg(`token: "${token}", `)}\n\n// in your entry file\nimport "@genclass/runtime/auto/heal";`
-    : `<meta name="genclass" content="token=${token}">\n\n// in your entry file\nimport "@genclass/runtime/auto/heal";`;
+    ? `<!-- in your HTML <head> -->\n${cfg(`token: "${token}", `)}\n\n// in your entry file\nimport "@genclass/runtime/auto";`
+    : `<meta name="genclass" content="token=${token}">\n\n// in your entry file\nimport "@genclass/runtime/auto";`;
   let n = 0;
   const snip = (label: string, name: string, code: string) => {
     const id = `csnip${++n}`;

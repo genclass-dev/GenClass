@@ -61,7 +61,8 @@ describe("private mode: a self-hosted collector's snippets name its own endpoint
     // the Connect panel itself (every page also carries the client-side snippet code, which names GENCLASS_CONFIG)
     const panel = (h: string) => /<section class="connect[\s\S]*?<\/section>/.exec(h)![0];
     const own = panel(dashboardPage("n", project, { account, id: "0123456789abcdef", endpoint: EP }));
-    expect(own).toContain(esc(`GenClass.init({ token: "gc_TestToken0123456789abc", mode: "heal", telemetry: { endpoint: "${EP}" } });`));
+    // observe, as the prompts start (2026-11-24): no mode in the hand-written setup
+    expect(own).toContain(esc(`GenClass.init({ token: "gc_TestToken0123456789abc", telemetry: { endpoint: "${EP}" } });`));
     expect(own).toContain(esc(`<script>window.GENCLASS_CONFIG = { telemetry: { endpoint: "${EP}" } };</script>`));
     expect(own).toContain("Add the key and this collector's endpoint");
     expect(own).not.toContain(`npx ${RUNTIME_PKG} login`);

@@ -693,7 +693,8 @@ describe("accounts: apps owned by an account", () => {
     const html = await own.text();
     expect(html).toContain("Connect to your project");
     expect(html).toContain("npx @genclass/runtime@beta login"); // latest on npm is 0.2.x until 0.3.0
-    expect(html).toContain(`GenClass.init({ token: &#34;${project.token}&#34;, mode: &#34;heal&#34; })`);
+    // observe, as the prompts start (2026-11-24)
+    expect(html).toContain(`GenClass.init({ token: &#34;${project.token}&#34; })`);
     expect(html).toContain(`data-token=&#34;${project.token}&#34;`);
     // RUNTIME_ON_NPM unset: the runtime that reads keys is named first
     expect(html).toContain("Project keys need @genclass/runtime 0.3.0-beta.0, which is not published yet.");
