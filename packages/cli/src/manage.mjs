@@ -182,7 +182,7 @@ export async function plan(o = {}, deps = {}) {
     row("Plan", c.bold(clean(state.account?.plan?.name ?? "not known", 20)));
     if (a.reauth) note("For its limits and what is used: npx genclass login, once (this sign-in is from before the command could show them).");
   } else if (a.teamPlan && a.teamPlan.id !== a.plan.id) {
-    // a member of a paying team: its seat is one the team's owner pays for (Pro is per developer), so it shows the
+    // a member of a paying team: the team's owner pays for its place (whatever the plan charges for), so it shows the
     // team's plan, the team's apps and what that plan includes, never its own Free
     const t = a.teamPlan;
     const inc = t.includes ?? a.includes;

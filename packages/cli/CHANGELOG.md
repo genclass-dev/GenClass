@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.16
+
+- No price is written in the command any more. Before the sign-in it says the setup is free and Pro is 3 days free,
+  with the prices on [genclass.dev/pricing](https://genclass.dev/pricing); once signed in it shows genclass.dev's own
+  price and plan name, as before. Plans and prices can change on genclass.dev without a new release of the command.
+
 ## 0.3.15
 
 - **Set your app up first, start Pro after.** The setup no longer asks for Pro: signing in, adding GenClass to the app,

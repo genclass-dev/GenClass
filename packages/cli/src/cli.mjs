@@ -78,7 +78,7 @@ export function usage(cols = width()) {
   };
   text("genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.");
   lines.push("");
-  text("Free: setting your app up (setup, init, connect, apps, analytics on | off) and login, logout, whoami, status, plan, upgrade, profile, remove, help. The rest comes with Pro, once the setup is done: 3 days free, then $50 / developer / month, with a card on Stripe. Free is on the website: https://genclass.dev", "  ");
+  text("Free: setting your app up (setup, init, connect, apps, analytics on | off) and login, logout, whoami, status, plan, upgrade, profile, remove, help. The rest comes with Pro, once the setup is done: 3 days free, with a card on Stripe. Prices: https://genclass.dev/pricing. Free is on the website.", "  ");
   const side = w >= 78;
   const col = 30;
   for (const [head, rows] of HELP) {
