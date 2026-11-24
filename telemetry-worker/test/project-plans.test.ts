@@ -970,64 +970,60 @@ describe("the website: set up first, the trial last (the owner, 2026-11-24: \"se
     expect(free).toContain("<h2>Create your first app</h2>");
   });
 
-  it("/account/get-started: four numbered steps, the app first, its connect command, the 3-day trial, then the terminal", async () => {
+  it("/account/get-started: one command for the whole setup, the genclass command's steps under it, and the ways without a terminal", async () => {
     const t = await withApps([]);
     const out = await call(t.env, "GET", "/account/get-started", {});
     expect(out.status).toBe(302);
     expect(out.headers.get("location")).toBe("/login?next=%2Faccount%2Fget-started");
     expect((await call(t.env, "POST", "/account/get-started", { cookie: t.cookie, body: {} })).status).toBe(405);
-    const steps = (html: string) =>
-      [...html.matchAll(/<li class="gs-step( done| now)?" id="step-(\w+)"><span class="gs-num" aria-hidden="true">(\d?)[\s\S]*?<h2>([^<]+)/g)].map((m) => [m[2], (m[1] ?? "").trim() || "open", m[3] || "check", m[4]]);
+    const rows = (html: string) => [...html.matchAll(/<li class="ob-row (\w+)" data-key="(\w+)"><span class="ob-g" aria-hidden="true">([^<]*)<\/span><span class="ob-t">([^<]+)<\/span>/g)].map((m) => [m[2], m[1], m[3], m[4]]);
     const page = async () => {
       const r = await call(t.env, "GET", "/account/get-started", { cookie: t.cookie });
       expect(r.status).toBe(200);
       return r.text();
     };
-    // a new account: nothing done, the app's step open
+    // a new account: the command first, then the command's steps with its marks
     const fresh = await page();
     expect(fresh).toContain("<title>Get started | GenClass</title>");
-    expect(fresh).toContain('<span class="gs-prog"><b>0</b> of 4 done</span>');
-    expect(steps(fresh)).toEqual([
-      ["app", "now", "1", "Create your app"],
-      ["connect", "open", "2", "Add GenClass to it"],
-      ["trial", "open", "3", "Start your 3-day free trial"],
-      ["cli", "open", "4", "Use it from your terminal"],
+    expect(fresh).toContain('<span class="gs-prog" id="gs-prog"><b>1</b> of 4 done</span>');
+    expect(fresh).toContain('<button class="ob-go" type="button" id="ob-make"><span>Get my command</span></button>');
+    expect(rows(fresh)).toEqual([
+      ["account", "done", "✔", "Account"],
+      ["runtime", "next", "●", "Runtime"],
+      ["dashboard", "later", "○", "Dashboard"],
+      ["workflow", "auto", "→", "Test workflow"],
+      ["github", "auto", "→", "GitHub App"],
+      ["agent", "auto", "→", "Coding agent"],
+      ["plan", "later", "○", "Pro"],
+      ["suggestions", "later", "○", "Suggestions"],
     ]);
-    // its link is /account/new; the page's site script (SITE_CHECKED_JS) adds ?name= for a site this browser checked
+    // the trial is in Pro's row, after the setup
+    expect(fresh).toContain('<span class="ob-d">$25 / month, 3 days free, after the setup</span><a class="ob-a" href="/account/billing?plan=pro&#38;start=1">Start 3-day free trial</a>');
+    // without a terminal: create the app here (the site script names it after a site this browser checked)
+    expect(fresh).toContain('<details class="gs-other" open><summary>No terminal? Two other ways</summary>');
     expect(fresh).toMatch(/<a class="btn" id="gs-new" href="\/account\/new">.*<span>Create your app<\/span><\/a>/);
-    expect(fresh).toContain('<p class="gs-fine">Create your app first: the command carries its key.</p>');
-    // the trial is a plain choice: its button is not the page's main one before the app sends events
-    expect(fresh).toContain('<a class="btn ghost" href="/account/billing?plan=pro&#38;start=1">Start 3-day free trial</a>');
-    expect(fresh).toContain("3 days free, then $25 / month. Cancel before it ends and you pay nothing.");
-    expect(fresh).toContain('<p class="gs-fine">Best once your app sends its first events, so you see your own problems on day one.</p>');
-    expect(fresh).toContain("<code>npx genclass</code>");
-    expect(fresh).toContain('<p class="gs-fine">Comes with Pro.</p>');
-    // the app: its dashboard, its own connect command (pages.ts setupCommand), waiting for the first event
+    // an app made here: by hand, its own connect command; the command still has to add GenClass to its code
     const shop = await createApp(t.env, t.cookie, "Shop");
     const made = await page();
-    expect(steps(made).map((s) => s.slice(0, 2))).toEqual([["app", "done"], ["connect", "now"], ["trial", "open"], ["cli", "open"]]);
-    expect(made).toContain(`<a class="btn sm ghost" href="/account/apps/${shop.id}">Open Shop</a>`);
+    expect(rows(made).map((r) => r.slice(0, 2))).toContainEqual(["runtime", "next"]);
+    expect(made).toContain("Shop is in your account: the command adds GenClass to its code");
     expect(made).toContain(`<code>${esc(setupCommand(shop.token))}</code>`);
     expect(made).toContain(`aria-label="Copy the command that connects Shop"`);
-    expect(made).toContain('<span class="gs-wait"><i></i>Waiting for the first event</span>');
-    expect(made).toContain(`<a class="btn sm ghost" href="/account/apps/${shop.id}#connect">Other ways to connect</a>`);
-    // the first event: connected, and the trial's button becomes the page's main one
+    expect(made).not.toContain('id="gs-new"');
+    // the terminal signs in and the first page arrives: the runtime and the dashboard done, Pro next
+    await cliToken(t.env, t.cookie);
     await sendBatch(t.env, shop.token, [{ t: "session", host: "shop.example", route: "/" }]);
     const live = await page();
-    expect(steps(live).map((s) => s.slice(0, 2))).toEqual([["app", "done"], ["connect", "done"], ["trial", "now"], ["cli", "open"]]);
-    expect(live).toContain('<span class="gs-wait on"><i></i>Events are arriving.</span>');
-    expect(live).toContain('<a class="btn" href="/account/billing?plan=pro&#38;start=1">Start 3-day free trial</a>');
-    expect(live).not.toContain("Best once your app sends its first events");
-    // on Pro, then with a terminal signed in: every step done
+    expect(rows(live).map((r) => r.slice(0, 2))).toEqual([["account", "done"], ["runtime", "done"], ["dashboard", "done"], ["workflow", "auto"], ["github", "auto"], ["agent", "auto"], ["plan", "next"], ["suggestions", "later"]]);
+    expect(live).toContain("signed in, here and in your terminal");
+    expect(live).toContain(`<a class="ob-a" href="/account/apps/${shop.id}">Open</a>`);
+    // on Pro: four of four
     paidPro(t.sql, t.account.id);
     const pro = await page();
-    expect(steps(pro).map((s) => s.slice(0, 2))).toEqual([["app", "done"], ["connect", "done"], ["trial", "done"], ["cli", "now"]]);
-    expect(pro).toContain('<span class="gs-wait on"><i></i>You are on Pro.</span>');
-    expect(pro).not.toContain("Comes with Pro.");
-    await cliToken(t.env, t.cookie);
-    const all = await page();
-    expect(all).toContain('<span class="gs-prog"><b>4</b> of 4 done</span>');
-    expect(steps(all).every((s) => s[1] === "done" && s[2] === "check")).toBe(true);
+    expect(pro).toContain('<span class="gs-prog" id="gs-prog"><b>4</b> of 4 done</span>');
+    expect(rows(pro).find((r) => r[0] === "plan")!.slice(1, 3)).toEqual(["done", "✔"]);
+    // the script that draws the run the command reports
+    expect(pro).toContain('fetch("/api/account/onboard"');
   });
 });
 
@@ -1056,25 +1052,33 @@ describe("GET /api/account/glance: the sidebar's plan card and Get started's ste
       note: "0 of 1 app",
       action: { label: "Start 3-day free trial", href: start, primary: false },
       steps: [
-        { key: "app", done: false },
-        { key: "connect", done: false },
-        { key: "trial", done: false },
-        { key: "cli", done: false },
+        { key: "account", done: true },
+        { key: "runtime", done: false },
+        { key: "dashboard", done: false },
+        { key: "plan", done: false },
       ],
+      setup: expect.any(Array),
       first: null,
       sold: { name: "Pro", price: "$25 / month", days: 3, start },
     });
+    // the genclass command's setup, as this server sees it (the test workflow and the coding agent are the command's)
+    const states = (g: any) => g.setup.map((x: any) => [x.key, x.state]);
+    expect(states(await glance(t.env, t.cookie))).toEqual([["account", "done"], ["runtime", "next"], ["dashboard", "later"], ["workflow", "auto"], ["github", "auto"], ["agent", "auto"], ["plan", "later"], ["suggestions", "later"]]);
     // the start URL opens the account's checkout at once
     expect(await text(call(t.env, "GET", start, { cookie: t.cookie }))).toContain('"go":true');
     const shop = await createApp(t.env, t.cookie, "Shop");
     const made = await glance(t.env, t.cookie);
-    expect(made.steps).toEqual([{ key: "app", done: true }, { key: "connect", done: false }, { key: "trial", done: false }, { key: "cli", done: false }]);
+    // an app made on the website, with no terminal signed in yet: the command still has to add GenClass to its code
+    expect(made.steps).toEqual([{ key: "account", done: true }, { key: "runtime", done: false }, { key: "dashboard", done: false }, { key: "plan", done: false }]);
+    expect(made.setup.find((x: any) => x.key === "runtime")).toMatchObject({ state: "next", detail: "Shop is in your account: the command adds GenClass to its code" });
     expect(made.first).toEqual({ id: shop.id, name: "Shop", token: shop.token, live: false });
     expect([made.apps, made.note, made.action.primary]).toEqual([{ used: 1, of: 1 }, "1 of 1 app", true]);
     // after the first event: connected
     await sendBatch(t.env, shop.token, [{ t: "session", host: "shop.example", route: "/" }]);
     const live = await glance(t.env, t.cookie);
-    expect(live.steps).toEqual([{ key: "app", done: true }, { key: "connect", done: true }, { key: "trial", done: false }, { key: "cli", done: false }]);
+    expect(live.steps).toEqual([{ key: "account", done: true }, { key: "runtime", done: true }, { key: "dashboard", done: true }, { key: "plan", done: false }]);
+    expect(states(live)).toEqual([["account", "done"], ["runtime", "done"], ["dashboard", "done"], ["workflow", "auto"], ["github", "auto"], ["agent", "auto"], ["plan", "next"], ["suggestions", "later"]]);
+    expect(live.setup.find((x: any) => x.key === "plan").link).toEqual({ label: "Start 3-day free trial", href: start });
     expect(live.first.live).toBe(true);
     expect(live.action).toEqual({ label: "Start 3-day free trial", href: start, primary: true });
   });
@@ -1101,7 +1105,8 @@ describe("GET /api/account/glance: the sidebar's plan card and Get started's ste
     expect((await call(t.env, "POST", "/api/team/join", { body: { code: inv.url.split("/").pop() }, cookie: bob.cookie })).status).toBe(200);
     const g = await glance(t.env, bob.cookie);
     expect(g).toMatchObject({ plan: "Business", status: "with your team", note: null, action: { label: "Plans and billing", href: "/account/billing", primary: false } });
-    expect(g.steps).toEqual([{ key: "app", done: true }, { key: "connect", done: true }, { key: "trial", done: true }, { key: "cli", done: false }]);
+    expect(g.steps).toEqual([{ key: "account", done: true }, { key: "runtime", done: true }, { key: "dashboard", done: true }, { key: "plan", done: true }]);
+    expect(g.setup.find((x: any) => x.key === "plan")).toMatchObject({ state: "done", detail: "with your team", link: null });
     expect(g.first).toMatchObject({ id: t.apps[0]!.id, name: "Shop", live: true });
   });
 
@@ -1110,14 +1115,14 @@ describe("GET /api/account/glance: the sidebar's plan card and Get started's ste
     paidPro(t.sql, t.account.id);
     const pro = await glance(t.env, t.cookie);
     expect(pro).toMatchObject({ plan: "Pro", status: "plan", trial: false, apps: { used: 1, of: 3 }, note: "1 of 3 apps", action: { label: "Plans and billing", href: "/account/billing", primary: false } });
-    expect(pro.steps).toEqual([{ key: "app", done: true }, { key: "connect", done: false }, { key: "trial", done: true }, { key: "cli", done: false }]);
+    expect(pro.steps).toEqual([{ key: "account", done: true }, { key: "runtime", done: false }, { key: "dashboard", done: false }, { key: "plan", done: true }]);
     setPlan(t.sql, t.account.id, "team", { subscription_status: "trialing", current_period_end: "2026-10-15T12:00:00.000Z" });
     expect(await glance(t.env, t.cookie)).toMatchObject({ plan: "Pro trial", status: "2 days left", trial: true });
     const g = await withApps(["Shop"]);
     setPlan(g.sql, g.account.id, "free", { comp_until: "9999-12-31T00:00:00.000Z" });
     const comp = await glance(g.env, g.cookie);
     expect(comp).toMatchObject({ status: "from GenClass", trial: false, action: { label: "Plans and billing", href: "/account/billing", primary: false } });
-    expect(comp.steps.find((s: { key: string }) => s.key === "trial").done).toBe(true);
+    expect(comp.steps.find((s: { key: string }) => s.key === "plan").done).toBe(true);
   });
 });
 

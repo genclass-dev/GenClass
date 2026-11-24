@@ -79,6 +79,7 @@ import { appExtrasData, appExtrasHtml } from "./billing-pages.js";
 import { linkUnlocked } from "./link-lock.js";
 import { forgetExports } from "./export.js";
 import { githubApp } from "./github/config.js";
+import { latestRun, onboardReady } from "./onboard.js";
 import { forgetAccount as forgetAccountGithub, unlinkProject } from "./github/store.js";
 import { json, mediaType, readCapped } from "./http.js";
 import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pages.js";
@@ -1547,6 +1548,37 @@ async function deviceApprove(c: C): Promise<Response> {
   return json(200, { ok: true, status: approve ? "approved" : "denied" });
 }
 
+/**
+ * POST /api/account/onboard: `npx genclass onboard <code>` for the signed-in account. The code is the device flow's
+ * own secret (POST /api/device/token takes it), in a row this account has already approved: the browser session that
+ * asks for it is the approval, so the terminal needs no second trip to the browser. Good once, for ten minutes, as a
+ * terminal's code is; asked for at most as often as the device flow's codes are.
+ */
+async function onboardCommand(c: C, a: Auth): Promise<Response> {
+  if (await overLimit(c, "device")) return tooMany();
+  // npm's genclass does not have the command yet: the plain setup, which signs in in the browser itself
+  if (!(await onboardReady(c.env, c.opts.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i)), c.now.getTime())))
+    return json(200, { ok: true, code: null, command: "npx genclass@latest", expires_in: null }, { "cache-control": "no-store" });
+  const device = randomSecret(32);
+  const hash = await sha256Hex(device);
+  const iso = c.now.toISOString();
+  const expires = new Date(c.now.getTime() + DEVICE_CODE_MS).toISOString();
+  for (let attempt = 0; ; attempt++) {
+    const user = newUserCode();
+    try {
+      await c.db.batch([
+        c.db.prepare("DELETE FROM device_codes WHERE user_code = ? AND expires <= ?").bind(user, iso),
+        c.db
+          .prepare("INSERT INTO device_codes (hash, user_code, status, account_id, client, created, expires, poll_interval) VALUES (?, ?, 'approved', ?, NULL, ?, ?, ?)")
+          .bind(hash, user, a.account.id, iso, expires, DEVICE_INTERVAL_S),
+      ]);
+      return json(200, { ok: true, code: device, command: `npx genclass@latest onboard ${device}`, expires_in: DEVICE_CODE_MS / 1000 }, { "cache-control": "no-store" });
+    } catch (e) {
+      if (attempt >= 4) throw e;
+    }
+  }
+}
+
 // --------------------------------------------------------------------------------------------- account API
 
 const signedOut = (): Response => fail(401, "not signed in");
@@ -1847,12 +1879,26 @@ export interface Glance {
   apps: { used: number; of: number | null };
   note: string | null;
   action: { label: string; href: string; primary: boolean } | null;
-  /** In order: create the app, connect it (its first event), the trial (any plan above Free), the genclass command. */
-  steps: { key: "app" | "connect" | "trial" | "cli"; done: boolean }[];
+  /** The four that count for the sidebar's Get started (n/4): the account, the runtime in an app, its first page, a plan. */
+  steps: { key: "account" | "runtime" | "dashboard" | "plan"; done: boolean }[];
+  /** The genclass command's setup, step by step as `npx genclass` shows it (packages/cli/src/state.mjs), with what this
+   *  server can see of each: Get started draws it and follows it live while the command runs in the visitor's terminal. */
+  setup: SetupStep[];
   /** The account's first app, for the steps' links and its connect command. */
   first: { id: string; name: string; token: string; live: boolean } | null;
   /** The paid plan sold first (Pro), its price, its days free for this account (0: none) and where it starts. */
   sold: { name: string; price: string; days: number; start: string } | null;
+}
+
+/** One step of the setup as Get started shows it. `auto`: the command does it on the visitor's machine, where this
+ *  server cannot see it (the test workflow file, the coding agent's configuration); `later`: not yet, it waits on an
+ *  earlier step; `waiting`: on the person (deploy, open a pull request). */
+export interface SetupStep {
+  key: "account" | "runtime" | "dashboard" | "workflow" | "github" | "agent" | "plan" | "suggestions";
+  title: string;
+  state: "done" | "next" | "waiting" | "auto" | "later";
+  detail: string;
+  link: { label: string; href: string } | null;
 }
 
 /**
@@ -1888,10 +1934,63 @@ export async function glance(c: C, a: Auth): Promise<Glance> {
   const left = trialing && Number.isFinite(leftMs) ? Math.max(0, Math.ceil(leftMs / 86400000)) : null;
   const live = mine.some((p) => !!p.first_event);
   const cli = !!(await c.db.prepare("SELECT 1 AS x FROM auth_sessions WHERE account_id = ? AND kind = 'cli' LIMIT 1").bind(a.account.id).first());
+  // the GitHub App on a repository linked to one of the account's apps, and whether it has reviewed a pull request
+  // there (a review needs the race files the test workflow uploads: the workflow runs)
+  let repo: string | null = null;
+  let reviewed = false;
+  if (githubApp(env)) {
+    try {
+      const r = await c.db.prepare("SELECT full_name FROM github_repos WHERE project_id IN (SELECT id FROM projects WHERE account_id = ? AND id IS NOT NULL) ORDER BY updated DESC LIMIT 1").bind(a.account.id).first<{ full_name: string }>();
+      repo = r?.full_name ?? null;
+      if (repo)
+        reviewed = !!(await c.db
+          .prepare("SELECT 1 AS x FROM github_prs WHERE reviews > 0 AND repo_id IN (SELECT repo_id FROM github_repos WHERE project_id IN (SELECT id FROM projects WHERE account_id = ? AND id IS NOT NULL)) LIMIT 1")
+          .bind(a.account.id)
+          .first());
+    } catch {
+      /* the GitHub App's tables answer nothing here: its steps stay the command's */
+    }
+  }
   // the oldest, in the order plans count apps (src/plans.ts coverage): the one Free covers (own is sorted by name)
   const oldest = own.length ? await c.db.prepare("SELECT id FROM projects WHERE account_id = ? AND id IS NOT NULL ORDER BY created, rowid LIMIT 1").bind(a.account.id).first<{ id: string }>() : null;
   const first = own.find((p) => p.id === oldest?.id) ?? own[0] ?? mine[0] ?? null;
   const start = plan ? `/account/billing?plan=${encodeURIComponent(planParam(plan))}&start=1` : null;
+  const paid = access.source !== null || !!team;
+  // the runtime is in an app once it sends pages, or once the command (signed in from a terminal) put an app in the account
+  const runtime = live || (cli && mine.length > 0);
+  const sold = plan && start && canBuy(env, a.account) ? { name: plan.name, price: priceText(plan, countryOf(c.req)), days, start } : null;
+  const setup: SetupStep[] = [
+    { key: "account", title: "Account", state: "done", detail: cli ? "signed in, here and in your terminal" : "signed in", link: null },
+    {
+      key: "runtime",
+      title: "Runtime",
+      state: runtime ? "done" : "next",
+      detail: runtime
+        ? `${first?.name ?? "your app"} is in your account`
+        : first
+          ? `${first.name} is in your account: the command adds GenClass to its code`
+          : "the command finds your framework, adds GenClass and puts the app in your account",
+      link: null,
+    },
+    { key: "dashboard", title: "Dashboard", state: live ? "done" : runtime ? "waiting" : "later", detail: live ? "pages are arriving" : "deploy, then open your live site once", link: live && first ? { label: "Open", href: `/account/apps/${first.id}` } : null },
+    { key: "workflow", title: "Test workflow", state: reviewed ? "done" : "auto", detail: reviewed ? `running on ${repo}` : "the command adds it when your app has Playwright tests", link: null },
+    {
+      key: "github",
+      title: "GitHub App",
+      state: reviewed ? "done" : repo ? "waiting" : "auto",
+      detail: reviewed ? `reviewing pull requests on ${repo}` : repo ? `on ${repo}: open a pull request` : "comments on a pull request when a page ends up wrong",
+      link: githubApp(env) && !reviewed ? { label: repo ? "Your repositories" : "Install", href: "/account/github" } : null,
+    },
+    { key: "agent", title: "Coding agent", state: "auto", detail: "the command adds GenClass's tools to Claude Code, Cursor and others in your project", link: null },
+    {
+      key: "plan",
+      title: sold?.name ?? "Plan",
+      state: paid ? "done" : runtime && sold ? "next" : "later",
+      detail: paid ? (team ? "with your team" : trialing ? `trial, ${left ?? 0} day${left === 1 ? "" : "s"} left` : access.plan.name) : sold ? `${sold.price}${sold.days ? `, ${sold.days} days free` : ""}, after the setup` : "",
+      link: !paid && sold ? { label: sold.days ? `Start ${sold.days}-day free trial` : `Start ${sold.name}`, href: sold.start } : null,
+    },
+    { key: "suggestions", title: "Suggestions", state: paid ? "auto" : "later", detail: "npx genclass suggest: what your app is missing, most important first", link: null },
+  ];
   const apps =
     of !== null && own.length > of
       ? `${own.length} apps, ${of} covered`
@@ -1905,13 +2004,14 @@ export async function glance(c: C, a: Auth): Promise<Glance> {
     note: access.source === "open" || team ? null : apps,
     action: buy && plan && start ? { label: days ? `Start ${days}-day free trial` : `Upgrade to ${plan.name}`, href: start, primary: own.length > 0 } : { label: "Plans and billing", href: "/account/billing", primary: false },
     steps: [
-      { key: "app", done: mine.length > 0 },
-      { key: "connect", done: live },
-      { key: "trial", done: access.source !== null || !!team },
-      { key: "cli", done: cli },
+      { key: "account", done: true },
+      { key: "runtime", done: runtime },
+      { key: "dashboard", done: live },
+      { key: "plan", done: paid },
     ],
+    setup,
     first: first ? { id: first.id!, name: first.name, token: first.token, live: !!first.first_event } : null,
-    sold: plan && start && canBuy(env, a.account) ? { name: plan.name, price: priceText(plan, countryOf(c.req)), days, start } : null,
+    sold,
   };
 }
 
@@ -2165,6 +2265,15 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       const a = await webSession(c);
       if (!a) return signedOut();
       return json(200, await glance(c, a), { "cache-control": "no-store" });
+    }
+    case "/api/account/onboard": {
+      // Get started's command (src/onboard.ts): POST makes it, GET follows the run it starts
+      const a = await webSession(c);
+      if (!a) return signedOut();
+      if (get) return json(200, { ok: true, run: await latestRun(c.db, a.account.id, c.now) }, { "cache-control": "no-store" });
+      if (m !== "POST") return method();
+      if (!originOk(c)) return csrfFail();
+      return onboardCommand(c, a);
     }
     case "/api/account":
       return m === "DELETE" ? deleteAccount(c) : method();

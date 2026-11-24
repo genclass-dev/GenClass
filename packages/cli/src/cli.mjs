@@ -31,6 +31,7 @@ const HELP = [
   [null, [
     ["npx genclass", "the command's prompt, for commands and questions (the first time in a folder, the setup first)"],
     ["npx genclass setup", "the guided setup, any time, to add or change a part (--yes: no questions, for a coding agent; --no-analytics: add GenClass without visitor analytics, which are on otherwise)"],
+    ["npx genclass onboard <code>", "the whole setup in one go, with the code from Get started on genclass.dev, which shows each step as it runs"],
     ["npx genclass status", "what is done, what is next (--all: every part; --json)"],
   ]],
   ["See", [
@@ -182,6 +183,20 @@ export async function run(argv, ctx = {}) {
     return thenPlan(noConnect ? code : await afterSignIn(po, args, login).catch(() => 1));
   }
   if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
+  // the whole setup in one go, with the code Get started gives (setup.mjs onboard): the code is its sign-in
+  if (cmd === "onboard" && !asksHelp) {
+    const h = hostConfig();
+    if (h.error) {
+      err(`genclass: ${h.error}`);
+      return 2;
+    }
+    const words = args.filter((a, k) => !a.startsWith("-") && args[k - 1] !== "--cwd");
+    if (words.length > 1) {
+      err(`genclass onboard: one code, from genclass.dev/account/get-started\n\n${usage()}`);
+      return 2;
+    }
+    return (await import("./setup.mjs")).onboard(words[0] ?? null, { cwd: po.cwd, noBrowser: po.noBrowser, noAnalytics: args.includes("--no-analytics") });
+  }
   if (["connect", "init", "scan", "audit"].includes(cmd)) {
     // words the command does not take: its own usage error, before anything is asked of genclass.dev
     if (!asksHelp && !(await argsRight(cmd, args))) {
@@ -467,11 +482,11 @@ export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "p
  * the trial after). The walk itself (`genclass`, `setup`) signs in as its first step; `analytics on` is init's
  * --analytics and passes the same way.
  */
-export const SETUP_COMMANDS = ["setup", "init", "connect", "apps"];
+export const SETUP_COMMANDS = ["setup", "init", "connect", "apps", "onboard"];
 
 /** Every command, for the "did you mean" of a mistyped one. */
 export const COMMANDS = [
-  "setup", "status", "suggest", "dashboard", "problems", "analytics", "events", "health", "report", "export", "fix", "ask", "scan", "site", "connections", "agent", "funnels",
+  "setup", "onboard", "status", "suggest", "dashboard", "problems", "analytics", "events", "health", "report", "export", "fix", "ask", "scan", "site", "connections", "agent", "funnels",
   "apps", "plan", "upgrade", "profile", "team", "login", "logout", "whoami", "connect", "init", "remove", "help", "version",
 ];
 

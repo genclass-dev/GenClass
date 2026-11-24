@@ -512,3 +512,16 @@ export async function askModel(creds, q, opts = {}) {
     upgradeUrl: sameOrigin(j.upgrade_url, creds.host),
   };
 }
+
+/**
+ * `genclass onboard`: where the setup stands, for Get started on genclass.dev to show while it runs (telemetry-worker
+ * src/onboard.ts). Only what the command's own screen says: the steps' ids, states and short words. A report that does
+ * not arrive changes nothing here: the setup goes on.
+ * @param {{ access_token: string, host: string }} creds
+ * @param {Record<string, unknown>} body  { run, steps?, app?, step?, end?, exit? }
+ */
+export async function reportOnboard(creds, body, opts = {}) {
+  const r = await request("/api/cli/onboard", { method: "POST", token: creds.access_token, host: creds.host, body, fetchFn: opts.fetchFn, timeoutMs: 8000 });
+  return { ok: r.ok, status: r.status };
+}
+

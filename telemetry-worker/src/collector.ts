@@ -131,6 +131,9 @@ export interface Env extends GithubEnv {
   MANAGED_PAYMENTS?: string;
   /** "open": every account has the grant plan, nothing is locked (a self-hosted collector; src/plans.ts planGatesOpen). */
   PLAN_GATES?: string;
+  /** Get started's command (src/onboard.ts onboardReady): "on" gives `npx genclass onboard <code>`, "off" the plain
+   *  `npx genclass`; unset, the onboard command once npm's published genclass has it (0.3.17 and later). */
+  ONBOARD_CLI?: string;
   /** `genclass suggest` (src/suggest.ts): the key of the model that writes the plan (a Worker secret). Without it the
    * plan is ordered by the checks' own weights and no model is asked. Never returned, logged or stored. */
   OPENAI_API_KEY?: string;

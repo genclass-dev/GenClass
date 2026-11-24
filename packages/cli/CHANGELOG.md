@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.17
+
+- **`genclass onboard <code>`: the whole setup in one go, shown live on your dashboard.** Get started on
+  genclass.dev gives you the command with a one-time code (good once, for ten minutes). The code is the sign-in, so
+  nothing opens in the browser. The command then runs the setup with no questions, as `genclass setup --yes` does:
+  it adds GenClass to the app, puts it in your account, adds the test workflow and connects your coding agent. What
+  only you can do (install the GitHub App, deploy, start Pro's trial) is printed with its address. Before and after
+  every step it tells genclass.dev where the setup stands, and Get started draws each step as it runs. Only the steps'
+  names, states and short words are sent, never your code. A coding agent can run the command too.
+- Without a code, `genclass onboard` signs in the usual way first.
+- Needs the collector from the same change (`POST /api/account/onboard`, `POST /api/cli/onboard`).
+
 ## 0.3.16
 
 - No price is written in the command any more. Before the sign-in it says the setup is free and Pro is 3 days free,

@@ -286,6 +286,7 @@ first step and the agent prompt, with the model's own ideas and website designs.
 |---|---|
 | `npx genclass` | where the project stands; on a terminal, the next step, then the home |
 | `npx genclass setup` | the guided setup (`--yes`: no questions; `--no-analytics`: without visitor analytics) |
+| `npx genclass onboard <code>` | the whole setup in one go, with the code from Get started on genclass.dev, which shows each step as it runs (no browser sign-in: the code is it) |
 | `npx genclass status` | what is done and what is next (`--all`: every part; `--json`) |
 | `npx genclass dashboard` | your app in the terminal (`--open` the browser dashboard) |
 | `npx genclass problems` | every problem found, by kind and page, and what GenClass did |

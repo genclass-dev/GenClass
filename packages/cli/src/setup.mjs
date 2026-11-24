@@ -20,14 +20,19 @@
 //   while someone can still type.
 // - A step that fails or is skipped does not stop the ones after it that do not depend on it.
 
+import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
+import { pollDeviceLogin, readCredentials, saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { detectProject } from "../../runtime/bin/lib/detect.mjs";
-import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
+import { apiHost } from "../../runtime/bin/lib/host.mjs";
+import { accountLabel } from "../../runtime/bin/lib/init.mjs";
+import { c, err, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { addRuntime, addWorkflow, chooseAppPlan, choosePlan, connectAgent, connectGithubApp, signIn, watchFirstPage } from "./actions.mjs";
+import { reportOnboard } from "./api.mjs";
 import { brand, canDraw } from "./art.mjs";
 import { BUILD } from "./assets.mjs";
 import { appsBelow, planName, readState, stateJson } from "./state.mjs";
-import { barPara, card, checklist, header, homeOpen, nextBlock, note, pick, PROMPT, rule, summary, typed, warn } from "./tui.mjs";
+import { bad, barPara, card, checklist, header, homeOpen, nextBlock, note, pick, PROMPT, rule, spinner, summary, typed, warn } from "./tui.mjs";
 
 /**
  * Prints the header and the steps for a state: the short view, or with `details` every part and what is known
@@ -163,6 +168,66 @@ export async function setup(o = {}, deps = {}) {
   return walk(o, deps, auto);
 }
 
+/** A code from Get started: the device flow's own secret (telemetry-worker src/auth.ts onboardCommand). */
+const ONBOARD_CODE_RE = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * `genclass onboard <code>`: the whole setup in one go, followed on genclass.dev (the owner, 2026-11-24: "the
+ * onboarding system actually gives you a command for the CLI ... it goes through the entire setup ... the CLI should
+ * connect to the dashboard and should show you a visualization of what's going on").
+ * - The code is a sign-in the account approved by asking for it on Get started: it is swapped for this terminal's
+ *   session at once, so nothing opens in the browser. Without a code the walk signs in the usual way.
+ * - Then the walk runs as with --yes: every step that needs no person is done; what only a person can do (install the
+ *   GitHub App, deploy, start the trial) is printed with its address.
+ * - Before and after every step it says where the setup stands (POST /api/cli/onboard): the steps' ids, states and
+ *   short words, nothing from the code. Get started draws them as they come. A report that fails changes nothing here.
+ * Exit code: the walk's (0, or 1 when a step failed); 1 when the code did not sign in; 2 for a code that is not one.
+ * @param {string | null} code
+ * @param {{ cwd?: string, noBrowser?: boolean, noAnalytics?: boolean }} o
+ * @param {{ fetchFn?: typeof fetch }} [deps]
+ */
+export async function onboard(code, o = {}, deps = {}) {
+  out();
+  out(`  ${c.bold(brand("GenClass"))} ${c.gray("· onboarding, shown live on your dashboard")}`);
+  out();
+  if (code) {
+    if (!ONBOARD_CODE_RE.test(code)) {
+      err(`genclass onboard: that is not a code from genclass.dev. Copy the whole command from ${c.cyan("genclass.dev/account/get-started")}`);
+      return 2;
+    }
+    const sp = spinner("Signing in with the code from genclass.dev");
+    const r = await pollDeviceLogin({ device_code: code, interval: 1, expires_in: 60 }, { fetchFn: deps.fetchFn });
+    if (!r.ok) {
+      sp.stop("bad", r.error === "expired_token" ? "That code has expired or was used already. Get a new one on genclass.dev/account/get-started." : `Could not sign in: ${r.reason}`);
+      return 1;
+    }
+    saveCredentials({ host: apiHost(), access_token: r.access_token, account: r.account });
+    sp.stop("ok", `Signed in as ${c.bold(accountLabel(r.account))}`);
+  }
+  const run = `run-${randomBytes(9).toString("base64url")}`;
+  const send = async (body) => {
+    const creds = readCredentials();
+    if (!creds) return;
+    try {
+      await reportOnboard(creds, { run, ...body }, { fetchFn: deps.fetchFn });
+    } catch {
+      /* the dashboard shows less; the setup goes on */
+    }
+  };
+  const report = async (ev) => {
+    if (ev.type === "state") {
+      const j = stateJson(ev.state);
+      await send({ steps: j.steps.map((x) => ({ id: x.id, title: x.title, state: x.state, detail: x.detail ?? "" })), app: { name: ev.state.app.name ?? "", framework: ev.state.app.framework ?? "" } });
+    } else if (ev.type === "step") await send({ step: { id: ev.step.id, doing: ev.step.doing, result: ev.result } });
+  };
+  note("Your dashboard shows each step as it runs: genclass.dev/account/get-started");
+  out();
+  const exit = await walk({ ...o, yes: true, report }, {}, true);
+  await report({ type: "state", state: await readState({ cwd: o.cwd, noAnalytics: o.noAnalytics }) });
+  await send({ end: true, exit });
+  return exit;
+}
+
 /** The walk itself (setup): every step in order until nothing is left that this machine can do. */
 async function walk(o, deps, auto) {
   const skip = [];
@@ -174,6 +239,8 @@ async function walk(o, deps, auto) {
   for (let turn = 0; turn < 14; turn++) {
     const state = await readState({ cwd: o.cwd, skip, noAnalytics: o.noAnalytics });
     const step = state.next;
+    // genclass onboard: where the setup stands, for genclass.dev to show (a report that fails changes nothing here)
+    if (o.report) await o.report({ type: "state", state });
     let go = auto;
     // the view, and (on a terminal) the keys: Enter starts the step, d unfolds or folds every part, s skips, q stops
     for (;;) {
@@ -232,6 +299,7 @@ async function walk(o, deps, auto) {
     // Enter (or --yes) is the yes for what the step's sentence says it writes
     const so = { ...o, confirmed: true };
     let result = "skipped";
+    if (o.report) await o.report({ type: "step", step, result: "running" });
     if (step.id === "account") result = await signIn(so);
     else if (step.id === "plan" || step.id === "app-plan") {
       result = step.id === "plan" ? await choosePlan(state, so) : await chooseAppPlan(state, so);
@@ -261,6 +329,7 @@ async function walk(o, deps, auto) {
         result = "skipped";
       } else result = (await deps.runSuggest({ cwd: o.cwd, fromSetup: true, paid: state.steps.find((x) => x.id === "plan")?.state === "done" })) === 0 ? "done" : "failed";
     }
+    if (o.report) await o.report({ type: "step", step, result });
     if (result === "failed") {
       failed = true;
       // what went wrong is above, in the step's own words; this says that the walk goes on without it (not for the

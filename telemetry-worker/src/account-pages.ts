@@ -1097,101 +1097,128 @@ export interface GetStartedView {
   command: string | null;
 }
 
-/** Get started's own look: a numbered list of steps, done ones checked, the next one open. Tokens only. */
+/**
+ * Get started's own look: the header, then the setup as a terminal (dark in both themes, as the genclass command's own
+ * screen is): the command, the steps with the command's marks (✔ done, ● next, ◌ waiting on a person, → the command
+ * does it, ○ later), the step running and what each step came to; the ways without a terminal under it.
+ */
 export const GS_CSS = `
-.gs{max-width:880px}
+.gs{max-width:920px}
 .gs-top{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:flex-end;justify-content:space-between}
-.gs-top p{color:var(--ink2);font-size:15px;margin-top:6px;max-width:60ch}
+.gs-top p{color:var(--ink2);font-size:15px;margin-top:6px;max-width:62ch}
 .gs-prog{font:13px var(--mono);color:var(--ink3);white-space:nowrap}
 .gs-prog b{color:var(--ink);font-weight:600}
-.gs-bar{height:4px;background:var(--s300);margin:18px 0 26px;overflow:hidden}
-.gs-bar i{display:block;height:100%;background:var(--accent);width:0}
+.gs-bar{height:4px;background:var(--s300);margin:18px 0 22px;overflow:hidden}
+.gs-bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
 .gs-bar[data-n="1"] i{width:25%}.gs-bar[data-n="2"] i{width:50%}.gs-bar[data-n="3"] i{width:75%}.gs-bar[data-n="4"] i{width:100%}
-.gs-list{list-style:none;display:grid;gap:12px}
-.gs-step{display:grid;grid-template-columns:36px minmax(0,1fr);gap:16px;padding:20px 22px;min-width:0;background:var(--panel);border:1px solid var(--rule);border-radius:10px}
-.gs-step.now{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
-.gs-num{display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule2);font:600 13px var(--mono);color:var(--ink2)}
-.gs-step.now .gs-num{background:var(--ink);border-color:var(--ink);color:var(--paper)}
-.gs-step.done .gs-num{background:var(--accent-t);border-color:var(--ok-b);color:var(--accent)}
-.gs-step.done .gs-num .ic{width:16px;height:16px}
-.gs-step h2{font-size:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.gs-step p{color:var(--ink2);font-size:14px;margin-top:4px;max-width:64ch}
-.gs-step.done h2{color:var(--ink2)}
-.gs-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
-.gs-step>div{min-width:0}
-.gs-cmd{display:flex;align-items:stretch;margin-top:14px;max-width:100%;min-width:0;border:1px solid var(--rule2);background:var(--code)}
-.gs-cmd code{flex:1;min-width:0;padding:10px 12px;font:13px/1.5 var(--mono);color:var(--codeink);overflow-x:auto;white-space:nowrap}
+.ob{background:#0F1115;color:#E9EBF1;border:1px solid #232832;box-shadow:0 24px 60px -28px rgba(8,10,14,.6)}
+.ob [hidden]{display:none!important}
+.ob-bar{display:flex;align-items:center;gap:10px;height:42px;padding:0 16px;border-bottom:1px solid #232832;font:12.5px var(--mono);color:#858C9C}
+.ob-dots{display:inline-flex;gap:6px}.ob-dots i{width:10px;height:10px;border-radius:50%;background:#2A2F39}
+.ob-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ob-live{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;max-width:55%;overflow:hidden;text-overflow:ellipsis}
+.ob-live i{flex:none;width:7px;height:7px;border-radius:50%;background:#5B6272}
+.ob-live.on{color:#E9EBF1}.ob-live.on i{background:#3DDC97;animation:ob-pulse 1.4s ease-in-out infinite}
+@keyframes ob-pulse{50%{opacity:.3}}
+.ob-cmd{padding:20px 18px 16px;border-bottom:1px solid #232832}
+.ob-ask{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:center;justify-content:space-between}
+.ob-ask p{max-width:60ch;color:#AEB4C2;font-size:14.5px;line-height:1.55}
+.ob-ask p b{color:#fff;font-weight:600}
+.ob-go{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 20px;border:0;background:#3DDC97;color:#06140D;font:700 15px/1 var(--sans);cursor:pointer;white-space:nowrap}
+.ob-go:hover{background:#6BE7AE;color:#06140D}
+.ob-go:disabled{opacity:.6;cursor:progress}
+.ob-go:focus-visible,.ob-copy:focus-visible,.ob-a:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.ob-line{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;background:#0A0C0F;border:1px solid #323946;font:14px/1.4 var(--mono);min-width:0}
+.ob-line .p{color:#3DDC97;flex:none}
+.ob-line code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;color:#fff;font:inherit}
+.ob-copy{flex:none;min-height:34px;padding:0 14px;border:1px solid #323946;background:#161A21;color:#E9EBF1;font:600 13px var(--sans);cursor:pointer}
+.ob-copy:hover{border-color:#E9EBF1;background:#1E232C;color:#fff}
+.ob-fine{margin-top:9px;font-size:12.5px;line-height:1.5;color:#858C9C}
+.ob-fine a{color:#AEB4C2}
+.ob-err{margin-top:10px;color:#FF8A70;font-size:13.5px}
+.ob-rows{list-style:none;padding:8px 18px 6px;font:13.5px/1.5 var(--mono)}
+.ob-row{display:grid;grid-template-columns:20px 128px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:38px;padding:4px 0;border-bottom:1px dashed #1E232C}
+.ob-row:last-child{border-bottom:0}
+.ob-g{display:inline-grid;place-items:center;width:16px;color:#5B6272;font-weight:700}
+.ob-row.done .ob-g{color:#3DDC97}
+.ob-row.next .ob-g{color:#fff}
+.ob-row.waiting .ob-g{color:#F2C879}
+.ob-row.blocked .ob-g{color:#FF8A70}
+.ob-row.running .ob-g{color:transparent;position:relative}
+.ob-row.running .ob-g::after{content:"";position:absolute;width:11px;height:11px;border:2px solid #3DDC97;border-right-color:transparent;border-radius:50%;animation:ob-spin .7s linear infinite}
+@keyframes ob-spin{to{transform:rotate(360deg)}}
+.ob-row.running{background:linear-gradient(90deg,rgba(61,220,151,.08),transparent 70%)}
+.ob-t{color:#E9EBF1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ob-row.later .ob-t,.ob-row.auto .ob-t,.ob-row.optional .ob-t{color:#AEB4C2}
+.ob-d{color:#858C9C;font:13px/1.45 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ob-row.done .ob-d,.ob-row.running .ob-d{color:#C9CED9}
+.ob-a{color:#3DDC97;font:600 13px var(--sans);white-space:nowrap;text-decoration:none;border-bottom:1px solid rgba(61,220,151,.4)}
+.ob-a:hover{color:#6BE7AE;border-bottom-color:#6BE7AE}
+.ob-log{list-style:none;padding:10px 18px 16px;border-top:1px solid #232832;font:12.5px/1.7 var(--mono);color:#AEB4C2}
+.ob-log:empty{display:none}
+.ob-log li.done{color:#3DDC97}.ob-log li.failed{color:#FF8A70}
+@media (prefers-reduced-motion:reduce){.ob-live.on i,.ob-row.running .ob-g::after{animation:none}}
+@media (max-width:640px){.ob-row{grid-template-columns:18px minmax(0,1fr) auto;gap:8px 10px}.ob-d{grid-column:2/-1;white-space:normal}.ob-cmd{padding:16px 14px}.ob-rows{padding:6px 14px}}
+.gs-other{margin-top:22px;border:1px solid var(--rule);background:var(--panel)}
+.gs-other>summary{cursor:pointer;padding:14px 18px;font-weight:600;font-size:14.5px;color:var(--ink)}
+.gs-other>summary::marker{color:var(--ink3)}
+.gs-ways{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-top:1px solid var(--rule)}
+.gs-way{padding:18px;min-width:0}
+.gs-way+.gs-way{border-left:1px solid var(--rule)}
+.gs-way h2{font-size:15.5px}
+.gs-way p{color:var(--ink2);font-size:14px;margin-top:4px;max-width:52ch}
+.gs-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.gs-cmd{display:flex;align-items:stretch;margin-top:12px;max-width:100%;min-width:0;border:1px solid var(--rule2);background:var(--code)}
+.gs-cmd code{flex:1;min-width:0;padding:9px 12px;font:12.5px/1.5 var(--mono);color:var(--codeink);overflow-x:auto;white-space:nowrap}
 .gs-cmd .btn{border-width:0 0 0 1px;min-height:0}
-.gs-wait{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink3)}
-.gs-wait i{width:8px;height:8px;border-radius:50%;background:var(--amber)}
-.gs-wait.on i{background:var(--accent)}
-.gs-fine{font-size:12.5px;color:var(--ink3);margin-top:8px}
-.gs-help{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:28px;font-size:13.5px;color:var(--ink3)}
+.gs-help{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:24px;font-size:13.5px;color:var(--ink3)}
 .gs-help a{color:var(--ink2)}
-@media (max-width:560px){.gs-step{grid-template-columns:minmax(0,1fr);gap:10px;padding:18px}}
+@media (max-width:640px){.gs-ways{grid-template-columns:minmax(0,1fr)}.gs-way+.gs-way{border-left:0;border-top:1px solid var(--rule)}}
 `;
 
+/** The command's marks (packages/cli/src/tui.mjs): done, next, waiting on a person, the command's own, later. */
+const OB_MARK: Record<string, string> = { done: "✔", next: "●", waiting: "◌", auto: "→", later: "○", optional: "–", todo: "○", blocked: "✖" };
+
 /**
- * /account/get-started: set the app up, connect it, then the trial, then the terminal (the owner, 2026-11-24: "set up
- * your entire app first before letting you put your credit card in"). The trial's step is a plain choice: its button
- * is the page's main one only once the app sends events.
+ * Get started (the owner, 2026-11-24: "the onboarding system actually gives you a command for the CLI ... it goes
+ * through the entire setup ... the CLI should connect to the dashboard and should show you a visualization"): one
+ * command, `npx genclass onboard <code>` (POST /api/account/onboard), which signs the terminal in with its code and
+ * runs the whole setup; the steps below it are the command's own, drawn from what this server knows (src/auth.ts
+ * glance) and, while it runs, from what the command reports (GET /api/account/onboard). Creating the app by hand,
+ * and its own connect command, stay under "No terminal?".
  */
 export function getStartedPage(nonce: string, v: GetStartedView): string {
   const g = v.glance;
-  const done = (k: string): boolean => g.steps.some((x) => x.key === k && x.done);
   const n = g.steps.filter((x) => x.done).length;
-  const nowKey = g.steps.find((x) => !x.done)?.key ?? null;
-  const step = (k: string, i: number, title: string, text: string, acts: string, extra = ""): string =>
-    `<li class="gs-step${done(k) ? " done" : k === nowKey ? " now" : ""}" id="step-${k}"><span class="gs-num" aria-hidden="true">${done(k) ? icon("check", 16) : i}</span><div><h2>${title}${
-      done(k) ? '<span class="bdg brand">Done</span>' : ""
-    }</h2><p>${text}</p>${extra}${acts ? `<div class="gs-acts">${acts}</div>` : ""}</div></li>`;
   const f = g.first;
+  const row = (s: import("./auth.js").SetupStep): string =>
+    `<li class="ob-row ${s.state}" data-key="${s.key}"><span class="ob-g" aria-hidden="true">${OB_MARK[s.state] ?? "○"}</span><span class="ob-t">${esc(s.title)}</span><span class="ob-d">${esc(s.detail)}</span>${
+      s.link ? `<a class="ob-a" href="${esc(s.link.href)}">${esc(s.link.label)}</a>` : "<span></span>"
+    }</li>`;
   const cmd = (c: string, label: string): string =>
     `<div class="gs-cmd"><code>${esc(c)}</code><button class="btn sm ghost" type="button" data-copy="${esc(c)}" aria-label="${esc(label)}">Copy</button></div>`;
-  const s = g.sold;
-  const trialText = s
-    ? `${esc(s.name)} shows every problem with a fix prompt, visitor analytics, alerts and the genclass command. ${
-        s.days ? `${s.days} days free, then ${esc(s.price)}. Cancel before it ends and you pay nothing.` : `${esc(s.price)}.`
-      }`
-    : "Every plan and what it includes.";
-  const trialActs = done("trial")
-    ? `<span class="gs-wait on"><i></i>You are on ${esc(g.plan)}${g.trial ? `, ${esc(g.status)}` : ""}.</span><a class="btn sm ghost" href="/account/billing">Plans and billing</a>`
-    : s
-      ? `<a class="btn${done("connect") ? "" : " ghost"}" href="${esc(s.start)}">${s.days ? `Start ${s.days}-day free trial` : `Upgrade to ${esc(s.name)}`}</a><a class="btn text" href="/account/billing">Compare plans</a>`
-      : `<a class="btn ghost" href="/account/billing">See plans</a>`;
+  const byHand = f
+    ? `<div class="gs-way"><h2>Connect ${esc(f.name)} by hand</h2><p>In your app's folder, this adds GenClass to ${esc(f.name)} with its key. Then open a page of your app.</p>${v.command ? cmd(v.command, `Copy the command that connects ${f.name}`) : ""}<div class="gs-acts"><a class="btn sm ghost" href="/account/apps/${esc(f.id)}#connect">Other ways to connect</a></div></div>`
+    : `<div class="gs-way"><h2>Create the app here</h2><p id="gs-app-t">Name it. It gets its own key and dashboard, and its page shows the ways to connect it.</p><div class="gs-acts"><a class="btn" id="gs-new" href="/account/new">${icon("plus", 14)}<span>Create your app</span></a></div></div>`;
   const body = `
 <div class="sb-page gs" id="mc" tabindex="-1">
-<div class="gs-top"><div><h1>Get started</h1><p>Set your app up first and watch GenClass work. The trial comes last.</p></div><span class="gs-prog"><b>${n}</b> of ${g.steps.length} done</span></div>
+<div class="gs-top"><div><h1>Get started</h1><p>One command sets GenClass up in your app, the whole setup the genclass command does, and this page shows each step as it runs.</p></div><span class="gs-prog" id="gs-prog"><b>${n}</b> of ${g.steps.length} done</span></div>
 <div class="gs-bar" data-n="${n}" aria-hidden="true"><i></i></div>
-<ol class="gs-list">
-${step(
-  "app",
-  1,
-  "Create your app",
-  f ? `${esc(f.name)} has its own key and dashboard.` : '<span id="gs-app-t">Name it. It gets its own key and dashboard.</span>',
-  f ? `<a class="btn sm ghost" href="/account/apps/${esc(f.id)}">Open ${esc(f.name)}</a>` : `<a class="btn" id="gs-new" href="/account/new">${icon("plus", 14)}<span>Create your app</span></a>`,
-)}
-${step(
-  "connect",
-  2,
-  "Add GenClass to it",
-  "Run this in your app's folder. It finds the framework, installs the runtime and adds one import. Then open a page of your app.",
-  f
-    ? `${done("connect") ? '<span class="gs-wait on"><i></i>Events are arriving.</span>' : '<span class="gs-wait"><i></i>Waiting for the first event</span>'}<a class="btn sm ghost" href="/account/apps/${esc(f.id)}#connect">Other ways to connect</a>`
-    : "",
-  f && v.command ? cmd(v.command, `Copy the command that connects ${f.name}`) : '<p class="gs-fine">Create your app first: the command carries its key.</p>',
-)}
-${step("trial", 3, s && s.days ? `Start your ${s.days}-day free trial` : "Choose a plan", trialText, trialActs, done("trial") || done("connect") || !s ? "" : '<p class="gs-fine">Best once your app sends its first events, so you see your own problems on day one.</p>')}
-${step(
-  "cli",
-  4,
-  "Use it from your terminal",
-  "The genclass command lists your app's problems and writes the fix prompt for your coding agent.",
-  "",
-  `${cmd("npx genclass", "Copy npx genclass")}${done("trial") ? "" : `<p class="gs-fine">Comes with ${esc(s?.name ?? "a paid plan")}.</p>`}`,
-)}
-</ol>
-<p class="gs-help"><a href="https://genclass.dev/docs" target="_blank" rel="noopener">Documentation</a><a href="https://discord.gg/kN9kRnFtZm" target="_blank" rel="noopener">Ask on Discord</a><a href="/account">All apps</a></p>
+<section class="ob" id="ob" aria-labelledby="ob-h">
+<div class="ob-bar"><span class="ob-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="ob-title" id="ob-h">npx genclass onboard</span><span class="ob-live" id="ob-live" role="status"><i></i><span id="ob-live-t">not running</span></span></div>
+<div class="ob-cmd">
+<div class="ob-ask" id="ob-ask"><p><b>Run one command in your app's folder.</b> It signs in with its own code, adds GenClass to your app, puts the app in your account, adds the test workflow and connects your coding agent. Nothing to do by hand.</p><button class="ob-go" type="button" id="ob-make"><span>Get my command</span></button></div>
+<div id="ob-got" hidden><div class="ob-line"><span class="p" aria-hidden="true">$</span><code id="ob-code"></code><button class="ob-copy" type="button" id="ob-copy">Copy</button></div><p class="ob-fine"><span id="ob-fine">Works once, for 10 minutes. Paste it to Claude Code, Cursor or Codex and they run it too.</span> <a href="#" id="ob-new">New command</a></p></div>
+<p class="ob-err" id="ob-err" role="alert" hidden></p>
+</div>
+<ol class="ob-rows" id="ob-rows" aria-label="The setup">${g.setup.map(row).join("")}</ol>
+<ol class="ob-log" id="ob-log" aria-label="What it did"></ol>
+</section>
+<details class="gs-other"${f ? "" : " open"}><summary>No terminal? Two other ways</summary><div class="gs-ways">
+${byHand}
+<div class="gs-way"><h2>Ask your coding agent</h2><p>Get your command above and paste it to Claude Code, Cursor, Codex or Gemini CLI: it runs the setup in your project and this page shows it.</p><div class="gs-acts"><a class="btn sm ghost" href="https://genclass.dev/docs/coding-agents" target="_blank" rel="noopener">How it works with agents</a></div></div>
+</div></details>
+<p class="gs-help"><a href="https://genclass.dev/docs/cli" target="_blank" rel="noopener">The genclass command</a><a href="https://discord.gg/kN9kRnFtZm" target="_blank" rel="noopener">Ask on Discord</a><a href="/account">All apps</a></p>
 </div>`;
   return studioPage(nonce, {
     title: "Get started | GenClass",
@@ -1205,9 +1232,83 @@ ${step(
     railLabel: "Organization",
     css: DASH_CSS + ORG_CSS + GS_CSS,
     body,
-    script: CLIENT_JS + (f ? "" : SITE_CHECKED_JS),
+    script: CLIENT_JS + ONBOARD_JS + (f ? "" : SITE_CHECKED_JS),
   });
 }
+
+/**
+ * Get started's script: "Get my command" asks POST /api/account/onboard and shows the command; the page then asks GET
+ * /api/account/onboard (every 1.5 s while a run goes on or a command was just made, every 6 s otherwise, for half an
+ * hour, never while the tab is hidden) and draws the run: each step's mark and words, the step running, the log. A run
+ * from before this page's own command is drawn too (one started from another tab), not one older than two hours.
+ */
+export const ONBOARD_JS = `
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var MARK = ${JSON.stringify(OB_MARK)};
+  var KEY = { "github-app": "github" };
+  var made = 0, seen = "", timer = null, began = Date.now();
+  function live(t, on){ $("ob-live-t").textContent = t; $("ob-live").className = "ob-live" + (on ? " on" : ""); }
+  function row(key, state, detail, running){
+    var li = document.querySelector('.ob-row[data-key="' + key + '"]'); if (!li) return;
+    li.className = "ob-row " + (running ? "running" : state);
+    li.querySelector(".ob-g").textContent = running ? "" : (MARK[state] || "\\u25CB");
+    if (detail) li.querySelector(".ob-d").textContent = detail;
+  }
+  function draw(run){
+    var now = run.now ? (KEY[run.now.id] || run.now.id) : null;
+    (run.steps || []).forEach(function(s){ var k = KEY[s.id] || s.id; if (k === "app-plan") return; row(k, s.state === "todo" ? "later" : s.state, s.detail, now === k); });
+    if (now) row(now, "next", run.now.doing, true);
+    var log = $("ob-log"); log.textContent = "";
+    (run.log || []).slice(-10).forEach(function(l){
+      var li = document.createElement("li"); li.className = l.result;
+      li.textContent = (l.result === "done" ? "\\u2714 " : l.result === "failed" ? "\\u2716 " : "\\u2192 ") + l.doing + (l.result === "skipped" || l.result === "quit" ? ": left for later" : l.result === "failed" ? ": did not finish" : "");
+      log.appendChild(li);
+    });
+    if (run.finished) live(run.exit ? "finished, a step needs you" : "done in your terminal", false);
+    else live(run.now ? "running: " + run.now.doing : "running in your terminal", true);
+    counts();
+  }
+  // the count over the steps and the sidebar's, from the server's own words, as the run moves them
+  function counts(rows){
+    fetch("/api/account/glance", { credentials: "same-origin", headers: { accept: "application/json" } }).then(function(r){ return r.ok ? r.json() : null; }).then(function(g){
+      if (!g || !g.steps) return;
+      // no run reported (a genclass without onboard, or none yet): the steps as this server sees them
+      if (rows && g.setup) g.setup.forEach(function(s){ row(s.key, s.state, s.detail, false); });
+      var n = 0; g.steps.forEach(function(x){ if (x.done) n++; });
+      var p = $("gs-prog"); if (p && p.firstChild) p.firstChild.textContent = String(n);
+      var bar = document.querySelector(".gs-bar"); if (bar) bar.setAttribute("data-n", String(n));
+      var side = $("gs-n"); if (side) { side.textContent = n + "/" + g.steps.length; side.classList.toggle("done", n === g.steps.length); }
+    }).catch(function(){});
+  }
+  function later(ms){ clearTimeout(timer); if (Date.now() - began < 1800000) timer = setTimeout(ask, ms); }
+  function ask(){
+    if (document.hidden) return later(4000);
+    fetch("/api/account/onboard", { credentials: "same-origin", headers: { accept: "application/json" } }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+      var run = j && j.run;
+      if (run && run.at !== seen) { seen = run.at; draw(run); }
+      else if (!run && made) counts(true);
+      later(run && !run.finished ? 1500 : made && Date.now() - made < 900000 ? 2000 : 6000);
+    }, function(){ later(6000); });
+  }
+  function make(e){
+    if (e) e.preventDefault();
+    var b = $("ob-make"); $("ob-err").hidden = true; gcBusy(b, true, "Making your command...");
+    gcPost("/api/account/onboard", {}).then(function(j){
+      made = Date.now(); $("ob-code").textContent = j.command; $("ob-ask").hidden = true; $("ob-got").hidden = false; gcBusy(b, false);
+      // the plain setup (npm's genclass has no onboard yet): it signs in in the browser, and this page follows the account
+      if (!j.code) { $("ob-fine").textContent = "Run it in your app's folder. It opens genclass.dev once to sign you in, then sets everything up; this page follows along."; $("ob-new").hidden = true; }
+      live("waiting for your terminal", true); later(1500);
+    }, function(err){ $("ob-err").textContent = gcWhy(err); $("ob-err").hidden = false; gcBusy(b, false); });
+  }
+  $("ob-make").addEventListener("click", make);
+  $("ob-new").addEventListener("click", make);
+  $("ob-copy").addEventListener("click", function(){
+    var b = this, t = $("ob-code").textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1600); }, function(){});
+  });
+  later(300);
+})();`;
 
 /**
  * The site the visitor checked on genclass.dev (the home page's live crawl or the page check keep it in this browser,
