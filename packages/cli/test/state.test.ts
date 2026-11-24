@@ -221,12 +221,15 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
   it("a step skipped for this run is not the next one, and --json says what to run and what only a person can do", async () => {
     const dir = tempDir();
     viteApp(dir);
-    // skipping the sign-in skips everything after Pro too: the genclass command is Pro's (CONTRACT: the gate's side doors)
+    // skipping the sign-in skips every step after it: the setup is free, but it is set up in an account (CONTRACT:
+    // the gate's side doors)
     const s = await readState({ cwd: dir, skip: ["account"] }, { runGit: noGit });
     expect(s.next).toBeNull();
-    // before the sign-in, the first screen says what the command costs
-    expect(s.steps[0].why).toBe("Opens genclass.dev. Then Pro: 3 days free, then $50 / developer / month, with a card on Stripe.");
-    expect(s.steps[1].detail).toBe("3 days free, then $50 / developer / month");
+    // before the sign-in, the first screen says the setup is free and the trial comes after it (2026-11-24)
+    expect(s.steps[0].why).toBe("Opens genclass.dev. The setup is free; Pro's 3-day free trial comes after it.");
+    expect(s.steps.find((x) => x.id === "plan")!.detail).toBe("3 days free, prices on genclass.dev/pricing");
+    // before the sign-in no price, seat or plan count is written in the command: they are genclass.dev's
+    expect(JSON.stringify(s.steps)).not.toMatch(/\$\d|developer \/ month|per developer/);
     // with Pro, a skipped step is not the next one
     signIn();
     const fetchFn = fakeServer({ "GET /api/cli/overview": { json: overview({ plan: { id: "team", name: "Pro" }, cli: { paid: true, via: "plan" } }) } }).fetchFn;
@@ -243,7 +246,7 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     expect(j.steps.find((x) => x.id === "workflow")).toMatchObject({ state: "optional", run: null, human: null });
     // every step has a short name, what doing it is called, one sentence and a fuller one
     for (const x of [...s.steps, ...pro.steps]) expect([x.title.length > 0, x.doing.length > 0, x.why.length > 0 && x.why.length < 100, x.more.length > 0], x.id).toEqual([true, true, true, true]);
-    expect(j.steps.map((x) => x.id)).toEqual(["account", "plan", "runtime", "app-plan", "dashboard", "workflow", "github-app", "agent", "suggestions"]);
+    expect(j.steps.map((x) => x.id)).toEqual(["account", "runtime", "app-plan", "dashboard", "workflow", "github-app", "agent", "plan", "suggestions"]);
     expect(stateJson(s).steps[0]).toMatchObject({ state: "todo", run: "npx genclass login", human: "approve the sign-in in your browser" });
     expect(j.complete).toBe(false);
     expect(JSON.stringify(j)).not.toContain(SESSION);
@@ -353,7 +356,7 @@ describe("genclass: a repository that was renamed on GitHub (src/git.mjs renamed
   });
 });
 
-describe("genclass: Pro right after the sign-in, and each app's plan page (src/state.mjs, src/paywall.mjs, src/actions.mjs choosePlan, planNow, src/tui.mjs planCard)", () => {
+describe("genclass: the setup first, Pro after it, and each app's plan page (src/state.mjs, src/paywall.mjs, src/actions.mjs choosePlan, planNow, src/tui.mjs planCard)", () => {
   const OFFER = {
     plan: { id: "team", name: "Pro" },
     price: "$15 / developer / month",
@@ -370,20 +373,27 @@ describe("genclass: Pro right after the sign-in, and each app's plan page (src/s
   const plain = (t: string) => t.replace(/\u001b\[[0-9;]*m/g, "");
   const flat = (t: string) => plain(t).replace(/\s+/g, " ");
 
-  it("the genclass command is Pro's: without it, Pro is the step right after the sign-in, before anything else", async () => {
+  it("the setup needs no Pro (the owner's call, 2026-11-24): Pro's step comes after the setup's steps, and only the suggestions wait for it", async () => {
     const dir = tempDir();
     viteApp(dir);
-    // signed out: the sign-in first, Pro right after it
+    // signed out: the sign-in first; Pro's step is the last but the suggestions
     const out = await readState({ cwd: dir }, { runGit: noGit });
-    expect(out.steps.map((x) => x.id).slice(0, 4)).toEqual(["account", "plan", "runtime", "app-plan"]);
+    expect(out.steps.map((x) => x.id)).toEqual(["account", "runtime", "app-plan", "dashboard", "workflow", "github-app", "agent", "plan", "suggestions"]);
     expect(out.steps.find((x) => x.id === "plan")).toMatchObject({ state: "todo", after: "account" });
     expect(out.next?.id).toBe("account");
     signIn();
     const locked = fakeServer({ "GET /api/cli/overview": { json: overview({ offer: OFFER, cli: LOCKED }) } });
     const s = await readState({ cwd: dir }, { runGit: noGit, fetchFn: locked.fetchFn });
-    expect(s.next?.id).toBe("plan");
+    // signed in without Pro: the runtime is next, not Pro
+    expect(s.next?.id).toBe("runtime");
     const step = s.steps.find((x) => x.id === "plan")!;
-    expect(step).toMatchObject({ title: "Pro", doing: "Start your 3-day free trial", detail: "$15 / developer / month, 3 days free", why: "Every genclass command comes with Pro, 3 days free to start.", run: "npx genclass upgrade", human: `start Pro in your browser: ${CHECKOUT}` });
+    expect(step).toMatchObject({ title: "Pro", doing: "Start your 3-day free trial", detail: "$15 / developer / month, 3 days free", why: "The dashboard, problems, fixes and suggestions come with Pro, 3 days free to start.", run: "npx genclass upgrade", human: `start Pro in your browser: ${CHECKOUT}` });
+    // every setup step done or skipped: Pro is next, and the suggestions (Pro's) are never next before it
+    const after = await readState({ cwd: dir, skip: ["runtime", "agent"] }, { runGit: noGit, fetchFn: locked.fetchFn });
+    expect(after.next?.id).toBe("plan");
+    const without = await readState({ cwd: dir, skip: ["runtime", "agent", "plan"] }, { runGit: noGit, fetchFn: locked.fetchFn });
+    expect(without.next).toBeNull();
+    expect(without.steps.find((x) => x.id === "suggestions")!.state).toBe("todo");
     expect(step.more).toContain("nothing is charged if you cancel before the 3 days end");
     expect(step.more).toContain("Free stays on the website");
     expect(s.account?.cli).toEqual({ paid: false, plan: "Pro", price: "$15 / developer / month", trialDays: 3, checkoutUrl: CHECKOUT });
@@ -392,6 +402,9 @@ describe("genclass: Pro right after the sign-in, and each app's plan page (src/s
     // done, with no "Pro" after the step's own name Pro
     expect(paid.steps.find((x) => x.id === "plan")).toMatchObject({ state: "done", detail: "" });
     expect(paid.next?.id).toBe("runtime");
+    // with Pro the suggestions are next once the setup's steps are skipped
+    const paidLater = await readState({ cwd: dir, skip: ["runtime", "agent"] }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview(PRO) } }).fetchFn });
+    expect(paidLater.next?.id).toBe("suggestions");
     // a member of a paying team (the server says why: via "team")
     const member = await readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ cli: { paid: true, via: "team" } }) } }).fetchFn });
     expect(member.steps.find((x) => x.id === "plan")).toMatchObject({ state: "done", detail: "through your team's plan" });
@@ -439,17 +452,25 @@ describe("genclass: Pro right after the sign-in, and each app's plan page (src/s
     expect(flat(await printed(async () => expect(await requirePro({ yes: true }, { fetchFn })).toBe(1)))).toContain("Sign in first: npx genclass login");
   });
 
-  it("every command but signing in, the plan, status, help and remove passes the gate first (src/cli.mjs FREE_COMMANDS)", async () => {
-    const { FREE_COMMANDS, run } = await import("../src/cli.mjs");
+  it("every command but signing in, the plan, status, help and remove passes the gate first; the setup's pass with the sign-in (src/cli.mjs FREE_COMMANDS, SETUP_COMMANDS)", async () => {
+    const { FREE_COMMANDS, SETUP_COMMANDS, run } = await import("../src/cli.mjs");
     expect(FREE_COMMANDS).toEqual(["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version"]);
+    expect(SETUP_COMMANDS).toEqual(["setup", "init", "connect", "apps"]);
     deleteCredentials();
     forgetPro();
     const dir = tempDir();
     viteApp(dir);
-    for (const cmd of ["dashboard", "problems", "suggest", "connections", "export", "init"]) {
+    for (const cmd of ["dashboard", "problems", "suggest", "connections", "export"]) {
       const said = await printed(async () => expect(await run([cmd, "--yes", "--cwd", dir]), cmd).toBe(1));
       expect(flat(said), cmd).toContain("Sign in first: npx genclass login. The genclass command comes with Pro");
     }
+    // the setup's commands need the sign-in, and say the setup is free
+    for (const argv of [["init"], ["connect"], ["analytics", "on"]]) {
+      const said = await printed(async () => expect(await run([...argv, "--yes", "--cwd", dir]), argv.join(" ")).toBe(1));
+      expect(flat(said), argv.join(" ")).toContain("Sign in first: npx genclass login. Setting your app up is free.");
+    }
+    const { requireSignIn } = await import("../src/paywall.mjs");
+    expect(JSON.parse(await printed(async () => expect(await requireSignIn({ json: true })).toBe(1)))).toEqual({ ok: false, error: "not signed in", signed_in: false, run: "npx genclass login" });
     // the home's commands pass the gate too (the home opens on q before the sign-in)
     const nested = await printed(async () => expect(await run(["suggest", "--no-model", "--yes", "--cwd", dir], { nested: true })).toBe(1));
     expect(flat(nested)).toContain("Sign in first: npx genclass login");
@@ -459,8 +480,8 @@ describe("genclass: Pro right after the sign-in, and each app's plan page (src/s
       expect(flat(said), cmd).toContain("Sign in first: npx genclass login");
       expect(flat(said), cmd).toContain("Free, without Pro: the page check on the website https://genclass.dev/scan");
     }
-    // where things stand is not gated: it shows Pro as the step after the sign-in
-    expect(JSON.parse(await printed(async () => expect(await run(["status", "--json", "--cwd", dir])).toBe(0))).steps.map((x: { id: string }) => x.id).slice(0, 2)).toEqual(["account", "plan"]);
+    // where things stand is not gated: it shows the setup first and Pro after it
+    expect(JSON.parse(await printed(async () => expect(await run(["status", "--json", "--cwd", dir])).toBe(0))).steps.map((x: { id: string }) => x.id).slice(-2)).toEqual(["plan", "suggestions"]);
     // a word a command does not take is told so before anything is asked of genclass.dev
     const { vi } = await import("vitest");
     const spy = vi.spyOn(process.stderr, "write").mockImplementation((() => true) as never);
@@ -527,10 +548,16 @@ describe("genclass: Pro right after the sign-in, and each app's plan page (src/s
     expect(flat(locked)).toContain("Your plan covers no more apps, and shop is one more. More apps come with Enterprise, by email.");
     expect(flat(locked)).toContain(`${url}&from=cli`);
     expect(locked).not.toMatch(/Waiting|No payment yet|has no plan yet/);
-    // on Free, an app with no plan yet: it is chosen in the browser
+    // an account without Pro: no plan page before the setup is done (Pro's step covers the app; 2026-11-24), and the
+    // walk's app plan step does not apply
     const freeApp = project({ id: "p1", plan: { id: "free", name: "Free", source: null }, needs_plan: false, plan_chosen: false, plan_url: url });
-    const onFree = (p: object) => readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ offer: OFFER, cli: LOCKED, projects: [p] }) } }).fetchFn });
-    const freeSaid = await printed(async () => expect(await planNow({ cwd: dir }, { readState: async () => onFree(freeApp) })).toBe("open"));
+    const onFree = (p: object, over: object = { cli: LOCKED }) => readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview({ offer: OFFER, ...over, projects: [p] }) } }).fetchFn });
+    expect(await printed(async () => expect(await planNow({ cwd: dir, announce: true }, { readState: async () => onFree(freeApp) })).toBe("none"))).toBe("");
+    const freeStep = (await onFree(freeApp)).steps.find((x) => x.id === "app-plan")!;
+    expect(freeStep).toMatchObject({ state: "optional", detail: "with Pro, after the setup" });
+    expect(freeStep.offer).toBeUndefined();
+    // a server that does not say whether the command is sold (no `cli`) but sells plans per app: chosen in the browser
+    const freeSaid = await printed(async () => expect(await planNow({ cwd: dir }, { readState: async () => onFree(freeApp, {}) })).toBe("open"));
     expect(flat(freeSaid)).toContain(`shop has no plan yet. Choose it in the browser: ${url}&from=cli`);
     // nothing to choose: Continue clicked, or GenClass's grant continued, or a team's app
     for (const p of [app({ plan_chosen: true }), app({ plan: { id: "team", name: "Pro", source: "comp" }, plan_chosen: true }), project({ shared: true })]) {

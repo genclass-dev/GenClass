@@ -154,6 +154,8 @@ describe("genclass: the home (src/home.mjs)", () => {
     expect(read("show problems")).toEqual({ command: ["problems"] });
     expect(read("open dashboard")).toEqual({ command: ["dashboard"] });
     expect(read("1", undefined, FREE_MENU)).toEqual({ command: ["upgrade"] });
+    // the setup works on Free (the owner's call, 2026-11-24), so it is on the short list
+    expect(read("2", undefined, FREE_MENU)).toEqual({ command: ["setup"] });
     expect(read("npx genclass")).toEqual({ help: true });
     // every command the command line has, including the runtime's own, is a command here and never a question
     for (const cmd of ["connect", "init", "audit"]) expect(read(`${cmd} --name shop now`)).toEqual({ command: [cmd, "--name", "shop", "now"] });
@@ -222,10 +224,29 @@ describe("genclass: the home (src/home.mjs)", () => {
     expect(fresh).toContain("Not signed in, and GenClass is not in this app yet. Type setup");
     const unset = plainLines(await at58(() => opening({ ...base, app: { name: "shop", token: null }, signedIn: true, sessionProblem: null } as never))).join(" ");
     expect(unset).toContain("GenClass is not set up in this folder yet.");
-    // on Free the next thing is Pro, not setup
-    const free = plainLines(await at58(() => opening({ ...base, app: { name: "shop", token: null }, signedIn: true, sessionProblem: null, account: { cli: { paid: false, trialDays: 3 } } } as never))).join(" ").replace(/\s+/g, " ");
-    expect(free).toContain("You are on Free. Type upgrade to start your 3-day free trial of Pro");
-    expect(free).not.toContain("Type setup");
+    // on Free the setup comes first and Pro after it (the owner's call, 2026-11-24): not set up here, setup is next
+    const cli = { paid: false, plan: "Pro", trialDays: 3 };
+    const free = plainLines(await at58(() => opening({ ...base, app: { name: "shop", token: null }, signedIn: true, sessionProblem: null, account: { cli } } as never))).join(" ").replace(/\s+/g, " ");
+    expect(free).toContain("GenClass is not set up in this folder yet. Type setup");
+    expect(free).not.toContain("Type upgrade");
+    // set up, with parts left before Pro's step: those, then the trial (a step after Pro's is not counted)
+    const steps = [
+      { id: "account", title: "Account", state: "done" },
+      { id: "runtime", title: "Runtime", state: "done" },
+      { id: "agent", title: "Coding agent", state: "todo" },
+      { id: "plan", title: "Pro", state: "todo" },
+      { id: "suggestions", title: "Suggestions", state: "todo" },
+    ];
+    const some = plainLines(await at58(() => opening({ ...base, steps, signedIn: true, sessionProblem: null, account: { cli } } as never))).join(" ").replace(/\s+/g, " ");
+    expect(some).toContain("Set up. 1 more step you can add (Coding agent): type setup. Then your 3-day free trial of Pro.");
+    // everything before Pro's step done: the trial is next
+    const done = steps.map((x) => (x.id === "agent" ? { ...x, state: "done" } : x));
+    const all = plainLines(await at58(() => opening({ ...base, steps: done, signedIn: true, sessionProblem: null, account: { cli } } as never))).join(" ").replace(/\s+/g, " ");
+    expect(all).toContain("Your app is set up. Type upgrade to start your 3-day free trial of Pro");
+    // with Pro, a step after Pro's still counts as one left
+    const pro = done.map((x) => (x.id === "plan" ? { ...x, state: "done" } : x));
+    const paid = plainLines(await at58(() => opening({ ...base, steps: pro, signedIn: true, sessionProblem: null, account: { cli: { paid: true } } } as never))).join(" ").replace(/\s+/g, " ");
+    expect(paid).toContain("Set up. 1 more step you can add (Suggestions): type setup.");
   });
 
   it("a command typed with a word it does not take is told so, not run as something else", async () => {

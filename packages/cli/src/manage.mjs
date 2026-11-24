@@ -182,7 +182,7 @@ export async function plan(o = {}, deps = {}) {
     row("Plan", c.bold(clean(state.account?.plan?.name ?? "not known", 20)));
     if (a.reauth) note("For its limits and what is used: npx genclass login, once (this sign-in is from before the command could show them).");
   } else if (a.teamPlan && a.teamPlan.id !== a.plan.id) {
-    // a member of a paying team: its seat is one the team's owner pays for (Pro is per developer), so it shows the
+    // a member of a paying team: the team's owner pays for its place (whatever the plan charges for), so it shows the
     // team's plan, the team's apps and what that plan includes, never its own Free
     const t = a.teamPlan;
     const inc = t.includes ?? a.includes;
@@ -281,10 +281,10 @@ export async function freeLine(o = {}, deps = {}) {
   const name = clean(cli && !cli.paid ? cli.plan : offer.plan.name, 20);
   const price = clean((cli && !cli.paid ? cli.price : null) ?? offer?.price ?? "", 40);
   const days = cli && !cli.paid ? cli.trialDays : offer?.trialDays;
-  // the genclass command is Pro's: Free is the website's (one app and its totals), and the line says so
+  // the genclass command is Pro's but for its setup: Free is the website's (one app and its totals), and the line says so
   const [first = "", ...rest] = wrap(
     cli && !cli.paid
-      ? `You are on Free${lim ? ` (${lim})` : ""}, on the website. Every genclass command comes with ${name}${days ? `, ${days} days free` : ""}: ${homeOpen() ? "type upgrade" : "npx genclass upgrade"}`
+      ? `You are on Free${lim ? ` (${lim})` : ""}, on the website. Setting up is free; the rest of genclass comes with ${name}${days ? `, ${days} days free` : ""}: ${homeOpen() ? "type upgrade" : "npx genclass upgrade"}`
       : `You are on Free, which has limits${lim ? ` (${lim})` : ""}. ${name} has everything, ${days ? `${days} days free, then ${price}` : `for ${price}`}. Upgrade now: ${homeOpen() ? "type upgrade" : "npx genclass upgrade"}`,
     width() - 6,
   );

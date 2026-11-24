@@ -9,6 +9,8 @@
 // - One next step at a time, always the first one open in the fixed order, and every run starts from what is true
 //   now: stopping at any point and running `genclass` again continues where it left off, and a step done by hand or
 //   by another tool counts.
+// - The setup comes first and Pro's free trial after it (the owner's call, 2026-11-24): Pro's step is the last but
+//   the suggestions, which are Pro's, and nothing before it asks for Pro.
 // - On a terminal a step starts on Enter, and Enter is the yes for what the step's sentence says it will write (s
 //   skips it for this run, q stops). With --yes nothing is asked: every step that needs no person is done, and what
 //   only a person can do (install the GitHub App, deploy) is printed with its address; the sign-in prints its link
@@ -233,7 +235,10 @@ async function walk(o, deps, auto) {
     if (step.id === "account") result = await signIn(so);
     else if (step.id === "plan" || step.id === "app-plan") {
       result = step.id === "plan" ? await choosePlan(state, so) : await chooseAppPlan(state, so);
-      // nothing after Pro works without it (paywall.mjs), and an app waits for its plan
+      // with --yes, Pro's step comes after the setup is done: its line says where the trial starts, and the walk ends
+      // as a finished setup does (exit code 0), since what is after it is Pro's
+      if (result === "quit" && auto && step.id === "plan") result = "skipped";
+      // what is after Pro is Pro's (paywall.mjs), and an app waits for its plan
       if (result === "quit") {
         // Pro's card has said how to start it later (one line is enough: the 0.3.9 user stories had three); the
         // plan page's wait said where the page is. Inside the prompt, setup is typed again, not npx genclass

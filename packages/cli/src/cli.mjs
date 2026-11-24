@@ -5,13 +5,15 @@
 // - One way in: `genclass` with no command shows where the project stands and, on a terminal, walks the next step.
 //   Every other command is a part of that walk that can also be run alone.
 // - `login`, `logout`, `whoami`, `connect`, `init` and `scan` are the runtime CLI's own commands: this file hands
-//   them their arguments. `genclass login` only signs in (the runtime login with --no-connect), then shows Pro for an
-//   account without it, and offers to connect this folder's app once Pro is on. `remove` is the runtime CLI's,
+//   them their arguments. `genclass login` only signs in (the runtime login with --no-connect), says where Pro
+//   stands in one line (no card: the setup comes first), and offers to connect this folder's app. `remove` is the runtime CLI's,
 //   followed by what this command's other steps wrote (remove.mjs). `dashboard` is this command's own view
 //   (app.mjs); signed out, in a folder with an app's private link, it prints that link (the runtime CLI's own).
-// - The command is Pro's (the owner's call, 2026-11-13): every command but FREE_COMMANDS passes paywall.mjs
-//   requirePro first (signed out: the sign-in, then Pro with its free trial), the home's commands (ctx.nested)
-//   included. The walk (`genclass`, `setup`) has Pro as its own step right after the sign-in (state.mjs).
+// - The command is Pro's (the owner's call, 2026-11-13), its setup is not (2026-11-24: set the app up first, start
+//   the trial after): SETUP_COMMANDS need only the sign-in (paywall.mjs requireSignIn), and every other command but
+//   FREE_COMMANDS passes paywall.mjs requirePro first (signed out: the sign-in, then Pro with its free trial), the
+//   home's commands (ctx.nested) included. The walk (`genclass`, `setup`) has Pro as its own step once the setup's
+//   steps are done (state.mjs).
 // - Every opt-out keeps working without Pro (AGENTS.md rule 8): `init --no-telemetry`, `init --telemetry` and
 //   `init --no-analytics` on an app that has GenClass change only that option, and pass without the gate; so does
 //   `analytics off`, the same switch by its short name.
@@ -76,7 +78,7 @@ export function usage(cols = width()) {
   };
   text("genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.");
   lines.push("");
-  text("The genclass command comes with Pro: 3 days free, then $50 / developer / month, with a card on Stripe. Without Pro: login, logout, whoami, status, plan, upgrade, profile, remove, help. Free is on the website: https://genclass.dev", "  ");
+  text("Free: setting your app up (setup, init, connect, apps, analytics on | off) and login, logout, whoami, status, plan, upgrade, profile, remove, help. The rest comes with Pro, once the setup is done: 3 days free, with a card on Stripe. Prices: https://genclass.dev/pricing. Free is on the website.", "  ");
   const side = w >= 78;
   const col = 30;
   for (const [head, rows] of HELP) {
@@ -134,17 +136,19 @@ export async function run(argv, ctx = {}) {
 
   // the genclass command is Pro's: a command asks genclass.dev first (paywall.mjs requirePro), once its words are
   // known to be right. Not: signing in and out, the plan, help, the version, status (where things stand, Pro's step
-  // included), remove, and the walk, whose own Pro step comes right after the sign-in. A command typed in the home
-  // asks too: the home opens on q at any step, the sign-in's included (once Pro is seen, it is not asked again)
+  // included), remove, and the walk, whose own Pro step comes once the setup is done. The setup's own commands
+  // (SETUP_COMMANDS) need the sign-in only (paywall.mjs requireSignIn). A command typed in the home asks too: the
+  // home opens on q at any step, the sign-in's included (once Pro is seen, it is not asked again)
   const asksHelp = args.some((a) => ["--help", "-h", "--version", "-v"].includes(a));
-  const paid = async () => {
+  const paid = async (setupOnly = SETUP_COMMANDS.includes(cmd)) => {
     if (asksHelp || FREE_COMMANDS.includes(cmd)) return 0;
     const h = hostConfig();
     if (h.error) {
       err(`genclass: ${h.error}`);
       return 2;
     }
-    return (await import("./paywall.mjs")).requirePro(parseArgs(args).o);
+    const paywall = await import("./paywall.mjs");
+    return setupOnly ? paywall.requireSignIn(parseArgs(args).o) : paywall.requirePro(parseArgs(args).o);
   };
 
   // the runtime CLI's own commands, with their own flags and help
@@ -164,8 +168,8 @@ export async function run(argv, ctx = {}) {
   };
   if (["logout", "whoami"].includes(cmd)) return (await import("../../runtime/bin/lib/login.mjs")).run(cmd, args);
   if (cmd === "login") {
-    // the sign-in only; then Pro (paywall.mjs afterLogin) for an account without it; this folder's app is offered
-    // to the account (the runtime login's own question) only once Pro is on, so nothing is written before Pro's card
+    // the sign-in only; then where Pro stands, in one line (paywall.mjs afterLogin: no card, the setup comes first);
+    // then this folder's app is offered to the account (the runtime login's own question), with or without Pro
     const login = await import("../../runtime/bin/lib/login.mjs");
     const noConnect = args.includes("--no-connect");
     // on a terminal the sign-in is the setup's own step, so it looks like the rest of genclass (the 0.3.9 user
@@ -174,7 +178,7 @@ export async function run(argv, ctx = {}) {
     const plain = args.every((a, i) => ["--cwd", "--no-connect", "--no-browser"].includes(a) || args[i - 1] === "--cwd");
     const code = !asksHelp && plain && interactive() ? await ownLogin(po) : await login.run(cmd, noConnect || asksHelp ? args : [...args, "--no-connect"]);
     if (code !== 0 || asksHelp) return code;
-    if (!(await (await import("./paywall.mjs")).afterLogin(po).catch(() => true))) return code;
+    await (await import("./paywall.mjs")).afterLogin(po).catch(() => true);
     return thenPlan(noConnect ? code : await afterSignIn(po, args, login).catch(() => 1));
   }
   if (cmd === "remove") return (await import("./remove.mjs")).remove(args);
@@ -277,6 +281,12 @@ export async function run(argv, ctx = {}) {
   }
   // off is an opt-out: like init --no-telemetry it works for everyone, with no sign-in and no Pro (AGENTS.md rule 8)
   if (toggle === "off") return (await import("./actions.mjs")).switchAnalytics(false, o);
+  // on is the setup's switch (init --analytics): the sign-in, no Pro
+  if (toggle === "on") {
+    const gate = await paid(true);
+    if (gate !== 0) return gate;
+    return (await import("./actions.mjs")).switchAnalytics(true, o);
+  }
   if (cmd === "agent" && words[0] && words[0] !== "link") {
     err(`genclass agent: there is no ${c.bold(words[0])}. Try ${c.cyan("npx genclass agent")} or ${c.cyan("npx genclass agent link")}`);
     return 2;
@@ -295,7 +305,6 @@ export async function run(argv, ctx = {}) {
   }
   if (cmd === "dashboard") return upsold((await import("./app.mjs")).dashboard(o, { fallback }));
   if (["problems", "events", "health", "report"].includes(cmd)) return upsold((await import("./views.mjs"))[cmd](o), cmd !== "report");
-  if (toggle === "on") return (await import("./actions.mjs")).switchAnalytics(true, o);
   if (cmd === "analytics") return upsold((await import("./views.mjs")).analytics({ ...o, section: words[0] ?? null }));
   if (cmd === "agent") {
     if (words[0] === "link") return (await import("./manage.mjs")).agentLink(o);
@@ -452,6 +461,13 @@ async function privateLinkHere(cwd) {
 
 /** The commands that work without Pro: signing in and out, the plan itself, where things stand, help, the version, and taking GenClass out. */
 export const FREE_COMMANDS = ["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version"];
+
+/**
+ * The setup's commands: they need the sign-in, not Pro (the owner's call, 2026-11-24: set the app up first, start
+ * the trial after). The walk itself (`genclass`, `setup`) signs in as its first step; `analytics on` is init's
+ * --analytics and passes the same way.
+ */
+export const SETUP_COMMANDS = ["setup", "init", "connect", "apps"];
 
 /** Every command, for the "did you mean" of a mistyped one. */
 export const COMMANDS = [

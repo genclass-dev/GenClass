@@ -30,13 +30,13 @@ take a prerelease. Both lines load the same model. AI coding agents working on t
 ## Quick start
 
 ```bash
-npx genclass   # signs you in, starts Pro, adds GenClass to your app and walks you through the rest
+npx genclass   # signs you in, adds GenClass to your app, walks you through the rest, then starts Pro's free trial
 ```
 
-Run it in your web app's folder and press Enter for each step: account, Pro, runtime, app plan, dashboard, test
-workflow, GitHub App, coding agent, suggestions. The command comes with Pro: 3 days free, then US$50 a developer a
-month. The card is asked for on Stripe when the trial starts, and nothing is charged if you cancel before the 3 days
-end. Free stays on the website ([pricing](https://genclass.dev/pricing)). A step that does not fit your project is
+Run it in your web app's folder and press Enter for each step: account, runtime, app plan, dashboard, test workflow,
+GitHub App, coding agent, Pro, suggestions. Setting your app up is free; the rest of the command comes with Pro: 3
+days free, then the price on [genclass.dev/pricing](https://genclass.dev/pricing). The card is asked for on Stripe
+when the trial starts, at the end of the setup, and nothing is charged if you cancel before the 3 days end. Free stays on the website ([pricing](https://genclass.dev/pricing)). A step that does not fit your project is
 skipped, Enter also stops any wait, and running it again continues from where things are. It draws nothing on your
 pages. Then:
 
