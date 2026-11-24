@@ -72,8 +72,12 @@ export function hasPlaywright(cwd, project) {
   return ["ts", "js", "mjs", "cjs", "mts"].some((e) => existsSync(join(cwd, `playwright.config.${e}`)));
 }
 
-/** What the command costs, said before the sign-in (the server says it in its own words once signed in): the setup is free. */
-export const PRO_TERMS = "After the setup, Pro: 3 days free, then $50 / developer / month, card on Stripe.";
+/**
+ * What the command costs, said before the sign-in: the setup is free, and the price is genclass.dev's. No price,
+ * seat or plan count is written here (plans.json changes them): once signed in, the server says them in its own
+ * words (`cli.price`, the 402 needs_pro body).
+ */
+export const PRO_TERMS = "After the setup, Pro: 3 days free, card on Stripe. Prices: genclass.dev/pricing.";
 
 /** Free's limits as a few words ("3 apps, 7 days of history, your top 3 suggestions"), from the numbers the server sent. */
 export function freeLimits(free) {
@@ -375,7 +379,7 @@ export async function readState(o = {}, deps = {}) {
     detail: !me
       ? creds || st.token
         ? ""
-        : "3 days free, then $50 / developer / month"
+        : "3 days free, prices on genclass.dev/pricing"
       : cli && !cli.paid
         ? `${cli.price ?? cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free` : ""}`
         : cli?.paid && cli.via === "team"

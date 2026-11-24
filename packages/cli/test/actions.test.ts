@@ -268,7 +268,9 @@ describe("genclass: the command line (src/cli.mjs, src/main.mjs)", () => {
       expect(lines.filter((l) => l.length > max), String(cols)).toEqual([]);
       expect(lines.join("\n")).toContain("npx genclass dashboard");
     }
-    expect(usage(60).replace(/\s+/g, " ")).toContain("$50 / developer / month");
+    // no price, seat or plan count is written in the command: the price is genclass.dev's (plans.json changes it)
+    expect(usage(60).replace(/\s+/g, " ")).toContain("Prices: https://genclass.dev/pricing");
+    expect(USAGE).not.toMatch(/\$\d|developer \/ month|per developer/);
     // the browser opens only for someone at a terminal (none here: a coding agent, CI, a pipe), never with --no-browser
     expect(openBrowser("https://genclass.dev/account", {})).toBe(false);
     expect(openBrowser("https://genclass.dev/account", { noBrowser: true })).toBe(false);

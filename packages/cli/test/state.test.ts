@@ -227,7 +227,9 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     expect(s.next).toBeNull();
     // before the sign-in, the first screen says the setup is free and the trial comes after it (2026-11-24)
     expect(s.steps[0].why).toBe("Opens genclass.dev. The setup is free; Pro's 3-day free trial comes after it.");
-    expect(s.steps.find((x) => x.id === "plan")!.detail).toBe("3 days free, then $50 / developer / month");
+    expect(s.steps.find((x) => x.id === "plan")!.detail).toBe("3 days free, prices on genclass.dev/pricing");
+    // before the sign-in no price, seat or plan count is written in the command: they are genclass.dev's
+    expect(JSON.stringify(s.steps)).not.toMatch(/\$\d|developer \/ month|per developer/);
     // with Pro, a skipped step is not the next one
     signIn();
     const fetchFn = fakeServer({ "GET /api/cli/overview": { json: overview({ plan: { id: "team", name: "Pro" }, cli: { paid: true, via: "plan" } }) } }).fetchFn;

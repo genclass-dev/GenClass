@@ -9,7 +9,8 @@ npx genclass
 
 Run it in your web app's folder. It shows where the project stands and walks you through the next step: one Enter
 per step. Stop at any point and run it again: it continues from what is true now. Setting your app up is free; the
-rest comes with Pro, whose free trial starts at the end of the setup: 3 days free, then US$50 a developer a month.
+rest comes with Pro, whose free trial starts at the end of the setup: 3 days free, then the price on
+[genclass.dev/pricing](https://genclass.dev/pricing).
 
 ```text
   ╭─ GenClass ────────────────────────────────────────────── v0.3.7 ─╮
@@ -73,7 +74,8 @@ also a command of its own (`npx genclass problems`), so scripts and coding agent
 account, the test workflow, the GitHub App and the coding agent (`setup`, `init`, `connect`, `apps`,
 `analytics on | off`). When they are done, Pro's card comes, and Enter opens its checkout in the browser: 3 days
 free (one trial per account; the card is asked for on Stripe, and nothing is charged if you cancel before they end),
-then US$50 a developer a month, for up to 3 apps in the account. More apps come with Enterprise, by email. The rest
+then the plan's price ([pricing](https://genclass.dev/pricing)), which the command shows in genclass.dev's own words
+before the checkout opens. The rest
 of the command comes with Pro: every command but the setup's, `login`, `logout`, `whoami`, `plan`, `upgrade`,
 `profile`, `status`, `remove`, `help` and `version` asks first, and shows the same card. Without a terminal
 (`--yes`, `--json`, a coding agent) nothing is opened: one line with the checkout address, and exit code 1 for a
