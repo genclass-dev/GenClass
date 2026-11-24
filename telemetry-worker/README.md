@@ -722,9 +722,9 @@ A CLI token is refused on all of them. Making an invite and joining take `AUTH_L
 
   ```sh
   # the account by email; 9999-12-31 means until revoked
-  npx --yes wrangler@4 d1 execute genclass-dashboard --remote --command "UPDATE accounts SET comp_until = '9999-12-31T00:00:00.000Z' WHERE email = 'mehar@daybot.ca'"
+  npx --yes wrangler@4 d1 execute genclass-dashboard --remote --command "UPDATE accounts SET comp_until = '9999-12-31T00:00:00.000Z' WHERE email = 'mehar@genclass.dev'"
   # revoke it
-  npx --yes wrangler@4 d1 execute genclass-dashboard --remote --command "UPDATE accounts SET comp_until = NULL WHERE email = 'mehar@daybot.ca'"
+  npx --yes wrangler@4 d1 execute genclass-dashboard --remote --command "UPDATE accounts SET comp_until = NULL WHERE email = 'mehar@genclass.dev'"
   ```
 
   When an account has both a paid plan and a grant, the plan listed later in `billing/plans.json` applies (the paid
