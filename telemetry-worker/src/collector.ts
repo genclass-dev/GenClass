@@ -26,6 +26,7 @@
 // its webhook, its pages and the link between a repository and an app. Off, and every route above unchanged, until
 // the app's secrets are set (src/github/config.ts).
 
+import { routeSales } from "./sales.js";
 import { OBSERVE_HEADER, OBSERVE_REASON, observeOnly } from "./usage.js";
 import { authConfig, lockedError, routeAuth, runtimeHasTokens } from "./auth.js";
 import {
@@ -248,6 +249,9 @@ export async function handle(request: Request, env: Env, opts: HandleOptions = {
     opts.waitUntil?.(res.catch(() => undefined));
     return res;
   }
+  // the site's Contact sales form (src/sales.ts): /api/sales
+  const sales = await routeSales(request, path, env, opts);
+  if (sales) return sales;
   // the GitHub App's routes first: /account/github and /api/account/github sit under the account routes' prefixes
   const github = await routeGithub(request, url, path, env, opts);
   if (github) return github;

@@ -12,9 +12,9 @@ diagnostics and for accounts (what is collected and stored, how long it is kept,
 Each web app gets a **project key** (token: `gc_` + 22 letters and digits) that groups its diagnostics on a
 dashboard at genclass.dev. The key is public: it ships in your page and can only add telemetry to its app. Keep the
 dashboards in a GenClass account, or use one private link per app without an account. The dashboard is free for every
-app: what GenClass found, on which pages and what it did, for the last 7 days and up to 3 apps in an account. The Team
-plan (US$50 a developer a month) adds visitor analytics, forwarding, export, 90 days of history, unlimited apps and
-members, who open your apps' dashboards with their own sign-in (Plan and billing, Team: make an invite link and send
+app: what GenClass found, on which pages and what it did, for the last 7 days and up to 3 apps in an account. Pro
+(US$25 a month, one developer, up to 3 apps) adds visitor analytics, forwarding, export and 90 days of history; Business
+(US$79 a month) adds members, up to 10 apps and 180 days. Members open your apps' dashboards with their own sign-in (Plan and billing, Team: make an invite link and send
 it; it works once, for 7 days). Enterprise adds a year of history and your own classifier, which a person from
 GenClass trains on your app's traffic, bug reports or labelled examples ([pricing](https://genclass.dev/pricing)).
 Data is kept 90 days on every plan, and visitor analytics are counted while a plan leaves them out, so an upgrade

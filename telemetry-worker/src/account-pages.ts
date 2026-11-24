@@ -30,7 +30,7 @@ export function pitchList(lines: string[], shown = PITCH_SHOWN): string {
 
 export const ACCOUNT_CSS = `
 /* the sign-in look's palette (the shell's tokens, pages.ts CSS) in the light theme; dark stays the default */
-:root[data-theme="light"]{--paper:#fcfcfc;--panel:#f7f7f7;--ink:#171717;--ink2:#525252;--ink3:#6b6b6b;--rule:#e6e6e6;--rule2:#dcdcdc;--line:#8a8a8a;--accent:#0a7c4a;--accent-x:#0a7c4a;--accent-f:#0a7c4a;--accent-t:#e8f5ee;--warn:#c2410c;--warn-f:#d9480f;--warn-t:#fdeee9;--bar:#6b6b6b;--bar2:#0a7c4a;--bar3:#d9480f;--ink-h:#000000;--green-h:#086a3f;--on-green:#ffffff;--head:rgba(252,252,252,.8);--code:#f3f3f3;--codeink:#171717}
+:root[data-theme="light"]{--paper:#FAF8F4;--panel:#FFFFFF;--ink:#15171F;--ink2:#4A4E5C;--ink3:#5F6473;--rule:#E6E2D9;--rule2:#DCD7CC;--line:#8A8D99;--accent:#0A6A49;--accent-x:#0A6A49;--accent-f:#15171F;--accent-t:#E9F2EC;--warn:#B53A25;--warn-f:#E0533B;--warn-t:#FBEDE9;--bar:#5F6473;--bar2:#0A6A49;--bar3:#E0533B;--ink-h:#000000;--green-h:#2C2F3A;--on-green:#FAF8F4;--head:rgba(250,248,244,.85);--code:#F3F0EA;--codeink:#15171F}
 code{font-family:var(--mono);font-size:.9em}
 .eb{font:500 12.5px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
 .auth{max-width:440px;margin:0 auto;padding:44px 0 64px;overflow-wrap:anywhere}
@@ -675,6 +675,8 @@ export interface AccountView {
   plan?: string;
   /** This server runs the GitHub App (src/github/config.ts): the projects view links to /account/github. */
   githubApp?: boolean;
+  /** No app yet: the page goes on to /account/get-started unless the address names a part of it (#settings). */
+  getStarted?: boolean;
   /**
    * A new account on Free that can buy (no app yet): its first screen is the paid plan's trial, with a tiny Skip on to
    * its first app (the owner's call, 2026-11-13: "our entire goal is for them to put their credit cards in").
@@ -701,18 +703,18 @@ export const ORG_CSS = `
 .psearch .ic{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink3);pointer-events:none}
 .psearch input{min-height:32px;padding-left:32px;font-size:13px}
 .pgrid{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:16px}
-.pcard{position:relative;display:flex;flex-direction:column;gap:14px;min-height:176px;padding:20px 20px 16px;background:var(--panel);border:1px solid var(--rule);border-radius:6px;transition:border-color .15s,background .15s;min-width:0}
+.pcard{position:relative;display:flex;flex-direction:column;gap:14px;min-height:176px;padding:20px 20px 16px;background:var(--panel);border:1px solid var(--rule);border-radius:10px;transition:border-color .15s,background .15s;min-width:0}
 .pcard:hover{border-color:var(--rule3);background:var(--card-h)}
 .pcard h2{font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:16px}
 .pcard h2 a{text-decoration:none;color:inherit}
-.pcard h2 a::after{content:"";position:absolute;inset:0;border-radius:6px}
+.pcard h2 a::after{content:"";position:absolute;inset:0;border-radius:10px}
 .pcard .pk{font:12px var(--mono);color:var(--ink3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pcard .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:var(--ink3);margin-top:auto}
 .pcard .acts{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--ink3)}
 .pcard .acts>span{min-width:0;overflow-wrap:anywhere}
-.pnew{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:176px;border:1px dashed var(--rule2);border-radius:6px;color:var(--ink3);text-decoration:none;font-size:13px}
+.pnew{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:176px;border:1px dashed var(--rule2);border-radius:10px;color:var(--ink3);text-decoration:none;font-size:13px}
 .pnew:hover{border-color:var(--rule3);color:var(--ink);background:var(--s75)}
-.empty-p{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:12px;padding:56px 16px;border:1px dashed var(--rule2);border-radius:6px;text-align:center}
+.empty-p{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:12px;padding:56px 16px;border:1px dashed var(--rule2);border-radius:10px;text-align:center}
 .empty-p h2{font-size:16px}
 .empty-p p{font-size:13px;color:var(--ink3);max-width:52ch}
 .empty-p.trial{border-style:solid;border-color:var(--accent);gap:10px;padding:32px 20px 24px}
@@ -734,7 +736,7 @@ export const ORG_CSS = `
 .acct-form label{display:block;font-size:13px;color:var(--ink2);margin-bottom:6px}
 .err{font-size:13px;color:var(--warn);margin-top:8px}
 .err:empty{display:none}
-.notice{margin:0 0 20px;padding:10px 14px;border:1px solid var(--rule);border-radius:6px;background:var(--s75);font-size:13.5px;color:var(--ink2)}
+.notice{margin:0 0 20px;padding:10px 14px;border:1px solid var(--rule);border-radius:10px;background:var(--s75);font-size:13.5px;color:var(--ink2)}
 .notice b{font-weight:500;color:var(--ink)}
 .notice.n-ok{border-color:var(--accent-b);background:var(--accent-t)}.notice.n-ok b{color:var(--accent)}
 .notice.n-bad{border-color:var(--warn-b);background:var(--warn-t)}.notice.n-bad b{color:var(--warn)}
@@ -777,10 +779,7 @@ table.dt td form{display:inline}
 /** The organization's rail (Studio's: Projects, Billing, and its settings at the foot). */
 export function orgRail(current: "projects" | "billing" | "settings"): { rail: RailItem[][]; railEnd: RailItem[] } {
   return {
-    rail: [
-      [{ href: "/account#projects", label: "Projects", icon: "box", current: current === "projects" }],
-      [{ href: "/account/billing", label: "Billing", icon: "receipt", current: current === "billing" }],
-    ],
+    rail: [[{ href: "/account/billing", label: "Plans and billing", icon: "receipt", current: current === "billing" }]],
     railEnd: [{ href: "/account#settings", label: "Account settings", icon: "settings", current: current === "settings" }],
   };
 }
@@ -826,8 +825,8 @@ export function accountPage(nonce: string, v: AccountView): string {
     .join("\n");
   const grid = v.projects.length
     ? `<ul class="pgrid" id="pgrid">${cards}
-<li><a class="pnew" href="/account/new">${icon("plus", 18)}New project</a></li></ul>
-<p class="quiet hidden" id="pnone">No project matches your search.</p>`
+<li><a class="pnew" href="/account/new">${icon("plus", 18)}New app</a></li></ul>
+<p class="quiet hidden" id="pnone">No app matches your search.</p>`
     : v.trial
       ? `<div class="pgrid"><div class="empty-p trial" id="trial"><h2>${v.trial.days ? `Start your ${v.trial.days}-day free trial` : `Start ${esc(v.trial.plan)}`}</h2>
   <p class="tp">${esc(v.trial.plan)}, ${esc(v.trial.price)}</p>
@@ -835,9 +834,9 @@ export function accountPage(nonce: string, v: AccountView): string {
   <a class="btn" href="${esc(v.trial.start)}" id="starttrial"><span>${v.trial.days ? `Start your ${v.trial.days}-day free trial` : `Start ${esc(v.trial.plan)}`}</span></a>
   ${v.trial.days ? `<p>${v.trial.days} days free, then ${esc(v.trial.price)}. Cancel before the trial ends and you pay nothing.</p>` : ""}
   <p class="skipit"><a href="/account/new" id="skiptrial">Skip</a></p></div></div>`
-      : `<div class="pgrid"><div class="empty-p"><h2>Create your first project</h2><p>Fastest: run <code>npx genclass</code> in your app's folder. It creates the project here and sets GenClass up.</p><a class="btn" href="/account/new">${icon("plus", 14)}<span>New project</span></a></div></div>`;
+      : `<div class="pgrid"><div class="empty-p"><h2>Create your first app</h2><p>Set it up and watch GenClass work first. The trial comes last.</p><div class="row"><a class="btn" href="/account/new">${icon("plus", 14)}<span>Create your app</span></a><a class="btn ghost" href="/account/get-started">Get started</a></div></div></div>`;
   // with the GitHub App set up on this server, its page sits next to New project (src/github/pages.ts)
-  const newBtn = `<a class="btn sm" href="/account/new" id="newproj">${icon("plus", 14)}<span>New project</span></a>`;
+  const newBtn = `<a class="btn sm" href="/account/new" id="newproj">${icon("plus", 14)}<span>New app</span></a>`;
   const newProject = v.githubApp ? `<div class="row"><a class="btn sm ghost" href="/account/github" id="ghapp">${icon("bot", 14)}<span>GitHub</span></a>${newBtn}</div>` : newBtn;
 
   const keyRows = v.passkeys
@@ -902,10 +901,10 @@ ${rows.map((s, i) => sessionRow(s, kind, i)).join("\n")}
 <div class="sb-page" id="mc" tabindex="-1">
 ${v.notice ? `<p class="notice n-${v.notice.kind}" role="status"><b>${v.notice.kind === "ok" ? "Done." : "Not changed."}</b> ${esc(v.notice.text)}</p>` : ""}
 <div id="projects" data-v="projects">
-<header class="sb-ph"><div><h1>Projects</h1></div></header>
+<header class="sb-ph"><div><h1>Apps</h1></div></header>
 ${planBlock}
 <section id="apps">
-  <div class="ptool"><div class="psearch">${icon("search", 14)}<input type="search" id="psearch" placeholder="Search for a project" aria-label="Search for a project" autocomplete="off"></div>${newProject}</div>
+  <div class="ptool"><div class="psearch">${icon("search", 14)}<input type="search" id="psearch" placeholder="Search your apps" aria-label="Search your apps" autocomplete="off"></div>${newProject}</div>
   ${grid}
   <p class="err" id="linkerr" role="alert"></p>
 </section>
@@ -955,7 +954,7 @@ ${planBlock}
 </section>
 </div>
 </div>
-<script type="application/json" id="acfg">${embed({ claim: !!v.pick?.claim, save: !!v.pick?.save })}</script>`;
+<script type="application/json" id="acfg">${embed({ claim: !!v.pick?.claim, save: !!v.pick?.save, start: !!v.getStarted })}</script>`;
 
   const script = `
 (function(){
@@ -1047,6 +1046,8 @@ ${planBlock}
     gcFresh(function(){ return gcRegister(); }).then(function(){ location.reload(); }, function(e){ pkerr.textContent = gcWhy(e); gcBusy(add, false); });
   });
   var cfg = JSON.parse(document.getElementById("acfg").textContent);
+  // no app yet: Get started, unless the address names a part of this page (#settings, #security...)
+  if (cfg.start && !location.hash) { location.replace("/account/get-started"); return; }
   // back from signing in on a locked dashboard link: return to it (its link was kept in this tab only), where the app
   // can be added to this account; otherwise the link field below is ready for it
   // back from "Save it to a free account" on /start/<secret>: add that app (its link was kept in this tab only) and open it
@@ -1066,8 +1067,9 @@ ${planBlock}
   }
 })();`;
   return studioPage(nonce, {
-    title: "Projects | GenClass",
+    title: "Apps | GenClass",
     account: true,
+    here: "home",
     org: { name: orgName(labelOf(a)), plan: v.plan ?? "Free", href: "/account" },
     projects: v.projects.map((p) => ({ id: p.id, name: p.name })),
     project: null,
@@ -1076,12 +1078,133 @@ ${planBlock}
     railLabel: "Organization",
     menus: [SETTINGS_MENU],
     commands: [
-      { group: "Actions", label: "New project", href: "/account/new", icon: "plus" },
+      { group: "Actions", label: "New app", href: "/account/new", icon: "plus" },
       { group: "Actions", label: "Import a dashboard", href: "/account#claim", icon: "link" },
     ],
     css: DASH_CSS + ORG_CSS,
     body,
     script: CLIENT_JS + script,
+  });
+}
+
+/** /account/get-started: the steps from the account's glance (src/auth.ts glance), its first app's connect command. */
+export interface GetStartedView {
+  account: AccountView["account"];
+  projects: { id: string; name: string }[];
+  glance: import("./auth.js").Glance;
+  /** The command that connects the first app (pages.ts setupCommand), or null before there is one. */
+  command: string | null;
+}
+
+/** Get started's own look: a numbered list of steps, done ones checked, the next one open. Tokens only. */
+export const GS_CSS = `
+.gs{max-width:880px}
+.gs-top{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:flex-end;justify-content:space-between}
+.gs-top p{color:var(--ink2);font-size:15px;margin-top:6px;max-width:60ch}
+.gs-prog{font:13px var(--mono);color:var(--ink3);white-space:nowrap}
+.gs-prog b{color:var(--ink);font-weight:600}
+.gs-bar{height:4px;background:var(--s300);margin:18px 0 26px;overflow:hidden}
+.gs-bar i{display:block;height:100%;background:var(--accent);width:0}
+.gs-bar[data-n="1"] i{width:25%}.gs-bar[data-n="2"] i{width:50%}.gs-bar[data-n="3"] i{width:75%}.gs-bar[data-n="4"] i{width:100%}
+.gs-list{list-style:none;display:grid;gap:12px}
+.gs-step{display:grid;grid-template-columns:36px minmax(0,1fr);gap:16px;padding:20px 22px;min-width:0;background:var(--panel);border:1px solid var(--rule);border-radius:10px}
+.gs-step.now{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.gs-num{display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule2);font:600 13px var(--mono);color:var(--ink2)}
+.gs-step.now .gs-num{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.gs-step.done .gs-num{background:var(--accent-t);border-color:var(--ok-b);color:var(--accent)}
+.gs-step.done .gs-num .ic{width:16px;height:16px}
+.gs-step h2{font-size:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.gs-step p{color:var(--ink2);font-size:14px;margin-top:4px;max-width:64ch}
+.gs-step.done h2{color:var(--ink2)}
+.gs-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
+.gs-step>div{min-width:0}
+.gs-cmd{display:flex;align-items:stretch;margin-top:14px;max-width:100%;min-width:0;border:1px solid var(--rule2);background:var(--code)}
+.gs-cmd code{flex:1;min-width:0;padding:10px 12px;font:13px/1.5 var(--mono);color:var(--codeink);overflow-x:auto;white-space:nowrap}
+.gs-cmd .btn{border-width:0 0 0 1px;min-height:0}
+.gs-wait{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink3)}
+.gs-wait i{width:8px;height:8px;border-radius:50%;background:var(--amber)}
+.gs-wait.on i{background:var(--accent)}
+.gs-fine{font-size:12.5px;color:var(--ink3);margin-top:8px}
+.gs-help{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:28px;font-size:13.5px;color:var(--ink3)}
+.gs-help a{color:var(--ink2)}
+@media (max-width:560px){.gs-step{grid-template-columns:minmax(0,1fr);gap:10px;padding:18px}}
+`;
+
+/**
+ * /account/get-started: set the app up, connect it, then the trial, then the terminal (the owner, 2026-11-24: "set up
+ * your entire app first before letting you put your credit card in"). The trial's step is a plain choice: its button
+ * is the page's main one only once the app sends events.
+ */
+export function getStartedPage(nonce: string, v: GetStartedView): string {
+  const g = v.glance;
+  const done = (k: string): boolean => g.steps.some((x) => x.key === k && x.done);
+  const n = g.steps.filter((x) => x.done).length;
+  const nowKey = g.steps.find((x) => !x.done)?.key ?? null;
+  const step = (k: string, i: number, title: string, text: string, acts: string, extra = ""): string =>
+    `<li class="gs-step${done(k) ? " done" : k === nowKey ? " now" : ""}" id="step-${k}"><span class="gs-num" aria-hidden="true">${done(k) ? icon("check", 16) : i}</span><div><h2>${title}${
+      done(k) ? '<span class="bdg brand">Done</span>' : ""
+    }</h2><p>${text}</p>${extra}${acts ? `<div class="gs-acts">${acts}</div>` : ""}</div></li>`;
+  const f = g.first;
+  const cmd = (c: string, label: string): string =>
+    `<div class="gs-cmd"><code>${esc(c)}</code><button class="btn sm ghost" type="button" data-copy="${esc(c)}" aria-label="${esc(label)}">Copy</button></div>`;
+  const s = g.sold;
+  const trialText = s
+    ? `${esc(s.name)} shows every problem with a fix prompt, visitor analytics, alerts and the genclass command. ${
+        s.days ? `${s.days} days free, then ${esc(s.price)}. Cancel before it ends and you pay nothing.` : `${esc(s.price)}.`
+      }`
+    : "Every plan and what it includes.";
+  const trialActs = done("trial")
+    ? `<span class="gs-wait on"><i></i>You are on ${esc(g.plan)}${g.trial ? `, ${esc(g.status)}` : ""}.</span><a class="btn sm ghost" href="/account/billing">Plans and billing</a>`
+    : s
+      ? `<a class="btn${done("connect") ? "" : " ghost"}" href="${esc(s.start)}">${s.days ? `Start ${s.days}-day free trial` : `Upgrade to ${esc(s.name)}`}</a><a class="btn text" href="/account/billing">Compare plans</a>`
+      : `<a class="btn ghost" href="/account/billing">See plans</a>`;
+  const body = `
+<div class="sb-page gs" id="mc" tabindex="-1">
+<div class="gs-top"><div><h1>Get started</h1><p>Set your app up first and watch GenClass work. The trial comes last.</p></div><span class="gs-prog"><b>${n}</b> of ${g.steps.length} done</span></div>
+<div class="gs-bar" data-n="${n}" aria-hidden="true"><i></i></div>
+<ol class="gs-list">
+${step(
+  "app",
+  1,
+  "Create your app",
+  f ? `${esc(f.name)} has its own key and dashboard.` : "Name it. It gets its own key and dashboard.",
+  f ? `<a class="btn sm ghost" href="/account/apps/${esc(f.id)}">Open ${esc(f.name)}</a>` : `<a class="btn" href="/account/new">${icon("plus", 14)}<span>Create your app</span></a>`,
+)}
+${step(
+  "connect",
+  2,
+  "Add GenClass to it",
+  "Run this in your app's folder. It finds the framework, installs the runtime and adds one import. Then open a page of your app.",
+  f
+    ? `${done("connect") ? '<span class="gs-wait on"><i></i>Events are arriving.</span>' : '<span class="gs-wait"><i></i>Waiting for the first event</span>'}<a class="btn sm ghost" href="/account/apps/${esc(f.id)}#connect">Other ways to connect</a>`
+    : "",
+  f && v.command ? cmd(v.command, `Copy the command that connects ${f.name}`) : '<p class="gs-fine">Create your app first: the command carries its key.</p>',
+)}
+${step("trial", 3, s && s.days ? `Start your ${s.days}-day free trial` : "Choose a plan", trialText, trialActs, done("trial") || done("connect") || !s ? "" : '<p class="gs-fine">Best once your app sends its first events, so you see your own problems on day one.</p>')}
+${step(
+  "cli",
+  4,
+  "Use it from your terminal",
+  "The genclass command lists your app's problems and writes the fix prompt for your coding agent.",
+  "",
+  `${cmd("npx genclass", "Copy npx genclass")}${done("trial") ? "" : `<p class="gs-fine">Comes with ${esc(s?.name ?? "a paid plan")}.</p>`}`,
+)}
+</ol>
+<p class="gs-help"><a href="https://genclass.dev/docs" target="_blank" rel="noopener">Documentation</a><a href="https://discord.gg/kN9kRnFtZm" target="_blank" rel="noopener">Ask on Discord</a><a href="/account">All apps</a></p>
+</div>`;
+  return studioPage(nonce, {
+    title: "Get started | GenClass",
+    account: true,
+    org: { name: orgName(labelOf(v.account)), plan: g.plan, href: "/account" },
+    projects: v.projects,
+    project: null,
+    user: { label: labelOf(v.account), sub: orgName(labelOf(v.account)) },
+    ...orgRail("projects"),
+    here: "start",
+    railLabel: "Organization",
+    css: DASH_CSS + ORG_CSS + GS_CSS,
+    body,
+    script: CLIENT_JS,
   });
 }
 
@@ -1103,10 +1226,10 @@ export function newProjectPage(nonce: string, v: NewProjectView): string {
   const body = `
 <div class="sb-page" id="mc" tabindex="-1">
 <form class="pnl newp" id="new-app" novalidate>
-  <div class="pnl-h"><h1>Create a new project</h1></div>
+  <div class="pnl-h"><h1>Create a new app</h1></div>
   <div class="frow"><label for="org">Organization</label><div><select id="org" disabled><option>${esc(org)}</option></select></div></div>
-  <div class="frow"><label for="appname">Project name</label><div><input id="appname" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Acme checkout" required autofocus${v.suggested ? ` value="${esc(v.suggested)}"` : ""}></div></div>
-  <div class="pnl-f"><p class="err" id="newerr" role="alert"></p><div class="row"><a class="btn ghost" href="/account">Cancel</a><button class="btn" type="submit" id="newgo"><span>Create new project</span></button></div></div>
+  <div class="frow"><label for="appname">App name</label><div><input id="appname" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Acme checkout" required autofocus${v.suggested ? ` value="${esc(v.suggested)}"` : ""}></div></div>
+  <div class="pnl-f"><p class="err" id="newerr" role="alert"></p><div class="row"><a class="btn ghost" href="/account">Cancel</a><button class="btn" type="submit" id="newgo"><span>Create app</span></button></div></div>
 </form>
 <p class="intro newp"><a href="/account#claim">Import an existing dashboard</a></p>
 </div>`;
@@ -1115,13 +1238,13 @@ export function newProjectPage(nonce: string, v: NewProjectView): string {
   var f = document.getElementById("new-app"), b = document.getElementById("newgo"), err = document.getElementById("newerr"), name = document.getElementById("appname");
   f.addEventListener("submit", function(ev){
     ev.preventDefault(); err.textContent = "";
-    if (!name.value.trim()) { err.textContent = "Give the project a name."; name.focus(); return; }
+    if (!name.value.trim()) { err.textContent = "Give the app a name."; name.focus(); return; }
     gcBusy(b, true, "Creating...");
-    gcPost("/api/account/projects", { name: name.value }).then(function(j){ location.href = "/account/billing?project=" + encodeURIComponent(j.project.id) + "&new=1"; }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });
+    gcPost("/api/account/projects", { name: name.value }).then(function(j){ location.href = "/account/apps/" + encodeURIComponent(j.project.id) + "#connect"; }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });
   });
 })();`;
   return studioPage(nonce, {
-    title: "New project | GenClass",
+    title: "New app | GenClass",
     account: true,
     org: { name: org, plan: v.plan ?? "Free", href: "/account" },
     projects: v.projects,

@@ -383,12 +383,13 @@ export function fakeStripe(o: { answer?: (url: URL, init: RequestInit) => Respon
   return { fetch, calls, other, customers, subs, sessions, invoices, refunds, charges, paymentIntents, portal, coupons, genclassCustomer };
 }
 
-/** The GenClass prices the fake Stripe knows by lookup key: the fixture's (Pro, Custom), the retired Individual, the real plans' Pro and a private price the tests give it. */
+/** The GenClass prices the fake Stripe knows by lookup key: the fixture's (Pro, Custom), the retired Individual, the real plans' Pro and Business, and a private price the tests give it. */
 const KNOWN_PRICES: Record<string, { plan: string; id: string }> = {
   genclass_pro_monthly: { plan: "pro", id: "price_pro000001" },
   genclass_custom_monthly: { plan: "custom", id: "price_custom0001" },
   genclass_individual_monthly: { plan: "individual", id: "price_indiv00001" },
   genclass_team_monthly: { plan: "team", id: "price_team000001" },
+  genclass_business_monthly: { plan: "business", id: "price_busi000001" },
   genclass_team_zz_monthly: { plan: "team", id: "price_teamzz00001" },
 };
 

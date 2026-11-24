@@ -15,7 +15,8 @@
 //   (test/fixtures/plans-two-paid.json). Team has a 3-day trial on an account's first subscription (trial_days).
 // - Seats. A per_seat plan is paid per person: the subscription's quantity (accounts.seats, written by src/stripe.ts)
 //   is how many people the account holds, its owner included. A plan that is not per_seat holds limits.seats people
-//   (Free: 1; null: no limit), and a plan GenClass grants has no seat count, so no limit. seatsOf says it.
+//   (Free: 1; null: no limit), or the quantity its subscription pays for when that is more (a Pro subscription bought
+//   per developer under plans.json version 5), and a plan GenClass grants has no seat count, so no limit. seatsOf says it.
 // - PLAN_GATES = "open" (a self-hosted collector, wrangler.selfhost.toml): every account has the grant plan, so
 //   nothing is locked on a server that sells nothing (planGatesOpen, source "open").
 // - A plan comes from accounts.plan, which src/stripe.ts derives from the Stripe subscription. Entitlements follow the
@@ -54,7 +55,7 @@ import { exportSweep, type BucketOps } from "./export.js";
 const DAY = 86_400_000;
 export const GRACE_DAYS = 30;
 
-export type PlanId = "free" | "team" | "enterprise";
+export type PlanId = "free" | "team" | "business" | "enterprise";
 /**
  * `github_private`: genclass-dev[bot] reviews the account's private repositories (src/github/entitlement.ts); public
  * ones are free for everyone. `problems` (2026-11-12): the problem lists, the pages they happen on, the activity and
@@ -407,11 +408,17 @@ export const OPEN_ACCESS: Access = { plan: GRANT_PLAN, source: "open", seats: nu
  * paid for, or no limit when they are not known: a subscription bought per project under version 4 (the whole team
  * included, so it never had a seat count) and an account row whose seats were not written (a rollback, a webhook
  * still to come); the webhook writes them for every subscription bought per seat. Any other plan, and every grant:
- * the plan's own limits.seats (a grant of a per_seat plan has no seat count, so no limit).
+ * the plan's own limits.seats. A grant has no seat limit, whatever its plan (version 7, 2026-11-24, keeps what grants
+ * of the per_seat Pro held before Pro became one developer). A paid plan with a seat limit holds more when its
+ * subscription pays for more (accounts.seats): one bought per seat before its plan became flat (Pro, version 7) keeps
+ * the seats it pays for.
  */
 export function seatsOf(plan: Plan, source: AccessSource | null, paidSeats: number | null | undefined): number | null {
+  if (source === "comp") return null;
   if (plan.per_seat === true) return source === "paid" ? cleanSeats(paidSeats) : null;
-  return plan.limits.seats ?? null;
+  const limit = plan.limits.seats ?? null;
+  const paid = source === "paid" ? cleanSeats(paidSeats) : null;
+  return limit !== null && paid !== null && paid > limit ? paid : limit;
 }
 
 /** The plan a grant gives: the one accounts.comp_plan names when it is a plan above Free, else plans.json grant_plan. */
@@ -484,8 +491,11 @@ export function accountWide(row: AccessRow | null | undefined, mode: StripeMode 
  * A project's own access: its paid plan (as the current Stripe key sees it) or its grant (accessOf), else Free. A
  * subscription bought per project (version 4) included the whole team: no seat limit (seatsOf).
  */
-export const projectOwnAccess = (r: ProjectPlanRow, mode: StripeMode | null, now: Date): Access =>
-  accessOf({ plan: r.plan, stripe_mode: r.stripe_mode, comp_until: r.comp_until, comp_plan: r.comp_plan, seats: null }, mode, now);
+export const projectOwnAccess = (r: ProjectPlanRow, mode: StripeMode | null, now: Date): Access => {
+  const a = accessOf({ plan: r.plan, stripe_mode: r.stripe_mode, comp_until: r.comp_until, comp_plan: r.comp_plan, seats: null }, mode, now);
+  // version 7 made Pro one developer (limits.seats 1): an app's own subscription still holds the whole team
+  return a.source === "paid" ? { ...a, seats: null } : a;
+};
 
 /**
  * What an account may use for itself (suggestions a day, its team, export keys) at `now`: the best of its own paid

@@ -28,8 +28,11 @@ async function cliUser(env: E, email = "ada@example.com") {
   const me = await signedIn(env, email);
   return { ...me, bearer: await cliToken(env, me.cookie) };
 }
-/** A paid Team (named Pro since 2026-11-12) account with `seats` seats (as the webhook leaves it). */
-const team = (sql: ReturnType<typeof setup>["sql"], accountId: string, seats = 3) =>
+/**
+ * A paid Team (named Pro since 2026-11-12) account as the webhook leaves it: no seat count for one bought under
+ * plans.json version 7 (one developer), `seats` for one bought per developer under version 5 (it keeps them).
+ */
+const team = (sql: ReturnType<typeof setup>["sql"], accountId: string, seats: number | null = null) =>
   setPlan(sql, accountId, "team", { stripe_mode: "live", seats, subscription_id: "sub_t000000001", subscription_status: "active", current_period_end: "2026-12-13T12:00:00.000Z" });
 /** One app paid for on its own as the version-4 webhook left it (plans per project); since version 5 it gives the account Pro. */
 const pro = (sql: ReturnType<typeof setup>["sql"], projectId: string) =>
@@ -118,7 +121,7 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     // nothing of how the account signs in or pays
     expect(JSON.stringify(j)).not.toMatch(/stripe|customer|password|passkey/i);
     // the genclass command is Pro's where Pro is sold: the account says so, and every other route answers 402
-    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$50 / developer / month", trial_days: 3, checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" });
+    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$25 / month", trial_days: 3, checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" });
     const no = await send(env, "POST", "/api/cli/team/invite", me.bearer, {});
     expect(no.status).toBe(402);
     expect(await no.json()).toMatchObject(NEEDS_PRO);
@@ -130,17 +133,29 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     expect(await none.json()).toMatchObject({ ok: false, upgrade_url: "https://genclass.dev/account/billing" });
   });
 
-  it("Pro (id team): the price, the subscription's state, the seats, and an invite link that is shown once", async () => {
+  it("Pro (id team) and Business: the price, the subscription's state, the seats, and an invite link that is shown once", async () => {
     const { env, sql } = setup({ STRIPE_SECRET_KEY: "sk_live_fake" });
     const me = await cliUser(env);
-    team(sql, me.account.id, 3);
+    team(sql, me.account.id);
     const j = await json(get(env, "/api/cli/account", me.bearer));
-    expect(j.plan).toMatchObject({ id: "team", name: "Pro", price: "$50 / developer / month" });
-    // Pro is per developer since plans.json version 5: the seats paid for, and up to 3 apps for the account
-    expect([j.access, j.limits.seats, j.limits.apps, j.limits.history_days]).toEqual(["paid", 3, 3, 90]);
+    expect(j.plan).toMatchObject({ id: "team", name: "Pro", price: "$25 / month" });
+    // Pro is one developer since plans.json version 7, for up to 3 apps
+    expect([j.access, j.limits.seats, j.limits.apps, j.limits.history_days]).toEqual(["paid", 1, 3, 90]);
     expect(j.includes).toEqual({ analytics: true, forwarding: true, export: true, private_repositories: true });
     expect(j.subscription).toEqual({ status: "active", current_period_end: "2026-12-13T12:00:00.000Z", cancel_at_period_end: false });
     expect(j.offer).toBeNull();
+    // no seat for a member on Pro: the team comes with Business
+    const one = await send(env, "POST", "/api/cli/team/invite", me.bearer, {});
+    expect(one.status).toBe(403);
+    expect(await one.json()).toMatchObject({ ok: false, error: expect.stringContaining("the Pro plan is for one person; members come with Business") });
+    // a Pro subscription bought per developer under version 5 keeps its seats
+    team(sql, me.account.id, 3);
+    expect((await json(get(env, "/api/cli/account", me.bearer))).limits.seats).toBe(3);
+    // Business: the whole team, up to 10 apps, 180 days
+    setPlan(sql, me.account.id, "business", { seats: null });
+    const k = await json(get(env, "/api/cli/account", me.bearer));
+    expect(k.plan).toMatchObject({ id: "business", name: "Business", price: "$79 / month" });
+    expect([k.access, k.limits.seats, k.limits.apps, k.limits.history_days]).toEqual(["paid", null, 10, 180]);
     const made = await send(env, "POST", "/api/cli/team/invite", me.bearer, {});
     expect(made.status).toBe(201);
     const inv = await made.json() as any;
@@ -312,7 +327,7 @@ describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
       plan: "Pro",
       upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`,
       trial_days: 3,
-      price: "$50 / developer / month",
+      price: "$25 / month",
     });
     expect(model.calls).toEqual([]);
     expect(sql.rows("SELECT * FROM suggest_usage")).toEqual([]);
@@ -461,7 +476,7 @@ describe("the genclass command is Pro's, its setup is not (src/cli.ts cliPaid, P
     needs_pro: true,
     paid: false,
     plan: "Pro",
-    price: "$50 / developer / month",
+    price: "$25 / month",
     trial_days: 3,
     checkout_url: CHECKOUT,
   };
@@ -535,7 +550,7 @@ describe("the genclass command is Pro's, its setup is not (src/cli.ts cliPaid, P
     const { env, sql: db, me } = await freeUser();
     setPlan(db, me.account.id, "free", { subscription_id: "sub_old0000001", subscription_status: "canceled" });
     const r = await get(env, "/api/cli/overview", me.bearer);
-    expect((await r.json() as any).cli).toEqual({ paid: false, plan: "Pro", price: "$50 / developer / month", trial_days: null, checkout_url: CHECKOUT });
+    expect((await r.json() as any).cli).toEqual({ paid: false, plan: "Pro", price: "$25 / month", trial_days: null, checkout_url: CHECKOUT });
     const no = await send(env, "POST", "/api/cli/suggest", me.bearer, {});
     expect(await no.json()).toMatchObject({ error: `the genclass command comes with Pro: ${CHECKOUT}`, trial_days: null });
   });
@@ -579,6 +594,7 @@ describe("the genclass command is Pro's, its setup is not (src/cli.ts cliPaid, P
   it("an active member of a paying owner's team is not gated; one past the owner's seats is", async () => {
     const t = setup(LIVE);
     const owner = await cliUser(t.env, "ada@example.com");
+    // Pro bought per developer under plans.json version 5, for 2 (since version 7 Pro is one developer)
     team(t.sql, owner.account.id, 2);
     const shop = await createApp(t.env, owner.cookie, "Shop");
     const bob = await cliUser(t.env, "bob@example.com");
@@ -602,9 +618,14 @@ describe("the genclass command is Pro's, its setup is not (src/cli.ts cliPaid, P
     expect(acct.team_plan).toEqual({ id: "team", name: "Pro", source: "paid", owner: "ada@example.com", apps: 3, used_apps: 1, history_days: 90, includes: { analytics: true, forwarding: true, export: true, private_repositories: true } });
     expect(acct.limits).toMatchObject({ suggestions_per_day: 30, suggestions_shown: null });
     expect(acct.offer).toBeNull();
-    // the owner down to one seat: bob is past it, and so gated again
+    // the owner down to one seat: bob is past it, and so gated again; Pro of version 7 is one developer too
     team(t.sql, owner.account.id, 1);
     expect((await get(t.env, `/api/cli/app?id=${mine.id}`, bob.bearer)).status).toBe(402);
+    team(t.sql, owner.account.id);
+    expect((await get(t.env, `/api/cli/app?id=${mine.id}`, bob.bearer)).status).toBe(402);
+    // Business holds the whole team: bob is in again
+    setPlan(t.sql, owner.account.id, "business", {});
+    expect((await get(t.env, `/api/cli/app?id=${mine.id}`, bob.bearer)).status).toBe(200);
     // the owner on Free: nothing to share
     team(t.sql, owner.account.id, 2);
     expect((await get(t.env, `/api/cli/app?id=${mine.id}`, bob.bearer)).status).toBe(200);

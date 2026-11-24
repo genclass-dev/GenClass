@@ -5,8 +5,8 @@ import { planForPrice, usePrivatePlans } from "../src/plans.js";
 // scripts/stripe-setup.mjs on the real billing/plans.json plus private prices (GENCLASS_PLANS_PRIVATE, the JSON of the
 // Worker secret PLANS_PRIVATE; made-up values here). Each price is on its own product, all named after the plan with
 // metadata genclass_plan (the Billing Portal's seat changes allow one monthly price a product): the plan's own price on
-// the product the secret names for it, the country price on the plan's main product genclass_<id>. A run against an
-// account that already has them changes nothing.
+// the product the secret names for it, the country price on the plan's main product genclass_<id>; a plan without
+// private prices (Business) on its main product. A run against an account that already has them changes nothing.
 const PRIVATE = {
   plans: {
     team: {
@@ -111,22 +111,26 @@ async function run(a: ReturnType<typeof account>) {
 }
 
 describe("scripts/stripe-setup.mjs: private prices (GENCLASS_PLANS_PRIVATE)", () => {
-  it("the plan's own price on the product the secret names, the country price on the main product, both seat-changeable", async () => {
+  it("the plan's own price on the product the secret names, the country price on the main product; Business on its own; no seat changes, every plan being flat", async () => {
     const a = account();
     await run(a);
     expect([...a.products.values()].map((x) => [x.id, x.name, x.metadata.genclass_plan, x.tax_code])).toEqual([
       ["genclass_team_alt", "GenClass Pro", "team", "txcd_10103001"],
       ["genclass_team", "GenClass Pro", "team", "txcd_10103001"],
+      ["genclass_business", "GenClass Business", "business", "txcd_10103001"],
     ]);
     expect([...a.prices.values()].map((x) => [x.lookup_key, x.product, x.unit_amount, x.currency, x.recurring.interval, x.nickname])).toEqual([
-      ["genclass_team_monthly", "genclass_team_alt", 5000, "usd", "month", "Pro monthly"],
+      ["genclass_team_monthly", "genclass_team_alt", 2500, "usd", "month", "Pro monthly"],
       ["genclass_team_zz_monthly", "genclass_team", 2000, "usd", "month", "Pro monthly (Zedland)"],
+      ["genclass_business_monthly", "genclass_business", 7900, "usd", "month", "Business monthly"],
     ]);
-    for (const x of a.prices.values()) expect(planForPrice({ ...x, product: a.products.get(x.product) })?.id).toBe("team");
+    for (const x of a.prices.values()) expect(planForPrice({ ...x, product: a.products.get(x.product) })?.id).toBe(x.lookup_key.startsWith("genclass_business") ? "business" : "team");
     const ours = [...a.portal.values()].find((c) => c.metadata.genclass === "1")!;
     const form = new URLSearchParams(Object.entries(ours.form as Obj).flatMap(([k, v]) => (Array.isArray(v) ? v.map((x) => [k, x]) : [[k, v]])) as [string, string][]);
     const products = [...form.entries()].filter(([k]) => /^features\[subscription_update\]\[products\]\[\d+\]\[product\]$/.test(k)).map(([, v]) => v);
-    expect(products).toEqual(["genclass_team_alt", "genclass_team"]);
+    // no plan is sold per seat since version 7: the portal changes no quantity
+    expect(products).toEqual([]);
+    expect(form.get("features[subscription_update][enabled]")).toBe("false");
   });
 
   it("a second run changes no product or price", async () => {
@@ -146,6 +150,7 @@ describe("scripts/stripe-setup.mjs: private prices (GENCLASS_PLANS_PRIVATE)", ()
     expect([...a.prices.values()].filter((x) => x.active).map((x) => [x.lookup_key, x.product])).toEqual([
       ["genclass_team_zz_monthly", "prod_earlier00001"],
       ["genclass_team_monthly", "genclass_team_alt"],
+      ["genclass_business_monthly", "genclass_business"],
     ]);
   });
 });

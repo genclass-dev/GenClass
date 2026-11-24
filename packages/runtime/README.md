@@ -840,9 +840,9 @@ digits) that groups its diagnostics on a dashboard at genclass.dev, kept in a Ge
 then `connect`, `whoami`, `logout`) or behind one private link per app (anyone with the link can open it), which
 `init` saves in `.genclass.local` and `npx @genclass/runtime@beta dashboard` prints again (from `0.3.0-beta.2`;
 `--open` opens it). On Free the dashboard shows an app's totals for the last 7 days, for one app in an account, and
-the `@genclass/mcp` server for coding agents is free. Pro, US$50 a developer a month for up to 3 apps in an account,
-adds every problem with its pages and a fix prompt, visitor analytics, forwarding, export, 90 days of history, team
-members and the `genclass` command; more apps, your own classifier, which a person from GenClass trains, and a year
+the `@genclass/mcp` server for coding agents is free. Pro, US$25 a month for one developer and up to 3 apps in an account,
+adds every problem with its pages and a fix prompt, visitor analytics, forwarding, export, 90 days of history and the
+`genclass` command; Business, US$79 a month, adds your whole team, up to 10 apps and 180 days; more apps, your own classifier, which a person from GenClass trains, and a year
 of history come with Enterprise ([pricing](https://genclass.dev/pricing)). Plans bought before 13 November 2026 keep
 every app they cover (an app paid for on its own does not count toward Pro's 3); Free covers an account's oldest app
 and locks the others. No plan limits the runtime, and it needs no account. It needs

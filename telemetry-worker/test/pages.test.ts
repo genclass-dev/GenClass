@@ -3,10 +3,11 @@
 import { describe, expect, it } from "vitest";
 import { Window } from "happy-dom";
 import { ANALYTICS_RUNTIME, analyticsPrompt, CDN_SCRIPT, DASH_CSS, dashboardPage, DEFAULT_CHOICES, esc, installPrompt, KEY_RUNTIME, MCP_PKG, MESH_SCRIPT, notFoundPage, openSourcePage, openSourcePrompt, orgName, RUNTIME_PKG, securityHeaders, SNIPPET_RUNTIME, setupPage, startPage, type DashboardOptions } from "../src/pages.js";
-import { FRAME_SCALE, scaleCss, THEME_HEAD_JS } from "../src/studio.js";
+import { FRAME_SCALE, scaleCss, STUDIO_FONTS, THEME_HEAD_JS } from "../src/studio.js";
 
 const setupOf = (o: Record<string, unknown> = {}) => setupPage("n", { token: "gc_TestToken0123456789abc", secret: "a".repeat(32), lastEvent: null, ...o });
-import { accountPage, devicePage, forgotPage, lockedLinkPage, loginPage, messagePage, newProjectPage, ORG_CSS, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
+import { accountPage, devicePage, forgotPage, getStartedPage, lockedLinkPage, loginPage, messagePage, newProjectPage, ORG_CSS, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
+import type { Glance } from "../src/auth.js";
 import { sampleStats } from "../src/sample.js";
 import { stripAnalytics, stripProblems, type Stats } from "../src/dashboard.js";
 import { problemsLock } from "../src/plans.js";
@@ -41,7 +42,7 @@ function page(html: string): { body: string; script: string } {
  * mode, the Connect dialog's project list). `opts` as dashboardPage takes them: with `account` the account-mode page
  * (/account/apps/<id>: the Connect dialog's ways in, the period controls in #period, no #ptok or #snips).
  */
-async function render(stats: Stats, opts: DashboardOptions = {}, o: { url?: string; copied?: string[] } = {}) {
+async function render(stats: Stats, opts: DashboardOptions = {}, o: { url?: string; copied?: string[]; glance?: Glance } = {}) {
   const html = dashboardPage("NONCE", { name: stats.name, token: stats.token, created: stats.created, lastEvent: stats.lastEvent }, opts);
   const { body, script } = page(html);
   const win = new Window({ url: o.url ?? (opts.account ? `https://genclass.dev/account/apps/${opts.id}` : "https://genclass.dev/dashboard/sample") });
@@ -53,6 +54,8 @@ async function render(stats: Stats, opts: DashboardOptions = {}, o: { url?: stri
     if (init?.method && init.method !== "GET") writes.push(`${init.method} ${u}`);
     // POST .../link: an agent link (auth.ts makeLink)
     if (u.endsWith("/link")) return { ok: true, status: 201, json: async () => ({ dashboardUrl: `https://genclass.dev/dashboard/${"S".repeat(32)}` }) };
+    // the sidebar's plan card (src/studio.ts, GET /api/account/glance)
+    if (u === "/api/account/glance") return o.glance ? { ok: true, status: 200, json: async () => o.glance } : { ok: false, status: 401, json: async () => ({ ok: false }) };
     return { ok: true, status: 200, json: async () => (u.startsWith("/api/account/projects?") || u === "/api/account/projects" ? { projects: [] } : stats) };
   };
   // a clipboard that records what was copied (the page's gcCopy writes with it)
@@ -220,8 +223,11 @@ describe("dashboard page: account mode (/account/apps/<id>) with live stats", ()
     // the Connect dialog: closed until the header's Connect opens it, and its status line says connected
     expect(r.doc.getElementById("m-connect")!.classList.contains("open")).toBe(false);
     expect(r.text("#cstatust")).toMatch(/^Connected\. First event /);
-    // the header: the organization (named after the account), the project and its live status
-    expect(r.text(".sb-crumbs")).toContain("dev's Org");
+    // the sidebar's workspace switcher: the organization (named after the account); the header: the project and its
+    // live status
+    expect(r.text(".sb-side .sb-ws.sb-org")).toContain("dev's Org");
+    expect(r.text(".sb-crumbs")).not.toContain("dev's Org");
+    expect(r.doc.querySelector(".sb-crumbs #hname")).not.toBeNull();
     expect(r.text("#hname")).toBe(st.name);
     expect(r.text("#hstatus")).toBe("Live");
     expect(r.doc.getElementById("cnote")).toBeNull(); // runtimeReady: no "Not on npm yet"
@@ -247,6 +253,121 @@ describe("dashboard page: account mode (/account/apps/<id>) with live stats", ()
     expect(r.text("#canalytics")).toBe(`Needs @genclass/runtime ${ANALYTICS_RUNTIME} or later.`);
     // the copied prompt carries the install line
     expect(r.doc.querySelector("#tp-ana [data-copy]")!.getAttribute("data-copy")).toContain(`npm install ${RUNTIME_PKG}`);
+    await r.close();
+  });
+});
+
+describe("the frame (src/studio.ts, 2026-11-24): a full-height sidebar; the header holds the project or the page's name", () => {
+  const account = { id: "A".repeat(22), email: "ada@example.com", emailVerified: false, google: false, githubLogin: null, created: "2026-10-01T00:00:00.000Z" };
+  const shop = { id: "0123456789abcdef", name: "Shop", token: "gc_TestToken0123456789abc", dashboard_url: "", created: "2026-10-01T00:00:00.000Z", last_event: null, first_event: null, privateLink: false };
+  const view = { account, projects: [shop], passkeys: [], web: [], cli: [], password: null, providers: { google: false, github: false }, plan: "Free" };
+  /** A page's body in happy-dom (no script run), with its links as [text, href]. */
+  function parse(html: string) {
+    const win = new Window({ url: "https://genclass.dev/account" });
+    win.document.body.innerHTML = /<body[^>]*>([\s\S]*)<\/body>/.exec(html)![1]!.replace(/<script[\s\S]*?<\/script>/g, "");
+    const doc = win.document;
+    const words = (el: Element | null) => (el?.textContent ?? "").replace(/\s+/g, " ").trim();
+    const links = (sel: string) => [...doc.querySelectorAll(sel)].map((a) => [words(a), a.getAttribute("href")]);
+    return { doc, words, links, close: () => win.happyDOM.close() };
+  }
+
+  it("signed in: the brand, the workspace switcher, Get started, Home, the apps, New app, the page's own menu, the plan card and Documentation", async () => {
+    const { doc, words, links, close } = parse(accountPage("n", view));
+    const side = doc.querySelector(".sb-shell > .sb-rail > .sb-side")!;
+    expect([...side.children].map((c) => c.className)).toEqual(["sb-brand", "dd sb-org sb-ws", "sb-scroll", "sb-foot"]);
+    expect(side.querySelector(".sb-brand")!.getAttribute("href")).toBe("/account");
+    expect(words(side.querySelector(".sb-brand"))).toBe("GenClass");
+    // the workspace switcher moved from the header to the sidebar; its menu says apps
+    expect(words(side.querySelector(".sb-ws .nm"))).toBe("ada's Org");
+    expect(doc.querySelector(".sb-crumbs .sb-org")).toBeNull();
+    expect(links(".sb-ws .dd-m a")).toEqual([["ada's Org", "/account"], ["All apps", "/account"], ["Billing", "/account/billing"], ["Account settings", "/account#settings"]]);
+    // Workspace: Get started, Home (this page), each app, New app
+    expect(links('.sb-scroll > nav.sb-nav[aria-label="Workspace"] a')).toEqual([["Get started", "/account/get-started"], ["Home", "/account"], ["Shop", "/account/apps/0123456789abcdef"], ["New app", "/account/new"]]);
+    expect(doc.querySelector('.sb-nav a[href="/account"]')!.getAttribute("aria-current")).toBe("page");
+    expect(doc.querySelector('.sb-nav a[href="/account/get-started"]')!.getAttribute("aria-current")).toBeNull();
+    expect(doc.querySelector(".sb-nav #gs-n")).not.toBeNull();
+    // the page's own menu: Plans and billing, and Account settings at its end; no Projects item
+    expect(links(".sb-scroll > nav.snav a")).toEqual([["Plans and billing", "/account/billing"], ["Account settings", "/account#settings"]]);
+    expect(doc.querySelector('.snav a[href="/account#projects"]')).toBeNull();
+    // the foot: the plan card (its plan's name until /api/account/glance answers), and Documentation
+    expect(words(doc.querySelector(".sb-foot #sb-plan #sbp-n"))).toBe("Free");
+    expect(links("#sb-plan a")).toEqual([["Plans and billing", "/account/billing"]]);
+    expect(links(".sb-foot nav a")).toEqual([["Documentation", "https://genclass.dev/docs"]]);
+    // the header: the page's name in place of a project
+    expect(words(doc.querySelector(".sb-top .sb-crumbs"))).toBe("Apps");
+    close();
+    // Get started marks itself
+    const gs = parse(getStartedPage("n", { account, projects: [shop], glance: glanceOf(), command: null }));
+    expect(gs.doc.querySelector('.sb-nav a[href="/account/get-started"]')!.getAttribute("aria-current")).toBe("page");
+    expect(gs.doc.querySelector('.sb-nav a[href="/account"]')!.getAttribute("aria-current")).toBeNull();
+    expect(gs.words(gs.doc.querySelector(".sb-crumbs"))).toBe("Get started");
+    gs.close();
+  });
+
+  it("an app's page: the project switcher in the header (Apps, All apps, New app), the app marked in the sidebar, its own menu under its name", async () => {
+    const acct = { apps: [{ id: "0123456789abcdef", name: "Shop" }, { id: "fedcba9876543210", name: "Blog" }], current: "0123456789abcdef", email: "ada@example.com" };
+    const { doc, words, links, close } = parse(dashboardPage("n", { name: "Shop", token: "gc_TestToken0123456789abc", created: "", lastEvent: null }, { account: acct, id: "0123456789abcdef" }));
+    expect(words(doc.querySelector(".sb-crumbs #hname"))).toBe("Shop");
+    expect(words(doc.querySelector(".sb-crumbs .dd-m .dd-l"))).toBe("Apps");
+    expect(links(".sb-crumbs .dd-m a")).toEqual([["Shop", "/account/apps/0123456789abcdef"], ["Blog", "/account/apps/fedcba9876543210"], ["All apps", "/account"], ["New app", "/account/new"]]);
+    expect(doc.querySelector(".sb-crumbs .sb-org")).toBeNull();
+    expect(doc.querySelector('.sb-nav a.sb-app[href="/account/apps/0123456789abcdef"]')!.getAttribute("aria-current")).toBe("page");
+    expect(doc.querySelector('.sb-nav a.sb-app[href="/account/apps/fedcba9876543210"]')!.getAttribute("aria-current")).toBeNull();
+    // neither Home nor Get started is the page's
+    expect(doc.querySelectorAll('.sb-nav a[aria-current="page"]')).toHaveLength(1);
+    // the app's own menu under its name, then its settings
+    const scroll = [...doc.querySelector(".sb-scroll")!.children].map((c) => c.className);
+    expect(scroll).toEqual(["sb-nav", "sb-gl", "snav"]);
+    expect(words(doc.querySelector(".sb-scroll > .sb-gl"))).toBe("Shop");
+    expect(doc.querySelector('.snav a[href="#settings"]')).not.toBeNull();
+    expect(doc.querySelector("#sb-plan")).not.toBeNull();
+    close();
+  });
+
+  it("a private link: no workspace links, no plan card; the static Private link box and the app's name", async () => {
+    const { doc, words, close } = parse(dashboardPage("n", { name: "Shop", token: "gc_TestToken0123456789abc", created: "", lastEvent: null }, { link: { locked: false } }));
+    expect(words(doc.querySelector(".sb-side .sb-ws .sb-org"))).toContain("Private link");
+    expect(doc.querySelector(".sb-nav")).toBeNull();
+    expect(doc.querySelector("#sb-plan")).toBeNull();
+    expect(doc.querySelector("#gs-n")).toBeNull();
+    expect(words(doc.querySelector(".sb-crumbs #hname"))).toBe("Shop");
+    expect(doc.querySelector(".sb-brand")!.getAttribute("href")).toBe("https://genclass.dev/");
+    close();
+  });
+
+  it("the plan card and Get started's count are filled from GET /api/account/glance, 400 ms after the page's own requests", async () => {
+    const acct = { apps: [{ id: "0123456789abcdef", name: "Shop" }], current: "0123456789abcdef", email: "dev@example.com" };
+    const glance = glanceOf({
+      plan: "Pro trial",
+      status: "2 days left",
+      trial: true,
+      apps: { used: 1, of: 3 },
+      note: "1 of 3 apps",
+      action: { label: "Plans and billing", href: "/account/billing", primary: false },
+      steps: [
+        { key: "app", done: true },
+        { key: "connect", done: true },
+        { key: "trial", done: true },
+        { key: "cli", done: false },
+      ],
+    });
+    const r = await render(sampleStats("7d", NOW), { account: acct, id: "0123456789abcdef", firstEvent: "2026-10-12T09:00:00.000Z", runtimeReady: true }, { glance });
+    // before 400 ms: the plan's name from the page, no glance asked for yet
+    expect(r.urls).not.toContain("/api/account/glance");
+    expect(r.text("#sbp-n")).toBe("Free");
+    await new Promise((res) => setTimeout(res, 450));
+    expect(r.urls).toContain("/api/account/glance");
+    expect(r.urls.indexOf("/api/account/glance")).toBeGreaterThan(r.urls.indexOf("/api/account/projects/0123456789abcdef/stats?range=7d"));
+    expect(r.text("#sbp-n")).toBe("Pro trial");
+    expect(r.text("#sbp-s")).toBe("2 days left");
+    expect(r.doc.getElementById("sb-plan")!.hasAttribute("data-trial")).toBe(true);
+    expect((r.doc.getElementById("sbp-m") as unknown as { hidden: boolean }).hidden).toBe(false);
+    expect((r.doc.querySelector("#sbp-m i") as unknown as { style: { width: string } }).style.width).toBe("33%");
+    expect(r.text("#sbp-p")).toBe("1 of 3 apps");
+    const a = r.doc.getElementById("sbp-a")!;
+    expect([a.textContent, a.getAttribute("href"), a.className]).toEqual(["Plans and billing", "/account/billing", "btn sm ghost"]);
+    expect(r.text("#gs-n")).toBe("3/4");
+    expect(r.doc.getElementById("gs-n")!.classList.contains("done")).toBe(false);
     await r.close();
   });
 });
@@ -311,14 +432,37 @@ function everyPage(): [string, string][] {
     ["/login/device", devicePage("n", { signedIn: null, code: "BCDF-GHJK", typed: true, request: null, next: "/login/device?code=BCDF-GHJK", providers })],
     ["/account", accountPage("n", view)],
     ["/account/new", newProjectPage("n", { account: view.account, projects: [] })],
+    ["/account/get-started", getStartedPage("n", { account: view.account, projects: [], glance: glanceOf(), command: null })],
     ["pending", pendingPage("n", { email: "ada@example.com", provider: "google" })],
     ["message", messagePage("n", { title: "T", text: "x", links: [["One", "/a"]] })],
     ["/dashboard/<secret> (locked)", lockedLinkPage("n", { name: "a", signedIn: null, owner: "none", providers })],
   ];
 }
 
+/** A new Free account's glance (src/auth.ts glance) where Pro is sold, for /account/get-started; `over` changes parts of it. */
+function glanceOf(over: Partial<Glance> = {}): Glance {
+  return {
+    ok: true,
+    plan: "Free",
+    status: "plan",
+    trial: false,
+    apps: { used: 0, of: 1 },
+    note: "0 of 1 app",
+    action: { label: "Start 3-day free trial", href: "/account/billing?plan=pro&start=1", primary: false },
+    steps: [
+      { key: "app", done: false },
+      { key: "connect", done: false },
+      { key: "trial", done: false },
+      { key: "cli", done: false },
+    ],
+    first: null,
+    sold: { name: "Pro", price: "$25 / month", days: 3, start: "/account/billing?plan=pro&start=1" },
+    ...over,
+  };
+}
+
 /** The pages in the Supabase Studio frame (src/studio.ts); the rest keep genclass.dev's own look. */
-const STUDIO = ["/dashboard", "/account/apps (locked)", "/account/apps", "/account", "/account/new"];
+const STUDIO = ["/dashboard", "/account/apps (locked)", "/account/apps", "/account", "/account/new", "/account/get-started"];
 
 /** CSS without its :root[data-theme="light"] blocks (the light theme's values, set only by the page's data-theme). */
 const withoutLight = (css: string) => css.replace(/:root\[data-theme="light"\]\{[^}]*\}/g, "");
@@ -351,20 +495,18 @@ describe("pages: two themes, dark by default and light by choice or by the syste
       expect(html.indexOf("color-scheme:dark;"), name).toBeLessThan(html.indexOf(':root[data-theme="light"]{'));
       // one set of dark tokens (no second set that could override them); light values only under data-theme="light"
       expect(withoutLight(html).match(/--paper:/g), name).toHaveLength(1);
-      expect(html, name).not.toMatch(/Outfit|Figtree|Geist/);
       expect(html, name).not.toContain("lockup-");
+      // one palette and one set of fonts for the frame and the site's pages (2026-11-24): genclass.dev's Geist, Geist
+      // Mono and Newsreader; Satoshi, JetBrains Mono, Inter and Source Code Pro are gone
+      expect(html, name).toContain('<meta name="theme-color" content="#0C0E12" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#FAF8F4" media="(prefers-color-scheme: light)">');
+      expect(html, name).toContain("--paper:#0C0E12;--panel:#14171D;--ink:#E9EBF1;");
+      expect(html, name).toContain("--paper:#FAF8F4;--panel:#FFFFFF;--ink:#15171F;");
+      expect(html, name).toContain(`<link rel="stylesheet" href="${STUDIO_FONTS}">`);
+      expect(html, name).toMatch(/--sans:"Geist",/);
+      expect(html, name).not.toMatch(/Satoshi|fontshare|JetBrains|Source\+Code|family=Inter|Outfit|Figtree/);
       if (STUDIO.includes(name)) {
-        expect(html, name).toContain('<meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#fcfcfc" media="(prefers-color-scheme: light)">');
-        expect(html, name).toContain("--paper:#121212;--panel:#1f1f1f;--ink:#fafafa;");
-        expect(html, name).toContain("--paper:#fcfcfc;--panel:#ffffff;--ink:#171717;");
-        expect(html, name).toContain("https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Source+Code+Pro:wght@400;500&display=swap");
         expect(html, name).toMatch(/<body class="sb"[ >]/);
         expect(html, name).toContain("data-theme-toggle");
-      } else {
-        expect(html, name).toContain('<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">');
-        expect(html, name).toContain("--paper:#000000;--panel:#0B0B0A;--ink:#F0F1E9;");
-        expect(html, name).toContain("--paper:#ffffff;--panel:#f7f7f5;--ink:#141412;");
-        expect(html, name).toContain("https://api.fontshare.com/v2/css?f[]=satoshi@1&display=swap");
       }
     }
     expect(DASH_CSS).toContain(":root{--t1:#3987E5;--t2:#E8552F;--t3:#2AA3C7;--t4:#C98500;--t5:#B964C9;--t0:#88897F;--grid:#262626}");
@@ -437,26 +579,29 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
     return (h * 60 + 360) % 360;
   };
 
-  it("the site's pages carry its tokens, its focus ring and its sticky header; the dashboards Studio's", () => {
+  it("the site's pages carry its tokens, its focus ring and its sticky header; the dashboards the frame's, in the same palette", () => {
+    // genclass.dev's palette (2026-11-24), the same on the site's pages and in the frame: ink text, the green for text,
+    // primary fills in ink (their label in paper), the red-orange (fills; text), the raised panel, the rules
+    const tokens = ["--ink:#E9EBF1", "--accent-f:#E9EBF1", "--on-green:#0C0E12", "--accent:#3DDC97", "--warn-f:#FF6A4D", "--warn:#FF8A70", "--panel:#14171D", "--rule:#222731", "--rule2:#2C323D"];
     for (const html of [startPage("n"), loginPage("n", { google: false, github: false, next: null })]) {
-      // site/src/css/base.css: bone text, the green (text, fills), the red-orange (fills; text), the raised black, the rules
-      for (const t of ["--ink:#F0F1E9", "--accent-f:#2FD07F", "--accent:#2FD07F", "--warn-f:#FF5A36", "--warn:#FF6B4A", "--panel:#0B0B0A", "--rule:#30312B", "--rule2:#46463E"]) expect(html).toContain(t);
+      for (const t of tokens) expect(html).toContain(t);
       expect(html).toContain(":focus-visible{outline:1px solid var(--accent);outline-offset:3px}");
       expect(html).toContain(':root[data-theme="light"]{');
       // square corners, as on the site (status dots stay round)
       expect(html).not.toMatch(/border-radius:[1-9]\d*px/);
     }
     expect(startPage("n")).toMatch(/header\.top\{position:sticky;top:0;/);
-    expect(startPage("n")).toContain('<a class="logo" href="https://genclass.dev/"><img src="https://genclass.dev/brand/mark-64.png?v=2" alt="" width="24" height="24">GenClass</a>');
-    // Studio: brand #3ecf8e, primary buttons on #006239, borders #2e2e2e, 6px corners, the 48px sticky header
+    expect(startPage("n")).toContain('<a class="logo" href="https://genclass.dev/"><img src="https://genclass.dev/brand/mark.svg?v=9" alt="" width="24" height="24">GenClass</a>');
+    // the frame: the same tokens, square buttons (primary in ink), the 56px sticky header
     const dash = dashboardPage("n", project);
-    for (const t of ["--accent:#3ecf8e", "--accent-f:#006239", "--rule:#2e2e2e", "--panel:#1f1f1f"]) expect(dash).toContain(t);
+    for (const t of tokens) expect(dash).toContain(t);
     expect(dash).toContain(":focus-visible{outline:2px solid var(--accent);outline-offset:2px}");
-    // the frame is drawn FRAME_SCALE (1.1) larger than written (src/studio.ts scaleCss): 48px reads 52.8px
-    expect(dash).toContain(scaleCss(".sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:48px;"));
-    expect(dash).toContain(".sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:52.8px;");
-    expect(dash).toContain(scaleCss(".btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 12px;border-radius:6px;"));
-    expect(dash).toContain('<img src="https://genclass.dev/brand/mark-64.png?v=2" alt="" width="22" height="22">');
+    // the frame is drawn FRAME_SCALE (1.1) larger than written (src/studio.ts scaleCss): 56px reads 61.6px
+    expect(dash).toContain(scaleCss(".sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:56px;"));
+    expect(dash).toContain(".sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:61.6px;");
+    expect(dash).toContain(scaleCss(".btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:0 14px;border-radius:0;"));
+    expect(dash).toContain("border:1px solid var(--brand-b);background:var(--accent-f);color:var(--on-green);");
+    expect(dash).toContain('<img src="https://genclass.dev/brand/mark.svg?v=9" alt="" width="24" height="24">');
   });
 
   it("the frame is drawn 1.1 times larger than written from 768px wide: px lengths scale, hairlines and breakpoints stay", () => {
@@ -473,28 +618,30 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
     expect(scaleCss("a{width:10px}", 1)).toBe("a{width:10px}");
     // only the frame's <style> elements: a script's "px" strings are left alone
     const dash = dashboardPage("n", project);
-    expect(dash).toContain(".sb-rail{position:sticky;top:52.8px;align-self:flex-start;height:calc(100vh - 52.8px);width:228.8px;flex:none;z-index:30}");
+    // the full-height sidebar: sticky at the top of the window, 248px written
+    expect(dash).toContain(".sb-rail{position:sticky;top:0;align-self:flex-start;height:100vh;width:272.8px;flex:none;z-index:50}");
     expect(dash).not.toMatch(/<script[^>]*>[^<]*\d\.\dpx/);
     // from 768px wide: the written CSS stays first (a phone draws it as written), the scaled copy follows in a media rule
     const head = /<style nonce="n">([\s\S]*?)<\/style>/.exec(dash)![1]!;
-    expect(head.indexOf(".sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:48px;")).toBeLessThan(head.indexOf("@media (min-width:768px){"));
-    expect(head.slice(head.indexOf("@media (min-width:768px){"))).toContain("height:52.8px;");
+    expect(head.indexOf(".sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:56px;")).toBeLessThan(head.indexOf("@media (min-width:768px){"));
+    expect(head.indexOf(".sb-rail{position:sticky;top:0;align-self:flex-start;height:100vh;width:248px;")).toBeLessThan(head.indexOf("@media (min-width:768px){"));
+    expect(head.slice(head.indexOf("@media (min-width:768px){"))).toContain("height:61.6px;");
   });
 
   it("scroll targets clear the sticky headers; one small button size per look; touch targets on coarse pointers", () => {
     expect(startPage("n")).toContain("html:has(header.top){scroll-padding-top:76px}");
     // the 320px header fits: a smaller gap below 361px
     expect(startPage("n")).toContain("@media (max-width:360px){header.top .wrap{gap:10px}}");
-    // the site: .btn.sm is 34px (44px on phones); Studio: 26px (40px on touch screens), with no per-place override
+    // the site: .btn.sm is 34px (44px on phones); the frame: 28px (40px on touch screens), with no per-place override
     const site = startPage("n") + messagePage("n", { title: "T", text: "x", links: [["One", "/a"]] });
     expect(site).toContain(".btn.sm{min-height:34px;");
     expect(site).toContain("@media (max-width:620px){.btn.sm{min-height:44px}}");
     const dash = dashboardPage("n", project);
-    expect(dash).toContain(scaleCss(".btn.sm,.btn.tiny{min-height:26px;padding:0 10px;font-size:12px}"));
+    expect(dash).toContain(scaleCss(".btn.sm,.btn.tiny{min-height:28px;padding:0 10px;font-size:12.5px}"));
     expect(dash).toContain(scaleCss("@media (pointer:coarse){.btn,.btn.sm,.btn.tiny{min-height:40px}"));
-    expect(dash).not.toMatch(/\.btn\.sm\{min-height:(28|30)px/);
-    // every #section under Studio's 48px header
-    expect(dash).toContain(scaleCss(".sb [id]{scroll-margin-top:64px}"));
+    expect(dash).not.toMatch(/\.btn\.sm\{min-height:\d/);
+    // every #section under the frame's 56px header
+    expect(dash).toContain(scaleCss(".sb [id]{scroll-margin-top:72px}"));
     expect(startPage("n")).toContain(".tablewrap{overflow-x:auto;padding-left:6px;margin-left:-6px}");
     // a route with a total but no per-type breakdown is drawn in the Other grey, not stale responses' red-orange
     expect(dash).toContain('i0.style.background = "var(--t0)"');
@@ -531,9 +678,10 @@ describe("pages: genclass.dev's palette, buttons, header and focus ring on /star
     // validate_palette.js --mode light passes on these on #ffffff and #f7f7f7 (pages.ts, the chart colours comment)
     expect(light).toEqual(["#2470D6", "#D4502B", "#1388AD", "#A86C00", "#A04FB5"]);
     for (const c of [...dark, ...light]) expect(hue(c) < 75 || hue(c) > 170, c).toBe(true);
-    // every slot is a visible mark on the site's black and on Studio's canvas and surface; the light ones on white
-    for (const c of dark) for (const bg of ["#000000", "#0B0B0A", "#121212", "#1f1f1f"]) expect(contrast(c, bg), `${c} on ${bg}`).toBeGreaterThanOrEqual(3);
-    for (const c of [...light, L.t0!]) for (const bg of ["#ffffff", "#f7f7f7", "#fcfcfc"]) expect(contrast(c, bg), `${c} on ${bg}`).toBeGreaterThanOrEqual(3);
+    // every slot is a visible mark on the frame's paper, panel and sidebar (the site's pages share them); the light ones
+    // on white, the validated light ground and the light paper and sidebar
+    for (const c of dark) for (const bg of ["#0C0E12", "#14171D", "#0F1116"]) expect(contrast(c, bg), `${c} on ${bg}`).toBeGreaterThanOrEqual(3);
+    for (const c of [...light, L.t0!]) for (const bg of ["#ffffff", "#f7f7f7", "#FAF8F4", "#F4F1EA"]) expect(contrast(c, bg), `${c} on ${bg}`).toBeGreaterThanOrEqual(3);
     expect(hue("#2FD07F")).toBeGreaterThan(75); // the check itself would catch the brand greens
     expect(hue("#3ecf8e")).toBeGreaterThan(75);
   });
@@ -655,7 +803,7 @@ describe("dashboard page: interaction analytics (docs/runtime/ANALYTICS.md secti
     const { doc, text, hidden, close } = await render(st);
     expect(hidden("prolock")).toBe(false);
     expect(text("#prolock b")).toBe("Free shows the totals");
-    expect(text("#prolockmsg")).toBe("Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with Pro. 3 days free, then $50 / developer / month. Cancel any time.");
+    expect(text("#prolockmsg")).toBe("Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with Pro. 3 days free, then $25 / month. Cancel any time.");
     expect(doc.getElementById("prolocka")!.getAttribute("href")).toBe("https://genclass.dev/account/billing?project=p1");
     expect(text("#prolocka")).toBe("Start your 3-day free trial");
     // the lists give way to the banner, so an empty list never reads as "no problems"
@@ -985,7 +1133,7 @@ describe("dashboard page: the Supabase Studio frame (src/studio.ts): header, rai
     expect(orgName(null)).toBe("Personal");
     expect(r.text(".sb-org .nm")).toBe("dev's Org");
     expect(r.text(".sb-org .bdg")).toBe("Free");
-    // the project switcher lists every project in the account, then All projects and New project
+    // the project switcher lists every app in the account, then All apps and New app
     const sw = [...r.doc.querySelectorAll(".sb-crumbs .dd:not(.sb-org) .dd-m a")].map((a) => a.getAttribute("href"));
     expect(sw).toEqual(["/account/apps/0123456789abcdef", "/account/apps/fedcba9876543210", "/account", "/account/new"]);
     expect(r.doc.querySelector('.sb-crumbs a[href="/account/apps/0123456789abcdef"]')!.getAttribute("aria-current")).toBe("true");

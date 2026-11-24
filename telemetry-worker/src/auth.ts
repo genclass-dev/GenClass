@@ -43,6 +43,7 @@ import type { Env, HandleOptions } from "./collector.js";
 import {
   accountPage,
   appNotFoundPage,
+  getStartedPage,
   devicePage,
   forgotPage,
   loginPage,
@@ -84,6 +85,7 @@ import { dashboardPage, ownEndpoint, securityHeaders, setupCommand } from "./pag
 import { DEVICE_FAILURES, DEVICE_MS, DUMMY_HASH, FAILURE_WINDOW_MS, FREE_FAILURES, MAX_DELAY_MS, PASSWORD_MAX, delayAfter, hashPassword, needsRehash, passwordProblem, verifyPassword, waitText } from "./password.js";
 import { accountAccess, accountBilling, canBuy, countryOf, firstPlanWith, planParam, FREE, hasAnalytics, hasDashboard, hasProblems, keepDays, PAID_PLANS, pickRange, pitchLines, PLANS_FILE, priceText, problemsLock, projectAccess, viewRanges } from "./plans.js";
 import { trialFor } from "./billing.js";
+import { appsCovered } from "./plans.js";
 import { activeOwners, appHome, forgetTeam, membershipsOf } from "./team.js";
 import { cancelForDeletion } from "./stripe.js";
 import {
@@ -1834,6 +1836,85 @@ async function deleteAccount(c: C): Promise<Response> {
   return withCookies(noContent(), [clearCookie(c, c.cfg.session)]);
 }
 
+/** The sidebar's plan card and the Get started steps, in the server's words (GET /api/account/glance, /account/get-started). */
+export interface Glance {
+  ok: true;
+  /** The plan's name as the card says it: "Free", "Pro", "Pro trial". */
+  plan: string;
+  /** Beside the name: "plan", "2 days left", "from GenClass". */
+  status: string;
+  trial: boolean;
+  apps: { used: number; of: number | null };
+  note: string | null;
+  action: { label: string; href: string; primary: boolean } | null;
+  /** In order: create the app, connect it (its first event), the trial (any plan above Free), the genclass command. */
+  steps: { key: "app" | "connect" | "trial" | "cli"; done: boolean }[];
+  /** The account's first app, for the steps' links and its connect command. */
+  first: { id: string; name: string; token: string; live: boolean } | null;
+  /** The paid plan sold first (Pro), its price, its days free for this account (0: none) and where it starts. */
+  sold: { name: string; price: string; days: number; start: string } | null;
+}
+
+/**
+ * What the account has and has done, for the sidebar and Get started (the owner, 2026-11-24: set the whole app up
+ * first, then the 3-day trial): its own apps (not a team's), whether one has sent an event, its plan or trial, a
+ * terminal session. Never writes.
+ */
+export async function glance(c: C, a: Auth): Promise<Glance> {
+  const env = c.env;
+  const access = await accountAccess(c.db, a.account.id, env, c.now);
+  const every = (await accountProjects(c, a.account.id)).filter((p) => p.id);
+  const own = every.filter((p) => p.account_id === a.account.id);
+  const billing = await accountBilling(c.db, a.account.id, env);
+  const of = await appsCovered(c.db, a.account.id, env, c.now);
+  const plan = PAID_PLANS[0] ?? null;
+  // a member of a team whose owner has a plan: the team's plan covers them, so nothing is sold to them here, and the
+  // team's apps count for their first steps (an app a member adds goes into the team's account)
+  let team: string | null = null;
+  if (access.source === null) {
+    for (const owner of await activeOwners(c.db, env, a.account.id, c.now)) {
+      const t = await accountAccess(c.db, owner, env, c.now);
+      if (t.source !== null) {
+        team = t.plan.name;
+        break;
+      }
+    }
+  }
+  const mine = own.length ? own : team ? every : own;
+  const buy = !!plan && canBuy(env, a.account) && access.source === null && !team;
+  const days = buy ? await trialFor(c.db, a.account.id, plan!) : 0;
+  const trialing = access.source === "paid" && billing.subscription_status === "trialing";
+  const leftMs = billing.current_period_end ? Date.parse(billing.current_period_end) - c.now.getTime() : NaN;
+  const left = trialing && Number.isFinite(leftMs) ? Math.max(0, Math.ceil(leftMs / 86400000)) : null;
+  const live = mine.some((p) => !!p.first_event);
+  const cli = !!(await c.db.prepare("SELECT 1 AS x FROM auth_sessions WHERE account_id = ? AND kind = 'cli' LIMIT 1").bind(a.account.id).first());
+  // the oldest, in the order plans count apps (src/plans.ts coverage): the one Free covers (own is sorted by name)
+  const oldest = own.length ? await c.db.prepare("SELECT id FROM projects WHERE account_id = ? AND id IS NOT NULL ORDER BY created, rowid LIMIT 1").bind(a.account.id).first<{ id: string }>() : null;
+  const first = own.find((p) => p.id === oldest?.id) ?? own[0] ?? mine[0] ?? null;
+  const start = plan ? `/account/billing?plan=${encodeURIComponent(planParam(plan))}&start=1` : null;
+  const apps =
+    of !== null && own.length > of
+      ? `${own.length} apps, ${of} covered`
+      : `${own.length} of ${of === null ? "any number of" : of} app${of === 1 ? "" : "s"}`;
+  return {
+    ok: true,
+    plan: team ?? (access.source === null ? "Free" : trialing ? `${access.plan.name} trial` : access.plan.name),
+    status: team ? "with your team" : left !== null ? `${left} day${left === 1 ? "" : "s"} left` : access.source === "comp" ? "from GenClass" : "plan",
+    trial: trialing,
+    apps: { used: own.length, of },
+    note: access.source === "open" || team ? null : apps,
+    action: buy && plan && start ? { label: days ? `Start ${days}-day free trial` : `Upgrade to ${plan.name}`, href: start, primary: own.length > 0 } : { label: "Plans and billing", href: "/account/billing", primary: false },
+    steps: [
+      { key: "app", done: mine.length > 0 },
+      { key: "connect", done: live },
+      { key: "trial", done: access.source !== null || !!team },
+      { key: "cli", done: cli },
+    ],
+    first: first ? { id: first.id!, name: first.name, token: first.token, live: !!first.first_event } : null,
+    sold: plan && start && canBuy(env, a.account) ? { name: plan.name, price: priceText(plan, countryOf(c.req)), days, start } : null,
+  };
+}
+
 async function accountView(c: C, a: Auth): Promise<AccountView> {
   const iso = c.now.toISOString();
   const access = await accountAccess(c.db, a.account.id, c.env, c.now);
@@ -1981,19 +2062,21 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       if (!a) return redirect("/login?next=%2Faccount");
       const view = await accountView(c, a);
       view.notice = accountNotice(url);
-      // a new account's first screen is the paid plan's trial, with a tiny Skip on to its first app (the owner's call,
-      // 2026-11-13: "our entire goal is for them to put their credit cards in")
-      const sold = PAID_PLANS[0];
-      if (!view.projects.length && sold && canBuy(env, a.account) && (await accountAccess(c.db, a.account.id, env, c.now)).source === null) {
-        view.trial = {
-          plan: sold.name,
-          price: priceText(sold, countryOf(c.req)),
-          days: (await trialFor(c.db, a.account.id, sold)) || null,
-          features: pitchLines(sold),
-          start: `/account/billing?plan=${encodeURIComponent(planParam(sold))}&start=1`,
-        };
-      }
+      // a new account sets its app up first, then the trial (the owner, 2026-11-24: "it should let you set up your
+      // entire app first before letting you put your credit card in"): with no app yet, the page sends the browser on
+      // to Get started unless the address names a part of it (#settings) or a link is being added (?claim, ?save); a
+      // notice keeps the page, except the one every sign-up lands on (?welcome=1), which is the case Get started is for
+      const notice = !!view.notice && url.searchParams.get("welcome") !== "1";
+      view.getStarted = !view.projects.length && !url.searchParams.has("claim") && !url.searchParams.has("save") && !notice;
       return page(200, (n) => accountPage(n, view));
+    }
+    case "/account/get-started": {
+      if (!get) return method();
+      const a = await webSession(c);
+      if (!a) return redirect("/login?next=%2Faccount%2Fget-started");
+      const view = await accountView(c, a);
+      const g = await glance(c, a);
+      return page(200, (n) => getStartedPage(n, { account: view.account, projects: view.projects.map((p) => ({ id: p.id, name: p.name })), glance: g, command: g.first ? setupCommand(g.first.token) : null }));
     }
     case "/account/new": {
       // Studio's "Create a new project" (the form posts to /api/account/projects, as the CLI does)
@@ -2077,6 +2160,12 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
       if (!a) return signedOut();
       return json(200, { account: accountJson(a.account), projects: (await accountProjects(c, a.account.id)).map((p) => projectJson(c, p)) });
     }
+    case "/api/account/glance": {
+      if (!get) return method();
+      const a = await webSession(c);
+      if (!a) return signedOut();
+      return json(200, await glance(c, a), { "cache-control": "no-store" });
+    }
     case "/api/account":
       return m === "DELETE" ? deleteAccount(c) : method();
     case "/api/account/projects": {
@@ -2150,8 +2239,9 @@ export async function routeAuth(request: Request, url: URL, path: string, env: E
     if (mine && PAID_PLANS.length && canBuy(env, a.account)) {
       // version 5 (2026-11-13): the paywall for every new app, a paying account included (it clicks Continue with
       // Pro), and for an app its plan does not cover
-      const row = await c.db.prepare("SELECT plan_chosen FROM projects WHERE id = ?").bind(p.id).first<{ plan_chosen: string | null }>();
-      if (!row?.plan_chosen || access.locked) return redirect(`/account/billing?project=${encodeURIComponent(p.id!)}`);
+      // setup first (2026-11-24): a new app opens its dashboard and Connect at once; the plan page waits only for an
+      // app past what the account's plan covers
+      if (access.locked) return redirect(`/account/billing?project=${encodeURIComponent(p.id!)}`);
     }
     const base = {
       account: { apps, current: p.id!, email: a.account.email ?? (a.account.github_login ? `@${a.account.github_login}` : null), plan: access.plan.name },
@@ -2194,7 +2284,7 @@ export function lockedJson(c: { cfg: AuthConfig; env: Env }, access?: { locked?:
     const covers = (n: number | null | undefined) => (n === 1 ? "one app" : `${n ?? "its"} apps`);
     const error = access.locked === "free_projects"
       ? `since 13 November 2026 Free covers ${covers(FREE.limits.apps)}, your oldest, and this one is past it: it needs ${PAID_PLANS[0]?.name ?? "a paid plan"}; start it at ${url}`
-      : `your plan covers ${covers(access.apps)}, and this one is past them: more apps come with Enterprise (${PLANS_FILE.contact}); see ${url}`;
+      : `your plan covers ${covers(access.apps)}, and this one is past them: more apps come with Business or Enterprise (${PLANS_FILE.contact}); see ${url}`;
     return json(402, { ok: false, error, locked: true, needs_plan: true, upgrade_url: url });
   }
   const url = `${c.cfg.origin}/account/billing`;
