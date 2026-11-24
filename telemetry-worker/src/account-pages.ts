@@ -761,6 +761,7 @@ table.dt td form{display:inline}
 .newp .pnl-f{justify-content:space-between}
 .newp .pnl-f .row{margin-left:auto}
 .newp .pnl-f .err{margin:0}
+.frow .hint{margin-top:8px}
 @media (max-width:640px){.frow{grid-template-columns:1fr}.frow>label,.frow>.l{padding-top:0}}
 @media (max-width:600px){
   table.dt.rows thead{display:none}
@@ -1167,8 +1168,8 @@ ${step(
   "app",
   1,
   "Create your app",
-  f ? `${esc(f.name)} has its own key and dashboard.` : "Name it. It gets its own key and dashboard.",
-  f ? `<a class="btn sm ghost" href="/account/apps/${esc(f.id)}">Open ${esc(f.name)}</a>` : `<a class="btn" href="/account/new">${icon("plus", 14)}<span>Create your app</span></a>`,
+  f ? `${esc(f.name)} has its own key and dashboard.` : '<span id="gs-app-t">Name it. It gets its own key and dashboard.</span>',
+  f ? `<a class="btn sm ghost" href="/account/apps/${esc(f.id)}">Open ${esc(f.name)}</a>` : `<a class="btn" id="gs-new" href="/account/new">${icon("plus", 14)}<span>Create your app</span></a>`,
 )}
 ${step(
   "connect",
@@ -1204,16 +1205,35 @@ ${step(
     railLabel: "Organization",
     css: DASH_CSS + ORG_CSS + GS_CSS,
     body,
-    script: CLIENT_JS,
+    script: CLIENT_JS + (f ? "" : SITE_CHECKED_JS),
   });
 }
+
+/**
+ * The site the visitor checked on genclass.dev (the home page's live crawl or the page check keep it in this browser,
+ * localStorage "gc-site": { host, name, at }, for 14 days): with no app yet, Get started's first step creates the app
+ * under that name (the owner, 2026-11-24: "it should write down polarparts.ca, whatever website you were actually
+ * working on ... and let them change it"). Read on the page only; never sent anywhere but the new-app form's own field.
+ */
+export const SITE_CHECKED_JS = `
+(function(){
+  var s = null; try { s = JSON.parse(localStorage.getItem("gc-site") || "null"); } catch (e) {}
+  if (!s || typeof s.name !== "string" || !s.name.trim() || !(Date.now() - (s.at || 0) < 14 * 864e5)) return;
+  var n = s.name.trim().slice(0, 80);
+  // an app of the account already has that name: nothing to suggest
+  if ([].some.call(document.querySelectorAll(".sb-app"), function(a){ return a.textContent.trim().toLowerCase() === n.toLowerCase(); })) return;
+  var b = document.getElementById("gs-new"), t = document.getElementById("gs-app-t"), name = document.getElementById("appname"), hint = document.getElementById("namehint");
+  if (b) { b.href = "/account/new?name=" + encodeURIComponent(n); if (t) t.textContent = "Start with " + n + ", the site you checked. You can rename it."; }
+  if (name && !name.value) { name.value = n; if (hint) hint.hidden = false; }
+})();`;
 
 export interface NewProjectView {
   account: AccountView["account"];
   /** The account's projects (the header's switcher) and its plan's name (the organization's badge). */
   projects: { id: string; name: string }[];
   plan?: string;
-  /** The name filled in (?name=, from the page check's "Fix it with GenClass"); empty for none. */
+  /** The name filled in (?name=: the site checked, from the page check's "Fix it with GenClass" or genclass.dev's
+   *  "Get started free" after a check); empty for none, and then the page fills in the site this browser checked last. */
   suggested?: string;
 }
 
@@ -1228,7 +1248,7 @@ export function newProjectPage(nonce: string, v: NewProjectView): string {
 <form class="pnl newp" id="new-app" novalidate>
   <div class="pnl-h"><h1>Create a new app</h1></div>
   <div class="frow"><label for="org">Organization</label><div><select id="org" disabled><option>${esc(org)}</option></select></div></div>
-  <div class="frow"><label for="appname">App name</label><div><input id="appname" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Acme checkout" required autofocus${v.suggested ? ` value="${esc(v.suggested)}"` : ""}></div></div>
+  <div class="frow"><label for="appname">App name</label><div><input id="appname" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Acme checkout" required autofocus${v.suggested ? ` value="${esc(v.suggested)}"` : ""}><p class="hint" id="namehint"${v.suggested ? "" : " hidden"}>From the site you checked. You can change it.</p></div></div>
   <div class="pnl-f"><p class="err" id="newerr" role="alert"></p><div class="row"><a class="btn ghost" href="/account">Cancel</a><button class="btn" type="submit" id="newgo"><span>Create app</span></button></div></div>
 </form>
 <p class="intro newp"><a href="/account#claim">Import an existing dashboard</a></p>
@@ -1254,7 +1274,7 @@ export function newProjectPage(nonce: string, v: NewProjectView): string {
     railLabel: "Organization",
     css: DASH_CSS + ORG_CSS,
     body,
-    script: CLIENT_JS + script,
+    script: CLIENT_JS + SITE_CHECKED_JS + script,
   });
 }
 
