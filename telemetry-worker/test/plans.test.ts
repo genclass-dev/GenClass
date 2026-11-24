@@ -547,7 +547,7 @@ describe("Pro (id team) and Business are the plans sold on the site, each flat f
       expect(page).toContain("<tr><td>Shop</td><td>Free</td>");
       // Free is one person: the team comes with Business, the plan with no seat limit
       expect(page).toContain("The Free plan is for one person. Your team comes with Business: members open the dashboards of your apps with their own sign-in.");
-      expect(page).toContain('<a class="btn ghost" href="mailto:mehar@genclass.dev?subject=GenClass%20Enterprise"><span>Talk to us</span></a>');
+      expect(page).toContain('<a class="btn ghost" href="https://genclass.dev/enterprise#contact"><span>Contact sales</span></a>');
       expect(page).toContain('<p class="price">By agreement</p>');
       expect(visible(page)).not.toMatch(/—|!/);
     }

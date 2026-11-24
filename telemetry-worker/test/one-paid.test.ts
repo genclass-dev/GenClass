@@ -75,9 +75,9 @@ describe("Individual on Stripe Checkout, Enterprise by email", () => {
     const off = setup();
     const a = await signedIn(off.env);
     const closed = await text(call(off.env, "GET", "/account/billing", { cookie: a.cookie }));
-    // not on sale (no key): no Upgrade button, but Enterprise's Talk to us is a mailto link whatever the key
+    // not on sale (no key): no Upgrade button, but Enterprise's Contact sales links the site's form whatever the key
     expect(closed).not.toContain("data-plan=");
-    expect(closed).toContain('<a class="btn ghost" href="mailto:mehar@genclass.dev?subject=GenClass%20Enterprise"><span>Talk to us</span></a>');
+    expect(closed).toContain('<a class="btn ghost" href="https://genclass.dev/enterprise#contact"><span>Contact sales</span></a>');
 
     const on = setup(LIVE);
     const b = await signedIn(on.env);

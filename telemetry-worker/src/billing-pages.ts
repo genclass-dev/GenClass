@@ -5,7 +5,7 @@
 // the page waits for the new plan. Same shell, tokens and rules as the account pages; server-rendered text goes through esc(),
 // scripts insert text with textContent. Buttons that need Stripe are shown only to an account that can buy (a live
 // STRIPE_SECRET_KEY, or a test key and the account in STRIPE_TEST_ACCOUNTS). A plan agreed by email (Enterprise) has
-// Talk to us, a mailto link, whatever the key. Which plans include something is said from billing/plans.json
+// Contact sales, a link to genclass.dev's sales form, whatever the key. Which plans include something is said from billing/plans.json
 // (plansWith), never by name.
 
 import { CLIENT_JS, ORG_CSS, orgRail, PITCH_SHOWN, pitchList, time } from "./account-pages.js";
@@ -302,7 +302,8 @@ function planColumn(v: BillingView, p: Plan, current: Plan): string {
       ? `<a class="btn" href="#projects"><span>Choose a project</span></a>`
       : '<span class="muted">Add a project first: run npx genclass in your app.</span>'
     : `${seats}<button class="btn${p !== PAID_PLANS[0] && !pick ? " ghost" : ""}" type="button" data-plan="${esc(p.id)}"${pick ? " data-pick" : ""}><span>${subscribed ? "Switch to" : "Upgrade to"} ${esc(p.name)}</span></button>`;
-  const talk = `<a class="btn ghost" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass ${p.name}`)}"><span>Talk to us</span></a>`;
+  // genclass.dev's Contact sales form (the site's /enterprise#contact, posting to /api/sales here)
+  const talk = `<a class="btn ghost" href="https://genclass.dev/enterprise#contact"><span>Contact sales</span></a>`;
   let act = "";
   if (cur) act = `<span class="tag">${v.access.source === "comp" ? "Set up by GenClass" : v.access.source === "open" ? "This server" : "Your plan"}</span>`;
   else if (p.id === "free") act = subscribed && v.live ? '<span class="muted">To go back to Free, <a href="#manage">cancel your plan</a>.</span>' : "";
