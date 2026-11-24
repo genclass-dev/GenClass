@@ -281,10 +281,10 @@ export async function freeLine(o = {}, deps = {}) {
   const name = clean(cli && !cli.paid ? cli.plan : offer.plan.name, 20);
   const price = clean((cli && !cli.paid ? cli.price : null) ?? offer?.price ?? "", 40);
   const days = cli && !cli.paid ? cli.trialDays : offer?.trialDays;
-  // the genclass command is Pro's: Free is the website's (one app and its totals), and the line says so
+  // the genclass command is Pro's but for its setup: Free is the website's (one app and its totals), and the line says so
   const [first = "", ...rest] = wrap(
     cli && !cli.paid
-      ? `You are on Free${lim ? ` (${lim})` : ""}, on the website. Every genclass command comes with ${name}${days ? `, ${days} days free` : ""}: ${homeOpen() ? "type upgrade" : "npx genclass upgrade"}`
+      ? `You are on Free${lim ? ` (${lim})` : ""}, on the website. Setting up is free; the rest of genclass comes with ${name}${days ? `, ${days} days free` : ""}: ${homeOpen() ? "type upgrade" : "npx genclass upgrade"}`
       : `You are on Free, which has limits${lim ? ` (${lim})` : ""}. ${name} has everything, ${days ? `${days} days free, then ${price}` : `for ${price}`}. Upgrade now: ${homeOpen() ? "type upgrade" : "npx genclass upgrade"}`,
     width() - 6,
   );

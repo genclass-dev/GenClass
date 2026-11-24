@@ -8,8 +8,8 @@ npx genclass
 ```
 
 Run it in your web app's folder. It shows where the project stands and walks you through the next step: one Enter
-per step. Stop at any point and run it again: it continues from what is true now. It comes with Pro: 3 days free,
-then US$50 a developer a month.
+per step. Stop at any point and run it again: it continues from what is true now. Setting your app up is free; the
+rest comes with Pro, whose free trial starts at the end of the setup: 3 days free, then US$50 a developer a month.
 
 ```text
   ╭─ GenClass ────────────────────────────────────────────── v0.3.7 ─╮
@@ -31,10 +31,10 @@ then US$50 a developer a month.
   │                                                                  │
   ╰──────────────────────────────────────────────────────────────────╯
 
-  ✔  Done     Account • Pro • Runtime
+  ✔  Done     Account • Runtime
   ●  Next     Add the test workflow
   ◌  Waiting  Dashboard: deploy, then open your site once
-  ○  Later    GitHub App • Coding agent • Suggestions
+  ○  Later    GitHub App • Coding agent • Pro • Suggestions
 
   ▎ Next  Add the test workflow
   ▎ One new file, .github/workflows/genclass.yml.
@@ -69,12 +69,15 @@ When the walk is done (or you press `q` to leave it for later), the command does
 Type a number, a command, or a sentence: a sentence is a question about your app. `q` leaves. Everything here is
 also a command of its own (`npx genclass problems`), so scripts and coding agents use the same things.
 
-**The command comes with Pro.** Right after the sign-in, an account without Pro sees Pro's card, and Enter opens its
-checkout in the browser: 3 days free (one trial per account; the card is asked for on Stripe, and nothing is charged
-if you cancel before they end), then US$50 a developer a month, for up to 3 apps in the account. More apps come with
-Enterprise, by email. Every command but `login`, `logout`, `whoami`, `plan`, `upgrade`, `profile`, `status`,
-`remove`, `help` and `version` asks first. Without a terminal (`--yes`, `--json`, a coding agent) nothing is opened:
-one line with the checkout address, and exit code 1. Free stays on the website: one app's totals for the last 7 days.
+**Set up first, then Pro.** The setup needs no Pro: signing in, adding GenClass to the app, putting the app in your
+account, the test workflow, the GitHub App and the coding agent (`setup`, `init`, `connect`, `apps`,
+`analytics on | off`). When they are done, Pro's card comes, and Enter opens its checkout in the browser: 3 days
+free (one trial per account; the card is asked for on Stripe, and nothing is charged if you cancel before they end),
+then US$50 a developer a month, for up to 3 apps in the account. More apps come with Enterprise, by email. The rest
+of the command comes with Pro: every command but the setup's, `login`, `logout`, `whoami`, `plan`, `upgrade`,
+`profile`, `status`, `remove`, `help` and `version` asks first, and shows the same card. Without a terminal
+(`--yes`, `--json`, a coding agent) nothing is opened: one line with the checkout address, and exit code 1 for a
+command that needs Pro (`setup --yes` ends with that line and exit code 0, since the setup is done). Free stays on the website: one app's totals for the last 7 days.
 Plans bought before 13 November 2026 keep every app they cover (an app paid for on its own does not count toward
 Pro's 3); Free covers an account's oldest app and locks the others.
 
@@ -87,18 +90,18 @@ it off). After that you type `genclass`, and every screen says `genclass` instea
 | Part | What the step does | What it changes |
 |---|---|---|
 | Account | Opens genclass.dev in your browser; you approve a short code there. | A session file in your user config folder. Nothing is typed in the terminal. |
-| Pro | Right after the sign-in: Pro's 3-day free trial opens in your browser, and the command waits for it. Every step after it needs Pro. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
 | Runtime | Adds GenClass to the app: one import (or script tag) and the package. It watches the page in your users' browsers for lost edits, double submits and old data shown over new, and only reports, to the console and your dashboard. Nothing is drawn on your pages. Visitor analytics are on too (`analytics: true` next to the app's token): page views, time on a page, scroll depth, clicks per element (never its text), where visits come from and the device class, with no cookies and nothing from localhost. `npx genclass setup --no-analytics` leaves them off, `npx genclass analytics off` turns them off later. Where the law asks for a visitor's consent to analytics (the EU, EEA and UK), set up without them and call `runtime.analytics.start()` once the visitor agrees. | Your entry file and `package.json`; you see the change first. `genclass remove` undoes it. |
-| App plan | Once the app is in your account, its plan page opens in your browser once: Continue with Pro. Pro covers up to 3 apps; more apps come with Enterprise, by email. | Nothing in your project. |
+| App plan | With Pro, an app past the 3 it covers waits on its plan page in your browser: more apps come with Enterprise, by email. Without Pro there is nothing to choose here: Pro's step, at the end of the setup, covers the app. | Nothing in your project. |
 | Dashboard | Waits for your live site to be opened once. GenClass sends nothing from localhost. | Nothing. |
 | Test workflow | Runs your Playwright tests once more per pull request with slow and reordered responses. | One new file, `.github/workflows/genclass.yml`, which you commit. |
 | GitHub App | Comments on a pull request when a page ends up wrong, with the steps to see it. The command opens GitHub's install page and waits for the answer. A repository that was renamed on GitHub is looked up under its new name. | Nothing in your project. The app cannot read or change your code. |
 | Coding agent | Gives Claude Code, Cursor and other agents GenClass's tools and its skill: ask what went wrong, replay it, check the fix. | `.mcp.json` (or `.cursor/mcp.json`) and `.claude/skills/genclass/SKILL.md`. |
+| Pro | Once the steps above are done or skipped: Pro's card, and Enter opens its 3-day free trial in your browser while the command waits for it. Nothing before it needs Pro; the suggestions after it do. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
 | Suggestions | Tells you what your app is missing, most important first. | Nothing in your project. |
 
 On a terminal, Enter starts a step and is the yes for what its sentence says it writes. While a step waits for you
-in the browser (the sign-in, GitHub), Enter stops the wait and the walk goes on. Pro and the app's plan are the
-exception: nothing after them runs until they are done. A part that does not apply
+in the browser (the sign-in, GitHub), Enter stops the wait and the walk goes on. Pro is the exception: the suggestions
+after it wait until it is started. A part that does not apply
 is left out and says why: no Playwright tests, not a GitHub repository, not a web app.
 
 ## Fix what the page check found

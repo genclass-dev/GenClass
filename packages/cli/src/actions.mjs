@@ -100,20 +100,24 @@ export async function signIn(o = {}) {
   return "done";
 }
 
-// ------------------------------------------------------------------------------------------------ 1b. Pro
+// ------------------------------------------------------------------------------------------------ 6b. Pro
 
 /**
- * The Pro step, right after the sign-in (state.mjs, step "plan"): the genclass command is Pro's (the owner's call,
- * 2026-11-13), so an account without it sees the paywall (paywall.mjs startPro): the card, then Enter, which opens
- * the checkout with its free trial and waits for the payment. There is no Free here. Returns "done" once Pro is on,
- * "skipped" when there is nothing to start, and "quit" otherwise (the walk stops: nothing after it works without Pro).
+ * The Pro step, once the setup's steps are done (state.mjs, step "plan"; the owner's call, 2026-11-24: set the app up
+ * first, start the trial after): the rest of the genclass command is Pro's (2026-11-13), so an account without it
+ * sees the paywall (paywall.mjs startPro): the card, then Enter, which opens the checkout with its free trial and
+ * waits for the payment. There is no Free here. Returns "done" once Pro is on, "skipped" when there is nothing to
+ * start, and "quit" otherwise (the walk ends: what is after it is Pro's).
  * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
  */
 export async function choosePlan(state, o = {}, deps = {}) {
   const cli = state.steps.find((s) => s.id === "plan")?.cli;
   if (!cli || cli.paid) return "skipped";
+  // the app has GenClass and is in the account: that is said first, above the card
+  const setUp = state.steps.find((s) => s.id === "runtime")?.state === "done";
   // seen once already in this process (the prompt): one line, not the card again
-  return (await (await import("./paywall.mjs")).startPro(cli, state.account?.offer ?? null, { ...o, again: "Setup goes on with Pro." }, deps)) ? "done" : "quit";
+  const opts = { ...o, ...(setUp ? { lead: "Your app is set up." } : {}), again: setUp ? "Your app is set up. The rest comes with Pro." : "The rest comes with Pro." };
+  return (await (await import("./paywall.mjs")).startPro(cli, state.account?.offer ?? null, opts, deps)) ? "done" : "quit";
 }
 
 /** This app's plan page, in the walk (state.mjs, step "app-plan"): projectPlan with the step's offer. */
@@ -146,7 +150,7 @@ export function upgradeOffer(state, name = null) {
  * rule (2026-11-12) is that it has its plan chosen before anything else, Pro or Free with a reason, so this opens its
  * plan page in the browser and waits for the choice. `id` names the app; without it, this folder's. Without a
  * terminal it says where the page is and goes on. Returns "chosen", "none" (nothing to choose: a plan, a grant, a
- * choice already, or nothing sold), "covered" (the account's plan covers it; Continue was not clicked yet, which
+ * choice already, nothing sold, or an account without Pro yet, whose Pro step comes after the setup), "covered" (the account's plan covers it; Continue was not clicked yet, which
  * blocks nothing), "locked" (past the apps a paying account's plan covers: Enterprise, by email) or "open" (the
  * choice was not made).
  */
@@ -157,6 +161,9 @@ export async function planNow(o = {}, deps = {}, id = null) {
   } catch {
     return "none";
   }
+  // an account without Pro sees no plan page before the setup is done: Pro's step, at the end of it, covers the app
+  // (the owner's call, 2026-11-24)
+  if (state.account?.cli && !state.account.cli.paid) return "none";
   const app = (state.projects ?? []).find((p) => (id ? p.id === id : p.token === state.app?.token) && !p.shared);
   // version 5 (2026-11-13): every new app sees its plan page, a paying account's too (it goes on with its plan
   // there), and an app its plan does not cover waits there (state.mjs appPlanOffer)
