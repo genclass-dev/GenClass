@@ -488,7 +488,7 @@ describe("github app: /github/setup with the link on and off (src/github/pages.t
     expect(r.status).toBe(200);
     const nonce = /script-src 'nonce-([A-Za-z0-9]+)'/.exec(csp)![1]!;
     expect(csp).toBe(
-      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}' https://api.fontshare.com https://fonts.googleapis.com; font-src https://cdn.fontshare.com https://fonts.gstatic.com; connect-src 'self'; ` +
+      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; ` +
         "img-src 'self' data: https://genclass.dev; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     );
     // the form: two inputs, "main" filled in, a submit button, no action

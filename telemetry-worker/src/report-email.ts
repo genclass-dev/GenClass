@@ -26,8 +26,10 @@ import { esc } from "./escape.js";
 import { DESIGN_CHECKS, EVERY_WORDS, PRIORITY_WORDS, showcasePrompt, type AppReport, type Every, type Item, type Priority, type Report } from "./report.js";
 
 /** Light colours (inline) and their dark twins (the <style> block): the dashboard's light theme and genclass.dev. */
-const C = { bg: "#ffffff", ink: "#171717", ink2: "#525252", ink3: "#6b6b6b", rule: "#e6e6e6", code: "#f3f3f3", green: "#0a7c4a", onGreen: "#ffffff", greenBg: "#e8f5ee", red: "#c8242b", amber: "#9a5b00", grey: "#6b6b6b" };
-const D = { bg: "#000000", ink: "#f0f1e9", ink2: "#a0a196", ink3: "#88897f", rule: "#30312b", code: "#131311", green: "#2fd07f", onGreen: "#02140a", greenBg: "#04150c", red: "#ff6b4a", amber: "#f5c66a", grey: "#88897f" };
+// genclass.dev's palette (the 2026-11-24 redesign: warm paper, soft ink, sage green; "dev mode" at night), with the
+// site's ink as the button, green for what GenClass fixed, coral and amber for what needs a look
+const C = { bg: "#faf8f4", ink: "#15171f", ink2: "#4a4e5c", ink3: "#656a79", rule: "#e6e2d9", code: "#f2efe8", green: "#0a6a49", onGreen: "#ffffff", greenBg: "#eef2ef", red: "#c03e28", amber: "#8a5a00", grey: "#656a79", btn: "#15171f", onBtn: "#ffffff" };
+const D = { bg: "#0c0e12", ink: "#e9ebf1", ink2: "#aeb4c2", ink3: "#858c9c", rule: "#232832", code: "#13161c", green: "#3ddc97", onGreen: "#0c0e12", greenBg: "#10241b", red: "#ff8a70", amber: "#f2c879", grey: "#858c9c", btn: "#e9ebf1", onBtn: "#0c0e12" };
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
 const P_COLOUR: Record<Priority, string> = { 0: C.red, 1: C.amber, 2: C.grey };
@@ -207,7 +209,7 @@ const TABLE = `role="presentation" width="100%" cellpadding="0" cellspacing="0" 
 
 /** The one filled button: a table cell, so Outlook draws it too. */
 const button = (href: string, text: string): string =>
-  `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 0"><tr><td class="gc-btn" bgcolor="${C.green}" style="background:${C.green}"><a class="gc-btn-a" href="${esc(href)}" style="display:inline-block;padding:11px 18px;font-size:15px;line-height:20px;font-weight:600;color:${C.onGreen};text-decoration:none">${esc(text)}</a></td></tr></table>`;
+  `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 0"><tr><td class="gc-btn" bgcolor="${C.btn}" style="background:${C.btn}"><a class="gc-btn-a" href="${esc(href)}" style="display:inline-block;padding:11px 18px;font-size:15px;line-height:20px;font-weight:600;color:${C.onBtn};text-decoration:none">${esc(text)}</a></td></tr></table>`;
 
 /** A section of the details: a rule, a title (a quiet note on the right), the body. */
 function section(name: string, body: string, meta = ""): string {
@@ -504,8 +506,8 @@ const darkRules = (pre: string, bgPre: string): string =>
     `${bgPre}.gc-p0{background:${D.red}!important}`,
     `${bgPre}.gc-p1{background:${D.amber}!important}`,
     `${bgPre}.gc-p2{background:${D.grey}!important}`,
-    `${bgPre}.gc-btn{background:${D.green}!important}`,
-    `${pre}.gc-btn-a{color:${D.onGreen}!important}`,
+    `${bgPre}.gc-btn{background:${D.btn}!important}`,
+    `${pre}.gc-btn-a{color:${D.onBtn}!important}`,
     `${bgPre}.gc-box{background:${D.greenBg}!important;border-color:${D.green}!important}`,
     `${bgPre}.gc-code{background:${D.code}!important;border-color:${D.rule}!important;color:${D.ink}!important}`,
   ].join("\n");
@@ -523,7 +525,7 @@ export function htmlOf(r: Report): string {
   // the date (the subject says which report); the hour too when reports come hourly or this is an alert
   const when = `${r.kind === "alert" ? "Alert · " : r.kind === "test" ? "Test · " : ""}${day(r.generated)}${r.kind === "alert" || r.every === "hourly" ? `, ${clock(r.generated)}` : ""}`;
   const head = `<table ${TABLE}><tr>
-<td style="vertical-align:middle;white-space:nowrap"><a class="gc-i1" href="${esc(r.links.origin)}" style="text-decoration:none;color:${C.ink};font-size:16px;line-height:24px;font-weight:700"><img src="https://genclass.dev/brand/mark-64.png?v=2" width="24" height="24" alt="" style="vertical-align:-6px;border:0;margin-right:8px">GenClass</a></td>
+<td style="vertical-align:middle;white-space:nowrap"><a class="gc-i1" href="${esc(r.links.origin)}" style="text-decoration:none;color:${C.ink};font-size:16px;line-height:24px;font-weight:700"><img src="https://genclass.dev/brand/mark-64.png?v=9" width="24" height="24" alt="" style="vertical-align:-6px;border:0;margin-right:8px">GenClass</a></td>
 <td class="gc-i3" style="vertical-align:middle;text-align:right;font-size:13px;line-height:19px;color:${C.ink3}">${esc(when)}</td></tr></table>`;
   // a new account's first step is to connect its app: that section comes before the empty numbers
   const setupFirst = !measured(r).length || r.items.some((i) => i.section === "setup" && i.p === 0);

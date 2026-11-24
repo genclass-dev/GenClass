@@ -51,7 +51,7 @@ export function securityHeaders(nonce: string, extra: Record<string, string> = {
     "cross-origin-opener-policy": "same-origin",
     "permissions-policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
     "content-security-policy":
-      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}' https://api.fontshare.com https://fonts.googleapis.com; font-src https://cdn.fontshare.com https://fonts.gstatic.com; connect-src 'self'; ` +
+      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; ` +
       `img-src 'self' data: https://genclass.dev; base-uri 'none'; form-action ${opts.account ? "'self'" : "'none'"}; frame-ancestors 'none'`,
     ...extra,
   };
@@ -98,10 +98,10 @@ export interface InstallChoices {
  */
 export const DEFAULT_CHOICES = { guard: true, heal: true } as const;
 
-// The palette, type, buttons, header and focus ring of genclass.dev (site/src/css/base.css and components.css), with
-// the site's values: black ground, bone text, the GenClass mark's green and red-orange, square corners, 1px rules,
-// Satoshi for text and JetBrains Mono for code. Like the site, every page here is dark only, whatever the visitor's
-// system theme: no prefers-color-scheme rules and `color-scheme: dark`, so form controls and scrollbars are dark too.
+// The palette, type, buttons, header and focus ring of genclass.dev (the 2026-11-24 redesign, site/src/css/base.css
+// and dark.css): near-black "dev mode" by default here and warm paper on <html data-theme="light">, ink buttons, sage
+// green for what GenClass fixed and coral for bugs, square corners, 1px rules; Geist for text, Geist Mono for code,
+// Newsreader for headlines by day (Geist Mono at night).
 // The token names are the light design's (--paper is the page, --ink the text), so every rule keeps working. Text
 // colours are at least 4.5:1 on --paper, --panel and --code, UI colours (focus ring, input border, fills) at least
 // 3:1 (test/pages.test.ts measures them). --accent #2FD07F is the site's green for text, fills and buttons, with

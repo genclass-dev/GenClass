@@ -709,8 +709,9 @@ describe("pages: the sign-in pages sit on genclass.dev's self-healing sphere, as
   it("the CSP allows the site's fonts and nothing more for scripts: the mesh loads by nonce", () => {
     const csp = securityHeaders("n")["content-security-policy"]!;
     expect(csp).toContain("script-src 'nonce-n';");
-    expect(csp).toContain("style-src 'nonce-n' https://api.fontshare.com https://fonts.googleapis.com;");
-    expect(csp).toContain("font-src https://cdn.fontshare.com https://fonts.gstatic.com;");
+    expect(csp).toContain("style-src 'nonce-n' https://fonts.googleapis.com;");
+    expect(csp).toContain("font-src https://fonts.gstatic.com;");
+    expect(csp).not.toContain("fontshare");
   });
 });
 
