@@ -1262,8 +1262,11 @@ describe("dashboard page: the Supabase Studio frame (src/studio.ts): header, rai
     expect(installPrompt(t)).toContain("3. Mode observe, as chosen on the dashboard: GenClass reports and never changes what the app does.");
     expect(installPrompt(t)).not.toContain("--mode");
     expect(installPrompt(t, null, { heal: true })).toBe(installPrompt(t));
+    // the dialog's defaults are observe (2026-11-24: detection first; fixing is ticked once a team trusts it)
+    expect(DEFAULT_CHOICES).toEqual({ guard: false, heal: false });
+    expect(installPrompt(t, null, DEFAULT_CHOICES)).toBe(installPrompt(t));
     // a self-hosted collector's endpoint is the one GENCLASS_CONFIG line left, before the script tag
-    expect(installPrompt(t, "https://c.example/v1/events", DEFAULT_CHOICES)).toContain(
+    expect(installPrompt(t, "https://c.example/v1/events", { guard: true, heal: true })).toContain(
       `   <script>window.GENCLASS_CONFIG = { telemetry: { endpoint: "https://c.example/v1/events" } };</script>\n   <script src="${CDN_SCRIPT}" data-token="${t}" data-mode="heal" data-visual="fix" data-devtools="local"></script>`,
     );
   });
@@ -1387,13 +1390,19 @@ describe("dashboard page: the Supabase Studio frame (src/studio.ts): header, rai
     const r = await render(st, { account, id: "0123456789abcdef", firstEvent: "2026-10-12T09:00:00.000Z", runtimeReady: true });
     const box = (k: string) => r.doc.querySelector(`#cchoices [data-choice="${k}"]`) as unknown as HTMLInputElement;
     const copied = () => r.doc.getElementById("cpinstall")!.getAttribute("data-copy");
-    // guard and heal start ticked, in the markup too: the prompt sets heal before and after the script runs
+    // nothing starts ticked (observe, 2026-11-24), in the markup too: the prompt sets no mode before and after the
+    // script runs
     expect(copied()).toBe(installPrompt(st.token, null, DEFAULT_CHOICES));
-    expect(box("guard").hasAttribute("checked")).toBe(true);
-    expect(box("heal").hasAttribute("checked")).toBe(true);
-    expect(box("heal").checked).toBe(true);
+    expect(copied()).toBe(installPrompt(st.token));
+    expect(box("guard").hasAttribute("checked")).toBe(false);
+    expect(box("heal").hasAttribute("checked")).toBe(false);
+    for (const k of ["guard", "heal", "badge", "agent", "deploy"]) expect(box(k).checked, k).toBe(false);
+    // guard, then heal with it: the heal mode
+    box("guard").click();
+    expect(copied()).toBe(installPrompt(st.token, null, { guard: true }));
     expect(box("heal").disabled).toBe(false);
-    for (const k of ["badge", "agent", "deploy"]) expect(box(k).checked, k).toBe(false);
+    box("heal").click();
+    expect(copied()).toBe(installPrompt(st.token, null, { guard: true, heal: true }));
     box("badge").click();
     box("deploy").click();
     expect(copied()).toBe(installPrompt(st.token, null, { guard: true, heal: true, badge: true, deploy: true }));
@@ -1431,8 +1440,8 @@ describe("dashboard page: the Supabase Studio frame (src/studio.ts): header, rai
     const r = await render(st, { account, id: "0123456789abcdef", firstEvent: "2026-10-12T09:00:00.000Z", runtimeReady: true });
     const box = (k: string) => r.doc.querySelector(`#cchoices [data-choice="${k}"]`) as unknown as HTMLInputElement;
     const copied = () => r.doc.getElementById("cpinstall")!.getAttribute("data-copy");
-    // Chromium restores boxes after the page script has run: a guard the visitor unticked comes back unticked, and heal,
-    // disabled then and so skipped, keeps the markup's tick; the prompt is still the default until pageshow
+    // Chromium restores boxes after the page script has run (here a ticked badge, guard still off); the prompt is still
+    // the default until pageshow, which also disables heal while guard is off
     box("guard").checked = false;
     box("badge").checked = true;
     expect(copied()).toBe(installPrompt(st.token, null, DEFAULT_CHOICES));
@@ -1637,7 +1646,7 @@ describe("dashboard page: measured visual checks (docs/runtime/VISUAL.md section
   });
 });
 
-describe("/start/open-source: the open-source parts with no account; heal and the anonymous diagnostics on unless chosen off, and the page sends nothing", () => {
+describe("/start/open-source: the open-source parts with no account; observe (2026-11-24) and the anonymous diagnostics on unless chosen otherwise, and the page sends nothing", () => {
   /** The page in happy-dom with its own script run; `fetch` records any request (there must be none). */
   async function openSource(o: { refuse?: boolean; before?: (doc: Document) => void; pageshow?: boolean } = {}) {
     const html = openSourcePage("NONCE");
@@ -1658,13 +1667,16 @@ describe("/start/open-source: the open-source parts with no account; heal and th
     return { html, win, doc, urls, copied, box, copy, close: () => win.happyDOM.close() };
   }
 
-  it("the page's default prompt: heal, the anonymous diagnostics on and init's free dashboard link, no token to paste, the agent link, the MCP server with that link as a choice, the local scan", () => {
+  it("the page's default prompt: observe, the anonymous diagnostics on and init's free dashboard link, no token to paste, the agent link, the MCP server with that link as a choice, the local scan", () => {
     const p = openSourcePrompt(DEFAULT_CHOICES);
     expect(p).toContain(
       "No GenClass account and nothing to sign in to: step 2's init command (use it rather than the hand-written GenClass.init(), which has no token and so makes no dashboard link) creates the app's free dashboard link (it sends the package name, nothing else, and saves the private link in .genclass.local, which init adds to .gitignore; keep that link private), and GenClass's anonymous diagnostics stay on: its decisions and counts, no text from the page unless the app opts in, never from local hosts (every field: packages/runtime/TELEMETRY.md in that repository). Do every step yourself.",
     );
     expect(p).toContain(`npm install ${RUNTIME_PKG}`);
-    expect(p).toContain('const rt = GenClass.init({ autoState: true, mode: "heal", visual: { on: true, fix: true } });');
+    // observe (2026-11-24: detection first): no mode, no visual fix, anywhere in the prompt
+    expect(p).toBe(openSourcePrompt());
+    expect(p).toContain("const rt = GenClass.init({ autoState: true });");
+    for (const s of ["mode: \"", "data-mode", "--mode", "visual: {", "data-visual"]) expect(p, s).not.toContain(s);
     // GenClass.init finds React, Redux and Zustand state only with the discover import first and autoState: true
     expect(p).toContain('import "@genclass/runtime/discover"; // first');
     expect(p.indexOf('import "@genclass/runtime/discover"')).toBeLessThan(p.indexOf('import { GenClass } from "@genclass/runtime"'));
@@ -1672,12 +1684,20 @@ describe("/start/open-source: the open-source parts with no account; heal and th
     expect(p).toContain(
       "with GenClass's anonymous diagnostics on (the default: its decisions and counts go to genclass.dev from public hosts, never from local ones); the browser downloads its model and onnxruntime-web, public files, from cdn.jsdelivr.net",
     );
-    expect(p).toContain(`<script src="${CDN_SCRIPT}" data-mode="heal" data-visual="fix" data-devtools="local"></script>`);
-    expect(p).toContain(`npx ${RUNTIME_PKG} init --mode heal --yes does steps 1 and 2`);
-    expect(p).toContain('and adds step 3\'s dev-only overlay; the handle is then GenClass.runtime; add visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content).)');
-    expect(p).toContain(
+    expect(p).toContain(`<script src="${CDN_SCRIPT}" data-devtools="local"></script>`);
+    expect(p).toContain(`npx ${RUNTIME_PKG} init --yes does steps 1 and 2`);
+    expect(p).toContain("and adds step 3's dev-only overlay; the handle is then GenClass.runtime.)");
+    expect(p).toContain("3. Mode observe, as chosen: GenClass reports and never changes what the app does.");
+    // Guard and Heal ticked: the heal mode, with the visual fix
+    const h = openSourcePrompt({ guard: true, heal: true });
+    expect(h).toContain('const rt = GenClass.init({ autoState: true, mode: "heal", visual: { on: true, fix: true } });');
+    expect(h).toContain(`<script src="${CDN_SCRIPT}" data-mode="heal" data-visual="fix" data-devtools="local"></script>`);
+    expect(h).toContain(`npx ${RUNTIME_PKG} init --mode heal --yes does steps 1 and 2`);
+    expect(h).toContain('and adds step 3\'s dev-only overlay; the handle is then GenClass.runtime; add visual: { on: true, fix: true } to the option file it writes (data-visual="fix" on the tag it writes; Astro gets a <meta name="genclass"> line instead: add visual=fix to its content).)');
+    expect(h).toContain(
       "3. Mode heal, as chosen: when GenClass is sure, it acts with minimal steps that it logs: it drops a stale response, merges or blocks a duplicate submit, fixes a CSS bug on the page, retries a failed request or serves its cached answer, hedges a slow call, and rolls back a bad write or asks your store to resync; discards and rollbacks can be undone, and a breaker steps the mode down after repeated undos. In development builds also mount the devtools overlay",
     );
+    expect(h.split("\n").length).toBe(p.split("\n").length);
     // nothing turns the diagnostics off, and no aggressiveness or GENCLASS_CONFIG line is left
     for (const s of ["telemetry: false", "--no-telemetry", "data-telemetry", "aggressiveness", "GENCLASS_CONFIG", "Keep the default mode"]) expect(p, s).not.toContain(s);
     expect(p).toContain('rt.atom("search", { query: "", results: [] })');
@@ -1717,7 +1737,7 @@ describe("/start/open-source: the open-source parts with no account; heal and th
   });
 
   it("the quiet choice: telemetry off in the init line, on the tag and in init's flags, so no token and no dashboard link, nothing sent to genclass.dev", () => {
-    const p = openSourcePrompt({ ...DEFAULT_CHOICES, quiet: true });
+    const p = openSourcePrompt({ guard: true, heal: true, quiet: true });
     expect(p).toContain("leave GENCLASS_DASHBOARD and GENCLASS_REPORT unset");
     expect(p).toContain("No GenClass account and no token: nothing is sent to genclass.dev. Do every step yourself.");
     expect(p).not.toContain("dashboard link");
@@ -1734,8 +1754,8 @@ describe("/start/open-source: the open-source parts with no account; heal and th
     expect(p).not.toContain("genclass.dev/dashboard");
     // the same steps as the default prompt: only the opening, step 2's first line and the last step change
     expect(p.split("\n").length).toBe(openSourcePrompt(DEFAULT_CHOICES).split("\n").length);
-    // quiet with observe
-    const o = openSourcePrompt({ quiet: true });
+    // quiet with the default mode, observe
+    const o = openSourcePrompt({ ...DEFAULT_CHOICES, quiet: true });
     expect(o).toContain("const rt = GenClass.init({ telemetry: false, autoState: true });");
     expect(o).toContain(`<script src="${CDN_SCRIPT}" data-telemetry="off" data-devtools="local"></script>`);
     expect(o).toContain(`npx ${RUNTIME_PKG} init --no-telemetry --yes does steps 1 and 2 and shows the diff`);
@@ -1777,11 +1797,17 @@ describe("/start/open-source: the open-source parts with no account; heal and th
 
   it("the page: ticking the choices rewrites the copied prompt with the server's own openSourcePrompt, and it sends nothing", async () => {
     const r = await openSource();
-    // guard and heal start ticked: the copied prompt sets heal
+    // nothing starts ticked: the copied prompt is observe, and heal waits for guard
     expect(r.copy()).toBe(openSourcePrompt(DEFAULT_CHOICES));
-    expect(r.box("heal").checked).toBe(true);
+    expect(r.copy()).not.toContain('mode: "heal"');
+    for (const k of ["guard", "heal", "logs", "selfHost", "quiet", "deploy"]) expect(r.box(k).checked, k).toBe(false);
+    expect(r.box("heal").disabled).toBe(true);
+    // guard, then heal: the heal mode
+    r.box("guard").click();
     expect(r.box("heal").disabled).toBe(false);
-    for (const k of ["logs", "selfHost", "quiet", "deploy"]) expect(r.box(k).checked, k).toBe(false);
+    expect(r.copy()).toBe(openSourcePrompt({ guard: true }));
+    r.box("heal").click();
+    expect(r.copy()).toBe(openSourcePrompt({ guard: true, heal: true }));
     r.box("logs").click();
     r.box("selfHost").click();
     r.box("quiet").click();
@@ -1800,14 +1826,14 @@ describe("/start/open-source: the open-source parts with no account; heal and th
     // the commands copy too
     const cmds = [...r.doc.querySelectorAll(".cmds [data-copy]")].map((b) => b.getAttribute("data-copy"));
     expect(cmds).toEqual([
-      `npx ${RUNTIME_PKG} init --mode heal`,
+      `npx ${RUNTIME_PKG} init`,
       `// in the app's entry, after the lines init added\nimport { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\nif (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime);`,
       `// in the app's entry (Next.js: instrumentation-client.ts), after the lines init added\nimport { GenClass } from "@genclass/runtime";\nimport { connectAgent } from "@genclass/runtime/agent";\nif (process.env.NODE_ENV === "development" && GenClass.runtime) connectAgent(GenClass.runtime);`,
       `npx -y ${MCP_PKG} init`,
       `npx ${RUNTIME_PKG} scan http://localhost:5173/ --local`,
     ]);
     // the choices are a fieldset with a visible legend; the commands' titles are h3 under the section's h2
-    expect(r.doc.querySelector("fieldset#choices > legend")!.textContent).toBe("What the prompt sets up (Guard and Heal are on: the heal mode; both off is observe, which only reports)");
+    expect(r.doc.querySelector("fieldset#choices > legend")!.textContent).toBe("What the prompt sets up (both off is observe: it only reports; tick Guard, and Heal, when you trust it)");
     expect(r.doc.querySelectorAll(".cmds h3").length).toBe(5);
     expect(r.doc.querySelectorAll(".cmds h2").length).toBe(1);
     expect(r.urls).toEqual([]);
@@ -1820,8 +1846,8 @@ describe("/start/open-source: the open-source parts with no account; heal and th
   });
 
   it("boxes a browser brings back with the page (back, reload; no change event) rewrite the prompt on pageshow", async () => {
-    // Chromium restores boxes after the page script has run: a guard the visitor unticked comes back unticked, and heal,
-    // disabled then and so skipped, keeps the markup's tick; the prompt is still the default until pageshow
+    // Chromium restores boxes after the page script has run (here a ticked logs box, guard still off); the prompt is
+    // still the default until pageshow, which also disables heal while guard is off
     const r = await openSource();
     r.box("guard").checked = false;
     r.box("logs").checked = true;
@@ -1841,43 +1867,42 @@ describe("/start/open-source: the open-source parts with no account; heal and th
     const t = await openSource({ before: (doc) => ((doc.querySelector('#choices [data-choice="selfHost"]') as HTMLInputElement).checked = true) });
     expect(t.copy()).toBe(openSourcePrompt({ ...DEFAULT_CHOICES, selfHost: true }));
     await t.close();
-    const u = await openSource({ before: (doc) => ((doc.querySelector('#choices [data-choice="guard"]') as HTMLInputElement).checked = false) });
-    expect(u.copy()).toBe(openSourcePrompt());
+    const u = await openSource({ before: (doc) => ((doc.querySelector('#choices [data-choice="guard"]') as HTMLInputElement).checked = true) });
+    expect(u.copy()).toBe(openSourcePrompt({ guard: true }));
     expect(u.box("heal").checked).toBe(false);
-    expect(u.box("heal").disabled).toBe(true);
+    expect(u.box("heal").disabled).toBe(false);
     await u.close();
   });
 
-  it("the defaults are in the markup: guard and heal ticked, nothing else, and heal enabled until pageshow, when the browser restores boxes", async () => {
+  it("the defaults are in the markup: nothing ticked (observe), and heal enabled until pageshow, when the browser restores boxes", async () => {
     const r = await openSource({ pageshow: false });
-    // the server renders the prompt the ticked boxes make, so the page says the same without its script
+    // the server renders the prompt the boxes make, so the page says the same without its script
     expect(r.html).toContain(`data-copy="${esc(openSourcePrompt(DEFAULT_CHOICES))}"`);
-    expect(r.html).toMatch(/<input type="checkbox" data-choice="guard" checked>/);
-    expect(r.html).toMatch(/<input type="checkbox" data-choice="heal" checked>/);
-    for (const k of ["logs", "selfHost", "quiet", "deploy"]) expect(r.html, k).toMatch(new RegExp(`<input type="checkbox" data-choice="${k}">`));
+    for (const k of ["guard", "heal", "logs", "selfHost", "quiet", "deploy"]) expect(r.html, k).toMatch(new RegExp(`<input type="checkbox" data-choice="${k}">`));
     expect(r.html).not.toContain('data-choice="eager"');
     // Chromium skips disabled boxes when it restores them, so heal must not be disabled before pageshow
     expect(r.box("heal").disabled).toBe(false);
-    expect(r.box("heal").checked).toBe(true);
+    expect(r.box("heal").checked).toBe(false);
     expect(r.copy()).toBe(openSourcePrompt(DEFAULT_CHOICES));
-    // a restored unticked heal under a ticked guard stays unticked, and enabled
-    r.box("heal").checked = false;
+    // a restored ticked guard and heal come back as the heal mode on pageshow
+    r.box("guard").checked = true;
+    r.box("heal").checked = true;
     r.box("logs").checked = true;
     r.win.dispatchEvent(new r.win.Event("pageshow"));
-    expect(r.box("heal").checked).toBe(false);
+    expect(r.box("heal").checked).toBe(true);
     expect(r.box("heal").disabled).toBe(false);
-    expect(r.copy()).toBe(openSourcePrompt({ guard: true, logs: true }));
+    expect(r.copy()).toBe(openSourcePrompt({ guard: true, heal: true, logs: true }));
     await r.close();
-    // with nothing restored, pageshow keeps the defaults
+    // with nothing restored, pageshow keeps the defaults, and heal waits for guard
     const t = await openSource();
-    expect(t.box("heal").checked).toBe(true);
-    expect(t.box("heal").disabled).toBe(false);
+    expect(t.box("heal").checked).toBe(false);
+    expect(t.box("heal").disabled).toBe(true);
     expect(t.copy()).toBe(openSourcePrompt(DEFAULT_CHOICES));
     // the page says what stays on and what the one choice turns off
     expect(t.html).toContain("the runtime's anonymous diagnostics stay on");
     expect(t.html).toContain("<b>Nothing sent to genclass.dev</b>");
     expect(t.html).toContain("https://github.com/genclass-dev/GenClass/blob/main/packages/runtime/TELEMETRY.md");
-    expect(t.html).toContain("with <code>--no-telemetry</code> nothing is sent to genclass.dev, and without <code>--mode heal</code> the mode is observe");
+    expect(t.html).toContain("with <code>--no-telemetry</code> nothing is sent to genclass.dev; the mode is observe (it only reports) until you add <code>--mode guard</code> or <code>--mode heal</code>");
     await t.close();
   });
 
