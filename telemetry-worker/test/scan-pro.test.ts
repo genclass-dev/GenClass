@@ -36,7 +36,7 @@ describe("GET /api/billing/pro: whether a sign-in has Pro, for the page check", 
     const t = setup(LIVE);
     expect((await pro(t.env, {})).status).toBe(401);
     const me = await user(t.env);
-    const FREE = { ok: true, pro: false, via: null, trial_days: 3 };
+    const FREE = { ok: true, pro: false, via: null, trial_days: 7 };
     expect(await pro(t.env, { cookie: me.cookie })).toEqual({ status: 200, body: FREE });
     expect(await pro(t.env, { bearer: me.bearer })).toEqual({ status: 200, body: FREE });
     team(t.sql, me.account.id);

@@ -226,8 +226,8 @@ describe("genclass: the state of a project (src/state.mjs header)", () => {
     const s = await readState({ cwd: dir, skip: ["account"] }, { runGit: noGit });
     expect(s.next).toBeNull();
     // before the sign-in, the first screen says the setup is free and the trial comes after it (2026-11-24)
-    expect(s.steps[0].why).toBe("Opens genclass.dev. The setup is free; Pro's 3-day free trial comes after it.");
-    expect(s.steps.find((x) => x.id === "plan")!.detail).toBe("3 days free, prices on genclass.dev/pricing");
+    expect(s.steps[0].why).toBe("Opens genclass.dev. The setup is free; Pro's 7-day free trial comes after it.");
+    expect(s.steps.find((x) => x.id === "plan")!.detail).toBe("7 days free, prices on genclass.dev/pricing");
     // before the sign-in no price, seat or plan count is written in the command: they are genclass.dev's
     expect(JSON.stringify(s.steps)).not.toMatch(/\$\d|developer \/ month|per developer/);
     // with Pro, a skipped step is not the next one
@@ -363,13 +363,13 @@ describe("genclass: the setup first, Pro after it, and each app's plan page (src
     summary: "Everything for up to 3 apps, per developer.",
     features: ["Every suggestion, with a prompt for your agent", "GitHub App on private repositories", "Visitor analytics", "Alerts to Sentry, PostHog, Datadog, Slack or a webhook"],
     checkout_url: `${HOST}/account/billing?plan=pro&start=1`,
-    trial_days: 3,
+    trial_days: 7,
     free: { name: "Free", apps: 1, history_days: 7, suggestions_shown: 1 },
   };
   const CHECKOUT = `${HOST}/account/billing?plan=pro&start=1`;
-  const LOCKED = { paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: CHECKOUT };
+  const LOCKED = { paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 7, checkout_url: CHECKOUT };
   const PRO = { plan: { id: "team", name: "Pro" }, cli: { paid: true } };
-  const NEEDS_PRO = { ok: false, error: "the genclass command comes with Pro", needs_pro: true, signed_in: true, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: CHECKOUT, run: "npx genclass upgrade" };
+  const NEEDS_PRO = { ok: false, error: "the genclass command comes with Pro", needs_pro: true, signed_in: true, plan: "Pro", price: "$15 / developer / month", trial_days: 7, checkout_url: CHECKOUT, run: "npx genclass upgrade" };
   const plain = (t: string) => t.replace(/\u001b\[[0-9;]*m/g, "");
   const flat = (t: string) => plain(t).replace(/\s+/g, " ");
 
@@ -387,16 +387,16 @@ describe("genclass: the setup first, Pro after it, and each app's plan page (src
     // signed in without Pro: the runtime is next, not Pro
     expect(s.next?.id).toBe("runtime");
     const step = s.steps.find((x) => x.id === "plan")!;
-    expect(step).toMatchObject({ title: "Pro", doing: "Start your 3-day free trial", detail: "$15 / developer / month, 3 days free", why: "The dashboard, problems, fixes and suggestions come with Pro, 3 days free to start.", run: "npx genclass upgrade", human: `start Pro in your browser: ${CHECKOUT}` });
+    expect(step).toMatchObject({ title: "Pro", doing: "Start your 7-day free trial", detail: "$15 / developer / month, 7 days free", why: "The dashboard, problems, fixes and suggestions come with Pro, 7 days free to start.", run: "npx genclass upgrade", human: `start Pro in your browser: ${CHECKOUT}` });
     // every setup step done or skipped: Pro is next, and the suggestions (Pro's) are never next before it
     const after = await readState({ cwd: dir, skip: ["runtime", "agent"] }, { runGit: noGit, fetchFn: locked.fetchFn });
     expect(after.next?.id).toBe("plan");
     const without = await readState({ cwd: dir, skip: ["runtime", "agent", "plan"] }, { runGit: noGit, fetchFn: locked.fetchFn });
     expect(without.next).toBeNull();
     expect(without.steps.find((x) => x.id === "suggestions")!.state).toBe("todo");
-    expect(step.more).toContain("nothing is charged if you cancel before the 3 days end");
+    expect(step.more).toContain("nothing is charged if you cancel before the 7 days end");
     expect(step.more).toContain("Free stays on the website");
-    expect(s.account?.cli).toEqual({ paid: false, plan: "Pro", price: "$15 / developer / month", trialDays: 3, checkoutUrl: CHECKOUT });
+    expect(s.account?.cli).toEqual({ paid: false, plan: "Pro", price: "$15 / developer / month", trialDays: 7, checkoutUrl: CHECKOUT });
     // Pro (paid, in its trial, a grant): done, and the runtime is next
     const paid = await readState({ cwd: dir }, { runGit: noGit, fetchFn: fakeServer({ "GET /api/cli/overview": { json: overview(PRO) } }).fetchFn });
     // done, with no "Pro" after the step's own name Pro
@@ -429,10 +429,10 @@ describe("genclass: the setup first, Pro after it, and each app's plan page (src
     const fetchFn = fakeServer({ "GET /api/cli/overview": { json: overview({ offer: OFFER, cli: LOCKED }) } }).fetchFn;
     const state = await readState({ cwd: dir }, { runGit: noGit, fetchFn });
     const said = await printed(async () => expect(await choosePlan(state, { yes: true })).toBe("quit"));
-    expect(flat(said)).toContain(`The genclass command comes with Pro ($15 / developer / month): start your 3-day free trial at ${CHECKOUT}`);
+    expect(flat(said)).toContain(`The genclass command comes with Pro ($15 / developer / month): start your 7-day free trial at ${CHECKOUT}`);
     // the gate every command passes: the same line, exit code 1; --json says it as data
     forgetPro();
-    expect(flat(await printed(async () => expect(await requirePro({ yes: true }, { fetchFn })).toBe(1)))).toContain(`start your 3-day free trial at ${CHECKOUT}`);
+    expect(flat(await printed(async () => expect(await requirePro({ yes: true }, { fetchFn })).toBe(1)))).toContain(`start your 7-day free trial at ${CHECKOUT}`);
     // one shape for needs_pro, wherever it comes from (the gate, a route's 402, upgrade)
     expect(JSON.parse(await printed(async () => expect(await requirePro({ json: true }, { fetchFn })).toBe(1)))).toEqual(NEEDS_PRO);
     // Pro: in, and not asked again in this process
@@ -573,14 +573,14 @@ describe("genclass: the setup first, Pro after it, and each app's plan page (src
     try {
       for (const width of [58, 80]) {
         process.stdout.columns = width;
-        const card = plain(await printed(() => planCard({ plan: { name: "Pro" }, price: OFFER.price, summary: OFFER.summary, features: OFFER.features, trialDays: 3 }, null, "Start your 3-day free trial")));
+        const card = plain(await printed(() => planCard({ plan: { name: "Pro" }, price: OFFER.price, summary: OFFER.summary, features: OFFER.features, trialDays: 7 }, null, "Start your 7-day free trial")));
         const lines = card.split("\n").filter((l) => /[│╭╰]/.test(l));
         expect(new Set(lines.map((l) => [...l].length)), `${width} columns`).toEqual(new Set([Math.max(60, width) - 2]));
-        expect(card).toContain("Start your 3-day free trial");
+        expect(card).toContain("Start your 7-day free trial");
         expect(card).toContain("P R O");
         expect(card).toContain("$15 / developer / month");
         expect(card).toContain("Everything for up to 3 apps, per developer.");
-        expect(card.replace(/[│\s]+/g, " ")).toContain("The first 3 days are free. Cancel any time.");
+        expect(card.replace(/[│\s]+/g, " ")).toContain("The first 7 days are free. Cancel any time.");
         expect(card).toContain("✔ Visitor analytics");
         expect(card.replace(/[│\s]+/g, " ")).toContain("✔ Alerts to Sentry, PostHog, Datadog, Slack or a webhook");
       }

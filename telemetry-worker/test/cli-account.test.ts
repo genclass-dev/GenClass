@@ -114,14 +114,14 @@ describe("genclass command: GET /api/cli/account and POST /api/cli/team/invite",
     expect(j.used).toEqual({ apps: 1, suggestions_today: 0, seats: 1 });
     expect(j.includes).toEqual({ analytics: false, forwarding: false, export: false, private_repositories: false });
     expect(j.team).toEqual({ seats: 1, used: 1, members: [], invites: [], memberships: [] });
-    // the plan id stays team; its name is Pro, and an account that never had a subscription starts with 3 days free
+    // the plan id stays team; its name is Pro, and an account that never had a subscription starts with 7 days free
     expect(j.offer.plan).toEqual({ id: "team", name: "Pro" });
-    expect(j.offer.trial_days).toBe(3);
+    expect(j.offer.trial_days).toBe(7);
     expect(j.billing_url).toBe("https://genclass.dev/account/billing");
     // nothing of how the account signs in or pays
     expect(JSON.stringify(j)).not.toMatch(/stripe|customer|password|passkey/i);
     // the genclass command is Pro's where Pro is sold: the account says so, and every other route answers 402
-    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$25 / month", trial_days: 3, checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" });
+    expect(j.cli).toEqual({ paid: false, plan: "Pro", price: "$25 / month", trial_days: 7, checkout_url: "https://genclass.dev/account/billing?plan=pro&start=1" });
     const no = await send(env, "POST", "/api/cli/team/invite", me.bearer, {});
     expect(no.status).toBe(402);
     expect(await no.json()).toMatchObject(NEEDS_PRO);
@@ -326,7 +326,7 @@ describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
       needs_plan: true,
       plan: "Pro",
       upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`,
-      trial_days: 3,
+      trial_days: 7,
       price: "$25 / month",
     });
     expect(model.calls).toEqual([]);
@@ -472,12 +472,12 @@ describe("the genclass command is Pro's, its setup is not (src/cli.ts cliPaid, P
   /** What every gated route answers a Free CLI session where Pro is on sale. */
   const LOCKED = {
     ok: false,
-    error: `the genclass command comes with Pro, 3 days free: ${CHECKOUT}`,
+    error: `the genclass command comes with Pro, 7 days free: ${CHECKOUT}`,
     needs_pro: true,
     paid: false,
     plan: "Pro",
     price: "$25 / month",
-    trial_days: 3,
+    trial_days: 7,
     checkout_url: CHECKOUT,
   };
   /** A Free account with an app and a CLI session, on a server with these keys. */

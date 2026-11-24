@@ -1181,7 +1181,7 @@ describe("init: app token and private dashboard link (fetch mocked; never the re
     expect(r.out).toContain("keep this link private; it is the only way to open your dashboard".replace(/^k/, "K"));
     // the notice says what Free shows, that the rest comes with Pro and its 3 free days, and how to get the link again
     expect(r.out).toContain("Free shows this app's totals");
-    expect(r.out.replace(/\s+/g, " ")).toContain("come with Pro (3 days free)");
+    expect(r.out.replace(/\s+/g, " ")).toContain("come with Pro (7 days free)");
     expect(r.out).toContain(`${CMD} dashboard`);
     expect(r.out).not.toMatch(/needs\s+Pro|trial for analytics/i);
     // again: the token is already there, no network, nothing to do

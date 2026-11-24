@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Pro's free trial is 7 days** (it was 3): `init`'s note about what Free shows and `scan`'s note about the free view
+  say so.
+
 - **`init --analytics`** turns on interaction analytics for the app's dashboard, and **`init --no-analytics`** takes
   the option out again. The runtime's default is unchanged: off. `--analytics` writes `analytics: true` in the option
   file (`genclass.config.ts/js`), `data-analytics="on"` on a plain HTML script tag, `analytics=on` in the Astro meta

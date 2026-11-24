@@ -225,7 +225,7 @@ describe("genclass: the home (src/home.mjs)", () => {
     const unset = plainLines(await at58(() => opening({ ...base, app: { name: "shop", token: null }, signedIn: true, sessionProblem: null } as never))).join(" ");
     expect(unset).toContain("GenClass is not set up in this folder yet.");
     // on Free the setup comes first and Pro after it (the owner's call, 2026-11-24): not set up here, setup is next
-    const cli = { paid: false, plan: "Pro", trialDays: 3 };
+    const cli = { paid: false, plan: "Pro", trialDays: 7 };
     const free = plainLines(await at58(() => opening({ ...base, app: { name: "shop", token: null }, signedIn: true, sessionProblem: null, account: { cli } } as never))).join(" ").replace(/\s+/g, " ");
     expect(free).toContain("GenClass is not set up in this folder yet. Type setup");
     expect(free).not.toContain("Type upgrade");
@@ -238,11 +238,11 @@ describe("genclass: the home (src/home.mjs)", () => {
       { id: "suggestions", title: "Suggestions", state: "todo" },
     ];
     const some = plainLines(await at58(() => opening({ ...base, steps, signedIn: true, sessionProblem: null, account: { cli } } as never))).join(" ").replace(/\s+/g, " ");
-    expect(some).toContain("Set up. 1 more step you can add (Coding agent): type setup. Then your 3-day free trial of Pro.");
+    expect(some).toContain("Set up. 1 more step you can add (Coding agent): type setup. Then your 7-day free trial of Pro.");
     // everything before Pro's step done: the trial is next
     const done = steps.map((x) => (x.id === "agent" ? { ...x, state: "done" } : x));
     const all = plainLines(await at58(() => opening({ ...base, steps: done, signedIn: true, sessionProblem: null, account: { cli } } as never))).join(" ").replace(/\s+/g, " ");
-    expect(all).toContain("Your app is set up. Type upgrade to start your 3-day free trial of Pro");
+    expect(all).toContain("Your app is set up. Type upgrade to start your 7-day free trial of Pro");
     // with Pro, a step after Pro's still counts as one left
     const pro = done.map((x) => (x.id === "plan" ? { ...x, state: "done" } : x));
     const paid = plainLines(await at58(() => opening({ ...base, steps: pro, signedIn: true, sessionProblem: null, account: { cli: { paid: true } } } as never))).join(" ").replace(/\s+/g, " ");

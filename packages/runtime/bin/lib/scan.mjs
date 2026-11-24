@@ -710,7 +710,7 @@ export function formatReport(rep) {
   }
   if (locked && locked.total > n) {
     p();
-    p(`  ${c.yellow(sym.warn)} ${fold(`The free view: ${n} of ${locked.total} findings in full. What the others are and how to fix them come with Pro (3 days free). To have your coding agent fix them all:`, "    ", 4)}`);
+    p(`  ${c.yellow(sym.warn)} ${fold(`The free view: ${n} of ${locked.total} findings in full. What the others are and how to fix them come with Pro (7 days free). To have your coding agent fix them all:`, "    ", 4)}`);
     p(`    ${c.cyan(`npx genclass fix ${rep.url}`)}`);
   }
   const notes = (rep.notes ?? []).filter((note) => !(nothing && / not measured: /.test(note)));

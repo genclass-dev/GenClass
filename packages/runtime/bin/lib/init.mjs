@@ -39,7 +39,7 @@ export const FREE_LINES = HOST_CLI
   ? ["Every problem, the pages it happens on, a fix prompt for each and visitor analytics, in the terminal:", `${CMD} dashboard`]
   : [
       "Free shows this app's totals for the last 7 days. Every problem, the pages it happens on, a fix prompt for",
-      `each and visitor analytics come with Pro (3 days free): ${PRICING_URL}. This link again: ${CMD} dashboard`,
+      `each and visitor analytics come with Pro (7 days free): ${PRICING_URL}. This link again: ${CMD} dashboard`,
     ];
 
 export const USAGE = `Usage:

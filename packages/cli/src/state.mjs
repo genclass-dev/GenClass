@@ -77,7 +77,7 @@ export function hasPlaywright(cwd, project) {
  * seat or plan count is written here (plans.json changes them): once signed in, the server says them in its own
  * words (`cli.price`, the 402 needs_pro body).
  */
-export const PRO_TERMS = "After the setup, Pro: 3 days free, card on Stripe. Prices: genclass.dev/pricing.";
+export const PRO_TERMS = "After the setup, Pro: 7 days free, card on Stripe. Prices: genclass.dev/pricing.";
 
 /** Free's limits as a few words ("3 apps, 7 days of history, your top 3 suggestions"), from the numbers the server sent. */
 export function freeLimits(free) {
@@ -209,7 +209,7 @@ export async function readState(o = {}, deps = {}) {
     // Pro: the price is said only to someone new (the 0.3.9 user stories: it was quoted to a payer after logout)
     why: creds || st.token
       ? `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"} to sign you in again.`
-      : `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"}. The setup is free; Pro's 3-day free trial comes after it.`,
+      : `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"}. The setup is free; Pro's 7-day free trial comes after it.`,
     more: `Your account is where your apps, their dashboards and your plan live. New here? It is made on that page. Nothing is typed in the terminal. ${PRO_TERMS} Free stays on the website: one app and its totals.`,
     run: "npx genclass login",
     human: "approve the sign-in in your browser",
@@ -379,7 +379,7 @@ export async function readState(o = {}, deps = {}) {
     detail: !me
       ? creds || st.token
         ? ""
-        : "3 days free, prices on genclass.dev/pricing"
+        : "7 days free, prices on genclass.dev/pricing"
       : cli && !cli.paid
         ? `${cli.price ?? cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free` : ""}`
         : cli?.paid && cli.via === "team"

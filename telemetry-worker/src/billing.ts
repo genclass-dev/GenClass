@@ -285,7 +285,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       // ?start=1 with a plan: the person chose it a moment ago (in the genclass command's plan step), so the page
       // opens that plan's checkout itself instead of waiting for one more click
       const go = !!picked && url.searchParams.get("start") === "1";
-      // ?next=/scan?url=...: started from a page check's "Start 3 days free"; Stripe and this page send the person back
+      // ?next=/scan?url=...: started from a page check's "Start 7 days free"; Stripe and this page send the person back
       const next = scanNext(url.searchParams.get("next"));
       const a = await webSession(c);
       // the plan picked on the pricing page (and where to go after) survives the sign-in
@@ -718,7 +718,7 @@ async function resumePlan(c: C, f: Fetch): Promise<Response> {
 const LIVE_RESUME = new Set(["active", "trialing", "past_due"]);
 
 /**
- * The days free a purchase of `plan` starts with: the plan's trial_days (Pro: 3) for an account that has never had a
+ * The days free a purchase of `plan` starts with: the plan's trial_days (Pro: 7) for an account that has never had a
  * subscription, none of its apps and not the account (D1), and none on its Stripe customer (`stripeSubs`, any
  * status, when the caller has asked Stripe); else 0. One trial per account: a cancelled trial does not start another.
  */

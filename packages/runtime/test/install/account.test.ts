@@ -486,7 +486,7 @@ describe("dashboard: this app's link in the terminal, and what Free and Pro show
     expect(r.code, r.out).toBe(0);
     expect(r.out).toMatch(new RegExp(`Your dashboard\\s+${ANON_LINK}`));
     expect(r.out).toContain("Free shows this app's totals");
-    expect(r.out.replace(/\s+/g, " ")).toContain("come with Pro (3 days free): https://genclass.dev/pricing");
+    expect(r.out.replace(/\s+/g, " ")).toContain("come with Pro (7 days free): https://genclass.dev/pricing");
     expect(r.out).toContain("Keep this link private");
     expect(r.out).not.toMatch(PAYWALL);
     expect(r.calls).toEqual([]);

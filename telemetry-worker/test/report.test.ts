@@ -315,14 +315,14 @@ describe("reports: one account's report", () => {
     const shown = r.items.filter((i) => i.section === "problems");
     expect(shown.map((i) => i.rule)).toEqual(["money:failing"]);
     expect(r.problemsHidden).toEqual([{ appId: app.id, app: "Blog", counts: { 0: 0, 1: 1, 2: 0 } }]);
-    expect(r.upgrade).toMatchObject({ plan: "Pro", trialDays: 3 });
+    expect(r.upgrade).toMatchObject({ plan: "Pro", trialDays: 7 });
     const mail = renderReport(r);
     expect(mail.html).toContain("/api/pay");
     expect(mail.html).not.toContain("/secret-admin");
     expect(mail.html).toContain(esc("You're seeing half of this report on Free"));
     expect(mail.html).toContain("1 more problem on <strong");
     expect(mail.html).toContain("(1 important)");
-    expect(mail.html).toContain("Start the 3-day free trial");
+    expect(mail.html).toContain("Start the 7-day free trial");
     expect(mail.text).toContain("You're seeing half of this report on Free.");
     expect(mail.text).not.toContain("/secret-admin");
   });

@@ -36,7 +36,7 @@
 // - A plan is granted only once Stripe has the money: a subscription the account has not been granted yet counts only
 //   when its latest invoice is paid (or asks for nothing), not when Stripe calls it active while a bank debit is still
 //   processing; invoice.paid brings it back when the payment clears.
-// - A trial only on an account's first subscription: a plan's trial_days (Team: 3) go on a Checkout for a customer that
+// - A trial only on an account's first subscription: a plan's trial_days (Pro: 7) go on a Checkout for a customer that
 //   has never had a subscription (billing.ts checkoutProject), never on a switch or a later one. Every Checkout still
 //   collects a payment method up front (payment_method_collection "always"), and a subscription in Stripe's trialing
 //   status that the account has not been granted yet counts only with a saved payment method (cardOnFile); Stripe

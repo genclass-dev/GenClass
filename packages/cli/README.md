@@ -9,7 +9,7 @@ npx genclass
 
 Run it in your web app's folder. It shows where the project stands and walks you through the next step: one Enter
 per step. Stop at any point and run it again: it continues from what is true now. Setting your app up is free; the
-rest comes with Pro, whose free trial starts at the end of the setup: 3 days free, then the price on
+rest comes with Pro, whose free trial starts at the end of the setup: 7 days free, then the price on
 [genclass.dev/pricing](https://genclass.dev/pricing).
 
 ```text
@@ -98,7 +98,7 @@ it off). After that you type `genclass`, and every screen says `genclass` instea
 | Test workflow | Runs your Playwright tests once more per pull request with slow and reordered responses. | One new file, `.github/workflows/genclass.yml`, which you commit. |
 | GitHub App | Comments on a pull request when a page ends up wrong, with the steps to see it. The command opens GitHub's install page and waits for the answer. A repository that was renamed on GitHub is looked up under its new name. | Nothing in your project. The app cannot read or change your code. |
 | Coding agent | Gives Claude Code, Cursor and other agents GenClass's tools and its skill: ask what went wrong, replay it, check the fix. | `.mcp.json` (or `.cursor/mcp.json`) and `.claude/skills/genclass/SKILL.md`. |
-| Pro | Once the steps above are done or skipped: Pro's card, and Enter opens its 3-day free trial in your browser while the command waits for it. Nothing before it needs Pro; the suggestions after it do. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
+| Pro | Once the steps above are done or skipped: Pro's card, and Enter opens its 7-day free trial in your browser while the command waits for it. Nothing before it needs Pro; the suggestions after it do. | Nothing in your project. The payment is on Stripe's page; the command never sees a card. |
 | Suggestions | Tells you what your app is missing, most important first. | Nothing in your project. |
 
 On a terminal, Enter starts a step and is the yes for what its sentence says it writes. While a step waits for you
@@ -113,7 +113,7 @@ npx genclass fix shop.example.com
 ```
 
 The command under a report's score on [genclass.dev/scan](https://genclass.dev/scan). Run it in the app's folder: it
-signs you in, starts Pro if the account has none (3 days free), reads that page's report with your sign-in (or checks
+signs you in, starts Pro if the account has none (7 days free), reads that page's report with your sign-in (or checks
 the page, about a minute) and hands every finding to your coding agent: Claude Code, Codex, Cursor or Gemini CLI.
 Enter starts the agent, `c` copies the prompt, `p` prints it; `--print` and `--json` print it for a script or an agent.
 GenClass changes no code: the agent does, and you approve each change.
@@ -327,7 +327,7 @@ npx genclass report            # the period as Markdown
 ```
 
 Four steps need the person, in their browser, and the command prints the link for each: approving the sign-in,
-starting Pro's 3-day trial (their card, on Stripe), opening a new app's plan page once, and installing the GitHub
+starting Pro's 7-day trial (their card, on Stripe), opening a new app's plan page once, and installing the GitHub
 App. At the sign-in, `setup --yes` prints a link and a code and waits up to ten minutes for the person to approve, so
 give it a long timeout, or have them run `npx genclass login` first. Without Pro, `setup --yes` stops at the trial
 with exit code 1 and one line with the checkout link, and every command that needs Pro answers the same way (`upgrade`
