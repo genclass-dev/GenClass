@@ -6,7 +6,7 @@ import { ANALYTICS_RUNTIME, analyticsPrompt, CDN_SCRIPT, DASH_CSS, dashboardPage
 import { FRAME_SCALE, scaleCss, STUDIO_FONTS, THEME_HEAD_JS } from "../src/studio.js";
 
 const setupOf = (o: Record<string, unknown> = {}) => setupPage("n", { token: "gc_TestToken0123456789abc", secret: "a".repeat(32), lastEvent: null, ...o });
-import { accountPage, devicePage, forgotPage, getStartedPage, lockedLinkPage, loginPage, messagePage, newProjectPage, ORG_CSS, passkeyStepPage, pendingPage, signupPage } from "../src/account-pages.js";
+import { accountPage, devicePage, forgotPage, getStartedPage, lockedLinkPage, loginPage, messagePage, newProjectPage, ORG_CSS, passkeyStepPage, pendingPage, signupPage, SITE_CHECKED_JS } from "../src/account-pages.js";
 import type { Glance } from "../src/auth.js";
 import { sampleStats } from "../src/sample.js";
 import { stripAnalytics, stripProblems, type Stats } from "../src/dashboard.js";
@@ -1899,5 +1899,71 @@ describe("/start/open-source: the open-source parts with no account; heal and th
     expect(startPage("n")).not.toContain("/start/open-source");
     for (const html of [loginPage("n", { google: false, github: false, next: null }), signupPage("n", { google: false, github: false, next: "/account/new?name=shop" })])
       expect(html).toContain('<a href="/start">Create a dashboard without an account</a>');
+  });
+});
+
+describe("the site the visitor checked names their first app (the owner, 2026-11-24: \"it should write down polarparts.ca ... and let them change it\")", () => {
+  const account = { id: "A".repeat(22), email: "ada@example.com", emailVerified: false, google: false, githubLogin: null, created: "2026-10-01T00:00:00.000Z" };
+  const shop = { id: "0123456789abcdef", name: "Shop" };
+  const DAY = 864e5;
+  /** The page's body in happy-dom, then its site script run with this browser's "gc-site" (or a storage that throws). */
+  function run(html: string, kept: unknown, opts: { throws?: boolean } = {}) {
+    const win = new Window({ url: "https://genclass.dev/account" });
+    win.document.body.innerHTML = /<body[^>]*>([\s\S]*)<\/body>/.exec(html)![1]!.replace(/<script[\s\S]*?<\/script>/g, "");
+    const storage = { getItem: (k: string) => { if (opts.throws) throw new Error("blocked"); return k === "gc-site" && kept !== undefined ? (typeof kept === "string" ? kept : JSON.stringify(kept)) : null; } };
+    if (html.includes(SITE_CHECKED_JS)) new Function("document", "localStorage", SITE_CHECKED_JS)(win.document, storage);
+    return { doc: win.document, close: () => win.happyDOM.close() };
+  }
+  const site = (o: Record<string, unknown> = {}) => ({ host: "polarparts.ca", name: "polarparts.ca", at: Date.now() - DAY, ...o });
+  const firstRun = () => getStartedPage("n", { account, projects: [], glance: glanceOf(), command: null });
+
+  it("Get started: with no app yet, the first step creates the app under the site checked", () => {
+    const { doc, close } = run(firstRun(), site());
+    expect(doc.querySelector("#gs-new")!.getAttribute("href")).toBe("/account/new?name=polarparts.ca");
+    expect(doc.querySelector("#gs-app-t")!.textContent).toBe("Start with polarparts.ca, the site you checked. You can rename it.");
+    close();
+  });
+
+  it("Get started: nothing kept, kept over 14 days ago, a blank or broken value, or storage that throws: the plain step", () => {
+    for (const [kept, opts] of [[undefined, {}], [site({ at: Date.now() - 15 * DAY }), {}], [site({ name: "  " }), {}], ["{not json", {}], [site(), { throws: true }]] as const) {
+      const { doc, close } = run(firstRun(), kept, opts);
+      expect(doc.querySelector("#gs-new")!.getAttribute("href")).toBe("/account/new");
+      expect(doc.querySelector("#gs-app-t")!.textContent).toBe("Name it. It gets its own key and dashboard.");
+      close();
+    }
+  });
+
+  it("Get started with an app already: no site script on the page", () => {
+    const g = glanceOf({ first: { id: shop.id, name: "Shop", token: "gc_TestToken0123456789abc", live: false }, steps: [{ key: "app", done: true }, { key: "connect", done: false }, { key: "trial", done: false }, { key: "cli", done: false }] });
+    const html = getStartedPage("n", { account, projects: [shop], glance: g, command: "npx genclass init gc_TestToken0123456789abc" });
+    expect(html).not.toContain(SITE_CHECKED_JS);
+    expect(html).not.toContain('id="gs-new"');
+  });
+
+  it("Create a new app: an empty name is filled in with the site checked, and says so; the visitor can still change it", () => {
+    const { doc, close } = run(newProjectPage("n", { account, projects: [] }), site());
+    const input = doc.querySelector("#appname") as unknown as { value: string; readOnly: boolean };
+    expect(input.value).toBe("polarparts.ca");
+    expect(input.readOnly).toBe(false);
+    expect((doc.querySelector("#namehint") as unknown as { hidden: boolean }).hidden).toBe(false);
+    expect(doc.querySelector("#namehint")!.textContent).toBe("From the site you checked. You can change it.");
+    close();
+  });
+
+  it("Create a new app: ?name= wins over what this browser kept; with neither, no hint", () => {
+    const named = run(newProjectPage("n", { account, projects: [], suggested: "snowday-predictor.ca" }), site());
+    expect((named.doc.querySelector("#appname") as unknown as { value: string }).value).toBe("snowday-predictor.ca");
+    expect((named.doc.querySelector("#namehint") as unknown as { hidden: boolean }).hidden).toBe(false);
+    named.close();
+    const none = run(newProjectPage("n", { account, projects: [] }), undefined);
+    expect((none.doc.querySelector("#appname") as unknown as { value: string }).value).toBe("");
+    expect((none.doc.querySelector("#namehint") as unknown as { hidden: boolean }).hidden).toBe(true);
+    none.close();
+  });
+
+  it("Create a new app: no suggestion when an app of the account already has that name", () => {
+    const { doc, close } = run(newProjectPage("n", { account, projects: [{ id: shop.id, name: "PolarParts.ca" }] }), site());
+    expect((doc.querySelector("#appname") as unknown as { value: string }).value).toBe("");
+    close();
   });
 });

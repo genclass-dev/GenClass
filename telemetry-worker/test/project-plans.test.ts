@@ -993,7 +993,8 @@ describe("the website: set up first, the trial last (the owner, 2026-11-24: \"se
       ["trial", "open", "3", "Start your 3-day free trial"],
       ["cli", "open", "4", "Use it from your terminal"],
     ]);
-    expect(fresh).toMatch(/<a class="btn" href="\/account\/new">.*<span>Create your app<\/span><\/a>/);
+    // its link is /account/new; the page's site script (SITE_CHECKED_JS) adds ?name= for a site this browser checked
+    expect(fresh).toMatch(/<a class="btn" id="gs-new" href="\/account\/new">.*<span>Create your app<\/span><\/a>/);
     expect(fresh).toContain('<p class="gs-fine">Create your app first: the command carries its key.</p>');
     // the trial is a plain choice: its button is not the page's main one before the app sends events
     expect(fresh).toContain('<a class="btn ghost" href="/account/billing?plan=pro&#38;start=1">Start 3-day free trial</a>');
