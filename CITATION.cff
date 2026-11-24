@@ -10,7 +10,7 @@ abstract: >-
   delays or changes a request, a response or a state write. The opt-in guard mode may act on a few of them, and
   heal is experimental.
 authors:
-  - name: "Daybot Solutions Inc."
+  - name: "GenClass, Inc."
     website: "https://genclass.dev"
 repository-code: "https://github.com/genclass-dev/GenClass"
 url: "https://genclass.dev"

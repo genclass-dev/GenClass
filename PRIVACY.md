@@ -9,7 +9,7 @@ available yet).
 
 ## Who we are
 
-GenClass is maintained by Daybot Solutions Inc. ("we"). Contact: mehar@genclass.dev.
+GenClass is maintained by GenClass, Inc. ("we"). Contact: mehar@genclass.dev.
 
 ## What we collect
 
