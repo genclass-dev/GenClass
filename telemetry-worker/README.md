@@ -1234,6 +1234,7 @@ time and cached in memory until 5 minutes before they expire.
 | `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | secret | the listing's webhook. Set it to a value of its own once the listing exists; unset, that endpoint accepts the app's webhook secret |
 | `OPENAI_API_KEY` | secret | `genclass suggest`: the key of the model that writes the plan ([The genclass command](#the-genclass-command)). Without it the plan is ordered by the checks' own weights |
 | `SUGGEST_MODEL` | var | the model asked (default `gpt-6.2-sol`) |
+| `APPSUMO_CODE_SECRET` | secret | AppSumo codes (`src/appsumo.ts`): every code is signed with it, and `/account/appsumo` redeems one (one code: Pro for life, two: Business). `scripts/appsumo-codes.mjs` makes the CSV AppSumo takes with the same secret; without it every code is refused |
 | `GITHUB_APP_SLUG` | var | the app's URL name (`genclass`): its bot is `<slug>[bot]` and its commands start with `@<slug>` |
 | `GITHUB_APP_PRIVATE_REPOS` | var | `plan` (default) or `open` |
 | `GITHUB_APP_WORKFLOW_LINK` | var | `on`: the check with no race files, and `/github/setup`, link to GitHub's new-file editor with `docs/github-app/workflows/genclass.yml` filled in. Anything else: off |

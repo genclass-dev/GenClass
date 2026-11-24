@@ -51,6 +51,7 @@ import {
 } from "./dashboard.js";
 import { routeBilling } from "./billing.js";
 import { routeTeam } from "./team-routes.js";
+import { routeAppsumo } from "./appsumo.js";
 import { routeReport } from "./report-routes.js";
 import { routeUnsubscribe } from "./unsubscribe.js";
 import type { EmailBinding } from "./report.js";
@@ -137,6 +138,9 @@ export interface Env extends GithubEnv {
   /** `genclass suggest` (src/suggest.ts): the key of the model that writes the plan (a Worker secret). Without it the
    * plan is ordered by the checks' own weights and no model is asked. Never returned, logged or stored. */
   OPENAI_API_KEY?: string;
+  /** AppSumo codes (src/appsumo.ts): the secret every code is signed with (a Worker secret; scripts/appsumo-codes.mjs
+   * makes the codes with it). Without it /account/appsumo says codes are not set up and every code is refused. */
+  APPSUMO_CODE_SECRET?: string;
   /** The model asked (a var in wrangler.toml; default src/suggest.ts DEFAULT_MODEL). */
   SUGGEST_MODEL?: string;
   /** Export pages per account per minute (src/billing.ts); without it the export is not rate-limited. */
@@ -266,6 +270,9 @@ export async function handle(request: Request, env: Env, opts: HandleOptions = {
   // teams (src/team-routes.ts): /api/team and the invite page /account/join/<code>, before the account routes
   const team = await routeTeam(request, url, path, env, opts);
   if (team) return team;
+  // AppSumo codes (src/appsumo.ts): the redeem page /account/appsumo and /api/account/appsumo, before the account routes
+  const appsumo = await routeAppsumo(request, url, path, env, opts);
+  if (appsumo) return appsumo;
   // email reports (src/report-routes.ts): /account/report*, /api/account/report*, /api/report/*, before the account routes
   const report = await routeReport(request, url, path, env, opts);
   if (report) return report;

@@ -507,6 +507,44 @@ export function joinPage(nonce: string, o: { state: "gone" } | { state: "own" } 
   return authPage(nonce, "Join a team | GenClass", inner, script);
 }
 
+/**
+ * /account/appsumo, where an AppSumo buyer redeems a code (src/appsumo.ts): signed in as `me`, the code from ?code=
+ * filled in, and what the account holds already (`codes`, `plan`). `ready`: the codes secret is set on this server.
+ */
+export function appsumoPage(nonce: string, o: { me: string; code: string; codes: number; plan: string | null; ready: boolean; max: number }): string {
+  if (!o.ready) {
+    return messagePage(nonce, { title: "AppSumo codes are not set up yet", text: "Write to mehar@genclass.dev with your code and we will add your plan by hand.", links: [["Your apps", "/account"]] });
+  }
+  const full = o.codes >= o.max;
+  const have = o.codes
+    ? `<p class="lead">You have ${o.codes} code${o.codes > 1 ? "s" : ""} on this account: <b>${esc(o.plan ?? "")}</b>, for life.${full ? "" : " A second code moves you up to Business."}</p>`
+    : `<p class="lead">Signed in as <b>${esc(o.me)}</b>. Paste the code from your AppSumo purchase. One code gives you Pro for life. A second code on the same account gives you Business.</p>`;
+  const form = full
+    ? `<div class="acts"><a class="btn green" href="/account/get-started">Set up your app</a> <a class="btn ghost" href="/account">Your apps</a></div>`
+    : `<form id="f" novalidate><label for="code">Your AppSumo code</label><input id="code" name="code" autocomplete="off" spellcheck="false" placeholder="GC-XXXXXXXXXXXX-XXXXXXXX" value="${esc(o.code)}" required><div class="acts"><button class="btn green" id="go" type="submit"><span>Redeem</span></button> <a class="btn ghost" href="/account">Not now</a></div></form>`;
+  const inner = `
+<h1>Redeem your AppSumo code</h1>
+${have}
+${form}
+<p class="err" id="err" role="alert"></p>
+<p class="notice n-ok" id="ok" role="status" hidden></p>`;
+  const script = full
+    ? ""
+    : `
+(function(){
+  var f = document.getElementById("f"), b = document.getElementById("go"), err = document.getElementById("err"), ok = document.getElementById("ok"), input = document.getElementById("code");
+  f.addEventListener("submit", function(e){
+    e.preventDefault(); err.textContent = ""; ok.hidden = true; gcBusy(b, true, "Redeeming...");
+    gcPost("/api/account/appsumo", { code: input.value }).then(function(j){
+      ok.textContent = (j.already ? "This code is on your account already. " : "Done. ") + "You have " + j.plan + " for life.";
+      ok.hidden = false;
+      setTimeout(function(){ location.href = j.next || "/account"; }, 1800);
+    }, function(e){ err.textContent = gcWhy(e); gcBusy(b, false); });
+  });
+})();`;
+  return authPage(nonce, "Redeem your AppSumo code | GenClass", inner, script);
+}
+
 export function appNotFoundPage(nonce: string): string {
   return messagePage(nonce, { title: "App not found", text: "This app does not exist, or it belongs to another account.", links: [["Your apps", "/account"]] });
 }
