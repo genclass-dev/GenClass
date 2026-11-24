@@ -345,10 +345,10 @@ describe("the frame (src/studio.ts, 2026-11-24): a full-height sidebar; the head
       note: "1 of 3 apps",
       action: { label: "Plans and billing", href: "/account/billing", primary: false },
       steps: [
-        { key: "app", done: true },
-        { key: "connect", done: true },
-        { key: "trial", done: true },
-        { key: "cli", done: false },
+        { key: "account", done: true },
+        { key: "runtime", done: true },
+        { key: "dashboard", done: false },
+        { key: "plan", done: true },
       ],
     });
     const r = await render(sampleStats("7d", NOW), { account: acct, id: "0123456789abcdef", firstEvent: "2026-10-12T09:00:00.000Z", runtimeReady: true }, { glance });
@@ -450,10 +450,20 @@ function glanceOf(over: Partial<Glance> = {}): Glance {
     note: "0 of 1 app",
     action: { label: "Start 3-day free trial", href: "/account/billing?plan=pro&start=1", primary: false },
     steps: [
-      { key: "app", done: false },
-      { key: "connect", done: false },
-      { key: "trial", done: false },
-      { key: "cli", done: false },
+      { key: "account", done: true },
+      { key: "runtime", done: false },
+      { key: "dashboard", done: false },
+      { key: "plan", done: false },
+    ],
+    setup: [
+      { key: "account", title: "Account", state: "done", detail: "signed in", link: null },
+      { key: "runtime", title: "Runtime", state: "next", detail: "the command finds your framework, adds GenClass and puts the app in your account", link: null },
+      { key: "dashboard", title: "Dashboard", state: "later", detail: "deploy, then open your live site once", link: null },
+      { key: "workflow", title: "Test workflow", state: "auto", detail: "the command adds it when your app has Playwright tests", link: null },
+      { key: "github", title: "GitHub App", state: "auto", detail: "comments on a pull request when a page ends up wrong", link: null },
+      { key: "agent", title: "Coding agent", state: "auto", detail: "the command adds GenClass's tools to Claude Code, Cursor and others in your project", link: null },
+      { key: "plan", title: "Pro", state: "later", detail: "$25 / month, 3 days free, after the setup", link: { label: "Start 3-day free trial", href: "/account/billing?plan=pro&start=1" } },
+      { key: "suggestions", title: "Suggestions", state: "later", detail: "npx genclass suggest: what your app is missing, most important first", link: null },
     ],
     first: null,
     sold: { name: "Pro", price: "$25 / month", days: 3, start: "/account/billing?plan=pro&start=1" },
@@ -1929,13 +1939,13 @@ describe("the site the visitor checked names their first app (the owner, 2026-11
     for (const [kept, opts] of [[undefined, {}], [site({ at: Date.now() - 15 * DAY }), {}], [site({ name: "  " }), {}], ["{not json", {}], [site(), { throws: true }]] as const) {
       const { doc, close } = run(firstRun(), kept, opts);
       expect(doc.querySelector("#gs-new")!.getAttribute("href")).toBe("/account/new");
-      expect(doc.querySelector("#gs-app-t")!.textContent).toBe("Name it. It gets its own key and dashboard.");
+      expect(doc.querySelector("#gs-app-t")!.textContent).toBe("Name it. It gets its own key and dashboard, and its page shows the ways to connect it.");
       close();
     }
   });
 
   it("Get started with an app already: no site script on the page", () => {
-    const g = glanceOf({ first: { id: shop.id, name: "Shop", token: "gc_TestToken0123456789abc", live: false }, steps: [{ key: "app", done: true }, { key: "connect", done: false }, { key: "trial", done: false }, { key: "cli", done: false }] });
+    const g = glanceOf({ first: { id: shop.id, name: "Shop", token: "gc_TestToken0123456789abc", live: false }, steps: [{ key: "account", done: true }, { key: "runtime", done: false }, { key: "dashboard", done: false }, { key: "plan", done: false }] });
     const html = getStartedPage("n", { account, projects: [shop], glance: g, command: "npx genclass init gc_TestToken0123456789abc" });
     expect(html).not.toContain(SITE_CHECKED_JS);
     expect(html).not.toContain('id="gs-new"');

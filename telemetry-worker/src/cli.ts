@@ -1,5 +1,7 @@
 // The routes the `genclass` command asks (packages/cli/src/api.mjs is the client). Checked before the account routes.
 //
+//   POST /api/cli/onboard               where `npx genclass onboard` stands, for Get started to show (src/onboard.ts)
+//
 //   GET  /api/cli/overview              the account, its plan, its apps, what suggestions it has left today, and
 //                                       for an account on Free the plan it can start (the command's plan step);
 //                                       `cli`: whether the command works for it (it is Pro's) and where Pro starts
@@ -62,6 +64,7 @@ import { accountAccess, accountBilling, accountProjectsAccess, appsCovered, bett
 import { liveFixUsage } from "./usage.js";
 import { appKey, askModel, byWeight, claimRun, hasModel, keepAnswer, lastAnswer, MAX_SUGGEST_BYTES, readDigest, suggestionLimits, usedToday, type PlanItem, type SuggestAnswer } from "./suggest.js";
 import { activeOwners, createInvite, isTeamError, membershipsOf, teamOf } from "./team.js";
+import { ONBOARD_BODY_MAX, readReport, saveReport } from "./onboard.js";
 
 /** A repository's full name as GitHub writes one. */
 const FULL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$/;
@@ -453,6 +456,28 @@ async function ask(c: C, f: Fetch): Promise<Response> {
   return json(200, { ok: true, answer: text, why: null, range: s.range, remaining_today: Math.max(0, lim.per_day - used), per_day: lim.per_day, upgrade_url: null });
 }
 
+/**
+ * POST /api/cli/onboard: where `npx genclass onboard` stands (src/onboard.ts), for Get started to show while it runs.
+ * The command's own session only (a browser cannot write a run), and open without Pro: the setup is free.
+ */
+async function onboardReport(c: C): Promise<Response> {
+  const a = await authenticate(c);
+  if (!a) return fail(401, "not signed in");
+  if (a.via !== "bearer") return fail(403, "the genclass command reports here, with its own sign-in");
+  const raw = await c.req.text();
+  if (raw.length > ONBOARD_BODY_MAX) return fail(413, "body too large");
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return fail(400, "send JSON");
+  }
+  const r = readReport(body);
+  if (typeof r === "string") return fail(400, r);
+  await saveReport(c.db, a.account.id, r, c.now);
+  return json(200, { ok: true });
+}
+
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 /** The `genclass` command's routes; null for any other path. */
@@ -473,6 +498,7 @@ export async function routeCli(request: Request, url: URL, path: string, env: En
     }
   }
   if (path === "/api/cli/github") return get ? github(c) : fail(405, "method not allowed");
+  if (path === "/api/cli/onboard") return m === "POST" ? onboardReport(c) : fail(405, "method not allowed");
   if (path === "/api/cli/suggest") return m === "POST" ? suggest(c) : fail(405, "method not allowed");
   if (path === "/api/cli/app") return get ? app(c) : fail(405, "method not allowed");
   const f: Fetch = opts.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i));

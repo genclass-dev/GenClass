@@ -455,7 +455,7 @@ describe("genclass: the setup first, Pro after it, and each app's plan page (src
   it("every command but signing in, the plan, status, help and remove passes the gate first; the setup's pass with the sign-in (src/cli.mjs FREE_COMMANDS, SETUP_COMMANDS)", async () => {
     const { FREE_COMMANDS, SETUP_COMMANDS, run } = await import("../src/cli.mjs");
     expect(FREE_COMMANDS).toEqual(["login", "logout", "whoami", "plan", "upgrade", "profile", "status", "remove", "help", "version"]);
-    expect(SETUP_COMMANDS).toEqual(["setup", "init", "connect", "apps"]);
+    expect(SETUP_COMMANDS).toEqual(["setup", "init", "connect", "apps", "onboard"]);
     deleteCredentials();
     forgetPro();
     const dir = tempDir();

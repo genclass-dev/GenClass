@@ -374,10 +374,11 @@ body.sb{min-height:100vh}
 .sb-scroll>.snav{flex:1 0 auto}
 .sb-rail nav{display:flex;flex-direction:column;gap:1px}
 .sb-rail nav+nav{margin-top:6px}
-.sb-rail a{display:flex;align-items:center;gap:10px;height:34px;min-height:34px;padding:0 10px;color:var(--ink2);text-decoration:none;font-size:14px;white-space:nowrap;border-left:2px solid transparent}
+/* a button in the sidebar (the plan card's) keeps its own look: these are for the sidebar's links only */
+.sb-rail a:not(.btn){display:flex;align-items:center;gap:10px;height:34px;min-height:34px;padding:0 10px;color:var(--ink2);text-decoration:none;font-size:14px;white-space:nowrap;border-left:2px solid transparent}
 .sb-rail a .ic{width:18px;height:18px;color:var(--ink3)}
-.sb-rail a:hover{background:var(--s200);color:var(--ink)}
-.sb-rail a[aria-current=true],.sb-rail a[aria-current=page]{background:var(--s300);color:var(--ink);border-left-color:var(--ink)}
+.sb-rail a:not(.btn):hover{background:var(--s200);color:var(--ink)}
+.sb-rail a:not(.btn)[aria-current=true],.sb-rail a:not(.btn)[aria-current=page]{background:var(--s300);color:var(--ink);border-left-color:var(--ink)}
 .sb-rail a[aria-current=true] .ic,.sb-rail a[aria-current=page] .ic{color:var(--ink)}
 .sb-rail a .lbl{overflow:hidden;text-overflow:ellipsis}
 .sb-rail a .cnt{margin-left:auto;font:11px var(--mono);color:var(--ink3)}
