@@ -20,10 +20,13 @@
 //   POST /api/cli/ask                   a question about an app, answered by the model from its numbers (src/ask.ts)
 //
 // Invariants:
-// - The genclass command is Pro's (the owner's call, 2026-11-13): a CLI session of an account with neither a plan
-//   (paid, in its trial, or GenClass's grant) nor an active place in a team that has one gets 402 `needs_pro` from
-//   every route but the overview and the account (cliPaid). Nothing is locked where nothing is sold to the account,
-//   with PLAN_GATES open, or for a browser session: the website keeps Free.
+// - The genclass command is Pro's (the owner's call, 2026-11-13), its setup is not (2026-11-24: people set their app
+//   up first and start the trial after): a CLI session of an account with neither a plan (paid, in its trial, or
+//   GenClass's grant) nor an active place in a team that has one gets 402 `needs_pro` from every route but the
+//   overview, the account and the GitHub App's state (cliPaid; PRO_ROUTE_RE). The setup reads only those: the
+//   sign-in and the app in the account are the account routes' (src/auth.ts), and the GitHub App step waits on
+//   /api/cli/github. Nothing is locked where nothing is sold to the account, with PLAN_GATES open, or for a browser
+//   session: the website keeps Free.
 // - Every route needs a signed-in account: the CLI's session (a bearer token from `genclass login`) or, for the
 //   first three GETs, the browser session. Every other route takes the CLI's session only, so no page can make a
 //   signed-in browser spend an account's runs or change its settings through them.
@@ -135,8 +138,11 @@ async function cliJson(c: C, a: Auth): Promise<{ paid: true; via: "plan" | "team
   return { paid: false, plan: plan.name, price: priceText(plan, countryOf(c.req)), trial_days: (await trialFor(c.db, a.account.id, plan)) || null, checkout_url: `${c.cfg.origin}/account/billing?plan=${planParam(plan)}&start=1` };
 }
 
-/** The routes that are Pro's for a CLI session: all but the overview and the account. */
-const PRO_ROUTE_RE = /^\/api\/cli\/(?:github|suggest|app|team\/invite|connections(?:\/[a-z]+(?:\/test)?)?|events|funnels|link|ask)$/;
+/**
+ * The routes that are Pro's for a CLI session: all but the overview, the account and the GitHub App's state, which
+ * the setup's GitHub App step reads (the setup needs no Pro; the owner's call, 2026-11-24).
+ */
+const PRO_ROUTE_RE = /^\/api\/cli\/(?:suggest|app|team\/invite|connections(?:\/[a-z]+(?:\/test)?)?|events|funnels|link|ask)$/;
 
 async function overview(c: C): Promise<Response> {
   const a = await authenticate(c);
@@ -457,7 +463,8 @@ export async function routeCli(request: Request, url: URL, path: string, env: En
   const m = request.method;
   const get = m === "GET" || m === "HEAD";
   if (path === "/api/cli/overview") return get ? overview(c) : fail(405, "method not allowed");
-  // every other route is Pro's for a CLI session (cliPaid); the account's stays open, to say where Pro starts
+  // every other route is Pro's for a CLI session (cliPaid); the account's stays open, to say where Pro starts, and
+  // the GitHub App's state, which the setup waits on
   if (PRO_ROUTE_RE.test(path)) {
     const who = await authenticate(c);
     if (who) {

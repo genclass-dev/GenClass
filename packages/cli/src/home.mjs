@@ -17,7 +17,7 @@ import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
 import { installedVersion, installGlobally, isShort, latestOnNpm, newer, readPrefs, savePrefs, shortNameWorks, useShortName, viaNpx } from "./name.mjs";
 import { planName } from "./state.mjs";
-import { header, inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
+import { clean, header, inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
 
 /** The commands of the home, in the order they are listed: [what is typed, what it is, shown in the short list]. */
 export const COMMANDS = [
@@ -52,6 +52,7 @@ const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "v
 /** The short list on Free (the account has no Pro): the commands that work there, numbered on their own. */
 export const FREE_MENU = [
   ["upgrade", "start Pro: its free trial first"],
+  ["setup", "set this app up (free)"],
   ["profile", "your account and plan"],
   ["plan", "your plan and its limits"],
   ["status", "where the setup stands"],
@@ -108,7 +109,7 @@ export function menu(all = false, free = false) {
     if (all) {
       const names = COMMANDS.map(([n]) => n);
       for (let i = 0; i < names.length; i += 4) out(`    ${c.cyan(names.slice(i, i + 4).map((n) => n.padEnd(13)).join(""))}`);
-      note("All but upgrade, profile, plan, status, login and remove come with Pro.");
+      note("All but setup, apps, upgrade, profile, plan, status, login and remove come with Pro.");
       return;
     }
     const pad = Math.max(...FREE_MENU.map(([n]) => n.length)) + 2;
@@ -196,11 +197,16 @@ export async function installShortName(deps = {}) {
  */
 export function opening(state) {
   header({ app: state.app?.name, framework: state.app?.framework, account: state.account?.label, plan: planName(state), host: state.host });
-  const left = state.steps.filter((x) => x.state !== "done" && x.state !== "optional" && x.blocking !== false && x.state !== "waiting");
+  const cli = state.account?.cli;
+  const trial = cli && !cli.paid ? `${cli.trialDays ? `your ${cli.trialDays}-day free trial of ` : ""}${clean(cli.plan, 20)}` : null;
+  // what setup has left; without Pro, the parts before Pro's step (Pro and what comes with it are said on their own)
+  const at = trial ? state.steps.findIndex((x) => x.id === "plan") : -1;
+  const left = state.steps.filter((x, i) => (at < 0 || i < at) && x.state !== "done" && x.state !== "optional" && x.blocking !== false && x.state !== "waiting");
   // signed out (logout, an expired session) in a folder that is set up: the app is still set up, only the sign-in is
   // missing (the 0.3.9 user stories: after logout it said "not set up")
-  // on Free the next thing is Pro, whatever the folder (setup answers only that it goes on with Pro)
-  if (state.signedIn && state.account?.cli && !state.account.cli.paid) note(`You are on Free. Type upgrade to start ${state.account.cli.trialDays ? `your ${state.account.cli.trialDays}-day free trial of ` : ""}Pro: setup and the other commands come with it.`);
+  // on Free the setup comes first and Pro after it (the owner's call, 2026-11-24): what setup has left, else Pro
+  if (state.signedIn && trial && state.app?.token && !left.length) note(`Your app is set up. Type upgrade to start ${trial}: the dashboard, problems, fixes and suggestions come with it.`);
+  else if (state.signedIn && trial && state.app?.token) note(`Set up. ${left.length} more step${left.length === 1 ? "" : "s"} you can add (${left.map((x) => x.title).join(", ")}): type setup. Then ${trial}.`);
   else if (!state.signedIn && state.app?.token) note(state.sessionProblem === "expired" ? "Your sign-in expired. Type login to sign in again." : "Not signed in. Type login to sign in again.");
   else if (!state.signedIn) note("Not signed in, and GenClass is not in this app yet. Type setup: it starts with the sign-in.");
   else if (!state.app?.token) note("GenClass is not set up in this folder yet. Type setup to do it, one step at a time.");

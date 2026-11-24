@@ -1,12 +1,14 @@
-// The genclass command is Pro's (the owner's call, 2026-11-13: "let's make the entire CLI paid"). Every command but
-// the sign-in's, the plan's, help and remove asks genclass.dev first whether the account has Pro (paid, in its
-// trial, GenClass's grant, or a place in a paying team) and, without it, shows the one way on: Pro, its free trial
-// first (the card is asked for up front, on Stripe), started in the browser. There is no Free in the terminal: the
-// website keeps Free.
+// The genclass command is Pro's (the owner's call, 2026-11-13: "let's make the entire CLI paid"), but its setup is
+// not (the owner's call, 2026-11-24: people set their app up first and start the trial after, once they have built
+// something). Every command but the setup's (cli.mjs SETUP_COMMANDS: a sign-in, no Pro), the sign-in's, the plan's,
+// help and remove asks genclass.dev first whether the account has Pro (paid, in its trial, GenClass's grant, or a
+// place in a paying team) and, without it, shows the one way on: Pro, its free trial first (the card is asked for up
+// front, on Stripe), started in the browser. There is no Free in the terminal: the website keeps Free.
 //
 // Invariants:
-// - Signed out, the sign-in comes first and the plan right after it: the first thing a new person does is sign in
-//   and start the trial.
+// - Nothing is sold before the setup: signing in shows no card, and the setup's commands need only the sign-in. The
+//   card comes at the end of the setup (state.mjs, Pro's step) or when a command that is Pro's is asked for.
+// - Signed out, a command that is Pro's signs in first and shows the plan right after it.
 // - The answer is genclass.dev's (`cli` in GET /api/cli/overview, api.mjs cliOf). A server that does not say (an
 //   older or self-hosted one) locks nothing, and neither does one that cannot be reached: its own routes refuse
 //   what is Pro's (402) when it is back.
@@ -21,7 +23,7 @@ import { readCredentials } from "../../runtime/bin/lib/account.mjs";
 import { accountLabel } from "../../runtime/bin/lib/init.mjs";
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview } from "./api.mjs";
-import { clean, homeOpen, note, planCard, PROMPT, typed, warn } from "./tui.mjs";
+import { clean, good, homeOpen, note, planCard, PROMPT, typed, warn } from "./tui.mjs";
 
 let seen = false;
 // the card was shown in this process (the home): a later command that needs Pro gets one line, not the card again
@@ -108,9 +110,10 @@ export function proLine(cli) {
  * Without a terminal it prints proLine and opens nothing. Returns whether the account has Pro now.
  * @param {{ plan: string, price: string | null, trialDays: number | null, checkoutUrl: string }} cli
  * @param {object | null} offer
- * @param {{ yes?: boolean, json?: boolean, noBrowser?: boolean, card?: boolean, account?: string | null }} o  `card`:
- *   the card without a terminal too; `account`: who it is for, said above the card (the checkout is the browser's
- *   account, so a person signed in there as someone else can tell)
+ * @param {{ yes?: boolean, json?: boolean, noBrowser?: boolean, card?: boolean, account?: string | null, lead?: string }} o
+ *   `card`: the card without a terminal too; `account`: who it is for, said above the card (the checkout is the
+ *   browser's account, so a person signed in there as someone else can tell); `lead`: one line above it all (the
+ *   setup's "Your app is set up.")
  * @param {{ fetchFn?: typeof fetch, waitMs?: number, everyMs?: number }} [deps]
  */
 export async function startPro(cli, offer, o = {}, deps = {}) {
@@ -119,6 +122,10 @@ export async function startPro(cli, offer, o = {}, deps = {}) {
   if (o.yes || o.json || !interactive()) {
     if (o.json) out(JSON.stringify(needsProJson(cli)));
     else {
+      if (o.lead) {
+        out();
+        good(o.lead);
+      }
       // `genclass plan` and `upgrade` show the card all the same: it is what they are for
       if (o.card && card.features.length) planCard(card, null, heading);
       out();
@@ -137,6 +144,10 @@ export async function startPro(cli, offer, o = {}, deps = {}) {
     return false;
   }
   cardShown = true;
+  if (o.lead) {
+    out();
+    good(o.lead);
+  }
   if (o.account) {
     out();
     note(`For ${clean(o.account, 60)}`);
@@ -145,8 +156,8 @@ export async function startPro(cli, offer, o = {}, deps = {}) {
   // the price is on the card once; this says only how paying works
   note(
     cli.trialDays
-      ? `Every genclass command comes with ${clean(cli.plan, 20)}. Your card is asked for on Stripe, and nothing is charged if you cancel before the trial ends.`
-      : `Every genclass command comes with ${clean(cli.plan, 20)}, paid on Stripe.`,
+      ? `Setting up is free; the rest of genclass comes with ${clean(cli.plan, 20)}. Your card is asked for on Stripe, and nothing is charged if you cancel before the trial ends.`
+      : `Setting up is free; the rest of genclass comes with ${clean(cli.plan, 20)}, paid on Stripe.`,
   );
   out();
   const dot = c.gray("·");
@@ -168,7 +179,39 @@ export async function startPro(cli, offer, o = {}, deps = {}) {
 }
 
 /**
- * The gate every command but cli.mjs FREE_COMMANDS passes first. Signed out: the sign-in (on a terminal), then the plan.
+ * The gate of the setup's commands (cli.mjs SETUP_COMMANDS: init, connect, analytics on): they need an account, not
+ * Pro (the owner's call, 2026-11-24). Signed out on a terminal: the sign-in; without one, what to run. Signed in: the
+ * runtime's lines are told where a new app goes (noteAccount). Returns 0 when the command may run, else 1.
+ * @param {{ yes?: boolean, json?: boolean, noBrowser?: boolean }} o
+ * @param {{ fetchFn?: typeof fetch, signIn?: (o: object) => Promise<string> }} [deps]
+ */
+export async function requireSignIn(o = {}, deps = {}) {
+  refused = false;
+  let creds = readCredentials();
+  if (!creds) {
+    if (o.yes || o.json || !interactive()) {
+      if (o.json) out(JSON.stringify({ ok: false, error: "not signed in", signed_in: false, run: "npx genclass login" }));
+      else {
+        out();
+        warn("Sign in first: npx genclass login. Setting your app up is free.");
+      }
+      return 1;
+    }
+    out();
+    note("Sign in to genclass.dev first.");
+    const signIn = deps.signIn ?? (await import("./actions.mjs")).signIn;
+    if ((await signIn(o)) !== "done") return 1;
+    creds = readCredentials();
+    if (!creds) return 1;
+  }
+  const me = await fetchOverview(creds, deps);
+  if (me.ok) noteAccount({ plan: me.plan, cli: me.cli, teamPlan: me.account?.teamPlan });
+  if (me.ok && me.cli?.paid) seen = true;
+  return 0;
+}
+
+/**
+ * The gate every command but cli.mjs FREE_COMMANDS and SETUP_COMMANDS passes first. Signed out: the sign-in (on a terminal), then the plan.
  * Returns 0 when the command may run, else the exit code to end with (1).
  * @param {{ yes?: boolean, json?: boolean, noBrowser?: boolean }} o
  * @param {{ fetchFn?: typeof fetch, signIn?: (o: object) => Promise<string>, waitMs?: number, everyMs?: number }} [deps]
@@ -210,9 +253,10 @@ export async function requirePro(o = {}, deps = {}) {
 }
 
 /**
- * After `genclass login`: Pro comes right after the sign-in. An account with it hears so in one line; one without it
- * sees the paywall (startPro). Never changes the login's exit code. Returns whether the account has Pro now (true
- * too when the server does not say or cannot be reached: nothing is locked then).
+ * After `genclass login`: no card (the owner's call, 2026-11-24: the setup comes first, the trial after it). An
+ * account with Pro hears so in one line; one without it hears, in one line, that the setup is free and the trial
+ * comes after it. Never changes the login's exit code. Returns whether the account has Pro (true too when the
+ * server does not say or cannot be reached: nothing is locked then).
  */
 export async function afterLogin(o = {}, deps = {}) {
   const creds = readCredentials();
@@ -225,9 +269,9 @@ export async function afterLogin(o = {}, deps = {}) {
     if (!o.json) note(`${clean(me.plan && me.plan.id !== "free" ? me.plan.name : "Pro", 20)} is on: every genclass command works.`);
     return true;
   }
-  if (await startPro(me.cli, me.offer ?? null, { ...o, account: accountLabel(me.account) }, deps)) {
-    seen = true;
-    return true;
+  if (!o.json) {
+    const trial = me.cli.trialDays ? `${clean(me.cli.plan, 20)}'s ${me.cli.trialDays}-day free trial` : clean(me.cli.plan, 20);
+    note(`Set up your app first, for free. ${trial} comes after that.`);
   }
   return false;
 }

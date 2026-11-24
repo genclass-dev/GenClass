@@ -13,6 +13,9 @@
 // - Every part of GenClass is a step (account, runtime, dashboard, test workflow, GitHub App, coding agent,
 //   suggestions), so nothing is set up somewhere this list does not show. A step that does not apply to a project
 //   says why and never blocks the ones after it.
+// - The setup comes before Pro (the owner's call, 2026-11-24): the sign-in, the runtime, the test workflow, the GitHub
+//   App and the coding agent need no Pro, and Pro's step (its free trial) comes once they are done or skipped. Only
+//   the steps after it (suggestions) wait for Pro.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -69,8 +72,8 @@ export function hasPlaywright(cwd, project) {
   return ["ts", "js", "mjs", "cjs", "mts"].some((e) => existsSync(join(cwd, `playwright.config.${e}`)));
 }
 
-/** What the command costs, said before the sign-in (the server says it in its own words once signed in). */
-export const PRO_TERMS = "The genclass command comes with Pro: 3 days free, then $50 / developer / month, card on Stripe.";
+/** What the command costs, said before the sign-in (the server says it in its own words once signed in): the setup is free. */
+export const PRO_TERMS = "After the setup, Pro: 3 days free, then $50 / developer / month, card on Stripe.";
 
 /** Free's limits as a few words ("3 apps, 7 days of history, your top 3 suggestions"), from the numbers the server sent. */
 export function freeLimits(free) {
@@ -174,6 +177,8 @@ export async function readState(o = {}, deps = {}) {
 
   /** @type {Step[]} */
   const steps = [];
+  // whether the command works for this account (it is Pro's): null when the server does not say
+  const cli = me?.cli ?? null;
   // what this command remembers about the project between runs (store.mjs): its site, the last suggestions, the plan chosen
   const notes = readNotes(cwd);
   const isApp = !project.refused && !!project.framework;
@@ -193,47 +198,17 @@ export async function readState(o = {}, deps = {}) {
           : otherHost
             ? `the saved session is for ${otherHost}`
             : "",
-    // said before anyone signs up: the command is Pro's, with its trial and price (the owner's call, 2026-11-13)
+    // said before anyone signs up: the setup is free, the rest is Pro's, with its trial after the setup (the owner's
+    // calls, 2026-11-13 and 2026-11-24)
     // the host the sign-in opens (genclass.dev, or GENCLASS_HOST in a test)
     // someone signing in again (a saved session, or an app set up in this folder) already has an account and maybe
     // Pro: the price is said only to someone new (the 0.3.9 user stories: it was quoted to a payer after logout)
     why: creds || st.token
       ? `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"} to sign you in again.`
-      : `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"}. Then Pro: 3 days free, then $50 / developer / month, with a card on Stripe.`,
+      : `Opens ${host.overridden && !host.error ? new URL(host.host).host : "genclass.dev"}. The setup is free; Pro's 3-day free trial comes after it.`,
     more: `Your account is where your apps, their dashboards and your plan live. New here? It is made on that page. Nothing is typed in the terminal. ${PRO_TERMS} Free stays on the website: one app and its totals.`,
     run: "npx genclass login",
     human: "approve the sign-in in your browser",
-  });
-
-  // 1b. Pro: the genclass command is Pro's (the owner's call, 2026-11-13: "let's make the entire CLI paid"). Right
-  // after the sign-in, an account without it (Pro paid or in its trial, GenClass's grant, a place in a paying team)
-  // starts it in the browser: the free trial first, the card on Stripe. paywall.mjs asks before every command, so
-  // nothing after this step runs without it. A server that does not say (`cli`), or sells nothing here, has no step.
-  const cli = me?.cli ?? null;
-  steps.push({
-    id: "plan",
-    title: "Pro",
-    doing: cli && !cli.paid ? (cli.trialDays ? `Start your ${cli.trialDays}-day free trial` : `Start ${cli.plan}`) : "Pro",
-    state: !me ? (creds && offline !== "expired" ? "optional" : "todo") : !cli ? "optional" : cli.paid ? "done" : "todo",
-    detail: !me
-      ? creds || st.token
-        ? ""
-        : "3 days free, then $50 / developer / month"
-      : cli && !cli.paid
-        ? `${cli.price ?? cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free` : ""}`
-        : cli?.paid && cli.via === "team"
-          ? "through your team's plan"
-          : cli?.paid && cli.via === "open"
-            ? "open on this genclass.dev"
-            : me.plan && me.plan.id !== "free" && me.plan.name !== "Pro"
-              ? me.plan.name
-              : "",
-    why: cli && !cli.paid ? `Every genclass command comes with ${cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free to start` : ""}.` : me ? "Every genclass command comes with Pro." : PRO_TERMS,
-    more: `${cli && !cli.paid && cli.trialDays ? `The trial opens in your browser and the card is asked for there, on Stripe: nothing is charged if you cancel before the ${cli.trialDays} days end. ` : "Pro opens in your browser and is paid there, on Stripe. "}Free stays on the website: one app and its totals. Plans and prices: genclass.dev/pricing.`,
-    run: "npx genclass upgrade",
-    human: cli && !cli.paid ? `start ${cli.plan} in your browser: ${cli.checkoutUrl}` : null,
-    ...(cli ? { cli } : {}),
-    after: "account",
   });
 
   // 2. the runtime in this app
@@ -278,8 +253,10 @@ export async function readState(o = {}, deps = {}) {
   // 2b. this app's plan page (genclass.dev/account/billing?project=<id>): every new app of the account sees it once
   // (the owner's call, 2026-11-13: the paywall for everyone, and a paying account clicks Continue with Pro), and an
   // app past the ones its plan covers waits there (past Free's one: Pro; past Pro's: Enterprise, by email). An app of
-  // a team the account is in has nothing to choose: its owner does.
-  const appOffer = appPlanOffer(app, me?.offer ?? null, accountPaid(me));
+  // a team the account is in has nothing to choose: its owner does. An account without Pro sees no plan page here:
+  // Pro's step, once the setup is done, covers the app (the owner's call, 2026-11-24: no paywall before the setup)
+  const proLater = !!cli && !cli.paid;
+  const appOffer = proLater ? null : appPlanOffer(app, me?.offer ?? null, accountPaid(me));
   steps.push({
     id: "app-plan",
     title: "App plan",
@@ -287,11 +264,13 @@ export async function readState(o = {}, deps = {}) {
     // an app the account's plan already covers (paid, in its trial, GenClass's grant) has its plan: the step is done,
     // so no page opens and nothing waits (the 0.3.9 user stories: a third browser page right after paying, and a
     // setup that stopped there). Its plan page stays one link away, in the detail
-    state: appOffer ? (appOffer.current && !appOffer.needs ? "done" : "todo") : app?.plan?.source && !app.needsPlan && !app.shared ? "done" : "optional",
+    state: proLater ? "optional" : appOffer ? (appOffer.current && !appOffer.needs ? "done" : "todo") : app?.plan?.source && !app.needsPlan && !app.shared ? "done" : "optional",
     blocking: !(appOffer?.current && !appOffer.needs),
     detail: !me || !app?.plan
       ? (app?.shared ? "the team's owner chooses it" : "")
-      : appOffer
+      : proLater && !app.shared
+        ? `with ${cli.plan}, after the setup`
+        : appOffer
         ? appOffer.needs
           ? appOffer.paying
             ? `${appOffer.current ?? "Your plan"} covers no more apps`
@@ -383,6 +362,37 @@ export async function readState(o = {}, deps = {}) {
     human: null,
   });
 
+  // 6b. Pro: the genclass command is Pro's (the owner's call, 2026-11-13: "let's make the entire CLI paid"), but not
+  // its setup (the owner's call, 2026-11-24: set the app up first, start the trial after). Once the parts above are
+  // done, an account without it (Pro paid or in its trial, GenClass's grant, a place in a paying team) starts it in
+  // the browser: the free trial first, the card on Stripe. The steps after this one are Pro's and wait for it. A
+  // server that does not say (`cli`), or sells nothing here, has no step.
+  steps.push({
+    id: "plan",
+    title: "Pro",
+    doing: cli && !cli.paid ? (cli.trialDays ? `Start your ${cli.trialDays}-day free trial` : `Start ${cli.plan}`) : "Pro",
+    state: !me ? (creds && offline !== "expired" ? "optional" : "todo") : !cli ? "optional" : cli.paid ? "done" : "todo",
+    detail: !me
+      ? creds || st.token
+        ? ""
+        : "3 days free, then $50 / developer / month"
+      : cli && !cli.paid
+        ? `${cli.price ?? cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free` : ""}`
+        : cli?.paid && cli.via === "team"
+          ? "through your team's plan"
+          : cli?.paid && cli.via === "open"
+            ? "open on this genclass.dev"
+            : me.plan && me.plan.id !== "free" && me.plan.name !== "Pro"
+              ? me.plan.name
+              : "",
+    why: cli && !cli.paid ? `The dashboard, problems, fixes and suggestions come with ${cli.plan}${cli.trialDays ? `, ${cli.trialDays} days free to start` : ""}.` : me ? "The dashboard, problems, fixes and suggestions come with Pro." : PRO_TERMS,
+    more: `${cli && !cli.paid && cli.trialDays ? `The trial opens in your browser and the card is asked for there, on Stripe: nothing is charged if you cancel before the ${cli.trialDays} days end. ` : "Pro opens in your browser and is paid there, on Stripe. "}Free stays on the website: one app and its totals. Plans and prices: genclass.dev/pricing.`,
+    run: "npx genclass upgrade",
+    human: cli && !cli.paid ? `start ${cli.plan} in your browser: ${cli.checkoutUrl}` : null,
+    ...(cli ? { cli } : {}),
+    after: "account",
+  });
+
   // 7. suggestions
   const s = notes.suggest;
   steps.push({
@@ -399,11 +409,13 @@ export async function readState(o = {}, deps = {}) {
   });
 
   // the first step to do that is not skipped and does not wait on a step that is not done (dashboard: the runtime).
-  // Every step after Pro's waits for it: the genclass command is Pro's, so skipping the sign-in skips them too (a
-  // server that sells nothing, or cannot be reached, leaves Pro's step optional and locks nothing)
+  // Every step waits for the sign-in, so skipping it skips them too. The setup (every step before Pro's) needs no
+  // Pro; the steps after Pro's are Pro's and wait for it (a server that sells nothing, or cannot be reached, leaves
+  // Pro's step optional and locks nothing)
+  const signedIn = steps.find((y) => y.id === "account").state === "done";
   const pro = steps.find((y) => y.id === "plan");
   const proReady = pro.state === "done" || pro.state === "optional";
-  const ready = (x) => (x.id === "account" || x.id === "plan" || proReady) && (!x.after || steps.find((y) => y.id === x.after)?.state === "done");
+  const ready = (x) => (x.id === "account" || (signedIn && (steps.indexOf(x) <= steps.indexOf(pro) || proReady))) && (!x.after || steps.find((y) => y.id === x.after)?.state === "done");
   const next = steps.find((x) => x.state === "todo" && !(o.skip ?? []).includes(x.id) && ready(x)) ?? null;
   if (next) next.state = "next";
   return {

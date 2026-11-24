@@ -11,13 +11,13 @@ import { resetTokenCache } from "../../../telemetry-worker/src/dashboard.js";
 import { resetOwnerCache } from "../../../telemetry-worker/src/paid.js";
 import { resetStandIns } from "../../../telemetry-worker/src/suggest.js";
 import { call, cliToken, createApp, detection, now, resetClock, sendBatch, setNow, setPlan, setup, signedIn } from "../../../telemetry-worker/test/account-helpers.js";
-import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
+import { readCredentials, saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { answerLines, ask, forget, marks } from "../src/ask.mjs";
-import { askModel, fetchAccount, fetchConnections } from "../src/api.mjs";
+import { askModel, fetchAccount, fetchConnections, fetchOverview } from "../src/api.mjs";
 import { signInAgain } from "../src/app.mjs";
 import { agentLink, apps, claudeAdd, connections, exportEvents, freeLine, funnels, plan, profile, team, upgrade } from "../src/manage.mjs";
 import { analytics } from "../src/views.mjs";
-import { HOST, isolate, printed, tempDir } from "./helpers.js";
+import { HOST, isolate, printed, tempDir, write } from "./helpers.js";
 import { plainLines, tooWide } from "./stats.js";
 
 isolate();
@@ -117,7 +117,7 @@ describe("genclass plan, team and apps (src/manage.mjs)", () => {
     const line = await said(async () => ((await freeLine(me.o, me.deps)) ? 0 : 1));
     expect(line.code).toBe(0);
     expect(tooWide(line.text)).toEqual([]);
-    expect(flat(line.text)).toContain("You are on Free (1 app, 100 live fixes a month, 7 days of history), on the website. Every genclass command comes with Pro, 3 days free: npx genclass upgrade");
+    expect(flat(line.text)).toContain("You are on Free (1 app, 100 live fixes a month, 7 days of history), on the website. Setting up is free; the rest of genclass comes with Pro, 3 days free: npx genclass upgrade");
     // profile: who, the plan, each app's plan, and the choices (nobody at a terminal: as commands)
     const p = await said(() => profile(me.o, me.deps));
     expect(p.code).toBe(0);
@@ -264,6 +264,56 @@ describe("genclass is Pro's: a view the server refuses with 402 says where Pro s
     expect(v.text).not.toContain("Could not read the dashboard");
     // the same needs_pro shape as the gate's (src/paywall.mjs needsProJson)
     expect(JSON.parse((await said(() => analytics({ ...me.o, json: true }, me.deps))).text)).toMatchObject({ ok: false, error: "the genclass command comes with Pro", needs_pro: true, signed_in: true, plan: "Pro", checkout_url: `${HOST}/account/billing?plan=pro&start=1`, trial_days: 3, run: "npx genclass upgrade" });
+  });
+});
+
+describe("genclass: the setup needs no Pro, and Pro's trial comes at its end (src/state.mjs, src/setup.mjs, src/paywall.mjs requireSignIn; the owner's call of 2026-11-24)", () => {
+  it("a Free account walks setup --yes on the real routes: the app in the account, the agent connected, then the trial's line; Pro's commands still ask for Pro", async () => {
+    const { env } = setup(LIVE);
+    const me = await signedIn(env);
+    saveCredentials({ host: HOST, access_token: await cliToken(env, me.cookie), account: { id: me.account.id, email: me.account.email, github_login: null } });
+    const dir = tempDir();
+    // the package is in package.json already, so init installs nothing (no network here)
+    const runtime = JSON.parse(readFileSync(new URL("../../runtime/package.json", import.meta.url), "utf8")).version;
+    write(dir, {
+      "package.json": JSON.stringify({ name: "shop", private: true, type: "module", dependencies: { react: "^19.0.0", "react-dom": "^19.0.0", "@genclass/runtime": runtime }, devDependencies: { vite: "^8.0.0", "@vitejs/plugin-react": "^5.0.0" } }),
+      "index.html": '<!doctype html>\n<html lang="en"><head><title>Shop</title></head><body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>\n',
+      "src/main.jsx": 'import { createRoot } from "react-dom/client";\n\ncreateRoot(document.getElementById("root")).render(<h1>Shop</h1>);\n',
+    });
+    const tags = process.env.GENCLASS_TEST_DIST_TAGS;
+    process.env.GENCLASS_TEST_DIST_TAGS = "fail";
+    vi.stubGlobal("fetch", through(env));
+    const { run } = await import("../src/cli.mjs");
+    const { forgetPro } = await import("../src/paywall.mjs");
+    try {
+      forgetPro();
+      let code = -1;
+      const walked = flat(await printed(async () => (code = await run(["setup", "--yes", "--cwd", dir]))));
+      // the setup ran to its end without Pro: exit code 0, and the trial's line last
+      expect(code).toBe(0);
+      expect(walked).toContain("Your app is set up.");
+      expect(walked).toContain(`start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
+      expect(walked.indexOf("Your app is set up.")).toBeGreaterThan(walked.indexOf("Connect your coding agent"));
+      // what it set up: GenClass in the code, the app in the account (its plan page was not opened), the agent's files
+      expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toContain("genclass:init");
+      const ov = await fetchOverview({ host: HOST, access_token: readCredentials()!.access_token }, { fetchFn: through(env) });
+      expect(ov.ok && ov.projects.map((p: { name: string }) => p.name)).toEqual(["shop"]);
+      expect(readFileSync(join(dir, "src/genclass.config.js"), "utf8")).toContain(ov.ok ? ov.projects[0].token : "-");
+      expect(existsSync(join(dir, ".mcp.json"))).toBe(true);
+      expect(existsSync(join(dir, ".claude/skills/genclass/SKILL.md"))).toBe(true);
+      // where it stands: Pro is next, for a person to start, and the suggestions wait for it
+      const st = JSON.parse(await printed(async () => expect(await run(["status", "--json", "--cwd", dir])).toBe(0)));
+      expect(st.next).toMatchObject({ id: "plan", run: "npx genclass upgrade", human: `start Pro in your browser: ${HOST}/account/billing?plan=pro&start=1` });
+      expect(st.steps.find((x: { id: string }) => x.id === "suggestions").state).toBe("todo");
+      // a command that is Pro's still asks for it
+      forgetPro();
+      const dash = flat(await printed(async () => expect(await run(["dashboard", "--yes", "--cwd", dir])).toBe(1)));
+      expect(dash).toContain(`start your 3-day free trial at ${HOST}/account/billing?plan=pro&start=1`);
+    } finally {
+      vi.unstubAllGlobals();
+      if (tags === undefined) delete process.env.GENCLASS_TEST_DIST_TAGS;
+      else process.env.GENCLASS_TEST_DIST_TAGS = tags;
+    }
   });
 });
 

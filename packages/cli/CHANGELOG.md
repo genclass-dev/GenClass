@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.15
+
+- **Set your app up first, start Pro after.** The setup no longer asks for Pro: signing in, adding GenClass to the app,
+  putting the app in your account, the test workflow, the GitHub App and the coding agent all run on an account
+  without it. Pro's step comes once they are done or skipped: "Your app is set up.", then Pro's card ("Start your
+  3-day free trial"), and Enter opens the checkout on Stripe as before. The suggestions after it, and every other
+  command (`dashboard`, `problems`, `fix`, `ask`, `site`, `suggest`, `analytics`, `export`, ...), still come with Pro
+  and show the same card when they are asked for.
+- `genclass login` signs in and says, in one line, that the setup is free and the trial comes after it; the folder's
+  app is offered to the account with or without Pro. No card after the sign-in.
+- `genclass init`, `connect`, `apps` and `analytics on` need the sign-in, not Pro. An account without Pro sees no app
+  plan page during the setup: Pro's step covers the app.
+- `genclass setup --yes` without Pro does every step it can, prints the trial's checkout line, and ends with exit
+  code 0. `genclass status --json` names Pro as the next step once the rest is done.
+- The prompt on Free lists `setup`, and says what the setup has left before the trial.
+- Needs the collector from the same change: genclass.dev answers the GitHub App step's question
+  (`/api/cli/github`) for an account without Pro.
+
 ## 0.3.14
 
 - **Setup turns visitor analytics on.** The runtime step now writes `analytics: true` next to the app's token, so an

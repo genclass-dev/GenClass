@@ -452,7 +452,7 @@ describe("genclass command: POST /api/cli/ask (src/ask.ts)", () => {
   });
 });
 
-describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of 2026-11-13, 'make the entire CLI paid')", () => {
+describe("the genclass command is Pro's, its setup is not (src/cli.ts cliPaid, PRO_ROUTE_RE; the owner's calls of 2026-11-13, 'make the entire CLI paid', and 2026-11-24, setup first and the trial after)", () => {
   const CHECKOUT = "https://genclass.dev/account/billing?plan=pro&start=1";
   /** What every gated route answers a Free CLI session where Pro is on sale. */
   const LOCKED = {
@@ -480,11 +480,10 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
     expect(await r.json()).toEqual(LOCKED);
   });
 
-  it("every route but the overview and the account is gated, whatever the method; those two say what the command needs", async () => {
+  it("every route but the overview, the account and the GitHub App's state is gated, whatever the method; those two say what the command needs", async () => {
     const { env, sql: db, me, app } = await freeUser();
     const at = `id=${app.id}`;
     const routes: [string, string, unknown?][] = [
-      ["GET", "/api/cli/github?repo=ada/shop"],
       ["POST", "/api/cli/suggest", {}],
       ["GET", `/api/cli/app?${at}`],
       ["POST", "/api/cli/team/invite", {}],
@@ -514,6 +513,22 @@ describe("the genclass command is Pro's (src/cli.ts cliPaid; the owner's call of
     }
     // a signed-out terminal is still told to sign in
     expect((await call(env, "GET", `/api/cli/app?${at}`, { origin: null })).status).toBe(401);
+  });
+
+  it("the setup needs no Pro: the GitHub App's state answers a Free CLI session, and the app is made in the account", async () => {
+    const { env, me } = await freeUser();
+    // the GitHub App step waits on this route: what GitHub said for the account (nothing yet), not a 402
+    const r = await get(env, "/api/cli/github?repo=ada/shop", me.bearer);
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ known: false });
+    // its own checks stand: a name that is not owner/name, and a wrong method
+    expect((await get(env, "/api/cli/github?repo=nope", me.bearer)).status).toBe(400);
+    expect((await send(env, "POST", "/api/cli/github?repo=ada/shop", me.bearer, {})).status).toBe(405);
+    // the runtime step puts the app in the account with the same session (init --in-account, connect)
+    const made = await send(env, "POST", "/api/account/projects", me.bearer, { name: "Blog" });
+    expect(made.status).toBe(201);
+    // signed out it is still the sign-in first
+    expect((await call(env, "GET", "/api/cli/github?repo=ada/shop", { origin: null })).status).toBe(401);
   });
 
   it("the trial is offered once: an account that had a subscription is told the price with no days free", async () => {
