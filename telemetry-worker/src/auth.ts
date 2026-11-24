@@ -116,7 +116,7 @@ export const FRESH_MS = 5 * MINUTE;
 /** Where to write about an account whose passkeys are all lost, or whose password is forgotten (no email reset yet). */
 export const RECOVERY_CONTACT = "mehar@genclass.dev";
 /** Global ceiling on apps created in accounts per minute (anonymous creation has its own, collector.ts). */
-const MAX_ACCOUNT_PROJECTS_PER_MINUTE = 60;
+export const MAX_ACCOUNT_PROJECTS_PER_MINUTE = 60;
 
 /** The web session cookie: __Host- on HTTPS; the plain name only for plain-HTTP localhost in development. */
 export const SESSION_COOKIE = "__Host-gc_session";
@@ -1813,10 +1813,12 @@ async function deleteAccount(c: C): Promise<Response> {
     c.db.prepare(`DELETE FROM integrations WHERE project_id IN (${owned})`).bind(id),
     c.db.prepare(`DELETE FROM forward_log WHERE project_id IN (${owned})`).bind(id),
     c.db.prepare("DELETE FROM export_keys WHERE account_id = ?").bind(id),
+    c.db.prepare("DELETE FROM partner_keys WHERE account_id = ?").bind(id),
     c.db.prepare("DELETE FROM custom_requests WHERE account_id = ?").bind(id),
     ...["daily", "hourly", "recent", "sessions", "visits"].map((t) => c.db.prepare(`DELETE FROM ${t} WHERE token IN (${own})`).bind(id)),
     c.db.prepare("DELETE FROM projects WHERE account_id = ? AND private_link = 0").bind(id),
-    c.db.prepare("UPDATE projects SET account_id = NULL WHERE account_id = ?").bind(id),
+    // an app that keeps its private link (one the partner API handed its user, too) leaves without its partner ref
+    c.db.prepare("UPDATE projects SET account_id = NULL, partner_ref = NULL WHERE account_id = ?").bind(id),
     c.db.prepare("DELETE FROM credentials WHERE account_id = ?").bind(id),
     c.db.prepare("DELETE FROM passwords WHERE account_id = ?").bind(id),
     c.db.prepare("DELETE FROM password_devices WHERE account_id = ?").bind(id),
@@ -1888,6 +1890,24 @@ async function accountView(c: C, a: Auth): Promise<AccountView> {
     pick: { claim: c.url.searchParams.get("claim") === "1", save: c.url.searchParams.get("save") === "1" },
     recovery: RECOVERY_CONTACT,
     githubApp: githubApp(c.env) !== null,
+    partner: await partnerView(c, a.account.id),
+  };
+}
+
+/** The partner API's section of /account (src/partner.ts): only for an account GenClass made a partner. */
+async function partnerView(c: C, accountId: string): Promise<AccountView["partner"]> {
+  const acct = await c.db.prepare("SELECT partner_apps FROM accounts WHERE id = ?").bind(accountId).first<{ partner_apps: number | null }>();
+  const apps = Number(acct?.partner_apps ?? 0);
+  if (!(apps > 0)) return null;
+  const [used, keys] = await c.db.batch([
+    c.db.prepare("SELECT COUNT(*) AS n FROM projects WHERE account_id = ?").bind(accountId),
+    c.db.prepare("SELECT id, label, created, last_used FROM partner_keys WHERE account_id = ? ORDER BY created").bind(accountId),
+  ]);
+  const rows = (r: unknown) => ((r as { results?: Record<string, unknown>[] })?.results ?? []) as Record<string, unknown>[];
+  return {
+    apps,
+    used: Number(rows(used)[0]?.n ?? 0),
+    keys: rows(keys).map((k) => ({ id: String(k.id), label: (k.label as string | null) ?? null, created: String(k.created), lastUsed: (k.last_used as string | null) ?? null })),
   };
 }
 

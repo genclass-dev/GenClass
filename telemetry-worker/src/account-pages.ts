@@ -680,6 +680,8 @@ export interface AccountView {
    * its first app (the owner's call, 2026-11-13: "our entire goal is for them to put their credit cards in").
    */
   trial?: { plan: string; price: string; days: number | null; features: string[]; start: string } | null;
+  /** The partner API (src/partner.ts): how many apps the account may hold, how many it has, its keys. Null: not a partner. */
+  partner?: { apps: number; used: number; keys: { id: string; label: string | null; created: string; lastUsed: string | null }[] } | null;
 }
 
 const TRANSPORT_WORDS: Record<string, string> = {
@@ -947,7 +949,7 @@ ${planBlock}
   ${others ? '<div class="acct-form"><button class="btn ghost" type="button" id="others"><span>Sign out everywhere else</span></button></div>' : ""}
   <p class="err" id="clierr" role="alert"></p>
 </section>
-<section class="blk" id="delete">
+${partnerSection(v.partner)}<section class="blk" id="delete">
   <div class="blk-h"><h2>Delete account</h2><span class="aside">Cannot be undone</span></div>
   <p class="intro">Deletes this account. A paid plan is cancelled at once.</p>
   <div class="acct-form"><button class="btn danger" type="button" id="del"><span>Delete account</span></button></div>
@@ -961,7 +963,7 @@ ${planBlock}
 (function(){
   gcDropQuery([]);
   // views: Projects (the default) and Account settings; the hash names the part, so links and the back button work
-  var VIEW = { projects: "projects", apps: "projects", claim: "projects", "new-app": "projects", settings: "settings", security: "settings", password: "settings", passkeys: "settings", sessions: "settings", cli: "settings", "delete": "settings" };
+  var VIEW = { projects: "projects", apps: "projects", claim: "projects", "new-app": "projects", settings: "settings", security: "settings", password: "settings", passkeys: "settings", sessions: "settings", cli: "settings", partner: "settings", "delete": "settings" };
   var parts = [].slice.call(document.querySelectorAll("[data-v]"));
   function show(id, jump){
     if (id === "new-app") { location.replace("/account/new"); return true; }
@@ -1004,6 +1006,17 @@ ${planBlock}
     });
   }
   del("[data-revoke]", "data-revoke", function(id){ return "/api/account/sessions/" + encodeURIComponent(id); }, "clierr", null);
+  del("[data-revokepk]", "data-revokepk", function(id){ return "/api/account/partner-keys/" + encodeURIComponent(id); }, "pterr", "Revoke? Its server stops at once");
+  var ptf = document.getElementById("ptf");
+  if (ptf) ptf.addEventListener("submit", function(ev){
+    ev.preventDefault();
+    var b = ptf.querySelector("button"), pe = document.getElementById("pterr"), out = document.getElementById("ptnew");
+    pe.textContent = ""; gcBusy(b, true, "Working...");
+    gcPost("/api/account/partner-keys", { label: document.getElementById("ptlabel").value }).then(function(j){
+      gcBusy(b, false); document.getElementById("ptlabel").value = "";
+      document.getElementById("ptkey").textContent = j.key; out.classList.remove("hidden");
+    }, function(e){ pe.textContent = gcWhy(e); gcBusy(b, false); });
+  });
   // removing a passkey asks for a passkey first when this session has not used one in the last few minutes
   document.querySelectorAll("[data-rmkey]").forEach(function(b){
     b.addEventListener("click", function(){
@@ -1084,6 +1097,28 @@ ${planBlock}
     script: CLIENT_JS + script,
   });
 }
+
+/** The Partner API section of /account settings: shown only to an account GenClass made a partner. */
+export function partnerSection(p: AccountView["partner"]): string {
+  if (!p) return "";
+  const keys = p.keys.length
+    ? `<div class="tablewrap"><table class="dt rows"><thead><tr><th>Partner key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>${p.keys
+        .map((k) => `<tr><td>${esc(k.label ?? "Partner key")}</td><td data-l="Created">${time(k.created)}</td><td data-l="Last used">${time(k.lastUsed, "ago")}</td><td class="act"><button class="btn sm ghost" type="button" data-revokepk="${esc(k.id)}">Revoke</button></td></tr>`)
+        .join("")}</tbody></table></div>`
+    : '<p class="intro">No partner keys yet.</p>';
+  return `<section class="blk" id="partner">
+  <div class="blk-h"><h2>Partner API</h2><span class="aside">${p.used} of ${p.apps} apps</span></div>
+  <p class="intro">Your server makes an app for each of your users and reads what it finds. Keep keys on your server: a page in a browser cannot use them. <a href="${PARTNER_DOCS}">How it works</a></p>
+  ${keys}
+  <form class="acct-form" id="ptf" novalidate><div class="f"><label for="ptlabel">New partner key</label><input id="ptlabel" type="text" maxlength="60" autocomplete="off" placeholder="Name, e.g. production server"></div><button class="btn ghost" type="submit"><span>Create partner key</span></button></form>
+  <div class="hidden" id="ptnew" role="status"><p class="intro">Copy it now: it is shown once.</p><pre class="code" id="ptkey"></pre></div>
+  <p class="err" id="pterr" role="alert"></p>
+</section>
+`;
+}
+
+/** Where the partner API is written down (telemetry-worker/README.md "Partner API"). */
+export const PARTNER_DOCS = "https://github.com/genclass-dev/GenClass/blob/main/telemetry-worker/README.md#partner-api";
 
 export interface NewProjectView {
   account: AccountView["account"];

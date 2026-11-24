@@ -143,6 +143,14 @@ and nothing else of your account: not its billing, its sign-ins, its export or i
 a member and a member can leave at any time; deleting an account removes it from every team, and deletes its own team
 and invite links.
 
+## Partners
+
+A partner is a product we agreed with that sets GenClass up for its own users. Its server makes a GenClass app for
+each of them in the partner's own account, and the partner reads what that app sends and finds, as any account reads
+its own apps. If a partner set GenClass up in your app, your app's data goes to that partner's account, and the
+partner's own terms say what it does with it; we collect nothing more for it. We store the partner's id for each app
+(its own id for you, which we ask partners not to make your email), and its partner keys only as one-way hashes.
+
 ## Paid plans, payments and Stripe
 
 Free costs nothing, Pro (named Team until 12 November 2026) is sold on genclass.dev for an account, per developer
