@@ -189,11 +189,15 @@ describe("a member reads the owner's dashboards with the owner's plan, and chang
     expect(html).not.toContain('type="button" data-mklink');
     expect(html).toContain("The app's owner makes it.");
     expect(html).toContain('"member":true');
-    // the owner's own app opens its plan page until the owner goes on with the plan there (plans.json version 5:
-    // every new app sees it, a paying account included); a member is never sent there
-    expect((await call(env, "GET", `/account/apps/${app.id}`, { cookie: owner.cookie })).headers.get("location")).toBe(`/account/billing?project=${app.id}`);
-    expect(await json(call(env, "POST", `/api/billing/projects/${app.id}/continue`, { cookie: owner.cookie, body: {} }))).toEqual({ ok: true, plan: "team" });
-    const ownerPage = await text(call(env, "GET", `/account/apps/${app.id}`, { cookie: owner.cookie }));
+    // the frame: the owner's app in the member's sidebar, marked as the page's, under the member's own workspace
+    expect(html).toContain(`<a class="sb-app" href="/account/apps/${app.id}" aria-current="page">`);
+    expect(html).toContain('<span class="nm">bob&#39;s Org</span>');
+    expect(html).toContain('<div class="sb-plan" id="sb-plan">');
+    // the owner's own app opens its dashboard at once, no plan chosen first (set up first, 2026-11-24); a member is
+    // never sent to a plan page either
+    const ownerRes = await call(env, "GET", `/account/apps/${app.id}`, { cookie: owner.cookie });
+    expect(ownerRes.status).toBe(200);
+    const ownerPage = await ownerRes.text();
     expect(ownerPage).toContain('id="delproj"');
     expect(ownerPage).toContain('type="button" data-mklink');
     expect(ownerPage).not.toContain('"member":true');

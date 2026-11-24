@@ -10,7 +10,7 @@
 
 import { demoData } from "./demo.js";
 import { embed, esc } from "./escape.js";
-import { COPY_JS, icon, ICON_LINKS, LOCK_JS, studioPage, THEME_COLOR_METAS, THEME_HEAD_JS, THEME_JS, themeButton, type ProductMenu, type RailItem } from "./studio.js";
+import { COPY_JS, icon, ICON_LINKS, LOCK_JS, STUDIO_FONTS, studioPage, THEME_COLOR_METAS, THEME_HEAD_JS, THEME_JS, themeButton, type ProductMenu, type RailItem } from "./studio.js";
 
 export { embed, esc };
 
@@ -59,7 +59,7 @@ export function securityHeaders(nonce: string, extra: Record<string, string> = {
 
 /** The header logo, as on genclass.dev: the mark and the name set in type. */
 export const LOGO =
-  '<a class="logo" href="https://genclass.dev/"><img src="https://genclass.dev/brand/mark-64.png?v=2" alt="" width="24" height="24">GenClass</a>';
+  '<a class="logo" href="https://genclass.dev/"><img src="https://genclass.dev/brand/mark.svg?v=9" alt="" width="24" height="24">GenClass</a>';
 
 /** The MCP server for coding agents, pinned as its own install blocks pin it (packages/mcp/src/clients.ts). */
 export const MCP_PKG = "@genclass/mcp@0.2.2";
@@ -110,19 +110,20 @@ export const DEFAULT_CHOICES = { guard: true, heal: true } as const;
 // --rule-strong is 2:1, fine for a divider, not for an empty field).
 const CSS = `
 :root{
-  --paper:#000000;--panel:#0B0B0A;--ink:#F0F1E9;--ink2:#A0A196;--ink3:#88897F;--rule:#30312B;--rule2:#46463E;--line:#6E6F66;
-  --accent:#2FD07F;--accent-x:#2FD07F;--accent-f:#2FD07F;--accent-t:#06140D;--warn:#FF6B4A;--warn-f:#FF5A36;--warn-t:#1C0A06;
-  --bar:#A0A196;--bar2:#2FD07F;--bar3:#FF5A36;--ink-h:#FFFFFF;--green-h:#52DA95;--on-green:#02140A;--head:rgba(0,0,0,.75);
-  --code:#131311;--codeink:#F0F1E9;
-  --display:"Satoshi",ui-sans-serif,system-ui,sans-serif;--sans:"Satoshi",ui-sans-serif,system-ui,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --paper:#0C0E12;--panel:#14171D;--ink:#E9EBF1;--ink2:#AEB4C2;--ink3:#8B92A2;--rule:#222731;--rule2:#2C323D;--line:#5E6576;
+  --accent:#3DDC97;--accent-x:#3DDC97;--accent-f:#E9EBF1;--accent-t:#10241B;--warn:#FF8A70;--warn-f:#FF6A4D;--warn-t:#2A1511;
+  --bar:#8B92A2;--bar2:#3DDC97;--bar3:#FF6A4D;--ink-h:#FFFFFF;--green-h:#FFFFFF;--on-green:#0C0E12;--head:rgba(12,14,18,.82);
+  --code:#101318;--codeink:#E9EBF1;
+  --display:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;--sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;--hw:600;--htrack:-.04em;
   color-scheme:dark;
 }
 :root[data-theme="light"]{
-  --paper:#ffffff;--panel:#f7f7f5;--ink:#141412;--ink2:#55564f;--ink3:#6b6c64;--rule:#e4e4df;--rule2:#d4d4cd;--line:#8a8b82;
-  --accent:#0a7c4a;--accent-x:#0a7c4a;--accent-f:#0a7c4a;--accent-t:#eaf7f0;--warn:#c4320a;--warn-f:#e5484d;--warn-t:#fdeeea;
-  --bar:#a0a196;--bar2:#22a06b;--bar3:#e5484d;--ink-h:#000000;--green-h:#086a3f;--on-green:#ffffff;--head:rgba(255,255,255,.8);
-  --code:#f4f4f1;--codeink:#141412;
+  --paper:#FAF8F4;--panel:#FFFFFF;--ink:#15171F;--ink2:#4A4E5C;--ink3:#5F6473;--rule:#E6E2D9;--rule2:#DCD7CC;--line:#8A8D99;
+  --accent:#0A6A49;--accent-x:#0A6A49;--accent-f:#15171F;--accent-t:#E9F2EC;--warn:#B53A25;--warn-f:#E0533B;--warn-t:#FBEDE9;
+  --bar:#A9ACB6;--bar2:#0E865C;--bar3:#E0533B;--ink-h:#000000;--green-h:#2C2F3A;--on-green:#FAF8F4;--head:rgba(250,248,244,.85);
+  --code:#F3F0EA;--codeink:#15171F;
+  --display:"Newsreader","Iowan Old Style",Georgia,serif;--hw:500;--htrack:-.025em;
   color-scheme:light;
 }
 .th-moon{display:none}.th-sun{display:contents}
@@ -141,7 +142,7 @@ header.top{position:sticky;top:0;z-index:20;background:var(--head);backdrop-filt
 @media (prefers-reduced-transparency:reduce){header.top{background:var(--paper)}}
 header.top .wrap{display:flex;align-items:center;gap:22px;height:64px}
 body:has(.app) header.top .wrap{max-width:1360px}
-.logo{display:flex;align-items:center;gap:10px;flex:none;font:500 17px var(--display);letter-spacing:-.02em;color:var(--ink);text-decoration:none}
+.logo{display:flex;align-items:center;gap:10px;flex:none;font:700 17px var(--sans);letter-spacing:-.02em;color:var(--ink);text-decoration:none}
 .logo img{width:24px;height:24px;display:block}
 header.top nav{margin-left:auto;display:flex;gap:22px;font-size:14px;color:var(--ink2);align-items:center}
 header.top nav a{text-decoration:none;white-space:nowrap}
@@ -153,9 +154,9 @@ header.top nav .so button,button.lnk{background:none;border:0;padding:0;font:inh
 @media (max-width:420px){header.top nav .dc{display:none}}
 @media (max-width:360px){header.top .wrap{gap:10px}}
 @media (max-width:340px){header.top nav{gap:10px}header.top nav .btn{padding:0 10px}}
-h1,h2,h3{font-family:var(--display);text-wrap:balance}
-h1{font-size:clamp(26px,4vw,40px);line-height:1.15;letter-spacing:-.04em;font-weight:500}
-h2{font-size:17px;letter-spacing:-.015em;font-weight:500;margin-bottom:10px}
+h1,h2,h3{font-family:var(--sans);text-wrap:balance}
+h1{font-family:var(--display);font-size:clamp(26px,4vw,40px);line-height:1.15;letter-spacing:var(--htrack);font-weight:var(--hw)}
+h2{font-size:17px;letter-spacing:-.015em;font-weight:600;margin-bottom:10px}
 p.lead{color:var(--ink2);font-size:16px;max-width:62ch;margin-top:10px}
 .muted{color:var(--ink3)}
 .small{font-size:13px}
@@ -296,12 +297,10 @@ export function shell(nonce: string, title: string, body: string, script: string
 <meta name="referrer" content="${opts.account ? "same-origin" : "no-referrer"}">
 <title>${esc(title)}</title>
 ${ICON_LINKS}
-${THEME_COLOR_METAS("#000000", "#ffffff")}
+${THEME_COLOR_METAS("#0C0E12", "#FAF8F4")}
 <script nonce="${nonce}">${THEME_HEAD_JS}</script>
-<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@1&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="${STUDIO_FONTS}">
 <style nonce="${nonce}">${CSS}</style>
 </head>
 <body${opts.mesh ? ' class="mesh"' : ""}>
@@ -858,7 +857,7 @@ table.dt td .bdg{margin-left:8px;vertical-align:middle}
 /* the app's status under its name: Critical, Needs attention or Healthy, large, in red, amber or green */
 .verdict{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:14px}
 .verdict i{width:16px;height:16px;border-radius:50%;background:currentColor;box-shadow:0 0 0 5px var(--halo);flex:none}
-.verdict b{font:600 40px/1.1 var(--display);letter-spacing:-.02em}
+.verdict b{font:600 36px/1.1 var(--num);letter-spacing:-.035em}
 .verdict span{font-size:15px;color:var(--ink2)}
 .verdict.ok{color:var(--accent)}
 .verdict.warn{color:var(--amber)}
@@ -880,12 +879,12 @@ table.dt td .bdg{margin-left:8px;vertical-align:middle}
 .statrow>div:nth-child(odd){border-right:1px solid var(--rule)}
 .statrow>div:nth-last-child(-n+2){border-bottom:0}
 .statrow .k{font:12px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--ink2)}
-.statrow .v{font:400 26px/1.15 var(--display);letter-spacing:-.02em;margin-top:8px;font-variant-numeric:tabular-nums}
+.statrow .v{font:600 28px/1.15 var(--num);letter-spacing:-.03em;margin-top:8px;font-variant-numeric:tabular-nums}
 .statrow .s{font-size:12.5px;color:var(--ink3);margin-top:4px}
 .usage{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 .ucard{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:18px 18px 12px;min-height:220px;min-width:0}
 .ucard .k{font:12px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--ink2)}
-.ucard .v{font:400 22px var(--display);margin-top:4px;font-variant-numeric:tabular-nums}
+.ucard .v{font:600 22px var(--num);letter-spacing:-.02em;margin-top:4px;font-variant-numeric:tabular-nums}
 .ucard .d{font-size:12px;color:var(--ink3);margin-top:2px}
 .ucard svg{margin-top:auto;width:100%;height:110px;display:block}
 .ucard .ax{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--ink3);margin-top:6px}
@@ -948,7 +947,7 @@ figcaption{font-size:12px;color:var(--ink3);margin-top:12px;line-height:1.5}
 .find h3{font-size:14px;display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere}
 .find .top>*{min-width:0}
 .find .nw{text-align:right;white-space:nowrap}
-.find .n{font:400 22px/1 var(--display);font-variant-numeric:tabular-nums}
+.find .n{font:600 22px/1 var(--num);font-variant-numeric:tabular-nums}
 .find p{font-size:13px;color:var(--ink2);line-height:1.55;overflow-wrap:anywhere}
 .find p.fix b{color:var(--ink);font-weight:500}
 .find .acts{display:flex;gap:8px;flex-wrap:wrap}
@@ -979,7 +978,7 @@ dl.health{display:grid;grid-template-columns:minmax(150px,240px) minmax(0,1fr)}
 dl.health dt,dl.health dd{padding:14px 0;border-bottom:1px solid var(--rule)}
 dl.health dt:last-of-type,dl.health dd:last-of-type{border-bottom:0}
 dl.health dt{font-size:13px;color:var(--ink3);padding-right:18px}
-dl.health .v{font:400 16px var(--display)}
+dl.health .v{font:500 16px var(--num)}
 dl.health .s{font-size:12.5px;color:var(--ink3);margin-top:3px}
 dl.health ul{list-style:none;margin-top:6px;display:grid;gap:2px;font:12px var(--mono);color:var(--ink2)}
 .ok-t,.bad-t{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;font:500 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.05em;margin-left:10px;vertical-align:middle}
@@ -3182,7 +3181,7 @@ ${opts.extra?.html ?? ""}
     commands: [
       { group: "Actions", label: "Connect to your project", href: "#connect", icon: "plug" },
       { group: "Actions", label: "Set up the MCP server", href: "#mcp", icon: "bot" },
-      ...(acct ? [{ group: "Actions", label: "New project", href: "/account/new", icon: "plus" as const }] : []),
+      ...(acct ? [{ group: "Actions", label: "New app", href: "/account/new", icon: "plus" as const }] : []),
       { group: "Help", label: "Dashboard guide", href: "https://genclass.dev/docs/dashboard", icon: "book" },
     ],
     css: DASH_CSS,

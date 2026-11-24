@@ -1527,10 +1527,10 @@ describe("plans: the Free plan's limits (apps, dashboard ranges)", () => {
     const locked = await call(env, "GET", `/api/account/projects/${app.id}/stats?range=30d`, { cookie });
     expect(locked.status).toBe(402);
     expect(await locked.json()).toMatchObject({ ok: false, locked: true, upgrade_url: "https://genclass.dev/account/billing" });
-    // with a plan on sale, the app's page opens its plan page until a plan is chosen there (plans.json version 5)
-    expect((await call(env, "GET", `/account/apps/${app.id}`, { cookie })).headers.get("location")).toBe(`/account/billing?project=${app.id}`);
-    sql.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ?").run(now().toISOString(), app.id);
-    const page = await (await call(env, "GET", `/account/apps/${app.id}`, { cookie })).text();
+    // with a plan on sale, the app's page still opens at once, no plan chosen first (set up first, 2026-11-24)
+    const opened = await call(env, "GET", `/account/apps/${app.id}`, { cookie });
+    expect(opened.status).toBe(200);
+    const page = await opened.text();
     expect(page).toContain("This app's plan has no dashboard.");
     expect(page).not.toContain('data-r="7d"');
     expect(page).not.toContain("/stats");

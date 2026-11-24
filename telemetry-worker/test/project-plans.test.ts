@@ -16,6 +16,7 @@ import { FREE_REASONS, trialFor } from "../src/billing.js";
 import { FREE_REASONS_SHOWN } from "../src/billing-pages.js";
 import { resetStripeCache, trialCancelled } from "../src/stripe.js";
 import { monthOf, OBSERVE_HEADER, resetUsageCache } from "../src/usage.js";
+import { esc, setupCommand } from "../src/pages.js";
 import { call, cliToken, createApp, deliver, fakeStripe, GENCLASS_PORTAL, now, price, resetClock, sendBatch, setPlan, setup, signedIn, stripeEvent, subscription, WEBHOOK_SECRET } from "./account-helpers.js";
 
 const LIVE = { STRIPE_SECRET_KEY: "sk_live_fake", STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, STRIPE_PORTAL_CONFIGURATION: GENCLASS_PORTAL };
@@ -921,78 +922,233 @@ describe("POST /api/billing/projects/<id>/continue: an app the account's plan co
   });
 });
 
-describe("the website: a new account's first screen is Pro's trial, with a tiny Skip (the owner's call, 2026-11-13)", () => {
-  it("an account with no app, on Free, where Pro is sold, sees the trial with its checkout and a Skip on to its first app", async () => {
+describe("the website: set up first, the trial last (the owner, 2026-11-24: \"set up your entire app first before letting you put your credit card in\")", () => {
+  /** The JSON in /account's #acfg. */
+  const acfg = (html: string) => JSON.parse(/<script type="application\/json" id="acfg">([^<]*)<\/script>/.exec(html)![1]!);
+
+  it("an account with no app goes on to Get started (\"start\":true in #acfg), from sign-up's ?welcome=1 too; the trial-first screen is gone", async () => {
     const t = await withApps([]);
     const home = await call(t.env, "GET", "/account", { cookie: t.cookie });
     expect(home.status).toBe(200);
     const page = await home.text();
-    expect(page).toContain('<div class="empty-p trial" id="trial"><h2>Start your 3-day free trial</h2>');
-    expect(page).toContain('<p class="tp">Pro, $25 / month</p>');
-    expect(page).toContain('<a class="btn" href="/account/billing?plan=pro&#38;start=1" id="starttrial"><span>Start your 3-day free trial</span></a>');
-    expect(page).toContain("<p>3 days free, then $25 / month. Cancel before the trial ends and you pay nothing.</p>");
-    // 5 lines shown, the rest folded, and no summary repeating the price (the owner, 2026-11-13: less written)
-    expect(page).toContain(`<details class="pmore"><summary>${pitchLines(PLANS[1]!).length - 5} more</summary>`);
-    expect(page).not.toContain("Everything for one developer and up to 3 apps.");
-    expect(page).toContain('<p class="skipit"><a href="/account/new" id="skiptrial">Skip</a></p>');
-    expect(page).toContain("<li>Up to 3 apps</li>");
-    expect(page).not.toContain("<li>Everything in Free</li>");
-    expect(page).not.toContain("Create your first project");
-    // the trial's own button opens the account's checkout at once (the billing page, go)
-    const billing = await (await call(t.env, "GET", "/account/billing?plan=pro&start=1", { cookie: t.cookie })).text();
-    expect(billing).toContain('"go":true');
-    // links name the plan as every screen does (plans.ts planParam); one sent before, with the plan's id, still works
-    expect(await (await call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: t.cookie })).text()).toContain('"go":true');
+    expect(page).toContain('<script type="application/json" id="acfg">{"claim":false,"save":false,"start":true}</script>');
+    // the page script goes on unless the address names a part of the page (#settings, #security...)
+    expect(page).toContain('if (cfg.start && !location.hash) { location.replace("/account/get-started"); return; }');
+    // no trial screen with a tiny Skip (2026-11-13): the empty grid offers the app first, and Get started
+    expect(page).not.toContain('id="trial"');
+    expect(page).not.toContain('id="starttrial"');
+    expect(page).not.toContain('id="skiptrial"');
+    expect(page).toContain("<h2>Create your first app</h2>");
+    expect(page).toContain('<a class="btn ghost" href="/account/get-started">Get started</a>');
+    // every sign-up lands on /account?welcome=1 (its notice stays on the page, which goes on all the same)
+    const welcome = await text(call(t.env, "GET", "/account?welcome=1", { cookie: t.cookie }));
+    expect(welcome).toContain("Your account is ready.");
+    expect(acfg(welcome).start).toBe(true);
+    // the trial (Get started's third step) still opens the account's checkout at once (the billing page, go); links
+    // name the plan as every screen does (plans.ts planParam), and one sent before, with the plan's id, still works
+    expect(await text(call(t.env, "GET", "/account/billing?plan=pro&start=1", { cookie: t.cookie }))).toContain('"go":true');
+    expect(await text(call(t.env, "GET", "/account/billing?plan=team&start=1", { cookie: t.cookie }))).toContain('"go":true');
   });
 
-  it("an account with an app, on Pro, or where nothing is sold sees its projects as before", async () => {
+  it("it stays on /account with an app, while a link is added (?claim, ?save) or for another notice; on Pro or where nothing is sold it goes on too", async () => {
     const withApp = await withApps(["Shop"]);
-    expect(await (await call(withApp.env, "GET", "/account", { cookie: withApp.cookie })).text()).not.toContain('id="trial"');
+    const has = await text(call(withApp.env, "GET", "/account", { cookie: withApp.cookie }));
+    expect(acfg(has).start).toBe(false);
+    expect(has).toContain('<li class="pcard" data-name="shop">');
+    const empty = await withApps([]);
+    for (const q of ["?claim=1", "?save=1", "?deleted=project"]) expect(acfg(await text(call(empty.env, "GET", `/account${q}`, { cookie: empty.cookie }))).start, q).toBe(false);
+    expect(acfg(await text(call(empty.env, "GET", "/account?claim=1", { cookie: empty.cookie }))).claim).toBe(true);
     const pro = await withApps([]);
     paidPro(pro.sql, pro.account.id);
-    const p = await (await call(pro.env, "GET", "/account", { cookie: pro.cookie })).text();
+    const p = await text(call(pro.env, "GET", "/account", { cookie: pro.cookie }));
+    expect(acfg(p).start).toBe(true);
     expect(p).not.toContain('id="trial"');
-    expect(p).toContain("Create your first project");
     const none = setup();
     const n = await signedIn(none.env);
-    const free = await (await call(none.env, "GET", "/account", { cookie: n.cookie })).text();
-    expect(free).not.toContain('id="trial"');
-    expect(free).toContain("Create your first project");
+    const free = await text(call(none.env, "GET", "/account", { cookie: n.cookie }));
+    expect(acfg(free).start).toBe(true);
+    expect(free).toContain("<h2>Create your first app</h2>");
+  });
+
+  it("/account/get-started: four numbered steps, the app first, its connect command, the 3-day trial, then the terminal", async () => {
+    const t = await withApps([]);
+    const out = await call(t.env, "GET", "/account/get-started", {});
+    expect(out.status).toBe(302);
+    expect(out.headers.get("location")).toBe("/login?next=%2Faccount%2Fget-started");
+    expect((await call(t.env, "POST", "/account/get-started", { cookie: t.cookie, body: {} })).status).toBe(405);
+    const steps = (html: string) =>
+      [...html.matchAll(/<li class="gs-step( done| now)?" id="step-(\w+)"><span class="gs-num" aria-hidden="true">(\d?)[\s\S]*?<h2>([^<]+)/g)].map((m) => [m[2], (m[1] ?? "").trim() || "open", m[3] || "check", m[4]]);
+    const page = async () => {
+      const r = await call(t.env, "GET", "/account/get-started", { cookie: t.cookie });
+      expect(r.status).toBe(200);
+      return r.text();
+    };
+    // a new account: nothing done, the app's step open
+    const fresh = await page();
+    expect(fresh).toContain("<title>Get started | GenClass</title>");
+    expect(fresh).toContain('<span class="gs-prog"><b>0</b> of 4 done</span>');
+    expect(steps(fresh)).toEqual([
+      ["app", "now", "1", "Create your app"],
+      ["connect", "open", "2", "Add GenClass to it"],
+      ["trial", "open", "3", "Start your 3-day free trial"],
+      ["cli", "open", "4", "Use it from your terminal"],
+    ]);
+    expect(fresh).toMatch(/<a class="btn" href="\/account\/new">.*<span>Create your app<\/span><\/a>/);
+    expect(fresh).toContain('<p class="gs-fine">Create your app first: the command carries its key.</p>');
+    // the trial is a plain choice: its button is not the page's main one before the app sends events
+    expect(fresh).toContain('<a class="btn ghost" href="/account/billing?plan=pro&#38;start=1">Start 3-day free trial</a>');
+    expect(fresh).toContain("3 days free, then $25 / month. Cancel before it ends and you pay nothing.");
+    expect(fresh).toContain('<p class="gs-fine">Best once your app sends its first events, so you see your own problems on day one.</p>');
+    expect(fresh).toContain("<code>npx genclass</code>");
+    expect(fresh).toContain('<p class="gs-fine">Comes with Pro.</p>');
+    // the app: its dashboard, its own connect command (pages.ts setupCommand), waiting for the first event
+    const shop = await createApp(t.env, t.cookie, "Shop");
+    const made = await page();
+    expect(steps(made).map((s) => s.slice(0, 2))).toEqual([["app", "done"], ["connect", "now"], ["trial", "open"], ["cli", "open"]]);
+    expect(made).toContain(`<a class="btn sm ghost" href="/account/apps/${shop.id}">Open Shop</a>`);
+    expect(made).toContain(`<code>${esc(setupCommand(shop.token))}</code>`);
+    expect(made).toContain(`aria-label="Copy the command that connects Shop"`);
+    expect(made).toContain('<span class="gs-wait"><i></i>Waiting for the first event</span>');
+    expect(made).toContain(`<a class="btn sm ghost" href="/account/apps/${shop.id}#connect">Other ways to connect</a>`);
+    // the first event: connected, and the trial's button becomes the page's main one
+    await sendBatch(t.env, shop.token, [{ t: "session", host: "shop.example", route: "/" }]);
+    const live = await page();
+    expect(steps(live).map((s) => s.slice(0, 2))).toEqual([["app", "done"], ["connect", "done"], ["trial", "now"], ["cli", "open"]]);
+    expect(live).toContain('<span class="gs-wait on"><i></i>Events are arriving.</span>');
+    expect(live).toContain('<a class="btn" href="/account/billing?plan=pro&#38;start=1">Start 3-day free trial</a>');
+    expect(live).not.toContain("Best once your app sends its first events");
+    // on Pro, then with a terminal signed in: every step done
+    paidPro(t.sql, t.account.id);
+    const pro = await page();
+    expect(steps(pro).map((s) => s.slice(0, 2))).toEqual([["app", "done"], ["connect", "done"], ["trial", "done"], ["cli", "now"]]);
+    expect(pro).toContain('<span class="gs-wait on"><i></i>You are on Pro.</span>');
+    expect(pro).not.toContain("Comes with Pro.");
+    await cliToken(t.env, t.cookie);
+    const all = await page();
+    expect(all).toContain('<span class="gs-prog"><b>4</b> of 4 done</span>');
+    expect(steps(all).every((s) => s[1] === "done" && s[2] === "check")).toBe(true);
   });
 });
 
-describe("the website: an own app opens its plan page until a plan is chosen there, and while the plan does not cover it", () => {
-  it("an app on Free that has not chosen opens its plan page instead of its dashboard, until it has", async () => {
+describe("GET /api/account/glance: the sidebar's plan card and Get started's steps, in the server's words", () => {
+  const glance = (env: ReturnType<typeof setup>["env"], cookie: string) => json(call(env, "GET", "/api/account/glance", { cookie }));
+
+  it("a signed-in browser only: 401 signed out and from a terminal, 405 for a write; never cached", async () => {
+    const t = await withApps([]);
+    expect((await call(t.env, "GET", "/api/account/glance", {})).status).toBe(401);
+    expect((await call(t.env, "GET", "/api/account/glance", { bearer: await cliToken(t.env, t.cookie), origin: null })).status).toBe(401);
+    expect((await call(t.env, "POST", "/api/account/glance", { cookie: t.cookie, body: {} })).status).toBe(405);
+    const r = await call(t.env, "GET", "/api/account/glance", { cookie: t.cookie });
+    expect(r.status).toBe(200);
+    expect(r.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("a new account on Free: no step done, Start 3-day free trial to the start URL; the app and its first event mark theirs", async () => {
+    const t = await withApps([]);
+    const start = "/account/billing?plan=pro&start=1";
+    expect(await glance(t.env, t.cookie)).toEqual({
+      ok: true,
+      plan: "Free",
+      status: "plan",
+      trial: false,
+      apps: { used: 0, of: 1 },
+      note: "0 of 1 app",
+      action: { label: "Start 3-day free trial", href: start, primary: false },
+      steps: [
+        { key: "app", done: false },
+        { key: "connect", done: false },
+        { key: "trial", done: false },
+        { key: "cli", done: false },
+      ],
+      first: null,
+      sold: { name: "Pro", price: "$25 / month", days: 3, start },
+    });
+    // the start URL opens the account's checkout at once
+    expect(await text(call(t.env, "GET", start, { cookie: t.cookie }))).toContain('"go":true');
+    const shop = await createApp(t.env, t.cookie, "Shop");
+    const made = await glance(t.env, t.cookie);
+    expect(made.steps).toEqual([{ key: "app", done: true }, { key: "connect", done: false }, { key: "trial", done: false }, { key: "cli", done: false }]);
+    expect(made.first).toEqual({ id: shop.id, name: "Shop", token: shop.token, live: false });
+    expect([made.apps, made.note, made.action.primary]).toEqual([{ used: 1, of: 1 }, "1 of 1 app", true]);
+    // after the first event: connected
+    await sendBatch(t.env, shop.token, [{ t: "session", host: "shop.example", route: "/" }]);
+    const live = await glance(t.env, t.cookie);
+    expect(live.steps).toEqual([{ key: "app", done: true }, { key: "connect", done: true }, { key: "trial", done: false }, { key: "cli", done: false }]);
+    expect(live.first.live).toBe(true);
+    expect(live.action).toEqual({ label: "Start 3-day free trial", href: start, primary: true });
+  });
+
+  it("the first app is the oldest (the one Free covers), not the first by name", async () => {
+    const { advance } = await import("./account-helpers.js");
+    const t = await withApps(["Shop"]);
+    advance(60_000);
+    const blog = await createApp(t.env, t.cookie, "Blog");
+    const g = await glance(t.env, t.cookie);
+    expect(g.first).toMatchObject({ id: t.apps[0]!.id, name: "Shop" });
+    expect([g.apps, g.note]).toEqual([{ used: 2, of: 1 }, "2 apps, 1 covered"]);
+    // Blog is past Free's one app: its page opens its plan page
+    expect((await call(t.env, "GET", `/account/apps/${blog.id}`, { cookie: t.cookie })).headers.get("location")).toBe(`/account/billing?project=${blog.id}`);
+    expect((await call(t.env, "GET", `/account/apps/${t.apps[0]!.id}`, { cookie: t.cookie })).status).toBe(200);
+  });
+
+  it("a member of a team on Business: the team's plan covers them, nothing is sold to them, and the team's app counts for their steps", async () => {
+    const t = await withApps(["Shop"]);
+    setPlan(t.sql, t.account.id, "business", { stripe_mode: "live", seats: null, subscription_id: "sub_acct000001", subscription_status: "active", current_period_end: "2026-11-13T12:00:00.000Z" });
+    await sendBatch(t.env, t.apps[0]!.token, [{ t: "session", host: "shop.example", route: "/" }]);
+    const bob = await signedIn(t.env, "bob@example.com");
+    const inv = await json(call(t.env, "POST", "/api/team/invites", { body: {}, cookie: t.cookie }));
+    expect((await call(t.env, "POST", "/api/team/join", { body: { code: inv.url.split("/").pop() }, cookie: bob.cookie })).status).toBe(200);
+    const g = await glance(t.env, bob.cookie);
+    expect(g).toMatchObject({ plan: "Business", status: "with your team", note: null, action: { label: "Plans and billing", href: "/account/billing", primary: false } });
+    expect(g.steps).toEqual([{ key: "app", done: true }, { key: "connect", done: true }, { key: "trial", done: true }, { key: "cli", done: false }]);
+    expect(g.first).toMatchObject({ id: t.apps[0]!.id, name: "Shop", live: true });
+  });
+
+  it("on Pro the trial step is done and the card offers Plans and billing; Pro's trial counts its days; GenClass's grant says so", async () => {
+    const t = await withApps(["Shop"]);
+    paidPro(t.sql, t.account.id);
+    const pro = await glance(t.env, t.cookie);
+    expect(pro).toMatchObject({ plan: "Pro", status: "plan", trial: false, apps: { used: 1, of: 3 }, note: "1 of 3 apps", action: { label: "Plans and billing", href: "/account/billing", primary: false } });
+    expect(pro.steps).toEqual([{ key: "app", done: true }, { key: "connect", done: false }, { key: "trial", done: true }, { key: "cli", done: false }]);
+    setPlan(t.sql, t.account.id, "team", { subscription_status: "trialing", current_period_end: "2026-10-15T12:00:00.000Z" });
+    expect(await glance(t.env, t.cookie)).toMatchObject({ plan: "Pro trial", status: "2 days left", trial: true });
+    const g = await withApps(["Shop"]);
+    setPlan(g.sql, g.account.id, "free", { comp_until: "9999-12-31T00:00:00.000Z" });
+    const comp = await glance(g.env, g.cookie);
+    expect(comp).toMatchObject({ status: "from GenClass", trial: false, action: { label: "Plans and billing", href: "/account/billing", primary: false } });
+    expect(comp.steps.find((s: { key: string }) => s.key === "trial").done).toBe(true);
+  });
+});
+
+describe("the website: an own app opens its dashboard at once (set up first, 2026-11-24); only one its plan does not cover opens its plan page", () => {
+  it("an app on Free opens its dashboard with nothing chosen first; the plan page stays where it was, chosen or not", async () => {
     const t = await withApps(["Shop"]);
     const shop = t.apps[0]!;
     const r = await call(t.env, "GET", `/account/apps/${shop.id}`, { cookie: t.cookie });
-    expect(r.status).toBe(302);
-    expect(r.headers.get("location")).toBe(`/account/billing?project=${shop.id}`);
+    expect(r.status).toBe(200);
+    expect(chosenAt(t.sql, shop.id)).toBeNull();
+    expect((await call(t.env, "GET", `/account/billing?project=${shop.id}`, { cookie: t.cookie })).status).toBe(200);
     await call(t.env, "POST", `/api/billing/projects/${shop.id}/free`, { cookie: t.cookie, body: { reason: "unsure" } });
     expect((await call(t.env, "GET", `/account/apps/${shop.id}`, { cookie: t.cookie })).status).toBe(200);
-    // where nothing is sold, nothing to choose
+    // where nothing is sold, the same
     const none = setup();
     const n = await signedIn(none.env);
     const app = await createApp(none.env, n.cookie, "Docs");
     expect((await call(none.env, "GET", `/account/apps/${app.id}`, { cookie: n.cookie })).status).toBe(200);
   });
 
-  it("an app of a paying account, or on a grant, that has not chosen opens its plan page too, until Continue with Pro", async () => {
+  it("an app of a paying account, of a version-4 project subscription or on a grant opens its dashboard at once too", async () => {
     const t = await withApps(["Shop", "Blog"]);
     paidPro(t.sql, t.account.id);
-    for (const app of t.apps) expect((await call(t.env, "GET", `/account/apps/${app.id}`, { cookie: t.cookie })).headers.get("location")).toBe(`/account/billing?project=${app.id}`);
-    expect((await call(t.env, "POST", `/api/billing/projects/${t.apps[1]!.id}/continue`, { cookie: t.cookie, body: {} })).status).toBe(200);
-    expect((await call(t.env, "GET", `/account/apps/${t.apps[1]!.id}`, { cookie: t.cookie })).status).toBe(200);
-    expect((await call(t.env, "GET", `/account/apps/${t.apps[0]!.id}`, { cookie: t.cookie })).status).toBe(302);
+    for (const app of t.apps) expect((await call(t.env, "GET", `/account/apps/${app.id}`, { cookie: t.cookie })).status).toBe(200);
+    expect(t.apps.map((a) => chosenAt(t.sql, a.id))).toEqual([null, null]);
     // a version-4 project subscription
     const v4 = await withApps(["Shop"]);
     projectPaid(v4.sql, v4.apps[0]!.id);
-    expect((await call(v4.env, "GET", `/account/apps/${v4.apps[0]!.id}`, { cookie: v4.cookie })).status).toBe(302);
+    expect((await call(v4.env, "GET", `/account/apps/${v4.apps[0]!.id}`, { cookie: v4.cookie })).status).toBe(200);
     // GenClass's grant
     const g = await withApps(["Shop"]);
     setPlan(g.sql, g.account.id, "free", { comp_until: "9999-12-31T00:00:00.000Z" });
-    expect((await call(g.env, "GET", `/account/apps/${g.apps[0]!.id}`, { cookie: g.cookie })).status).toBe(302);
-    expect((await call(g.env, "POST", `/api/billing/projects/${g.apps[0]!.id}/continue`, { cookie: g.cookie, body: {} })).status).toBe(200);
     expect((await call(g.env, "GET", `/account/apps/${g.apps[0]!.id}`, { cookie: g.cookie })).status).toBe(200);
   });
 

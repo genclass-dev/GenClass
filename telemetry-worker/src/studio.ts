@@ -64,6 +64,8 @@ const PATHS = {
   lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  rocket:
+    '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
   compass: '<circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/>',
 } as const;
 
@@ -78,8 +80,11 @@ export function icon(name: IconName, size = 16): string {
 const DIVIDER =
   '<span class="sb-div" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M16 3.5 7.5 20.5"/></svg></span>';
 
-/** genclass.dev's mark, where Studio puts its own logo (the home link of the header). */
-const MARK = '<img src="https://genclass.dev/brand/mark-64.png?v=2" alt="" width="22" height="22">';
+/** genclass.dev's fonts: Geist for text, Geist Mono for code and night headlines, Newsreader for page titles by day. */
+export const STUDIO_FONTS = "https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&family=Newsreader:opsz,wght@6..72,500&display=swap";
+
+/** genclass.dev's mark, at the top of the sidebar (and in the header on a phone). */
+const MARK = '<img src="https://genclass.dev/brand/mark.svg?v=9" alt="" width="24" height="24">';
 
 /** The site's own icons (site/public/brand, apple-touch-icon.png), so every genclass.dev page shows the same one. */
 export const ICON_LINKS =
@@ -195,120 +200,125 @@ export function badge(text: string, kind: "default" | "brand" | "warning" | "des
  */
 export const STUDIO_CSS = `
 :root{
-  --paper:#121212;--panel:#1f1f1f;--ink:#fafafa;--ink2:#b4b4b4;--ink3:#898989;--rule:#2e2e2e;--rule2:#363636;--line:#636363;
-  --accent:#3ecf8e;--accent-x:#3ecf8e;--accent-f:#006239;--accent-t:#0b2118;--warn:#f9785b;--warn-f:#e54d2e;--warn-t:#2a1410;
-  --bar:#898989;--bar2:#3ecf8e;--bar3:#e54d2e;--ink-h:#ffffff;--green-h:#007a4a;--on-green:#fafafa;--head:#121212;
-  --code:#171717;--codeink:#fafafa;
-  --s75:#171717;--s200:#242424;--s300:#2e2e2e;--ctl:#1a1a1a;--rule3:#454545;--brand-b:rgba(62,207,142,.3);--amber:#f1a10d;--amber-t:#2b1d05;--ovl:#1c1c1c;
-  --display:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-  --mono:"Source Code Pro",ui-monospace,SFMono-Regular,Menlo,monospace;
-  --cb:#393939;--cb-h:#4d4d4d;--sel:#3ecf8e40;--brand-bh:#3ecf8e99;--ph:#6b6b6b;--ok-b:#0f5a37;--amber-b:#5c3d06;--warn-b:#5c2018;
-  --dng-bg:#3c1712;--dng-b:#7f2c20;--dng-bg-h:#52201a;--dng-b-h:#b23b28;--av-bg:#2b4a3c;--av-b:#3a5a4b;--ovl-b:#333333;
+  --paper:#0C0E12;--panel:#14171D;--ink:#E9EBF1;--ink2:#AEB4C2;--ink3:#8B92A2;--rule:#222731;--rule2:#2C323D;--line:#5E6576;
+  --accent:#3DDC97;--accent-x:#3DDC97;--accent-f:#E9EBF1;--accent-t:#10241B;--warn:#FF8A70;--warn-f:#FF6A4D;--warn-t:#2A1511;
+  --bar:#8B92A2;--bar2:#3DDC97;--bar3:#FF6A4D;--ink-h:#ffffff;--green-h:#FFFFFF;--on-green:#0C0E12;--head:#0C0E12;
+  --code:#101318;--codeink:#E9EBF1;
+  --s75:#101318;--s200:#181C23;--s300:#232832;--ctl:#101318;--rule3:#3A414E;--brand-b:#E9EBF1;--amber:#F2C879;--amber-t:#2B2210;--ovl:#14171D;
+  --side:#0F1116;--sage:#3DDC97;
+  --display:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;--sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;--num:var(--mono);--hw:600;--htrack:-.035em;
+  --cb:#2C323D;--cb-h:#454C5A;--sel:rgba(61,220,151,.25);--brand-bh:#FFFFFF;--ph:#6C7383;--ok-b:#1F4A37;--amber-b:#4D3A12;--warn-b:#5C2A20;
+  --dng-bg:#2A1511;--dng-b:#6B2C20;--dng-bg-h:#3A1B15;--dng-b-h:#B23B28;--av-bg:#10241B;--av-b:#1F4A37;--ovl-b:#2C323D;
   --shadow-m:0 12px 32px rgba(0,0,0,.5);--shadow-l:0 24px 64px rgba(0,0,0,.6);--shadow-r:12px 0 24px rgba(0,0,0,.35);--scrim:rgba(0,0,0,.66);--tour-scrim:rgba(0,0,0,.6);
   color-scheme:dark;
 }
 :root[data-theme="light"]{
-  --paper:#fcfcfc;--panel:#ffffff;--ink:#171717;--ink2:#525252;--ink3:#6b6b6b;--rule:#e6e6e6;--rule2:#dedede;--line:#8c8c8c;
-  --accent:#0a7c4a;--accent-x:#0a7c4a;--accent-f:#0a7c4a;--accent-t:#eaf7f0;--warn:#c4320a;--warn-f:#e5484d;--warn-t:#fdeeea;
-  --bar:#a3a3a3;--bar2:#22a06b;--bar3:#e5484d;--ink-h:#000000;--green-h:#086a3f;--on-green:#ffffff;--head:#ffffff;
-  --code:#f5f5f5;--codeink:#171717;
-  --s75:#f7f7f7;--s200:#f0f0f0;--s300:#e8e8e8;--ctl:#ffffff;--rule3:#c7c7c7;--brand-b:rgba(10,124,74,.35);--amber:#8a5a00;--amber-t:#fdf6e7;--ovl:#ffffff;
-  --cb:#d4d4d4;--cb-h:#a3a3a3;--sel:rgba(10,124,74,.18);--brand-bh:rgba(10,124,74,.6);--ph:#8f8f8f;--ok-b:#a7dcc0;--amber-b:#f0d29a;--warn-b:#f5c2b8;
-  --dng-bg:#fdeeea;--dng-b:#f2b8ab;--dng-bg-h:#fadbd5;--dng-b-h:#e5484d;--av-bg:#d9f2e5;--av-b:#a7dcc0;--ovl-b:#e0e0e0;
-  --shadow-m:0 12px 32px rgba(0,0,0,.12);--shadow-l:0 24px 64px rgba(0,0,0,.18);--shadow-r:12px 0 24px rgba(0,0,0,.08);--scrim:rgba(20,20,20,.35);--tour-scrim:rgba(20,20,20,.5);
+  --paper:#FAF8F4;--panel:#FFFFFF;--ink:#15171F;--ink2:#4A4E5C;--ink3:#5F6473;--rule:#E6E2D9;--rule2:#DCD7CC;--line:#8A8D99;
+  --accent:#0A6A49;--accent-x:#0A6A49;--accent-f:#15171F;--accent-t:#E9F2EC;--warn:#B53A25;--warn-f:#E0533B;--warn-t:#FBEDE9;
+  --bar:#A9ACB6;--bar2:#0E865C;--bar3:#E0533B;--ink-h:#000000;--green-h:#2C2F3A;--on-green:#FAF8F4;--head:#FAF8F4;
+  --code:#F3F0EA;--codeink:#15171F;
+  --s75:#F5F2EC;--s200:#EFEBE3;--s300:#E9E5DC;--ctl:#FFFFFF;--rule3:#C9C3B6;--brand-b:#15171F;--amber:#7A5000;--amber-t:#FAF1DE;--ovl:#FFFFFF;
+  --side:#F4F1EA;--sage:#4F7A6E;
+  --display:"Newsreader","Iowan Old Style",Georgia,serif;--num:var(--sans);--hw:500;--htrack:-.02em;
+  --cb:#DCD7CC;--cb-h:#B9B3A6;--sel:rgba(14,134,92,.18);--brand-bh:#2C2F3A;--ph:#8C8F9C;--ok-b:#BFDCCB;--amber-b:#EBD3A1;--warn-b:#F2C3B8;
+  --dng-bg:#FBEDE9;--dng-b:#F2C3B8;--dng-bg-h:#F7DDD6;--dng-b-h:#E0533B;--av-bg:#E9F2EC;--av-b:#BFDCCB;--ovl-b:#E6E2D9;
+  --shadow-m:0 12px 32px rgba(21,23,31,.10);--shadow-l:0 24px 64px rgba(21,23,31,.16);--shadow-r:12px 0 24px rgba(21,23,31,.06);--scrim:rgba(21,23,31,.35);--tour-scrim:rgba(21,23,31,.5);
   color-scheme:light;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--paper)}
-body{background:var(--paper);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-feature-settings:"cv11","ss01"}
+body{background:var(--paper);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 ::selection{background:var(--sel);color:var(--ink)}
 .th-moon{display:none}
 :root[data-theme="light"] .th-moon{display:contents}:root[data-theme="light"] .th-sun{display:none}
 .th-sun{display:contents}
 a{color:inherit;text-underline-offset:3px}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-h1,h2,h3{font-family:var(--display);font-weight:400;letter-spacing:-.01em;text-wrap:balance}
-h1{font-size:24px;line-height:1.25}
-h2{font-size:16px;line-height:1.4}
+h1,h2,h3{font-family:var(--sans);font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+h1{font-family:var(--display);font-weight:var(--hw);letter-spacing:var(--htrack);font-size:26px;line-height:1.2}
+h2{font-size:15px;line-height:1.4}
 h3{font-size:14px;line-height:1.4}
 code,pre,.mono{font-family:var(--mono)}
 .muted{color:var(--ink3)}
 .small{font-size:13px}
 .hidden{display:none!important}
 .vh{display:none!important}
-.skip{position:absolute;left:12px;top:-60px;z-index:90;background:var(--accent-f);color:var(--on-green);padding:8px 12px;border-radius:6px;font-size:13px;text-decoration:none}
+.skip{position:absolute;left:12px;top:-60px;z-index:90;background:var(--accent-f);color:var(--on-green);padding:8px 12px;font-size:13px;text-decoration:none}
 .skip:focus{top:8px}
 [tabindex="-1"]:focus{outline:none}
-.sb [id]{scroll-margin-top:64px}
+.sb [id]{scroll-margin-top:72px}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .stack>*+*{margin-top:12px}
 .mt-xl{margin-top:40px}.mt-l{margin-top:24px}.mt-s{margin-top:12px}.big{font-size:16px}.brk{word-break:break-all}.minw0{min-width:0}
 .ic{display:block;flex:none}
-/* buttons: Studio's primary (dark green, green border), default (grey) and outline; tiny 26px, small 32px */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 12px;border-radius:6px;font:400 13px/1 var(--sans);cursor:pointer;border:1px solid var(--brand-b);background:var(--accent-f);color:var(--on-green);text-decoration:none;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
+/* buttons: genclass.dev's, square: primary is ink with a paper label in both themes, the second an outline */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:0 14px;border-radius:0;font:500 13.5px/1 var(--sans);cursor:pointer;border:1px solid var(--brand-b);background:var(--accent-f);color:var(--on-green);text-decoration:none;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
 .btn:hover{background:var(--green-h);border-color:var(--brand-bh)}
 .btn:disabled{opacity:.55;cursor:progress}
 .btn.green{background:var(--accent-f);border-color:var(--brand-b);color:var(--on-green)}
 .btn.green:hover{background:var(--green-h);border-color:var(--brand-bh)}
-.btn.ghost,.btn.paper{background:var(--s200);color:var(--ink);border-color:var(--cb)}
-.btn.ghost:hover,.btn.paper:hover{background:var(--s300);border-color:var(--cb-h)}
+.btn.ghost,.btn.paper{background:var(--ctl);color:var(--ink);border-color:var(--cb)}
+.btn.ghost:hover,.btn.paper:hover{background:var(--s200);border-color:var(--cb-h)}
 .btn.text{background:transparent;border-color:transparent;color:var(--ink2)}
 .btn.text:hover{background:var(--s200);color:var(--ink)}
 .btn.danger{background:var(--dng-bg);border-color:var(--dng-b);color:var(--ink)}
 .btn.danger:hover{background:var(--dng-bg-h);border-color:var(--dng-b-h)}
-.btn.sm,.btn.tiny{min-height:26px;padding:0 10px;font-size:12px}
-.btn.xl{min-height:40px;padding:0 18px;font-size:14px}
+.btn.sm,.btn.tiny{min-height:28px;padding:0 10px;font-size:12.5px}
+.btn.xl{min-height:42px;padding:0 20px;font-size:14.5px}
 .btn .ic{width:14px;height:14px}
-.btn.ico{padding:0;width:26px;min-height:26px}
+.btn.ico{padding:0;width:28px;min-height:28px}
 @media (pointer:coarse){.btn,.btn.sm,.btn.tiny{min-height:40px}.btn.ico{width:40px}.js .sb-x{min-width:40px;min-height:40px;align-items:center;justify-content:center;margin:-10px -10px -10px 0}}
 button.lnk{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
-/* inputs: Studio's control fill and 6px corners; the border at 3:1 for contrast */
-input[type=text],input[type=email],input[type=password],input[type=url],input[type=date],input[type=search],select,textarea{min-height:34px;width:100%;padding:0 12px;border-radius:6px;border:1px solid var(--line);background:var(--ctl);color:var(--ink);font:14px var(--sans)}
+/* inputs: square, as on genclass.dev; the border at 3:1 for contrast */
+input[type=text],input[type=email],input[type=password],input[type=url],input[type=date],input[type=search],select,textarea{min-height:36px;width:100%;padding:0 12px;border-radius:0;border:1px solid var(--line);background:var(--ctl);color:var(--ink);font:14px var(--sans)}
 textarea{padding:8px 12px;min-height:80px;resize:vertical}
 input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
 input:disabled,select:disabled{opacity:.6}
 ::placeholder{color:var(--ph);opacity:1}
 label{font-size:13px;color:var(--ink2)}
-/* tables: Studio's grid look, header row on the sidebar tone */
+/* tables: quiet rules, the header row in small mono capitals */
 table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--rule);white-space:nowrap}
-th{color:var(--ink3);font:400 12px var(--sans);background:var(--s75)}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);white-space:nowrap}
+th{color:var(--ink3);font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.06em;background:var(--s75)}
 .tablewrap{overflow-x:auto}
-pre.code{background:var(--code);color:var(--codeink);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;font:13px/1.6 var(--mono);overflow-x:auto;white-space:pre}
-.note{border:1px solid var(--amber-b);background:var(--amber-t);padding:10px 14px;border-radius:6px;font-size:13px;color:var(--ink)}
+pre.code{background:var(--code);color:var(--codeink);border:1px solid var(--rule);border-radius:8px;padding:12px 14px;font:13px/1.6 var(--mono);overflow-x:auto;white-space:pre}
+.note{border:1px solid var(--amber-b);background:var(--amber-t);padding:10px 14px;border-radius:8px;font-size:13px;color:var(--ink)}
 .note.ok,.ok{border-color:var(--ok-b);background:var(--accent-t)}
 /* badges */
-.bdg{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;border:1px solid var(--rule2);background:var(--s75);color:var(--ink2);font:500 10.5px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+.bdg{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:0;border:1px solid var(--rule2);background:var(--s75);color:var(--ink2);font:500 10.5px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
 .bdg.brand{border-color:var(--ok-b);background:var(--accent-t);color:var(--accent)}
 .bdg.warning{border-color:var(--amber-b);background:var(--amber-t);color:var(--amber)}
 .bdg.destructive{border-color:var(--warn-b);background:var(--warn-t);color:var(--warn)}
 .bdg i{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
-
-/* ---------- the frame */
+/* ---------- the frame: a full-height sidebar on the left (genclass.dev's mark and name, the workspace switcher, Get
+   started, Home, the apps, the page's own menu, the plan card and Documentation), the header and the page on the right */
 body.sb{min-height:100vh}
-.sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:48px;border-bottom:1px solid var(--rule);background:var(--head);padding-right:12px;gap:4px}
-.sb-home{display:flex;align-items:center;justify-content:center;width:48px;height:48px;flex:none}
+.sb-shell{display:flex;min-height:100vh}
+.sb-col{flex:1;min-width:0;display:flex;flex-direction:column}
+.sb-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;height:56px;border-bottom:1px solid var(--rule);background:var(--head);padding:0 16px 0 20px;gap:6px}
+.sb-home{display:none;align-items:center;justify-content:center;width:40px;height:56px;flex:none}
 .sb-home img{width:22px;height:22px;display:block}
 .sb-ib.sb-burger{display:none}
 .sb-crumbs{display:flex;align-items:center;min-width:0;flex:0 1 auto;font-size:14px}
 .sb-div{color:var(--rule3);display:flex;flex:none}
-.sb-cr{display:flex;align-items:center;gap:6px;min-width:0;padding:0 4px;height:28px;border-radius:6px;color:var(--ink);text-decoration:none;background:none;border:0;font:inherit;cursor:pointer;white-space:nowrap}
+.sb-cr{display:flex;align-items:center;gap:6px;min-width:0;padding:0 6px;height:30px;color:var(--ink);text-decoration:none;background:none;border:0;font:500 14px var(--sans);cursor:pointer;white-space:nowrap}
 .sb-cr:hover,.sb-cr[aria-expanded=true]{background:var(--s200)}
-.sb-cr .nm{overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.sb-cr .nm{overflow:hidden;text-overflow:ellipsis;max-width:260px}
 .sb-cr .ic{color:var(--ink3)}
 .sb-cr.static{cursor:default}.sb-cr.static:hover{background:none}
-.sb-acts{display:flex;align-items:center;gap:8px;margin-left:12px;flex:none}
+.sb-acts{display:flex;align-items:center;gap:8px;margin-left:10px;flex:none}
 .sb-right{display:flex;align-items:center;gap:8px;flex:none}
-/* the search, in the middle of the header right after the crumbs: wide, easy to see */
+/* the search, in the middle of the header: wide, easy to see */
 .sb-mid{flex:1 1 auto;display:flex;justify-content:center;min-width:0;padding:0 20px}
-.sb-search{display:flex;align-items:center;gap:10px;width:100%;max-width:460px;height:34px;padding:0 8px 0 12px;border-radius:8px;border:1px solid var(--cb);background:var(--s75);color:var(--ink2);font:13.5px var(--sans);cursor:pointer;transition:border-color .15s,background .15s}
-.sb-search:hover{border-color:var(--cb-h);background:var(--s200);color:var(--ink)}
+.sb-search{display:flex;align-items:center;gap:10px;width:100%;max-width:440px;height:36px;padding:0 8px 0 12px;border-radius:0;border:1px solid var(--cb);background:var(--ctl);color:var(--ink3);font:13.5px var(--sans);cursor:pointer;transition:border-color .15s,background .15s}
+.sb-search:hover{border-color:var(--cb-h);color:var(--ink)}
 .sb-search .ic{color:var(--ink3)}
-.sb-search kbd{margin-left:auto;font:11px var(--mono);color:var(--ink3);padding:2px 6px;border:1px solid var(--cb);border-radius:4px;background:var(--paper)}
+.sb-search kbd{margin-left:auto;font:11px var(--mono);color:var(--ink3);padding:2px 6px;border:1px solid var(--cb);background:var(--paper)}
 .sb-lk{display:inline-flex;align-items:center;color:var(--accent)}
 .sb-lk .ic{width:13px;height:13px}
 /* the tour: a spotlight on one part of the page and a card next to it */
-.tour-spot{position:fixed;z-index:95;border-radius:8px;box-shadow:0 0 0 2px var(--accent),0 0 0 200vmax var(--tour-scrim);pointer-events:none;transition:top .25s ease,left .25s ease,width .25s ease,height .25s ease}
+.tour-spot{position:fixed;z-index:95;border-radius:4px;box-shadow:0 0 0 2px var(--accent),0 0 0 200vmax var(--tour-scrim);pointer-events:none;transition:top .25s ease,left .25s ease,width .25s ease,height .25s ease}
 .tour-spot.mid{top:50%;left:50%;width:0;height:0;box-shadow:0 0 0 200vmax var(--tour-scrim)}
 .tour-pop{position:fixed;z-index:96;width:min(320px,calc(100vw - 32px));background:var(--ovl);border:1px solid var(--ovl-b);border-radius:10px;box-shadow:var(--shadow-l);padding:18px 18px 14px;transition:top .25s ease,left .25s ease}
 .tour-pop h2{font-size:15px;font-weight:500;margin-bottom:4px}
@@ -320,7 +330,7 @@ body.sb{min-height:100vh}
 /* a lock form: passkey or password */
 .lk-choice{display:none;gap:8px}
 .js .lk-choice{display:grid;grid-template-columns:1fr 1fr}
-.lk-choice label{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--cb);border-radius:8px;cursor:pointer;color:var(--ink);font-size:13.5px;background:var(--ctl)}
+.lk-choice label{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--cb);border-radius:0;cursor:pointer;color:var(--ink);font-size:13.5px;background:var(--ctl)}
 .lk-choice label:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .lk-choice label.off{opacity:.5;cursor:not-allowed}
 .lk-choice input{accent-color:var(--accent);margin:0}
@@ -329,12 +339,12 @@ body.sb{min-height:100vh}
 .lk-f [data-pw][hidden]{display:none}
 .lk-err{font-size:13px;color:var(--warn);min-height:1em}
 .lk-err:empty{display:none}
-.sb-ib{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;border:1px solid var(--cb);background:var(--s75);color:var(--ink2);cursor:pointer;text-decoration:none}
+.sb-ib{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:0;border:1px solid var(--cb);background:var(--ctl);color:var(--ink2);cursor:pointer;text-decoration:none}
 .sb-ib:hover{color:var(--ink);border-color:var(--cb-h)}
-.sb-av{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:var(--av-bg);color:var(--ink);font:500 12px var(--sans);border:1px solid var(--av-b);cursor:pointer;text-transform:uppercase}
+.sb-av{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--av-bg);color:var(--ink);font:500 12px var(--sans);border:1px solid var(--av-b);cursor:pointer;text-transform:uppercase}
 /* dropdowns (organization, project, help, account) */
 .dd{position:relative;display:flex;align-items:center;min-width:0}
-.dd-m{position:absolute;top:calc(100% + 6px);left:0;z-index:70;min-width:240px;max-width:min(340px,90vw);max-height:70vh;overflow:auto;background:var(--ovl);border:1px solid var(--ovl-b);border-radius:6px;padding:4px;box-shadow:var(--shadow-m)}
+.dd-m{position:absolute;top:calc(100% + 6px);left:0;z-index:70;min-width:240px;max-width:min(340px,90vw);max-height:70vh;overflow:auto;background:var(--ovl);border:1px solid var(--ovl-b);border-radius:8px;padding:4px;box-shadow:var(--shadow-m)}
 .dd-m.end{left:auto;right:0}
 .dd-m[hidden]{display:none}
 .dd-m .dd-l{display:block;padding:6px 8px 4px;font:12px var(--sans);color:var(--ink3)}
@@ -346,38 +356,70 @@ body.sb{min-height:100vh}
 .dd-m .who{padding:8px 8px 6px;font-size:13px;color:var(--ink);overflow-wrap:anywhere}
 .dd-m .who small{display:block;color:var(--ink3);font-size:12px}
 .dd-m form{display:block}
-.sb-body{display:flex;min-height:calc(100vh - 48px)}
-/* the menu: icons with their labels, always open (it no longer widens on hover); a phone opens it from the burger */
-.sb-rail{position:sticky;top:48px;align-self:flex-start;height:calc(100vh - 48px);width:208px;flex:none;z-index:30}
-.sb-rail nav{position:absolute;inset:0 auto 0 0;width:208px;height:100%;display:flex;flex-direction:column;gap:2px;padding:8px;background:var(--head);border-right:1px solid var(--rule);overflow:hidden auto;transition:width .15s ease,box-shadow .15s ease}
-.sb-rail a{display:flex;align-items:center;gap:10px;height:32px;min-height:32px;padding:0 6px;border-radius:6px;color:var(--ink3);text-decoration:none;font-size:14px;white-space:nowrap}
-.sb-rail a .ic{width:20px;height:20px}
+.sb-body{display:flex;flex:1;min-height:0}
+/* the sidebar: full height, its own ground; a phone opens it from the burger */
+.sb-rail{position:sticky;top:0;align-self:flex-start;height:100vh;width:248px;flex:none;z-index:50}
+.sb-side{position:absolute;inset:0 auto 0 0;width:248px;height:100%;display:flex;flex-direction:column;background:var(--side);border-right:1px solid var(--rule)}
+.sb-brand{display:flex;align-items:center;gap:10px;height:56px;padding:0 18px;flex:none;color:var(--ink);text-decoration:none;font:700 16px var(--sans);letter-spacing:-.02em}
+.sb-brand img{width:24px;height:24px;display:block}
+.sb-ws{margin:2px 12px 6px;flex:none}
+.sb-ws .sb-cr{width:100%;height:42px;padding:0 10px;border:1px solid var(--cb);background:var(--ctl);gap:9px}
+.sb-ws .sb-cr:hover,.sb-ws .sb-cr[aria-expanded=true]{border-color:var(--cb-h);background:var(--ctl)}
+.sb-ws .sb-cr .nm{flex:1;text-align:left;font-size:13.5px}
+.sb-ws .av{display:inline-grid;place-items:center;width:22px;height:22px;flex:none;background:var(--ink);color:var(--paper);font:600 11px var(--sans);text-transform:uppercase}
+.sb-ws .dd-m{left:0;right:0;min-width:0}
+.sb-scroll{flex:1;min-height:0;overflow:hidden auto;padding:6px 12px 8px;display:flex;flex-direction:column}
+.sb-scroll>*{flex:none}
+.sb-scroll>.snav{flex:1 0 auto}
+.sb-rail nav{display:flex;flex-direction:column;gap:1px}
+.sb-rail nav+nav{margin-top:6px}
+.sb-rail a{display:flex;align-items:center;gap:10px;height:34px;min-height:34px;padding:0 10px;color:var(--ink2);text-decoration:none;font-size:14px;white-space:nowrap;border-left:2px solid transparent}
+.sb-rail a .ic{width:18px;height:18px;color:var(--ink3)}
 .sb-rail a:hover{background:var(--s200);color:var(--ink)}
-.sb-rail a[aria-current=true],.sb-rail a[aria-current=page]{background:var(--s300);color:var(--ink)}
+.sb-rail a[aria-current=true],.sb-rail a[aria-current=page]{background:var(--s300);color:var(--ink);border-left-color:var(--ink)}
+.sb-rail a[aria-current=true] .ic,.sb-rail a[aria-current=page] .ic{color:var(--ink)}
 .sb-rail a .lbl{overflow:hidden;text-overflow:ellipsis}
 .sb-rail a .cnt{margin-left:auto;font:11px var(--mono);color:var(--ink3)}
-.sb-rail hr{border:0;border-top:1px solid var(--rule);margin:6px 2px}
-.sb-rail .end{margin-top:auto}
+.sb-rail a .cnt.done{color:var(--accent)}
+.sb-rail hr{border:0;border-top:1px solid var(--rule);margin:8px 2px}
+.sb-rail .end{margin-top:auto;padding-top:8px}
+.sb-gl{display:block;padding:14px 10px 6px;font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-rail a.sb-app .dot{width:7px;height:7px;border-radius:50%;background:var(--ink3);flex:none;margin:0 5px}
+.sb-rail a.sb-app .dot.live{background:var(--accent)}
+.sb-rail a.sb-add{color:var(--ink3);font-size:13.5px}
+/* the foot: the plan card (filled from /api/account/glance) and Documentation */
+.sb-foot{flex:none;padding:10px 12px 14px;border-top:1px solid var(--rule);display:grid;gap:6px}
+.sb-plan{border:1px solid var(--cb);background:var(--ctl);padding:12px;display:grid;gap:8px}
+.sb-plan-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.sb-plan-h b{font:600 13.5px var(--sans)}
+.sb-plan-h span{font:12px var(--mono);color:var(--ink3);white-space:nowrap}
+.sb-plan p{font-size:12.5px;color:var(--ink2);line-height:1.4}
+.sb-meter{height:4px;background:var(--s300);overflow:hidden}
+.sb-meter i{display:block;height:100%;width:0;background:var(--ink);transition:width .3s}
+.sb-plan .btn{width:100%}
+.sb-plan[data-trial] .sb-plan-h span{color:var(--accent)}
+.sb-foot a.sb-doc{height:32px;font-size:13.5px}
+.sb-foot a.sb-doc .ext{margin-left:auto;width:13px;height:13px}
 /* the product menu: Studio's second column, its title on top, groups under small labels */
-.sb-menu{position:sticky;top:48px;align-self:flex-start;height:calc(100vh - 48px);width:240px;flex:none;border-right:1px solid var(--rule);background:var(--head);overflow-y:auto}
+.sb-menu{position:sticky;top:56px;align-self:flex-start;height:calc(100vh - 56px);width:240px;flex:none;border-right:1px solid var(--rule);background:var(--head);overflow-y:auto}
 .sb-menu:not(:has(.sb-pm:not(.vh))){display:none}
-.sb-pm .t{display:flex;align-items:center;height:48px;padding:0 20px;border-bottom:1px solid var(--rule);font-size:16px;color:var(--ink)}
+.sb-pm .t{display:flex;align-items:center;height:52px;padding:0 20px;border-bottom:1px solid var(--rule);font:600 14px var(--sans);color:var(--ink)}
 .sb-pm .g{padding:14px 12px 6px}
 .sb-pm .g+.g{border-top:1px solid var(--rule)}
 .sb-pm .gl{display:block;padding:0 8px 6px;font:12px var(--sans);color:var(--ink3)}
-.sb-pm a{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:6px;font-size:13.5px;color:var(--ink2);text-decoration:none}
+.sb-pm a{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:0;font-size:13.5px;color:var(--ink2);text-decoration:none}
 .sb-pm a:hover{background:var(--s200);color:var(--ink)}
 .sb-pm a[aria-current=true],.sb-pm a[aria-current=page]{background:var(--s300);color:var(--ink)}
 .sb-pm a .ic{width:14px;height:14px;color:var(--ink3)}
 /* the page */
 main.wrap{flex:1;min-width:0}
-.sb-page{max-width:1200px;margin:0 auto;padding:32px 40px 64px}
+.sb-page{max-width:1200px;margin:0 auto;padding:36px 44px 72px}
 .sb-page.wide{max-width:1600px}
 .sb-ph{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:24px}
-.sb-ph h1{font-size:24px}
+.sb-ph h1{font-size:30px}
 .sb-ph p{color:var(--ink3);font-size:14px;margin-top:4px;max-width:72ch}
 .sb-ph .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.pnl{background:var(--panel);border:1px solid var(--rule);border-radius:6px;min-width:0}
+.pnl{background:var(--panel);border:1px solid var(--rule);border-radius:10px;min-width:0}
 .pnl-h{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--rule);min-height:48px}
 .pnl-h h2,.pnl-h h3{font-size:14px;color:var(--ink)}
 .pnl-h .aside{font-size:12px;color:var(--ink3)}
@@ -388,7 +430,7 @@ main.wrap{flex:1;min-width:0}
 .sb-modal{margin-top:24px}
 .js .sb-modal{display:none;margin:0}
 .js .sb-modal.open{display:flex;position:fixed;inset:0;z-index:80;background:var(--scrim);align-items:flex-start;justify-content:center;padding:7vh 16px 16px;overflow:auto}
-.sb-mbox{width:100%;max-width:860px;background:var(--paper);border:1px solid var(--ovl-b);border-radius:8px;box-shadow:var(--shadow-l);min-width:0}
+.sb-mbox{width:100%;max-width:860px;background:var(--paper);border:1px solid var(--ovl-b);border-radius:12px;box-shadow:var(--shadow-l);min-width:0}
 .sb-mbox.sm{max-width:440px}
 .sb-mh{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--rule)}
 .sb-mh h2{font-size:16px}
@@ -410,7 +452,7 @@ main.wrap{flex:1;min-width:0}
 .sb-cmd input[type=search]:focus-visible{outline:none;border-color:var(--rule)}
 .sb-cmd ul{list-style:none;max-height:56vh;overflow:auto;padding:6px}
 .sb-cmd li.gl{padding:8px 10px 4px;font-size:12px;color:var(--ink3)}
-.sb-cmd li a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:var(--ink2);text-decoration:none;font-size:14px}
+.sb-cmd li a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:0;color:var(--ink2);text-decoration:none;font-size:14px}
 .sb-cmd li a:hover,.sb-cmd li a.on{background:var(--s300);color:var(--ink)}
 .sb-cmd li a .ic{color:var(--ink3)}
 .sb-cmd .none{padding:16px 20px;color:var(--ink3);font-size:13px}
@@ -422,38 +464,34 @@ main.wrap{flex:1;min-width:0}
 }
 @media (max-width:640px){
   .sb-mid{flex:0 0 auto;margin-left:auto;padding:0 4px}
-  .sb-search{width:32px;height:32px;padding:0;justify-content:center;border-radius:999px}.sb-search span{display:none}
+  .sb-search{width:34px;height:34px;padding:0;justify-content:center}.sb-search span{display:none}
 }
-@media (max-width:767px){
-  .sb-ib.sb-burger{display:inline-flex;margin-left:8px}
+@media (max-width:1023px){
+  .sb-ib.sb-burger{display:inline-flex}
+  .sb-home{display:flex}
+  .sb-top{padding:0 10px}
   .sb-ib,.sb-av{flex:none}
-  .sb-home{width:40px}
-  .sb-rail{position:fixed;left:0;top:48px;height:calc(100vh - 48px);height:calc(100dvh - 48px);width:0;z-index:60}
-  .sb-rail nav{width:0;padding:8px 0;border-right:0;visibility:hidden;transition:width .15s ease,visibility 0s .15s}
-  body.sb-open .sb-rail nav{width:240px;padding:8px;border-right:1px solid var(--rule);box-shadow:var(--shadow-r);visibility:visible;transition:width .15s ease}
-  .sb-cr .nm{max-width:120px}
-  .sb-crumbs .bdg,.sb-fb{display:none}
-  .sb-page{padding:20px 16px 48px}
+  .sb-rail{position:fixed;left:0;top:0;height:100vh;height:100dvh;width:0;z-index:60}
+  .sb-side{width:0;border-right:0;visibility:hidden;overflow:hidden;transition:width .15s ease,visibility 0s .15s}
+  body.sb-open .sb-side{width:272px;border-right:1px solid var(--rule);box-shadow:var(--shadow-r);visibility:visible;transition:width .15s ease}
+  .sb-cr .nm{max-width:140px}
   .sb-acts .btn span{display:none}
   .sb-acts .btn{padding:0 8px}
 }
-/* the org switcher gives way on a phone; the divider before it goes too, the one before the project stays */
-@media (max-width:420px){.sb-crumbs .sb-org{display:none}.sb-crumbs>.sb-div:first-child{display:none}}
+@media (max-width:767px){.sb-page{padding:20px 16px 48px}.sb-crumbs .bdg{display:none}}
 /* a phone: the header's groups closer together, so they fit from 360px without pushing the page sideways */
-@media (max-width:480px){.sb-top{gap:2px;padding-right:8px}.sb-acts{margin-left:4px;gap:4px}.sb-right{gap:2px}.sb-mid{padding:0 2px}}
+@media (max-width:480px){.sb-top{gap:2px;padding-right:8px}.sb-acts{margin-left:4px;gap:4px}.sb-right{gap:4px}.sb-mid{padding:0 2px}}
 /* the narrowest phones: the theme follows the phone's own setting, so its button gives its room to Sign in and the menus */
 @media (max-width:400px){.sb-right>span:first-child{display:none}}
-/* a phone: the project's name gets the header's spare room (the live status stays on the overview), fields at 16px
-   so iOS does not zoom the page on focus, small labels at 12px, the rail's counts too */
+/* a phone: fields at 16px so iOS does not zoom the page on focus, small labels at 12px */
 @media (max-width:560px){
-  .sb-home{width:36px}.sb-ib.sb-burger{margin-left:6px}
   .sb-acts .bdg{display:none}
   .sb-cr .nm{max-width:none}
   input[type=text],input[type=email],input[type=password],input[type=url],input[type=date],input[type=search],select,textarea{font-size:16px}
   .bdg{font-size:12px;height:22px}
   .sb-rail a .cnt{font-size:12px}
 }
-/* Sign in: its word, and on the narrowest phones its icon instead, so the project's name keeps some room */
+/* Sign in: its word, and on the narrowest phones its icon instead */
 .sb-in .ic{display:none}
 @media (max-width:360px){.sb-in .ic{display:block}.sb-in span{display:none}.btn.sb-in{padding:0 7px}}
 /* the phone-only rail links (what the product menu holds there): the menu shows them from 901px */
@@ -732,6 +770,29 @@ document.addEventListener("keydown", function(e){
       .catch(function(x){ err.textContent = gcLkWhy(x); b.disabled = false; });
   });
 })();
+
+// the sidebar's plan card and Get started count, from the server's own words (GET /api/account/glance); without them
+// the card keeps its plan's name and Plans and billing
+(function(){
+  var card = document.getElementById("sb-plan"), gs = document.getElementById("gs-n");
+  if ((!card && !gs) || !window.fetch) return;
+  // after the page's own requests (its stats first)
+  setTimeout(function(){ fetch("/api/account/glance", { credentials: "same-origin", headers: { accept: "application/json" } }).then(function(r){ return r.ok ? r.json() : null; }).then(function(g){
+    if (!g || !g.ok) return;
+    if (gs && g.steps && g.steps.length) {
+      var n = 0; g.steps.forEach(function(x){ if (x.done) n++; });
+      gs.textContent = n + "/" + g.steps.length; if (n === g.steps.length) gs.classList.add("done");
+    }
+    if (!card) return;
+    var nm = document.getElementById("sbp-n"), st = document.getElementById("sbp-s"), m = document.getElementById("sbp-m"), p = document.getElementById("sbp-p"), a = document.getElementById("sbp-a");
+    if (nm && g.plan) nm.textContent = g.plan;
+    if (st) st.textContent = g.status || "";
+    if (g.trial) card.setAttribute("data-trial", "");
+    if (m && g.apps && g.apps.of) { m.hidden = false; var bar = m.querySelector("i"); if (bar) bar.style.width = Math.min(100, Math.round((g.apps.used / g.apps.of) * 100)) + "%"; }
+    if (p && g.note) { p.hidden = false; p.textContent = g.note; }
+    if (a && g.action && g.action.href) { a.textContent = g.action.label; a.setAttribute("href", g.action.href); a.className = "btn sm" + (g.action.primary ? "" : " ghost"); }
+  }).catch(function(){}); }, 400);
+})();
 `;
 
 // --------------------------------------------------------------------------------------------- the document
@@ -796,6 +857,8 @@ export interface StudioOptions {
    * into the page).
    */
   link?: { locked: boolean } | null;
+  /** Which workspace link is the page's own: Get started, Home (the apps), or none (an app's pages mark the app). */
+  here?: "start" | "home" | null;
 }
 
 const railLink = (r: RailItem): string =>
@@ -815,31 +878,40 @@ function productMenu(m: ProductMenu): string {
   return `<nav class="sb-pm"${m.view ? ` data-v="${esc(m.view)}"` : ""} aria-label="${esc(m.title)}"><div class="t">${esc(m.title)}</div>${groups}</nav>`;
 }
 
-/** The header: home, the organization and project switchers, Connect; Feedback, search, help and the account. */
-function header(o: StudioOptions): string {
-  const orgMenu = o.org
-    ? `<div class="dd sb-org"><button class="sb-cr" type="button" data-dd aria-haspopup="menu" aria-expanded="false"><span class="nm">${esc(o.org.name)}</span>${
+/**
+ * The workspace switcher at the top of the sidebar: the organization (the account) with its plan, and its pages; on a
+ * private link a static "Private link" box.
+ */
+function workspace(o: StudioOptions): string {
+  return o.org
+    ? `<div class="dd sb-org sb-ws"><button class="sb-cr" type="button" data-dd aria-haspopup="menu" aria-expanded="false"><span class="av" aria-hidden="true">${esc((o.org.name.replace(/^@/, "").charAt(0) || "?").toUpperCase())}</span><span class="nm">${esc(o.org.name)}</span>${
         o.org.plan ? badge(o.org.plan) : ""
       }${icon("chevrons", 14)}</button><div class="dd-m" role="menu" hidden><span class="dd-l">Organization</span><a href="${esc(o.org.href)}" aria-current="true">${esc(
         o.org.name,
-      )}</a><hr><a href="/account">${icon("box", 14)}All projects</a><a href="/account/billing">${icon("receipt", 14)}Billing</a><a href="/account#settings">${icon(
+      )}</a><hr><a href="/account">${icon("box", 14)}All apps</a><a href="/account/billing">${icon("receipt", 14)}Billing</a><a href="/account#settings">${icon(
         "settings",
         14,
       )}Account settings</a></div></div>`
-    : `<span class="sb-cr static sb-org">${o.link?.locked ? `<span class="sb-lk" title="Protected">${icon("lock", 13)}</span>` : ""}<span class="nm">Private link</span>${badge("Free")}</span>`;
+    : `<div class="sb-ws"><span class="sb-cr static sb-org">${o.link?.locked ? `<span class="sb-lk" title="Protected">${icon("lock", 13)}</span>` : ""}<span class="nm">Private link</span>${badge("Free")}</span></div>`;
+}
+
+/** The header: the project switcher (or the page's name), Connect; search, the theme, help and the account. */
+function header(o: StudioOptions): string {
   const p = o.project;
   let projectMenu = "";
   if (p) {
     const list = (o.projects ?? []).map((x) => `<a href="/account/apps/${esc(x.id)}"${x.id === p.id ? ' aria-current="true"' : ""}>${esc(x.name)}</a>`).join("");
     projectMenu = o.org
-      ? `${DIVIDER}<div class="dd"><button class="sb-cr" type="button" data-dd aria-haspopup="menu" aria-expanded="false"><span class="nm" id="hname">${esc(p.name)}</span>${icon(
+      ? `<div class="dd"><button class="sb-cr" type="button" data-dd aria-haspopup="menu" aria-expanded="false"><span class="nm" id="hname">${esc(p.name)}</span>${icon(
           "chevrons",
           14,
-        )}</button><div class="dd-m" role="menu" hidden><span class="dd-l">Projects</span>${list}<hr><a href="/account">${icon("box", 14)}All projects</a><a href="/account/new">${icon(
+        )}</button><div class="dd-m" role="menu" hidden><span class="dd-l">Apps</span>${list}<hr><a href="/account">${icon("box", 14)}All apps</a><a href="/account/new">${icon(
           "plus",
           14,
-        )}New project</a></div></div>`
-      : `${DIVIDER}<span class="sb-cr static"><span class="nm" id="hname">${esc(p.name)}</span></span>`;
+        )}New app</a></div></div>`
+      : `<span class="sb-cr static"><span class="nm" id="hname">${esc(p.name)}</span></span>`;
+  } else {
+    projectMenu = `<span class="sb-cr static"><span class="nm">${esc(o.title.split(" | ")[0] ?? "")}</span></span>`;
   }
   const protect = o.link && !o.link.locked ? `<button class="btn sm ghost" type="button" data-open="m-protect" id="hprotect">${icon("lock", 14)}<span>Protect</span></button>` : "";
   const connect = o.connect
@@ -858,15 +930,15 @@ function header(o: StudioOptions): string {
   const me = o.user
     ? `<div class="dd"><button class="sb-av" type="button" data-dd aria-haspopup="menu" aria-expanded="false" aria-label="Account">${esc((o.user.label.replace(/^@/, "").charAt(0) || "?").toUpperCase())}</button><div class="dd-m end" role="menu" hidden><div class="who">${esc(
         o.user.label,
-      )}${o.user.sub ? `<small>${esc(o.user.sub)}</small>` : ""}</div><hr><a href="/account">${icon("box", 14)}All projects</a><a href="/account#settings">${icon("settings", 14)}Account settings</a><a href="/account/billing">${icon(
+      )}${o.user.sub ? `<small>${esc(o.user.sub)}</small>` : ""}</div><hr><a href="/account">${icon("box", 14)}All apps</a><a href="/account#settings">${icon("settings", 14)}Account settings</a><a href="/account/billing">${icon(
         "receipt",
         14,
       )}Billing</a><hr><form method="post" action="/logout"><button type="submit">${icon("logout", 14)}Sign out</button></form></div></div>`
     : `<a class="btn sm ghost sb-in" href="/login" aria-label="Sign in">${icon("user", 14)}<span>Sign in</span></a>`;
   return `<header class="sb-top">
 <button class="sb-ib sb-burger" type="button" data-burger aria-label="Menu" aria-expanded="false">${icon("menu", 15)}</button>
-<a class="sb-home" href="${o.user ? "/account" : "https://genclass.dev/"}" aria-label="${o.user ? "All projects" : "GenClass"}">${MARK}</a>
-<nav class="sb-crumbs" aria-label="Breadcrumb" data-tour="${o.org ? "10|Your apps|Switch apps, or go to your organization." : "10|Your app|You're looking at this app's dashboard."}">${DIVIDER}${orgMenu}${projectMenu}</nav>
+<a class="sb-home" href="${o.user ? "/account" : "https://genclass.dev/"}" aria-label="${o.user ? "All apps" : "GenClass"}">${MARK}</a>
+<nav class="sb-crumbs" aria-label="Breadcrumb" data-tour="${o.org ? "10|Your apps|Switch apps here or in the menu." : "10|Your app|You're looking at this app's dashboard."}">${projectMenu}</nav>
 ${acts}
 <div class="sb-mid"><button class="sb-search" type="button" data-open="m-cmd" aria-label="Search" data-tour="20|Search|Find any page, problem or setting.">${icon("search", 15)}<span>Search pages, problems, settings…</span><kbd>⌘K</kbd></button></div>
 <div class="sb-right">
@@ -896,7 +968,7 @@ function commandMenu(o: StudioOptions): string {
   for (const r of [...o.rail.flat(), ...(o.railEnd ?? [])]) if (!r.phoneOnly) add(o.project ? "Project" : "Organization", r.label, r.href, r.icon);
   for (const m of o.menus ?? []) for (const g of m.groups) for (const i of g.items) add(m.title, i.label, i.href, i.icon ?? "file");
   for (const c of o.commands ?? []) add(c.group, c.label, c.href, c.icon ?? "file");
-  for (const p of o.projects ?? []) add("Projects", p.name, `/account/apps/${p.id}`, "box");
+  for (const p of o.projects ?? []) add("Apps", p.name, `/account/apps/${p.id}`, "box");
   const list = Object.entries(groups)
     .map(([g, items]) => `<li class="gl">${esc(g)}</li>${items.join("")}`)
     .join("");
@@ -960,6 +1032,23 @@ const sizesOnly = (css: string): string =>
 export function studioPage(nonce: string, o: StudioOptions): string {
   const rail = o.rail.map((g) => g.map(railLink).join("")).join("<hr>");
   const end = o.railEnd?.length ? `<div class="end">${o.railEnd.map(railLink).join("")}</div>` : "";
+  const here = o.here ?? null;
+  const cur = (on: boolean): string => (on ? ' aria-current="page"' : "");
+  // signed in: Get started (its steps done, from /api/account/glance), Home (the apps), each app, New app
+  const work = o.org
+    ? `<nav class="sb-nav" aria-label="Workspace"><a href="/account/get-started"${cur(here === "start")}>${icon("rocket", 18)}<span class="lbl">Get started</span><span class="cnt" id="gs-n"></span></a><a href="/account"${cur(here === "home")}>${icon("home", 18)}<span class="lbl">Home</span></a><span class="sb-gl">Apps</span>${(o.projects ?? [])
+        .map((x) => `<a class="sb-app" href="/account/apps/${esc(x.id)}"${cur(!!o.project && o.project.id === x.id)}>${icon("box", 16)}<span class="lbl">${esc(x.name)}</span></a>`)
+        .join("")}<a class="sb-add" href="/account/new">${icon("plus", 16)}<span class="lbl">New app</span></a></nav>`
+    : "";
+  // the plan card: the server's words for the plan (filled from /api/account/glance), and Plans and billing
+  const plan = o.org
+    ? `<div class="sb-plan" id="sb-plan"><div class="sb-plan-h"><b id="sbp-n">${esc(o.org.plan ?? "Free")}</b><span id="sbp-s">plan</span></div><div class="sb-meter" id="sbp-m" hidden><i></i></div><p id="sbp-p" hidden></p><a class="btn sm ghost" id="sbp-a" href="/account/billing">Plans and billing</a></div>`
+    : "";
+  const side = `<div class="sb-side"><a class="sb-brand" href="${o.user ? "/account" : "https://genclass.dev/"}">${MARK}<span>GenClass</span></a>
+${workspace(o)}
+<div class="sb-scroll">${work}${o.project ? `<span class="sb-gl">${esc(o.project.name)}</span>` : ""}<nav class="snav" id="snav" aria-label="${esc(o.railLabel)}" data-tour="40|Menu|Every part of your dashboard. Let's open each one.">${rail}${end}</nav></div>
+<div class="sb-foot">${plan}<nav aria-label="Help"><a class="sb-doc" href="https://genclass.dev/docs" target="_blank" rel="noopener">${icon("book", 18)}<span class="lbl">Documentation</span><span class="ext">${icon("external", 13)}</span></a></nav></div>
+</div>`;
   const menus = o.menus?.length ? `<aside class="sb-menu">${o.menus.map(productMenu).join("")}</aside>` : "";
   return scaleStyles(`<!doctype html>
 <html lang="en">
@@ -970,19 +1059,23 @@ export function studioPage(nonce: string, o: StudioOptions): string {
 <meta name="referrer" content="${o.account ? "same-origin" : "no-referrer"}">
 <title>${esc(o.title)}</title>
 ${ICON_LINKS}
-${THEME_COLOR_METAS("#121212", "#fcfcfc")}
+${THEME_COLOR_METAS("#0C0E12", "#FAF8F4")}
 <script nonce="${nonce}">${THEME_HEAD_JS}</script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Source+Code+Pro:wght@400;500&display=swap">
+<link rel="stylesheet" href="${STUDIO_FONTS}">
 <style nonce="${nonce}">${STUDIO_CSS}${o.css ?? ""}</style>
 </head>
 <body class="sb"${o.tour ? ` data-tour-auto="${esc(o.tour)}"` : ""}>
 <a class="skip" href="#mc">Skip to content</a>
+<div class="sb-shell">
+<div class="sb-rail">${side}</div>
+<div class="sb-col">
 ${header(o)}
 <div class="sb-body">
-<div class="sb-rail"><nav class="snav" id="snav" aria-label="${esc(o.railLabel)}" data-tour="40|Menu|Every part of your dashboard. Let's open each one.">${rail}${end}</nav></div>
 ${menus}
 <main class="wrap" id="main">${o.body}</main>
+</div>
+</div>
 </div>
 ${commandMenu(o)}
 ${o.link && !o.link.locked ? protectDialog() : ""}

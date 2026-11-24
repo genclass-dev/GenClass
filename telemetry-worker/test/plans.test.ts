@@ -251,10 +251,12 @@ describe("the dashboard is free: every app opens it, with an account or without"
     // a fourth app is created and waits for a plan of its own (plans per project, version 4: test/project-plans.test.ts)
     const fourth = await call(env, "POST", "/api/account/projects", { body: { name: "d" }, cookie });
     expect(fourth.status).toBe(201);
-    // Free chosen for it on its plan page first (until then the app's page opens that plan page)
-    expect((await call(env, "GET", `/account/apps/${apps[0]!.id}`, { cookie })).headers.get("location")).toBe(`/account/billing?project=${apps[0]!.id}`);
-    expect((await call(env, "POST", `/api/billing/projects/${apps[0]!.id}/free`, { cookie, body: { reason: "trying" } })).status).toBe(200);
-    const page = await text(call(env, "GET", `/account/apps/${apps[0]!.id}`, { cookie }));
+    // the app Free covers opens its dashboard at once, no plan chosen first (set up first, 2026-11-24); the ones past
+    // Free's one app open their plan page
+    const opened = await call(env, "GET", `/account/apps/${apps[0]!.id}`, { cookie });
+    expect(opened.status).toBe(200);
+    expect((await call(env, "GET", `/account/apps/${apps[1]!.id}`, { cookie })).headers.get("location")).toBe(`/account/billing?project=${apps[1]!.id}`);
+    const page = await opened.text();
     expect(page).not.toContain("has no dashboard");
     // the sections are there and say which plans have them; no forms
     expect(page).toContain('<p class="intro">Included in Pro, Business and Enterprise. <a href="/account/billing">See plans</a></p>');

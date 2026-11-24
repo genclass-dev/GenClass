@@ -108,13 +108,17 @@ describe("a locked private link: sign in, add the app to the account, see the pl
     expect(mine).toContain('<a class="btn green" href="/account/billing">See plans</a>');
     // the app's own page: the key and the Connect panel, the plans, no stats
     const id = String(sql.rows("SELECT id FROM projects WHERE token = ?", anon.token)[0]!.id);
-    // with a plan on sale the app's page opens its plan page first, until a plan is chosen there (plans.json version 5)
-    expect((await call(env, "GET", `/account/apps/${id}`, { cookie })).headers.get("location")).toBe(`/account/billing?project=${id}`);
-    sql.db.prepare("UPDATE projects SET plan_chosen = ? WHERE id = ?").run(now().toISOString(), id);
-    const app = await text(call(env, "GET", `/account/apps/${id}`, { cookie }));
+    // with a plan on sale the app's page still opens at once, no plan chosen first (set up first, 2026-11-24)
+    const opened = await call(env, "GET", `/account/apps/${id}`, { cookie });
+    expect(opened.status).toBe(200);
+    const app = await opened.text();
     expect(app).toContain('<h2 id="lock-h">This app\'s plan has no dashboard.</h2>');
     expect(app).toContain('<div class="acts"><a class="btn green" href="/account/billing">See plans</a></div>');
-    expect(app).not.toMatch(/trial/i);
+    // nothing offers a trial: not the page's words (the frame's CSS and script only name the plan card's data-trial),
+    // nor the sidebar's plan card, which the account's glance fills in
+    expect(app.replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/g, "")).not.toMatch(/trial/i);
+    const g = (await (await call(env, "GET", "/api/account/glance", { cookie })).json()) as any;
+    expect([g.trial, g.action, g.sold.days]).toEqual([false, { label: "Upgrade to Pro", href: "/account/billing?plan=pro&start=1", primary: true }, 0]);
     const locked = await call(env, "GET", `/api/account/projects/${id}/stats`, { cookie });
     expect(locked.status).toBe(402);
     expect(await locked.json()).toEqual({ ok: false, error: "this app's plan has no dashboard; see the plans at https://genclass.dev/account/billing", locked: true, upgrade_url: "https://genclass.dev/account/billing" });

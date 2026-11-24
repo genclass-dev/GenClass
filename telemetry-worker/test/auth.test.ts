@@ -2009,7 +2009,7 @@ describe("accounts: the Connect dialog and the Studio header", () => {
   });
 });
 
-describe("accounts: the agent link (POST /api/account/projects/<id>/link) and Studio's New project (/account/new)", () => {
+describe("accounts: the agent link (POST /api/account/projects/<id>/link) and Studio's New app (/account/new)", () => {
   it("makes a private link for an owned app, shown once: it opens the stats the MCP server reads; a new one turns the old one off", async () => {
     const { env, sql } = setup();
     const { cookie } = await signedIn(env);
@@ -2053,7 +2053,7 @@ describe("accounts: the agent link (POST /api/account/projects/<id>/link) and St
     expect((await call(env, "GET", path, { cookie: ada.cookie })).status).toBe(405);
   });
 
-  it("/account/new: Studio's Create a new project form, for a signed-in account; it posts to the projects API and opens Connect", async () => {
+  it("/account/new: Studio's Create a new app form, for a signed-in account; it posts to the projects API and opens Connect", async () => {
     const { env } = setup();
     const signedOut = await call(env, "GET", "/account/new", {});
     expect(signedOut.status).toBe(302);
@@ -2062,19 +2062,32 @@ describe("accounts: the agent link (POST /api/account/projects/<id>/link) and St
     const r = await call(env, "GET", "/account/new", { cookie });
     expect(r.status).toBe(200);
     const html = await r.text();
-    expect(html).toContain("<h1>Create a new project</h1>");
+    expect(html).toContain("<title>New app | GenClass</title>");
+    expect(html).toContain("<h1>Create a new app</h1>");
     expect(html).toContain('<form class="pnl newp" id="new-app" novalidate>');
     expect(html).toContain("<option>ada&#39;s Org</option>");
+    expect(html).toContain('<label for="appname">App name</label>');
+    expect(html).toContain('<button class="btn" type="submit" id="newgo"><span>Create app</span></button>');
+    expect(html).toContain('err.textContent = "Give the app a name."');
     expect(html).toContain('gcPost("/api/account/projects", { name: name.value })');
-    // a new app goes to its plan page first (Team large, Free small), which goes on to Connect
-    expect(html).toContain('"/account/billing?project=" + encodeURIComponent(j.project.id) + "&new=1"');
+    // set up first, the trial last (the owner, 2026-11-24): a new app opens its dashboard with Connect, no plan page
+    expect(html).toContain('location.href = "/account/apps/" + encodeURIComponent(j.project.id) + "#connect";');
+    expect(html).not.toContain("/account/billing?project=");
+    expect(html).not.toContain("Project name");
+    expect(html).not.toContain("Create new project");
     expect(html).toContain('<a class="btn ghost" href="/account">Cancel</a>');
-    // the Projects page offers it, and lists each project as a card
+    // Home (the Apps page) offers it (its button, its grid's tile and the sidebar's New app), and lists each app as a card
     await call(env, "POST", "/api/account/projects", { body: { name: "Shop" }, cookie });
     const projects = await (await call(env, "GET", "/account", { cookie })).text();
-    expect(projects).toContain('<a class="btn sm" href="/account/new" id="newproj">');
+    expect(projects).toMatch(/<a class="btn sm" href="\/account\/new" id="newproj">.*<span>New app<\/span><\/a>/);
+    expect(projects).toMatch(/<a class="pnew" href="\/account\/new">.*New app<\/a>/);
+    expect(projects).toMatch(/<a class="sb-add" href="\/account\/new">.*<span class="lbl">New app<\/span><\/a>/);
     expect(projects).toContain('<li class="pcard" data-name="shop">');
-    expect(projects).toContain("<h1>Projects</h1>");
+    expect(projects).toContain("<h1>Apps</h1>");
+    expect(projects).toContain('placeholder="Search your apps" aria-label="Search your apps"');
+    expect(projects).toContain('<p class="quiet hidden" id="pnone">No app matches your search.</p>');
+    expect(projects).not.toContain("<h1>Projects</h1>");
+    expect(projects).not.toMatch(/<span>New project<\/span>|Search for a project|No project matches/);
     expect(projects).toContain("<h1>Account settings</h1>");
   });
 
