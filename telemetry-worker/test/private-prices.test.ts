@@ -43,7 +43,7 @@ const sessionsOf = (s: ReturnType<typeof fakeStripe>) => s.calls.filter((c) => c
 
 describe("private prices (PLANS_PRIVATE)", () => {
   it("plans.json has one price for Pro; the secret adds one for its countries, and both lookup keys give Pro", () => {
-    expect(PRO.price_usd_cents.monthly).toBe(5000);
+    expect(PRO.price_usd_cents.monthly).toBe(2500);
     usePrivatePlans(undefined);
     expect(priceFor(PRO, "ZZ").stripe_lookup_keys.monthly).toBe("genclass_team_monthly");
     expect(planByLookupKey("genclass_team_zz_monthly")).toBeNull();
@@ -67,14 +67,14 @@ describe("private prices (PLANS_PRIVATE)", () => {
 
   it("the price text: the visitor's country's, else plans.json's, and never the other prices", () => {
     usePrivatePlans(PRIVATE);
-    expect(priceText(PRO, "ZZ")).toBe("$20 / developer / month");
-    expect(priceText(PRO, "US")).toBe("$50 / developer / month");
-    expect(priceText(PRO, null)).toBe("$50 / developer / month");
-    expect(priceText(PRO)).toBe("$50 / developer / month");
+    expect(priceText(PRO, "ZZ")).toBe("$20 / month");
+    expect(priceText(PRO, "US")).toBe("$25 / month");
+    expect(priceText(PRO, null)).toBe("$25 / month");
+    expect(priceText(PRO)).toBe("$25 / month");
     expect(priceText(planById("free"), "ZZ")).toBe("$0");
     expect(priceText(planById("enterprise"), "ZZ")).toBe("By agreement");
-    expect(problemsLock("https://genclass.dev/account/billing", "ZZ").price).toBe("$20 / developer / month");
-    expect(problemsLock("https://genclass.dev/account/billing").price).toBe("$50 / developer / month");
+    expect(problemsLock("https://genclass.dev/account/billing", "ZZ").price).toBe("$20 / month");
+    expect(problemsLock("https://genclass.dev/account/billing").price).toBe("$25 / month");
   });
 
   it("countryOf reads Cloudflare's request.cf.country, and nothing else", () => {
@@ -130,17 +130,17 @@ describe("private prices (PLANS_PRIVATE)", () => {
   it("the billing page and the genclass command show the visitor's price, and nothing about other prices", async () => {
     const b = await buyer();
     const zz = await (await call(b.env, "GET", "/account/billing", { cookie: b.cookie, country: "ZZ" })).text();
-    expect(zz).toContain('<p class="price">$20 / developer / month</p>');
-    expect(zz).not.toContain("$50");
+    expect(zz).toContain('<p class="price">$20 / month</p>');
+    expect(zz).not.toContain("$25");
     const us = await (await call(b.env, "GET", "/account/billing", { cookie: b.cookie, country: "US" })).text();
-    expect(us).toContain('<p class="price">$50 / developer / month</p>');
+    expect(us).toContain('<p class="price">$25 / month</p>');
     expect(us).not.toContain("$20");
     expect(us).not.toContain("Zedland");
     setNow(new Date(Date.parse(CLI_ACCOUNT_FROM) + 3_600_000));
     const t = setup(LIVE);
     const me = await signedIn(t.env, "grace@example.com");
     const token = await cliToken(t.env, me.cookie);
-    for (const [country, want] of [["ZZ", "$20 / developer / month"], ["FR", "$50 / developer / month"]] as const) {
+    for (const [country, want] of [["ZZ", "$20 / month"], ["FR", "$25 / month"]] as const) {
       const res = await call(t.env, "GET", "/api/cli/account", { bearer: token, origin: null, country });
       const cli = (await res.json()) as any;
       expect(res.status, JSON.stringify(cli)).toBe(200);

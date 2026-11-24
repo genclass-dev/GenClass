@@ -69,14 +69,14 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     expect(offered.offer).toEqual({
       // the plan id stays team; its name is Pro since 2026-11-12
       plan: { id: "team", name: "Pro" },
-      price: "$50 / developer / month",
+      price: "$25 / month",
       summary: teamPlan.summary,
       features: teamPlan.features.filter((f) => f.available && !/^Everything in /.test(f.text)).map((f) => f.text).slice(0, 12),
       // Pro is the account's (plans.json version 5), bought on the plan page of its first app on Free
       checkout_url: `https://genclass.dev/account/billing?project=${app.id}&from=cli`,
       // an account that has never had a subscription starts with Pro's 3 days free (src/billing.ts trialFor)
       trial_days: 3,
-      // Pro is per developer since version 5, not sold by units of apps
+      // Pro is flat for the account since version 7, not sold by units of apps
       apps_per_unit: null,
       // Free covers one app since version 5
       free: { name: "Free", apps: 1, history_days: 7, suggestions_shown: 1, live_fixes: 100 },
@@ -128,6 +128,7 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     expect(PLANS.map((p) => [p.id, suggestionLimits(p)])).toEqual([
       ["free", { per_day: 3, shown: 1 }],
       ["team", { per_day: 30, shown: null }],
+      ["business", { per_day: 60, shown: null }],
       ["enterprise", { per_day: 100, shown: null }],
     ]);
     // a plan that leaves the numbers out gets 3 runs a day and 3 items (Free's numbers before 2026-11-12)
@@ -247,7 +248,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       cached_at: null,
       // the plan page that starts Pro from the command, and what Pro is
       upgrade_url: "https://genclass.dev/account/billing?plan=pro&from=cli",
-      upgrade_plan: { name: "Pro", price: "$50 / developer / month", trial_days: 3 },
+      upgrade_plan: { name: "Pro", price: "$25 / month", trial_days: 3 },
       remaining_today: 3,
       limited: false,
     });
@@ -399,7 +400,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       designs_locked: 2,
       cached_at: null,
       upgrade_url: "https://genclass.dev/account/billing?plan=pro&from=cli",
-      upgrade_plan: { name: "Pro", price: "$50 / developer / month", trial_days: 3 },
+      upgrade_plan: { name: "Pro", price: "$25 / month", trial_days: 3 },
       remaining_today: 2,
       limited: false,
     });
@@ -543,7 +544,7 @@ describe("genclass command: GET /api/cli/app (src/cli.ts)", () => {
     expect(j.recent).toEqual([]);
     expect(j.typeSeries.every((b: any) => Object.keys(b.counts).join() === "problems")).toBe(true);
     expect(j.typeSeries.reduce((n: number, b: any) => n + b.counts.problems, 0)).toBe(1);
-    expect(j.locked.problems).toEqual({ plan: "Pro", upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`, trial_days: 3, price: "$50 / developer / month" });
+    expect(j.locked.problems).toEqual({ plan: "Pro", upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`, trial_days: 3, price: "$25 / month" });
     expect(JSON.stringify(j)).not.toContain("/checkout");
     // nothing a page typed, and no session of the account
     expect(JSON.stringify(j)).not.toContain("SECRET PAGE TEXT");

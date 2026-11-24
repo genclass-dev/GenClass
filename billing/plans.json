@@ -1,11 +1,11 @@
 {
-  "_about": "The one place GenClass plans are defined. telemetry-worker/src/plans.ts imports this file (limits, entitlements, Stripe lookup keys, the billing page) and genclass.dev's site reads it (the pricing page). Three plans since version 3 (2026-11-11): Free, Team (named Pro since 2026-11-12) and Enterprise; version 4 (2026-11-12) sold a plan per project; version 5 (2026-11-13, below) sells Pro for the account again. The history up to version 4 follows. Free is what finds, shows and fixes the problems: the open-source runtime with every mode and its on-device model, the coding-agent loop on the developer's machine, the dashboard's problems for an account's first 3 projects (the last 7 days shown; a 4th project on Free is locked until it has a plan), and 100 problems fixed live a month per project (limits.live_fixes_per_month; past it the runtime is told to observe only until the month ends) and genclass-dev[bot] on public repositories. Team is sold per project (per_project true: one Stripe subscription of quantity 1 per project, its metadata naming the project; everyone on the account's team sees it; telemetry-worker/src/stripe.ts) and adds what a team uses: genclass-dev[bot] on private repositories, visitor analytics, forwarding, export, 90 days of history and members. Enterprise is agreed by email: a null monthly price means the plan is not sold on the site, and an account gets it from GenClass's own grant (accounts.comp_until, set by hand to the end of the agreement; accounts.comp_plan names the plan granted, grant_plan when it is empty). The classifier a person from GenClass trains is in Enterprise only. retired_plans lists the plan ids GenClass sold before (Pro and Custom until 2026-10-19, Individual until 2026-10-22): their Stripe products and prices stay GenClass's own, so a subscription to one is still cancelled with its account, opens Manage billing and is reported to the owner while it bills, but it gives no plan (it reads as Free). The worker's Stripe code and scripts/stripe-setup.mjs sell any plan given a monthly price above 0, its stripe_lookup_keys and a stripe_tax_code. Prices are US cents (per project for a per_project plan, per seat for a per_seat plan); a null yearly price means no yearly option. limits.apps null means no plan limit (the worker still caps an account at 200 apps against abuse); limits.seats is how many people a plan that is not per_seat holds (null: no limit); limits.history_days is what the dashboard shows, and data is never deleted before 90 days whatever the plan, so the longer history is there the moment an account upgrades. Ingest never depends on the plan: an app's visitor analytics are counted while its plan leaves them out, and shown once it includes them. Pro (id team; named Team until 2026-11-12) has a trial: trial_days (3) days free at Checkout, a card taken up front and charged when it ends unless cancelled, once per account (telemetry-worker/src/billing.ts trialFor). Feature lines with available false are shown as coming next. The entitlement github_private is what lets genclass-dev[bot], the GitHub App, review an account's private repositories (telemetry-worker/src/github/entitlement.ts); public repositories are reviewed for everyone, whatever this file says. A self-hosted collector sets PLAN_GATES = \"open\" and gives every account the grant plan. managed_payments true would sell a plan through Stripe Managed Payments (only for fully automated digital products; telemetry-worker/README.md, Paid plans). `suggestions` (2026-11-12): what `genclass suggest` gives a plan (telemetry-worker/src/suggest.ts): `per_day`, model runs an account has a day, and `shown`, how many items of the plan it is shown (null: all); the measured checks themselves are free for everyone. Entitlements `problems` (the problem lists, pages, activity and fix prompts on the dashboard and in the genclass command; Free shows only the totals) and `ask` (genclass ask) were added 2026-11-12 (the owner's 'limit free fully'); a plan file without the key gives them. Version 5 (2026-11-13, the owner's call): Pro is bought for the account again, not per app, and per developer (per_seat: the subscription's quantity is how many developers, the owner included, US$15 each a month); it covers up to 3 apps (limits.apps) whatever the number of developers, the oldest first, and a later app waits on its plan page, where more apps are Enterprise's, by email. A subscription bought per project under version 4 still covers its app, is not counted in the 3 and holds the whole team (no seat count); an account subscription from before version 5 keeps covering the apps the account had when migration 0021 was applied (accounts.apps_kept) while it lasts. Free covers one app. GenClass's grants cover every app. The genclass command is Pro's (2026-11-13, the owner's 'make the entire CLI paid'): a CLI session without Pro, its trial or a paying team gets 402 from every /api/cli route but the overview and the account; Free is the website's, with the owner's words for its list: one app, a limited dashboard, the open-source basics, and (the owner's 'keep them free') the GitHub App on public repositories, the page check and 100 live fixes a month. Pro is US$50 a developer a month since 2026-11-16 (US$15 from 2026-11-11). The Worker secret PLANS_PRIVATE can add prices to a plan (telemetry-worker/src/plans.ts usePrivatePlans); this file holds none.",
-  "version": 5,
+  "_about": "The one place GenClass plans are defined. telemetry-worker/src/plans.ts imports this file (limits, entitlements, Stripe lookup keys, the billing page) and genclass.dev's site reads it (the pricing page). Three plans since version 3 (2026-11-11): Free, Team (named Pro since 2026-11-12) and Enterprise; version 4 (2026-11-12) sold a plan per project; version 5 (2026-11-13, below) sells Pro for the account again. The history up to version 4 follows. Free is what finds, shows and fixes the problems: the open-source runtime with every mode and its on-device model, the coding-agent loop on the developer's machine, the dashboard's problems for an account's first 3 projects (the last 7 days shown; a 4th project on Free is locked until it has a plan), and 100 problems fixed live a month per project (limits.live_fixes_per_month; past it the runtime is told to observe only until the month ends) and genclass-dev[bot] on public repositories. Team is sold per project (per_project true: one Stripe subscription of quantity 1 per project, its metadata naming the project; everyone on the account's team sees it; telemetry-worker/src/stripe.ts) and adds what a team uses: genclass-dev[bot] on private repositories, visitor analytics, forwarding, export, 90 days of history and members. Enterprise is agreed by email: a null monthly price means the plan is not sold on the site, and an account gets it from GenClass's own grant (accounts.comp_until, set by hand to the end of the agreement; accounts.comp_plan names the plan granted, grant_plan when it is empty). The classifier a person from GenClass trains is in Enterprise only. retired_plans lists the plan ids GenClass sold before (Pro and Custom until 2026-10-19, Individual until 2026-10-22): their Stripe products and prices stay GenClass's own, so a subscription to one is still cancelled with its account, opens Manage billing and is reported to the owner while it bills, but it gives no plan (it reads as Free). The worker's Stripe code and scripts/stripe-setup.mjs sell any plan given a monthly price above 0, its stripe_lookup_keys and a stripe_tax_code. Prices are US cents (per project for a per_project plan, per seat for a per_seat plan); a null yearly price means no yearly option. limits.apps null means no plan limit (the worker still caps an account at 200 apps against abuse); limits.seats is how many people a plan that is not per_seat holds (null: no limit); limits.history_days is what the dashboard shows, and data is never deleted before 90 days whatever the plan, so the longer history is there the moment an account upgrades. Ingest never depends on the plan: an app's visitor analytics are counted while its plan leaves them out, and shown once it includes them. Pro (id team; named Team until 2026-11-12) has a trial: trial_days (3) days free at Checkout, a card taken up front and charged when it ends unless cancelled, once per account (telemetry-worker/src/billing.ts trialFor). Feature lines with available false are shown as coming next. The entitlement github_private is what lets genclass-dev[bot], the GitHub App, review an account's private repositories (telemetry-worker/src/github/entitlement.ts); public repositories are reviewed for everyone, whatever this file says. A self-hosted collector sets PLAN_GATES = \"open\" and gives every account the grant plan. managed_payments true would sell a plan through Stripe Managed Payments (only for fully automated digital products; telemetry-worker/README.md, Paid plans). `suggestions` (2026-11-12): what `genclass suggest` gives a plan (telemetry-worker/src/suggest.ts): `per_day`, model runs an account has a day, and `shown`, how many items of the plan it is shown (null: all); the measured checks themselves are free for everyone. Entitlements `problems` (the problem lists, pages, activity and fix prompts on the dashboard and in the genclass command; Free shows only the totals) and `ask` (genclass ask) were added 2026-11-12 (the owner's 'limit free fully'); a plan file without the key gives them. Version 5 (2026-11-13, the owner's call): Pro is bought for the account again, not per app, and per developer (per_seat: the subscription's quantity is how many developers, the owner included, US$15 each a month); it covers up to 3 apps (limits.apps) whatever the number of developers, the oldest first, and a later app waits on its plan page, where more apps are Enterprise's, by email. A subscription bought per project under version 4 still covers its app, is not counted in the 3 and holds the whole team (no seat count); an account subscription from before version 5 keeps covering the apps the account had when migration 0021 was applied (accounts.apps_kept) while it lasts. Free covers one app. GenClass's grants cover every app. The genclass command is Pro's (2026-11-13, the owner's 'make the entire CLI paid'): a CLI session without Pro, its trial or a paying team gets 402 from every /api/cli route but the overview and the account; Free is the website's, with the owner's words for its list: one app, a limited dashboard, the open-source basics, and (the owner's 'keep them free') the GitHub App on public repositories, the page check and 100 live fixes a month. Pro is US$50 a developer a month since 2026-11-16 (US$15 from 2026-11-11). The Worker secret PLANS_PRIVATE can add prices to a plan (telemetry-worker/src/plans.ts usePrivatePlans); this file holds none. Version 7 (2026-11-24): four plans, each flat for the account (per_seat false; existing subscriptions keep their price and what they had): Free; Pro (id team, kept so every Pro subscription stays Pro) at US$25 a month for one developer and up to 3 apps, with every feature it had; Business (id business) at US$79 a month for the whole team (no seat limit), up to 10 apps and 180 days; Enterprise by the Contact sales form. Pro and Business start with 3 days free once the account's app is set up.",
+  "version": 7,
   "currency": "usd",
   "contact": "mehar@genclass.dev",
   "grant_plan": "enterprise",
   "retired_plans": ["pro", "custom", "individual"],
-  "footer": "Questions about Pro, Enterprise, your own classifier, self-hosting or invoices? Email mehar@genclass.dev.",
+  "footer": "Questions about a plan, Enterprise, your own classifier, self-hosting or invoices? Contact sales.",
   "plans": [
     {
       "id": "free",
@@ -34,14 +34,14 @@
     {
       "id": "team",
       "name": "Pro",
-      "summary": "Everything for up to 3 apps, per developer.",
-      "price_usd_cents": { "monthly": 5000, "yearly": null },
+      "summary": "Everything for one developer and up to 3 apps.",
+      "price_usd_cents": { "monthly": 2500, "yearly": null },
       "stripe_lookup_keys": { "monthly": "genclass_team_monthly", "yearly": null },
       "stripe_tax_code": "txcd_10103001",
       "managed_payments": false,
-      "per_seat": true,
+      "per_seat": false,
       "trial_days": 3,
-      "limits": { "apps": 3, "history_days": 90, "seats": null, "live_fixes_per_month": null },
+      "limits": { "apps": 3, "history_days": 90, "seats": 1, "live_fixes_per_month": null },
       "suggestions": { "per_day": 30, "shown": null },
       "entitlements": { "dashboard": true, "forwarding": true, "export": true, "analytics": true, "custom_model": false, "github_private": true, "problems": true, "ask": true },
       "features": [
@@ -49,17 +49,37 @@
         { "text": "3 days free to start", "available": true },
         { "text": "Up to 3 apps", "available": true },
         { "text": "The genclass command in your terminal", "available": true },
-        { "text": "Every problem, its pages and a fix prompt", "available": true },
+        { "text": "Every problem with a fix prompt", "available": true },
         { "text": "Ask about your app in plain words", "available": true },
-        { "text": "Every suggestion, plus the model's own ideas", "available": true },
-        { "text": "Website design ideas from sites like yours", "available": true },
         { "text": "Visitor analytics", "available": true },
-        { "text": "Alerts to Sentry, PostHog, Datadog, Slack or a webhook", "available": true },
+        { "text": "Alerts to Slack, Sentry or a webhook", "available": true },
         { "text": "GitHub App on private repositories", "available": true },
         { "text": "Unlimited live fixes", "available": true },
         { "text": "Data export and API", "available": true },
-        { "text": "90 days of history", "available": true },
-        { "text": "Your team on it, priced per developer", "available": true }
+        { "text": "90 days of history", "available": true }
+      ]
+    },
+    {
+      "id": "business",
+      "name": "Business",
+      "summary": "For a team with apps in production.",
+      "price_usd_cents": { "monthly": 7900, "yearly": null },
+      "stripe_lookup_keys": { "monthly": "genclass_business_monthly", "yearly": null },
+      "stripe_tax_code": "txcd_10103001",
+      "managed_payments": false,
+      "per_seat": false,
+      "trial_days": 3,
+      "limits": { "apps": 10, "history_days": 180, "seats": null, "live_fixes_per_month": null },
+      "suggestions": { "per_day": 60, "shown": null },
+      "entitlements": { "dashboard": true, "forwarding": true, "export": true, "analytics": true, "custom_model": false, "github_private": true, "problems": true, "ask": true },
+      "features": [
+        { "text": "Everything in Pro", "available": true },
+        { "text": "3 days free to start", "available": true },
+        { "text": "Up to 10 apps", "available": true },
+        { "text": "Your whole team, no seat limit", "available": true },
+        { "text": "Twice the suggestions a day", "available": true },
+        { "text": "180 days of history", "available": true },
+        { "text": "Priority email support", "available": true }
       ]
     },
     {
@@ -75,11 +95,10 @@
       "suggestions": { "per_day": 100, "shown": null },
       "entitlements": { "dashboard": true, "forwarding": true, "export": true, "analytics": true, "custom_model": true, "github_private": true, "problems": true, "ask": true },
       "features": [
-        { "text": "Everything in Pro", "available": true },
-        { "text": "More than 3 apps", "available": true },
+        { "text": "Everything in Business", "available": true },
+        { "text": "Any number of apps", "available": true },
         { "text": "Your own classifier, trained by us", "available": true },
         { "text": "Our models in our cloud", "available": true },
-        { "text": "The coding-agent loop run for your team", "available": true },
         { "text": "1 year of history", "available": true },
         { "text": "Self-hosting, invoices and a contract", "available": true },
         { "text": "Priority support", "available": true }

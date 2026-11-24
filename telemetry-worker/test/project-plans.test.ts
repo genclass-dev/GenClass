@@ -1,6 +1,8 @@
 // Pro for the account again (billing/plans.json version 5, the owner's decision of 2026-11-13): Pro was US$15 a
 // developer a month for up to 3 of the account's apps (oldest first), everyone on its team included; more apps are
-// Enterprise's, by email. Free covers one app and 100 problems fixed live a month, after which the runtime is told to
+// Enterprise's, by email. Since version 7 (2026-11-24) every plan is flat for the account: Pro US$25 a month for one
+// developer and up to 3 apps, Business US$79 for the whole team and up to 10 apps; a Pro subscription bought per
+// developer before keeps the seats it pays for. Free covers one app and 100 problems fixed live a month, after which the runtime is told to
 // observe only. A subscription bought per project under version 4 still gives the account Pro (and its 3 apps), and
 // GenClass's grants cover every app. Coverage, Checkout and its trial, the webhook, every app's plan page (Continue
 // with Pro, the trial, Email us about Enterprise), the website's redirect to it, the live-fix limit at ingest, and
@@ -32,11 +34,11 @@ beforeEach(() => {
 /** A version-4 subscription of one project as Stripe returns it: GenClass's Pro price, its metadata naming the project. */
 const projectSub = (id: string, accountId: string, customer: string, projectId: string, status = "active") =>
   subscription(id, accountId, customer, "genclass_team_monthly", status, { metadata: { genclass: "1", genclass_account: accountId, genclass_project: projectId } });
-/** The account's own Pro subscription (version 5) with `seats` developers, as Stripe returns it. */
+/** The account's own Pro subscription with `seats` developers (more than 1 only when bought under version 5), as Stripe returns it. */
 const accountSub = (id: string, accountId: string, customer: string, status = "active", seats = 1) =>
   subscription(id, accountId, customer, "genclass_team_monthly", status, { items: { data: [{ id: `si_${id.slice(4)}`, current_period_end: 1_792_000_000, quantity: seats, price: price("genclass_team_monthly") }] } });
-/** The account on Pro, as the webhook leaves it. */
-const paidPro = (sql: Sql, accountId: string, seats = 1) =>
+/** The account on Pro, as the webhook leaves it (seats: only a subscription bought per developer under version 5 has them). */
+const paidPro = (sql: Sql, accountId: string, seats: number | null = null) =>
   setPlan(sql, accountId, "team", { stripe_mode: "live", seats, subscription_id: "sub_acct000001", subscription_status: "active", current_period_end: "2026-11-13T12:00:00.000Z" });
 /** One app paid for on its own, as the version-4 webhook left it. */
 const projectPaid = (sql: Sql, projectId: string) =>
@@ -65,20 +67,25 @@ async function withApps(names: string[], over: Record<string, unknown> = {}) {
   return { ...t, ...a, apps };
 }
 
-describe("plans.json version 5: Pro for the account, per developer, up to 3 apps", () => {
-  it("Pro is $50 a developer a month, sold by seats, for up to 3 apps; Free covers one app and 100 live fixes a month", () => {
-    const [free, team, enterprise] = PLANS;
-    expect(priceText(team!)).toBe("$50 / developer / month");
-    expect(team!.per_project).toBeUndefined();
-    expect(team!.per_seat).toBe(true);
-    expect(team!.apps_per_unit).toBeUndefined();
-    expect(byQuantity(team!)).toBe(true);
-    expect(team!.limits.apps).toBe(3);
+describe("plans.json version 7: Pro and Business for the account, each flat; Pro up to 3 apps, Business up to 10", () => {
+  it("Pro is $25 a month for one developer and up to 3 apps, Business $79 for the whole team and up to 10, neither sold by seats; Free covers one app and 100 live fixes a month", () => {
+    const [free, team, business, enterprise] = PLANS;
+    expect(priceText(team!)).toBe("$25 / month");
+    expect(priceText(business!)).toBe("$79 / month");
+    for (const p of [team!, business!]) {
+      expect(p.per_project, p.id).toBeUndefined();
+      expect(p.per_seat, p.id).toBe(false);
+      expect(p.apps_per_unit, p.id).toBeUndefined();
+      expect(byQuantity(p), p.id).toBe(false);
+      expect(p.limits.live_fixes_per_month, p.id).toBeNull();
+    }
+    expect(team!.limits).toMatchObject({ apps: 3, seats: 1 });
+    expect(business!.limits).toMatchObject({ apps: 10, seats: null });
     expect(free!.limits).toEqual({ apps: 1, history_days: 7, seats: 1, live_fixes_per_month: 100 });
-    expect(team!.limits.live_fixes_per_month).toBeNull();
     expect(enterprise!.limits).toMatchObject({ apps: null, live_fixes_per_month: null });
     expect(team!.features.map((f) => f.text)).toEqual(expect.arrayContaining(["Up to 3 apps", "Unlimited live fixes"]));
-    expect(enterprise!.features.map((f) => f.text)).toContain("More than 3 apps");
+    expect(business!.features.map((f) => f.text)).toEqual(expect.arrayContaining(["Everything in Pro", "Up to 10 apps"]));
+    expect(enterprise!.features.map((f) => f.text)).toContain("Any number of apps");
   });
 });
 
@@ -101,12 +108,13 @@ describe("coverage: what the account's plan covers (src/plans.ts coverage, acces
 
   it("Pro covers the first 3 apps, oldest first, however many seats; a 4th is past it", async () => {
     const t = await withApps(["Shop", "Blog", "Docs", "Extra", "More"]);
-    for (const seats of [1, 2, 5]) {
+    // one developer (version 7), or the developers a subscription bought under version 5 pays for
+    for (const [seats, holds] of [[null, 1], [1, 1], [2, 2], [5, 5]] as const) {
       paidPro(t.sql, t.account.id, seats);
       expect(await plansOf(t), String(seats)).toEqual(["team:paid", "team:paid", "team:paid", "pro_apps", "pro_apps"]);
       const cov = await coverage(t.sql.api, t.account.id, "live", now());
       expect(cov.cap).toBe(3);
-      expect(cov.access).toMatchObject({ source: "paid", seats, apps: 3 });
+      expect(cov.access).toMatchObject({ source: "paid", seats: holds, apps: 3 });
     }
     // a locked app reads as Free, with the cap and the lock
     const cov = await coverage(t.sql.api, t.account.id, "live", now());
@@ -117,6 +125,15 @@ describe("coverage: what the account's plan covers (src/plans.ts coverage, acces
     // bought in test mode: counts only under a test key
     setPlan(t.sql, t.account.id, "team", { stripe_mode: "test" });
     expect(await plansOf(t)).toEqual(["free", "free_projects", "free_projects", "free_projects"]);
+  });
+
+  it("Business covers the first 10 apps, oldest first, and the whole team; an 11th is past it", async () => {
+    const t = await withApps(Array.from({ length: 11 }, (_, i) => `app${i}`));
+    setPlan(t.sql, t.account.id, "business", { stripe_mode: "live", subscription_id: "sub_acct000001", subscription_status: "active", current_period_end: "2026-11-13T12:00:00.000Z" });
+    expect(await plansOf(t)).toEqual([...Array(10).fill("business:paid"), "pro_apps"]);
+    const cov = await coverage(t.sql.api, t.account.id, "live", now());
+    expect(cov.cap).toBe(10);
+    expect(cov.access).toMatchObject({ source: "paid", plan: { id: "business" }, seats: null, apps: 10 });
   });
 
   it("a version-4 subscription of one project gives the account Pro for 3 more apps: an app that pays for itself is not counted", async () => {
@@ -212,7 +229,7 @@ describe("coverage: what the account's plan covers (src/plans.ts coverage, acces
 });
 
 describe("checkout for the account (POST /api/billing/checkout { plan, seats?, project_id? })", () => {
-  it("Pro is bought for the account: one developer by default, adjustable on Stripe; the session names no project", async () => {
+  it("Pro is bought for the account: one, flat (no quantity to adjust on Stripe); the session names no project", async () => {
     const b = await buyer();
     const r = await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team" }, cookie: b.cookie, fetch: b.s.fetch });
     expect(r.status).toBe(200);
@@ -223,23 +240,22 @@ describe("checkout for the account (POST /api/billing/checkout { plan, seats?, p
       client_reference_id: b.account.id,
       "line_items[0][price]": "price_team000001",
       "line_items[0][quantity]": "1",
-      "line_items[0][adjustable_quantity][enabled]": "true",
-      "line_items[0][adjustable_quantity][minimum]": "1",
-      "line_items[0][adjustable_quantity][maximum]": "200",
       allow_promotion_codes: "true",
       "metadata[genclass_plan]": "team",
-      "metadata[genclass_seats]": "1",
       "subscription_data[metadata][genclass_account]": b.account.id,
       // no app's plan page asked: back to the account's billing page
       success_url: "https://genclass.dev/account/billing?done=1",
       cancel_url: "https://genclass.dev/account/billing",
     });
+    // Pro is flat since version 7: nothing to adjust, no seats
+    expect(form!.has("line_items[0][adjustable_quantity][enabled]")).toBe(false);
+    expect(form!.has("metadata[genclass_seats]")).toBe(false);
     // an account subscription: the webhook writes the account, never one app
     expect(form!.has("metadata[genclass_project]")).toBe(false);
     expect(form!.has("subscription_data[metadata][genclass_project]")).toBe(false);
   });
 
-  it("started from an app's plan page: Stripe returns there; the seats asked for are the quantity; another account's app is no page to return to", async () => {
+  it("started from an app's plan page: Stripe returns there; a flat plan is one, whatever seats are sent; another account's app is no page to return to", async () => {
     const b = await buyer();
     const done = () => {
       for (const x of b.s.sessions.values()) x.status = "complete";
@@ -255,7 +271,8 @@ describe("checkout for the account (POST /api/billing/checkout { plan, seats?, p
     expect(sessionsOf(b.s)[0]!.has("metadata[genclass_project]")).toBe(false);
     done();
     expect((await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: b.shop.id, seats: 4 }, cookie: b.cookie, fetch: b.s.fetch })).status).toBe(200);
-    expect(Object.fromEntries(sessionsOf(b.s)[1]!)).toMatchObject({ "line_items[0][quantity]": "4", "metadata[genclass_seats]": "4", success_url: `https://genclass.dev/account/billing?project=${b.shop.id}&done=1` });
+    expect(Object.fromEntries(sessionsOf(b.s)[1]!)).toMatchObject({ "line_items[0][quantity]": "1", success_url: `https://genclass.dev/account/billing?project=${b.shop.id}&done=1` });
+    expect(sessionsOf(b.s)[1]!.has("metadata[genclass_seats]")).toBe(false);
     done();
     const other = await signedIn(b.env, "bob@example.com");
     const theirs = await createApp(b.env, other.cookie, "Theirs");
@@ -269,17 +286,31 @@ describe("checkout for the account (POST /api/billing/checkout { plan, seats?, p
     expect(b.s.calls.length).toBe(before);
   });
 
-  it("an account on Pro cannot buy it again; a server that sells nothing sells nothing", async () => {
+  it("an account on Pro cannot buy it again, and moves to Business by a switch; a server that sells nothing sells nothing", async () => {
     const b = await buyer();
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const sub = accountSub("sub_ada0000001", b.account.id, "cus_ada0000001");
     b.s.subs.set(sub.id, sub);
     expect(await json(deliver(b.env, stripeEvent("customer.subscription.created", sub), b.s.fetch))).toEqual({ received: true, result: "applied" });
-    expect(b.sql.rows("SELECT plan, seats, subscription_id FROM accounts")[0]).toEqual({ plan: "team", seats: 1, subscription_id: "sub_ada0000001" });
+    // Pro is flat (version 7): no seat count is written
+    expect(b.sql.rows("SELECT plan, seats, subscription_id FROM accounts")[0]).toEqual({ plan: "team", seats: null, subscription_id: "sub_ada0000001" });
     const again = await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: b.shop.id }, cookie: b.cookie, fetch: b.s.fetch });
     expect(again.status).toBe(409);
     expect((await again.json() as any).error).toBe("you are already on the Pro plan");
     expect(sessionsOf(b.s)).toEqual([]);
+    // Business is a switch: a Checkout that replaces the Pro subscription once it is paid, with no days free
+    const up = await call(b.env, "POST", "/api/billing/checkout", { body: { plan: "business" }, cookie: b.cookie, fetch: b.s.fetch });
+    expect(up.status).toBe(200);
+    expect(await up.json()).toEqual({ url: expect.stringMatching(/^https:\/\/checkout\.stripe\.com\//), switch: true });
+    const [form] = sessionsOf(b.s);
+    expect(Object.fromEntries(form!)).toMatchObject({
+      "line_items[0][price]": "price_busi000001",
+      "line_items[0][quantity]": "1",
+      "metadata[genclass_plan]": "business",
+      "metadata[genclass_switch_from]": "sub_ada0000001",
+      success_url: "https://genclass.dev/account/billing?done=1&to=business",
+    });
+    expect(form!.has("subscription_data[trial_period_days]")).toBe(false);
     log.mockRestore();
     const none = setup();
     const a = await signedIn(none.env);
@@ -287,7 +318,7 @@ describe("checkout for the account (POST /api/billing/checkout { plan, seats?, p
   });
 });
 
-describe("Pro's trial: 3 days free at Checkout, once per account (src/billing.ts trialFor, the owner's decision of 2026-11-12)", () => {
+describe("the trial of Pro and Business: 3 days free at Checkout, once per account (src/billing.ts trialFor, the owner's decision of 2026-11-12)", () => {
   const checkout = (b: Awaited<ReturnType<typeof buyer>>, projectId: string, extra: Record<string, unknown> = {}) =>
     call(b.env, "POST", "/api/billing/checkout", { body: { plan: "team", project_id: projectId, ...extra }, cookie: b.cookie, fetch: b.s.fetch });
 
@@ -321,6 +352,11 @@ describe("Pro's trial: 3 days free at Checkout, once per account (src/billing.ts
     expect((await again.json() as any).trial_days).toBeNull();
     expect(sessionsOf(b.s)[1]!.has("subscription_data[trial_period_days]")).toBe(false);
     expect(sessionsOf(b.s)[1]!.get("allow_promotion_codes")).toBe("true");
+    // nor does Business: the trial is the account's, whichever plan it was taken on
+    const business = await checkout(b, b.blog.id, { plan: "business" });
+    expect(business.status).toBe(200);
+    expect((await business.json() as any).trial_days).toBeNull();
+    expect(sessionsOf(b.s)[2]!.has("subscription_data[trial_period_days]")).toBe(false);
     // the plan page offers Pro, not a trial
     const page = await text(call(b.env, "GET", `/account/billing?project=${b.shop.id}`, { cookie: b.cookie }));
     expect(page).toContain('data-plan="team" data-pick><span>Start Pro</span>');
@@ -350,7 +386,7 @@ describe("Pro's trial: 3 days free at Checkout, once per account (src/billing.ts
     expect(sessionsOf(s)[0]!.get("subscription_data[trial_period_days]")).toBe("3");
   });
 
-  it("one trial per account: a second app's page while the first's Checkout is open gets that same page; other seats close it for a new one", async () => {
+  it("one trial per account: a second app's page while the first's Checkout is open gets that same page; another plan closes it for a new one", async () => {
     const b = await buyer();
     const first = await checkout(b, b.shop.id);
     expect((await first.json() as any).trial_days).toBe(3);
@@ -358,8 +394,10 @@ describe("Pro's trial: 3 days free at Checkout, once per account (src/billing.ts
     const second = await checkout(b, b.blog.id);
     expect(await second.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000001", trial_days: 3 });
     expect(sessionsOf(b.s)).toHaveLength(1);
-    // asked for 2 developers: the open page is closed and one new page opened, still the account's one trial
-    const more = await checkout(b, b.blog.id, { seats: 2 });
+    // Pro is flat: seats sent change nothing, the same page again
+    expect(await (await checkout(b, b.blog.id, { seats: 2 })).json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000001", trial_days: 3 });
+    // Business instead: the open page is closed and one new page opened, still the account's one trial
+    const more = await checkout(b, b.blog.id, { plan: "business" });
     expect(await more.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_000002", trial_days: 3 });
     expect(b.s.sessions.get("cs_test_000001")!.status).toBe("expired");
     expect([...b.s.sessions.values()].filter((x) => x.status === "open").map((x) => x.id)).toEqual(["cs_test_000002"]);
@@ -651,17 +689,19 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     // past Pro's 3: the app's plan page, which says more apps are Enterprise's
     const pj = await past.json();
     expect(pj).toMatchObject({ ok: false, locked: true, needs_plan: true, upgrade_url: `https://genclass.dev/account/billing?project=${t.apps[3]!.id}` });
-    expect(pj.error).toContain("your plan covers 3 apps, and this one is past them: more apps come with Enterprise");
+    expect(pj.error).toContain("your plan covers 3 apps, and this one is past them: more apps come with Business or Enterprise");
     // the page polling for a payment reads the lock
     expect(await json(call(t.env, "GET", `/api/billing?project=${t.apps[3]!.id}`, { cookie: t.cookie }))).toEqual({ project: { id: t.apps[3]!.id, plan: "free", source: null, locked: "pro_apps" } });
     expect(await json(call(t.env, "GET", `/api/billing?project=${t.apps[0]!.id}`, { cookie: t.cookie }))).toEqual({ project: { id: t.apps[0]!.id, plan: "team", source: "paid", locked: null } });
   });
 
-  it("the billing page lists each app with its plan and sells Pro for the account", async () => {
+  it("the billing page lists each app with its plan and sells Pro and Business for the account", async () => {
     const t = await withApps(["Shop", "Blog"]);
     const page = await text(call(t.env, "GET", "/account/billing", { cookie: t.cookie }));
-    expect(page).toContain('<p class="price">$50 / developer / month</p>');
+    expect(page).toContain('<p class="price">$25 / month</p>');
     expect(page).toContain('data-plan="team"><span>Upgrade to Pro</span>');
+    expect(page).toContain('<p class="price">$79 / month</p>');
+    expect(page).toContain('data-plan="business"><span>Upgrade to Business</span>');
     expect(page).not.toContain("Choose a project");
     expect(page).toContain('id="projects"');
     expect(page).toContain("<tr><td>Shop</td><td>Free</td>");
@@ -680,7 +720,7 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     expect(one).not.toContain("Choose its plan to go on");
     expect(one).not.toContain("Problems fixed live this month");
     // the card: the name, the price, the first 5 lines, the rest folded under "N more"; no summary repeating the price
-    expect(one).toContain('<div class="plan pick big"><h3>Pro</h3><p class="price">$50 / developer / month</p><ul><li>Up to 3 apps</li><li>The genclass command in your terminal</li>');
+    expect(one).toContain('<div class="plan pick big"><h3>Pro</h3><p class="price">$25 / month</p><ul><li>Up to 3 apps</li><li>The genclass command in your terminal</li>');
     const lines = pitchLines(PLANS[1]!);
     expect(one).toContain(`<details class="pmore"><summary>${lines.length - 5} more</summary><ul>${lines.slice(5).map((l) => `<li>${l.replace(/'/g, "&#39;")}</li>`).join("")}</ul></details>`);
     expect(one).not.toContain("<li>Everything in Free</li>");
@@ -688,7 +728,7 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     expect(one).not.toContain('<p class="sum">');
     // an account that has never had a subscription starts with Pro's 3 days free (billing.ts trialFor)
     expect(one).toContain('<button class="btn" type="button" data-plan="team" data-pick><span>Start your 3-day free trial</span></button>');
-    expect(one).toContain('<p class="trialnote">3 days free, then $50 / developer / month. Cancel before the trial ends and you pay nothing.</p>');
+    expect(one).toContain('<p class="trialnote">3 days free, then $25 / month. Cancel before the trial ends and you pay nothing.</p>');
     expect(one).not.toContain('type="button" data-continue>');
     expect(one).not.toContain('<span class="tag">Your plan</span>');
     // Free is the small way on: a very small link under the big card, and a popup that asks why before it goes on
@@ -754,20 +794,30 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
     expect(granted).not.toContain("data-pick");
   });
 
-  it("the plan page, an app past Pro's 3: Email us about Enterprise, nothing to buy, no waiting for a payment", async () => {
+  it("the plan page, an app past Pro's 3: Switch to Business (10 apps), or remove an app; nothing opens on its own", async () => {
     const t = await withApps(["Shop", "Blog", "Docs", "Extra"]);
     paidPro(t.sql, t.account.id);
     const page = await text(call(t.env, "GET", `/account/billing?project=${t.apps[3]!.id}&start=1`, { cookie: t.cookie }));
     expect(page).toContain("<h1>Choose a plan for Extra</h1>");
-    expect(page).toContain("Your <b>Pro</b> plan covers up to 3 apps, and <b>Extra</b> is one more. More apps come with <b>Enterprise</b>, agreed by email.");
-    expect(page).toContain(`<a class="btn" href="mailto:mehar@genclass.dev?subject=${encodeURIComponent("GenClass Enterprise: more than 3 apps")}"><span>Email us about Enterprise</span></a>`);
+    expect(page).toContain("Your <b>Pro</b> plan covers up to 3 apps, and <b>Extra</b> is one more. <b>Business</b> covers up to 10 apps.");
+    expect(page).toContain('<button class="btn" type="button" data-plan="business" data-pick><span>Switch to Business</span></button>');
     expect(page).toContain("Or remove an app you no longer use, and this one takes its place.");
+    expect(page).not.toContain("Email us about Enterprise");
     expect(page).not.toContain('type="button" data-addapps>');
     expect(page).not.toContain('type="button" data-continue>');
-    expect(page).not.toContain("data-pick");
     expect(page).not.toContain("Try for free");
-    // nothing is bought here, so the page neither opens a Checkout nor polls for one
+    // nothing is bought until the button is pressed: the page neither opens a Checkout nor polls for one
     expect(page).toContain('"go":false,"wait":false');
+  });
+
+  it("the plan page, an app past Business's 10: Email us about Enterprise, nothing to buy", async () => {
+    const names = Array.from({ length: 11 }, (_, i) => `App ${i + 1}`);
+    const t = await withApps(names);
+    setPlan(t.sql, t.account.id, "business", { stripe_mode: "live", seats: null, subscription_id: "sub_acct000001", subscription_status: "active", current_period_end: "2026-11-13T12:00:00.000Z" });
+    const page = await text(call(t.env, "GET", `/account/billing?project=${t.apps[10]!.id}&start=1`, { cookie: t.cookie }));
+    expect(page).toContain("Your <b>Business</b> plan covers up to 10 apps, and <b>App 11</b> is one more. More apps come with <b>Enterprise</b>, agreed by email.");
+    expect(page).toContain(`<a class="btn" href="mailto:mehar@genclass.dev?subject=${encodeURIComponent("GenClass Enterprise: more than 10 apps")}"><span>Email us about Enterprise</span></a>`);
+    expect(page).not.toContain("data-pick");
   });
 
   it("Try for free (limited) records the choice for that app only; an app past Free's one cannot, and it is a browser write", async () => {
@@ -878,12 +928,12 @@ describe("the website: a new account's first screen is Pro's trial, with a tiny 
     expect(home.status).toBe(200);
     const page = await home.text();
     expect(page).toContain('<div class="empty-p trial" id="trial"><h2>Start your 3-day free trial</h2>');
-    expect(page).toContain('<p class="tp">Pro, $50 / developer / month</p>');
+    expect(page).toContain('<p class="tp">Pro, $25 / month</p>');
     expect(page).toContain('<a class="btn" href="/account/billing?plan=pro&#38;start=1" id="starttrial"><span>Start your 3-day free trial</span></a>');
-    expect(page).toContain("<p>3 days free, then $50 / developer / month. Cancel before the trial ends and you pay nothing.</p>");
+    expect(page).toContain("<p>3 days free, then $25 / month. Cancel before the trial ends and you pay nothing.</p>");
     // 5 lines shown, the rest folded, and no summary repeating the price (the owner, 2026-11-13: less written)
     expect(page).toContain(`<details class="pmore"><summary>${pitchLines(PLANS[1]!).length - 5} more</summary>`);
-    expect(page).not.toContain("Everything for up to 3 apps, per developer.");
+    expect(page).not.toContain("Everything for one developer and up to 3 apps.");
     expect(page).toContain('<p class="skipit"><a href="/account/new" id="skiptrial">Skip</a></p>');
     expect(page).toContain("<li>Up to 3 apps</li>");
     expect(page).not.toContain("<li>Everything in Free</li>");

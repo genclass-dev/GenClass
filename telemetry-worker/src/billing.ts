@@ -140,7 +140,9 @@ async function proAnswer(c: C): Promise<Response> {
 /** The 403 for something the account's plan leaves out, naming the plans that include it. */
 const upgrade = (c: C, what: Entitlement): Response => {
   const plans = PLANS.filter((p) => entitled(p, what)).map((p) => p.name);
-  const has = plans.length ? `is part of the ${plans.join(" and ")} plan${plans.length > 1 ? "s" : ""}` : "is not part of any plan";
+  // "Pro and Enterprise", "Pro, Business and Enterprise"
+  const names = plans.length > 1 ? `${plans.slice(0, -1).join(", ")} and ${plans[plans.length - 1]}` : plans[0];
+  const has = plans.length ? `is part of the ${names} plan${plans.length > 1 ? "s" : ""}` : "is not part of any plan";
   return json(403, { ok: false, error: `${what} ${has}; see ${c.cfg.origin}/account/billing`, upgrade_url: `${c.cfg.origin}/account/billing` });
 };
 
@@ -388,7 +390,7 @@ async function chooseFree(c: C, f: Fetch, id: string): Promise<Response> {
   const p = await ownedProject(c, a.account.id, id);
   if (!p || !p.id) return fail(404, "not found");
   const access = await projectAccess(c.db, p, c.env, c.now);
-  if (access.locked) return fail(409, access.locked === "pro_apps" ? "your plan covers no more apps: more apps come with Enterprise" : `Free covers ${FREE.limits.apps === 1 ? "one app" : `${FREE.limits.apps ?? 1} apps`}, and this one is past it: it needs a paid plan`);
+  if (access.locked) return fail(409, access.locked === "pro_apps" ? "your plan covers no more apps: more apps come with Business or Enterprise" : `Free covers ${FREE.limits.apps === 1 ? "one app" : `${FREE.limits.apps ?? 1} apps`}, and this one is past it: it needs a paid plan`);
   const at = c.now.toISOString();
   await c.db.batch([
     c.db.prepare("INSERT INTO plan_feedback (account_id, project_id, reason, note, created) VALUES (?, ?, ?, ?, ?)").bind(a.account.id, p.id, reason[0], note || null, at),

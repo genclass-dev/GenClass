@@ -23,15 +23,16 @@ async function user(env: E, email = "ada@example.com") {
   const me = await signedIn(env, email);
   return { ...me, bearer: await cliToken(env, me.cookie) };
 }
-const team = (sql: ReturnType<typeof setup>["sql"], accountId: string, seats = 3) =>
-  setPlan(sql, accountId, "team", { stripe_mode: "live", seats, subscription_id: "sub_t000000001", subscription_status: "active", current_period_end: "2026-12-13T12:00:00.000Z" });
+/** A paid account on `plan` (Pro: id team) as the webhook leaves it; Pro holds one developer, Business the whole team. */
+const team = (sql: ReturnType<typeof setup>["sql"], accountId: string, plan = "team") =>
+  setPlan(sql, accountId, plan, { stripe_mode: "live", seats: null, subscription_id: "sub_t000000001", subscription_status: "active", current_period_end: "2026-12-13T12:00:00.000Z" });
 const pro = async (env: E, o: { cookie?: string; bearer?: string }) => {
   const r = await call(env, "GET", "/api/billing/pro", { ...o, origin: null });
   return { status: r.status, body: (await r.json()) as Record<string, unknown> };
 };
 
 describe("GET /api/billing/pro: whether a sign-in has Pro, for the page check", () => {
-  it("answers for a browser session and the genclass command's token alike: Free with its trial, Pro, a grant, a team's seat", async () => {
+  it("answers for a browser session and the genclass command's token alike: Free with its trial, Pro, Business, a grant, a team's seat", async () => {
     const t = setup(LIVE);
     expect((await pro(t.env, {})).status).toBe(401);
     const me = await user(t.env);
@@ -46,7 +47,11 @@ describe("GET /api/billing/pro: whether a sign-in has Pro, for the page check", 
     const g = await user(t.env, "grace@example.com");
     setPlan(t.sql, g.account.id, "free", { comp_until: "9999-12-31T00:00:00.000Z", comp_plan: "team" });
     expect((await pro(t.env, { cookie: g.cookie })).body).toMatchObject({ pro: true, via: "plan" });
-    // a seat on a paying owner's team
+    // Business has everything Pro has
+    team(t.sql, me.account.id, "business");
+    expect(await pro(t.env, { cookie: me.cookie })).toEqual({ status: 200, body: PRO });
+    expect(await pro(t.env, { bearer: me.bearer })).toEqual({ status: 200, body: PRO });
+    // a seat on a paying owner's team (Business: the whole team)
     const bob = await user(t.env, "bob@example.com");
     expect((await pro(t.env, { bearer: bob.bearer })).body).toMatchObject({ pro: false });
     const inv = (await (await call(t.env, "POST", "/api/team/invites", { body: {}, cookie: me.cookie })).json()) as { url: string };

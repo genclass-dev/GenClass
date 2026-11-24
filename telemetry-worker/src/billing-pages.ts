@@ -336,7 +336,7 @@ function projectsSection(v: BillingView): string {
     .join("");
   return `<section class="blk team" id="projects">
   <div class="blk-h"><h2>Apps</h2><span class="aside">What your plan covers</span></div>
-  <p class="intro">Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}${PAID_PLANS[0] ? `; ${esc(PAID_PLANS[0].name)} covers ${PAID_PLANS[0].limits.apps ? `up to ${PAID_PLANS[0].limits.apps} apps` : "every app"}, ${esc(priceText(PAID_PLANS[0], v.country ?? null))}` : ""}. More apps come with Enterprise.</p>
+  <p class="intro">Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}${PAID_PLANS.map((p) => `; ${esc(p.name)} ${p.limits.apps ? `up to ${p.limits.apps} apps` : "every app"}, ${esc(priceText(p, v.country ?? null))}`).join("")}. More apps come with Enterprise.</p>
   <div class="tablewrap"><table><thead><tr><th>Project</th><th>Plan</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
 </section>`;
 }
@@ -397,11 +397,16 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   // paying account included (Continue with Pro), and an app past what the plan covers waits here: more apps are
   // Enterprise's, by email
   const proFull = a.locked === "pro_apps";
+  // the account's plan by the apps it covers (a locked app's access carries Free's), and the next plan with more
+  const mine = proFull ? (PAID_PLANS.find((p) => p.limits.apps === a.apps) ?? offer) : offer;
+  const bigger = proFull ? (PAID_PLANS.find((p) => p !== mine && (p.limits.apps ?? Infinity) > (a.apps ?? 0)) ?? null) : null;
   const covered = !a.locked && a.source !== null;
   const status = a.source === "open"
     ? `This server gives every app everything in <b>${esc(a.plan.name)}</b>.`
     : proFull
-      ? `Your <b>${esc(offer?.name ?? "paid")}</b> plan covers up to ${a.apps ?? 0} apps, and <b>${name}</b> is one more. More apps come with <b>Enterprise</b>, agreed by email.`
+      ? `Your <b>${esc(mine?.name ?? "paid")}</b> plan covers up to ${a.apps ?? 0} apps, and <b>${name}</b> is one more. ${
+          bigger ? `<b>${esc(bigger.name)}</b> covers ${bigger.limits.apps ? `up to ${bigger.limits.apps} apps` : "every app"}.` : "More apps come with <b>Enterprise</b>, agreed by email."
+        }`
       : paid
         ? v.sub.cancels
           ? `<b>${name}</b> is on <b>${esc(a.plan.name)}</b> until ${day(v.sub.periodEnd)}. It is cancelled and will not renew${ownSub ? "; you can resume it below" : ""}.`
@@ -430,7 +435,9 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   const action = covered
     ? `<button class="btn" type="button" data-continue><span>Continue with ${esc(a.plan.name)}</span></button><p class="trialnote">Your current plan.${paid ? ` <a href="#" id="portal">Manage billing</a>` : ""}${ownSub ? (v.sub.cancels ? ` <a href="#" id="resumeplan">Resume plan</a>` : ` <a href="#" id="cancelplan">Cancel plan</a>`) : paid ? ` <a href="/account/billing#manage">Cancel plan</a>` : ""}</p>`
     : proFull
-        ? `<a class="btn" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass Enterprise: more than ${a.apps ?? 3} apps`)}"><span>Email us about Enterprise</span></a><p class="trialnote">Or remove an app you no longer use, and this one takes its place.</p>`
+        ? bigger && v.live
+          ? `<button class="btn" type="button" data-plan="${esc(bigger.id)}" data-pick><span>Switch to ${esc(bigger.name)}</span></button><p class="trialnote">${esc(priceText(bigger, v.country ?? null))}. Or remove an app you no longer use, and this one takes its place.</p>`
+          : `<a class="btn" href="mailto:${esc(CONTACT)}?subject=${encodeURIComponent(`GenClass Enterprise: more than ${a.apps ?? 3} apps`)}"><span>Email us about Enterprise</span></a><p class="trialnote">Or remove an app you no longer use, and this one takes its place.</p>`
       : v.live
         ? `<button class="btn" type="button" data-plan="${esc(offer!.id)}" data-pick><span>${v.trialDays ? `Start your ${v.trialDays}-day free trial` : `Start ${esc(offer!.name)}`}</span></button>${v.trialDays ? `<p class="trialnote">${v.trialDays} days free, then ${esc(priceText(offer!, v.country ?? null))}. Cancel before the trial ends and you pay nothing.</p>` : ""}`
         : '<span class="muted">Paid plans are not on sale yet.</span>';
@@ -559,14 +566,14 @@ function teamSection(v: BillingView): string {
   const t = v.team;
   if (!t) return "";
   const holds = t.seats === null || t.seats > 1;
-  const sold = PAID_PLANS.filter((p) => p.per_seat === true).map((p) => p.name);
+  const sold = PAID_PLANS.filter((p) => p.per_seat === true || p.limits.seats === null || (p.limits.seats ?? 1) > 1).map((p) => p.name);
   const aside = t.seats === null ? `${t.used} ${t.used === 1 ? "person" : "people"}` : `${t.used} of ${t.seats} seat${t.seats === 1 ? "" : "s"} used`;
   let own: string;
   if (!holds) {
     own = `<p class="intro">${
       t.access.plan.per_seat === true
         ? "Your plan has one seat, yours. Add seats in Manage billing to invite your team."
-        : `The ${esc(t.access.plan.name)} plan is for one person.${sold.length ? ` Members come with ${esc(sold.join(" and "))}: one seat each, and they open the dashboards of your apps with their own sign-in.` : ""}`
+        : `The ${esc(t.access.plan.name)} plan is for one person.${sold.length ? ` Your team comes with ${esc(sold.join(" and "))}: members open the dashboards of your apps with their own sign-in.` : ""}`
     }</p>`;
   } else {
     const over = t.members.some((m) => !m.active);
@@ -658,7 +665,7 @@ ${notice}${test}
   <div class="plans">${PLANS.map((p) => planColumn(v, p, plan)).join("")}</div>
   <p class="err" id="planerr" role="alert"></p>
   ${switchNote}${managed}
-  <p class="intro">${esc(PLANS_FILE.footer).replace(esc(CONTACT), `<a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>`)}</p>
+  <p class="intro">${esc(PLANS_FILE.footer).replace(esc(CONTACT), `<a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>`).replace("Contact sales", '<a href="https://genclass.dev/enterprise#contact">Contact sales</a>')}</p>
 </section>
 ${
   manage

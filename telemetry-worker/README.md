@@ -4,10 +4,11 @@ Cloudflare Worker that receives the default-on diagnostics batches from `@gencla
 [`packages/runtime/TELEMETRY.md`](../packages/runtime/TELEMETRY.md)) and stores them in R2, that gives every web app
 a token and a private dashboard on genclass.dev, and that holds the optional accounts (Google, an email and a
 password, or GitHub, with passkeys as extra security) which keep several apps in one place and let `npx @genclass/runtime@beta login` connect an app
-([Accounts](#accounts)). There are three plans (`billing/plans.json` version 5, since 2026-11-13): Free, one app with
-its totals, on the website; Pro (plan id `team`), US$50 per developer a month for up to 3 apps, with the genclass
-command, every problem, visitor analytics, forwarding, export, 90 days of history, private repositories for the
-GitHub App and members ([Teams](#teams)), 3 days free at the first Checkout; and Enterprise, by agreement, with more
+([Accounts](#accounts)). There are four plans (`billing/plans.json` version 7, since 2026-11-24), each flat for the account: Free, one app
+with its totals, on the website; Pro (plan id `team`), US$25 a month for one developer and up to 3 apps, with the
+genclass command, every problem, visitor analytics, forwarding, export, 90 days of history and private repositories
+for the GitHub App; Business (id `business`), US$79 a month for the whole team ([Teams](#teams)), up to 10 apps and
+180 days; Pro and Business start with 3 days free at the first Checkout; and Enterprise, by agreement, with more
 apps and your own classifier, which GenClass trains ([Paid plans](#paid-plans)). What was bought before 13 November
 2026 keeps covering what it covered (migration 0021).
 
@@ -543,6 +544,13 @@ open Checkout page for another price is closed and a new one made. Without the s
 price. A price on its own product (`stripe_product`) keeps the Billing Portal's seat changes, which allow one monthly
 price per product.
 
+**Version 7 (2026-11-24, the owner's call: "four plans for real").** Every plan is flat for the account
+(`per_seat` false): Pro (id `team`, kept so every Pro subscription stays Pro) US$25 a month for one developer
+(`limits.seats` 1) and 3 apps; Business (id `business`) US$79 a month, no seat limit, 10 apps, 180 days; both start
+with 3 days free, once per account. Existing subscriptions keep their price, and a version 5 subscription that paid for
+more than one developer keeps those seats (`seatsOf`, `accounts.seats`). A grant has no seat limit, and an app's own
+subscription from version 4 still holds the whole team.
+
 **Version 5 (2026-11-13, the owner's calls; what follows below is the history it replaces where they differ).**
 Pro (id `team`) is bought for the account again, not per app, and per developer: `per_seat` true, the
 subscription's quantity is how many developers (US$15 each a month then, US$50 since 2026-11-16), and it covers up to 3 apps (`limits.apps`)
@@ -678,7 +686,7 @@ their link opens the dashboard (24 hours, 7 and 30 days).
 `src/team.ts` (data) and `src/team-routes.ts` (routes); tables `team_members` and `team_invites` (migration 0014).
 
 - **Who is in.** A team is an account and the accounts it added as members. How many people an account holds comes
-  from its plan (`src/plans.ts` accessOf, `seats`): Free 1; Pro (per developer since version 5) the seats its
+  from its plan (`src/plans.ts` accessOf, `seats`): Free 1; Pro 1 since version 7 (Business: no limit); before it, Pro (per developer since version 5) the seats its
   subscription pays for (`accounts.seats`, the subscription item's quantity, written by the webhook with the plan;
   `test/team.test.ts` runs it on `test/fixtures/plans-v3-seats.json`), and no limit while they are not known (a
   subscription bought per project under version 4 included the whole team; a row whose seats the webhook has not

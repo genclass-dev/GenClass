@@ -714,7 +714,10 @@ export interface SubscriptionState {
   lookupKey: string | null;
   periodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  /** For a plan sold per seat: the quantity of its subscription item (1 to MAX_SEATS; a larger one reads as MAX_SEATS). Else null. */
+  /**
+   * For a plan sold per seat, or a quantity above 1 (a subscription bought per seat before its plan became flat: Pro,
+   * plans.json version 7): the quantity of its subscription item (1 to MAX_SEATS; a larger one reads as MAX_SEATS). Else null.
+   */
   seats: number | null;
 }
 
@@ -756,7 +759,7 @@ export function subscriptionState(sub: Obj, o: { pastDueSince?: string | null; n
     lookupKey,
     periodEnd: isoOf(end),
     cancelAtPeriodEnd: status !== "canceled" && (sub?.cancel_at_period_end === true || typeof sub?.cancel_at === "number"),
-    seats: priced && byQuantity(priced) ? (cleanSeats(quantity) ?? (typeof quantity === "number" && quantity > MAX_SEATS ? MAX_SEATS : 1)) : null,
+    seats: priced && (byQuantity(priced) || (typeof quantity === "number" && quantity > 1)) ? (cleanSeats(quantity) ?? (typeof quantity === "number" && quantity > MAX_SEATS ? MAX_SEATS : 1)) : null,
   };
 }
 
@@ -1245,7 +1248,8 @@ export async function applySubscription(x: EventContext, account: BillingAccount
       "UPDATE accounts SET plan = ?, subscription_id = ?, subscription_status = ?, past_due_since = ?, current_period_end = ?, cancel_at_period_end = ?, " +
         "stripe_mode = ?, seats = ?, apps_kept = CASE WHEN ? = 'free' OR subscription_id IS NOT ? THEN NULL ELSE apps_kept END WHERE id = ? AND stripe_customer_id = ?",
     )
-    // the seats follow the subscription like the plan: a plan that is not sold per seat, or that ended, has none
+    // the seats follow the subscription like the plan: a plan that is not sold per seat (unless the subscription pays
+    // for more than one: bought per seat before version 7), or that ended, has none
     .bind(s.plan, subId, s.status, pastDueSince, s.periodEnd, s.cancelAtPeriodEnd ? 1 : 0, stripeMode(x.env), s.plan === "free" ? null : s.seats, s.plan, subId, account.id, customer)
     .run();
   return { status: "applied", ours: true, account: account.id, plan: s.plan };

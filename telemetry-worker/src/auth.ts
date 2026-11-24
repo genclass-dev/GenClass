@@ -2194,7 +2194,7 @@ export function lockedJson(c: { cfg: AuthConfig; env: Env }, access?: { locked?:
     const covers = (n: number | null | undefined) => (n === 1 ? "one app" : `${n ?? "its"} apps`);
     const error = access.locked === "free_projects"
       ? `since 13 November 2026 Free covers ${covers(FREE.limits.apps)}, your oldest, and this one is past it: it needs ${PAID_PLANS[0]?.name ?? "a paid plan"}; start it at ${url}`
-      : `your plan covers ${covers(access.apps)}, and this one is past them: more apps come with Enterprise (${PLANS_FILE.contact}); see ${url}`;
+      : `your plan covers ${covers(access.apps)}, and this one is past them: more apps come with Business or Enterprise (${PLANS_FILE.contact}); see ${url}`;
     return json(402, { ok: false, error, locked: true, needs_plan: true, upgrade_url: url });
   }
   const url = `${c.cfg.origin}/account/billing`;
