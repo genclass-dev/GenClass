@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.18
+
+- **Pro's free trial is 7 days** (it was 3). The lines the command says before it has asked genclass.dev (the first
+  screen, the sign-in step and the plan step of a signed-out setup) now say 7 days; every other line already takes
+  the number from genclass.dev. A trial that is already running keeps the end date it started with.
+
 ## 0.3.17
 
 - **`genclass onboard <code>`: the whole setup in one go, shown live on your dashboard.** Get started on

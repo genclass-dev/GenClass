@@ -1903,7 +1903,7 @@ export interface SetupStep {
 
 /**
  * What the account has and has done, for the sidebar and Get started (the owner, 2026-11-24: set the whole app up
- * first, then the 3-day trial): its own apps (not a team's), whether one has sent an event, its plan or trial, a
+ * first, then the 7-day trial): its own apps (not a team's), whether one has sent an event, its plan or trial, a
  * terminal session. Never writes.
  */
 export async function glance(c: C, a: Auth): Promise<Glance> {

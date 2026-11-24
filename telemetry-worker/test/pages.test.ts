@@ -448,7 +448,7 @@ function glanceOf(over: Partial<Glance> = {}): Glance {
     trial: false,
     apps: { used: 0, of: 1 },
     note: "0 of 1 app",
-    action: { label: "Start 3-day free trial", href: "/account/billing?plan=pro&start=1", primary: false },
+    action: { label: "Start 7-day free trial", href: "/account/billing?plan=pro&start=1", primary: false },
     steps: [
       { key: "account", done: true },
       { key: "runtime", done: false },
@@ -462,7 +462,7 @@ function glanceOf(over: Partial<Glance> = {}): Glance {
       { key: "workflow", title: "Test workflow", state: "auto", detail: "the command adds it when your app has Playwright tests", link: null },
       { key: "github", title: "GitHub App", state: "auto", detail: "comments on a pull request when a page ends up wrong", link: null },
       { key: "agent", title: "Coding agent", state: "auto", detail: "the command adds GenClass's tools to Claude Code, Cursor and others in your project", link: null },
-      { key: "plan", title: "Pro", state: "later", detail: "$25 / month, 3 days free, after the setup", link: { label: "Start 3-day free trial", href: "/account/billing?plan=pro&start=1" } },
+      { key: "plan", title: "Pro", state: "later", detail: "$25 / month, 7 days free, after the setup", link: { label: "Start 7-day free trial", href: "/account/billing?plan=pro&start=1" } },
       { key: "suggestions", title: "Suggestions", state: "later", detail: "npx genclass suggest: what your app is missing, most important first", link: null },
     ],
     first: null,
@@ -814,9 +814,9 @@ describe("dashboard page: interaction analytics (docs/runtime/ANALYTICS.md secti
     const { doc, text, hidden, close } = await render(st);
     expect(hidden("prolock")).toBe(false);
     expect(text("#prolock b")).toBe("Free shows the totals");
-    expect(text("#prolockmsg")).toBe("Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with Pro. 3 days free, then $25 / month. Cancel any time.");
+    expect(text("#prolockmsg")).toBe("Every problem, the pages it happens on, what GenClass did about it and a fix prompt for your coding agent come with Pro. 7 days free, then $25 / month. Cancel any time.");
     expect(doc.getElementById("prolocka")!.getAttribute("href")).toBe("https://genclass.dev/account/billing?project=p1");
-    expect(text("#prolocka")).toBe("Start your 3-day free trial");
+    expect(text("#prolocka")).toBe("Start your 7-day free trial");
     // the lists give way to the banner, so an empty list never reads as "no problems"
     for (const id of ["found", "possible-s", "where", "recent-s", "advisor", "adv-s", "fixall2"]) expect(hidden(id), id).toBe(true);
     expect(doc.getElementById("advn")!.parentElement!.classList.contains("hidden")).toBe(true);

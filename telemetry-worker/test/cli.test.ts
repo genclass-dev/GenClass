@@ -74,8 +74,8 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
       features: teamPlan.features.filter((f) => f.available && !/^Everything in /.test(f.text)).map((f) => f.text).slice(0, 12),
       // Pro is the account's (plans.json version 5), bought on the plan page of its first app on Free
       checkout_url: `https://genclass.dev/account/billing?project=${app.id}&from=cli`,
-      // an account that has never had a subscription starts with Pro's 3 days free (src/billing.ts trialFor)
-      trial_days: 3,
+      // an account that has never had a subscription starts with Pro's 7 days free (src/billing.ts trialFor)
+      trial_days: 7,
       // Pro is flat for the account since version 7, not sold by units of apps
       apps_per_unit: null,
       // Free covers one app since version 5
@@ -93,7 +93,7 @@ describe("genclass command: GET /api/cli/overview (src/cli.ts)", () => {
     expect(((await (await call(selling, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toMatchObject({ plan: { name: "Pro" }, trial_days: null });
     sql.db.prepare("UPDATE projects SET plan = NULL, stripe_mode = NULL, subscription_id = NULL, subscription_status = NULL WHERE id = ?").run(app.id);
     expect(offered.offer.features).toContain("Visitor analytics");
-    expect(offered.offer.features).toContain("3 days free to start");
+    expect(offered.offer.features).toContain("7 days free to start");
     expect(offered.offer.features.join(" ")).not.toContain("Everything in Free");
     // a test key sells only to the accounts on its list
     expect(((await (await call({ ...env, STRIPE_SECRET_KEY: "sk_test_fake" }, "GET", "/api/cli/overview", { bearer: me.bearer, origin: null })).json()) as any).offer).toBeNull();
@@ -248,7 +248,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       cached_at: null,
       // the plan page that starts Pro from the command, and what Pro is
       upgrade_url: "https://genclass.dev/account/billing?plan=pro&from=cli",
-      upgrade_plan: { name: "Pro", price: "$25 / month", trial_days: 3 },
+      upgrade_plan: { name: "Pro", price: "$25 / month", trial_days: 7 },
       remaining_today: 3,
       limited: false,
     });
@@ -400,7 +400,7 @@ describe("genclass command: POST /api/cli/suggest (src/suggest.ts header)", () =
       designs_locked: 2,
       cached_at: null,
       upgrade_url: "https://genclass.dev/account/billing?plan=pro&from=cli",
-      upgrade_plan: { name: "Pro", price: "$25 / month", trial_days: 3 },
+      upgrade_plan: { name: "Pro", price: "$25 / month", trial_days: 7 },
       remaining_today: 2,
       limited: false,
     });
@@ -544,7 +544,7 @@ describe("genclass command: GET /api/cli/app (src/cli.ts)", () => {
     expect(j.recent).toEqual([]);
     expect(j.typeSeries.every((b: any) => Object.keys(b.counts).join() === "problems")).toBe(true);
     expect(j.typeSeries.reduce((n: number, b: any) => n + b.counts.problems, 0)).toBe(1);
-    expect(j.locked.problems).toEqual({ plan: "Pro", upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`, trial_days: 3, price: "$25 / month" });
+    expect(j.locked.problems).toEqual({ plan: "Pro", upgrade_url: `https://genclass.dev/account/billing?project=${app.id}`, trial_days: 7, price: "$25 / month" });
     expect(JSON.stringify(j)).not.toContain("/checkout");
     // nothing a page typed, and no session of the account
     expect(JSON.stringify(j)).not.toContain("SECRET PAGE TEXT");

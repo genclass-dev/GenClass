@@ -21,7 +21,7 @@ isolate();
 const flat = (t: string) => plainLines(t).join(" ").replace(/\s+/g, " ");
 const signIn = () => saveCredentials({ host: HOST, access_token: SESSION, account: ACCOUNT });
 const CHECKOUT = `${HOST}/account/billing?plan=pro&start=1`;
-const LOCKED = { paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 3, checkout_url: CHECKOUT };
+const LOCKED = { paid: false, plan: "Pro", price: "$15 / developer / month", trial_days: 7, checkout_url: CHECKOUT };
 /** stderr, quiet for a call (usage errors go there). */
 async function quietErr<T>(fn: () => Promise<T>): Promise<{ value: T; err: string }> {
   let err = "";
@@ -99,16 +99,16 @@ describe("genclass without Pro: every opt-out and the app's own link keep workin
       forgetPro();
       const init = flat(await printed(async () => expect(await run(["init", "--yes", "--no-install", "--no-network", "--cwd", dir])).toBe(0)));
       expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toContain("genclass:init");
-      expect(init).not.toContain("start your 3-day free trial at");
+      expect(init).not.toContain("start your 7-day free trial at");
       // the account's plan page is not opened before the setup is done
       expect(init).not.toContain("has no plan yet");
       forgetPro();
       const listed = flat(await printed(async () => expect(await run(["apps", "--yes", "--cwd", dir])).toBe(0)));
       expect(listed).toContain("1 app");
-      expect(listed).not.toContain("start your 3-day free trial at");
+      expect(listed).not.toContain("start your 7-day free trial at");
       // a command that is Pro's still stops at the gate
       forgetPro();
-      expect(flat(await printed(async () => expect(await run(["problems", "--yes", "--cwd", dir])).toBe(1)))).toContain(`start your 3-day free trial at ${CHECKOUT}`);
+      expect(flat(await printed(async () => expect(await run(["problems", "--yes", "--cwd", dir])).toBe(1)))).toContain(`start your 7-day free trial at ${CHECKOUT}`);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -146,7 +146,7 @@ describe("genclass without Pro: every opt-out and the app's own link keep workin
     const { ask } = await import("../src/ask.mjs");
     let saved = false;
     const r = await quietErr(() => printed(async () => expect(await ask({ question: "which page is slow?", cwd: dir }, { fetchFn, savePrefs: () => (saved = true) })).toBe(1)));
-    expect(flat(r.value)).toContain(`start your 3-day free trial at ${CHECKOUT}`);
+    expect(flat(r.value)).toContain(`start your 7-day free trial at ${CHECKOUT}`);
     expect(r.err).not.toContain("Your question goes to");
     expect(saved).toBe(false);
   });
@@ -166,10 +166,10 @@ describe("genclass login: the sign-in only, no card, and the folder's app offere
       vi.stubGlobal("fetch", locked.fetchFn);
       forgetPro();
       const no = flat(await printed(async () => expect(await run(["login", "--cwd", dir])).toBe(0)));
-      expect(no).toContain("Set up your app first, for free. Pro's 3-day free trial comes after that.");
+      expect(no).toContain("Set up your app first, for free. Pro's 7-day free trial comes after that.");
       // no card and no checkout before the setup
       expect(no).not.toContain(CHECKOUT);
-      expect(no).not.toContain("Start your 3-day free trial");
+      expect(no).not.toContain("Start your 7-day free trial");
       // the folder's app is offered all the same (here, with no terminal, it says how to connect)
       expect(no).toMatch(/Not a terminal: run \S+( \S+)? connect --yes here to connect this app\./);
       expect(no.indexOf("Set up your app first")).toBeLessThan(no.indexOf("Not a terminal"));
@@ -219,9 +219,9 @@ describe("genclass: a team member's new app goes into the team's account (src/pa
 
 describe("genclass: the plan's card and its answers (src/paywall.mjs, src/suggest/index.mjs layOut)", () => {
   it("a used trial is not promised in the card; a Pro account with no plan from the server sees every suggestion", () => {
-    const features = ["3 days free to start", "Up to 3 apps", "Visitor analytics"];
+    const features = ["7 days free to start", "Up to 3 apps", "Visitor analytics"];
     expect(proOffer({ plan: "Pro", price: "$15", trialDays: null, checkoutUrl: CHECKOUT }, { features } as never).features).toEqual(["Up to 3 apps", "Visitor analytics"]);
-    expect(proOffer({ plan: "Pro", price: "$15", trialDays: 3, checkoutUrl: CHECKOUT }, { features } as never).features).toEqual(features);
+    expect(proOffer({ plan: "Pro", price: "$15", trialDays: 7, checkoutUrl: CHECKOUT }, { features } as never).features).toEqual(features);
     const results = [1, 2, 3].map((i) => ({ id: `c${i}`, status: "fail", weight: i, title: `t${i}`, why: "w", fix: "f", prompt: "p" }));
     expect(layOut(results as never, null).filter((i) => i.open)).toHaveLength(1);
     expect(layOut(results as never, null, true).filter((i) => i.open)).toHaveLength(3);
@@ -281,7 +281,7 @@ describe("genclass at a terminal: the paywall's question, the plan page's wait, 
   beforeAll(() => Object.defineProperty(process, "stdin", { value: input, configurable: true }));
   afterAll(() => Object.defineProperty(process, "stdin", real));
   const type = (...lines: string[]) => lines.forEach((l, i) => setTimeout(() => input.write(`${l}\n`), 30 * (i + 1)));
-  const cli = { paid: false, plan: "Pro", price: "$15 / developer / month", trialDays: 3, checkoutUrl: CHECKOUT };
+  const cli = { paid: false, plan: "Pro", price: "$15 / developer / month", trialDays: 7, checkoutUrl: CHECKOUT };
 
   it("n, no, s and exit at Pro's card stop as q does; the card says which account it is for", async () => {
     for (const answer of ["n", "no", "s", "exit", "q"]) {
@@ -292,13 +292,13 @@ describe("genclass at a terminal: the paywall's question, the plan page's wait, 
       expect(said, answer).not.toMatch(/Waiting for the payment|Your browser is opening/);
       expect(flat(said), answer).toContain("For ada@example.com");
       // stopped: what starts it later, without the price again (it is on the card)
-      expect(flat(said), answer).toContain("Not started. Run npx genclass upgrade any time to start your 3-day free trial.");
+      expect(flat(said), answer).toContain("Not started. Run npx genclass upgrade any time to start your 7-day free trial.");
       expect(flat(said).match(/\$15/g), answer).toHaveLength(1);
     }
     // the card once per process: a later command that needs Pro gets one line (the gate), upgrade and plan the card
     type("q");
     const again = await printed(async () => expect(await startPro(cli, null, { short: true }, { waitMs: 50, everyMs: 10 })).toBe(false));
-    expect(flat(again).trim()).toBe("That comes with Pro. Run npx genclass upgrade to start your 3-day free trial.");
+    expect(flat(again).trim()).toBe("That comes with Pro. Run npx genclass upgrade to start your 7-day free trial.");
   });
 
   it("the plan page's wait: a Free choice made before it is not its answer; a stopped wait says it once", async () => {
@@ -365,7 +365,7 @@ describe("genclass at a terminal: Pro's step at the end of the walk (src/actions
   beforeAll(() => Object.defineProperty(process, "stdin", { value: input, configurable: true }));
   afterAll(() => Object.defineProperty(process, "stdin", real));
   const type = (...lines: string[]) => lines.forEach((l, i) => setTimeout(() => input.write(`${l}\n`), 30 * (i + 1)));
-  const cli = { paid: false, plan: "Pro", price: "$15 / developer / month", trialDays: 3, checkoutUrl: CHECKOUT };
+  const cli = { paid: false, plan: "Pro", price: "$15 / developer / month", trialDays: 7, checkoutUrl: CHECKOUT };
 
   it("the walk's Pro step comes after the setup: the card says the app is set up, and q stops with the way back", async () => {
     const { choosePlan } = await import("../src/actions.mjs");
@@ -374,13 +374,13 @@ describe("genclass at a terminal: Pro's step at the end of the walk (src/actions
     type("q");
     const said = flat(await printed(async () => expect(await choosePlan(state as never, {}, { waitMs: 50, everyMs: 10 })).toBe("quit")));
     expect(said).toContain("Your app is set up.");
-    expect(said).toContain("Start your 3-day free trial");
-    expect(said.indexOf("Your app is set up.")).toBeLessThan(said.indexOf("Start your 3-day free trial"));
+    expect(said).toContain("Start your 7-day free trial");
+    expect(said.indexOf("Your app is set up.")).toBeLessThan(said.indexOf("Start your 7-day free trial"));
     expect(said).toContain("Setting up is free; the rest of genclass comes with Pro.");
-    expect(said).toContain("Not started. Run npx genclass upgrade any time to start your 3-day free trial.");
+    expect(said).toContain("Not started. Run npx genclass upgrade any time to start your 7-day free trial.");
     // the card seen once in this process (the prompt): one line, and nothing is asked
     const again = flat(await printed(async () => expect(await choosePlan(state as never, {}, { waitMs: 50, everyMs: 10 })).toBe("quit")));
-    expect(again.trim()).toBe("Your app is set up. The rest comes with Pro. Run npx genclass upgrade to start your 3-day free trial.");
+    expect(again.trim()).toBe("Your app is set up. The rest comes with Pro. Run npx genclass upgrade to start your 7-day free trial.");
     forgetPro();
   });
 });
