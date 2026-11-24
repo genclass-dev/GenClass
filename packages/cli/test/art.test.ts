@@ -85,7 +85,7 @@ describe("genclass: the welcome card (src/art.mjs header, src/tui.mjs card)", ()
   });
 
   it("names: a GitHub name, capitalised; nothing for an email address (walk58@... is not a name) or no name at all", () => {
-    expect(firstName("mehar@daybot.ca")).toBeNull();
+    expect(firstName("mehar@genclass.dev")).toBeNull();
     expect(firstName("walk58@example.com")).toBeNull();
     expect(firstName("GitHub octo-cat")).toBe("Octocat");
     expect(firstName("account acct0000000000000000001")).toBeNull();

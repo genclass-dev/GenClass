@@ -485,7 +485,7 @@ function footer(r: Report): string {
   const who = r.account.verified ? "" : " Not your account? Stop these emails and nothing else is sent.";
   return `<table ${TABLE}><tr><td style="height:40px;line-height:40px;font-size:0">&nbsp;</td></tr><tr><td class="gc-rule gc-i3" style="border-top:1px solid ${C.rule};padding:16px 0 0;font-size:12px;line-height:19px;color:${C.ink3}">
 ${often ? `<p style="margin:0 0 8px">How often: ${often}</p>` : ""}<p style="margin:0 0 8px">${alerts}${stop}</p>
-<p style="margin:0">Sent to ${esc(r.account.email)} for your GenClass account.${who} Reply to reach a person.<br>GenClass · Daybot Solutions Inc. · ${qa(`${r.links.origin}/privacy`, "Privacy")}</p>
+<p style="margin:0">Sent to ${esc(r.account.email)} for your GenClass account.${who} Reply to reach a person.<br>GenClass, Inc. · ${qa(`${r.links.origin}/privacy`, "Privacy")}</p>
 </td></tr></table>`;
 }
 

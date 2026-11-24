@@ -39,7 +39,7 @@
     "wasm",
     "onnx"
   ],
-  "author": "Daybot Solutions Inc. (https://genclass.dev)",
+  "author": "GenClass, Inc. (https://genclass.dev)",
   "sideEffects": [
     "./dist/auto.js",
     "./dist/auto/*.js",

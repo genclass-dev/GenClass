@@ -13,7 +13,7 @@ every event and field it sends, where they are stored and for how long, and ever
 > 0.3.0-beta.2.
 
 Since **`0.1.0-beta.3`**, `GenClass.init()` in a browser sends **anonymous diagnostics** about GenClass's own
-decisions to the GenClass maintainers (Daybot Solutions Inc.). We use them to measure and improve the GenClass
+decisions to the GenClass maintainers (GenClass, Inc.). We use them to measure and improve the GenClass
 model (accuracy, false interventions, latency, which situations it sees in real apps).
 
 **Turn it off:** `GenClass.init({ telemetry: false })` (or `npx @genclass/runtime@beta init --no-telemetry` while
