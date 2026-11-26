@@ -36,8 +36,9 @@
 // EXPORT_LIMIT's.
 
 import { accountContext, accountProjects, authenticate, csrfFail, fail, originOk, ownedProject, page, readJson, redirect, safeNext, webSession, type Auth, type C } from "./auth.js";
-import { billingPage, projectPlanPage } from "./billing-pages.js";
-import { liveFixUsage } from "./usage.js";
+import { billingPage, projectPlanPage, type BillingUsage } from "./billing-pages.js";
+import { suggestionLimits, usedToday } from "./suggest.js";
+import { liveFixUsage, monthOf } from "./usage.js";
 import type { Env, HandleOptions, RateLimiterLike } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like, type Project } from "./dashboard.js";
 import { decodeCursor, exportResponse, PAGE_MAX, parseTime } from "./export.js";
@@ -64,6 +65,7 @@ import {
   projectAccess,
   accountProjectsAccess,
   stripeMode,
+  type Access,
   type Entitlement,
   type Plan,
 } from "./plans.js";
@@ -308,7 +310,12 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       const team = await teamOf(c.db, env, a.account.id, c.now);
       const memberships = await membershipsOf(c.db, env, a.account.id, c.now);
       const names = new Map((await accountProjects(c, a.account.id)).filter((x) => x.account_id === a.account.id).map((x) => [x.token, x.name]));
-      const projects = (await accountProjectsAccess(c.db, a.account.id, env, c.now)).filter((x) => names.has(x.row.token)).map((x) => ({ id: x.row.id!, name: names.get(x.row.token)!, access: x.access }));
+      const owned = (await accountProjectsAccess(c.db, a.account.id, env, c.now)).filter((x) => names.has(x.row.token));
+      const projects = owned.map((x) => ({ id: x.row.id!, name: names.get(x.row.token)!, access: x.access }));
+      // what the account has used of its plan, for the strip at the top: the counters the dashboard and the model keep
+      const usage = await billingUsage(c, a.account.id, access, owned.map((x) => ({ token: x.row.token, name: names.get(x.row.token)!, plan: x.access.plan })));
+      const trialDays: Record<string, number> = {};
+      for (const p of PAID_PLANS) trialDays[p.id] = await trialFor(c.db, a.account.id, p).catch(() => 0);
       // an AppSumo lifetime grant shows its code (src/appsumo.ts, migration 0025)
       const appsumo = access.lifetime
         ? ((await c.db.prepare("SELECT code FROM appsumo_codes WHERE account_id = ? AND refunded IS NULL ORDER BY redeemed").bind(a.account.id).all<{ code: string }>().catch(() => ({ results: [] as { code: string }[] }))).results ?? []).map((r) => r.code)
@@ -331,6 +338,8 @@ export async function routeBilling(request: Request, url: URL, path: string, env
           next,
           switchTo: pickedPlan(url.searchParams.get("to"))?.id ?? null,
           managedPlans: PAID_PLANS.filter((p) => managedPayments(env, p)).map((p) => p.name),
+          usage,
+          trialDays,
           appsumo,
           now: c.now,
         }),
@@ -726,6 +735,31 @@ async function resumePlan(c: C, f: Fetch): Promise<Response> {
 }
 /** The statuses a plan set to end can be resumed in. */
 const LIVE_RESUME = new Set(["active", "trialing", "past_due"]);
+
+/**
+ * What an account has used of its plan (the billing page's strip): its own apps against the plan's apps, the live
+ * fixes this month of its busiest app against that app's plan (the limit is per app, src/usage.ts), and today's
+ * suggestions against the plan's per day (src/suggest.ts). Reads only counters that exist; a part that cannot be read
+ * is left out (null), never guessed.
+ */
+export async function billingUsage(c: C, accountId: string, access: Access, apps: { token: string; name: string; plan: Plan }[]): Promise<BillingUsage> {
+  let liveFixes: BillingUsage["liveFixes"] = null;
+  for (const x of apps) {
+    const u = await liveFixUsage(c.db, x.token, x.plan, c.now).catch(() => null);
+    if (!u) continue;
+    const share = (y: { used: number; limit: number | null }) => (y.limit ? y.used / y.limit : 0);
+    if (!liveFixes || share(u) > share(liveFixes) || (share(u) === share(liveFixes) && u.used > liveFixes.used)) liveFixes = { used: u.used, limit: u.limit, resets: u.resets, app: x.name };
+  }
+  // no app yet (a new account): nothing fixed, against the plan's limit per app, so the tile is there from the start
+  if (!apps.length) liveFixes = { used: 0, limit: access.plan.limits.live_fixes_per_month ?? null, resets: monthOf(c.now).resets, app: "" };
+  const lim = suggestionLimits(access.plan);
+  const used = await usedToday(c.db, accountId, c.now).catch(() => null);
+  return {
+    apps: { used: apps.length, limit: access.plan.limits.apps },
+    liveFixes,
+    suggestions: used === null ? null : { used, perDay: lim.per_day },
+  };
+}
 
 /**
  * The days free a purchase of `plan` starts with: the plan's trial_days (Pro: 7) for an account that has never had a

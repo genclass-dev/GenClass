@@ -66,6 +66,9 @@ describe("AppSumo codes: redeeming (POST /api/account/appsumo, /account/appsumo)
     expect(html).toContain("up to 3 apps and one developer");
     expect(html).toContain("nothing is ever billed");
     expect(html).toContain("Lifetime, from AppSumo");
+    // the usage tiles on top say the same: the plan for life, its apps against Pro's 3, no trial anywhere
+    expect(html).toContain('<p class="ut-v name">Pro</p>');
+    expect(html).toContain("For life, from AppSumo<br>90 days of history");
     for (const sold of ["$25", "$79", "days free", "Upgrade to", "billed monthly", "set up by GenClass"]) expect(html).not.toContain(sold);
     const s = fakeStripe();
     const r = await call(env, "POST", "/api/billing/checkout", { body: { plan: "business" }, cookie: me.cookie, fetch: s.fetch });

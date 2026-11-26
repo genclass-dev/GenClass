@@ -130,10 +130,10 @@ describe("private prices (PLANS_PRIVATE)", () => {
   it("the billing page and the genclass command show the visitor's price, and nothing about other prices", async () => {
     const b = await buyer();
     const zz = await (await call(b.env, "GET", "/account/billing", { cookie: b.cookie, country: "ZZ" })).text();
-    expect(zz).toContain('<p class="price">$20 / month</p>');
+    expect(zz).toContain("$20<small> a month</small>");
     expect(zz).not.toContain("$25");
     const us = await (await call(b.env, "GET", "/account/billing", { cookie: b.cookie, country: "US" })).text();
-    expect(us).toContain('<p class="price">$25 / month</p>');
+    expect(us).toContain("$25<small> a month</small>");
     expect(us).not.toContain("$20");
     expect(us).not.toContain("Zedland");
     setNow(new Date(Date.parse(CLI_ACCOUNT_FROM) + 3_600_000));

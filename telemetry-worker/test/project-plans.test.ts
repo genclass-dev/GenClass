@@ -699,10 +699,10 @@ describe("an app past what the plan covers waits on its plan page (Free: one app
   it("the billing page lists each app with its plan and sells Pro and Business for the account", async () => {
     const t = await withApps(["Shop", "Blog"]);
     const page = await text(call(t.env, "GET", "/account/billing", { cookie: t.cookie }));
-    expect(page).toContain('<p class="price">$25 / month</p>');
-    expect(page).toContain('data-plan="team"><span>Upgrade to Pro</span>');
-    expect(page).toContain('<p class="price">$79 / month</p>');
-    expect(page).toContain('data-plan="business"><span>Upgrade to Business</span>');
+    expect(page).toContain("$25<small> a month</small>");
+    expect(page).toContain('data-plan="team" aria-label="Start Pro with 7 days free"><span>Start 7 days free</span>');
+    expect(page).toContain("$79<small> a month</small>");
+    expect(page).toContain('data-plan="business" aria-label="Start Business with 7 days free"><span>Start 7 days free</span>');
     expect(page).not.toContain("Choose a project");
     expect(page).toContain('id="projects"');
     expect(page).toContain("<tr><td>Shop</td><td>Free</td>");
@@ -1181,7 +1181,7 @@ describe("the website: an own app opens its dashboard at once (set up first, 202
     expect(none.status).toBe(200);
     const html = await none.text();
     expect(html).toContain('"go":true');
-    expect(html).toContain('data-plan="team" data-pick><span>Upgrade to Pro</span>');
+    expect(html).toContain('data-plan="team" data-pick aria-label="Start Pro with 7 days free"><span>Start 7 days free</span>');
     await createApp(t.env, a.cookie, "Shop");
     expect((await call(t.env, "GET", "/account/billing?plan=pro&start=1", { cookie: a.cookie })).status).toBe(200);
     // a plain link shows the page, and starts nothing
