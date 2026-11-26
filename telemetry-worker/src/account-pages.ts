@@ -517,8 +517,8 @@ export function appsumoPage(nonce: string, o: { me: string; code: string; codes:
   }
   const full = o.codes >= o.max;
   const have = o.codes
-    ? `<p class="lead">You have ${o.codes} code${o.codes > 1 ? "s" : ""} on this account: <b>${esc(o.plan ?? "")}</b>, for life.${full ? "" : " A second code moves you up to Business."}</p>`
-    : `<p class="lead">Signed in as <b>${esc(o.me)}</b>. Paste the code from your AppSumo purchase. One code gives you Pro for life. A second code on the same account gives you Business.</p>`;
+    ? `<p class="lead">Your AppSumo code is on this account: you have <b>${esc(o.plan ?? "")}</b> for life. There is no subscription, so nothing is ever billed.</p>`
+    : `<p class="lead">Signed in as <b>${esc(o.me)}</b>. Paste the code from your AppSumo purchase: it gives you Pro for life, with nothing ever billed.</p>`;
   const form = full
     ? `<div class="acts"><a class="btn green" href="/account/get-started">Set up your app</a> <a class="btn ghost" href="/account">Your apps</a></div>`
     : `<form id="f" novalidate><label for="code">Your AppSumo code</label><input id="code" name="code" autocomplete="off" spellcheck="false" placeholder="GC-XXXXXXXXXXXX-XXXXXXXX" value="${esc(o.code)}" required><div class="acts"><button class="btn green" id="go" type="submit"><span>Redeem</span></button> <a class="btn ghost" href="/account">Not now</a></div></form>`;

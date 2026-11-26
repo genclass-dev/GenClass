@@ -53,6 +53,7 @@ import {
   cleanSeats,
   countryOf,
   entitled,
+  isLifetime,
   MAX_SEATS,
   FREE,
   PAID_PLANS,
@@ -315,6 +316,10 @@ export async function routeBilling(request: Request, url: URL, path: string, env
       const usage = await billingUsage(c, a.account.id, access, owned.map((x) => ({ token: x.row.token, name: names.get(x.row.token)!, plan: x.access.plan })));
       const trialDays: Record<string, number> = {};
       for (const p of PAID_PLANS) trialDays[p.id] = await trialFor(c.db, a.account.id, p).catch(() => 0);
+      // an AppSumo lifetime grant shows its code (src/appsumo.ts, migration 0025)
+      const appsumo = access.lifetime
+        ? ((await c.db.prepare("SELECT code FROM appsumo_codes WHERE account_id = ? AND refunded IS NULL ORDER BY redeemed").bind(a.account.id).all<{ code: string }>().catch(() => ({ results: [] as { code: string }[] }))).results ?? []).map((r) => r.code)
+        : undefined;
       return page(200, (n) =>
         billingPage(n, {
           projects,
@@ -335,6 +340,7 @@ export async function routeBilling(request: Request, url: URL, path: string, env
           managedPlans: PAID_PLANS.filter((p) => managedPayments(env, p)).map((p) => p.name),
           usage,
           trialDays,
+          appsumo,
           now: c.now,
         }),
       );
@@ -445,6 +451,10 @@ async function checkout(c: C, f: Fetch): Promise<Response> {
   const body = await readJson(c, 1024);
   if (body instanceof Response) return body;
   if (!canBuy(c.env, a.account)) return fail(503, "paid plans are not on sale yet");
+  // an AppSumo lifetime grant is never moved into a trial or a subscription (src/plans.ts isLifetime)
+  if (isLifetime(await c.db.prepare("SELECT comp_until FROM accounts WHERE id = ?").bind(a.account.id).first<{ comp_until: string | null }>())) {
+    return fail(409, `your plan is for life, from AppSumo, and this account is never billed; for more apps or a team, write to ${PLANS_FILE.contact}`);
+  }
   const plan = PAID_PLANS.find((p) => p.id === body.plan);
   if (!plan) {
     if (!PAID_PLANS.length) return fail(400, `no plan is sold on genclass.dev: Free costs nothing, and Enterprise is agreed by email with ${PLANS_FILE.contact}`);

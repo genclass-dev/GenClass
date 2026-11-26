@@ -92,6 +92,8 @@ export interface BillingView {
   usage?: BillingUsage;
   /** The days free each paid plan starts with for this account (src/billing.ts trialFor), by plan id; 0 or missing: none. */
   trialDays?: Record<string, number>;
+  /** The AppSumo codes redeemed on this account (src/appsumo.ts), shown with a lifetime grant (access.lifetime). */
+  appsumo?: string[];
   now: Date;
 }
 
@@ -118,6 +120,7 @@ const BILLING_CSS = `
 .plan li.soon{color:var(--ink3)}
 .plan li.soon::before{border-color:var(--ink3)}
 .plan .act{margin-top:auto;padding-top:10px}
+.plans.life{grid-template-columns:minmax(0,440px)}
 .plan .tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;font:500 10.5px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--accent);background:var(--accent-t);border:1px solid var(--accent-b)}
 .status{margin-top:6px;font-size:14px;line-height:1.55;max-width:80ch;color:var(--ink2)}
 .status b{color:var(--ink);font-weight:500}
@@ -302,11 +305,37 @@ function gcCancel(project){
   });
 }`;
 
+/** An AppSumo lifetime grant (src/plans.ts isLifetime): the plan for life, with its own limits, never billed. */
+const lifetime = (a: Access): boolean => a.source === "comp" && a.lifetime === true;
+
+/** What a lifetime plan holds, in words: "up to 3 apps and one developer". */
+function lifetimeLimits(p: Plan): string {
+  const apps = p.limits.apps ? `up to ${p.limits.apps} app${p.limits.apps === 1 ? "" : "s"}` : "every app";
+  const seats = p.limits.seats === null || p.limits.seats === undefined ? "your whole team" : p.limits.seats === 1 ? "one developer" : `${p.limits.seats} people`;
+  return `${apps} and ${seats}`;
+}
+
+/** The status line of an AppSumo lifetime grant: the plan, its code, its limits, and that nothing is billed. */
+function lifetimeLine(v: BillingView): string {
+  const p = v.access.plan;
+  const codes = v.appsumo ?? [];
+  const ref = codes.length ? ` (AppSumo code <code>${esc(codes[0]!)}</code>)` : "";
+  return `You have <b>${esc(p.name)} for life</b> from AppSumo${ref}, for ${lifetimeLimits(p)}. It is not a subscription: there is no trial, nothing renews and nothing is ever billed. Questions: <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.`;
+}
+
+/** The one plan card of an AppSumo lifetime grant, in place of the plans on sale (no prices, no trial). */
+function lifetimeCard(v: BillingView): string {
+  const p = v.access.plan;
+  const lines = p.features.filter((f) => f.available && !/days free/i.test(f.text)).map((f) => `<li>${esc(f.text)}</li>`).join("");
+  return `<div class="plans life"><div class="plan cur"><h3>${esc(p.name)}</h3><p class="price">Lifetime, from AppSumo</p><p class="sum">${esc(p.summary)}</p><ul>${lines}</ul><div class="act"><span class="tag">Your plan, for life</span></div></div></div>`;
+}
+
 function statusLine(v: BillingView, plan: Plan): string {
   const b = v.billing;
   const name = `<b>${esc(plan.name)}</b>`;
   // a server with PLAN_GATES open (a self-hosted collector): nothing is sold and nothing is locked
   if (v.access.source === "open") return `This server gives every account everything in <b>${esc(v.access.plan.name)}</b>: it sells no plans (PLAN_GATES is open).`;
+  if (lifetime(v.access)) return lifetimeLine(v);
   if (plan.id === "free") {
     if (v.access.source === "comp") return `You have <b>${esc(v.access.plan.name)}</b>, set up by GenClass. Questions: <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.`;
     const overdue = !!b.subscription_id && (b.subscription_status === "past_due" || b.subscription_status === "unpaid");
@@ -466,6 +495,7 @@ function plansTable(v: BillingView, current: Plan): string {
 function planState(v: BillingView, plan: Plan): string {
   const b = v.billing;
   if (v.access.source === "open") return "Everything, on this server";
+  if (lifetime(v.access)) return "For life, from AppSumo";
   if (v.access.source === "comp") return "Set up by GenClass";
   if (plan.id === "free" || !b.subscription_id) return plan.id === "free" ? "No subscription" : "Set up by GenClass";
   if (b.subscription_status === "past_due" || b.subscription_status === "unpaid") return "Payment due: see Manage billing";
@@ -499,13 +529,14 @@ function usageStrip(v: BillingView, plan: Plan): string {
   const after = (ok: (p: Plan) => boolean): Plan | undefined => PAID_PLANS.slice(PAID_PLANS.indexOf(has) + 1).find(ok) ?? PAID_PLANS.find((p) => p !== has && ok(p));
   const tiles: string[] = [];
   tiles.push(tile("Plan", `<p class="ut-v name">${esc(has.name)}</p>`, "", `${planState(v, plan)}<br>${historyWords(has.limits.history_days)} of history`));
-  const moreApps = u.apps.limit !== null && u.apps.used >= u.apps.limit ? after((p) => p.limits.apps === null || p.limits.apps > u.apps.limit!) : undefined;
+  const life = lifetime(v.access);
+  const moreApps = !life && u.apps.limit !== null && u.apps.used >= u.apps.limit ? after((p) => p.limits.apps === null || p.limits.apps > u.apps.limit!) : undefined;
   tiles.push(
     tile(
       "Apps",
       numberOf(u.apps.used, u.apps.limit),
       bar(u.apps.used, u.apps.limit, "Apps"),
-      u.apps.limit === null ? "No limit" : moreApps ? `${esc(moreApps.name)}: ${moreApps.limits.apps === null ? "any number" : `up to ${count(moreApps.limits.apps)}`}` : `${count(Math.max(0, u.apps.limit - u.apps.used))} more on ${esc(has.name)}`,
+      u.apps.limit === null ? "No limit" : life && u.apps.used >= u.apps.limit ? `For more, write to <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>` : moreApps ? `${esc(moreApps.name)}: ${moreApps.limits.apps === null ? "any number" : `up to ${count(moreApps.limits.apps)}`}` : `${count(Math.max(0, u.apps.limit - u.apps.used))} more on ${esc(has.name)}`,
       v.projects?.length ? '<a href="#projects">Manage</a>' : "",
     ),
   );
@@ -534,18 +565,23 @@ function projectsSection(v: BillingView): string {
   const rows = v.projects
     .map((p) => {
       const a = p.access;
+      const life = a.lifetime === true;
       const what = a.locked
-        ? `<span class="tag" style="color:var(--warn);border-color:var(--warn)">Needs a plan</span>`
+        ? `<span class="tag" style="color:var(--warn);border-color:var(--warn)">${life ? "Not covered" : "Needs a plan"}</span>`
         : a.plan.id === "free"
           ? "Free"
-          : `<b>${esc(a.plan.name)}</b>${a.source === "comp" ? " (set up by GenClass)" : ""}`;
-      const act = a.source === "paid" ? `<a href="/account/billing?project=${encodeURIComponent(p.id)}">See plan</a>` : `<a class="btn${a.locked ? "" : " ghost"}" href="/account/billing?project=${encodeURIComponent(p.id)}"><span>${a.locked ? "Choose a plan" : "Upgrade"}</span></a>`;
+          : `<b>${esc(a.plan.name)}</b>${a.source === "comp" ? (life ? " (for life, from AppSumo)" : " (set up by GenClass)") : ""}`;
+      const act = a.source === "paid" || life ? `<a href="/account/billing?project=${encodeURIComponent(p.id)}">See plan</a>` : `<a class="btn${a.locked ? "" : " ghost"}" href="/account/billing?project=${encodeURIComponent(p.id)}"><span>${a.locked ? "Choose a plan" : "Upgrade"}</span></a>`;
       return `<tr><td>${esc(p.name)}</td><td>${what}</td><td class="act">${act}</td></tr>`;
     })
     .join("");
   return `<section class="blk team" id="projects">
   <div class="blk-h"><h2>Apps</h2><span class="aside">What your plan covers</span></div>
-  <p class="intro">Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}${PAID_PLANS.map((p) => `; ${esc(p.name)} ${p.limits.apps ? `up to ${p.limits.apps} apps` : "every app"}, ${esc(priceText(p, v.country ?? null))}`).join("")}. More apps come with Enterprise.</p>
+  <p class="intro">${
+    lifetime(v.access)
+      ? `Your ${esc(v.access.plan.name)} for life covers ${lifetimeLimits(v.access.plan)}, your oldest apps first. For more, write to <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.`
+      : `Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}${PAID_PLANS.map((p) => `; ${esc(p.name)} ${p.limits.apps ? `up to ${p.limits.apps} apps` : "every app"}, ${esc(priceText(p, v.country ?? null))}`).join("")}. More apps come with Enterprise.`
+  }</p>
   <div class="tablewrap"><table><thead><tr><th>Project</th><th>Plan</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
 </section>`;
 }
@@ -606,14 +642,16 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
   // paying account included (Continue with Pro), and an app past what the plan covers waits here: more apps are
   // Enterprise's, by email
   const proFull = a.locked === "pro_apps";
+  // an AppSumo lifetime grant: no plan on sale is offered to it, and no price is shown (src/plans.ts isLifetime)
+  const life = a.lifetime === true;
   // the account's plan by the apps it covers (a locked app's access carries Free's), and the next plan with more
   const mine = proFull ? (PAID_PLANS.find((p) => p.limits.apps === a.apps) ?? offer) : offer;
-  const bigger = proFull ? (PAID_PLANS.find((p) => p !== mine && (p.limits.apps ?? Infinity) > (a.apps ?? 0)) ?? null) : null;
+  const bigger = proFull && !life ? (PAID_PLANS.find((p) => p !== mine && (p.limits.apps ?? Infinity) > (a.apps ?? 0)) ?? null) : null;
   const covered = !a.locked && a.source !== null;
   const status = a.source === "open"
     ? `This server gives every app everything in <b>${esc(a.plan.name)}</b>.`
     : proFull
-      ? `Your <b>${esc(mine?.name ?? "paid")}</b> plan covers up to ${a.apps ?? 0} apps, and <b>${name}</b> is one more. ${
+      ? `Your <b>${esc(mine?.name ?? "paid")}</b> plan${life ? ", for life from AppSumo," : ""} covers up to ${a.apps ?? 0} apps, and <b>${name}</b> is one more. ${
           bigger ? `<b>${esc(bigger.name)}</b> covers ${bigger.limits.apps ? `up to ${bigger.limits.apps} apps` : "every app"}.` : "More apps come with <b>Enterprise</b>, agreed by email."
         }`
       : paid
@@ -623,7 +661,7 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
             ? `<b>${name}</b> is on <b>${esc(a.plan.name)}</b>. The last payment did not go through: update your card in Manage billing.`
             : `Your <b>${esc(a.plan.name)}</b> plan covers <b>${name}</b>${a.apps ? ` (up to ${a.apps} apps on your account)` : ""}.`
         : a.source === "comp"
-          ? `Your <b>${esc(a.plan.name)}</b> plan, set up by GenClass, covers <b>${name}</b>.`
+          ? `Your <b>${esc(a.plan.name)}</b> plan, ${life ? "for life from AppSumo" : "set up by GenClass"}, covers <b>${name}</b>.`
           : a.locked
             ? `Since 13 November 2026 Free covers ${FREE_APPS === 1 ? "one app" : `${FREE_APPS} apps`}, your oldest, and <b>${name}</b> is past it: it needs ${esc(offer?.name ?? "a paid plan")}.`
             : (v.fromCli || v.isNew) && !v.chosen
@@ -651,7 +689,7 @@ export function projectPlanPage(nonce: string, v: ProjectPlanView): string {
         ? `<button class="btn" type="button" data-plan="${esc(offer!.id)}" data-pick><span>${v.trialDays ? `Start your ${v.trialDays}-day free trial` : `Start ${esc(offer!.name)}`}</span></button>${v.trialDays ? `<p class="trialnote">${v.trialDays} days free, then ${esc(priceText(offer!, v.country ?? null))}. Cancel before the trial ends and you pay nothing.</p>` : ""}`
         : '<span class="muted">Paid plans are not on sale yet.</span>';
   const card = offer && a.source !== "open"
-    ? `<div class="plan pick big"><h3>${esc(offer.name)}${covered ? ' <span class="tag">Your plan</span>' : ""}</h3><p class="price">${esc(priceText(offer, v.country ?? null))}</p>${features}
+    ? `<div class="plan pick big"><h3>${esc(offer.name)}${covered ? ' <span class="tag">Your plan</span>' : ""}</h3><p class="price">${life ? "Lifetime, from AppSumo" : esc(priceText(offer, v.country ?? null))}</p>${features}
   <div class="act">${action}</div></div>
   ${a.locked || a.source !== null ? "" : `<p class="free"><a href="#why" class="linkish" id="free">Skip</a></p>
   <dialog id="why" class="why" aria-labelledby="whyh">
@@ -868,6 +906,21 @@ export function billingPage(nonce: string, v: BillingView): string {
     v.testMode && v.live
       ? '<p class="notice" role="note"><b>Stripe test mode.</b> Only accounts listed in STRIPE_TEST_ACCOUNTS can buy, and no real money moves. Pay with card 4242 4242 4242 4242, any future date and any CVC.</p>'
       : "";
+  // an AppSumo lifetime grant sees its own plan, for life, and no plan on sale (no prices, no trial)
+  const life = lifetime(v.access);
+  const plansBlock = life
+    ? `<section class="blk" id="plans">
+  <div class="blk-h"><h2>Your plan</h2></div>
+  ${lifetimeCard(v)}
+  <p class="intro">Need more apps or a team? Write to <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.</p>
+</section>`
+    : `<section class="blk" id="plans">
+  <div class="blk-h"><h2>Plans</h2>${PAID_PLANS.length ? `<span class="aside">${trialAside(v)}US dollars, billed monthly</span>` : ""}</div>
+  ${plansTable(v, plan)}
+  <p class="err" id="planerr" role="alert"></p>
+  ${switchNote}${managed}
+  <p class="intro">${esc(PLANS_FILE.footer).replace(esc(CONTACT), `<a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>`).replace("Contact sales", '<a href="https://genclass.dev/enterprise#contact">Contact sales</a>')}</p>
+</section>`;
   const body = `
 <div class="sb-page" id="mc" tabindex="-1">
 <header class="sb-ph" id="top"><div>
@@ -877,13 +930,7 @@ export function billingPage(nonce: string, v: BillingView): string {
 </div></header>
 ${notice}${test}
 ${usageStrip(v, plan)}
-<section class="blk" id="plans">
-  <div class="blk-h"><h2>Plans</h2>${PAID_PLANS.length ? `<span class="aside">${trialAside(v)}US dollars, billed monthly</span>` : ""}</div>
-  ${plansTable(v, plan)}
-  <p class="err" id="planerr" role="alert"></p>
-  ${switchNote}${managed}
-  <p class="intro">${esc(PLANS_FILE.footer).replace(esc(CONTACT), `<a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>`).replace("Contact sales", '<a href="https://genclass.dev/enterprise#contact">Contact sales</a>')}</p>
-</section>
+${plansBlock}
 ${
   manage
     ? `<section class="blk" id="manage">

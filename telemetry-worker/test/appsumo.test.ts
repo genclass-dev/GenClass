@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { codesOf, isCode, LIFETIME_UNTIL, makeCode, normaliseCode } from "../src/appsumo.js";
-import { accessOf } from "../src/plans.js";
+import { accessOf, appsCovered } from "../src/plans.js";
 import { makeCodes } from "../scripts/appsumo-codes.mjs";
-import { call, cliToken, now, resetClock, setup, signedIn } from "./account-helpers.js";
+import { call, cliToken, fakeStripe, now, resetClock, setup, signedIn } from "./account-helpers.js";
 
-// AppSumo codes (src/appsumo.ts, the owner 2026-11-24: launch on AppSumo): a signed code is redeemed once, by one
-// account, which then has Pro for life; a second code gives Business; nothing more stacks.
+// AppSumo codes (src/appsumo.ts, the owner 2026-11-24: launch on AppSumo; 2026-11-25: Pro for life, not Business): a
+// signed code is redeemed once, by one account, which then has Pro for life with Pro's own limits (3 apps, one
+// developer), never billed; one code per account.
 
 const SECRET = "test-secret-0123456789abcdef0123456789abcdef";
 beforeEach(() => resetClock());
@@ -34,22 +35,48 @@ describe("AppSumo codes: what a code is (src/appsumo.ts)", () => {
 });
 
 describe("AppSumo codes: redeeming (POST /api/account/appsumo, /account/appsumo)", () => {
-  it("one code gives Pro for life, a second gives Business, a third is refused", async () => {
+  it("a code gives Pro for life with Pro's own limits (3 apps, one developer); a second code on the account is refused", async () => {
     const { env, sql } = setup({ APPSUMO_CODE_SECRET: SECRET });
     const me = await signedIn(env);
-    const [a, b, c] = await makeCodes(SECRET, 3);
+    const [a, b] = await makeCodes(SECRET, 2);
     const r1 = await redeem(env, me.cookie, a);
     expect(r1.status).toBe(200);
     expect(await r1.json()).toMatchObject({ ok: true, plan: "Pro", codes: 1, already: false });
     expect(grant(sql, me.account.id)).toEqual({ comp_plan: "team", comp_until: LIFETIME_UNTIL });
-    expect(accessOf({ plan: null, stripe_mode: null, ...grant(sql, me.account.id) }, null, now()).plan.id).toBe("team");
+    const access = accessOf({ plan: null, stripe_mode: null, ...grant(sql, me.account.id) }, null, now());
+    expect(access).toMatchObject({ source: "comp", lifetime: true, seats: 1 });
+    expect(access.plan.id).toBe("team");
+    // a grant GenClass gives by hand covers every app; a lifetime one covers Pro's 3
+    expect(await appsCovered(sql.api, me.account.id, env, now())).toBe(3);
     const r2 = await redeem(env, me.cookie, b);
-    expect(await r2.json()).toMatchObject({ ok: true, plan: "Business", codes: 2 });
-    expect(grant(sql, me.account.id).comp_plan).toBe("business");
-    const r3 = await redeem(env, me.cookie, c);
-    expect(r3.status).toBe(409);
-    expect(((await r3.json()) as any).error).toContain("2 codes at most");
-    expect(await codesOf(sql.api, me.account.id)).toBe(2);
+    expect(r2.status).toBe(409);
+    expect(((await r2.json()) as any).error).toContain("one code is all an account takes");
+    expect(await codesOf(sql.api, me.account.id)).toBe(1);
+    expect(grant(sql, me.account.id).comp_plan).toBe("team");
+  });
+
+  it("Plan and billing shows Pro for life with its code and no price or trial; checkout is refused; the sidebar says 0 of 3 apps", async () => {
+    const { env } = setup({ APPSUMO_CODE_SECRET: SECRET, STRIPE_SECRET_KEY: "sk_live_fake" });
+    const me = await signedIn(env);
+    const code = await makeCode(SECRET);
+    expect((await redeem(env, me.cookie, code)).status).toBe(200);
+    const html = await (await call(env, "GET", "/account/billing", { cookie: me.cookie })).text();
+    expect(html).toContain("<b>Pro for life</b> from AppSumo");
+    expect(html).toContain(`<code>${code}</code>`);
+    expect(html).toContain("up to 3 apps and one developer");
+    expect(html).toContain("nothing is ever billed");
+    expect(html).toContain("Lifetime, from AppSumo");
+    // the usage tiles on top say the same: the plan for life, its apps against Pro's 3, no trial anywhere
+    expect(html).toContain('<p class="ut-v name">Pro</p>');
+    expect(html).toContain("For life, from AppSumo<br>90 days of history");
+    for (const sold of ["$25", "$79", "days free", "Upgrade to", "billed monthly", "set up by GenClass"]) expect(html).not.toContain(sold);
+    const s = fakeStripe();
+    const r = await call(env, "POST", "/api/billing/checkout", { body: { plan: "business" }, cookie: me.cookie, fetch: s.fetch });
+    expect(r.status).toBe(409);
+    expect(((await r.json()) as any).error).toContain("for life, from AppSumo");
+    expect(s.calls).toEqual([]);
+    const g = (await (await call(env, "GET", "/api/account/glance", { cookie: me.cookie })).json()) as any;
+    expect(g).toMatchObject({ plan: "Pro", status: "for life", apps: { used: 0, of: 3 }, note: "0 of 3 apps" });
   });
 
   it("a code works once: the same account again is told it has it, another account is refused", async () => {
