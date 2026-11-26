@@ -706,6 +706,23 @@ describe("remove keeps the package while anything still imports it", () => {
       expect(readFileSync(join(dir, extra), "utf8")).toContain("@genclass/runtime");
     }
   });
+
+  it("does not count the app's own build output (a content-hashed or minified bundle) as an import", () => {
+    const bundle = `var e="@genclass/runtime";${"x".repeat(6000)}\n`;
+    for (const out of ["dist/assets/index-BxK3a9Qz.js", "build/static/js/main.4f9a1c2e.js", "dist/app.js"]) {
+      const dir = project({
+        "package.json": pkg({ vue: "^3", vite: "^7", "@genclass/runtime": "^0.1.0" }),
+        "index.html": VITE_HTML.replace("main.tsx", "main.js"),
+        "src/main.js": VITE_MAIN,
+        [out]: out === "dist/app.js" ? bundle : `import{GenClass as t}from"@genclass/runtime";t.init();\n`,
+      });
+      expect(cli(dir, "init", "--yes", "--no-install").code).toBe(0);
+      const r = cli(dir, "remove", "--dry-run");
+      expect(r.code, r.out).toBe(0);
+      expect(r.out, out).toContain("Uninstall");
+      expect(r.out, out).not.toContain("still imported");
+    }
+  });
 });
 
 describe("init only edits browser apps", () => {

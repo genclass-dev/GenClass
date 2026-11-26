@@ -10,7 +10,9 @@
 //   before getting a sample of the problems fixed): no sign-in and no Pro. genclass.dev sends a viewer without Pro
 //   the free view, the three worst findings in full (genclass-site scan-worker gate.ts sampleOf): those go to the
 //   agent, and the screen says how many more come with Pro. A free view with none in full gives no prompt.
-// - The sign-in (when there is one) and the address go to genclass.dev (GENCLASS_HOST) and nowhere else.
+// - The sign-in (when there is one) and the address go to genclass.dev (GENCLASS_HOST) and nowhere else. A page on
+//   this machine or its network (localhost, a private address, runtime scan.mjs privateHost) is never sent: the page
+//   check could not reach it, and the address is the person's own; the command says how to check it here instead.
 // - The report's words come from someone's page (selectors, measured text): each is cut to length and stripped of
 //   control characters, and the prompt tells the agent they are data from the page, not instructions.
 // - GenClass changes no code: the agent does, in the person's own session with it. Nothing starts without a key press;
@@ -18,6 +20,7 @@
 
 import { readCredentials } from "../../runtime/bin/lib/account.mjs";
 import { apiHost } from "../../runtime/bin/lib/host.mjs";
+import { privateHost } from "../../runtime/bin/lib/scan.mjs";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { copyText, findAgents, SESSION_MCP, sessionMcp, startAgent } from "./fix.mjs";
 import { clean, good, note, PROMPT, typed, warn, width } from "./tui.mjs";
@@ -27,6 +30,26 @@ export function isAddress(word) {
   const w = String(word ?? "").trim();
   if (!w || /\s/.test(w) || w.length > 2048) return false;
   return /^(https?:\/\/)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?([/?#]\S*)?$/i.test(w);
+}
+
+/**
+ * Whether a word after `fix` is a page on this machine or its network (localhost:5173, 127.0.0.1:5199,
+ * http://192.168.1.20:3000/): the same test `scan` uses before it would send an address to the hosted check.
+ */
+export function isLocalPage(word) {
+  const w = String(word ?? "").trim();
+  if (!w || /\s/.test(w) || w.length > 2048) return false;
+  // it must look like an address (a scheme, a port, a dot, brackets or localhost): `fix stale` and `fix 2` name a
+  // problem, and privateHost alone would read a bare word as a name only this network knows
+  if (!/^https?:\/\/|[.:[]|^localhost\b/i.test(w)) return false;
+  try {
+    const href = /^https?:\/\//i.test(w) ? w : `http://${w}`;
+    const u = new URL(href);
+    if (!/^https?:$/.test(u.protocol) || !u.hostname) return false;
+    return privateHost(u.href);
+  } catch {
+    return false;
+  }
 }
 
 const CATEGORY = { visual: "Visual bugs", a11y: "Accessibility", accessibility: "Accessibility", phone: "Phone", reliability: "Reliability", speed: "Speed", security: "Security", seo: "Search and sharing", races: "Races" };
@@ -184,6 +207,14 @@ const STEP_WORDS = { check: "checking the address", browser: "starting a browser
  */
 export async function fixPage(o, deps = {}) {
   const address = String(o.what).trim();
+  // a dev server or a machine on this network: genclass.dev's page check cannot reach it, so it is never sent there
+  if (isLocalPage(address)) {
+    const here = clean(address, 80);
+    const msg = `${here} is a page on this machine or your network, which genclass.dev's page check cannot reach. Check it here instead: npx genclass scan ${here} --local (it needs Playwright's Chromium), or fix the live page: npx genclass fix <its public address>.`;
+    if (o.json) out(JSON.stringify({ ok: false, error: msg, local: true }));
+    else process.stderr.write(`genclass fix: ${msg}\n`);
+    return 2;
+  }
   if (!isAddress(address)) {
     process.stderr.write(`genclass fix: "${clean(address, 60)}" is not a page's address. Try npx genclass fix shop.example.com, or a number or kind from npx genclass fix.\n`);
     return 2;

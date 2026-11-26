@@ -319,7 +319,8 @@ export async function run(argv, ctx = {}) {
   const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", [...(o.cwd ? ["--cwd", o.cwd] : []), ...(o.open ? ["--open"] : [])]);
   if (cmd === "dashboard" && !o.json && !o.app && (await privateLinkHere(o.cwd))) return fallback();
   // `fix <address>` is free, as the page check is on the website: the three worst findings without Pro, all with it
-  const pageFix = cmd === "fix" && words.length === 1 && (await import("./fix-page.mjs")).isAddress(words[0]);
+  // (a local address too: it gets its own answer there, never a Pro card for the production problems)
+  const pageFix = cmd === "fix" && words.length === 1 && (await import("./fix-page.mjs").then((m) => m.isAddress(words[0]) || m.isLocalPage(words[0])));
   if (cmd !== null && !["setup", "status"].includes(cmd) && !pageFix) {
     const gate = await paid();
     if (gate !== 0) return gate;

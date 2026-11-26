@@ -464,6 +464,11 @@ describe("genclass: the setup first, Pro after it, and each app's plan page (src
       const said = await printed(async () => expect(await run([cmd, "--yes", "--cwd", dir]), cmd).toBe(1));
       expect(flat(said), cmd).toContain("Sign in first: npx genclass login. The genclass command comes with Pro");
     }
+    // fix with a problem's kind or number is the production problems' fix: Pro's, never mistaken for a local page
+    for (const argv of [["fix", "stale"], ["fix", "2"], ["fix", "all"]]) {
+      const said = await printed(async () => expect(await run([...argv, "--yes", "--cwd", dir]), argv.join(" ")).toBe(1));
+      expect(flat(said), argv.join(" ")).toContain("Sign in first: npx genclass login. The genclass command comes with Pro");
+    }
     // the setup's commands need the sign-in, and say the setup is free
     for (const argv of [["init"], ["connect"], ["analytics", "on"]]) {
       const said = await printed(async () => expect(await run([...argv, "--yes", "--cwd", dir]), argv.join(" ")).toBe(1));

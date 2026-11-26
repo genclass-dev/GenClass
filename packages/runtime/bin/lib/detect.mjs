@@ -2,7 +2,7 @@
 // libraries. Reads files only.
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 export const readText = (p) => {
   try {
@@ -91,9 +91,29 @@ const NEVER_SCAN = new Set([
   ".turbo", ".cache", ".parcel-cache", ".angular", ".vite", ".react-router", ".remix", "coverage",
 ]);
 
+/** A bundler's content-hashed file name (index-BxK3a9Qz.js, chunk.4f9a1c2e.mjs): the hash has a digit or a capital. */
+const HASHED_NAME = /[.-](?=[A-Za-z0-9_-]*[A-Z0-9])[A-Za-z0-9_-]{8,}\.(?:m|c)?js$/;
+/** A path inside a build's output folder. */
+const OUTPUT_DIR = /[\\/](?:dist|build|out|storybook-static)[\\/]/;
+
+/**
+ * A bundler's output, not a source: a content-hashed file in a build's output folder, or a minified file (a line of
+ * more than 5,000 characters). The app's own build holds the package inlined, so it would keep the package installed
+ * after `remove` (the 2026-11-25 onboarding walk: "still imported in dist/assets/index-....js" after one build).
+ */
+export function bundleOutput(p, read = (f) => readFileSync(f, "utf8")) {
+  if (OUTPUT_DIR.test(p) && HASHED_NAME.test(basename(p))) return true;
+  try {
+    return read(p).slice(0, 200_000).split("\n").some((l) => l.length > 5000);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Source files walkSources leaves out (dot-directories such as .storybook, tmp, out, build, dist, deeper than 10
- * levels), read-only: `remove` checks them for imports before it uninstalls the package.
+ * levels), read-only: `remove` checks them for imports before it uninstalls the package. A build's own output
+ * (bundleOutput) is not a source and is left out.
  */
 export function walkSkipped(dir, max = 20000) {
   const seen = new Set(walkSources(dir));
@@ -114,7 +134,7 @@ export function walkSkipped(dir, max = 20000) {
         const p = join(d, e.name);
         if (seen.has(p)) continue;
         try {
-          if (statSync(p).size <= 1_000_000) outFiles.push(p);
+          if (statSync(p).size <= 1_000_000 && !bundleOutput(p)) outFiles.push(p);
         } catch {
           /* ignore */
         }
