@@ -1,22 +1,27 @@
 // genclass-mcp: the command (bin/genclass-mcp.mjs).
 //
 //   genclass-mcp                 the MCP server on stdio (what an agent's MCP config runs)
-//   genclass-mcp init [--hook] [--no-skill]
+//   genclass-mcp init [--hook] [--no-skill] [--no-link] [--yes]
 //                                add the server to this project's .mcp.json and the genclass skill (the package's
 //                                plugin/skills/genclass/SKILL.md, with a `genclass:init` marker line) to
 //                                .claude/skills/genclass/SKILL.md (and, with --hook, the prompt hook to
-//                                .claude/settings.json), then print the lines for the app's dev build
+//                                .claude/settings.json), then connect the app's dev build: it runs
+//                                the runtime CLI at the version it pins (pinnedRuntime) with `init --agent-link`, which shows the
+//                                dev-only lines it adds to the app's entry and asks first (--yes: no question)
 //   genclass-mcp hook            UserPromptSubmit hook: new findings since the last prompt, as additional context
 //   genclass-mcp status          the bridge's status, for people
 //   genclass-mcp config [client] how to add the server to an MCP client (all of them without an argument)
 //
 // init writes only those three files, merging with what is there (the skill: a rerun replaces a file that carries the
-// marker and leaves one without it), and says what it changed.
+// marker and leaves one without it), and says what it changed. The app's entry is the runtime CLI's to edit (its
+// markers, its diff, its question, its `remove`): this package has no runtime dependency, so it runs that CLI at the
+// version it pins, says so first, and prints the lines to add by hand only when that does not finish.
 
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CLIENTS, clientById, hookCommand, installMarkdown, pinned, serverConfig } from "./clients.js";
+import { CLIENTS, clientById, hookCommand, installMarkdown, pinned, pinnedRuntime, serverConfig } from "./clients.js";
 import { callBridge } from "./http.js";
 import { serve, stateDirOf } from "./server.js";
 import { clean, q } from "./text.js";
@@ -34,10 +39,13 @@ export interface CliIo {
 const HELP = `genclass-mcp ${VERSION}: GenClass for coding agents
 
   genclass-mcp                 run the MCP server on stdio (the bridge listens on 127.0.0.1:${DEFAULT_PORT})
-  genclass-mcp init [--hook] [--no-skill]
+  genclass-mcp init [--hook] [--no-skill] [--no-link] [--yes]
                                add it to this project's .mcp.json and write the genclass skill (the procedure Claude Code
-                               loads for timing bugs) to .claude/skills/genclass/SKILL.md; --hook: also a prompt hook in
-                               .claude/settings.json; --no-skill: leave the skill out
+                               loads for timing bugs) to .claude/skills/genclass/SKILL.md, then connect the app's dev
+                               build (npx -y ${pinnedRuntime()} init --agent-link: it shows the lines
+                               it adds to your entry file and asks first); --hook: also a prompt hook in
+                               .claude/settings.json; --no-skill: leave the skill out; --no-link: leave the app alone;
+                               --yes: add the app's lines without asking
   genclass-mcp hook            print new findings for a UserPromptSubmit hook
   genclass-mcp status          show connected pages and findings
   genclass-mcp config [client] how to add it to an MCP client (${CLIENTS.map((c) => c.id).join(", ")})
@@ -99,7 +107,34 @@ function writeSkill(io: CliIo): void {
   io.out(cur === null ? `Wrote the genclass skill (the procedure Claude Code loads for timing bugs) to ${file}; --no-skill leaves it out.\n` : `Replaced the genclass skill at ${file} (it carried the ${SKILL_MARK} marker).\n`);
 }
 
-export function init(io: CliIo, hook: boolean, skill = true): number {
+/** Runs a command in `cwd` with the terminal attached (the runtime CLI shows its diff and asks there). Its exit code; 1 when it did not start. */
+export type RunFn = (cmd: string, args: string[], cwd: string) => number;
+const runAttached: RunFn = (cmd, args, cwd) => {
+  try {
+    const r = spawnSync(cmd, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
+    return typeof r.status === "number" ? r.status : 1;
+  } catch {
+    return 1;
+  }
+};
+
+/** What is left after init, said once: the agent has to load its MCP servers again. */
+const LEFT = "reload your agent's MCP servers (Claude Code: /mcp) or start a new agent session in this folder";
+
+export interface InitOptions {
+  hook?: boolean;
+  skill?: boolean;
+  /** connect the app's dev build with the runtime CLI (the command line does, unless --no-link) */
+  link?: boolean;
+  /** pass --yes to it */
+  yes?: boolean;
+  run?: RunFn;
+}
+
+export function init(io: CliIo, hookOrOpts: boolean | InitOptions = {}, skillArg = true): number {
+  const opts: InitOptions = typeof hookOrOpts === "boolean" ? { hook: hookOrOpts, skill: skillArg } : hookOrOpts;
+  const hook = !!opts.hook;
+  const skill = opts.skill !== false;
   const mcpFile = join(io.cwd, ".mcp.json");
   const existing = existsSync(mcpFile) ? readJson(mcpFile) : {};
   if (existing === null) {
@@ -132,7 +167,15 @@ export function init(io: CliIo, hook: boolean, skill = true): number {
       io.out(`Added a UserPromptSubmit hook (${cmd}) to ${sFile}: new findings reach the agent with each prompt.\n`);
     }
   }
-  io.out(`\nThen, in the app:\n\n${setupText(io.cwd)}\n`);
+  if (opts.link && existsSync(join(io.cwd, "package.json"))) {
+    // the app's dev build: the runtime CLI adds the dev-only lines after GenClass's import (or sets GenClass up first,
+    // in an app without it), with its own diff, question and markers, so its `remove` takes them out
+    const args = ["-y", pinnedRuntime(), "init", "--agent-link", "--cwd", io.cwd, ...(opts.yes ? ["--yes"] : [])];
+    io.out(`\nNow your app's dev build, so its pages reach the server. Running: npx ${args.join(" ")}\n(it shows the lines it adds and asks first)\n\n`);
+    const code = (opts.run ?? runAttached)("npx", args, io.cwd);
+    if (code === 0) io.out(`\nLeft to do: ${LEFT}, then open your app's dev server and ask the agent for genclass_status.\n`);
+    else io.out(`\nYour app is not connected yet (that command did not finish). In the app:\n\n${setupText(io.cwd)}\n\nThen ${LEFT}.\n`);
+  } else io.out(`\nThen, in the app:\n\n${setupText(io.cwd)}\n\nThen ${LEFT}.\n`);
   io.out(`\nChannels (findings pushed to an idle Claude Code session, research preview): start Claude Code with\n  claude --dangerously-load-development-channels server:genclass\n`);
   return 0;
 }
@@ -207,7 +250,7 @@ export async function runCli(argv: string[], io: CliIo & { stdin: NodeJS.Readabl
     io.out(`${VERSION}\n`);
     return 0;
   }
-  if (cmd === "init") return init(io, rest.includes("--hook"), !rest.includes("--no-skill"));
+  if (cmd === "init") return init(io, { hook: rest.includes("--hook"), skill: !rest.includes("--no-skill"), link: !rest.includes("--no-link"), yes: rest.includes("--yes") || rest.includes("-y") });
   if (cmd === "hook") return hookCmd(io);
   if (cmd === "config") return configCmd(io, rest[0]);
   if (cmd === "status") {

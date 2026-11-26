@@ -105,6 +105,29 @@ describe("cli (AGENT.md §4.4)", () => {
     expect(said).toContain("if (import.meta.env.DEV) {\n  const rt = GenClass.init();\n  connectAgent(rt);\n}");
   });
 
+  it("init connects the app's dev build with the runtime CLI it pins, said first; only when that does not finish are the lines printed", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gc-init-"));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ devDependencies: { vite: "7" } }));
+    const runs: { cmd: string; args: string[]; cwd: string }[] = [];
+    const ok = io(dir);
+    expect(init(ok, { link: true, yes: true, run: (cmd, args, cwd) => (runs.push({ cmd, args, cwd }), 0) })).toBe(0);
+    expect(runs).toEqual([{ cmd: "npx", args: ["-y", `@genclass/runtime@${RUNTIME_VERSION}`, "init", "--agent-link", "--cwd", dir, "--yes"], cwd: dir }]);
+    const said = ok.o.join("");
+    expect(said).toContain(`Running: npx -y @genclass/runtime@${RUNTIME_VERSION} init --agent-link --cwd ${dir} --yes`);
+    expect(said).toContain("Left to do: reload your agent's MCP servers (Claude Code: /mcp) or start a new agent session in this folder");
+    // the hand-edit lines are only the fallback
+    expect(said).not.toContain("connectAgent(rt)");
+    const failed = io(dir);
+    expect(init(failed, { link: true, run: () => 2 })).toBe(0);
+    expect(failed.o.join("")).toContain("Your app is not connected yet (that command did not finish)");
+    expect(failed.o.join("")).toContain("connectAgent(rt);");
+    // a folder with no package.json is no app: nothing is run
+    const none = mkdtempSync(join(tmpdir(), "gc-init-"));
+    let ran = 0;
+    expect(init(io(none), { link: true, run: () => (ran++, 0) })).toBe(0);
+    expect(ran).toBe(0);
+  });
+
   it("init again replaces a skill file that carries the marker and leaves one that does not, saying which", () => {
     const dir = mkdtempSync(join(tmpdir(), "gc-init-"));
     const file = join(dir, SKILL_PATH);

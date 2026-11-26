@@ -258,7 +258,7 @@ async function connectApp(o, creds, st, me) {
       }
       const app = r.project ?? { name: pkgName, token: st.token, dashboard_url: null };
       row("App", `${c.bold(app.name)} ${c.gray(`(added to your account; project key ${st.token})`)}`);
-      if (st.handWritten) {
+      if (st.handWritten && !st.keyFits) {
         out();
         printManual(st.token);
         return 0;
@@ -317,7 +317,10 @@ async function connectApp(o, creds, st, me) {
   }
   row("App", app ? `${c.bold(app.name)} ${c.gray(`(in your account; project key ${app.token})`)}` : `${c.bold(createName)} ${c.gray(`(a new app in ${HOST_CLI?.into ? HOST_CLI.into : "your account"}, created once you apply the changes)`)}`);
 
-  if (st.handWritten) {
+  // set up by hand: the key is added the way init adds options when it fits next to the person's own
+  // `import "@genclass/runtime/auto"` (a file of its own, shown first, and the app is created once it is applied);
+  // a GenClass.init() call, a script tag or an integration takes it in its own options, so it is printed to add
+  if (st.handWritten && !st.keyFits) {
     out();
     let token = app?.token;
     if (!token) {

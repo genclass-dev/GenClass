@@ -26,7 +26,8 @@ import { run as runLogin } from "../../runtime/bin/lib/login.mjs";
 import { c, interactive, out, printChange, stopOnEnter, sym } from "../../runtime/bin/lib/ui.mjs";
 import { fetchOverview, fetchRepoStatus } from "./api.mjs";
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "./assets.mjs";
-import { accountPaid, appPlanOffer, WORKFLOW_PATH } from "./state.mjs";
+import { planAgentLink } from "../../runtime/bin/lib/agent-link.mjs";
+import { accountPaid, agentConfigs, appPlanOffer, WORKFLOW_PATH } from "./state.mjs";
 import { agree, bad, clean, good, note, planCard, spinner, warn } from "./tui.mjs";
 import { planViteSettings } from "./vite.mjs";
 
@@ -330,7 +331,10 @@ export async function addRuntime(state, o = {}) {
     // step did not finish, so the walk says so and ends with exit code 1 instead of "done"
     const optedOut = args.some((a) => a === "--no-telemetry" || a === "--no-token" || a === "--no-network" || a === "--dry-run");
     if (state.signedIn && !after.token && !optedOut) {
-      warn("GenClass is in your code, but the app is not in your account yet: run npx genclass again to connect it.");
+      // set up by hand in a way connect cannot add the key to (a GenClass.init() call, a script tag, an integration):
+      // connect has said where it goes, and running the walk again before it is there would only say it again
+      if (after.handWritten) warn("GenClass is set up by hand here, so its key goes in by hand, as connect said above. Then run npx genclass again.");
+      else warn("GenClass is in your code, but the app is not in your account yet: run npx genclass again to connect it.");
       await addViteSettings(state, o);
       return "failed";
     }
@@ -668,8 +672,58 @@ export function writeSkill(dir) {
   }
 }
 
-/** Adds the MCP server to the project's agent configuration after showing the change, and the skill next to it. */
+/**
+ * The coding agent step: GenClass's MCP server in the project's agent configuration and the skill next to it (shown
+ * first; skipped when a configuration already names it), then the dev-only lines that connect the running app to that
+ * server (the runtime CLI's `init --agent-link`, which shows them and asks like init's other edits; --yes applies).
+ * Ends with what is left: the agent has to load its MCP servers again.
+ */
 export async function connectAgent(state, o = {}) {
+  if (!agentConfigs(state.cwd).length) {
+    const wrote = await writeAgentConfig(state, o);
+    if (wrote !== "done") return wrote;
+  }
+  const link = await linkApp(state, o);
+  const reload = "reload your coding agent's MCP servers (Claude Code: /mcp) or start a new session in this folder";
+  note(
+    link === "linked"
+      ? `Left to do: ${reload}, and open your app's dev server. npx genclass fix needs neither reload: it starts Claude Code and Codex with GenClass attached.`
+      : link === "manual"
+        ? `Left to do: add the lines above to your app, then ${reload}.`
+        : link === "fresh"
+          ? `Left to do: ${reload}. Once GenClass is in your app (npx genclass setup), this step also connects your running app.`
+          : `Left to do: the lines that connect your running app (npx genclass setup offers them again), then ${reload}.`,
+  );
+  return "done";
+}
+
+/**
+ * The agent link in the app's entry (runtime bin/lib/agent-link.mjs): "linked" (now or before), "fresh" (no GenClass
+ * in the app yet: nothing to link), "manual" (no known place: the lines were printed) or "declined".
+ */
+async function linkApp(state, o) {
+  let st;
+  try {
+    st = inspectProject({ cwd: state.cwd });
+  } catch {
+    return "fresh";
+  }
+  if (st.fresh || st.project.refused || !st.project.framework) return "fresh";
+  const plan = planAgentLink(st.project, st.cwd, st.files);
+  if (plan.done) return "linked";
+  out();
+  const code = await runInit("init", ["--cwd", st.cwd, "--agent-link", "--brief", ...(o.yes ? ["--yes"] : [])]);
+  if (!plan.changes.length) return "manual";
+  try {
+    const now = inspectProject({ cwd: state.cwd });
+    return planAgentLink(now.project, now.cwd, now.files).done ? "linked" : "declined";
+  } catch {
+    return code === 0 ? "linked" : "declined";
+  }
+}
+
+/** Adds the MCP server to the project's agent configuration after showing the change, and the skill next to it. */
+async function writeAgentConfig(state, o = {}) {
   const plan = planAgentConfig(state.cwd);
   if (!plan.change) {
     warn(`${plan.reason}, so it was left alone. Add this to its "mcpServers" by hand:`);
@@ -702,6 +756,5 @@ export async function connectAgent(state, o = {}) {
   // the skill is the procedure the agent follows with those tools; a file the person made their own is left alone
   const skill = writeSkill(state.cwd);
   if (skill === "written") good(`Wrote ${c.bold(SKILL_PATH)} ${c.gray("(how the agent uses them)")}`);
-  note('Restart your coding agent in this folder, then ask it "is GenClass connected?". The first time, it shows two dev-only lines that connect your running app and adds them when you say yes.');
   return "done";
 }

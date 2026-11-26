@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`init` connects your app's development build too.** After `.mcp.json` and the skill, it runs the runtime CLI it
+  pins, `npx -y @genclass/runtime@<that version> init --agent-link`, and says so first. That command shows the dev-only
+  lines it adds right after GenClass's import in your entry file and asks before it writes; `init --yes` passes
+  `--yes`, `--no-link` leaves the app alone, and `npx @genclass/runtime remove` takes the lines out. Before, `init`
+  printed lines to add by hand, so `genclass_status` said "No page has connected yet" until someone did. The lines are
+  still printed when that command does not finish (a project it cannot edit, a declined change, an older runtime
+  release without `--agent-link`). Then `init` says what is left: reload your agent's MCP servers, or start a new
+  agent session.
+
 - **`genclass_scan` on the hosted check's free view no longer lists blank findings.** Findings genclass.dev keeps
   locked without Pro (their what, where and fix) were printed as `- [moderate]  (phone): "" at ""`; they are now
   counted in one line, and the agent fixes the ones shown.
