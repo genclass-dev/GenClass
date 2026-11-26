@@ -1377,9 +1377,12 @@ describe("dashboard page: the Supabase Studio frame (src/studio.ts): header, rai
     const p = b.getAttribute("data-copy")!;
     expect(b2.getAttribute("data-copy")).toBe(p);
     for (const x of st.breakdowns.detect_diagnosis!.filter((x) => x.key !== "expected")) expect(p).toMatch(new RegExp(`\\n- [^\\n]*${nf.format(x.count)} times?`));
-    expect(p).toContain("check genclass_findings lists from the dev page");
+    expect(p).toContain("genclass_findings also lists the checks from the dev page");
     expect(p).toContain("then wait for the loads yourself: check every 10 seconds (sleep 10 in a shell in between)");
-    expect(p).toContain("4. Replay the recorded order again: it must say not reproduced.");
+    expect(p).toContain("genclass_replay of the recorded order after the fix: it must say not reproduced.");
+    // the fix comes from the code first; without the MCP tools the agent skips the proof and installs nothing (2026-11-25)
+    expect(p).toContain("1. For each problem, the most frequent first: find the code behind it");
+    expect(p).toContain("do not install or configure anything for them now");
     // each problem's own prompt waits the same way
     expect(r.doc.querySelector("#issues [data-copy]")!.getAttribute("data-copy")).toContain("then wait for the loads yourself");
     await r.close();
@@ -1548,9 +1551,11 @@ describe("dashboard page: measured visual checks (docs/runtime/VISUAL.md section
     expect(prompt).toContain("GenClass removes the leaked lock");
     expect(prompt).toContain("Fix a problem GenClass measured in production in this web app (Sample storefront (simulated data)): scroll locked (the measured check scroll-lock-stuck)");
     expect(prompt).toContain("not a model finding");
-    expect(prompt).toContain("1. genclass_scan on /products/:id");
+    expect(prompt).toContain("1. Find the component and the CSS that render /products/:id");
+    expect(prompt).toContain("3. With the GenClass MCP tools: genclass_scan on /products/:id");
     expect(prompt).toContain("Open and close every dialog, menu and notice on the page");
-    expect(prompt).toContain("must not list scroll-lock-stuck any more");
+    expect(prompt).toContain("after the fix it must not list scroll-lock-stuck.");
+    expect(prompt).toContain("do not install or configure anything for them now");
     expect(prompt).toContain("then wait for the loads yourself");
     expect(prompt).not.toContain("genclass_replay");
     await r.close();
@@ -1616,9 +1621,9 @@ describe("dashboard page: measured visual checks (docs/runtime/VISUAL.md section
     expect(b.classList.contains("hidden")).toBe(false);
     const p = b.getAttribute("data-copy")!;
     expect(p).toContain("- Scroll locked (measured check scroll-lock-stuck), 4 times, on /.");
-    expect(p).toContain("run genclass_scan on its page instead");
-    expect(p).toContain("For a measured check, genclass_scan on its page must no longer list it.");
-    expect(p).toContain("every other check genclass_findings lists from the dev page");
+    expect(p).toContain("A measured check is a measurement of the page, so its fix is in the component or the CSS.");
+    expect(p).toContain("For a measured check, genclass_scan on its page before and after: it must no longer list it.");
+    expect(p).toContain("genclass_findings also lists the checks from the dev page");
     // the overview's first card is the check, with its own prompt
     expect(r.doc.querySelector("#advisor article h3 .bdg")!.textContent).toBe("Measured check");
     expect(r.doc.querySelector("#advisor [data-copy]")!.getAttribute("data-copy")).toContain("genclass_scan");

@@ -15,7 +15,7 @@
 
 import { c, interactive, out } from "../../runtime/bin/lib/ui.mjs";
 import { BUILD } from "./assets.mjs";
-import { installedVersion, installGlobally, isShort, latestOnNpm, newer, readPrefs, savePrefs, shortNameWorks, useShortName, viaNpx } from "./name.mjs";
+import { installedVersion, installGlobally, latestOnNpm, newer, readPrefs, savePrefs, shortNameWorks, useShortName, viaNpx } from "./name.mjs";
 import { planName } from "./state.mjs";
 import { clean, header, inHome, note, PROMPT, rule, spinner, typed, warn } from "./tui.mjs";
 
@@ -53,6 +53,8 @@ const NAMES = [...COMMANDS.map(([n]) => n.split(" ")[0]), "logout", "whoami", "v
 export const FREE_MENU = [
   ["upgrade", "start Pro: its free trial first"],
   ["setup", "set this app up (free)"],
+  ["fix <url>", "fix a page's 3 worst problems (free)"],
+  ["scan <url>", "check a page's score (free)"],
   ["profile", "your account and plan"],
   ["plan", "your plan and its limits"],
   ["status", "where the setup stands"],
@@ -109,7 +111,7 @@ export function menu(all = false, free = false) {
     if (all) {
       const names = COMMANDS.map(([n]) => n);
       for (let i = 0; i < names.length; i += 4) out(`    ${c.cyan(names.slice(i, i + 4).map((n) => n.padEnd(13)).join(""))}`);
-      note("All but setup, apps, upgrade, profile, plan, status, login and remove come with Pro.");
+      note("All but setup, apps, upgrade, profile, plan, status, login, remove, scan <url> and fix <url> come with Pro.");
       return;
     }
     const pad = Math.max(...FREE_MENU.map(([n]) => n.length)) + 2;
@@ -127,47 +129,70 @@ export function menu(all = false, free = false) {
 
 const DAY = 24 * 60 * 60_000;
 
+let keptCurrent = false;
+
+/**
+ * Keeps the installed `genclass` current, after any command on a terminal and when the home opens (the 2026-11-25
+ * sandbox run: a copy installed by an earlier run never asked npm, because the check sat behind the test for a command
+ * that is not installed yet, which is always false once it is). A run through npx that is newer than the installed copy
+ * replaces it; the installed copy asks npm at most once a day and updates to what npm has. A failed update is tried
+ * again a day later and the screen says how by hand. Not with --json, without a terminal, in CI, or with
+ * GENCLASS_NO_INSTALL=1; once per process. Returns "updated", "failed" or "skipped".
+ */
+export async function keepCurrent(deps = {}) {
+  if (keptCurrent || process.env.CI || process.env.GENCLASS_NO_INSTALL || !(deps.interactive ?? interactive)()) return "skipped";
+  keptCurrent = true;
+  const p = readPrefs();
+  const now = deps.now ?? Date.now();
+  const install = deps.install ?? installGlobally;
+  const have = (deps.installedVersion ?? installedVersion)();
+  if (!have) return "skipped";
+  const npx = (deps.viaNpx ?? viaNpx)();
+  let want = null;
+  // npx ran the newest it knows: only an older installed copy is replaced; the installed copy itself asks npm
+  if (npx) want = newer(BUILD.version, have) ? BUILD.version : null;
+  else if (!(p.updateCheckedAt && now - Date.parse(p.updateCheckedAt) < DAY)) {
+    savePrefs({ updateCheckedAt: new Date(now).toISOString() });
+    const latest = await (deps.latest ?? latestOnNpm)();
+    want = latest && newer(latest, have) && newer(latest, BUILD.version) ? latest : null;
+  }
+  if (want && p.updateFailedAt && now - Date.parse(p.updateFailedAt) < DAY) want = null;
+  if (!want) return "skipped";
+  out();
+  const sp = spinner(`A newer genclass is out: updating ${have} to ${want}`);
+  const r = await install(want);
+  if (r.ok) {
+    savePrefs({ updateFailedAt: null });
+    sp.stop("ok", npx ? `Updated to ${want}.` : `Updated to ${want}: the next genclass you type runs it.`);
+    return "updated";
+  }
+  savePrefs({ updateFailedAt: new Date(now).toISOString() });
+  sp.stop("warn", `genclass ${want} is out, and this one is ${have}. It could not update itself.`);
+  note("By hand: npm install -g genclass@latest");
+  return "failed";
+}
+
+/** For tests: this process has not checked for a newer genclass yet. */
+export const forgetKeptCurrent = () => {
+  keptCurrent = false;
+};
+
 /**
  * Makes `genclass` alone work in the terminal: a run through npx on a terminal installs the command (npm install
  * -g genclass@<this version>) and says so (the owner's call, 2026-11-12: it installs itself). Not with --yes, without
  * a terminal, in CI, or with GENCLASS_NO_INSTALL=1; after a failure it is tried again a day later, and the screen
- * says how to do it by hand. npm uninstall -g genclass takes it out.
+ * says how to do it by hand. npm uninstall -g genclass takes it out. Once it is installed, keepCurrent keeps it
+ * current.
  */
 export async function installShortName(deps = {}) {
-  if (isShort() || process.env.CI || process.env.GENCLASS_NO_INSTALL || !(deps.interactive ?? interactive)()) return "skipped";
+  if (process.env.CI || process.env.GENCLASS_NO_INSTALL || !(deps.interactive ?? interactive)()) return "skipped";
   const p = readPrefs();
   const now = deps.now ?? Date.now();
   const install = deps.install ?? installGlobally;
   if ((deps.works ?? shortNameWorks)()) {
-    // the installed command stays current (the 0.3.7 walk: a Mac stayed on its first version): a run through npx,
-    // which runs the newest, replaces an older installed copy; the installed copy asks npm once a day
-    const have = (deps.installedVersion ?? installedVersion)();
-    const npx = (deps.viaNpx ?? viaNpx)();
-    let want = null;
-    if (have && npx) want = newer(BUILD.version, have) ? BUILD.version : null;
-    else if (have && !(p.updateCheckedAt && now - Date.parse(p.updateCheckedAt) < DAY)) {
-      savePrefs({ updateCheckedAt: new Date(now).toISOString() });
-      const latest = await (deps.latest ?? latestOnNpm)();
-      want = latest && newer(latest, have) ? latest : null;
-    }
-    if (want && p.updateFailedAt && now - Date.parse(p.updateFailedAt) < DAY) want = null;
-    let updated = false;
-    if (want) {
-      out();
-      const sp = spinner(`Updating the genclass command, ${have} to ${want}`);
-      const r = await install(want);
-      if (r.ok) {
-        savePrefs({ updateFailedAt: null });
-        sp.stop("ok", npx ? `Updated to ${want}.` : `Updated to ${want}: the next genclass you type runs it.`);
-        updated = true;
-      } else {
-        savePrefs({ updateFailedAt: new Date(now).toISOString() });
-        sp.stop("warn", `Could not update the genclass command: it stays ${have}.`);
-        note("By hand: npm install -g genclass@latest");
-      }
-    }
+    const r = await keepCurrent(deps);
     useShortName();
-    return updated ? "updated" : "skipped";
+    return r === "updated" ? "updated" : "skipped";
   }
   if (p.installFailedAt && now - Date.parse(p.installFailedAt) < DAY) return "skipped";
   out();
@@ -253,7 +278,14 @@ export async function home(o = {}, deps = {}) {
       note("help lists them all.");
       continue;
     }
-    const argv = got.command ?? ["ask", got.question];
+    let argv = got.command ?? ["ask", got.question];
+    // a page's command picked by its number, or typed alone: its address is asked for (on Free, fix alone is the
+    // page's fix, the one that works there)
+    if (argv.length === 1 && (argv[0] === "scan" || (free && argv[0] === "fix"))) {
+      const page = await typed(`  ${PROMPT()} ${c.gray("Which page? Its address, like shop.example.com:")} `);
+      if (page === null || !page.trim() || /^q$/i.test(page.trim())) continue;
+      argv = [argv[0], page.trim()];
+    }
     // the folder chosen at the start stays the folder
     const withCwd = o.cwd && !argv.includes("--cwd") ? [...argv, "--cwd", o.cwd] : argv;
     try {

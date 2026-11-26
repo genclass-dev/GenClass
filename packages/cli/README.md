@@ -72,7 +72,7 @@ also a command of its own (`npx genclass problems`), so scripts and coding agent
 
 **Set up first, then Pro.** The setup needs no Pro: signing in, adding GenClass to the app, putting the app in your
 account, the test workflow, the GitHub App and the coding agent (`setup`, `init`, `connect`, `apps`,
-`analytics on | off`). When they are done, Pro's card comes, and Enter opens its checkout in the browser: 3 days
+`analytics on | off`). When they are done, Pro's card comes, and Enter opens its checkout in the browser: 7 days
 free (one trial per account; the card is asked for on Stripe, and nothing is charged if you cancel before they end),
 then the plan's price ([pricing](https://genclass.dev/pricing)), which the command shows in genclass.dev's own words
 before the checkout opens. The rest
@@ -80,12 +80,18 @@ of the command comes with Pro: every command but the setup's, `login`, `logout`,
 `profile`, `status`, `remove`, `help` and `version` asks first, and shows the same card. Without a terminal
 (`--yes`, `--json`, a coding agent) nothing is opened: one line with the checkout address, and exit code 1 for a
 command that needs Pro (`setup --yes` ends with that line and exit code 0, since the setup is done). Free stays on the website: one app's totals for the last 7 days.
+What the website's page check gives without an account, the command gives too: `scan <url>` and `fix <url>` need no
+sign-in and no Pro, and show a page's score and its three worst problems in full, which `fix` hands to your coding
+agent.
 Plans bought before 13 November 2026 keep every app they cover (an app paid for on its own does not count toward
 Pro's 3); Free covers an account's oldest app and locks the others.
 
 **Just `genclass`.** `npx` runs the command without installing it, so the first run on a terminal installs it
 (`npm install -g genclass`, said on screen; `npm uninstall -g genclass` takes it out, `GENCLASS_NO_INSTALL=1` turns
-it off). After that you type `genclass`, and every screen says `genclass` instead of `npx genclass`.
+it off). After that you type `genclass`, and every screen says `genclass` instead of `npx genclass`. The installed
+command keeps itself current: after a command on a terminal it asks npm, at most once a day, and updates itself when a
+newer `genclass` is out (or says how to by hand, when it cannot); never with `--json`, in CI or with
+`GENCLASS_NO_INSTALL=1`.
 
 ## Every part, in order
 
@@ -113,8 +119,9 @@ npx genclass fix shop.example.com
 ```
 
 The command under a report's score on [genclass.dev/scan](https://genclass.dev/scan). Run it in the app's folder: it
-signs you in, starts Pro if the account has none (7 days free), reads that page's report with your sign-in (or checks
-the page, about a minute) and hands every finding to your coding agent: Claude Code, Codex, Cursor or Gemini CLI.
+reads that page's report (or checks the page, about a minute) and hands the findings to your coding agent: Claude
+Code, Codex, Cursor or Gemini CLI. No sign-in and no Pro: without Pro you get the three worst findings in full, as on
+the website, and the screen says how many more Pro has; signed in with Pro, every finding.
 Enter starts the agent, `c` copies the prompt, `p` prints it; `--print` and `--json` print it for a script or an agent.
 GenClass changes no code: the agent does, and you approve each change.
 

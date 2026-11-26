@@ -1,6 +1,7 @@
 // `genclass fix <address>` (src/fix-page.mjs): the page check's findings for one page, handed to the person's coding
 // agent; step 1 of "How do you fix this?" under a report's score on genclass.dev/scan. The report is asked with this
-// sign-in, a locked one gives no prompt, and the page's words reach the agent as data.
+// sign-in when there is one (signed out works too), the free view hands its worst findings to the agent, and the
+// page's words reach the agent as data.
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fix } from "../src/fix.mjs";
@@ -113,14 +114,47 @@ describe("genclass fix <address> on the screen and piped", () => {
     expect(started[0]!.cwd).toBe("/tmp/shop");
     expect(started[0]!.prompt).toContain("--- page check findings ---");
   });
-  it("a report genclass.dev locked (no Pro seen on this sign-in) gives no prompt and says what is behind it", async () => {
-    const s = server({ report: [200, { ok: true, report: { url: REPORT.url, findings: [REPORT.findings[0]], score: { locked: true }, gate: { locked: true, shown: 1, total: 14, severities: { serious: 3, moderate: 7, minor: 4 } } } }] });
+  it("the free view (no Pro on this sign-in): the worst findings go to the agent, and the screen says how many more Pro has", async () => {
+    const free = { url: REPORT.url, score: { value: 58 }, findings: [REPORT.findings[1], REPORT.findings[0], { n: 7, category: "speed", severity: "minor", count: 1, locked: true }], gate: { locked: true, shown: 2, total: 14, severities: { serious: 3, moderate: 7, minor: 4 } } };
+    const s = server({ report: [200, { ok: true, report: free }] });
+    const started: string[] = [];
+    let code: unknown;
+    type("");
+    const text = await printed(async () => (code = await fixPage({ what: "shop.example.com" }, { creds: CREDS, fetchFn: s.fetchFn, agents: () => [{ cmd: "claude", name: "Claude Code", args: (p: string) => [p] }], start: async (_a: unknown, prompt: string) => (started.push(prompt), 0) })));
+    expect(code).toBe(0);
+    const flatText = text.replace(/\s+/g, " ");
+    expect(flatText).toContain("14 problems: 3 serious, 7 moderate, 4 minor");
+    expect(flatText).toContain("The 2 worst, free:");
+    expect(flatText).toContain("The other 12 come with Pro, its free trial first: npx genclass upgrade");
+    expect(started).toHaveLength(1);
+    expect(started[0]).toContain("found 14 problems (3 serious, 7 moderate, 4 minor). Below are the 2 worst, in full.");
+    expect(started[0]).toContain("Button text is too faint");
+    expect(started[0]).toContain("Signup fields have no labels");
+    // the prompt carries no sales line: the agent gets what to fix
+    expect(started[0]).not.toContain("upgrade");
+    const j = JSON.parse(await printed(async () => fixPage({ what: "shop.example.com", json: true }, { creds: CREDS, fetchFn: s.fetchFn })));
+    expect(j).toMatchObject({ ok: true, free: { shown: 2, total: 14, rest: "npx genclass upgrade" } });
+    expect(j.findings).toHaveLength(2);
+  });
+  it("a free view with nothing in full gives no prompt and says what is behind it", async () => {
+    const s = server({ report: [200, { ok: true, report: { url: REPORT.url, findings: [{ n: 1, category: "seo", severity: "minor", locked: true }], gate: { locked: true, shown: 0, total: 14, severities: { serious: 3, moderate: 7, minor: 4 } } } }] });
     const started: unknown[] = [];
     let code: unknown;
     const text = await printed(async () => (code = await fixPage({ what: "shop.example.com" }, { creds: CREDS, fetchFn: s.fetchFn, start: async () => (started.push(1), 0) })));
     expect(code).toBe(1);
     expect(text.replace(/\s+/g, " ")).toContain("the free view: 14 problems (3 serious, 7 moderate, 4 minor). The findings come with Pro: npx genclass upgrade");
     expect(started).toEqual([]);
+  });
+  it("signed out: the page check is asked with no sign-in, on genclass.dev, and its free view is handed off", async () => {
+    const free = { url: REPORT.url, findings: [REPORT.findings[1]], gate: { locked: true, shown: 1, total: 5, severities: { serious: 1, moderate: 4 } } };
+    const s = server({ report: [200, { ok: true, report: free }] });
+    let code: unknown;
+    const p = await printed(async () => (code = await fixPage({ what: "shop.example.com", print: true }, { creds: null, fetchFn: s.fetchFn })));
+    expect(code).toBe(0);
+    expect(s.seen).toHaveLength(1);
+    expect(s.seen[0]!.auth).toBeNull();
+    expect(s.seen[0]!.url.startsWith(`${HOST}/api/scan/report?url=`) || s.seen[0]!.url.startsWith("https://genclass.dev/api/scan/report?url=")).toBe(true);
+    expect(p).toContain("found 5 problems (1 serious, 4 moderate). Below is the worst, in full. Fix it in this project's code.");
   });
   it("--print gives the prompt alone; --json the findings and the prompt; not an address says so", async () => {
     const s = server({ report: [200, { ok: true, report: REPORT }] });

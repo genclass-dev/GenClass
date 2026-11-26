@@ -1368,35 +1368,40 @@ const DASH_JS = `
   function lower(s){ return s.charAt(0).toLowerCase() + s.slice(1); }
   // page loads the agent needs: it says what to do, then waits for them itself, so nobody has to type "done"
   var WAIT = "When a step needs page loads on the dev page, tell me in one line exactly what to do there (for example: reload it and repeat the search fast), then wait for the loads yourself: check every 10 seconds (sleep 10 in a shell in between), for up to 5 minutes, instead of ending your turn.";
-  // what a coding agent gets from Copy prompt for one kind of problem: what, where, the usual fix, the MCP steps
+  // the MCP server's tools prove a fix when the agent has them; without them nothing is set up for it (an agent told to
+  // use them, without them, spent its turn adding the server: 2026-11-25), and a server added mid-session is only seen next time
+  var MCP_OPTIONAL = "If the GenClass MCP tools (genclass_*) are not available to you, skip the steps that name them and say so at the end: do not install or configure anything for them now (a server added now is only seen in your next session; npx -y " + MCP + " init adds it for then).";
+  // what a coding agent gets from Copy prompt for one kind of problem: what, where, the usual fix; the fix from the code
+  // first, then the MCP server's proof when it is there
   function fixPrompt(k, n, where){
     var t = T(k), pages = where.slice(0, 4).map(function(w){ return w.route + " (" + fmt(w.count) + ")"; }).join(", ");
     var out = ["Fix a problem GenClass found in production in this web app (" + P.name + "): " + lower(t.name) + ", " + plural(n, "time", "times") + " " + lower(RANGE[range]) + (pages ? ", on " + pages : "") + ".", ""];
     if (t.what) out.push("What it means: " + t.what);
     if (t.fix) out.push("How it is usually fixed: " + t.fix);
-    out.push("", "Use the GenClass MCP server (" + MCP + "; the project's MCP page in the GenClass dashboard says how to add it):",
-      "1. genclass_findings, then genclass_explain on the finding that matches. " + stepFor(k, where.length ? where[0].route : "the page"),
-      "   " + WAIT,
-      "2. Find the code behind it and fix it; keep the regression test genclass_explain generates.",
-      "3. Replay the recorded order again with genclass_replay: it must say not reproduced.",
-      "4. Tell me what you changed, the test you added and the replay's verdict.");
+    var top = where.length ? where[0].route : "the page";
+    out.push("",
+      "1. Find the code behind it on " + top + ": the requests, handlers and state updates that match the description above. Read them before changing anything.",
+      "2. Fix the cause, small and idiomatic, and add a regression test that fails before the fix and passes after it.",
+      "3. With the GenClass MCP tools, prove it: genclass_findings, then genclass_explain on the finding that matches. " + stepFor(k, top) + " After the fix, genclass_replay of the recorded order must say not reproduced. " + WAIT,
+      "4. Tell me what you changed, the test you added and, if you ran it, the replay's verdict.",
+      "", MCP_OPTIONAL);
     return out.join("\\n");
   }
   // one prompt for every kind of problem in the period, and the checks on the dev page: the loop for each (reproduce,
   // fix, prove), from one paste
   function fixAllPrompt(S){
     var list = problemList(S), checks = list.some(function(x){ return x.check; });
-    var out = ["Fix the problems GenClass found in this web app (" + P.name + ") and prove each fix, with the GenClass MCP server (" + MCP + "; the project's MCP page in the GenClass dashboard says how to add it).", "", "In production, " + lower(RANGE[range]) + ":"];
+    var out = ["Fix the problems GenClass found in this web app (" + P.name + ").", "", "In production, " + lower(RANGE[range]) + ":"];
     list.forEach(function(x){
       var t = infoOf(x), w = whereFor(S, x);
-      out.push("- " + t.name + (x.check ? " (measured check " + x.key + ")" : "") + ", " + plural(x.count, "time", "times") + (w.length ? ", on " + w.slice(0, 3).map(function(v){ return v.route; }).join(", ") : "") + "." + (t.fix ? " Usual fix: " + t.fix : ""));
+      out.push("- " + t.name + (x.check ? " (measured check " + x.key + ")" : "") + ", " + plural(x.count, "time", "times") + (w.length ? ", on " + w.slice(0, 3).map(function(v){ return v.route; }).join(", ") : "") + "." + (t.what ? " " + t.what : "") + (t.fix ? " Usual fix: " + t.fix : ""));
     });
-    out.push("- And every " + (checks ? "other " : "") + "check genclass_findings lists from the dev page (unreadable text, a scroll lock left on, a page that stops taking clicks).", "",
-      "1. genclass_status: the dev page must be connected; if it is not, tell me what to open.",
-      "2. For each problem: genclass_findings, then genclass_explain; reproduce it with genclass_explore or genclass_replay. " + (checks ? "A measured check is a measurement, not a recorded order: run genclass_scan on its page instead, which lists it with the element, its selector and a suggested CSS change. " : "") + WAIT,
-      "3. Fix the cause in the code, small and idiomatic; keep the regression test genclass_explain generates.",
-      "4. Replay the recorded order again: it must say not reproduced." + (checks ? " For a measured check, genclass_scan on its page must no longer list it." : ""),
-      "5. Sum up in one line per problem: what it was, the proof, the fix.");
+    out.push("",
+      "1. For each problem, the most frequent first: find the code behind it on the pages named (the requests, handlers, state updates or CSS that match), and read it before changing anything.",
+      "2. Fix the cause, small and idiomatic, and add a regression test for each one that fails before the fix and passes after it." + (checks ? " A measured check is a measurement of the page, so its fix is in the component or the CSS." : ""),
+      "3. With the GenClass MCP tools, prove each fix: genclass_status (the dev page must be connected; if it is not, tell me what to open), then genclass_findings and genclass_explain, and genclass_replay of the recorded order after the fix: it must say not reproduced." + (checks ? " For a measured check, genclass_scan on its page before and after: it must no longer list it." : "") + " genclass_findings also lists the checks from the dev page (unreadable text, a scroll lock left on, a page that stops taking clicks). " + WAIT,
+      "4. Sum up in one line per problem: what it was, the fix, the test, and the proof if you ran it.",
+      "", MCP_OPTIONAL);
     return out.join("\\n");
   }
   function fixAll(S){
@@ -1486,12 +1491,12 @@ const DASH_JS = `
     if (t.what) out.push("What it measured: " + t.what);
     if (t.fix) out.push("How it is usually fixed: " + t.fix);
     out.push("This is a measured check (a measurement against a fixed threshold, not a model finding): it says what was wrong on the page; the cause is in the code or the CSS.",
-      "", "Use the GenClass MCP server (" + MCP + "; the project's MCP page in the GenClass dashboard says how to add it):",
-      "1. genclass_scan on " + top + " (the dev server's URL, or the deployed page): it runs the same checks and lists this one with the element, its selector, what it measured and a suggested CSS change. With the dev page connected, genclass_findings lists it too, as kind check. " + (CHECK_DO[k] || "Load the page and use it as visitors do."),
-      "   " + WAIT,
-      "2. Find the code or CSS behind it and fix it at the cause (the suggested CSS is a starting point, not a patch).",
-      "3. Run genclass_scan on the page again, after the same steps: it must not list " + k + " any more.",
-      "4. Tell me what you changed and what genclass_scan listed before and after.");
+      "",
+      "1. Find the component and the CSS that render " + top + ", and what on it matches the description above. " + (CHECK_DO[k] || "Read how visitors use the page."),
+      "2. Fix it at the cause (the usual fix is a starting point, not a patch). Keep the change small.",
+      "3. With the GenClass MCP tools: genclass_scan on " + top + " (the dev server's URL, or the deployed page) before and after the fix; it lists this check with the element, its selector and what it measured, and after the fix it must not list " + k + ". " + WAIT,
+      "4. Tell me what you changed, and what genclass_scan listed before and after if you ran it.",
+      "", MCP_OPTIONAL);
     return out.join("\\n");
   }
   function checkBtn(k, n, where, cls){

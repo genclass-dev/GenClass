@@ -98,7 +98,7 @@ describe("genclass fix: the command (src/fix.mjs fix)", () => {
     expect(one.startsWith("Fix a problem GenClass found in production in this web app (shop): stale responses, 11 times in the last 7 days")).toBe(true);
     expect(one).not.toContain("────");
     const all = await printed(async () => expect(await fix({ cwd: dir, print: true }, deps)).toBe(0));
-    expect(all.startsWith("Fix the problems GenClass found in this web app (shop) and prove each fix")).toBe(true);
+    expect(all.startsWith("Fix the problems GenClass found in this web app (shop).\n")).toBe(true);
     expect(all).toContain("- Double submits, 14 times, on /checkout.");
     const errs: string[] = [];
     const spy = (await import("vitest")).vi.spyOn(process.stderr, "write").mockImplementation(((s: unknown) => (errs.push(String(s)), true)) as never);

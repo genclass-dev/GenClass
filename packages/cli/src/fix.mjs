@@ -1,7 +1,8 @@
 // `genclass fix`: the problems GenClass found on the live site, handed to the person's coding agent to fix. It lists
 // them, takes a pick (one kind, or all of them), and starts the agent in the project folder with the prompt the
 // dashboard's "Copy prompt" and "Fix all" buttons copy (kinds.mjs): what was found, where, how it is usually fixed,
-// and the steps that reproduce it and prove the fix with GenClass's MCP server.
+// the fix from the code, then the steps that reproduce it and prove the fix with GenClass's MCP server when the agent
+// has it (without it, the agent skips them and sets nothing up).
 //
 // Invariants:
 // - GenClass itself changes no code. The fix is the agent's, in the person's own session with it, where they see and
@@ -185,9 +186,9 @@ export function fix(o = {}, deps = {}) {
       }
       const prompt = promptFor(target, app, list, pick);
       const what = pick === "all" ? `all ${n(list.length)} kinds of problem` : infoOf(pick).name.toLowerCase();
-      // the prompt's steps use GenClass's MCP server: say so when the agent does not have it here
+      // the prompt works without GenClass's MCP server; with it, the agent can also prove each fix
       if (here && !agentSetup(state.cwd, deps.home).files.length) {
-        note("Your agent needs GenClass's MCP server for the steps in this prompt. npx genclass setup adds it (the coding agent step).");
+        note("Your agent can fix these without GenClass's MCP server. With it, it can also replay each one and prove the fix: npx genclass setup adds it (the coding agent step), for the agent's next session.");
         out();
       }
       if (o.copy) {

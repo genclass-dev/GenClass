@@ -14,6 +14,9 @@
 //   FREE_COMMANDS passes paywall.mjs requirePro first (signed out: the sign-in, then Pro with its free trial), the
 //   home's commands (ctx.nested) included. The walk (`genclass`, `setup`) has Pro as its own step once the setup's
 //   steps are done (state.mjs).
+// - What the website gives without an account, the command gives too (the owner's call, 2026-11-25, after a visitor
+//   would not start a trial before getting a sample fixed): `scan <url>` and `fix <url>` need no sign-in and no Pro.
+//   genclass.dev decides what they see: the score and the three worst findings in full, the rest with Pro.
 // - Every opt-out keeps working without Pro (AGENTS.md rule 8): `init --no-telemetry`, `init --telemetry` and
 //   `init --no-analytics` on an app that has GenClass change only that option, and pass without the gate; so does
 //   `analytics off`, the same switch by its short name.
@@ -45,10 +48,10 @@ const HELP = [
   ]],
   ["Act", [
     ["npx genclass fix", "hand a problem to your coding agent (fix 2 | fix stale | fix all; --print, --copy, --agent claude | codex | cursor-agent | gemini)"],
-    ["npx genclass fix <address>", "the page check's findings for one page, to your coding agent (the command under a report's score on genclass.dev/scan)"],
+    ["npx genclass fix <address>", "the page check's findings for one page, to your coding agent: free, no account, the three worst in full (Pro: all of them)"],
     ['npx genclass ask "..."', "ask about your app in plain words; the model answers from its numbers"],
     ["npx genclass suggest [url]", "what your app is missing, most important first (--yes, --no-model, --all)"],
-    ["npx genclass scan <url>", "23 visual checks on one page"],
+    ["npx genclass scan <url>", "check one page on genclass.dev's page check: its score and the three worst problems, free, no account (--local: on this machine)"],
     ["npx genclass site <address>", "the site check: your site's pages from that address, their links, buttons and accessibility, signed in with a test account if you like (--user, --login-page, --out)"],
   ]],
   ["Connect", [
@@ -79,7 +82,7 @@ export function usage(cols = width()) {
   };
   text("genclass: GenClass in your terminal. Set it up, see what it finds, have it fixed.");
   lines.push("");
-  text("Free: setting your app up (setup, init, connect, apps, analytics on | off) and login, logout, whoami, status, plan, upgrade, profile, remove, help. The rest comes with Pro, once the setup is done: 3 days free, with a card on Stripe. Prices: https://genclass.dev/pricing. Free is on the website.", "  ");
+  text("Free, with no account: scan <url> and fix <url> (a page's score, and its three worst problems handed to your coding agent). Free with an account: setting your app up (setup, init, connect, apps, analytics on | off) and login, logout, whoami, status, plan, upgrade, profile, remove, help. The rest comes with Pro, once the setup is done, its free trial first. Prices: https://genclass.dev/pricing.", "  ");
   const side = w >= 78;
   const col = 30;
   for (const [head, rows] of HELP) {
@@ -207,7 +210,8 @@ export async function run(argv, ctx = {}) {
     // the opt-out the setup prints works for everyone (AGENTS.md rule 8): on an app with GenClass in it, init
     // --no-telemetry (or --telemetry, to undo it) changes that one option, here on this machine
     const optOut = cmd === "init" && telemetryOnly(args) && !(await import("../../runtime/bin/lib/init.mjs")).inspectProject({ cwd: po.cwd }).fresh;
-    const gate = optOut ? 0 : await paid();
+    // a page check is free, as on the website: genclass.dev sends the free view without Pro (the score, the 3 worst)
+    const gate = optOut || cmd === "scan" || cmd === "audit" ? 0 : await paid();
     if (gate !== 0) {
       if (cmd !== "scan" && cmd !== "audit") return gate;
       // a scan's exit code 1 means "problems found": a scan that did not run ends with 2, and says where the page
@@ -314,7 +318,9 @@ export async function run(argv, ctx = {}) {
   // printed as before, with no sign-in and no Pro (it is on this machine already)
   const fallback = async () => (await import("../../runtime/bin/lib/login.mjs")).run("dashboard", [...(o.cwd ? ["--cwd", o.cwd] : []), ...(o.open ? ["--open"] : [])]);
   if (cmd === "dashboard" && !o.json && !o.app && (await privateLinkHere(o.cwd))) return fallback();
-  if (cmd !== null && !["setup", "status"].includes(cmd)) {
+  // `fix <address>` is free, as the page check is on the website: the three worst findings without Pro, all with it
+  const pageFix = cmd === "fix" && words.length === 1 && (await import("./fix-page.mjs")).isAddress(words[0]);
+  if (cmd !== null && !["setup", "status"].includes(cmd) && !pageFix) {
     const gate = await paid();
     if (gate !== 0) return gate;
   }
