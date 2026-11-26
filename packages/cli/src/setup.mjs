@@ -97,6 +97,15 @@ function showNext(step, details) {
   if (details && step.more) barPara(step.more);
 }
 
+/**
+ * A step this folder cannot have yet (no GitHub repository, no Playwright tests), said with why: at the end of the
+ * setup, before the prompt opens too (a person at a terminal saw the test workflow and the GitHub App vanish).
+ */
+function leftOut(state) {
+  const skipped = state.steps.filter((s) => s.state === "optional" && s.detail);
+  if (skipped.length) note(`Left out here: ${skipped.map((s) => `${s.title} (${s.detail})`).join(", ")}. npx genclass setup adds ${skipped.length === 1 ? "it" : "them"} once that changes.`);
+}
+
 /** The lines under the steps when nothing is left to walk through. */
 export function closing(state) {
   out();
@@ -115,8 +124,7 @@ export function closing(state) {
   }
   // a step this folder cannot have yet (no GitHub repository, no Playwright tests) is said, never left out without a
   // word (the 2026-11-25 walk: the test workflow and the GitHub App vanished from the screen)
-  const skipped = blocked ? [] : state.steps.filter((s) => s.state === "optional" && s.detail);
-  if (skipped.length) note(`Left out here: ${skipped.map((s) => `${s.title} (${s.detail})`).join(", ")}. npx genclass setup adds ${skipped.length === 1 ? "it" : "them"} once that changes.`);
+  if (!blocked) leftOut(state);
   out();
   out(`  ${c.gray("Day to day")}`);
   // the commands in one column with room after the longest, so the short name (genclass ...) keeps a gap too; on
@@ -302,6 +310,7 @@ async function walk(o, deps, auto) {
           out();
           for (const s of waiting) note(`${s.title}: ${s.human ?? s.detail}.`);
         }
+        leftOut(state);
         return deps.home({ ...o, cwd: state.cwd, app: state.app.name ?? "" });
       }
       closing(state);
