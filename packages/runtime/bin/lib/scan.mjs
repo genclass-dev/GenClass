@@ -691,7 +691,8 @@ export function formatReport(rep) {
   if (rep.top?.length) {
     p();
     p(`  ${c.bold("Top issues")}`);
-    for (const t of rep.top) p(`  ${sym.dot} ${t.what} ${c.gray(`(${t.severity}${t.count > 1 ? `, ${t.count}` : ""}, costs ${Math.round(t.points)} points)`)}`);
+    // the free view keeps a locked issue's numbers, not its words: it is named by its category, and said to be locked
+    for (const t of rep.top) p(`  ${sym.dot} ${t.what || c.gray(`${t.category ? `${t.category} problem` : "A problem"}, details with Pro`)} ${c.gray(`(${t.severity}${t.count > 1 ? `, ${t.count}` : ""}, costs ${Math.round(t.points)} points)`)}`);
   }
   let sev = null;
   for (const f of rep.findings) {

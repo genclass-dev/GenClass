@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The plan step no longer says "Pro is ." when genclass.dev sends no price.
+
 - **`fix <url>` and `scan <url>` are free, with no account.** As on the website's page check: a page's score, and its
   three worst problems in full, which `fix` hands to your coding agent with a ready prompt. The screen says how many
   more come with Pro. Signed in with Pro, every finding, as before. The home's Free list has both.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **`scan`'s Top issues name a locked issue by its category** ("Security problem, details with Pro") instead of a
+  blank title, in the hosted check's free view; the note under the findings says your coding agent can fix the ones
+  shown now, free (`genclass fix <url>`).
+
 - **Pro's free trial is 7 days** (it was 3): `init`'s note about what Free shows and `scan`'s note about the free view
   say so.
 

@@ -42,7 +42,7 @@ function page(html: string): { body: string; script: string } {
  * mode, the Connect dialog's project list). `opts` as dashboardPage takes them: with `account` the account-mode page
  * (/account/apps/<id>: the Connect dialog's ways in, the period controls in #period, no #ptok or #snips).
  */
-async function render(stats: Stats, opts: DashboardOptions = {}, o: { url?: string; copied?: string[]; glance?: Glance } = {}) {
+async function render(stats: Stats, opts: DashboardOptions = {}, o: { url?: string; copied?: string[]; glance?: Glance; sample?: Stats } = {}) {
   const html = dashboardPage("NONCE", { name: stats.name, token: stats.token, created: stats.created, lastEvent: stats.lastEvent }, opts);
   const { body, script } = page(html);
   const win = new Window({ url: o.url ?? (opts.account ? `https://genclass.dev/account/apps/${opts.id}` : "https://genclass.dev/dashboard/sample") });
@@ -56,6 +56,8 @@ async function render(stats: Stats, opts: DashboardOptions = {}, o: { url?: stri
     if (u.endsWith("/link")) return { ok: true, status: 201, json: async () => ({ dashboardUrl: `https://genclass.dev/dashboard/${"S".repeat(32)}` }) };
     // the sidebar's plan card (src/studio.ts, GET /api/account/glance)
     if (u === "/api/account/glance") return o.glance ? { ok: true, status: 200, json: async () => o.glance } : { ok: false, status: 401, json: async () => ({ ok: false }) };
+    // the tour's sample (GET /api/projects/sample), when a test gives one
+    if (o.sample && u.startsWith("/api/projects/sample")) return { ok: true, status: 200, json: async () => o.sample };
     return { ok: true, status: 200, json: async () => (u.startsWith("/api/account/projects?") || u === "/api/account/projects" ? { projects: [] } : stats) };
   };
   // a clipboard that records what was copied (the page's gcCopy writes with it)
@@ -231,6 +233,25 @@ describe("dashboard page: account mode (/account/apps/<id>) with live stats", ()
     expect(r.text("#hname")).toBe(st.name);
     expect(r.text("#hstatus")).toBe("Live");
     expect(r.doc.getElementById("cnote")).toBeNull(); // runtimeReady: no "Not on npm yet"
+    await r.close();
+  });
+
+  it("the tour's sample on an app with no data yet: never Live, and nothing of it left in the sidebar after the tour (the 2026-11-25 walk)", async () => {
+    const st = { ...sampleStats("7d", NOW), lastEvent: null };
+    const r = await render(st, { account, id: "0123456789abcdef", firstEvent: null }, { sample: sampleStats("7d", NOW) });
+    const gc = (r.win as unknown as { gcDash: { tourStart: () => Promise<boolean>; tourEnd: () => void } }).gcDash;
+    expect(await gc.tourStart()).toBe(true);
+    // the views show the sample's numbers; the app's own status says what they are
+    expect(r.hidden("content")).toBe(false);
+    expect(r.text("#hstatus")).toBe("Sample");
+    expect(r.text("#statust")).toBe("Sample data: your app has sent nothing yet");
+    expect(r.doc.getElementById("status")!.classList.contains("on")).toBe(false);
+    expect(r.text("#c-trend")).not.toBe("");
+    // the tour ends (Skip, or its last step): the app's own state again, with no sample count left in the sidebar
+    gc.tourEnd();
+    await new Promise((x) => setTimeout(x, 20));
+    expect(r.text("#hstatus")).toBe("Waiting");
+    for (const id of ["c-trend", "c-found", "c-pages", "c-did"]) expect(r.text(`#${id}`), id).toBe("");
     await r.close();
   });
 

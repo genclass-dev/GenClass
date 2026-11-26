@@ -2398,9 +2398,12 @@ const DASH_JS = `
     // the recorded demo's kinds get the chart's slots while its estimate is shown (src/demo.ts), else the model's five
     SLOTS = S.demo && P.demo ? P.demo.slots : BASE_SLOTS;
     var live = !!S.lastEvent, st = document.getElementById("status"), stt = document.getElementById("statust"), hs = document.getElementById("hstatus");
-    if (st) st.classList.toggle("on", live);
-    if (stt) stt.textContent = live ? "Last event " + ago(S.lastEvent) : "Waiting for the first event";
-    if (hs) { hs.className = "bdg " + (live ? "brand" : "warning"); if (hs.lastChild) hs.lastChild.textContent = live ? "Live" : "Waiting"; }
+    // the tour's sample (no data yet) fills the views, never the app's own status: it is not live and sent nothing
+    // (the 2026-11-25 walk: a new app showed a Live badge and "Last event 3 min ago" over the sample's numbers)
+    var on = live && !sampling;
+    if (st) st.classList.toggle("on", on);
+    if (stt) stt.textContent = sampling ? "Sample data: your app has sent nothing yet" : live ? "Last event " + ago(S.lastEvent) : "Waiting for the first event";
+    if (hs) { hs.className = "bdg " + (on ? "brand" : "warning"); if (hs.lastChild) hs.lastChild.textContent = sampling ? "Sample" : live ? "Live" : "Waiting"; }
     // a private link has no account to poll: the Connect dialog's status line follows the stats instead
     if (!P.account) {
       var cs = document.getElementById("cstatus"), cst = document.getElementById("cstatust"), cp = document.getElementById("cpoll");
@@ -2412,7 +2415,8 @@ const DASH_JS = `
     document.getElementById("nodata").classList.toggle("hidden", live);
     document.getElementById("content").classList.toggle("hidden", !live);
     ["period", "mdcopy", "verdict"].forEach(function(id){ var n = document.getElementById(id); if (n) n.classList.toggle("hidden", !live); });
-    if (!live) return;
+    // no data: the sidebar's counts are emptied too, so a sample the tour showed leaves none of its numbers behind
+    if (!live) { ["c-trend", "c-found", "c-pages", "c-did"].forEach(function(id){ var n = document.getElementById(id); if (n) n.textContent = ""; }); return; }
     verdict(S); tiles(S); usage(S); advisor(S); fixAll(S); trend(S); possibleTrend(S); cards(S); possibleCards(S); pages(S); acted(S); health(S); stages(S); agentLog(S); loop(S); recent(S); visits(S); advanced(S); proLock(S);
     var B2 = S.breakdowns, T2 = S.totals;
     function put(id, t){ var n = document.getElementById(id); if (n) n.textContent = t; }
