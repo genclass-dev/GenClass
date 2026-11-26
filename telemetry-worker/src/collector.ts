@@ -138,6 +138,10 @@ export interface Env extends GithubEnv {
   /** `genclass suggest` (src/suggest.ts): the key of the model that writes the plan (a Worker secret). Without it the
    * plan is ordered by the checks' own weights and no model is asked. Never returned, logged or stored. */
   OPENAI_API_KEY?: string;
+  /** Monitor with evalship (src/evalship.ts): the production key evalship shows once (a Worker secret). With it, every
+   * model call above (what was sent and answered) also goes to evalship, which checks the answers; without it nothing
+   * is sent there. Never returned, logged or stored. */
+  EVALSHIP_PRODUCTION_KEY?: string;
   /** AppSumo codes (src/appsumo.ts): the secret every code is signed with (a Worker secret; scripts/appsumo-codes.mjs
    * makes the codes with it). Without it /account/appsumo says codes are not set up and every code is refused. */
   APPSUMO_CODE_SECRET?: string;

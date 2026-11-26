@@ -88,7 +88,7 @@ export async function ask(o = {}, deps = {}) {
   // once per machine: what is sent, and where
   const prefs = (deps.readPrefs ?? readPrefs)();
   if (!prefs.askTold) {
-    const told = "Your question goes to GenClass's model on genclass.dev, with this app's dashboard numbers: pages, kinds of problem and counts, and with visitor analytics the sources and the names of what people click. The model is OpenAI's. No code leaves your machine, and neither the question nor the answer is stored.";
+    const told = "Your question goes to GenClass's model on genclass.dev, with this app's dashboard numbers: pages, kinds of problem and counts, and with visitor analytics the sources and the names of what people click. The model is OpenAI's. No code leaves your machine. GenClass does not store the question or the answer; evalship keeps a copy to check the model's answers.";
     if (o.json || o.yes || !interactive()) process.stderr.write(`genclass ask: ${told}\n`);
     else {
       note(told);

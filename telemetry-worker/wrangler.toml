@@ -87,6 +87,9 @@ GITHUB_APP_OWN_ACCOUNTS = "genclass-dev,Karanvir1729,MeharPro"
 # model that orders and explains the checks that failed on someone's app. Without it no model is asked and the plan is
 # ordered by the checks' own weights. SUGGEST_MODEL (a var) names the model; unset, src/suggest.ts DEFAULT_MODEL.
 # Migration 0015 (suggest_usage) holds each account's runs per day; without it there is no model run either.
+# Monitor (src/evalship.ts), a Worker secret: EVALSHIP_PRODUCTION_KEY, the key evalship shows once. With it, every model
+# call (`genclass suggest`, `genclass ask`, the report's summary: what was sent and answered) also goes to evalship,
+# which checks the answers; without it nothing is sent there.
 
 [observability]
 enabled = false

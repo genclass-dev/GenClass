@@ -1234,6 +1234,7 @@ time and cached in memory until 5 minutes before they expire.
 | `GITHUB_MARKETPLACE_WEBHOOK_SECRET` | secret | the listing's webhook. Set it to a value of its own once the listing exists; unset, that endpoint accepts the app's webhook secret |
 | `OPENAI_API_KEY` | secret | `genclass suggest`: the key of the model that writes the plan ([The genclass command](#the-genclass-command)). Without it the plan is ordered by the checks' own weights |
 | `SUGGEST_MODEL` | var | the model asked (default `gpt-6.2-sol`) |
+| `EVALSHIP_PRODUCTION_KEY` | secret | Monitor with evalship (`src/evalship.ts`): every model call (`genclass suggest`, `genclass ask`, the report's summary), what was sent and what came back, also goes to evalship, which checks the answers and emails when one fails. Sent after the response (`waitUntil`), 5-second timeout, never changes an answer. Unset, nothing goes there. PRIVACY.md, "Checking the model's answers", must be live before it is set |
 | `APPSUMO_CODE_SECRET` | secret | AppSumo codes (`src/appsumo.ts`): every code is signed with it, and `/account/appsumo` redeems one (one code: Pro for life, two: Business). `scripts/appsumo-codes.mjs` makes the CSV AppSumo takes with the same secret; without it every code is refused |
 | `GITHUB_APP_SLUG` | var | the app's URL name (`genclass`): its bot is `<slug>[bot]` and its commands start with `@<slug>` |
 | `GITHUB_APP_PRIVATE_REPOS` | var | `plan` (default) or `open` |
@@ -1273,7 +1274,9 @@ What decides the answer:
   is tried again by the next isolate, so a key that gains it starts using it. The model orders and explains: only ids the request named come back, each once, cut to length and cleaned
   of control characters, and ids it leaves out follow in weight order. Without the key, when the day's runs are used
   up, or when the model fails, is slow (40 seconds) or answers something else, the plan is the checks by their own
-  weights and `source` is `checks`. The route never fails because of the model.
+  weights and `source` is `checks`. The route never fails because of the model. With the secret
+  `EVALSHIP_PRODUCTION_KEY`, each model call (the messages sent and the answer, or the reason there is none) also
+  goes to evalship after the response (`src/evalship.ts`); it never changes the answer.
 - **The plan's numbers** (`billing/plans.json` `suggestions`): `per_day`, model runs an account has a UTC day (Free
   3, Team 30, Enterprise 100), and `shown`, how many items of the plan come back in full (Free 3, the others all).
   The checks themselves run on the person's machine and are free for everyone.

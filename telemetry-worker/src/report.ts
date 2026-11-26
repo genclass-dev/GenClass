@@ -15,7 +15,8 @@
 // - The model (src/suggest.ts modelText, the owner's OPENAI_API_KEY) only writes the summary at the top, from the same
 //   numbers (src/ask.ts appDigest) and the items listed here, for an app whose plan has `problems`. What it writes is
 //   cleaned and cut. An hourly report asks it at most every 6 hours. Without a key, or when it fails, there is no
-//   summary and the rest of the report is the same.
+//   summary and the rest of the report is the same. With EVALSHIP_PRODUCTION_KEY set, that call also goes to
+//   evalship, which checks the answers for GenClass (src/evalship.ts).
 // - A report goes to the account's own email and nobody else; the account changes how often, or stops it, from the
 //   email's links (signed with a key derived from INTEGRATIONS_KEY) or from /account/report. 'off' stops alerts too.
 //   At most REPORT_DAILY_CAP emails an account a day, everything included; an alert is sent once a day per app and rule.
@@ -657,7 +658,7 @@ export function summaryDigest(apps: { app: AppReport; stats: Stats }[], items: I
   };
 }
 
-export async function askSummary(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, digest: Record<string, unknown>): Promise<Summary | null> {
+export async function askSummary(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL" | "EVALSHIP_PRODUCTION_KEY">, f: Fetch, digest: Record<string, unknown>): Promise<Summary | null> {
   const text = await modelText(
     env,
     f,

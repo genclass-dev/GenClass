@@ -23,9 +23,12 @@
 //   fails or answers something that does not pass the checks here, the answer says `source: "checks"`.
 // - Evidence lines are text from someone's repository or site. The model is told they are data, and whatever it
 //   writes is shown in that same person's terminal and nowhere else.
+// - When the Worker secret EVALSHIP_PRODUCTION_KEY is set, each model call (what modelText sent and what came back)
+//   also goes to evalship, which checks the answers for GenClass (src/evalship.ts); without it nothing is sent there.
 
 import type { Env } from "./collector.js";
 import type { D1Like } from "./dashboard.js";
+import { messagesOf, reportCall, type Defer } from "./evalship.js";
 import type { Plan } from "./plans.js";
 
 /** The largest request body read. */
@@ -295,44 +298,62 @@ export const resetStandIns = (): void => standIns.clear();
  * no text. When the key has no model of the configured name, the newest model it has of the same family and tier is
  * asked instead (standIn), and the log says which; the configured name is tried again by the next isolate, so a key
  * that gains it starts using it without a change here. The key is never logged, nor is anything sent or answered.
+ * Once the call is over it is sent to evalship when EVALSHIP_PRODUCTION_KEY is set (src/evalship.ts reportCall),
+ * handed to `defer` (ctx.waitUntil) when there is one, else awaited; that never changes the answer.
  */
-export async function modelText(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, tag: string, body: (model: string) => Record<string, unknown>, timeoutMs = MODEL_TIMEOUT_MS): Promise<string | null> {
+export async function modelText(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL" | "EVALSHIP_PRODUCTION_KEY">, f: Fetch, tag: string, body: (model: string) => Record<string, unknown>, timeoutMs = MODEL_TIMEOUT_MS, defer?: Defer): Promise<string | null> {
   const key = (env.OPENAI_API_KEY ?? "").trim();
   if (!key) return null;
   const wanted = modelName(env);
-  const call = (model: string) =>
-    f(MODEL_URL, {
+  // what the last request sent and why there is no answer, for evalship (src/evalship.ts) once the call is over
+  const started = Date.now();
+  let sent: Record<string, unknown> = {};
+  let asked = wanted;
+  let error: string | null = null;
+  const call = (model: string) => {
+    asked = model;
+    sent = body(model);
+    return f(MODEL_URL, {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify(body(model)),
+      body: JSON.stringify(sent),
       signal: AbortSignal.timeout(timeoutMs),
     });
-  try {
-    let res = await call(standIns.get(wanted) ?? wanted);
-    if (!res.ok) {
-      const why = await modelError(res);
-      console.log(`${tag}: the model answered HTTP ${res.status}${why}`);
-      if (!why.includes("model_not_found") || standIns.has(wanted)) return null;
-      // the key has no such model: ask the newest one it has of the same family and tier, and say so in the log
-      const models = await keyModels(f, key);
-      console.log(`${tag}: models this key can use: ${models.map((m) => m.id).join(", ") || "(the list could not be read)"}`);
-      const other = standIn(wanted, models);
-      if (!other) return null;
-      console.log(`${tag}: asking ${other} in place of ${wanted}`);
-      res = await call(other);
+  };
+  const text = await (async (): Promise<string | null> => {
+    try {
+      let res = await call(standIns.get(wanted) ?? wanted);
       if (!res.ok) {
-        console.log(`${tag}: the model answered HTTP ${res.status}${await modelError(res)}`);
-        return null;
+        error = `HTTP ${res.status}`;
+        const why = await modelError(res);
+        console.log(`${tag}: the model answered HTTP ${res.status}${why}`);
+        if (!why.includes("model_not_found") || standIns.has(wanted)) return null;
+        // the key has no such model: ask the newest one it has of the same family and tier, and say so in the log
+        const models = await keyModels(f, key);
+        console.log(`${tag}: models this key can use: ${models.map((m) => m.id).join(", ") || "(the list could not be read)"}`);
+        const other = standIn(wanted, models);
+        if (!other) return null;
+        console.log(`${tag}: asking ${other} in place of ${wanted}`);
+        res = await call(other);
+        if (!res.ok) {
+          error = `HTTP ${res.status}`;
+          console.log(`${tag}: the model answered HTTP ${res.status}${await modelError(res)}`);
+          return null;
+        }
+        error = null;
+        standIns.set(wanted, other);
       }
-      standIns.set(wanted, other);
+      const j = (await res.json().catch(() => null)) as { choices?: { message?: { content?: unknown } }[] } | null;
+      const content = j?.choices?.[0]?.message?.content;
+      return typeof content === "string" ? content : null;
+    } catch (e) {
+      error = e instanceof Error && e.name === "TimeoutError" ? "timeout" : "error";
+      console.log(`${tag}: the model request failed: ${error}`);
+      return null;
     }
-    const j = (await res.json().catch(() => null)) as { choices?: { message?: { content?: unknown } }[] } | null;
-    const text = j?.choices?.[0]?.message?.content;
-    return typeof text === "string" ? text : null;
-  } catch (e) {
-    console.log(`${tag}: the model request failed: ${e instanceof Error && e.name === "TimeoutError" ? "timeout" : "error"}`);
-    return null;
-  }
+  })();
+  await reportCall(env, f, { call: tag, messages: messagesOf(sent), model: asked, output: text, error, durationMs: Date.now() - started }, defer);
+  return text;
 }
 
 /** The model's ideas from its answer text: titled, cleaned and cut, at most MAX_IDEAS. */
@@ -415,7 +436,7 @@ export async function liveDesigns(f: Fetch, designs: Design[]): Promise<Design[]
  * ideas. Null when there is no key, the request failed or timed out, or the checks part was not the JSON asked for:
  * the caller then uses the checks' own order and has no ideas or designs.
  */
-export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, digest: Digest): Promise<SuggestAnswer | null> {
+export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL" | "EVALSHIP_PRODUCTION_KEY">, f: Fetch, digest: Digest, defer?: Defer): Promise<SuggestAnswer | null> {
   if (!hasModel(env)) return null;
   const text = await modelText(
     env,
@@ -431,6 +452,7 @@ export async function askModel(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL"
       max_completion_tokens: 24000,
     }),
     SUGGEST_TIMEOUT_MS,
+    defer,
   );
   if (text === null) return null;
   const items = digest.checks.length ? planFromAnswer(text, digest) : [];

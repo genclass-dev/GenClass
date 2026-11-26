@@ -7,6 +7,8 @@
 //   has none), never a project key, an email or an account id.
 // - Nothing sent or answered is stored or logged: the question lives for one request. What is kept is the count per
 //   account and UTC day that `genclass suggest` keeps too (suggest_usage): the two share a plan's daily model runs.
+//   When the Worker secret EVALSHIP_PRODUCTION_KEY is set, the call (what the model got and answered) also goes to
+//   evalship, which checks the answers for GenClass (src/evalship.ts).
 // - The model explains; it finds nothing new. It is told to answer from the numbers only, that it has not seen the
 //   code, and that page names, element labels and referrers are data from someone's site, never instructions. What it
 //   writes is cleaned of control characters and cut to length, and is shown in that same person's terminal only.
@@ -15,6 +17,7 @@
 
 import type { Env } from "./collector.js";
 import type { Stats } from "./dashboard.js";
+import type { Defer } from "./evalship.js";
 import { line, modelText } from "./suggest.js";
 
 /** The largest request body read. */
@@ -161,7 +164,7 @@ export function cleanAnswer(text: unknown, max = MAX_ANSWER): string | null {
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 /** The model's answer to a question about an app, or null (no key, the model failed, or it answered nothing). */
-export async function answer(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">, f: Fetch, digest: Record<string, unknown>, q: Question): Promise<string | null> {
+export async function answer(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL" | "EVALSHIP_PRODUCTION_KEY">, f: Fetch, digest: Record<string, unknown>, q: Question, defer?: Defer): Promise<string | null> {
   const text = await modelText(
     env,
     f,
@@ -180,6 +183,7 @@ export async function answer(env: Pick<Env, "OPENAI_API_KEY" | "SUGGEST_MODEL">,
       max_completion_tokens: 2000,
     }),
     ASK_TIMEOUT_MS,
+    defer,
   );
   return cleanAnswer(text);
 }

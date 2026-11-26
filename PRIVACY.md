@@ -1,6 +1,6 @@
 # GenClass Runtime: privacy policy
 
-_Last updated: 2026-11-13._
+_Last updated: 2026-11-25._
 
 This policy covers the diagnostics that `@genclass/runtime` (from `0.1.0-beta.3`) sends to its maintainers. It does not
 cover the website or app that uses GenClass; that site has its own privacy policy. It also covers the
@@ -253,7 +253,8 @@ answers of the same sitting, leave the developer's machine. On genclass.dev we a
 dashboard already shows for the app and period (page paths, kinds of problem, counts, what the runtime did, what the
 coding agent reported and, where the plan has visitor analytics, visits, sources, devices, countries and the names
 of clicked elements) and pass both to a language model (OpenAI's API), then return its answer. No source code is
-involved: we have none. We do not store or log the question, the numbers sent or the answer; we keep the same one
+involved: we have none. We do not store or log the question, the numbers sent or the answer ourselves, but evalship
+keeps a copy to check the answer ([Checking the model's answers](#checking-the-models-answers)); we keep the same one
 number as for suggestions, how many model runs an account used on a day, for 3 days. The command says this before
 the first question and waits for the developer's Enter. OpenAI processes it under its API terms, and nothing from it
 is used to train GenClass's own model.
@@ -282,7 +283,8 @@ repository answers "not found" and is left as it is.
 
 We pass the digest to a language model (OpenAI's API) to order the failed checks and word the reasons, to suggest
 its own ideas for the app and website designs inspired by real sites (we check that each site it names answers), and
-return its answer. We do not store or log the digest. Since 12 November 2026 we keep the last answer for each app of
+return its answer. We do not store or log the digest ourselves; evalship keeps a copy of the call to check the answer
+([Checking the model's answers](#checking-the-models-answers)). Since 12 November 2026 we keep the last answer for each app of
 an account (the ordered checks with their reasons, the ideas and the designs, not the digest), so it can be shown
 again once the day's model runs are used up, and in your GenClass report (below); it is replaced by the next answer
 and deleted with the account. We also keep how many plans an account asked for on a day, for 3 days, to hold each plan's daily limit.
@@ -303,11 +305,20 @@ repositories, new sign-ins, terminals and passkeys on your account, and your las
 new is collected for it, and visitors' IP addresses never are: the section on unusual activity reads patterns in the
 counts, not addresses. For an app on a paid plan, the numbers its dashboard shows and the report's own list of
 problems (titles, counts and page names, never your email, your account id, an app's key or anything a visitor typed)
-are sent to OpenAI's API, with the same key as `genclass ask`, so a model can write the short summary at the top; it
-is not stored or logged. The report is sent only to your account's email, through Cloudflare Email Sending, from
+are sent to OpenAI's API, with the same key as `genclass ask`, so a model can write the short summary at the top; we
+do not store or log it, and evalship keeps a copy to check the summary
+([Checking the model's answers](#checking-the-models-answers)). The report is sent only to your account's email, through Cloudflare Email Sending, from
 report@genclass.dev. We keep, per account, how often you chose and when the last report went out, how many emails it
 was sent on a day (for 3 days, to cap them), and when each alert last went out per app (7 days), so an alert is sent
 once a day at most.
+
+## Checking the model's answers
+
+Each request we send to the language model for `genclass ask`, `genclass suggest` and a report's summary (what the
+model gets, as described in those sections, never your email, your account id or a key) and its answer also go to
+evalship (evalship.com, run by Garm Tech), which checks each answer for mistakes on our behalf and tells us when one
+fails. evalship processes them under its data processing agreement and privacy policy, keeps them so we can see what
+went wrong, and uses Anthropic's and OpenAI's APIs to check them, which do not train on them.
 
 ## Where it goes and how long we keep it
 

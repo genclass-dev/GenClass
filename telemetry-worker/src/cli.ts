@@ -279,7 +279,7 @@ async function suggest(c: C): Promise<Response> {
       answer = await lastAnswer(c.db, a.account.id, key);
       created = answer?.created ?? null;
     } else {
-      answer = await askModel(c.env, c.opts.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i)), digest);
+      answer = await askModel(c.env, c.opts.fetch ?? ((u: string, i?: RequestInit) => fetch(u, i)), digest, c.opts.waitUntil);
       if (answer) await keepAnswer(c.db, a.account.id, key, answer, c.now);
     }
   }
@@ -451,7 +451,7 @@ async function ask(c: C, f: Fetch): Promise<Response> {
   if (used === null) return none((await usedToday(c.db, a.account.id, c.now)) >= lim.per_day ? "limit" : "no-model");
   const range = pickRange(typeof body.range === "string" ? body.range : null, viewRanges(access.plan));
   const s = await stats(c.db, p, range, c.now);
-  const text = await answer(c.env, f, appDigest(s, hasAnalytics(access)), q);
+  const text = await answer(c.env, f, appDigest(s, hasAnalytics(access)), q, c.opts.waitUntil);
   if (text === null) return none("failed");
   return json(200, { ok: true, answer: text, why: null, range: s.range, remaining_today: Math.max(0, lim.per_day - used), per_day: lim.per_day, upgrade_url: null });
 }

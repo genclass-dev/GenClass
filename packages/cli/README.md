@@ -209,7 +209,8 @@ kinds of problem and counts, and with visitor analytics the sources and what peo
 the question; a follow-up ("and on which page?") carries the turn before it.
 
 **What leaves your machine:** the question. The numbers are read on genclass.dev, where they already are, and go to
-the model (OpenAI's API) with it. No code, no file of your project. Neither the question nor the answer is stored.
+the model (OpenAI's API) with it. No code, no file of your project. GenClass does not store the question or the
+answer; evalship keeps a copy to check the model's answers (PRIVACY.md, "Checking the model's answers").
 The command says this before the first question and waits for Enter. Ask and suggest share a plan's model runs a
 day (30 on Pro).
 
