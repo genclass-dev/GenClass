@@ -1554,9 +1554,11 @@ describe("GET /account/billing", () => {
     const html = await (await call(off.env, "GET", "/account/billing", { cookie: a.cookie })).text();
     expect(html).toContain("<h1>Plan and billing</h1>");
     expect(html).toContain("Paid plans are not on sale yet.");
-    expect(html).toContain("$99 / month");
-    expect(html).toContain("$599 / month");
-    expect(html).toContain("Interaction analytics (coming next)");
+    // the plans side by side in one table: price and a month, a row per feature, "Coming next" where it is not out yet
+    expect(html).toContain("$99<small> a month</small>");
+    expect(html).toContain("$599<small> a month</small>");
+    expect(html).toContain('<th scope="row">Interaction analytics</th>');
+    expect(html).toContain('<span class="soon">Coming next</span>');
     expect(html).toContain('Need self-hosting, SSO or invoices? Email <a href="mailto:mehar@genclass.dev">mehar@genclass.dev</a>.');
     // no footer of what is stored: that is in the privacy policy
     expect(html).not.toContain('class="dfoot"');
@@ -1597,7 +1599,7 @@ describe("GET /account/billing", () => {
     expect((await call(env, "GET", "/account/billing?plan=enterprise", {})).headers.get("location")).toBe("/login?next=%2Faccount%2Fbilling");
     const a = await signedIn(env);
     const html = await (await call(env, "GET", "/account/billing?plan=custom", { cookie: a.cookie })).text();
-    expect(html).toContain('<div class="plan pick"><h3>Custom</h3>');
+    expect(html).toContain('<th scope="col" class="pick" data-col="custom">');
     expect(html).toContain('<button class="btn" type="button" data-plan="custom" data-pick><span>Upgrade to Custom</span></button>');
     expect(html).toContain('data-plan="pro"><span>Upgrade to Pro</span>');
     // ?start=1 with a plan (the genclass command's plan step): the page is told to open that plan's checkout itself.
@@ -1617,7 +1619,7 @@ describe("GET /account/billing", () => {
     // already on that plan: nothing to pick (the page script's [data-pick] selector is not a button)
     const onPro = await (await call(env, "GET", "/account/billing?plan=pro", { cookie: a.cookie })).text();
     expect(onPro).not.toContain(" data-pick>");
-    expect(onPro).not.toContain('class="plan pick"');
+    expect(onPro).not.toContain('class="pick"');
   });
 
   it("GET /api/billing gives the browser its plan; a Custom page says who emails and when", async () => {
