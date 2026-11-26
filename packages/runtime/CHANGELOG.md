@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0-beta.8 (2026-11-26)
 
 - **`init --agent-link` connects the app's development build to your coding agent.** It adds the three dev-only lines
   that connect its pages to GenClass's MCP server (`@genclass/mcp`), right after the `@genclass/runtime/auto` import
