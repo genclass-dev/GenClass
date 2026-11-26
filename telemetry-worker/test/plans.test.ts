@@ -590,8 +590,11 @@ describe("Pro (id team) and Business are the plans sold on the site, each flat f
     expect(featureRows()).toContain("Ask about your app in plain words"); // "app" alone does not make a limit line
     // the trial is once per account: after a subscription the buttons say Upgrade, and nothing offers days free
     setPlan(t.sql, a.account.id, "free", { stripe_customer_id: "cus_used000001", subscription_id: "sub_used000001", subscription_status: "canceled", current_period_end: "2026-10-01T00:00:00.000Z" });
+    // the Apps table says the same as the plans: Start 7 days free while the account has its trial
+    expect(page).toMatch(/<tr><td>Shop<\/td><td>Free<\/td><td class="act"><a class="btn ghost" href="\/account\/billing\?project=[^"]+"><span>Start 7 days free<\/span><\/a>/);
     const used = await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }));
     expect(used).toContain('data-plan="team"><span>Upgrade to Pro</span>');
+    expect(used).toMatch(/<td class="act"><a class="btn ghost" href="\/account\/billing\?project=[^"]+"><span>Upgrade<\/span><\/a>/);
     expect(used).not.toContain("days free");
     expect(visible(page)).not.toMatch(/—|!/);
   });
