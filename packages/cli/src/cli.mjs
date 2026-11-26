@@ -352,8 +352,9 @@ export async function run(argv, ctx = {}) {
       const ready = !!state?.signedIn && !!state?.app?.token;
       if (ready || !(await import("./name.mjs")).viaNpx()) {
         if (state) (await import("./home.mjs")).opening(state);
-        // signed in without Pro: the prompt's short list is what works on Free
-        const free = !!state?.account?.cli && !state.account.cli.paid;
+        // signed in without Pro: the prompt's short list is what works on Free; signed out too (the 2026-11-25
+        // sandbox walk: a new person was shown nine commands that all need an account and Pro, and not the setup)
+        const free = !state?.signedIn ? "out" : !!state?.account?.cli && !state.account.cli.paid;
         return home({ ...o, cwd: state?.cwd ?? o.cwd, app: state?.app?.name ?? "", free });
       }
     }

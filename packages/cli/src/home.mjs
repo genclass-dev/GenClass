@@ -101,8 +101,8 @@ export function read(line, known = NAMES, numbered = COMMANDS) {
 }
 
 /**
- * The list of commands: the short one, or every command. On Free (`free`) the short one is FREE_MENU, the commands
- * that work without Pro, and every command is listed by name only.
+ * The list of commands: the short one, or every command. On Free (`free`; "out" when signed out) the short one is
+ * FREE_MENU, the commands that work without Pro, and every command is listed by name only.
  */
 export function menu(all = false, free = false) {
   out();
@@ -117,7 +117,7 @@ export function menu(all = false, free = false) {
     const pad = Math.max(...FREE_MENU.map(([n]) => n.length)) + 2;
     FREE_MENU.forEach(([name, what], i) => out(`  ${c.gray(String(i + 1).padStart(2))}  ${c.cyan(name.padEnd(pad))}${c.gray(what)}`));
     out(`      ${c.cyan("help".padEnd(pad))}${c.gray("every command")}   ${c.cyan("q")} ${c.gray("leave")}`);
-    note("You are on Free: the other commands come with Pro.");
+    note(free === "out" ? "Not signed in: setup signs you in. fix <url> and scan <url> need no account." : "You are on Free: the other commands come with Pro.");
     return;
   }
   out(`  ${c.bold("What next?")} ${c.gray("A number, a command, or a question.")}`);
@@ -248,7 +248,8 @@ export async function home(o = {}, deps = {}) {
   if (!interactive()) return 0;
   await installShortName(deps);
   // on Free the short list is what works there; once Pro is on (upgrade, here), the whole list
-  let free = !!o.free;
+  // ("out": signed out, the same list)
+  let free = o.free === "out" ? "out" : !!o.free;
   const pro = async () => (await import("./paywall.mjs")).proSeen();
   menu(false, free);
   inHome(o.app ?? "");
@@ -282,7 +283,7 @@ export async function home(o = {}, deps = {}) {
     // a page's command picked by its number, or typed alone: its address is asked for (on Free, fix alone is the
     // page's fix, the one that works there)
     if (argv.length === 1 && (argv[0] === "scan" || (free && argv[0] === "fix"))) {
-      const page = await typed(`  ${PROMPT()} ${c.gray("Which page? Its address, like shop.example.com:")} `);
+      const page = await typed(`  ${PROMPT()} ${c.gray("Which page? Its address:")} `);
       if (page === null || !page.trim() || /^q$/i.test(page.trim())) continue;
       argv = [argv[0], page.trim()];
     }

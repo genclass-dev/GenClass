@@ -247,6 +247,17 @@ describe("genclass: the home (src/home.mjs)", () => {
     expect(freeFlat).toContain("You are on Free: the other commands come with Pro.");
     expect(freeFlat).not.toContain("what GenClass found on your live site");
     expect(tooWide(free)).toEqual([]);
+    // signed out: the same short list, which leads to the setup and the page's free commands; fix picked by its
+    // number asks for the page's address (2026-11-25)
+    type("3", "shop.example.com", "q");
+    const out = await at58(async () => expect(await home({ free: "out" }, { runCommand: async (a: string[]) => (ran.push(a), 0), nearest })).toBe(0));
+    expect(ran[2]).toEqual(["fix", "shop.example.com"]);
+    const outFlat = plainLines(out).join(" ").replace(/\s+/g, " ");
+    expect(outFlat).toContain("fix <url> fix a page's 3 worst problems (free)");
+    expect(outFlat).toContain("Not signed in: setup signs you in. fix <url> and scan <url> need no account.");
+    expect(outFlat).toContain("Which page? Its address:");
+    expect(outFlat).not.toContain("what GenClass found on your live site");
+    expect(tooWide(out)).toEqual([]);
   });
 
   it("opening: signed out in a folder that is set up says to sign in, not that it is not set up (the 0.3.9 user stories)", async () => {
