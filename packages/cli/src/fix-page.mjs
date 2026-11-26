@@ -19,7 +19,7 @@
 import { readCredentials } from "../../runtime/bin/lib/account.mjs";
 import { apiHost } from "../../runtime/bin/lib/host.mjs";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
-import { copyText, findAgents, startAgent } from "./fix.mjs";
+import { copyText, findAgents, SESSION_MCP, sessionMcp, startAgent } from "./fix.mjs";
 import { clean, good, note, PROMPT, typed, warn, width } from "./tui.mjs";
 
 /** A word after `fix` that is a page's address (a host with a dot, an optional path), not a problem's number or kind. */
@@ -306,7 +306,7 @@ export async function handOff(prompt, count, o, deps, words) {
     return 0;
   }
   out();
-  out(`  ${c.gray(sym.arrow)} Starting ${c.bold(agents[0].name)} in this folder, with the prompt.`);
+  out(`  ${c.gray(sym.arrow)} Starting ${c.bold(agents[0].name)} in this folder, with the prompt${SESSION_MCP.has(agents[0].cmd) && sessionMcp(o.cwd ?? process.cwd()) ? " and GenClass's MCP server for this session (nothing is installed)" : ""}.`);
   note("When you leave it, you are back here.");
   out();
   await new Promise((r2) => setTimeout(r2, 30));

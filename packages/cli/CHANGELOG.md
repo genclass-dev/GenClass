@@ -10,6 +10,10 @@
   hand. Before, a copy installed by an earlier run never asked (the check sat behind a test that is always false once
   the command is installed), so everyone stayed on their first version. Never with `--json`, in CI or with
   `GENCLASS_NO_INSTALL=1`.
+- **`fix` starts Claude Code and Codex with GenClass's MCP server already attached**, for that session only (their own
+  `--mcp-config` and `-c mcp_servers...` flags), when the folder has none configured: the agent can replay each
+  problem and prove its fix at once, with nothing installed, no restart and no file written. Cursor and Gemini CLI have
+  no such flag and get the prompt alone.
 - **Fix prompts work without GenClass's MCP server.** `fix` (and the dashboard's Copy prompt) now tell the agent to
   find and fix the cause in the code first, with a regression test; the MCP tools only prove the fix when the agent has
   them. Without them it skips those steps and installs nothing (a server added mid-session is only seen in the agent's

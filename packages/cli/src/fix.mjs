@@ -13,23 +13,50 @@
 //   command never reads, and it is sent nowhere: it goes to the agent on this machine, the clipboard or the screen.
 // - An agent is started only when its command is on the PATH, in the app's own folder, with the terminal handed to
 //   it; when it ends, this command carries on.
+// - Claude Code and Codex start with GenClass's MCP server attached for that one session (their own flags:
+//   --mcp-config, -c mcp_servers...), when the folder has none configured: the prompt's proof steps work at once, with
+//   nothing installed, no restart and no file written (2026-11-25: a person's agent got stuck adding the server
+//   mid-session, which an agent only sees in its next session). The server is this build's pinned @genclass/mcp, run
+//   by npx on this machine.
 
 import { spawn } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { c, interactive, out, sym } from "../../runtime/bin/lib/ui.mjs";
 import { appView, KINDS, n, RANGE_WORDS } from "./app.mjs";
+import { BUILD } from "./assets.mjs";
 import { fixAllPrompt, fixPrompt, infoOf, problemList } from "./kinds.mjs";
 import { agentSetup } from "./views.mjs";
 import { clean, good, note, PROMPT, typed, warn, width, wrap } from "./tui.mjs";
 
-/** The coding agents this command can start, in the order they are looked for: [command, name, arguments for a prompt]. */
+/**
+ * The coding agents this command can start, in the order they are looked for: [command, name, arguments for a prompt
+ * and, when given, GenClass's MCP server for that session only]. Claude Code's --mcp-config takes several values, so
+ * it comes after the prompt; Codex's -c values are TOML. Cursor's and Gemini CLI's commands have no such flag: they get
+ * the prompt alone, which works without the server.
+ */
 export const AGENTS = [
-  ["claude", "Claude Code", (p) => [p]],
-  ["codex", "Codex", (p) => [p]],
+  ["claude", "Claude Code", (p, m) => (m ? [p, "--mcp-config", JSON.stringify({ mcpServers: { genclass: m } })] : [p])],
+  ["codex", "Codex", (p, m) => (m ? ["-c", `mcp_servers.genclass.command=${JSON.stringify(m.command)}`, "-c", `mcp_servers.genclass.args=${JSON.stringify(m.args)}`, p] : [p])],
   ["cursor-agent", "Cursor", (p) => [p]],
   ["gemini", "Gemini CLI", (p) => ["-i", p]],
 ];
+
+/** The agents that take GenClass's MCP server for one session. */
+export const SESSION_MCP = new Set(["claude", "codex"]);
+
+/**
+ * GenClass's MCP server for an agent's session in `cwd` ({ command, args }, this build's pinned version), or null when
+ * the folder already has it configured (a second entry of the same name would only compete with the person's own).
+ */
+export function sessionMcp(cwd, setup = agentSetup) {
+  try {
+    if (setup(cwd).files.length) return null;
+  } catch {
+    /* unreadable: attach it */
+  }
+  return { command: "npx", args: ["-y", `@genclass/mcp@${BUILD.mcpVersion}`] };
+}
 
 /** The full path of a command on the PATH, or null. */
 export function onPath(name, env = process.env, platform = process.platform) {
@@ -78,12 +105,15 @@ export function copyText(text, platform = process.platform, run = spawn) {
   return attempt(0);
 }
 
-/** Starts an agent with the prompt in `cwd`, the terminal handed to it. Resolves its exit code (null: it did not start). */
-export function startAgent(agent, prompt, cwd, run = spawn) {
+/**
+ * Starts an agent with the prompt in `cwd`, the terminal handed to it, with GenClass's MCP server for that session
+ * when the agent takes one and the folder has none (sessionMcp). Resolves its exit code (null: it did not start).
+ */
+export function startAgent(agent, prompt, cwd, run = spawn, mcp = sessionMcp(cwd)) {
   return new Promise((done) => {
     let child;
     try {
-      child = run(process.platform === "win32" ? `${agent.cmd}.cmd` : agent.cmd, agent.args(prompt), { cwd, stdio: "inherit" });
+      child = run(process.platform === "win32" ? `${agent.cmd}.cmd` : agent.cmd, agent.args(prompt, SESSION_MCP.has(agent.cmd) ? mcp : null), { cwd, stdio: "inherit" });
     } catch {
       return done(null);
     }
@@ -186,8 +216,10 @@ export function fix(o = {}, deps = {}) {
       }
       const prompt = promptFor(target, app, list, pick);
       const what = pick === "all" ? `all ${n(list.length)} kinds of problem` : infoOf(pick).name.toLowerCase();
-      // the prompt works without GenClass's MCP server; with it, the agent can also prove each fix
-      if (here && !agentSetup(state.cwd, deps.home).files.length) {
+      // the prompt works without GenClass's MCP server; with it, the agent can also prove each fix (Claude Code and
+      // Codex get it for the session they are started in, below)
+      const agentsHere = here ? (deps.agents ?? findAgents)(o.agent ?? null) : [];
+      if (here && !agentSetup(state.cwd, deps.home).files.length && !(agentsHere[0] && SESSION_MCP.has(agentsHere[0].cmd))) {
         note("Your agent can fix these without GenClass's MCP server. With it, it can also replay each one and prove the fix: npx genclass setup adds it (the coding agent step), for the agent's next session.");
         out();
       }
@@ -203,7 +235,7 @@ export function fix(o = {}, deps = {}) {
         out();
         return 0;
       }
-      const agents = here ? (deps.agents ?? findAgents)(o.agent ?? null) : [];
+      const agents = agentsHere;
       if (!here) note(`This folder is not ${clean(target.name, 40)}'s. Run this in the app's folder and its coding agent can be started on the code from here.`);
       else if (!agents.length) note(o.agent ? `No ${clean(o.agent, 20)} command on this machine.` : "No coding agent's command found on this machine (claude, codex, cursor-agent, gemini).");
       const agentLine = agents.length ? `${c.bold("Enter")} ${c.gray(`start ${agents[0].name} ·`)} ` : "";
@@ -230,7 +262,7 @@ export function fix(o = {}, deps = {}) {
         return 0;
       }
       out();
-      out(`  ${c.gray(sym.arrow)} Starting ${c.bold(agents[0].name)} in this folder, with the prompt.`);
+      out(`  ${c.gray(sym.arrow)} Starting ${c.bold(agents[0].name)} in this folder, with the prompt${SESSION_MCP.has(agents[0].cmd) && sessionMcp(state.cwd) ? " and GenClass's MCP server for this session (nothing is installed)" : ""}.`);
       note("When you leave it, you are back here.");
       out();
       // the terminal is the agent's until it ends

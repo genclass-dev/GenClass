@@ -122,7 +122,8 @@ The command under a report's score on [genclass.dev/scan](https://genclass.dev/s
 reads that page's report (or checks the page, about a minute) and hands the findings to your coding agent: Claude
 Code, Codex, Cursor or Gemini CLI. No sign-in and no Pro: without Pro you get the three worst findings in full, as on
 the website, and the screen says how many more Pro has; signed in with Pro, every finding.
-Enter starts the agent, `c` copies the prompt, `p` prints it; `--print` and `--json` print it for a script or an agent.
+Enter starts the agent, `c` copies the prompt, `p` prints it; `--print` and `--json` print it for a script or an agent. Claude Code and Codex start with GenClass's MCP server attached for that session (nothing is installed), so they
+can also replay a problem and prove the fix.
 GenClass changes no code: the agent does, and you approve each change.
 
 ## Check your whole site
