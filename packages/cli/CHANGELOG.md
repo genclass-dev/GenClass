@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **An app with GenClass already in its code, but no key yet, is put in your account in one go.** GenClass's own
+  starter templates (`templates/react-vite` and the others) import `@genclass/runtime/auto` themselves. On those,
+  the setup's "Put this app in your account" step created the app, printed its key to add by hand, then said the app
+  was not in the account yet and to run `genclass` again, which did the same: `genclass setup --yes` could not
+  finish. Now the key goes into a file of its own, `genclass.config.ts` (or `.js`), imported on one line right before
+  your own `import "@genclass/runtime/auto"`. The change is shown before it is made, the app is created once it is
+  applied, your import is left as it is, and `remove` takes out both lines. A setup that brings GenClass in another
+  way (a `GenClass.init()` call, a script tag, the Nuxt or Astro integration) still gets the key printed to add, and
+  the setup now says that instead of asking you to run it again (runtime `bin/lib/init.mjs`, `login.mjs`).
+
 ## 0.3.18
 
 - **Pro's free trial is 7 days** (it was 3). The lines the command says before it has asked genclass.dev (the first

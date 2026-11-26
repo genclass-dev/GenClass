@@ -546,7 +546,10 @@ function cspAdvice(project, files, cfg) {
 
 /**
  * init with options on a project init already set up: the options file (or the script tag's attributes, or the
- * Astro meta line) changes in place, or is added next to the marked auto import. Returns the changes (may be empty).
+ * Astro meta line) changes in place, or is added next to the marked auto import. `marked` may also be a hand-written
+ * setup's files (keyFitsHandWritten): the options file then goes right before its own `/auto` import, and the line
+ * that imports it is marked, so `remove` takes out both and leaves the person's import. Returns the changes (may be
+ * empty).
  */
 function planConfigSwitch(project, cwd, marked, cfg, readText) {
   const changes = [];
@@ -577,7 +580,10 @@ function planConfigSwitch(project, cwd, marked, cfg, readText) {
       let spec = posix(relative(dirname(f), file)).replace(/\.[cm]?[jt]sx?$/, "");
       if (!spec.startsWith(".")) spec = `./${spec}`;
       const indent = /^\s*/.exec(lines[at])[0];
-      lines.splice(at, 0, `${indent}import ${q}${spec}${q}${semi}${lines[at].includes(`// ${MARK}`) ? ` // ${MARK}` : ""}`);
+      // marked like the line it goes before, and always in a file init did not write (inside a block init created,
+      // the block's own markers cover it)
+      const markIt = lines[at].includes(`// ${MARK}`) || !hasMarker(before);
+      lines.splice(at, 0, `${indent}import ${q}${spec}${q}${semi}${markIt ? ` // ${MARK}` : ""}`);
       after = lines.join("\n");
       const ch = configFileChange(file, cfg);
       changes.push({ ...ch, rel: rel(file) });
@@ -591,6 +597,21 @@ function planConfigSwitch(project, cwd, marked, cfg, readText) {
   return { changes, where };
 }
 
+/**
+ * Whether a hand-written setup (`manual`: its files, manualRefs) can be given its key without touching the person's
+ * code: it brings GenClass in with `import "@genclass/runtime/auto"` (or /auto/<mode>) in a JS or TS module and has no
+ * options file next to it yet, so the key goes into init's own options file, imported right before that line. A
+ * GenClass.init() call, a script tag, or the Nuxt and Astro integrations take the key in their own options: no.
+ */
+export function keyFitsHandWritten(project, cwd, manual) {
+  if (!manual?.length) return false;
+  try {
+    return planConfigSwitch(project, cwd, manual, { token: PENDING_TOKEN }, readText).changes.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // ------------------------------------------------------------------------------------------------ init
 
 /**
@@ -600,7 +621,7 @@ function planConfigSwitch(project, cwd, marked, cfg, readText) {
 async function switchModes(o, project, planned, install, spec, cwd, what, tk) {
   let changes = planned;
   if (what.mode) row("Mode", `${o.mode} ${c.gray("(switching what init added)")}`);
-  if (what.options) row("Options", `${what.options} ${c.gray("(changing what init added)")}`);
+  if (what.options) row("Options", `${what.options} ${c.gray(what.byHand ? "(in a file of its own, imported right before your GenClass import)" : "(changing what init added)")}`);
   out();
   out(`  ${c.bold("Changes")}`);
   out();
@@ -926,7 +947,9 @@ export function inspectProject(o) {
   // integrations' options), else in .genclass.local
   // visitor analytics: on when init's options, or a hand-written setup's own, turn them on
   const analytics = (marked.length ? marked : manual).some((f) => analyticsIn(readText(f) ?? ""));
-  return { cwd, project, files, marked, handWritten: !marked.length && manual.length > 0, fresh: !marked.length && !manual.length, token: tokenInFiles(marked) ?? tokenInFiles(manual) ?? local?.token ?? null, local, analytics };
+  const handWritten = !marked.length && manual.length > 0;
+  // keyFits: a hand-written setup that connect can give its key without touching the person's code (keyFitsHandWritten)
+  return { cwd, project, files, marked, handWritten, keyFits: handWritten && keyFitsHandWritten(project, cwd, manual), fresh: !marked.length && !manual.length, token: tokenInFiles(marked) ?? tokenInFiles(manual) ?? local?.token ?? null, local, analytics };
 }
 
 /**
@@ -986,11 +1009,16 @@ export async function init(o, ctx = {}) {
   const files = walkSources(cwd);
   const marked = files.filter((f) => hasMarker(readText(f) ?? ""));
   // a hand-written setup (no init markers): init leaves the code alone, so no token is created for it
-  const handWritten = !marked.length && manualRefs(files).length > 0;
-  const fresh = !marked.length && !manualRefs(files).length;
+  const manual = marked.length ? [] : manualRefs(files);
+  const handWritten = !marked.length && manual.length > 0;
+  const fresh = !marked.length && !manual.length;
+  // ...except its key, when one is given for it (connect: the account's app, or a new one; --token) and it fits
+  // without touching the person's code (keyFitsHandWritten: `import "@genclass/runtime/auto"`, as GenClass's starter
+  // templates have it). The key goes into init's options file, imported right before that line, shown first
+  const keyed = handWritten && (!!o.token || ctx.create !== undefined) && !o.noToken && !o.noTelemetry && keyFitsHandWritten(project, cwd, manual);
   // no network here: a new project (tk.pending) is created only after the user approved the changes (settleToken)
   let tk;
-  if (handWritten) tk = { why: "GenClass is set up by hand here: pass token to GenClass.init()" };
+  if (handWritten && !keyed) tk = { why: "GenClass is set up by hand here: pass token to GenClass.init()" };
   else if (ctx.create !== undefined && !o.dryRun) tk = { pending: true, name: ctx.create, account: ctx.creds };
   else if (ctx.create !== undefined) tk = { why: "dry run", wouldCreate: true, account: ctx.creds, chosen: true };
   else {
@@ -998,7 +1026,8 @@ export async function init(o, ctx = {}) {
     if (ctx.app && tk.token === ctx.app.token) tk = { ...tk, source: `your account's app "${ctx.app.name}"`, app: ctx.app, account: ctx.creds };
   }
   if (tk.write) cfg = { token: tk.token, ...cfg };
-  else if (tk.pending) cfg = { token: PENDING_TOKEN, ...cfg };
+  // (a dry run of connect on a hand-written setup shows the change it would make, with the stand-in for the key)
+  else if (tk.pending || (keyed && tk.wouldCreate)) cfg = { token: PENDING_TOKEN, ...cfg };
   // --analytics on a setup that has no token and gets none here (telemetry off, set up by hand, made without one):
   // the option is not written, since the runtime would record nothing and warn on every page
   const noAnalytics = cfg.analytics === true && !tk.token && !tk.pending && !tk.wouldCreate;
@@ -1015,9 +1044,9 @@ export async function init(o, ctx = {}) {
   if (older) row("Package", `${PKG} ${older} is older than this init (${VERSION})${install ? "; init upgrades it" : ": upgrade it (--no-install)"}`, c.yellow(sym.warn));
   const spec = installSpec(o);
 
-  if (marked.length || manualRefs(files).length) {
-    const where = (marked.length ? marked : manualRefs(files)).map((f) => posix(relative(cwd, f)));
-    row("Setup", marked.length ? `already added by init in ${where.join(", ")}` : `GenClass is already imported in ${where.join(", ")}; init leaves your code alone`);
+  if (marked.length || manual.length) {
+    const where = (marked.length ? marked : manual).map((f) => posix(relative(cwd, f)));
+    row("Setup", marked.length ? `already added by init in ${where.join(", ")}` : `GenClass is already imported in ${where.join(", ")}; ${actor} ${keyed ? "adds this app's key next to it and leaves that import as it is" : "leaves your code alone"}`);
     // `init --mode <m>` again: switch what init added to that mode, in place (GenClass.init() keeps the first
     // runtime's options, so a later GenClass.init({ mode }) in app code would not change it)
     const switches = o.mode
@@ -1029,9 +1058,9 @@ export async function init(o, ctx = {}) {
           .filter((ch) => ch.after !== ch.before)
       : [];
     // --no-telemetry / --telemetry / --model-url again: change (or add) the options init wrote, on top of a mode switch
-    if (marked.length && !isEmptyConfig(cfg)) {
+    if ((marked.length || keyed) && !isEmptyConfig(cfg)) {
       const byFile = new Map(switches.map((ch) => [ch.file, ch]));
-      const sw = planConfigSwitch(project, cwd, marked, cfg, (f) => byFile.get(f)?.after ?? readText(f));
+      const sw = planConfigSwitch(project, cwd, marked.length ? marked : manual, cfg, (f) => byFile.get(f)?.after ?? readText(f));
       for (const ch of sw.changes) {
         const prev = byFile.get(ch.file);
         byFile.set(ch.file, prev ? { ...ch, before: prev.before } : ch);
@@ -1050,7 +1079,7 @@ export async function init(o, ctx = {}) {
     cspAdvice(project, files, cfg);
     out();
     if (switches.length) {
-      const r = await switchModes(o, project, switches, install, spec, cwd, { mode: !!o.mode && switches.some((ch) => switchMode(ch.before, o.mode) !== ch.before), options: optionsChanged && !isEmptyConfig(cfg) ? describeConfig(cfg) : null }, tk);
+      const r = await switchModes(o, project, switches, install, spec, cwd, { mode: !!o.mode && switches.some((ch) => switchMode(ch.before, o.mode) !== ch.before), options: optionsChanged && !isEmptyConfig(cfg) ? describeConfig(cfg) : null, byHand: keyed }, tk);
       dashboardNotice(r.tk ?? tk, cwd, r.applied);
       return r.code;
     }

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`connect` gives a hand-written setup its key when it can do so without touching your code.** On an app that
+  brings GenClass in with its own `import "@genclass/runtime/auto"` (GenClass's starter templates do) and has no key,
+  `connect` used to create the app and print the key to add by hand. It now writes the key the way `init` writes its
+  options: a file of its own, `genclass.config.ts/js`, and one line importing it right before your import, both
+  inside init's markers, so `remove` takes them out and leaves your import. The diff is shown and asked first
+  (`--yes` applies it), the new app is created only once it is applied, and `--dry-run` shows it. `init --token`
+  does the same on such a setup. A `GenClass.init()` call, a script tag or the Nuxt and Astro integrations take the
+  key in their own options, so for them the key is printed as before (`bin/lib/init.mjs`, `login.mjs`).
+
 - **Pro's free trial is 7 days** (it was 3): `init`'s note about what Free shows and `scan`'s note about the free view
   say so.
 

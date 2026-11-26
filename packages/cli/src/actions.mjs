@@ -330,7 +330,10 @@ export async function addRuntime(state, o = {}) {
     // step did not finish, so the walk says so and ends with exit code 1 instead of "done"
     const optedOut = args.some((a) => a === "--no-telemetry" || a === "--no-token" || a === "--no-network" || a === "--dry-run");
     if (state.signedIn && !after.token && !optedOut) {
-      warn("GenClass is in your code, but the app is not in your account yet: run npx genclass again to connect it.");
+      // set up by hand in a way connect cannot add the key to (a GenClass.init() call, a script tag, an integration):
+      // connect has said where it goes, and running the walk again before it is there would only say it again
+      if (after.handWritten) warn("GenClass is set up by hand here, so its key goes in by hand, as connect said above. Then run npx genclass again.");
+      else warn("GenClass is in your code, but the app is not in your account yet: run npx genclass again to connect it.");
       await addViteSettings(state, o);
       return "failed";
     }
