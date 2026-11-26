@@ -38,7 +38,7 @@
 import { accountContext, accountProjects, authenticate, csrfFail, fail, originOk, ownedProject, page, readJson, redirect, safeNext, webSession, type Auth, type C } from "./auth.js";
 import { billingPage, projectPlanPage, type BillingUsage } from "./billing-pages.js";
 import { suggestionLimits, usedToday } from "./suggest.js";
-import { liveFixUsage } from "./usage.js";
+import { liveFixUsage, monthOf } from "./usage.js";
 import type { Env, HandleOptions, RateLimiterLike } from "./collector.js";
 import { randomBase62, sha256Hex, type D1Like, type Project } from "./dashboard.js";
 import { decodeCursor, exportResponse, PAGE_MAX, parseTime } from "./export.js";
@@ -750,6 +750,8 @@ export async function billingUsage(c: C, accountId: string, access: Access, apps
     const share = (y: { used: number; limit: number | null }) => (y.limit ? y.used / y.limit : 0);
     if (!liveFixes || share(u) > share(liveFixes) || (share(u) === share(liveFixes) && u.used > liveFixes.used)) liveFixes = { used: u.used, limit: u.limit, resets: u.resets, app: x.name };
   }
+  // no app yet (a new account): nothing fixed, against the plan's limit per app, so the tile is there from the start
+  if (!apps.length) liveFixes = { used: 0, limit: access.plan.limits.live_fixes_per_month ?? null, resets: monthOf(c.now).resets, app: "" };
   const lim = suggestionLimits(access.plan);
   const used = await usedToday(c.db, accountId, c.now).catch(() => null);
   return {

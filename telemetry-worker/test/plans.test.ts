@@ -564,6 +564,11 @@ describe("Pro (id team) and Business are the plans sold on the site, each flat f
   it("the billing page: what the account has used against its plan's limits, and every line of plans.json in the plans table", async () => {
     const t = setup(LIVE);
     const a = await signedIn(t.env);
+    // a new account with no app yet sees all four tiles: nothing fixed yet, against Free's 100 a month per app
+    const fresh = await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }));
+    expect(fresh).toContain('<p class="ut-v">0<span class="of"> / 1</span></p>');
+    expect(fresh).toContain('<p class="ut-v">0<span class="of"> / 100</span></p><progress class="ut-bar" max="100" value="0" aria-label="Live fixes this month: 0 of 100"></progress>');
+    expect(fresh.match(/<div class="ut">/g)).toHaveLength(4);
     const app = await createApp(t.env, a.cookie, "Shop");
     const day = now().toISOString().slice(0, 10);
     // this month's live fixes are the dashboard's own counters: applied interventions and applied visual fixes

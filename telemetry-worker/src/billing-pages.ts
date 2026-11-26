@@ -101,7 +101,7 @@ export interface BillingView {
 export interface BillingUsage {
   /** The account's own apps; `limit` null: no limit. */
   apps: { used: number; limit: number | null };
-  /** Live fixes this month in the account's busiest app (the limit is per app), its name, and when the month ends; null without apps. */
+  /** Live fixes this month in the account's busiest app (the limit is per app), its name ("" with no app yet: 0), and when the month ends; null when unknown. */
   liveFixes: { used: number; limit: number | null; resets: string; app: string } | null;
   /** Suggestions (model runs) used today against the plan's per day; null when unknown. */
   suggestions: { used: number; perDay: number } | null;
