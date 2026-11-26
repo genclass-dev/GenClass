@@ -6,6 +6,7 @@
 // - This file imports only assets.mjs statically. Everything else is imported after the name is set, because those
 //   modules read it once, when they load.
 // - The exit code is the command's own; an error nobody caught prints one line and exits 1, never a stack trace.
+// - After a command on a terminal, an installed copy older than npm's is updated (once a day, home.mjs keepCurrent).
 
 import { BUILD } from "./assets.mjs";
 
@@ -16,7 +17,13 @@ try {
   const { shortNameWorks, useShortName } = await import("./name.mjs");
   if (shortNameWorks()) useShortName();
   const { run } = await import("./cli.mjs");
-  process.exitCode = await run(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  process.exitCode = await run(argv);
+  // after the command (never before it, so its answer is not held up): an installed copy stays current, once a day
+  // (home.mjs keepCurrent: only on a terminal, never in CI); not for output a program reads, nor after remove
+  if (!argv.some((a) => ["--json", "--print", "--yes", "-y", "--help", "-h", "--version", "-v"].includes(a)) && argv[0] !== "remove" && process.stdout.isTTY) {
+    await (await import("./home.mjs")).keepCurrent().catch(() => "skipped");
+  }
 } catch (e) {
   process.stderr.write(`genclass: ${e?.message ?? e}\n`);
   process.exitCode = 1;

@@ -691,7 +691,8 @@ export function formatReport(rep) {
   if (rep.top?.length) {
     p();
     p(`  ${c.bold("Top issues")}`);
-    for (const t of rep.top) p(`  ${sym.dot} ${t.what} ${c.gray(`(${t.severity}${t.count > 1 ? `, ${t.count}` : ""}, costs ${Math.round(t.points)} points)`)}`);
+    // the free view keeps a locked issue's numbers, not its words: it is named by its category, and said to be locked
+    for (const t of rep.top) p(`  ${sym.dot} ${t.what || c.gray(`${t.category ? `${t.category} problem` : "A problem"}, details with Pro`)} ${c.gray(`(${t.severity}${t.count > 1 ? `, ${t.count}` : ""}, costs ${Math.round(t.points)} points)`)}`);
   }
   let sev = null;
   for (const f of rep.findings) {
@@ -710,7 +711,7 @@ export function formatReport(rep) {
   }
   if (locked && locked.total > n) {
     p();
-    p(`  ${c.yellow(sym.warn)} ${fold(`The free view: ${n} of ${locked.total} findings in full. What the others are and how to fix them come with Pro (7 days free). To have your coding agent fix them all:`, "    ", 4)}`);
+    p(`  ${c.yellow(sym.warn)} ${fold(`The free view: ${n} of ${locked.total} findings in full. What the others are and how to fix them come with Pro (7 days free). Your coding agent can fix ${n === 1 ? "this one" : `these ${n}`} now, free:`, "    ", 4)}`);
     p(`    ${c.cyan(`npx genclass fix ${rep.url}`)}`);
   }
   const notes = (rep.notes ?? []).filter((note) => !(nothing && / not measured: /.test(note)));

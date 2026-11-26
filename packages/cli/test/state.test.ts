@@ -464,6 +464,11 @@ describe("genclass: the setup first, Pro after it, and each app's plan page (src
       const said = await printed(async () => expect(await run([cmd, "--yes", "--cwd", dir]), cmd).toBe(1));
       expect(flat(said), cmd).toContain("Sign in first: npx genclass login. The genclass command comes with Pro");
     }
+    // fix with a problem's kind or number is the production problems' fix: Pro's, never mistaken for a local page
+    for (const argv of [["fix", "stale"], ["fix", "2"], ["fix", "all"]]) {
+      const said = await printed(async () => expect(await run([...argv, "--yes", "--cwd", dir]), argv.join(" ")).toBe(1));
+      expect(flat(said), argv.join(" ")).toContain("Sign in first: npx genclass login. The genclass command comes with Pro");
+    }
     // the setup's commands need the sign-in, and say the setup is free
     for (const argv of [["init"], ["connect"], ["analytics", "on"]]) {
       const said = await printed(async () => expect(await run([...argv, "--yes", "--cwd", dir]), argv.join(" ")).toBe(1));
@@ -474,11 +479,33 @@ describe("genclass: the setup first, Pro after it, and each app's plan page (src
     // the home's commands pass the gate too (the home opens on q before the sign-in)
     const nested = await printed(async () => expect(await run(["suggest", "--no-model", "--yes", "--cwd", dir], { nested: true })).toBe(1));
     expect(flat(nested)).toContain("Sign in first: npx genclass login");
-    // a scan that did not run ends with 2 (its 1 means "problems found"), and says where the page check is free
+    // a page check is free, signed out too, as on the website (2026-11-25): scan and audit pass no gate (a loopback
+    // address is never sent to the hosted check, so this asks nothing of genclass.dev)
     for (const cmd of ["scan", "audit"]) {
-      const said = await printed(async () => expect(await run([cmd, "https://example.com", "--cwd", dir]), cmd).toBe(2));
-      expect(flat(said), cmd).toContain("Sign in first: npx genclass login");
-      expect(flat(said), cmd).toContain("Free, without Pro: the page check on the website https://genclass.dev/scan");
+      const said = await printed(async () => {
+        const spy = (await import("vitest")).vi.spyOn(process.stderr, "write").mockImplementation((() => true) as never);
+        try {
+          await run([cmd, "http://localhost:9/", "--hosted", "--cwd", dir]);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+      expect(flat(said), cmd).not.toContain("Sign in first");
+      expect(flat(said), cmd).not.toContain("comes with Pro");
+    }
+    // and so is fix <address>: signed out it asks the page check itself (here a port nobody answers on), no gate first
+    const scanHost = process.env.GENCLASS_SCAN_HOST;
+    process.env.GENCLASS_SCAN_HOST = "http://127.0.0.1:9";
+    const errs: string[] = [];
+    const spy2 = (await import("vitest")).vi.spyOn(process.stderr, "write").mockImplementation(((t: unknown) => (errs.push(String(t)), true)) as never);
+    try {
+      const said = await printed(async () => expect(await run(["fix", "shop.example.com", "--print", "--cwd", dir])).toBe(1));
+      expect(flat(said + errs.join(""))).toContain("could not reach the page check on http://127.0.0.1:9");
+      expect(flat(said + errs.join(""))).not.toContain("Sign in first");
+    } finally {
+      spy2.mockRestore();
+      if (scanHost === undefined) delete process.env.GENCLASS_SCAN_HOST;
+      else process.env.GENCLASS_SCAN_HOST = scanHost;
     }
     // where things stand is not gated: it shows the setup first and Pro after it
     expect(JSON.parse(await printed(async () => expect(await run(["status", "--json", "--cwd", dir])).toBe(0))).steps.map((x: { id: string }) => x.id).slice(-2)).toEqual(["plan", "suggestions"]);

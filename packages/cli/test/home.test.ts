@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMMANDS as ALL, nearest, run } from "../src/cli.mjs";
-import { COMMANDS, FREE_MENU, home, installShortName, menu, read, words } from "../src/home.mjs";
+import { COMMANDS, forgetKeptCurrent, FREE_MENU, home, installShortName, keepCurrent, menu, read, words } from "../src/home.mjs";
 import { forgetShortName, readPrefs, savePrefs, shorten, shortNameWorks } from "../src/name.mjs";
 import { isolate, printed, tempDir, write } from "./helpers.js";
 import { plainLines, tooWide } from "./stats.js";
@@ -100,12 +100,12 @@ describe("genclass: how the command is typed here (src/name.mjs)", () => {
     try {
       const ran: string[] = [];
       const install = async (v: string) => (ran.push(v), { ok: true, text: "" });
-      const fresh = () => forgetShortName();
+      const fresh = () => (forgetShortName(), forgetKeptCurrent());
       // npx runs the newest: an older installed copy is replaced by this version
       fresh();
       const up = await at58(async () => expect(await installShortName({ interactive: () => true, install, works: () => true, installedVersion: () => "0.3.6", viaNpx: () => true })).toBe("updated"));
       expect(ran).toEqual([BUILD.version]);
-      expect(plainLines(up).join(" ")).toContain(`Updating the genclass command, 0.3.6 to ${BUILD.version}`);
+      expect(plainLines(up).join(" ")).toContain(`A newer genclass is out: updating 0.3.6 to ${BUILD.version}`);
       expect(tooWide(up)).toEqual([]);
       // the same version installed: nothing to do, and nothing asked of npm
       let asked = 0;
@@ -124,6 +124,40 @@ describe("genclass: how the command is typed here (src/name.mjs)", () => {
     } finally {
       if (before === undefined) delete process.env.CI;
       else process.env.CI = before;
+    }
+  });
+
+  it("every command keeps an installed copy current, once per process; a failed update says how by hand (the 2026-11-25 sandbox run)", async () => {
+    const before = process.env.CI;
+    delete process.env.CI;
+    try {
+      const ran: string[] = [];
+      let asked = 0;
+      const latest = async () => (asked++, "99.0.0");
+      const now = Date.now() + 9 * 24 * 60 * 60_000;
+      forgetKeptCurrent();
+      // an installed copy run on its own (not npx) asks npm and updates, whatever name the screens use
+      expect(await keepCurrent({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), installedVersion: () => "0.3.12", viaNpx: () => false, latest, now })).toBe("updated");
+      expect(ran).toEqual(["99.0.0"]);
+      // once per process: the home after a command does not ask again
+      expect(await keepCurrent({ interactive: () => true, install: async (v: string) => (ran.push(v), { ok: true, text: "" }), installedVersion: () => "0.3.12", viaNpx: () => false, latest, now })).toBe("skipped");
+      expect(asked).toBe(1);
+      // not installed (npx only), not a terminal: nothing is asked
+      forgetKeptCurrent();
+      expect(await keepCurrent({ interactive: () => true, installedVersion: () => null, latest, now: now + 2 * 24 * 60 * 60_000 })).toBe("skipped");
+      forgetKeptCurrent();
+      expect(await keepCurrent({ interactive: () => false, installedVersion: () => "0.3.12", latest, now: now + 2 * 24 * 60 * 60_000 })).toBe("skipped");
+      expect(asked).toBe(1);
+      // the update fails: one line with the new version, and the way by hand
+      forgetKeptCurrent();
+      const said = await at58(async () => expect(await keepCurrent({ interactive: () => true, install: async () => ({ ok: false, text: "EACCES" }), installedVersion: () => "0.3.12", viaNpx: () => false, latest, now: now + 3 * 24 * 60 * 60_000 })).toBe("failed"));
+      expect(plainLines(said).join(" ")).toContain("genclass 99.0.0 is out, and this one is 0.3.12");
+      expect(plainLines(said).join(" ")).toContain("npm install -g genclass@latest");
+      expect(tooWide(said)).toEqual([]);
+    } finally {
+      if (before === undefined) delete process.env.CI;
+      else process.env.CI = before;
+      forgetKeptCurrent();
     }
   });
 });
@@ -213,6 +247,17 @@ describe("genclass: the home (src/home.mjs)", () => {
     expect(freeFlat).toContain("You are on Free: the other commands come with Pro.");
     expect(freeFlat).not.toContain("what GenClass found on your live site");
     expect(tooWide(free)).toEqual([]);
+    // signed out: the same short list, which leads to the setup and the page's free commands; fix picked by its
+    // number asks for the page's address (2026-11-25)
+    type("3", "shop.example.com", "q");
+    const out = await at58(async () => expect(await home({ free: "out" }, { runCommand: async (a: string[]) => (ran.push(a), 0), nearest })).toBe(0));
+    expect(ran[2]).toEqual(["fix", "shop.example.com"]);
+    const outFlat = plainLines(out).join(" ").replace(/\s+/g, " ");
+    expect(outFlat).toContain("fix <url> fix a page's 3 worst problems (free)");
+    expect(outFlat).toContain("Not signed in: setup signs you in. fix <url> and scan <url> need no account.");
+    expect(outFlat).toContain("Which page? Its address:");
+    expect(outFlat).not.toContain("what GenClass found on your live site");
+    expect(tooWide(out)).toEqual([]);
   });
 
   it("opening: signed out in a folder that is set up says to sign in, not that it is not set up (the 0.3.9 user stories)", async () => {

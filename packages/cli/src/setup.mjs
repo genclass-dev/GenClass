@@ -97,8 +97,17 @@ function showNext(step, details) {
   if (details && step.more) barPara(step.more);
 }
 
+/**
+ * A step this folder cannot have yet (no GitHub repository, no Playwright tests), said with why: at the end of the
+ * setup, before the prompt opens too (a person at a terminal saw the test workflow and the GitHub App vanish).
+ */
+function leftOut(state) {
+  const skipped = state.steps.filter((s) => s.state === "optional" && s.detail);
+  if (skipped.length) note(`Left out here: ${skipped.map((s) => `${s.title} (${s.detail})`).join(", ")}. npx genclass setup adds ${skipped.length === 1 ? "it" : "them"} once that changes.`);
+}
+
 /** The lines under the steps when nothing is left to walk through. */
-function closing(state) {
+export function closing(state) {
   out();
   const waiting = state.steps.filter((s) => s.state === "waiting");
   const blocked = state.steps.find((s) => s.state === "blocked");
@@ -113,12 +122,23 @@ function closing(state) {
     out(`  ${c.bold("Nothing more to do here right now.")}`);
     for (const s of waiting) note(`${s.title}: ${s.human ?? s.detail}.`);
   }
+  // a step this folder cannot have yet (no GitHub repository, no Playwright tests) is said, never left out without a
+  // word (the 2026-11-25 walk: the test workflow and the GitHub App vanished from the screen)
+  if (!blocked) leftOut(state);
   out();
   out(`  ${c.gray("Day to day")}`);
-  // the commands in one column with room after the longest, so the short name (genclass ...) keeps a gap too
+  // the commands in one column with room after the longest, so the short name (genclass ...) keeps a gap too; on
+  // Free only what works there (the 2026-11-25 onboarding walk: suggest and dashboard both opened the Pro card)
+  const free = !!state.account?.cli && !state.account.cli.paid;
   out(`    ${c.cyan("npx genclass".padEnd(25))}${c.gray("the prompt: commands, questions")}`);
-  out(`    ${c.cyan("npx genclass suggest".padEnd(25))}${c.gray("what your app is missing")}`);
-  if (state.app.token) out(`    ${c.cyan("npx genclass dashboard".padEnd(25))}${c.gray("what it found on your site")}`);
+  if (free) {
+    out(`    ${c.cyan("npx genclass fix <url>".padEnd(25))}${c.gray("your agent fixes a page's 3 worst problems")}`);
+    out(`    ${c.cyan("npx genclass scan <url>".padEnd(25))}${c.gray("a page's score")}`);
+    out(`    ${c.cyan("npx genclass upgrade".padEnd(25))}${c.gray("Pro: every problem, dashboard, suggestions")}`);
+  } else {
+    out(`    ${c.cyan("npx genclass suggest".padEnd(25))}${c.gray("what your app is missing")}`);
+    if (state.app.token) out(`    ${c.cyan("npx genclass dashboard".padEnd(25))}${c.gray("what it found on your site")}`);
+  }
   out();
 }
 
@@ -138,7 +158,7 @@ export async function status(o = {}) {
     const typedHere = homeOpen() && cmd.startsWith("npx genclass ");
     barPara(`${c.gray(typedHere ? "Type" : "Run")} ${c.cyan(typedHere ? cmd.slice("npx genclass ".length) : cmd)}${step.human ? c.gray(`  (then: ${step.human})`) : ""}`, (l) => l);
     out();
-    if (!o.all) out(`  ${c.gray("Every part:")} ${c.cyan("npx genclass status --all")}`);
+    if (!o.all) out(`  ${c.gray("Every part:")} ${c.cyan(homeOpen() ? "status --all" : "npx genclass status --all")}`);
     out();
   } else closing(state);
   return 0;
@@ -220,7 +240,7 @@ export async function onboard(code, o = {}, deps = {}) {
       await send({ steps: j.steps.map((x) => ({ id: x.id, title: x.title, state: x.state, detail: x.detail ?? "" })), app: { name: ev.state.app.name ?? "", framework: ev.state.app.framework ?? "" } });
     } else if (ev.type === "step") await send({ step: { id: ev.step.id, doing: ev.step.doing, result: ev.result } });
   };
-  note("Your dashboard shows each step as it runs: genclass.dev/account/get-started");
+  note(`Your dashboard shows each step as it runs: ${apiHost().replace(/^https?:\/\//, "")}/account/get-started`);
   out();
   const exit = await walk({ ...o, yes: true, report }, {}, true);
   await report({ type: "state", state: await readState({ cwd: o.cwd, noAnalytics: o.noAnalytics }) });
@@ -290,6 +310,7 @@ async function walk(o, deps, auto) {
           out();
           for (const s of waiting) note(`${s.title}: ${s.human ?? s.detail}.`);
         }
+        leftOut(state);
         return deps.home({ ...o, cwd: state.cwd, app: state.app.name ?? "" });
       }
       closing(state);

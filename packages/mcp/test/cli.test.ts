@@ -137,6 +137,15 @@ describe("cli (AGENT.md §4.4)", () => {
     expect(JSON.parse(readFileSync(join(dir2, ".mcp.json"), "utf8")).mcpServers.genclass).toBeTruthy();
   });
 
+  it("init --help prints the help and writes nothing (the 2026-11-25 sandbox run: it ran init)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gc-init-"));
+    const x = io(dir);
+    expect(await runCli(["init", "--help"], { ...x, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr })).toBe(0);
+    expect(existsSync(join(dir, ".mcp.json"))).toBe(false);
+    expect(existsSync(join(dir, ".claude"))).toBe(false);
+    expect(x.o.join("")).toContain("init");
+  });
+
   it("init refuses to rewrite a .mcp.json it cannot parse", () => {
     const dir = mkdtempSync(join(tmpdir(), "gc-init-"));
     writeFileSync(join(dir, ".mcp.json"), "{ not json");

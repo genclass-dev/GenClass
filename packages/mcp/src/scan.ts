@@ -108,6 +108,10 @@ export function scanText(r: ScanReport, via: string, stderr: string): string {
       : "ran remotely on the genclass.dev page check (its browser loaded the page)";
   out.push(`GenClass scan of ${q(r.url, 200)}: ${where}; via ${via}.`);
   for (const v of r.views) if (v.error) out.push(`${v.id}: ${clean(v.error, 200)}`);
+  // the free view of the hosted check (genclass.dev without Pro) keeps a locked finding's severity and count, not its
+  // words: such a finding is counted, never listed as a line of blanks
+  const shown = r.findings.filter((f) => f.kind || f.target || f.selector || f.message);
+  const locked = r.findings.length - shown.length;
   const n = r.findings.length;
   const label = r.ranAt === "local" ? "Visual score" : "Score";
   out.push(`${r.score.value === null ? "No score" : `${label} ${r.score.value}/100`} · ${n === 0 ? "no problems found" : `${n} problem(s): ${Object.entries(r.summary).filter(([k]) => k !== "total").map(([k, x]) => `${x} ${k}`).join(", ")}`}.`);
@@ -115,12 +119,13 @@ export function scanText(r: ScanReport, via: string, stderr: string): string {
   if (r.categories?.length) out.push(`Categories: ${r.categories.map((c) => `${clean(c.label, 40)} ${c.measured ? c.value : "not measured"}`).join(", ")}.`);
   if (n) {
     out.push("", `Problems, worst first ${PAGE_TEXT}:`);
-    for (const f of r.findings.slice(0, 60)) {
+    for (const f of shown.slice(0, 60)) {
       out.push(`- [${clean(f.severity, 12)}] ${clean(f.kind, 60)}${(f.count ?? 1) > 1 ? ` x${f.count}` : ""}${f.views?.length ? ` (${f.views.map((v) => clean(v, 16)).join(", ")})` : ""}: ${q(f.target ?? "", 120)} at ${q(f.selector ?? "", 160)}`);
       if (f.message) out.push(`  ${clean(f.message, 400)}`);
       if (f.fix) out.push(`  fix: ${clean(f.fix, 400)}${f.fixNote ? ` (${clean(f.fixNote, 300)})` : ""}`);
     }
-    if (n > 60) out.push(`… and ${n - 60} more in the JSON below.`);
+    if (shown.length > 60) out.push(`… and ${shown.length - 60} more in the JSON below.`);
+    if (locked) out.push(`… and ${locked} more that genclass.dev's free view counts without their details (what, where, the fix): those come with GenClass Pro. Fix the ones above.`);
   }
   for (const note of r.notes ?? []) out.push(`Note: ${clean(note, 300)}`);
   const said = stderr

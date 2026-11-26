@@ -31,26 +31,37 @@ describe("genclass fix: the kinds and their texts (src/kinds.mjs) are the dashbo
     // each sentence of a prompt that is fixed text is in the page (the parts the page builds are joined with +)
     for (const line of [
       "Fix a problem GenClass found in production in this web app (",
-      "2. Find the code behind it and fix it; keep the regression test genclass_explain generates.",
-      "3. Replay the recorded order again with genclass_replay: it must say not reproduced.",
-      "4. Tell me what you changed, the test you added and the replay's verdict.",
+      ": the requests, handlers and state updates that match the description above. Read them before changing anything.",
+      "2. Fix the cause, small and idiomatic, and add a regression test that fails before the fix and passes after it.",
+      "3. With the GenClass MCP tools, prove it: genclass_findings, then genclass_explain on the finding that matches. ",
+      " After the fix, genclass_replay of the recorded order must say not reproduced. ",
+      "4. Tell me what you changed, the test you added and, if you ran it, the replay's verdict.",
       "When a step needs page loads on the dev page, tell me in one line exactly what to do there",
       "Fix a problem GenClass measured in production in this web app (",
-      "2. Find the code or CSS behind it and fix it at the cause (the suggested CSS is a starting point, not a patch).",
-      "4. Tell me what you changed and what genclass_scan listed before and after.",
-      "1. genclass_status: the dev page must be connected; if it is not, tell me what to open.",
-      "5. Sum up in one line per problem: what it was, the proof, the fix.",
+      "2. Fix it at the cause (the usual fix is a starting point, not a patch). Keep the change small.",
+      "4. Tell me what you changed, and what genclass_scan listed before and after if you ran it.",
+      "1. For each problem, the most frequent first: find the code behind it on the pages named (the requests, handlers, state updates or CSS that match), and read it before changing anything.",
+      "4. Sum up in one line per problem: what it was, the fix, the test, and the proof if you ran it.",
+      "If the GenClass MCP tools (genclass_*) are not available to you, skip the steps that name them and say so at the end: do not install or configure anything for them now",
     ]) {
       expect(PAGE).toContain(line);
       expect(`${one}\n${check}\n${all}`).toContain(line);
     }
+    // the fix comes from the code first: the MCP server's tools only prove it, and nothing is set up for them
+    for (const p of [one, check, all]) {
+      expect(p.indexOf("genclass_")).toBeGreaterThan(p.indexOf("1. "));
+      expect(p).toContain("do not install or configure anything for them now");
+      expect(p).not.toContain("Use the GenClass MCP server");
+    }
     expect(one).toContain("stale responses, 11 times in the last 7 days, on /search (9), /checkout (2).");
+    expect(one).toContain("1. Find the code behind it on /search:");
     expect(one).toContain("genclass_explore with focus on the request behind /search");
     expect(check).toContain("invisible text (the measured check text-invisible), 6 times in the last 7 days, on /pricing (6).");
-    expect(check).toContain("3. Run genclass_scan on the page again, after the same steps: it must not list text-invisible any more.");
-    expect(all).toContain("- Double submits, 14 times, on /checkout. Usual fix: Disable the control while the request is in flight");
+    expect(check).toContain("after the fix it must not list text-invisible.");
+    expect(all).toContain("- Double submits, 14 times, on /checkout. ");
+    expect(all).toContain(" Usual fix: Disable the control while the request is in flight");
     expect(all).toContain("- Invisible text (measured check text-invisible), 6 times, on /pricing.");
-    expect(all).toContain("For a measured check, genclass_scan on its page must no longer list it.");
+    expect(all).toContain("For a measured check, genclass_scan on its page before and after: it must no longer list it.");
     // nothing but the app's name, pages and counts comes from outside
     expect(`${one}${all}`).not.toContain("gc_AbCdEf");
   });

@@ -3,7 +3,7 @@
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
-import { AGENTS, copyText, findAgents, fix, onPath, pickProblem } from "../src/fix.mjs";
+import { AGENTS, copyText, findAgents, fix, onPath, pickProblem, sessionMcp, startAgent } from "../src/fix.mjs";
 import { problemList } from "../src/kinds.mjs";
 import { run as runInit } from "../../runtime/bin/lib/init.mjs";
 import { ACCOUNT, fakeServer, HOST, isolate, overview, printed, project, SESSION, tempDir, TOKEN, viteApp, write } from "./helpers.js";
@@ -72,6 +72,35 @@ describe("genclass fix: which problem, which agent (src/fix.mjs)", () => {
     expect(AGENTS.map(([cmd, , args]) => [cmd, args("P")])).toEqual([["claude", ["P"]], ["codex", ["P"]], ["cursor-agent", ["P"]], ["gemini", ["-i", "P"]]]);
   });
 
+  it("Claude Code and Codex start with GenClass's MCP server for that session, when the folder has none (2026-11-25)", async () => {
+    const m = { command: "npx", args: ["-y", "@genclass/mcp@1.2.3"] };
+    const byCmd = Object.fromEntries(AGENTS.map(([cmd, , args]) => [cmd, args("P", m)]));
+    // Claude Code: the prompt first, since --mcp-config takes several values
+    expect(byCmd.claude).toEqual(["P", "--mcp-config", JSON.stringify({ mcpServers: { genclass: m } })]);
+    // Codex: TOML values through -c, before the prompt
+    expect(byCmd.codex).toEqual(["-c", 'mcp_servers.genclass.command="npx"', "-c", 'mcp_servers.genclass.args=["-y","@genclass/mcp@1.2.3"]', "P"]);
+    // the others have no such flag: the prompt alone
+    expect(byCmd["cursor-agent"]).toEqual(["P"]);
+    expect(byCmd.gemini).toEqual(["-i", "P"]);
+    // this build's pinned server; none when the folder already has it (the person's own entry wins)
+    expect(sessionMcp("/x", () => ({ files: [] }))).toEqual({ command: "npx", args: ["-y", expect.stringMatching(/^@genclass\/mcp@\d+\.\d+\.\d+/)] });
+    expect(sessionMcp("/x", () => ({ files: [".mcp.json"] }))).toBeNull();
+    // startAgent passes it to the agents that take it, never to the others
+    const seen: [string, string[]][] = [];
+    const run = ((cmd: string, args: string[]) => {
+      seen.push([cmd, args]);
+      const { EventEmitter } = require("node:events") as typeof import("node:events");
+      const child = new EventEmitter();
+      setTimeout(() => child.emit("close", 0), 1);
+      return child;
+    }) as never;
+    for (const [cmd, name, args] of AGENTS) expect(await startAgent({ cmd, name, args }, "P", "/tmp", run, m)).toBe(0);
+    expect(seen.find(([c]) => c.startsWith("claude"))![1]).toContain("--mcp-config");
+    expect(seen.find(([c]) => c.startsWith("codex"))![1]).toContain("-c");
+    expect(seen.find(([c]) => c.startsWith("gemini"))![1]).toEqual(["-i", "P"]);
+    expect(seen.find(([c]) => c.startsWith("cursor-agent"))![1]).toEqual(["P"]);
+  });
+
   it("copyText tries the platform's clipboard commands in turn and says whether one took it", async () => {
     const { EventEmitter } = await import("node:events");
     const tried: string[] = [];
@@ -98,7 +127,7 @@ describe("genclass fix: the command (src/fix.mjs fix)", () => {
     expect(one.startsWith("Fix a problem GenClass found in production in this web app (shop): stale responses, 11 times in the last 7 days")).toBe(true);
     expect(one).not.toContain("────");
     const all = await printed(async () => expect(await fix({ cwd: dir, print: true }, deps)).toBe(0));
-    expect(all.startsWith("Fix the problems GenClass found in this web app (shop) and prove each fix")).toBe(true);
+    expect(all.startsWith("Fix the problems GenClass found in this web app (shop).\n")).toBe(true);
     expect(all).toContain("- Double submits, 14 times, on /checkout.");
     const errs: string[] = [];
     const spy = (await import("vitest")).vi.spyOn(process.stderr, "write").mockImplementation(((s: unknown) => (errs.push(String(s)), true)) as never);
