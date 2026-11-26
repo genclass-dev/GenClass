@@ -79,4 +79,17 @@ describe("the setup's last lines: Day to day (src/setup.mjs closing)", () => {
     expect(pro).toContain("npx genclass dashboard");
     expect(pro).not.toContain("npx genclass upgrade");
   });
+
+  it("says which steps this folder cannot have yet, and why, instead of leaving them out without a word (the 2026-11-25 walk)", async () => {
+    const { closing } = await import("../src/setup.mjs");
+    const steps = [
+      { id: "workflow", title: "Test workflow", state: "optional", detail: "no Playwright tests yet" },
+      { id: "github", title: "GitHub App", state: "optional", detail: "the repository is not on GitHub" },
+      { id: "plan", title: "App plan", state: "optional", detail: "" },
+    ];
+    const text = (await printed(() => closing({ steps, signedIn: true, complete: false, app: { token: "gc_t", name: "shop" }, account: { cli: { paid: true } } }))).replace(/\s+/g, " ");
+    expect(text).toContain("Left out here: Test workflow (no Playwright tests yet), GitHub App (the repository is not on GitHub). npx genclass setup adds them once that changes.");
+    // a step with no reason (nothing this folder lacks) is not named
+    expect(text).not.toContain("App plan");
+  });
 });

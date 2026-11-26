@@ -21,6 +21,8 @@
   way (a `GenClass.init()` call, a script tag, the Nuxt or Astro integration) still gets the key printed to add, and
   the setup now says that instead of asking you to run it again (runtime `bin/lib/init.mjs`, `login.mjs`).
 
+- The end of the setup names the steps this folder cannot have yet, and why ("Left out here: Test workflow (no Playwright
+  tests yet), GitHub App (the repository is not on GitHub)"), instead of leaving them off the screen.
 - The plan step no longer says "Pro is ." when genclass.dev sends no price.
 
 - **`fix <url>` and `scan <url>` are free, with no account.** As on the website's page check: a page's score, and its
